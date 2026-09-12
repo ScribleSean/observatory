@@ -14,6 +14,7 @@ struct NativeDashboard: View {
     let settingsActions: NativeSettingsActions
     @State private var host = "Mac"
     @State private var selectedDate = ""
+    @State private var period = "day"
     private let sections = [("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
                             ("allowances", "Allowances", "gauge.with.dots.needle.50percent"), ("agents", "Agents", "point.3.connected.trianglepath.dotted"),
                             ("dictation", "Dictation", "mic"), ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
@@ -69,10 +70,17 @@ struct NativeDashboard: View {
         let key = selection.section == "tokens" ? "tokens" : "activity"
         let field = key == "tokens" ? "totalTokens" : "seconds"
         let days = store.snapshot?.recordedDays(key, host: host) ?? []
-        let chosen = days.first(where: { text($0["date"]) == selectedDate }) ?? days.last
+        let anchor = text(days.first(where: { text($0["date"]) == selectedDate })?["date"] ?? days.last?["date"])
+        let selected = nativePeriodDays(days, period: period, anchor: anchor)
+        let chosen = nativePeriodSummary(selected, kind: key)
         return VStack(alignment: .leading, spacing: 18) {
             Picker("Device", selection: $host) {
                 ForEach(["All", "Mac", "Windows", "Ubuntu"], id: \.self) { Text($0).tag($0) }
+            }.pickerStyle(.segmented)
+            Picker("Period", selection: $period) {
+                Text("Day").tag("day")
+                Text("Week").tag("week")
+                Text("All retained").tag("all")
             }.pickerStyle(.segmented)
             if key == "activity", let archive = store.snapshot?.activityArchive(host: host) {
                 Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
@@ -90,13 +98,15 @@ struct NativeDashboard: View {
                     Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : "\(formatted(number(chosen?[field]).map { $0 / 60 })) min")
                         .font(.system(size: 38, weight: .semibold, design: .rounded)).monospacedDigit()
                     Spacer()
-                    Picker("Recorded day", selection: Binding(get: { text(chosen?["date"]) }, set: { selectedDate = $0 })) {
+                    Picker(period == "week" ? "Week ending" : "Recorded day", selection: Binding(get: { anchor }, set: { selectedDate = $0 })) {
                         ForEach(Array(days.enumerated()), id: \.offset) { _, day in Text(text(day["date"])).tag(text(day["date"])) }
-                    }.frame(maxWidth: 210)
+                    }.frame(maxWidth: 210).disabled(period == "all")
                 }
-                Text("Recent recorded days").font(.headline)
+                Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])), \(selected.count) recorded dates. Missing dates are not filled with zeros.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Text("Selected recorded days (up to 30 shown)").font(.headline)
                 Chart {
-                    ForEach(Array(days.suffix(30).enumerated()), id: \.offset) { _, day in
+                    ForEach(Array(selected.suffix(30).enumerated()), id: \.offset) { _, day in
                         if let value = number(day[field]) {
                             BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60))
                         }
@@ -106,9 +116,9 @@ struct NativeDashboard: View {
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
                     .font(.callout).foregroundStyle(.secondary)
                 if key == "tokens", let chosen {
-                    NativeTokenDetails(day: chosen, snapshot: store.snapshot, host: host)
+                    NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: store.snapshot, host: host)
                 } else if let chosen {
-                    NativeActivityDetails(day: chosen)
+                    NativeActivityDetails(day: chosen, showHours: period == "day")
                 }
             }
         }

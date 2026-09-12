@@ -38,8 +38,10 @@ func nativeSettingsCoverage(model: JSONObject, profiles: [JSONObject]) -> Native
 
 struct NativeActivityDetails: View {
     let day: JSONObject
+    var showHours = true
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if showHours {
             Text("Recorded activity by hour").font(.headline).accessibilityAddTraits(.isHeader)
             let hours = day["hours"] as? [Any] ?? []
             if hours.count == 24 && hours.allSatisfy({ number($0) != nil }) {
@@ -53,6 +55,7 @@ struct NativeActivityDetails: View {
             } else { Text("Hourly breakdown unavailable.").foregroundStyle(.secondary) }
             Text("New York time. Repeated daylight-saving clock hours share a chart cell. Gaps may be idle time or missing records.")
                 .font(.callout).foregroundStyle(.secondary)
+            }
             if let tracked = number(day["trackedSeconds"]), tracked == 0, number(day["seconds"]) == 0 {
                 Text("No tracking records for this date. Zero recorded activity does not establish inactivity.").foregroundStyle(.secondary)
             }
@@ -93,6 +96,7 @@ struct NativeActivityDetails: View {
 
 struct NativeTokenDetails: View {
     let day: JSONObject
+    let recordedDays: [JSONObject]
     let snapshot: Snapshot?
     let host: String
     private var settings: JSONObject? {
@@ -120,18 +124,16 @@ struct NativeTokenDetails: View {
                         ForEach(fields, id: \.0) { field, label in LabeledContent(label, value: formatted(number(model[field]))) }
                         estimate(model["apiEstimate"] as? JSONObject)
                         Text("Recorded reasoning and speed").font(.headline)
-                        let candidates = rows(settings?["profiles"]).filter {
-                            text($0["date"]) == text(day["date"]) && text($0["model"]) == text(model["model"])
-                        }
+                        let candidates = nativePeriodProfiles(model: model, days: recordedDays, settings: settings)
                         let coverage = nativeSettingsCoverage(model: model, profiles: candidates)
                         if text(settings?["status"]) != "ok" || settings?["snapshotStable"] as? Bool == false {
                             Text("Settings unavailable or usage changed during collection. Breakdown withheld.").foregroundStyle(.secondary)
                         } else if coverage.profiles.isEmpty {
-                            Text(coverage.status == "unreconciled" ? "Settings counters do not match this daily report. Breakdown withheld." : "No matching recorded settings for this model and date.")
+                            Text(coverage.status == "unreconciled" ? "Settings counters do not match this report. Breakdown withheld." : "No reconciled settings for these model/date records. Missing or conflicting counters are withheld.")
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(Array(coverage.profiles.enumerated()), id: \.offset) { _, profile in
-                                LabeledContent(text(profile["effort"]) + " · " + text(profile["speed"]),
+                                LabeledContent(text(profile["date"]) + " · " + text(profile["effort"]) + " · " + text(profile["speed"]),
                                                value: formatted(number(profile["totalTokens"])) + " tokens")
                             }
                             if coverage.status == "partial", let total = number(model["totalTokens"]) {

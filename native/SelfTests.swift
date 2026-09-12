@@ -14,6 +14,32 @@ func runSelfTests() {
     precondition(nativeSettingsCoverage(model: inferredModel, profiles: [countedModel]).status == "missing")
     precondition(nativeSettingsCoverage(model: countedModel, profiles: [[:]]).status == "unreconciled")
     precondition(nativeCounters(["invalid": -1, "boolean": true, "AI apps": 60, "Editors": 120]).map(\.name) == ["Editors", "AI apps"])
+    let periodActivity: [JSONObject] = [
+        ["date": "2026-09-01", "seconds": 10, "categories": ["Editors": 10], "apps": ["Editors": ["VS Code": 10]]],
+        ["date": "2026-09-06", "seconds": 20, "categories": ["AI apps": 20], "apps": ["AI apps": ["ChatGPT / Codex": 20]]],
+        ["date": "2026-09-12", "seconds": 30, "categories": ["Editors": 30], "apps": ["Editors": ["VS Code": 30]]]
+    ]
+    let selectedWeek = nativePeriodDays(periodActivity, period: "week", anchor: "2026-09-12")
+    precondition(selectedWeek.count == 2)
+    precondition(number(nativePeriodSummary(selectedWeek, kind: "activity")?["seconds"]) == 50)
+    precondition(number(nativePeriodSummary(periodActivity, kind: "activity")?["seconds"]) == 60)
+    precondition(nativePeriodDays(periodActivity, period: "day", anchor: "2026-09-07").isEmpty)
+    precondition(nativePeriodDays(periodActivity, period: "invalid", anchor: "2026-09-12").isEmpty)
+    let unknownDay = nativePeriodSummary([["date": "2026-09-11", "totalTokens": 10], ["date": "2026-09-12"]], kind: "tokens")
+    precondition(number(unknownDay?["totalTokens"]) == nil)
+    var dailyModel = countedModel
+    dailyModel["model"] = "fixture-model"
+    let tokenDays: [JSONObject] = [["date": "2026-09-11", "models": [dailyModel]], ["date": "2026-09-12", "models": [dailyModel]]]
+    var badProfile = dailyModel
+    badProfile["date"] = "2026-09-11"
+    badProfile["inputTokens"] = 11
+    var goodProfile = dailyModel
+    goodProfile["date"] = "2026-09-12"
+    let reconciled = nativePeriodProfiles(model: dailyModel, days: tokenDays,
+        settings: ["status": "ok", "profiles": [badProfile, goodProfile]])
+    precondition(reconciled.count == 1 && text(reconciled.first?["date"]) == "2026-09-12")
+    precondition(nativePeriodProfiles(model: dailyModel, days: tokenDays,
+        settings: ["status": "ok", "snapshotStable": false, "profiles": [goodProfile]]).isEmpty)
     let dictationRows: [JSONObject] = [
         ["date": "2026-09-01", "transcriptions": 1, "words": 12, "audioSeconds": 60, "wordRecords": 1, "audioRecords": 1],
         ["date": "2026-09-06", "transcriptions": 2, "words": 0, "audioSeconds": 0, "wordRecords": 0, "audioRecords": 0],
