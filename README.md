@@ -26,7 +26,7 @@ Missing data stays missing. Estimates stay labeled. Token counts are not subscri
 
 ## Data and privacy
 
-The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Account-limit history is not synchronized yet.
+The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional allowance-history exchange is implemented and tested with fictional records, but real paired consent and legacy migration remain unfinished.
 
 Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Allowance history has [bounded retention](docs/USAGE-LIMITS.md).
 
@@ -34,7 +34,7 @@ Saved history can be displayed again after a UI repair, but observations that we
 
 **[Open the interactive demo](https://scriblesean.github.io/workspace-observatory/)** to explore fictional records without connecting any accounts or devices.
 
-The project is an early preview tested on one Mac, Windows and WSL setup. The Mac app currently builds from source. **Public installers are being prepared, not yet available.**
+The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.**
 
 | Platform | Current status |
 | --- | --- |
