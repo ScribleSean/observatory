@@ -15,10 +15,11 @@ internal sealed partial class NativeDashboard : Form
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
 
-    internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null)
+    internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null)
     {
         this.read = read; this.refresh = refresh;
         this.sourceSettings = sourceSettings;
+        this.deviceSettings = deviceSettings;
         Text = "Observatory native preview"; AccessibleName = Text;
         Font = regular; BackColor = Color.FromArgb(30, 30, 32); ForeColor = Color.WhiteSmoke;
         ClientSize = new Size(1000, 720); MinimumSize = new Size(800, 560); StartPosition = FormStartPosition.CenterScreen;
@@ -103,7 +104,7 @@ internal sealed partial class NativeDashboard : Form
             else if (section == "Agents") Agents(snapshot);
             else if (section == "Settings") SourceSettings();
             else Sources(snapshot);
-            Label("Native migration preview. Startup and pairing controls remain in the system-tray menu.");
+            Label("Native migration preview. Provider sign-ins remain in their owning applications.");
             ResizeRows();
         }
         finally { body.ResumeLayout(true); }

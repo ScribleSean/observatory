@@ -145,6 +145,8 @@ internal sealed class ObservatoryContext : ApplicationContext
     }
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
+    private DeviceSettingsActions DeviceActions() => new(LoginStartup.Registered, LoginStartup.SetRegistered,
+        ShowPairingDetails, DisconnectPairing, PreparePairingRepair);
 
     private void ShowUsage()
     {
@@ -221,7 +223,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
         if (dashboard is NativeDashboard existing) { existing.ShowSourceSettings(); return; }
         using var settings = new NativeDashboard(Data, collector.Refresh,
-            new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }));
+            new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions());
         settings.ShowSourceSettings();
         settings.ShowDialog();
     }
@@ -268,7 +270,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (dashboard is null || dashboard.IsDisposed)
         {
             dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
-                new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); })) : new Dashboard(runtime);
+                new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions()) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         dashboard.Show();

@@ -31,8 +31,13 @@ internal static class NativeDashboardTests
         var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":false,"wslDistribution":null,"quotaWslDistribution":null,"futureSetting":"preserved"}""")!.AsObject();
         File.WriteAllText(Path.Combine(settingsRoot, "collector.config.json"), initialSettings.ToJsonString());
         using var settingsCollector = new Collector(settingsRoot);
+        var startupRegistered = false;
+        var pairingDetails = 0; var disconnects = 0; var repairs = 0;
+        var devicePending = new TaskCompletionSource();
         using var form = new NativeDashboard(() => data, () => { refreshes++; return Task.CompletedTask; },
-            new SourceSettingsActions(settingsCollector.ReadConfiguration, settingsCollector.UpdateConfiguration));
+            new SourceSettingsActions(settingsCollector.ReadConfiguration, settingsCollector.UpdateConfiguration),
+            new DeviceSettingsActions(() => startupRegistered, value => startupRegistered = value,
+                () => pairingDetails++, () => { disconnects++; return devicePending.Task; }, () => { repairs++; return Task.CompletedTask; }));
         form.Shown += async (_, _) =>
         {
             try
@@ -116,6 +121,21 @@ internal static class NativeDashboardTests
                     try { settingsCollector.UpdateConfiguration(current, initialSettings); throw new Exception("Collection lock ignored"); }
                     catch (IOException) { }
                 }
+                await Select(form, "Settings page", "This device");
+                void ClickDevice(string name) => Children(form).OfType<Button>().Single(button => button.AccessibleName == name).PerformClick();
+                Check(Texts(form).Any(value => value.StartsWith("This installation is not registered")), "Startup state read");
+                ClickDevice("Toggle login startup");
+                Check(startupRegistered && Texts(form).Any(value => value.StartsWith("This installation is registered")), "Startup toggle reread");
+                ClickDevice("Pairing details for Mac");
+                Check(pairingDetails == 1, "Pairing details callback");
+                ClickDevice("Disconnect paired device");
+                ClickDevice("Prepare pairing repair");
+                Check(disconnects == 1 && repairs == 0, "Concurrent device operation rejected");
+                devicePending.SetResult();
+                await Task.Delay(100);
+                ClickDevice("Prepare pairing repair");
+                Check(repairs == 1, "Repair callback after operation completion");
+                Capture(form, output, "native-device-settings");
                 sections.SelectedItem = "Sources";
                 Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 7, "Source rows");
                 Capture(form, output, "native-sources");

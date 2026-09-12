@@ -7,11 +7,14 @@ internal sealed record SourceSettingsActions(Func<JsonObject> Read, Action<JsonO
 internal sealed partial class NativeDashboard
 {
     private readonly SourceSettingsActions? sourceSettings;
+    private string settingsPage = "Sources";
 
-    internal void ShowSourceSettings() { sections.SelectedItem = "Settings"; Activate(); }
+    internal void ShowSourceSettings() { settingsPage = "Sources"; sections.SelectedItem = "Settings"; Reload(); Activate(); }
 
     private void SourceSettings()
     {
+        Choice("Settings page", ["Sources", "This device"], settingsPage, value => settingsPage = value);
+        if (settingsPage == "This device") { DeviceSettings(); return; }
         if (sourceSettings is null) { Label("Source settings are unavailable in this preview session."); return; }
         JsonObject original;
         try { original = sourceSettings.Read().DeepClone().AsObject(); }
