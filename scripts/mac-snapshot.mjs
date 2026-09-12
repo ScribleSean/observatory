@@ -6,10 +6,11 @@ import {retainActivityHistory} from './activity-history.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 
 export function macCollectorConfig(raw) {
-  const keys=['activity','codex','wispr','typewhisper','quota'];
+  const keys=['activity','codex','wispr','typewhisper','quota','receipts','benchmarks'];
   if(!raw || typeof raw!=='object' || Array.isArray(raw) ||
     Object.keys(raw).some(key=>!keys.includes(key) || typeof raw[key]!=='boolean'))throw Error('Invalid local Mac source settings');
-  return {activity:raw.activity!==false,codex:raw.codex!==false,wispr:raw.wispr===true,typewhisper:raw.typewhisper===true,quota:raw.quota===true};
+  return {activity:raw.activity!==false,codex:raw.codex!==false,wispr:raw.wispr===true,typewhisper:raw.typewhisper===true,quota:raw.quota===true,
+    receipts:raw.receipts===true,benchmarks:raw.benchmarks===true};
 }
 
 export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().toISOString(),peerConfig=null) {

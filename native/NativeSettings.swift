@@ -54,6 +54,16 @@ struct NativeSettings: View {
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             if store.localCollection {
+                settingsSection("Configured workflows") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("Read configured agent receipts", isOn: binding("receipts")).disabled(!loaded || busy)
+                        Toggle("Read configured Ubuntu benchmarks", isOn: binding("benchmarks")).disabled(!loaded || busy)
+                        Text("Uses only paths and the SSH connection already configured in a legacy installation. Without that configuration, the source stays disconnected. Benchmark reads may connect to Ubuntu. These records stay local to this dashboard and are not shared through device pairing.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Text("Turning a workflow source off stops its reads and removes it from the current view. Original receipt files are not deleted.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                }
                 HStack {
                     Button("Save collection settings", action: save).disabled(!loaded || busy || draft == original)
                     Button("Reload saved settings", action: load).disabled(busy)

@@ -7,7 +7,7 @@ struct CollectorLaunch {
 }
 
 enum CollectorConfiguration {
-    static let defaults = ["activity": true, "codex": true, "wispr": false, "typewhisper": false, "quota": false]
+    static let defaults = ["activity": true, "codex": true, "wispr": false, "typewhisper": false, "quota": false, "receipts": false, "benchmarks": false]
 
     static func validate(_ object: JSONObject) throws -> [String: Bool] {
         var result = defaults

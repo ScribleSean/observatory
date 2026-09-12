@@ -199,6 +199,11 @@ func runSelfTests() {
     precondition((try? CollectorConfiguration.validate(["wispr": true]))?["wispr"] == true)
     precondition((try? CollectorConfiguration.validate(["quota": true]))?["quota"] == true)
     precondition(CollectorConfiguration.defaults["quota"] == false)
+    for source in ["receipts", "benchmarks"] {
+        precondition(CollectorConfiguration.defaults[source] == false)
+        precondition((try? CollectorConfiguration.validate([source: true]))?[source] == true)
+        precondition((try? CollectorConfiguration.validate([source: "true"])) == nil)
+    }
     precondition(visibleQuotaWindows([["bucket": "codex"], ["bucket": "codex_bengalfox"], ["bucket": "SPARK"], ["bucket": "codex_spark"]]).count == 1)
     let quotaSamples: [JSONObject] = [
         ["checkedAt": "2026-09-09T12:00:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 80, "resetsAt": "2026-09-09T16:00:00Z"]]],

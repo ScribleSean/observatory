@@ -18,9 +18,13 @@ export function cleanLocalModel(raw) {
 const disabled=()=>({agents:[],agentSource:{status:'not-connected'},localModel:{host:'Ubuntu',status:'not-connected'}});
 // Transitional adapter for explicitly configured legacy sources. No discovery,
 // credential transfer or new opt-in. Private paths never enter its result.
-export async function collectLegacyWorkflows(runtime,{receipts=readAgentReceipts,benchmark=async(host,folder)=>
+export async function collectLegacyWorkflows(runtime,{enabled={receipts:false,benchmarks:false},isEnabled=async()=>enabled,receipts=readAgentReceipts,benchmark=async(host,folder)=>
   pythonReport(host,await readFile(new URL('./read-local-model.py',import.meta.url),'utf8'),folder)}={}) {
   const result=disabled();
+  const validate=value=>value && typeof value==='object' && !Array.isArray(value) &&
+    Object.keys(value).length===2 && typeof value.receipts==='boolean' && typeof value.benchmarks==='boolean';
+  if(!validate(enabled))throw Error('Explicit workflow switches required');
+  if(!enabled.receipts && !enabled.benchmarks)return result;
   const file=path.join(runtime,'local.config.json');
   let config;
   try {
@@ -33,17 +37,21 @@ export async function collectLegacyWorkflows(runtime,{receipts=readAgentReceipts
     throw Error('Legacy workflow configuration unavailable');
   }
   const absolute=value=>typeof value==='string' && path.isAbsolute(value) && !/[\r\n\0]/.test(value);
-  if(config.receiptDirectory!==undefined && !absolute(config.receiptDirectory))throw Error('Invalid receipt directory');
-  if(config.localModelResults && (!absolute(config.localModelResults) || typeof config.ubuntuHost!=='string' ||
+  if(enabled.receipts && config.receiptDirectory!==undefined && !absolute(config.receiptDirectory))throw Error('Invalid receipt directory');
+  if(enabled.benchmarks && config.localModelResults && (!absolute(config.localModelResults) || typeof config.ubuntuHost!=='string' ||
     !/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(config.ubuntuHost)))throw Error('Invalid benchmark source');
   await Promise.all([
-    config.receiptDirectory?Promise.resolve().then(()=>receipts(config.receiptDirectory)).then(value=>{
+    enabled.receipts && config.receiptDirectory?Promise.resolve().then(()=>receipts(config.receiptDirectory)).then(value=>{
       result.agents=value.agents;result.agentSource=value.source;
     }).catch(()=>{result.agentSource={status:'unavailable'};}):null,
-    config.localModelResults?Promise.resolve().then(()=>benchmark(config.ubuntuHost,config.localModelResults)).then(value=>{
+    enabled.benchmarks && config.localModelResults?Promise.resolve().then(()=>benchmark(config.ubuntuHost,config.localModelResults)).then(value=>{
       result.localModel=cleanLocalModel(value);
     }).catch(()=>{result.localModel={host:'Ubuntu',status:'unavailable'};}):null,
   ]);
+  const current=await isEnabled();
+  if(!validate(current))throw Error('Workflow switches unavailable');
+  if(!current.receipts){result.agents=[];result.agentSource={status:'not-connected'};}
+  if(!current.benchmarks)result.localModel={host:'Ubuntu',status:'not-connected'};
   return result;
 }
 

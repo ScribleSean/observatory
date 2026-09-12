@@ -83,8 +83,11 @@ export async function collectMac(runtime,python,peerConfig=null) {
   // Preserve explicitly configured workflows during a future legacy migration.
   // These owner-local results are attached after peer merge, never exported.
   let workflows;
-  try {workflows=await collectLegacyWorkflows(runtime);}
-  catch {workflows={agents:[],agentSource:{status:'unavailable'},localModel:{host:'Ubuntu',status:'unavailable'}};}
+  const workflowFlags=value=>({receipts:value.receipts,benchmarks:value.benchmarks});
+  try {workflows=await collectLegacyWorkflows(runtime,{enabled:workflowFlags(config),
+    isEnabled:async()=>workflowFlags(macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))))});}
+  catch {workflows={agents:[],agentSource:{status:config.receipts?'unavailable':'not-connected'},
+    localModel:{host:'Ubuntu',status:config.benchmarks?'unavailable':'not-connected'}};}
   attachWorkflows(result,workflows);
   const {data,status}=result;
   await atomic('usage.json',data);

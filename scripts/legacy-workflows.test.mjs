@@ -4,6 +4,7 @@ import {mkdtemp,writeFile,rm,symlink,mkdir,readFile,realpath} from 'node:fs/prom
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {collectLegacyWorkflows,cleanLocalModel,attachWorkflows} from './legacy-workflows.mjs';
+const enabled={receipts:true,benchmarks:true};
 async function fixture(t,config) {
   const dir=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-workflows-')));
   t.after(()=>rm(dir,{recursive:true,force:true}));
@@ -18,7 +19,7 @@ test('fresh installations never discover workflow sources',async t=>{
 });
 test('legacy sources retain sanitized metrics without exporting paths or raw receipts',async t=>{
   const dir=await fixture(t,{receiptDirectory:'/private/receipts',ubuntuHost:'test-host',localModelResults:'/private/benchmarks'});
-  const result=await collectLegacyWorkflows(dir,{receipts:async folder=>{
+  const result=await collectLegacyWorkflows(dir,{enabled,receipts:async folder=>{
     assert.equal(folder,'/private/receipts');return {agents:[{id:'review-1',total:42}],source:{status:'ok'}};
   },benchmark:async(host,folder)=>{
     assert.equal(host,'test-host');assert.equal(folder,'/private/benchmarks');
@@ -29,18 +30,18 @@ test('legacy sources retain sanitized metrics without exporting paths or raw rec
 });
 test('a failed benchmark read does not discard agent receipts',async t=>{
   const dir=await fixture(t,{receiptDirectory:'/receipts',ubuntuHost:'test-host',localModelResults:'/benchmarks'});
-  const result=await collectLegacyWorkflows(dir,{receipts:async()=>({agents:[{id:'review-1'}],source:{status:'partial'}}),benchmark:()=>{throw Error('PRIVATE');}});
+  const result=await collectLegacyWorkflows(dir,{enabled,receipts:async()=>({agents:[{id:'review-1'}],source:{status:'partial'}}),benchmark:()=>{throw Error('PRIVATE');}});
   assert.equal(result.agents.length,1);assert.equal(result.agentSource.status,'partial');assert.equal(result.localModel.status,'unavailable');
 });
 test('invalid source settings are rejected before invoking any reader',async t=>{
   const dir=await fixture(t,{receiptDirectory:'/receipts',ubuntuHost:'bad;host',localModelResults:'/benchmarks'});
   let called=false;
-  await assert.rejects(collectLegacyWorkflows(dir,{receipts:async()=>{called=true;}}));assert.equal(called,false);
+  await assert.rejects(collectLegacyWorkflows(dir,{enabled,receipts:async()=>{called=true;}}));assert.equal(called,false);
 });
 test('linked configuration is not followed',{skip:process.platform==='win32'},async t=>{
   const dir=await fixture(t);
   await writeFile(path.join(dir,'target'),'{}');await symlink(path.join(dir,'target'),path.join(dir,'local.config.json'));
-  await assert.rejects(collectLegacyWorkflows(dir));
+  await assert.rejects(collectLegacyWorkflows(dir,{enabled}));
 });
 test('benchmark projection is bounded and strips invalid values',()=>{
   assert.throws(()=>cleanLocalModel({records:Array(2001).fill({})}));
@@ -58,7 +59,7 @@ test('native Mac collection retains real sanitized receipt output during migrati
   const dir=await fixture(t);
   const receipts=path.join(dir,'receipts');await mkdir(receipts);
   await writeFile(path.join(dir,'local.config.json'),JSON.stringify({receiptDirectory:receipts}));
-  await writeFile(path.join(dir,'collector.config.json'),JSON.stringify({activity:false,codex:false,wispr:false,typewhisper:false,quota:false}));
+  await writeFile(path.join(dir,'collector.config.json'),JSON.stringify({activity:false,codex:false,wispr:false,typewhisper:false,quota:false,receipts:true}));
   await writeFile(path.join(receipts,'fixture.usage.json'),JSON.stringify({conversationId:'PRIVATE',requestedModel:'test-model',status:'SUCCESS',usage:{total_tokens:42},prompt:'PRIVATE'}));
   const {collectMac}=await import('./collect-mac.mjs');
   await collectMac(dir,'/unused-python');
@@ -66,4 +67,19 @@ test('native Mac collection retains real sanitized receipt output during migrati
   const snapshot=JSON.parse(serialized);
   assert.equal(snapshot.agents[0].total,42);assert.equal(snapshot.agentSource.status,'ok');
   assert.equal(snapshot.localModel.status,'not-connected');assert.ok(!serialized.includes('PRIVATE'));assert.ok(!serialized.includes(receipts));
+  await writeFile(path.join(dir,'collector.config.json'),JSON.stringify({activity:false,codex:false,receipts:false}));
+  await collectMac(dir,'/unused-python');
+  const disabled=JSON.parse(await readFile(path.join(dir,'public/local/usage.json'),'utf8'));
+  assert.deepEqual(disabled.agents,[]);assert.equal(disabled.agentSource.status,'not-connected');
+  assert.ok((await readFile(path.join(receipts,'fixture.usage.json'),'utf8')).includes('PRIVATE'));
+});
+test('disabled sources ignore legacy paths and discard in-flight results',async t=>{
+  const dir=await fixture(t,{receiptDirectory:'/receipts',ubuntuHost:'invalid host',localModelResults:'/benchmarks'});
+  let reads=0;
+  const result=await collectLegacyWorkflows(dir,{enabled:{receipts:true,benchmarks:false},
+    isEnabled:async()=>({receipts:false,benchmarks:false}),
+    receipts:async()=>{reads++;return {agents:[{id:'review-1'}],source:{status:'ok'}};},
+    benchmark:()=>{throw Error('Disabled benchmark was invoked');}});
+  assert.equal(reads,1);assert.deepEqual(result.agents,[]);assert.equal(result.agentSource.status,'not-connected');
+  await collectLegacyWorkflows(dir,{receipts:()=>{throw Error('Disabled receipt was invoked');}});
 });
