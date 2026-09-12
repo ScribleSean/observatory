@@ -54,7 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         popover.behavior = .transient
-        popover.animates = true
+        // Keep visibility state synchronous with fallback and dashboard handoff.
+        // An opening animation can otherwise outlive a close request.
+        popover.animates = false
         makeMenu()
         signal(SIGTERM, SIG_IGN)
         let termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
