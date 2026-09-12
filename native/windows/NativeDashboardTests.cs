@@ -43,6 +43,18 @@ internal static class NativeDashboardTests
                 sections.SelectedItem = "Allowances";
                 Check(Children(form).OfType<QuotaGraph>().Count() == 1, "Retired allowance hidden");
                 Capture(form, output, "native-allowances");
+                var quotaGraph = Children(form).OfType<QuotaGraph>().Single();
+                var tokenGraph = Children(form).OfType<DailyTokenGraph>().Single();
+                Check(quotaGraph.AccessibleDescription?.Contains("no observations") == true, "Empty quota history explained");
+                Check(tokenGraph.AccessibleDescription?.Contains("unknown, not zero") == true, "Empty daily totals explained");
+                data["quota"]!["dailyUsageBuckets"] = JsonNode.Parse("""[{"startDate":"2026-09-12","tokens":0}]""");
+                Capture(form, output, "native-zero-tokens");
+                Check(tokenGraph.AccessibleDescription?.Contains("0 tokens") == true, "Recorded zero is not missing");
+                data["quota"]!["dailyUsageBuckets"] = new JsonArray();
+                data["quota"]!["checkedAt"] = "invalid";
+                Capture(form, output, "native-unknown-time");
+                Check(quotaGraph.AccessibleDescription?.Contains("observation time is unknown") == true, "Invalid quota time explained");
+                Check(tokenGraph.AccessibleDescription?.Contains("unknown, not zero") == true, "Empty summary replaces previous values");
                 sections.SelectedItem = "Sources";
                 Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 2, "Source rows");
                 Capture(form, output, "native-sources");

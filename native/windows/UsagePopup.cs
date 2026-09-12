@@ -210,7 +210,13 @@ internal sealed class QuotaGraph : Control
             var y = box.Bottom - box.Height * percent / 100;
             g.DrawLine(grid, box.Left, y, box.Right, y); g.DrawString(percent + "%", Font, brush, 0, y - 6);
         }
-        if (!DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var end)) return;
+        if (!DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var end))
+        {
+            AccessibleDescription = "Allowance history is unavailable because its observation time is unknown.";
+            TextRenderer.DrawText(g, AccessibleDescription, Font, Rectangle.Round(box), ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
+            return;
+        }
         var start = end.AddDays(-1);
         g.DrawString(start.ToLocalTime().ToString("HH:mm"), Font, brush, box.Left, box.Bottom + 6);
         g.DrawString(end.ToLocalTime().ToString("HH:mm"), Font, brush, box.Right - 38, box.Bottom + 6);
@@ -236,6 +242,9 @@ internal sealed class QuotaGraph : Control
         var selection = Snapshot.Text(window["bucket"]) + " " + Snapshot.Text(window["window"]);
         AccessibleDescription = count == 0 ? $"{selection}: no observations in this 24-hour period."
             : $"{selection}: {count} observations. Allowance used starts at {firstUsed:0.#}%, ends at {lastUsed:0.#}%, and ranges from {minimumUsed:0.#}% to {maximumUsed:0.#}%. Gaps and resets are not joined.";
+        if (count == 0)
+            TextRenderer.DrawText(g, "No saved observations in this 24-hour period.", Font, Rectangle.Round(box), ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
     }
 }
 
@@ -244,7 +253,7 @@ internal sealed class DailyTokenGraph : Control
     private readonly JsonObject quota;
     internal DailyTokenGraph(JsonObject quota)
     {
-        this.quota = quota; DoubleBuffered = true; BackColor = Color.FromArgb(24, 25, 27);
+        this.quota = quota; DoubleBuffered = true; BackColor = Color.FromArgb(24, 25, 27); ForeColor = Color.WhiteSmoke;
         AccessibleName = "Recent daily account token totals. Missing dates are unknown, not zero.";
         AccessibleRole = AccessibleRole.Graphic;
     }
@@ -254,7 +263,13 @@ internal sealed class DailyTokenGraph : Control
         var values = ((quota["dailyUsageBuckets"] as JsonArray)?.OfType<JsonObject>() ?? [])
             .Select(row => (date: DateOnly.TryParseExact(Snapshot.Text(row["startDate"]), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) ? day : (DateOnly?)null,
                 tokens: Snapshot.Number(row["tokens"]))).Where(row => row.date is not null && row.tokens is not null).TakeLast(14).ToArray();
-        if (values.Length == 0) return;
+        if (values.Length == 0)
+        {
+            AccessibleDescription = "No saved daily account token totals. Missing data is unknown, not zero.";
+            TextRenderer.DrawText(e.Graphics, AccessibleDescription, Font, ClientRectangle, ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
+            return;
+        }
         var start = values.Min(row => row.date!.Value.DayNumber); var end = values.Max(row => row.date!.Value.DayNumber);
         var maximum = Math.Max(1, values.Max(row => row.tokens!.Value));
         var box = new RectangleF(44, 12, Math.Max(1, Width - 54), Math.Max(1, Height - 42));
