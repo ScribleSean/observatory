@@ -6,6 +6,11 @@ namespace WorkspaceObservatory;
 
 internal sealed class UsagePopup : Form
 {
+    private readonly Font normalFont = new("Segoe UI", 10);
+    private readonly Font headingFont = new("Segoe UI", 10, FontStyle.Bold);
+    private readonly Font titleFont = new("Segoe UI", 13, FontStyle.Bold);
+    private readonly Font valueFont = new("Segoe UI", 14, FontStyle.Bold);
+    private readonly Font secondaryFont = new("Segoe UI", 9);
     private readonly Func<JsonObject?> read;
     private readonly Func<Task> refresh;
     private readonly Action open;
@@ -18,20 +23,53 @@ internal sealed class UsagePopup : Form
         this.read = read; this.refresh = refresh; this.open = open;
         Text = "Workspace Observatory";
         AccessibleName = "Workspace Observatory usage overview";
-        BackColor = Color.FromArgb(24, 25, 27); ForeColor = Color.WhiteSmoke;
-        Font = new Font("Segoe UI", 9);
+        BackColor = Color.FromArgb(39, 39, 41); ForeColor = Color.WhiteSmoke;
+        Font = normalFont;
         ClientSize = new Size(388, 560);
-        FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        FormBorderStyle = FormBorderStyle.None;
+        DoubleBuffered = true;
         ShowInTaskbar = false; StartPosition = FormStartPosition.Manual;
         Controls.Add(content);
         Reload();
     }
 
+    protected override bool ProcessCmdKey(ref Message message, Keys keyData)
+    {
+        if (keyData == Keys.Escape) { Close(); return true; }
+        return base.ProcessCmdKey(ref message, keyData);
+    }
+
+    private Button ActionButton(string title, int width = BodyWidth)
+    {
+        var button = new Button { Text = title, AccessibleName = title, Width = width, Height = 38,
+            FlatStyle = FlatStyle.Flat, BackColor = BackColor, ForeColor = ForeColor,
+            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0),
+            Margin = new Padding(0, 2, 0, 2), UseVisualStyleBackColor = false };
+        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(58, 58, 61);
+        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(68, 68, 72);
+        return button;
+    }
+
+    private void Separator() => content.Controls.Add(new Panel { Width = BodyWidth, Height = 1,
+        BackColor = Color.FromArgb(67, 67, 70), Margin = new Padding(0, 10, 0, 10) });
+
+    private void Stat(string title, string value, string date)
+    {
+        var row = new Panel { Width = BodyWidth, Height = 62, Margin = Padding.Empty };
+        row.Controls.Add(new Label { Text = title, ForeColor = Color.Gainsboro, Bounds = new Rectangle(10, 8, 155, 24) });
+        row.Controls.Add(new Label { Text = value, ForeColor = ForeColor, TextAlign = ContentAlignment.TopRight,
+            Font = valueFont, Bounds = new Rectangle(165, 5, BodyWidth - 175, 29) });
+        row.Controls.Add(new Label { Text = date, ForeColor = Color.FromArgb(170, 170, 176),
+            Font = secondaryFont, Bounds = new Rectangle(10, 34, BodyWidth - 20, 22) });
+        content.Controls.Add(row);
+    }
+
     private Label Label(string text, bool heading = false)
     {
         var label = new Label { Text = text, AutoSize = true, MaximumSize = new Size(BodyWidth, 0),
-            Margin = new Padding(0, heading ? 12 : 4, 0, 4), ForeColor = heading ? Color.WhiteSmoke : Color.LightGray };
-        if (heading) label.Font = new Font(Font, FontStyle.Bold);
+            Margin = new Padding(10, heading ? 8 : 3, 0, 4), ForeColor = heading ? Color.WhiteSmoke : Color.FromArgb(180, 180, 186) };
+        if (heading) label.Font = headingFont;
         content.Controls.Add(label); return label;
     }
 
@@ -41,7 +79,14 @@ internal sealed class UsagePopup : Form
         content.SuspendLayout();
         foreach (var control in content.Controls.Cast<Control>().ToArray()) control.Dispose();
         var data = read();
-        Label("WORKSPACE OBSERVATORY", true);
+        var title = Label("Workspace Observatory", true);
+        title.Font = titleFont;
+        if (DateTimeOffset.TryParse(Snapshot.Text(data?["collectedAt"]), out var collected))
+        {
+            var minutes = Math.Max(0, (int)(DateTimeOffset.UtcNow - collected).TotalMinutes);
+            Label(minutes == 0 ? "Updated just now" : $"Updated {minutes}m ago");
+        }
+        Separator();
         var quota = data?["quota"] as JsonObject;
         if (Snapshot.Text(quota?["status"]) != "not-connected" && quota is not null)
         {
@@ -56,27 +101,38 @@ internal sealed class UsagePopup : Form
             foreach (var window in windows.Take(2))
             {
                 Label($"{WindowLabel(window)}    {Snapshot.Format(Snapshot.Number(window["remainingPercent"]))}% left");
-                content.Controls.Add(new ProgressBar { Width = BodyWidth, Height = 8, Maximum = 1000,
+                content.Controls.Add(new AllowanceMeter { Width = BodyWidth, Height = 5,
                     Value = (int)Math.Clamp((Snapshot.Number(window["remainingPercent"]) ?? 0) * 10, 0, 1000),
                     AccessibleName = WindowLabel(window) + " remaining allowance", Margin = new Padding(0, 0, 0, 4) });
             }
             if (windows.Length > 2) Label($"{windows.Length - 2} more allowance windows in Observatory");
             Label("Account-wide limits, not a device sum.");
         }
-        else Label("Account limits are off. Enable optional account usage in Configure local collection.");
-        Label("Latest local records", true);
-        var hosts = new ComboBox { Width = BodyWidth, DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Source host" };
-        hosts.Items.AddRange(new object[] { "All", "Mac", "Windows", "Ubuntu" }); hosts.SelectedItem = host;
-        hosts.SelectedIndexChanged += (_, _) => { host = (string)hosts.SelectedItem!; Reload(); };
+        else Label("Account limits not connected");
+        var hosts = new Panel { Width = BodyWidth, Height = 38, AccessibleName = "Source host", Margin = new Padding(0, 12, 0, 12) };
+        var names = new[] { "All", "Mac", "Windows", "Ubuntu" };
+        for (var index = 0; index < names.Length; index++)
+        {
+            var name = names[index];
+            var choice = ActionButton(name, BodyWidth / 4 - 3);
+            choice.AccessibleRole = AccessibleRole.RadioButton;
+            choice.AccessibleDescription = host == name ? "Selected source host" : "Select source host";
+            choice.Location = new Point(index * BodyWidth / 4, 0);
+            choice.TextAlign = ContentAlignment.MiddleCenter; choice.Padding = Padding.Empty;
+            choice.BackColor = host == name ? Color.FromArgb(66, 66, 72) : BackColor;
+            choice.Click += (_, _) => { host = name; Reload(); };
+            hosts.Controls.Add(choice);
+        }
         content.Controls.Add(hosts);
         var activity = Snapshot.Latest(data, "activity", host);
         var tokens = Snapshot.Latest(data, "tokens", host);
-        Label($"Active time: {Snapshot.Duration(Snapshot.Number(activity?["seconds"]))} · {Snapshot.Text(activity?["date"])}");
-        Label($"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))} · {Snapshot.Text(tokens?["date"])}");
-        var refreshButton = new Button { Text = "Refresh sources", Width = BodyWidth, Height = 30, AccessibleName = "Refresh sources" };
+        Stat("Active time", Snapshot.Duration(Snapshot.Number(activity?["seconds"])), Snapshot.Text(activity?["date"], "No retained records"));
+        Stat("Tokens", Snapshot.Format(Snapshot.Number(tokens?["totalTokens"])), Snapshot.Text(tokens?["date"], "No retained records"));
+        Separator();
+        var refreshButton = ActionButton("Refresh sources");
         refreshButton.Click += async (_, _) => { refreshButton.Enabled = false; try { await refresh(); } finally { if (!IsDisposed) Reload(); } };
         content.Controls.Add(refreshButton);
-        var openButton = new Button { Text = "Open Observatory", Width = BodyWidth, Height = 30 };
+        var openButton = ActionButton("Open Observatory");
         openButton.Click += (_, _) => { Close(); open(); }; content.Controls.Add(openButton);
         content.ResumeLayout();
         // Size the native surface around its controls instead of hiding navigation
@@ -99,6 +155,34 @@ internal sealed class UsagePopup : Form
         Location = new Point(Math.Clamp(Cursor.Position.X - Width, area.Left, area.Right - Width),
             Math.Clamp(Cursor.Position.Y - Height, area.Top, area.Bottom - Height));
         Show(); Activate();
+    }
+    protected override void Dispose(bool disposing)
+    {
+        var releaseFonts = disposing && !IsDisposed;
+        base.Dispose(disposing);
+        if (releaseFonts)
+        {
+            normalFont.Dispose(); headingFont.Dispose(); titleFont.Dispose(); valueFont.Dispose(); secondaryFont.Dispose();
+        }
+    }
+}
+
+internal sealed class AllowanceMeter : Control
+{
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal int Value { get; set; }
+    internal AllowanceMeter() { DoubleBuffered = true; AccessibleRole = AccessibleRole.ProgressBar; }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        using var track = new SolidBrush(Color.FromArgb(74, 74, 78));
+        using var fill = new SolidBrush(Color.FromArgb(223, 223, 230));
+        e.Graphics.FillRectangle(track, ClientRectangle);
+        e.Graphics.FillRectangle(fill, 0, 0, Width * Math.Clamp(Value, 0, 1000) / 1000f, Height);
+    }
+    protected override AccessibleObject CreateAccessibilityInstance() => new MeterAccessibility(this);
+    private sealed class MeterAccessibility(AllowanceMeter owner) : ControlAccessibleObject(owner)
+    {
+        public override string? Value { get => $"{owner.Value / 10.0:0.#}% remaining"; set { } }
     }
 }
 

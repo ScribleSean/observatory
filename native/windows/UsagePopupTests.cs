@@ -21,9 +21,16 @@ internal static class UsagePopupTests
                 // Native progress bars animate toward their assigned values.
                 await Task.Delay(1000);
                 Check(popup.Visible && Screen.AllScreens.Any(screen => screen.WorkingArea.Contains(popup.Bounds)), "Popup is not fully on screen.");
+                var headingFont = Descendants(popup).OfType<Label>().Single(label => label.Text == "Workspace Observatory").Font;
+                for (var repeat = 0; repeat < 20; repeat++) popup.Reload();
+                Check(ReferenceEquals(headingFont, Descendants(popup).OfType<Label>().Single(label => label.Text == "Workspace Observatory").Font), "Refresh should reuse its font resources.");
                 var controls = Descendants(popup).ToArray();
-                Check(controls.OfType<ProgressBar>().Count() == 2, "Expected two compact allowance bars.");
-                Check(controls.OfType<ProgressBar>().Select(bar => bar.Value).SequenceEqual(new[] { 568, 584 }), "Allowance bar values differ from fixture.");
+                Check(controls.OfType<AllowanceMeter>().Count() == 2, "Expected two compact allowance bars.");
+                Check(controls.OfType<AllowanceMeter>().Select(bar => bar.Value).SequenceEqual(new[] { 568, 584 }), "Allowance bar values differ from fixture.");
+                Check(controls.OfType<AllowanceMeter>().All(bar => bar.AccessibilityObject.Value?.Contains("remaining") == true), "Allowance values must be accessible.");
+                Check(popup.FormBorderStyle == FormBorderStyle.None, "Tray panel should not use a utility-window title bar.");
+                Check(!controls.OfType<ComboBox>().Any(), "Device navigation should not use a stock dropdown.");
+                Check(controls.OfType<Button>().All(button => button.FlatAppearance.BorderSize == 0), "Tray actions should not have outlined button frames.");
                 Check(!controls.OfType<Label>().Any(label => label.Text.Contains("bengalfox")), "Retired allowance is visible.");
                 Check(!controls.OfType<FlowLayoutPanel>().Single().AutoScroll, "Popup must not scroll.");
                 Check(controls.All(control => control.Parent!.ClientRectangle.Contains(control.Bounds)), "A popup control is clipped.");
@@ -53,9 +60,13 @@ internal static class UsagePopupTests
 
                 data["quota"] = new JsonObject { ["status"] = "needs-auth", ["windows"] = new JsonArray() };
                 popup.Reload();
-                Check(!Descendants(popup).OfType<ProgressBar>().Any() && !Descendants(popup).OfType<QuotaGraph>().Any(), "Missing limits rendered as a value.");
+                Check(!Descendants(popup).OfType<AllowanceMeter>().Any() && !Descendants(popup).OfType<QuotaGraph>().Any(), "Missing limits rendered as a value.");
                 Check(Descendants(popup).OfType<Label>().Any(label => label.Text.Contains("Sign in through Codex")), "Missing sign-in guidance.");
                 Capture(popup, output, "popup-unavailable");
+
+                data["quota"] = new JsonObject { ["status"] = "not-connected" };
+                popup.Reload();
+                Capture(popup, output, "popup-limits-off");
 
                 var buttons = Descendants(popup).OfType<Button>().ToArray();
                 var layout = Descendants(popup).OfType<FlowLayoutPanel>().Single();
@@ -128,6 +139,8 @@ internal static class UsagePopupTests
             daily.Add(new JsonObject { ["startDate"] = now.AddDays(index - 13).ToString("yyyy-MM-dd"), ["tokens"] = 120000 + index * 17000 });
         return new JsonObject { ["schema"] = 2, ["collectedAt"] = now.ToString("O"),
             ["quota"] = new JsonObject { ["status"] = "ok", ["checkedAt"] = now.ToString("O"), ["windows"] = Windows(288),
-                ["history"] = history, ["dailyUsageBuckets"] = daily }, ["activity"] = new JsonArray(), ["tokens"] = new JsonArray() };
+                ["history"] = history, ["dailyUsageBuckets"] = daily },
+            ["activity"] = new JsonArray(new JsonObject { ["host"] = "Windows", ["status"] = "ok", ["days"] = new JsonArray(new JsonObject { ["date"] = "2026-09-12", ["seconds"] = 2160 }) }),
+            ["tokens"] = new JsonArray(new JsonObject { ["host"] = "Windows", ["status"] = "ok", ["days"] = new JsonArray(new JsonObject { ["date"] = "2026-09-12", ["totalTokens"] = 18000 }) }) };
     }
 }
