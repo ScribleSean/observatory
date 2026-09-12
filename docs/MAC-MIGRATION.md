@@ -31,6 +31,8 @@ The assessment's `windows-typewhisper-not-in-native-peer-payload` review code re
 
 Nine focused archive and migration-assessment checks pass on Mac. Archive tests use fictional records and cover exact-byte preservation, retained timestamps, owner-only permissions, repeated preparation without overwrite, linked paths, broad directory permissions and invalid or oversized inputs. They do not establish power-loss recovery or completion of a live migration.
 
+A subsequent installed-app check archived the actual legacy snapshot while holding `.runtime/collector.lock`. The private copy matched the source bytes and checksum, and the legacy configuration was unchanged. The installed native viewer opened that archive, displayed its original timestamp and retained token dates, disabled Refresh and showed read-only Settings guidance. Return to live data restored the live view. This verifies real retained-snapshot visibility, but the collector activation and paired live-data checks remain unfinished. Archive paths and actual usage records are kept outside this repository.
+
 The native Mac dashboard now has an Open saved snapshot action in source. It opens a user-selected Observatory schema-2 JSON snapshot in a separate read-only view. The original collection timestamp remains visible, refresh and settings mutation are unavailable in that view, and Return to live data restores the current collector snapshot. Live collection continues independently. Archived metrics are never added to current totals.
 
 The reader bounds files to 16 MB, rejects final-path symbolic links, non-regular files, changed files and invalid snapshot headers. Native tests cover retained token visibility, unchanged file bytes and invalid/oversized/link rejection.
