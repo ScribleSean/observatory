@@ -34,11 +34,16 @@ export async function findCodexExecutable() {
   throw Error('Installed Codex client unavailable');
 }
 
-function project(state) {
+function project(state,now) {
   const history=state.history;
   if(!history || history.status==='not-connected')return {...disconnected(),status:'unavailable',latestReadStatus:'waiting',nextAttemptAt:new Date(state.nextAttemptAt).toISOString()};
+  // Loading retained history is not a failed poll. Keep a successful sample
+  // healthy for two five-minute polling intervals without changing its time.
+  const age=now-Date.parse(history.asOf);
+  const status=history.latestReadStatus==='ok' && ['ok','stale'].includes(history.status)?
+    (Number.isFinite(age) && age>=0 && age<600000?'ok':'stale'):history.status;
   // Do not expose the salt, account scope key, revision or private store path.
-  return {status:history.status,provider:'Codex',scope:'account',checkedAt:history.asOf,
+  return {status,provider:'Codex',scope:'account',checkedAt:history.asOf,
     latestReadStatus:history.latestReadStatus,nextAttemptAt:new Date(state.nextAttemptAt).toISOString(),
     windows:history.samples.at(-1)?.windows || [],
     history:history.samples.filter(row=>Date.parse(row.checkedAt)>=Date.parse(history.asOf)-86400000),
@@ -55,7 +60,7 @@ export async function collectQuota(runtime,{enabled=false,isEnabled=async()=>ena
     return disconnected();
   }
   const before=await readQuotaState(runtime,clock());
-  if(before.nextAttemptAt>clock())return project(before);
+  if(before.nextAttemptAt>clock())return project(before,clock());
   let observation;
   try {observation=await readSnapshot(await resolveExecutable(),before.salt);}
   catch(error) {
@@ -72,7 +77,7 @@ export async function collectQuota(runtime,{enabled=false,isEnabled=async()=>ena
   const scope=observation.scope || before.history?.scope || randomBytes(32).toString('hex');
   const state=await updateQuotaState(runtime,{revision:before.revision,scope,observation,
     nextAttemptAt:now+delay,failures},now);
-  return project(state);
+  return project(state,now);
 }
 
 export function attachQuota(result,quota) {
