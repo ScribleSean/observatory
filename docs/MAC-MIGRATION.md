@@ -6,7 +6,7 @@ Migration is in development. Do not rename or delete `local.config.json` to forc
 
 Current source runs the optional receipt-directory reader in a separate local process with a 15-second deadline and bounded output. An unavailable directory must not hold the entire dashboard collection open. Timeout reports unavailable receipts without deleting their original files or widening folder permissions. Both the legacy collector and native workflow adapter use this boundary.
 
-This follows a September 12 development-machine diagnosis where the legacy collector stalled inside the operating system's directory-open call. The cause of that OS-level wait was not established. Synthetic tests verify timeout cleanup, unchanged source bytes and sanitized results. Installed-runtime verification of the fix remains pending.
+This follows a September 12 development-machine diagnosis where the legacy collector stalled inside the operating system's directory-open call. The cause of that OS-level wait was not established. Synthetic tests verify timeout cleanup, unchanged source bytes and sanitized results. The minimal legacy-runtime update was applied under the existing collector lock with a verified backup and unchanged private-data inventory. A subsequent installed-app refresh completed in about nine seconds and saved a new snapshot. Receipt data was readable during that run, so live timeout behavior is supported by the synthetic stalled-worker test, not that successful read. The prior run had also recovered before deployment. This is not evidence that the underlying OS permission issue is resolved.
 
 ## Read-only assessment
 
