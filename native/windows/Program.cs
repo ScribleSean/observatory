@@ -9,7 +9,7 @@ internal static class Program
     {
         if (args.Contains("--self-test"))
         {
-            try { Snapshot.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest(); }
+            try { Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest(); }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
             return;
         }
@@ -30,6 +30,14 @@ internal static class Program
             return;
         }
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && args[0] == "--test-native-dashboard")
+        {
+            if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
+                File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint) || Directory.EnumerateFileSystemEntries(args[1]).Any())
+            { Environment.ExitCode = 1; return; }
+            NativeDashboardTests.Run(args[1]);
+            return;
+        }
         if (args.Length == 2 && args[0] == "--test-setup-wizard")
         {
             if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
@@ -66,7 +74,7 @@ internal static class Program
             if (!args.Contains("--background")) activation.Set();
             return;
         }
-        Application.Run(new ObservatoryContext(activation, !args.Contains("--background")));
+        Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), args.Contains("--native-dashboard")));
     }
 }
 
@@ -76,13 +84,15 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly NotifyIcon tray;
     private readonly Collector collector;
     private readonly System.Windows.Forms.Timer activationTimer = new() { Interval = 200 };
-    private Dashboard? dashboard;
+    private Form? dashboard;
+    private readonly bool nativeDashboard;
     private SetupWizard? setupWizard;
     private UsagePopup? usagePopup;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
 
-    internal ObservatoryContext(EventWaitHandle activation, bool show)
+    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = false)
     {
+        this.nativeDashboard = nativeDashboard;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
         var setupPending = true;
@@ -272,7 +282,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
-            dashboard = new Dashboard(runtime);
+            dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         dashboard.Show();

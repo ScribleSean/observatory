@@ -10,7 +10,17 @@ Installed builds appear as **Workspace Observatory** in the Start menu. Launchin
 
 The telescope icon lives in the **system tray**, possibly under the hidden-icons arrow. Click it for a compact usage overview, then choose **Open Observatory** for the full window. Closing the main window leaves the tray app running. Use **Quit Observatory** in the tray menu to stop it.
 
-The compact overview does not embed full history charts or require scrolling on the tested desktop. Retired Spark / Bengal-fox allowance windows are excluded. This does not remove historical model-token records. The current main window still embeds the dashboard. Replacing that screen with native controls remains planned work.
+The compact overview does not embed full history charts or require scrolling on the tested desktop. Retired Spark / Bengal-fox allowance windows are excluded. This does not remove historical model-token records. The installed main window still embeds the dashboard. Source builds include an opt-in native main-window preview described below.
+
+## Native main-window preview
+
+Launch a development build with `--native-dashboard` to use native Windows controls for Activity, Tokens, Allowances and Sources. Quit any running Observatory instance first. The single-instance activation mechanism opens the existing instance and does not change its display mode.
+
+Activity and Tokens offer Day, Week and All retained periods. A week ends on the selected recorded date. Missing dates are not filled with zeros, and all-device token totals require a collector-verified deduplication result. Allowances reuse the saved account-history charts and exclude retired Spark windows. Refresh sources invokes the existing collector without changing its configuration. The view reads sanitized snapshots, not raw logs.
+
+This preview is not the installed default. Dictation, agent detail and integrated Settings are not migrated yet. Empty chart states, full accessibility review and feature parity remain unfinished. It does not add device synchronization or provider sign-ins.
+
+For an isolated desktop check, run `WorkspaceObservatory.exe --test-native-dashboard C:\absolute\path\to\empty-test-directory`. The directory must already exist, be empty and not be linked. The test uses in-memory fictional records, an inert refresh callback and captures only its own form. It does not start a collector or modify installed settings. On September 12 the Windows build and desktop test passed period totals, missing-data handling, unverified combined-token suppression, retired-allowance filtering, source rows, refresh and repeated reload checks. Activity and Allowances captures were visually inspected. These checks do not establish installed native-window behavior or complete native feature parity.
 
 ## First collection
 
