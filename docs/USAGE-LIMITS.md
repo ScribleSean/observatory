@@ -14,6 +14,8 @@ Pairing disconnection now revokes local sharing consent and invalidates in-fligh
 
 Before transport integration, both devices still need explicit sharing controls and an authenticated agreement on the owner's current generation. Receiving code must check freshness and retain device provenance. A matching allowance percentage is not proof that two devices use the same account, so cross-device account totals must not be summed.
 
+`quota-sharing-control.mjs` provides the local settings interface for that integration. Status returns only availability, consent state and an opaque confirmation token. Enabling requires a successful observation within ten minutes and a current token bound to the account-store revision and pairing. Disconnect and settings operations share the pairing lock. This interface has synthetic and command-line tests but is not yet exposed in native settings or used by transport.
+
 ## Reference implementation
 
 Reviewed [Codenotch](https://github.com/vinzdg/codenotch/tree/0a6c6fb62b7fda52e4f8bd1ce7e8c7e7b8595b75), including `UsageStore.swift`, `UsageArchive.swift`, `CodexLocalProvider.swift` and `CodexUsage.swift`, on September 9, 2026. Its root license is MIT. This work uses its behavior as a reference, not copied source or artwork.
