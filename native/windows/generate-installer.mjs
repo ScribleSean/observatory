@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {verifyManifest} from './verify-manifest.mjs';
 import {sourceState} from '../source-state.mjs';
+import {desktopReleaseVersion} from '../release-version.mjs';
 
 export function nsisLiteral(value) {
   if(typeof value!=='string' || /[\r\n\0]/.test(value))throw Error('Invalid installer literal');
@@ -39,8 +40,7 @@ export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
     throw Error('Release installer source must be clean and match the package revision');
   for(const required of ['WorkspaceObservatory.exe','Runtime/node.exe','LICENSE'])
     if(!manifest.files.some(file=>file.path===required))throw Error('Missing application component');
-  const version=readFileSync(new URL('WorkspaceObservatory.csproj',import.meta.url),'utf8').match(/<Version>([0-9]+\.[0-9]+\.[0-9]+)<\/Version>/)?.[1];
-  if(!version)throw Error('Invalid application version');
+  const {version}=desktopReleaseVersion();
   const name=testIdentity?'Workspace Observatory Installer Test':'Workspace Observatory';
   const setupId=testIdentity?'WorkspaceObservatoryInstallerTest':'WorkspaceObservatorySetup';
   const installerName=`Workspace-Observatory-${version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;

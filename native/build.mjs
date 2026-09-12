@@ -5,9 +5,11 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {bundleRuntime} from './mac/runtime-bundle.mjs';
 import {sourceState} from './source-state.mjs';
+import {desktopReleaseVersion} from './release-version.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
 const source=sourceState(root);
+const release=desktopReleaseVersion();
 const runtimeIndex=process.argv.indexOf('--runtime-dir');
 const runtimeSource=runtimeIndex>=0?process.argv[runtimeIndex+1]:null;
 if(!runtimeSource || !path.isAbsolute(runtimeSource))throw Error('Pass --runtime-dir with an absolute verified Mac runtime payload directory');
@@ -31,7 +33,7 @@ const resources=path.join(contents,'Resources');
 mkdirSync(path.join(contents,'MacOS'),{recursive:true});
 mkdirSync(resources,{recursive:true});
 for(const name of ['LICENSE','THIRD-PARTY-NOTICES.md'])cpSync(path.join(root,name),path.join(resources,name));
-writeFileSync(path.join(resources,'build-info.json'),JSON.stringify({version:'0.3.0',sourceRevision:source.revision,sourceDirty:source.dirty}));
+writeFileSync(path.join(resources,'build-info.json'),JSON.stringify({...release,sourceRevision:source.revision,sourceDirty:source.dirty}));
 const runtimeBinaries=bundleRuntime(runtimeSource,path.join(resources,'Runtime'),
   JSON.parse(readFileSync(path.join(root,'native/mac/runtime-assets.json'),'utf8')));
 const mark=path.join(root,'public/brand/telescope.svg');
@@ -65,8 +67,8 @@ writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UT
 <key>CFBundleExecutable</key><string>WorkspaceObservatory</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>${release.version}</string>
+<key>CFBundleVersion</key><string>${release.buildNumber}</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
