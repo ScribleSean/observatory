@@ -5,7 +5,7 @@ namespace WorkspaceObservatory;
 
 internal sealed partial class NativeDashboard
 {
-    private string dictationHost = "Windows", dictationProduct = "Wispr Flow", dictationPeriod = "Week", dictationAnchor = "";
+    private string dictationHost = "All devices", dictationProduct = "All tools", dictationPeriod = "Week", dictationAnchor = "";
 
     internal static string DictationValue(JsonObject[] days, string field, bool wispr)
     {
@@ -20,45 +20,45 @@ internal sealed partial class NativeDashboard
 
     private void Dictation(JsonObject? snapshot)
     {
-        Choice("Product", ["Wispr Flow", "TypeWhisper"], dictationProduct, value => { dictationProduct = value; dictationAnchor = ""; });
-        Choice("Device", ["Mac", "Windows"], dictationHost, value => { dictationHost = value; dictationAnchor = ""; });
+        Label("Your voice usage over time, by tool and device.");
+        Choice("Tool", ["All tools", "Wispr Flow", "ChatGPT"], dictationProduct, value => { dictationProduct = value; dictationAnchor = ""; });
+        Choice("Device", ["All devices", "Mac", "Windows"], dictationHost, value => { dictationHost = value; dictationAnchor = ""; });
         Choice("Period", ["Day", "Week", "All retained"], dictationPeriod, value => dictationPeriod = value);
-        var source = NativeHistory.Rows(snapshot?["dictation"]).FirstOrDefault(row =>
-            Snapshot.Text(row["host"]) == dictationHost && Snapshot.Text(row["source"], "TypeWhisper") == dictationProduct);
-        Label("Source status: " + Snapshot.Text(source?["status"], "not-connected") + ". Last checked: " + Snapshot.Text(source?["checkedAt"]));
-        if (Snapshot.Text(source?["status"]) != "ok")
-        {
-            Label("Statistics unavailable. Missing records are unknown, not zero. Hosts and products are not combined.");
-            return;
-        }
-        var days = NativeHistory.Rows(source?["days"]).Where(row => DateOnly.TryParseExact(Snapshot.Text(row["date"]),
-            "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)).OrderBy(row => Snapshot.Text(row["date"]), StringComparer.Ordinal).ToArray();
-        if (days.Length == 0) { Label("No retained transcription aggregates. This is not a confirmed zero usage total."); return; }
-        var dates = days.Select(row => Snapshot.Text(row["date"])).ToArray();
-        if (!dates.Contains(dictationAnchor)) dictationAnchor = dates[^1];
-        if (dictationPeriod != "All retained") Choice(dictationPeriod == "Week" ? "Week ending" : "Recorded day", dates, dictationAnchor, value => dictationAnchor = value);
-        var selected = NativeHistory.Select(days, dictationPeriod, dictationAnchor);
-        var wispr = dictationProduct == "Wispr Flow";
-        Label(wispr ? "America/New_York dates. The device identifies the store read, not necessarily the recording device."
-            : "Device-local dates. History may include recovered or imported transcriptions.");
-        Table("Dictation totals", ["Metric", "Recorded value"], new[] {
-            new[] { wispr ? "History records" : "Transcriptions", Snapshot.Format(NativeHistory.Sum(selected, "transcriptions")) },
-            new[] { "Words", DictationValue(selected, "words", wispr) },
-            new[] { "Recorded audio minutes", DictationValue(selected, "audioSeconds", wispr) }
-        });
-        if (wispr) Label("Word coverage: " + Snapshot.Format(NativeHistory.Sum(selected, "wordRecords")) + " of "
-            + Snapshot.Format(NativeHistory.Sum(selected, "transcriptions")) + " records. Audio coverage: "
-            + Snapshot.Format(NativeHistory.Sum(selected, "audioRecords")) + " records. Partial coverage is not a full usage total.");
-        Table("Daily dictation", ["Date", "Records", "Words", "Audio minutes"], selected.Reverse().Select(day => new[] {
-            Snapshot.Text(day["date"]), Snapshot.Format(Snapshot.Number(day["transcriptions"])), DictationValue([day], "words", wispr), DictationValue([day], "audioSeconds", wispr) }));
-        if (!wispr)
-        {
-            var engines = selected.SelectMany(day => NativeHistory.Rows(day["engines"]).Select(engine => new[] {
-                Snapshot.Text(day["date"]), Snapshot.Text(engine["engine"]), Snapshot.Format(Snapshot.Number(engine["transcriptions"])) })).ToArray();
-            if (engines.Length == 0) Label("Engine breakdown unknown.");
-            else Table("Dictation engines", ["Date", "Engine", "Transcriptions"], engines);
-        }
-        Label("Hosts and products stay separate. Missing dates are not filled with zeros. Transcripts, recordings, app names and custom model names are excluded.");
-        if (wispr) Label("History may include unfinished or failed records. Audio duration includes silence. Synced or imported records can overlap.");
+        var devices = dictationHost == "All devices" ? new[] { "Mac", "Windows" } : [dictationHost];
+        var products = dictationProduct == "All tools" ? new[] { "Wispr Flow", "ChatGPT" } : [dictationProduct];
+        var sources = devices.SelectMany(device => products.Select(product => {
+            var matches = NativeHistory.Rows(snapshot?["dictation"]).Where(row =>
+                Snapshot.Text(row["host"]) == device && Snapshot.Text(row["source"]) == product).ToArray();
+            var source = product == "Wispr Flow" && matches.Length == 1 ? matches[0] : null;
+            var status = product == "ChatGPT" ? "Tracking not yet verified" :
+                matches.Length > 1 ? "Ambiguous source" : Snapshot.Text(source?["status"], "not-connected");
+            var days = status == "ok" ? NativeHistory.Rows(source?["days"]).Where(row =>
+                DateOnly.TryParseExact(Snapshot.Text(row["date"]), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out _)).OrderBy(row => Snapshot.Text(row["date"]), StringComparer.Ordinal).ToArray() : [];
+            return (device, product, source, status, days);
+        })).ToArray();
+        var dates = sources.SelectMany(source => source.days).Select(day => Snapshot.Text(day["date"]))
+            .Distinct().Order(StringComparer.Ordinal).ToArray();
+        if (!dates.Contains(dictationAnchor)) dictationAnchor = dates.LastOrDefault() ?? "";
+        if (dictationPeriod != "All retained" && dates.Length > 0)
+            Choice(dictationPeriod == "Week" ? "Week ending" : "Recorded day", dates, dictationAnchor, value => dictationAnchor = value);
+        Label("All voice time: Unknown. Complete coverage is not established.");
+        var selected = sources.Select(source => (source, days: NativeHistory.Select(source.days, dictationPeriod, dictationAnchor))).ToArray();
+        Table("By tool and device", ["Tool", "Device", "Records", "Words", "Audio minutes", "Status", "Checked"], selected.Select(row => new[] {
+            row.source.product, row.source.device, Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions")),
+            DictationValue(row.days, "words", true), DictationValue(row.days, "audioSeconds", true),
+            row.source.status == "ok" ? "Recorded history" : row.source.status, Snapshot.Text(row.source.source?["checkedAt"])
+        }));
+        var daily = selected.SelectMany(row => row.days.Select(day => new[] {
+            Snapshot.Text(day["date"]), row.source.product, row.source.device,
+            Snapshot.Format(Snapshot.Number(day["transcriptions"])), DictationValue([day], "words", true),
+            DictationValue([day], "audioSeconds", true)
+        })).OrderByDescending(row => row[0], StringComparer.Ordinal).ToArray();
+        if (daily.Length == 0) Label("No recorded voice statistics in this scope. Missing data is not zero usage.");
+        else Table("Voice over time", ["Date", "Tool", "Device", "Records", "Words", "Audio minutes"], daily.Take(60));
+        Label("Latest 60 tool/device rows shown. Totals cover the selected period. America/New_York dates. Missing dates are gaps, not zeros.");
+        Label("More local speech detection coming soon.");
+        Label("ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage.");
+        Label("Wispr recording metadata can include silence and unfinished records. Synced or imported histories can overlap, so device totals are not added together. Transcripts, recordings and credentials are excluded.");
     }
 }

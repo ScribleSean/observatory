@@ -68,6 +68,9 @@ internal static class NativeDashboardTests
             try
             {
                 await Task.Delay(200);
+                var sections = Children(form).OfType<ListBox>().Single();
+                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
+                sections.SelectedItem = "Activity";
                 Check(Texts(form).Contains("30 min"), "Day total");
                 await Select(form, "Period", "Week");
                 Check(Texts(form).Contains("50 min"), "Calendar week total");
@@ -85,7 +88,6 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("Hourly breakdown unavailable."), "Missing hourly detail");
                 await Select(form, "Device", "Mac");
                 Check(Texts(form).Any(value => value.StartsWith("No verified records")), "Unavailable host");
-                var sections = Children(form).OfType<ListBox>().Single();
                 sections.SelectedItem = "Tokens";
                 await Select(form, "Device", "Windows");
                 Check(Texts(form).Contains("60 tokens"), "Token total");
@@ -139,18 +141,20 @@ internal static class NativeDashboardTests
                 data["quota"] = localQuota;
                 sections.SelectedItem = "Dictation";
                 string Cell(string table, int row, int column) => Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == table).Rows[row].Cells[column].Value?.ToString() ?? "";
-                Check(Cell("Dictation totals", 0, 1) == "4", "Dictation week excludes older records");
-                Check(Cell("Dictation totals", 1, 1) == "20 (partial)", "Partial word coverage");
-                Check(Cell("Dictation totals", 2, 1) == "Unknown", "No audio coverage is unknown");
+                Check(Cell("By tool and device", 2, 2) == "4", "Dictation week excludes older records");
+                Check(Cell("By tool and device", 2, 3) == "20 (partial)", "Partial word coverage");
+                Check(Cell("By tool and device", 2, 4) == "Unknown", "No audio coverage is unknown");
+                Check(Cell("By tool and device", 3, 5) == "Tracking not yet verified", "ChatGPT coverage explicit");
                 Capture(form, output, "native-dictation");
                 await Select(form, "Period", "All retained");
-                Check(Cell("Dictation totals", 0, 1) == "14", "Dictation retained records");
+                Check(Cell("By tool and device", 2, 2) == "14", "Dictation retained records");
                 await Select(form, "Device", "Mac");
-                Check(Texts(form).Any(value => value.StartsWith("Statistics unavailable")), "Dictation host not combined");
+                Check(Cell("By tool and device", 0, 2) == "Unknown", "Dictation host not combined");
                 await Select(form, "Device", "Windows");
-                await Select(form, "Product", "TypeWhisper");
-                Check(Cell("Dictation totals", 1, 1) == "0", "Recorded dictation zero");
-                Check(Cell("Dictation engines", 0, 1) == "whisper", "Dictation engine detail");
+                await Select(form, "Tool", "ChatGPT");
+                Check(Cell("By tool and device", 0, 2) == "Unknown", "ChatGPT records not fabricated");
+                Check(Texts(form).Contains("More local speech detection coming soon."), "Future local speech coverage copy");
+                Check(!Children(form).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Any(item => item.ToString() == "TypeWhisper"), "Retired source selector removed");
                 Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
                 sections.SelectedItem = "Agents";
                 Check(Cell("Handoff receipt", 5, 1) == "Unknown", "Failed receipt tokens withheld");
@@ -189,13 +193,13 @@ internal static class NativeDashboardTests
                 confirmSettings = true;
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(!settingsCollector.ReadConfiguration()["quota"]!.GetValue<bool>(), "Confirmed quota opt-out saved");
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = false;
                 confirmSettings = false;
                 Children(form).OfType<Button>().Single(button => button.Text == "Reload saved settings").PerformClick();
-                Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked && confirmations.Last() == "discard", "Canceled discard retains draft");
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked && confirmations.Last() == "discard", "Canceled discard retains draft");
                 confirmSettings = true;
                 Children(form).OfType<Button>().Single(button => button.Text == "Reload saved settings").PerformClick();
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Confirmed discard reloads saved values");
+                Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Confirmed discard reloads saved values");
                 try { settingsCollector.UpdateConfiguration(initialSettings, initialSettings); throw new Exception("Stale settings accepted"); }
                 catch (InvalidOperationException) { }
                 var current = settingsCollector.ReadConfiguration();
