@@ -12,6 +12,11 @@ internal static class NativeDashboardTests
           "activityHistory":[{"host":"Windows","status":"ok","days":[
           {"date":"2026-09-01","seconds":600},{"date":"2026-09-06","seconds":1200},{"date":"2026-09-12","seconds":1800}]}],
           "tokens":[{"host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":60,"inputTokens":40,"outputTokens":20}]}],
+          "dictation":[{"host":"Windows","source":"Wispr Flow","status":"ok","days":[
+          {"date":"2026-09-01","transcriptions":10,"words":100,"wordRecords":10,"audioSeconds":120,"audioRecords":10},
+          {"date":"2026-09-12","transcriptions":4,"words":20,"wordRecords":2,"audioSeconds":0,"audioRecords":0}]},
+          {"host":"Windows","source":"TypeWhisper","status":"ok","days":[
+          {"date":"2026-09-12","transcriptions":1,"words":0,"audioSeconds":0,"engines":[{"engine":"whisper","transcriptions":1}]}]}],
           "combinedTokens":{"status":"ok","verification":{"status":"overlap"},"days":[{"date":"2026-09-12","totalTokens":999}]},
           "quota":{"status":"stale","checkedAt":"2026-09-12T12:00:00Z","windows":[
           {"bucket":"codex","window":"primary","remainingPercent":65},
@@ -55,8 +60,23 @@ internal static class NativeDashboardTests
                 Capture(form, output, "native-unknown-time");
                 Check(quotaGraph.AccessibleDescription?.Contains("observation time is unknown") == true, "Invalid quota time explained");
                 Check(tokenGraph.AccessibleDescription?.Contains("unknown, not zero") == true, "Empty summary replaces previous values");
+                sections.SelectedItem = "Dictation";
+                string Cell(string table, int row, int column) => Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == table).Rows[row].Cells[column].Value?.ToString() ?? "";
+                Check(Cell("Dictation totals", 0, 1) == "4", "Dictation week excludes older records");
+                Check(Cell("Dictation totals", 1, 1) == "20 (partial)", "Partial word coverage");
+                Check(Cell("Dictation totals", 2, 1) == "Unknown", "No audio coverage is unknown");
+                Capture(form, output, "native-dictation");
+                await Select(form, "Period", "All retained");
+                Check(Cell("Dictation totals", 0, 1) == "14", "Dictation retained records");
+                await Select(form, "Device", "Mac");
+                Check(Texts(form).Any(value => value.StartsWith("Statistics unavailable")), "Dictation host not combined");
+                await Select(form, "Device", "Windows");
+                await Select(form, "Product", "TypeWhisper");
+                Check(Cell("Dictation totals", 1, 1) == "0", "Recorded dictation zero");
+                Check(Cell("Dictation engines", 0, 1) == "whisper", "Dictation engine detail");
+                Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
                 sections.SelectedItem = "Sources";
-                Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 2, "Source rows");
+                Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 4, "Source rows");
                 Capture(form, output, "native-sources");
                 Children(form).OfType<Button>().Single(button => button.Text == "Refresh sources").PerformClick();
                 Check(refreshes == 1, "Refresh callback");

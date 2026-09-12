@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace WorkspaceObservatory;
 
 // Reads the sanitized snapshot only. This migration view never opens raw logs.
-internal sealed class NativeDashboard : Form
+internal sealed partial class NativeDashboard : Form
 {
     private readonly Func<JsonObject?> read;
     private readonly Func<Task> refresh;
@@ -35,7 +35,7 @@ internal sealed class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Sources"]);
+        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Sources"]);
         Controls.Add(body); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); };
         sections.SelectedIndex = 0;
@@ -72,6 +72,7 @@ internal sealed class NativeDashboard : Form
         table.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(45, 45, 48); table.ColumnHeadersDefaultCellStyle.ForeColor = ForeColor;
         foreach (var column in columns) table.Columns.Add(column, column);
         foreach (var row in values) table.Rows.Add(row.Cast<object>().ToArray());
+        table.Height = Math.Min(235, table.ColumnHeadersHeight + Math.Max(1, table.Rows.Count) * table.RowTemplate.Height + 4);
         body.Controls.Add(table); return table;
     }
     internal void Reload()
@@ -97,8 +98,9 @@ internal sealed class NativeDashboard : Form
             body.Controls.Add(refreshButton);
             if (section is "Activity" or "Tokens") History(snapshot, section == "Activity" ? "activity" : "tokens");
             else if (section == "Allowances") Allowances(snapshot);
+            else if (section == "Dictation") Dictation(snapshot);
             else Sources(snapshot);
-            Label("Native migration preview. Dictation, agent detail and integrated Settings remain in the current dashboard and tray menu.");
+            Label("Native migration preview. Agent detail and integrated Settings remain in the current dashboard and tray menu.");
             ResizeRows();
         }
         finally { body.ResumeLayout(true); }
