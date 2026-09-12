@@ -17,6 +17,9 @@ internal static class NativeDashboardTests
           {"date":"2026-09-12","transcriptions":4,"words":20,"wordRecords":2,"audioSeconds":0,"audioRecords":0}]},
           {"host":"Windows","source":"TypeWhisper","status":"ok","days":[
           {"date":"2026-09-12","transcriptions":1,"words":0,"audioSeconds":0,"engines":[{"engine":"whisper","transcriptions":1}]}]}],
+          "agentSource":{"status":"ok"},"agents":[{"model":"test-model","status":"failed","total":99,"role":"review","seconds":2,"recordedAt":"2026-09-12T12:00:00Z","failure":"Synthetic failure"}],
+          "localModel":{"status":"ok","records":[{"model":"test-local","status":"ok","input":12,"output":4,"seconds":1}]},
+          "settings":[{"host":"Windows","status":"ok","tools":[{"date":"2026-09-12","tool":"functions.exec","namespace":"functions","category":"execution","count":3}]}],
           "combinedTokens":{"status":"ok","verification":{"status":"overlap"},"days":[{"date":"2026-09-12","totalTokens":999}]},
           "quota":{"status":"stale","checkedAt":"2026-09-12T12:00:00Z","windows":[
           {"bucket":"codex","window":"primary","remainingPercent":65},
@@ -75,8 +78,24 @@ internal static class NativeDashboardTests
                 Check(Cell("Dictation totals", 1, 1) == "0", "Recorded dictation zero");
                 Check(Cell("Dictation engines", 0, 1) == "whisper", "Dictation engine detail");
                 Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
+                sections.SelectedItem = "Agents";
+                Check(Cell("Handoff receipt", 5, 1) == "Unknown", "Failed receipt tokens withheld");
+                Check(Texts(form).Contains("Failure: Synthetic failure"), "Receipt failure detail");
+                Capture(form, output, "native-agents");
+                data["agents"]![0]!["status"] = "ok";
+                form.Reload();
+                Check(Cell("Handoff receipt", 5, 1) == "99", "Successful reported counter");
+                await Select(form, "Record type", "Local benchmarks");
+                Check(Cell("Local benchmark", 1, 1) == "12", "Local benchmark input");
+                Check(Cell("Local benchmark", 4, 1) == "Unknown", "Missing local timing");
+                await Select(form, "Record type", "Tool requests");
+                Check(Cell("Tool requests", 0, 1) == "functions.exec", "Exact tool name");
+                Check(Cell("Tool requests", 0, 2) == "functions", "Exact namespace");
+                Capture(form, output, "native-tools");
+                await Select(form, "Device", "Mac");
+                Check(Texts(form).Contains("Tool records unavailable."), "Unavailable tool host");
                 sections.SelectedItem = "Sources";
-                Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 4, "Source rows");
+                Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 7, "Source rows");
                 Capture(form, output, "native-sources");
                 Children(form).OfType<Button>().Single(button => button.Text == "Refresh sources").PerformClick();
                 Check(refreshes == 1, "Refresh callback");

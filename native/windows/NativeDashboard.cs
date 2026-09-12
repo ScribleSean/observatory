@@ -35,7 +35,7 @@ internal sealed partial class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Sources"]);
+        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Agents", "Sources"]);
         Controls.Add(body); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); };
         sections.SelectedIndex = 0;
@@ -99,8 +99,9 @@ internal sealed partial class NativeDashboard : Form
             if (section is "Activity" or "Tokens") History(snapshot, section == "Activity" ? "activity" : "tokens");
             else if (section == "Allowances") Allowances(snapshot);
             else if (section == "Dictation") Dictation(snapshot);
+            else if (section == "Agents") Agents(snapshot);
             else Sources(snapshot);
-            Label("Native migration preview. Agent detail and integrated Settings remain in the current dashboard and tray menu.");
+            Label("Native migration preview. Integrated Settings remain in the current dashboard and tray menu.");
             ResizeRows();
         }
         finally { body.ResumeLayout(true); }
