@@ -27,6 +27,9 @@ test('stalled optional worker is killed and resolves unavailable without blockin
       {stdio:['pipe','pipe','ignore']})});
   assert.equal(result.source.status,'unavailable');assert.deepEqual(result.agents,[]);
   assert.ok(Date.now()-started<3000);assert.ok(child.killed);
+  // Production intentionally unreferences the stopped worker. The test must
+  // keep its handle referenced while independently verifying termination.
+  child.ref();
   await new Promise(resolve=>child.exitCode!==null || child.signalCode!==null?resolve():child.once('close',resolve));
   assert.ok(child.signalCode || child.exitCode!==null);
 });
