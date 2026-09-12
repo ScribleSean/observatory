@@ -26,6 +26,10 @@ internal static class NativeDashboardTests
           {"bucket":"spark","window":"primary","remainingPercent":90}],"history":[],"dailyUsageBuckets":[]}}
           """)!.AsObject();
         var refreshes = 0;
+        var modelFixture = JsonNode.Parse("""{"model":"test-model","inputTokens":40,"cacheReadTokens":0,"cacheCreationTokens":0,"outputTokens":20,"totalTokens":60,"apiEstimate":{"usd":0.25,"coveredTokens":60,"checked":"2026-09-01"}}""")!.AsObject();
+        data["tokens"]![0]!["days"]![0]!["models"] = new JsonArray(modelFixture);
+        var profileFixture = JsonNode.Parse("""{"date":"2026-09-12","model":"test-model","effort":"high","speed":"standard","inputTokens":20,"cacheReadTokens":0,"cacheCreationTokens":0,"outputTokens":10,"totalTokens":30}""")!.AsObject();
+        data["settings"]![0]!["profiles"] = new JsonArray(profileFixture);
         var activityDay = data["activityHistory"]![0]!["days"]![2]!;
         activityDay["hours"] = new JsonArray(Enumerable.Range(0, 24).Select(hour => JsonValue.Create(hour == 12 ? 1800 : 0) as JsonNode).ToArray());
         activityDay["categories"] = JsonNode.Parse("""{"AI apps":1200,"Mixed activity":600}""");
@@ -68,7 +72,25 @@ internal static class NativeDashboardTests
                 sections.SelectedItem = "Tokens";
                 await Select(form, "Device", "Windows");
                 Check(Texts(form).Contains("60 tokens"), "Token total");
+                var modelSettings = Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded model settings");
+                Check(modelSettings.Rows[0].Cells[1].Value?.ToString() == "high", "Recorded effort label");
+                Check(Texts(form).Contains("30 tokens have no reconciled settings in this scan."), "Partial model settings disclosed");
+                Check(Texts(form).Contains("Model's saved comparison: $0.25"), "Saved API comparison");
                 Capture(form, output, "native-tokens");
+                ((ScrollableControl)modelSettings.Parent!).ScrollControlIntoView(modelSettings);
+                Capture(form, output, "native-model-detail");
+                var settingsFixture = data["settings"]![0]!.AsObject();
+                Check(NativeDashboard.ReconciledProfiles(modelFixture, "2026-09-11", settingsFixture).Length == 0, "Different date withheld");
+                profileFixture["inputTokens"] = 41;
+                Check(NativeDashboard.ReconciledProfiles(modelFixture, "2026-09-12", settingsFixture).Length == 0, "Per-field overflow withheld");
+                profileFixture["inputTokens"] = 20;
+                modelFixture["inferred"] = true;
+                Check(NativeDashboard.ReconciledProfiles(modelFixture, "2026-09-12", settingsFixture).Length == 0, "Inferred model settings withheld");
+                modelFixture["inferred"] = false;
+                settingsFixture["snapshotStable"] = false;
+                form.Reload();
+                Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Recorded model settings"), "Unstable settings withheld in UI");
+                settingsFixture["snapshotStable"] = true;
                 await Select(form, "Device", "All");
                 Check(Texts(form).Any(value => value.StartsWith("No verified records")), "Unverified combined tokens");
                 sections.SelectedItem = "Allowances";

@@ -39,7 +39,7 @@ internal sealed partial class NativeDashboard : Form
         sections.AccessibleName = "Sections";
         sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Agents", "Sources", "Settings"]);
         Controls.Add(body); Controls.Add(sections);
-        sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); };
+        sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;
         body.ClientSizeChanged += (_, _) => ResizeRows();
         timer.Tick += (_, _) => { if (!ContainsFocus && sections.SelectedItem?.ToString() != "Settings") Reload(); };
@@ -131,6 +131,7 @@ internal sealed partial class NativeDashboard : Form
             Table("Recorded models", ["Date", "Model", "Tokens"], selected.SelectMany(day => NativeHistory.Rows(day["models"]).Select(model => new[] {
                 Snapshot.Text(day["date"]), Snapshot.Text(model["model"]) + (model["inferred"]?.ToJsonString() == "true" ? " (inferred)" : ""), Snapshot.Format(Snapshot.Number(model["totalTokens"])) })));
             Label("Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
+            TokenDetails(snapshot, selected);
         }
         else
         {
