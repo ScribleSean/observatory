@@ -1,6 +1,6 @@
 import {lstat,readFile} from 'node:fs/promises';
 import path from 'node:path';
-import {readAgentReceipts} from './agent-receipts.mjs';
+import {readBoundedReceipts as readAgentReceipts} from './bounded-receipts.mjs';
 import {pythonReport} from './python-report.mjs';
 
 const numeric=value=>typeof value==='number' && Number.isFinite(value) && value>=0?value:null;

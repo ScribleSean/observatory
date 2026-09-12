@@ -16,7 +16,7 @@ import { hostname, homedir } from 'node:os';
 import { cleanDictation } from './typewhisper.mjs';
 import { cleanWispr } from './wispr.mjs';
 import { selectActivityPairs } from './activity-buckets.mjs';
-import { readAgentReceipts } from './agent-receipts.mjs';
+import { readBoundedReceipts as readAgentReceipts } from './bounded-receipts.mjs';
 import {cleanLocalModel} from './legacy-workflows.mjs';
 export { cleanReceipts } from './agent-receipts.mjs';
 import {previousActivityHistory,retainActivityHistory} from './activity-history.mjs';

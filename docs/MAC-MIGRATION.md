@@ -2,6 +2,12 @@
 
 Migration is in development. Do not rename or delete `local.config.json` to force the native collector to start. That can change source coverage and account selection before retained data has been checked.
 
+## Optional receipt read isolation
+
+Current source runs the optional receipt-directory reader in a separate local process with a 15-second deadline and bounded output. An unavailable directory must not hold the entire dashboard collection open. Timeout reports unavailable receipts without deleting their original files or widening folder permissions. Both the legacy collector and native workflow adapter use this boundary.
+
+This follows a September 12 development-machine diagnosis where the legacy collector stalled inside the operating system's directory-open call. The cause of that OS-level wait was not established. Synthetic tests verify timeout cleanup, unchanged source bytes and sanitized results. Installed-runtime verification of the fix remains pending.
+
 ## Read-only assessment
 
 `scripts/mac-migration-plan.mjs --runtime ABSOLUTE_RUNTIME` reports source switches, fixed review codes and coverage changes. It does not create a native configuration, connect devices, alter account state or move history. Its output omits private paths and SSH aliases. An existing native configuration is reported separately and is never replaced.
