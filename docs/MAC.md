@@ -1,12 +1,18 @@
 # Mac development candidate
 
-The Apple Silicon app uses a SwiftUI menu-bar panel and a system WebKit dashboard. The 0.3.0 development candidate bundles Node and Python and can run the local collector without a checkout or separately installed runtimes. It is not yet a published, clean-install-verified release. Existing installed previews retain their legacy cross-device configuration and external runtimes.
+The Apple Silicon source build uses a SwiftUI main window and menu-bar panel. The 0.3.0 development candidate bundles Node and Python and can run the local collector without a checkout or separately installed runtimes. It is not yet a published, clean-install-verified release. Earlier installed previews retain their legacy cross-device configuration and external runtimes.
 
-New installations create private local source settings. ActivityWatch and saved Codex usage are enabled by default. Wispr and TypeWhisper are off until selected in **Local source settings**. Changes apply to the next collection. The app does not automatically convert an existing cross-device configuration to local-only collection.
+Fresh installations keep all sources off until the first-run wizard is completed. The wizard covers privacy, source choices and optional device pairing. Settings can later change the local sources and optional Codex account-limit monitoring. Changes apply to the next collection. Existing cross-device configuration is preserved, but migration to the native source controls remains unfinished.
 
-## Dashboard enlargement
+## Main window and fallback
 
-With the dashboard open, use **View > Zoom In**, **Zoom Out**, **Actual Size**, or **200%**. The keyboard shortcuts are Command-equals (or Command-plus), Command-minus, and Command-zero. Zoom is bounded from 75% to 200%; the menu disables further changes at either limit. Keyboard handling belongs to the dashboard view, not a global keyboard hook.
+Normal launch opens the native dashboard after setup. Closing the window leaves the menu-bar collector running. **Open Observatory** reopens it, and Command-comma opens native Settings. The window supports resizing and remembers its frame for the installed app. `--background` suppresses the initial main window, while `--show` opens the compact popup. Actual login and sleep/wake behavior still require release verification.
+
+The main window includes activity and token day/week/all-retained views, allowance graphs, dictation, agent and tool records, source health and Settings. Provider account additions and unified allowance history remain unfinished. The explicit `--legacy-dashboard` executable argument selects the older WebKit dashboard as a fallback.
+
+### Legacy dashboard enlargement
+
+With the legacy dashboard open, use **View > Zoom In**, **Zoom Out**, **Actual Size**, or **200%**. The keyboard shortcuts are Command-equals (or Command-plus), Command-minus, and Command-zero. Zoom is bounded from 75% to 200%. The menu disables further changes at either limit. These web-only controls are disabled for the native dashboard.
 
 This scales the web page's text and controls, not macOS system fonts or the menu-bar panel. Zoom applies to the open dashboard and resets to 100% after it is closed and reopened. It does not change collection settings. See [native UI verification](UI-VERIFICATION.md) for the tested layouts and remaining limits.
 
@@ -28,11 +34,11 @@ node native/build.mjs --runtime-dir /absolute/extracted-runtime --web-dir /absol
 
 The web directory must include its generated `assets/third-party-licenses.txt`. The builder checks runtime file hashes, preserves relative symlinks, signs all 11 bundled Mach-O binaries, and checks the final app. The runtime manifest records the input files before local signing, not hashes of the signed binaries. Signing is ad hoc, not an Apple Developer ID signature or notarization. No paid signing service is used. Downloaded-app Gatekeeper handling and public distribution are still pending.
 
-The candidate passes configuration self-tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr and TypeWhisper successfully. Source-setting controls were visually checked in an isolated preview: Cancel discards changes, Save persists them, and the dashboard receives the new source's data. This is development-machine evidence, not a clean-machine installation test.
+The candidate passes configuration and first-run consent tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate earlier live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr and TypeWhisper successfully. Native Settings was checked in an isolated preview: Save persists the choice, Reload discards unsaved changes, and preview collection remains disabled. This is development-machine evidence, not a clean-machine installation test.
 
-For an isolated UI check, launch the built executable with `--preview --show`. This creates temporary settings with every source disabled, does not change installed settings, and prevents launch-at-login changes. Preview source choices affect only that temporary data folder. Quit the preview when finished.
+For an isolated native UI check, launch the built executable with `--preview`. Add `--show` for the popup, `--preview-setup` for the wizard, or `--legacy-dashboard` for the fallback. Temporary settings have every source disabled. Preview source choices affect only that temporary folder, and real collection, pairing and login changes are disabled. Quit the preview when finished.
 
-The build also runs `--test-lifecycle`: three dashboard open/close cycles with temporary empty settings and no collection. It checks that each `WKWebView` is deallocated after closing and the menu-bar app remains running. This tests object lifetime, not total WebKit helper memory, idle CPU, login startup or actual sleep/wake behavior.
+The build runs `--test-lifecycle` and `--test-popup` for both native and legacy modes. It verifies three open/close cycles release their content views, native Settings navigation reuses the main window, and popup handoff preserves the dashboard. The menu-bar app remains running after the window closes. These checks do not measure total helper memory, idle CPU, login startup or sleep/wake behavior.
 
 ## Distribution packaging
 
@@ -46,7 +52,7 @@ The packager checks every bundled file, scans for private filenames and build pa
 
 To produce and verify only the ZIP, add `--zip-only`. This explicit mode removes its temporary copies after ZIP verification and never invokes disk-image creation or mounting. It does not satisfy the separate DMG release gate. Omit the flag to prepare both formats.
 
-DMG creation is bounded to two minutes. macOS may request authorization; handle system prompts yourself and never share a password with an agent. A failed DMG attempt leaves the verified ZIP and temporary copies intact, exits with failure, and does not produce a successful full-release receipt. Any partial DMG must not be distributed. Successful DMG creation additionally requires an integrity check, read-only mount, exact app manifest and signature checks, and successful detach. Only then are the full `SHA256SUMS.txt` and `release-info.json` written.
+DMG creation is bounded to two minutes. macOS may request authorization. Handle authentication prompts yourself and never share a password with an agent. A failed DMG attempt leaves the verified ZIP and temporary copies intact, exits with failure, and does not produce a successful full-release receipt. Any partial DMG must not be distributed. Successful DMG creation additionally requires an integrity check, read-only mount, exact app manifest and signature checks, and successful detach. Only then are the full `SHA256SUMS.txt` and `release-info.json` written.
 
 ## Independent local collector
 
@@ -59,11 +65,12 @@ Prepare a separate private runtime directory outside the checkout. Put `collecto
   "activity": true,
   "codex": true,
   "wispr": false,
-  "typewhisper": false
+  "typewhisper": false,
+  "quota": false
 }
 ```
 
-Only these boolean source settings are accepted. Dictation sources are opt-in. Run one collection with absolute paths to the runtime directory, Node, Python and collector script:
+Only these boolean source settings are accepted. This manual example opts into activity and saved Codex records. It is not the fresh-app default. Dictation and online account monitoring are opt-in. Run one collection with absolute paths to the runtime directory, Node, Python and collector script:
 
 ```sh
 python3 scripts/run-collector.py \

@@ -1,8 +1,7 @@
 <div align="center">
   <img src="public/favicon.svg" width="80" height="80" alt="Workspace Observatory telescope">
   <h1>Workspace Observatory</h1>
-  <p><strong>Your screen time. Your AI usage. One clear view.</strong></p>
-  <p>A local-first workspace monitor for people who build with AI.</p>
+  <p>Screen time and AI usage across your devices.</p>
   <p>
     <a href="https://scriblesean.github.io/workspace-observatory/">Explore the demo</a>
     &nbsp; · &nbsp;
@@ -10,12 +9,11 @@
     &nbsp; · &nbsp;
     <a href="docs/ROADMAP.md">Roadmap</a>
   </p>
-  <p>Native Mac app · Private by default · Open source</p>
 </div>
 
-## See where your workspace goes
+## What it shows
 
-Observatory brings foreground activity, reported AI tokens, tool activity and dictation statistics into a single dashboard. Stay in the flow with a compact telescope menu-bar panel, then open the full view when you want the details.
+Observatory shows recorded app activity, Codex tokens, available account limits, tool activity and dictation statistics. A compact Mac menu-bar or Windows system-tray panel opens the full dashboard.
 
 | View | What it brings into focus |
 | --- | --- |
@@ -26,12 +24,11 @@ Observatory brings foreground activity, reported AI tokens, tool activity and di
 
 Missing data stays missing. Estimates stay labeled. Token counts are not subscription bills, and app activity is not a productivity score.
 
-## Built to stay out of the way
+## Data and privacy
 
-- **Native Mac menu bar.** SwiftUI panel, system WebKit detail window, launch at login and automatic refresh. No manually started web server or bundled Chromium engine.
-- **Your data stays yours.** No required hosted account. The dashboard retains allowlisted usage metadata, not prompts, transcripts, recordings or credentials.
-- **One view across your setup.** The Mac collector can read configured Windows and Ubuntu sources over SSH. The Windows tray preview collects locally. Source builds also support [optional device pairing](docs/PAIRING-MAINTENANCE.md) over an existing SSH connection. Repair and simpler Windows setup remain unfinished.
-- **Inspectable by design.** Source health, freshness, tests and measurement limits are part of the product, not hidden behind a total.
+The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Account-limit history is not synchronized yet.
+
+Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Allowance history has [bounded retention](docs/USAGE-LIMITS.md).
 
 ## Try it
 
@@ -41,15 +38,15 @@ The project is an early preview tested on one Mac, Windows and WSL setup. The Ma
 
 | Platform | Current status |
 | --- | --- |
-| macOS, Apple Silicon | [Self-contained candidate](docs/MAC.md) with verified local sources and source settings. Public release pending. |
-| Windows x64 | Native tray app with local collection and WebView2 dashboard. [Installer tested](docs/WINDOWS.md); public release pending. |
+| macOS, Apple Silicon | [Native SwiftUI main window and menu-bar panel](docs/MAC.md), with bundled Node and Python. Public release pending. |
+| Windows x64 | Native system-tray panel and WebView2 main window. [Installer tested](docs/WINDOWS.md). Native main window and public release remain unfinished. |
 | Ubuntu / WSL | Configured token and workflow sources. Standalone desktop app planned. |
 
-Read the [setup and development guide](docs/GUIDE.md) or check the [integration coverage](docs/SOURCE-COVERAGE.md) before connecting your records.
+Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Provider account management, unified allowance history and clean-machine release verification are still in progress. Read the [setup guide](docs/GUIDE.md) and [integration coverage](docs/SOURCE-COVERAGE.md) before connecting records.
 
 ## Go deeper
 
-[Setup & development](docs/GUIDE.md) · [Source coverage](docs/SOURCE-COVERAGE.md) · [Startup](docs/STARTUP.md) · [Security](SECURITY.md) · [Brand](docs/BRAND.md) · [Roadmap](docs/ROADMAP.md)
+[Product direction](docs/PRODUCT-DIRECTION.md) · [Usage limits](docs/USAGE-LIMITS.md) · [Tracking reuse](docs/TRACKING-REUSE.md) · [Private sync](docs/PRIVATE-SYNC.md) · [Security](SECURITY.md) · [Roadmap](docs/ROADMAP.md)
 
 Contributions are welcome, especially reproducible bugs, tested adapters and accessibility improvements. Use synthetic examples. Never attach private usage records or account details.
 

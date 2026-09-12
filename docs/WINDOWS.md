@@ -4,13 +4,29 @@ The native Windows tray app collects on Windows without a running Mac or open te
 
 This is a development preview. A per-user installer is implemented and tested, but no public binary release is available yet. Windows x64 is the tested build target. Other Windows architectures are not verified.
 
+## Open the app
+
+Installed builds appear as **Workspace Observatory** in the Start menu. Launching the app opens its main window. Launching it again requests the existing window instead of starting another collector in the same Windows session.
+
+The telescope icon lives in the **system tray**, possibly under the hidden-icons arrow. Click it for a compact usage overview, then choose **Open Observatory** for the full window. Closing the main window leaves the tray app running. Use **Quit Observatory** in the tray menu to stop it.
+
+The compact overview does not embed full history charts or require scrolling on the tested desktop. Retired Spark / Bengal-fox allowance windows are excluded. This does not remove historical model-token records. The current main window still embeds the dashboard. Replacing that screen with native controls remains planned work.
+
 ## First collection
 
-Right-click the Observatory system-tray icon, using the hidden-icons arrow if needed, and choose **Configure local collection**. Confirm local collection and choose whether to include Ubuntu and Wispr. Ubuntu collection starts the installed WSL distribution. Neither optional source nor Mac pairing is required for Windows data.
+Fresh installations show a native first-run wizard before collection. All sources remain off until setup is completed. Review privacy, choose sources and optionally inspect device-pairing details. Closing incomplete setup leaves collection paused, including after restart. Existing configured installations keep their settings and skip the wizard.
+
+Later, right-click the Observatory system-tray icon and choose **Configure local collection**. Ubuntu collection starts the installed WSL distribution. Neither optional sources nor Mac pairing are required for Windows data.
 
 After collection finishes, choose **Reload snapshot** in the dashboard. Reload reads the saved snapshot. It does not enable or start collection. New source builds show setup instructions when Windows confirms that collection is unconfigured. Older previews can instead show a reload error with an empty dashboard. A configured installation with no readable snapshot still shows a load error rather than being labelled unconfigured.
 
 For renderer verification, `WorkspaceObservatory.exe --test-first-run C:\absolute\path\to\empty-test-runtime` checks the setup instructions. A separate synthetic runtime containing `collector.config.json` but no snapshot checks the load-error state. Both cases passed on the signed-in Windows desktop on September 9. The ordinary `--test-web` check still requires a valid snapshot. These checks do not enable collection or verify the configuration prompts.
+
+## Pairing details
+
+The tray menu's **Pairing details for Mac…** shows paths from the running source build. **Copy Windows details** exports those paths only after a click and is disabled if bundled pairing tools are missing. The Mac setup form can import the text through **Paste Windows details**. An existing verified SSH alias remains a separate requirement. This does not enable SSH or transfer clipboard contents between devices automatically. See [pairing maintenance](PAIRING-MAINTENANCE.md) for the full flow and privacy limits.
+
+The Windows details dialog and explicit copy handler passed a synthetic desktop test without accessing the owner's clipboard. The test capture remains pending visual review. The Mac parser separately rejects unsupported versions, unexpected fields and invalid paths. Real cross-device clipboard transfer has not been verified. The September 12 development-machine installation includes these controls.
 
 ## Build on Windows
 
@@ -80,6 +96,8 @@ There is no automatic updater. To update, uninstall the current version and inst
 
 Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Ubuntu collection is optional and starts the installed `Ubuntu` WSL distribution in the background during collection. Windows collection does not require WSL. Wispr Flow statistics are separately opt-in.
 
+The app also offers optional [account limits and token history](USAGE-LIMITS.md). When enabled, a separate prompt selects the native Windows Codex client or Ubuntu's existing client. Selecting Ubuntu may start WSL and uses Ubuntu's signed-in account, even when Ubuntu log collection is off. Cancel leaves the settings unchanged. The tested Ubuntu route reads limits and daily totals successfully. The native Windows client could not be launched on the tested machine and is not yet verified for account usage. The September 12 development-machine update includes these controls and preserved its existing monitoring-off choice.
+
 The plain development executable requires a working Python 3 installation with timezone data and a Node installation. Package candidates use their bundled copies instead. Local settings and snapshots live under `%LOCALAPPDATA%\Workspace Observatory`, outside the source checkout. Collection runs every five minutes while the configured app is running.
 
 Only allowlisted metadata enters snapshots. Prompts, tool arguments, window titles, transcripts and recordings are excluded. Unsupported or disconnected sources remain unavailable. Combined cross-device token totals are not published by this collector until private sync and deduplication are implemented.
@@ -87,6 +105,8 @@ Only allowlisted metadata enters snapshots. Prompts, tool arguments, window titl
 ## Login startup
 
 **Register start at login** adds or removes only this installation's entry in the current user's Windows Run key. No administrator privileges or Windows service is needed. The checked menu state means the entry matches this installation. Windows Settings, Task Manager or organizational policy may separately disable startup, so a checked entry does not prove launch occurred.
+
+Login registration uses `--background`, which starts the system-tray app without opening the main window. Start menu launches omit that argument and open the window.
 
 Disable registration before moving or removing the app folder. Another installation's entry is not silently replaced. Actual logout/login and reboot behavior still need release testing. See Microsoft's [Run-key documentation](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys) for platform behavior.
 
@@ -96,4 +116,8 @@ On the development Windows machine, the native build and snapshot tests pass. Th
 
 For a synthetic desktop test, prepare a new private test directory with `node native/windows/prepare-demo-runtime.mjs ABSOLUTE_NEW_DIRECTORY`. Run the packaged executable with `--test-web ABSOLUTE_NEW_DIRECTORY` from the signed-in desktop. The test captures only the WebView and only for a snapshot marked as synthetic. It does not capture other windows or the desktop. The result and WebView cache belong in that test directory, never in a release package.
 
-Remaining work includes final clean-source release artifact checks, clean-environment checks, login and sleep/wake testing, CPU and memory measurements, independent Mac collection and private device sync. Do not publish local snapshots or build caches as release artifacts.
+Development builds also accept `--test-usage-popup C:\absolute\path\to\empty-test-directory`. This test requires an existing empty directory and refuses a linked directory. It uses in-memory synthetic quota data, starts no collectors, and captures only its own form and graph controls. On September 9 it passed window selection, reload, saved/unavailable states, accessible chart summaries and inert refresh/navigation callbacks. The captures were visually reviewed. This is not a test of clicking the real tray icon or of an installed release.
+
+The September 12 clean candidate passed packaged wizard and compact-tray tests and was installed on the development machine with a recoverable application backup. Payload hashes, Start search registration and preserved private settings were checked. Collection completed after restart. This does not prove every source, actual login launch or peer synchronization.
+
+Remaining work includes native main-window implementation, final public-release checks, clean-environment checks, login and sleep/wake testing, CPU and memory measurements, and private device sync. Do not publish local snapshots or build caches as release artifacts.
