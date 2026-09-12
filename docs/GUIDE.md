@@ -15,7 +15,7 @@ The app runs on your computer. It does not send usage records to a hosted servic
 | Activity | Time spent in app categories and recognized apps on Mac and Windows, excluding away time |
 | Tokens | Daily Codex token counts from Mac, Ubuntu and configured native Windows logs, including cached input |
 | Agents | Antigravity receipts, saved local-model benchmarks and partial Codex tool-call counts |
-| Dictation | Wispr audio duration and word counts, with retained TypeWhisper history kept separate |
+| Dictation | Voice usage by tool and device, with Wispr recording metadata and explicit coverage |
 | Sources | Which sources were read and which measurements are still missing |
 
 Activity offers daily and weekly timelines and a combined Mac and Windows total. Overlapping intervals count once. Simultaneous activity in different categories is labeled Device overlap, since foreground records cannot establish which device had your attention. Tokens offers All, Mac, Ubuntu and Windows sources with Day, Week and All time periods. The All-host total is available only after successful reads and a cross-host session overlap check.
@@ -95,7 +95,7 @@ Use `npm run serve:local` for viewing. It serves static files on the loopback ad
 
 ## Optional dictation statistics
 
-The Dictation view defaults to Wispr Flow, with a separate TypeWhisper history option. Enable either host in the ignored `local.config.json`:
+The Dictation view defaults to all tools and devices. Wispr is the supported recording-metadata source. ChatGPT voice tracking remains unverified, not zero usage. For the legacy collector, enable either host in the ignored `local.config.json`:
 
 ```json
 "dictation": { "mac": true, "windows": true }
@@ -103,9 +103,7 @@ The Dictation view defaults to Wispr Flow, with a separate TypeWhisper history o
 
 Wispr reads `flow.sqlite` from Application Support on Mac and AppData/Roaming on Windows. Windows uses its native `py -3` runtime through the Windows SSH connection to avoid WSL shared-memory locking errors. Read-only SQLite authorizes only History timestamp, duration and numWords columns. No transcript or audio content is fetched. Dates use America/New_York, which requires Python timezone data on each reader. Missing numeric metadata has explicit record coverage and is never presented as a confirmed zero.
 
-The legacy TypeWhisper reader uses its dedicated Mac `usage-statistics.store` or Windows `Data/usage-statistics.json`. It does not search uninstall backups, install apps or enable history. An unavailable legacy store remains unknown.
-
-Only dates, transcription counts, word counts, recorded audio duration, and fixed engine labels enter the dashboard. App names, custom model names, transcripts, recordings, and credentials are excluded. A missing, invalid, or unsupported store reports unknown usage, not zero. Device-local dates are preserved.
+Only dates, transcription counts, word counts and recorded audio duration enter the dashboard. App names, custom model names, transcripts, recordings and credentials are excluded. A missing, invalid or unsupported store reports unknown usage, not zero. Dates use America/New_York.
 
 Wispr counts retained history rows, including unfinished or failed entries when present, not confirmed successful dictations. Audio duration includes silence. Host labels identify stores, not necessarily recording devices. Synced or imported history can overlap, so hosts and products are never summed. Clearing source history clears what its reader can show. The public demo uses fictional aggregates only.
 

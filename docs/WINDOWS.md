@@ -22,7 +22,7 @@ Activity also offers a recorded-date detail selector with hourly activity, categ
 
 Tokens offers a model/date detail selector with token classes, saved API-cost comparisons and recorded reasoning/speed profiles. Every selected date reconciles separately against its model counters. Inferred models, unstable settings and profiles exceeding any reported counter are withheld. Partial profile coverage shows the remaining unreconciled tokens. Saved comparisons are hypothetical API pricing, not subscription bills, and this view does not fetch new prices.
 
-Dictation offers separate Wispr Flow and TypeWhisper records for Mac and Windows, with Day, Week and All retained periods. Word and audio coverage remain explicit. Missing counters are unknown, partial Wispr coverage is labelled, and available TypeWhisper engine counts are listed by date. Hosts and products are not summed because imported or synchronized records may overlap. Only sanitized aggregates are read.
+Dictation opens across tools and devices, with Day, Week and All retained periods. Sources share one selected date range. Wispr word and audio coverage remain explicit. ChatGPT tracking is unverified. Device totals are not summed because imported or synchronized records may overlap. Only sanitized recording metadata is read. More local speech detection is planned.
 
 Agents separates saved handoff receipts, local benchmarks and per-device tool requests. Failed handoff token counters remain unknown. Local timing and GPU-memory fields preserve missing values, and tool rows retain exact names and namespaces. The view does not sum cumulative receipt counters or claim that requests succeeded. Synthetic desktop checks cover failed and successful reported counters, missing local timing, exact tool labels and unavailable hosts.
 
@@ -68,13 +68,9 @@ The build runs native snapshot and startup-contract tests plus the JavaScript an
 
 ## Prepare a package candidate
 
-### Optional TypeWhisper source
+### Voice source coverage
 
-Current source adds an off-by-default TypeWhisper aggregate-statistics choice in first-run setup and native source settings. It reuses the bounded aggregate reader for Store and direct installations. If both stores exist, collection reports an ambiguous source instead of choosing or adding them. No transcript or audio store is read.
-
-Updated peers can receive sanitized Windows TypeWhisper records and still accept older Windows payloads without this source. Update both apps before enabling this source on a paired installation. Older receiving apps reject the added source, and an older payload without it means unknown coverage, not zero usage. Disabling the source removes its current projection without deleting the original aggregate store.
-
-September 12 isolated Windows checks passed the build, native self-tests, Settings opt-in interaction and 22 focused collector/reader/payload tests. A fictional aggregate store was read by the actual Windows collector, then retained unchanged after opt-out. A separate native wizard interaction check verified that TypeWhisper starts unchecked, fits in the source panel, retains its selection through Back/Continue and saves only on completion. Its screenshot was visually checked and the test verified that no real collection started. These changes have not been installed on the development machines.
+Wispr is the supported voice metadata reader. Retired speech-source configuration is ignored without deleting original application data or saved archives. Update both paired apps together because the supported peer payload has changed. ChatGPT voice collection is not yet verified.
 
 ### Build commands
 

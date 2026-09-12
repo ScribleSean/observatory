@@ -20,7 +20,7 @@ Observatory shows recorded app activity, Codex tokens, available account limits,
 | **Screen time** | Active app time, daily and weekly timelines, and overlap-aware Mac and Windows totals. |
 | **AI usage** | Codex tokens by model and day, cached input, and separately reported quota windows where available. |
 | **Workflows** | Recorded tool identities, agent receipts and local-model benchmark results, with explicit coverage. |
-| **Dictation** | Wispr Flow audio duration and word counts. Retained TypeWhisper statistics stay separate. |
+| **Dictation** | Voice usage by tool and device, with Wispr recording metadata and explicit gaps in coverage. |
 
 Missing data stays missing. Estimates stay labeled. Token counts are not subscription bills, and app activity is not a productivity score.
 

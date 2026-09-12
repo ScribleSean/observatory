@@ -34,7 +34,7 @@ node native/build.mjs --runtime-dir /absolute/extracted-runtime --web-dir /absol
 
 The web directory must include its generated `assets/third-party-licenses.txt`. The builder checks runtime file hashes, preserves relative symlinks, signs all 11 bundled Mach-O binaries, and checks the final app. The runtime manifest records the input files before local signing, not hashes of the signed binaries. Signing is ad hoc, not an Apple Developer ID signature or notarization. No paid signing service is used. Downloaded-app Gatekeeper handling and public distribution are still pending.
 
-The candidate passes configuration and first-run consent tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate earlier live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr and TypeWhisper successfully. Native Settings was checked in an isolated preview: Save persists the choice, Reload discards unsaved changes, and preview collection remains disabled. This is development-machine evidence, not a clean-machine installation test.
+The candidate passes configuration and first-run consent tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate earlier live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr successfully. Native Settings was checked in an isolated preview: Save persists the choice, Reload discards unsaved changes, and preview collection remains disabled. This is development-machine evidence, not a clean-machine installation test.
 
 For an isolated native UI check, launch the built executable with `--preview`. Add `--show` for the popup, `--preview-setup` for the wizard, or `--legacy-dashboard` for the fallback. Temporary settings have every source disabled. Preview source choices affect only that temporary folder, and real collection, pairing and login changes are disabled. Quit the preview when finished.
 
@@ -56,7 +56,7 @@ DMG creation is bounded to two minutes. macOS may request authorization. Handle 
 
 ## Independent local collector
 
-`scripts/collect-mac.mjs` collects this Mac's ActivityWatch activity, saved Codex token/settings records, and optional Wispr Flow or TypeWhisper statistics. It does not call SSH, inspect Windows/Ubuntu records, or publish combined cross-device totals. ActivityWatch must already be running locally. The Python readers use only the standard library.
+`scripts/collect-mac.mjs` collects this Mac's ActivityWatch activity, saved Codex token/settings records, and optional Wispr Flow statistics. It does not call SSH, inspect Windows/Ubuntu records, or publish combined cross-device totals. ActivityWatch must already be running locally. The Python readers use only the standard library.
 
 Prepare a separate private runtime directory outside the checkout. Put `collector.config.json` there:
 
@@ -86,6 +86,6 @@ Snapshots include only the existing allowlisted usage fields. Raw prompts, tool 
 
 ## Verified scope
 
-The local collector was tested in an isolated directory on the development Mac. ActivityWatch, saved Codex usage, Wispr and TypeWhisper all returned valid metadata. The snapshot passed the private-field shape check. Regression tests cover disabled readers, output filtering, shared token/settings reads, invalid counters, and ActivityWatch interval normalization. POSIX runner tests cover failure, timeout, overlapping runs and separation of bundle code from writable state.
+The local collector was tested in an isolated directory on the development Mac. ActivityWatch, saved Codex usage, Wispr all returned valid metadata. The snapshot passed the private-field shape check. Regression tests cover disabled readers, output filtering, shared token/settings reads, invalid counters, and ActivityWatch interval normalization. POSIX runner tests cover failure, timeout, overlapping runs and separation of bundle code from writable state.
 
 These checks did not modify the installed app, its login registration, its existing settings or its legacy cross-device collector. Public release packaging, clean-machine compatibility, and installed-app migration remain pending. Do not replace the working cross-device collector until optional device sync has been verified.

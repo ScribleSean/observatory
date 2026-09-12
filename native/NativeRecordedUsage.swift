@@ -30,74 +30,102 @@ func dictationValue(_ values: [JSONObject], field: String, wispr: Bool) -> Strin
     return display + (partial ? " (partial)" : "")
 }
 
+struct NativeVoiceSource: Identifiable {
+    let host: String
+    let tool: String
+    let status: String
+    let checkedAt: String
+    let days: [JSONObject]
+    var id: String { host + tool }
+}
+
+func nativeVoiceSources(_ raw: [JSONObject], host: String, tool: String) -> [NativeVoiceSource] {
+    let hosts = host == "All devices" ? ["Mac", "Windows"] : [host]
+    let tools = tool == "All tools" ? ["Wispr Flow", "ChatGPT"] : [tool]
+    return hosts.flatMap { device in tools.map { provider in
+        let matches = raw.filter { text($0["host"]) == device && text($0["source"]) == provider }
+        let source = provider == "Wispr Flow" && matches.count == 1 ? matches[0] : nil
+        let status = provider == "ChatGPT" ? "Tracking not yet verified" :
+            matches.count > 1 ? "Ambiguous source" : text(source?["status"], fallback: "not-connected")
+        return NativeVoiceSource(host: device, tool: provider, status: status,
+            checkedAt: text(source?["checkedAt"]),
+            days: status == "ok" ? nativePeriodDays(rows(source?["days"]), period: "all", anchor: "") : [])
+    }}
+}
+
 struct NativeDictation: View {
     let snapshot: Snapshot?
-    @State private var host = "Mac"
-    @State private var provider = "Wispr Flow"
-    @State private var latestWeek = true
-    private var source: JSONObject? {
-        rows(snapshot?.object["dictation"]).first {
-            text($0["host"]) == host && text($0["source"], fallback: "TypeWhisper") == provider
+    @State private var host = "All devices"
+    @State private var provider = "All tools"
+    @State private var period = "week"
+    @State private var anchor = ""
+    private var sources: [NativeVoiceSource] {
+        nativeVoiceSources(rows(snapshot?.object["dictation"]), host: host, tool: provider)
+    }
+    private var dates: [String] {
+        Array(Set(sources.flatMap { $0.days.map { text($0["date"]) } })).sorted()
+    }
+    private var end: String { dates.contains(anchor) ? anchor : dates.last ?? "" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Your voice usage over time, by tool and device.").foregroundStyle(.secondary)
+            Picker("Tool", selection: $provider) {
+                ForEach(["All tools", "Wispr Flow", "ChatGPT"], id: \.self) { Text($0).tag($0) }
+            }.pickerStyle(.segmented).onChange(of: provider) { anchor = "" }
+            Picker("Device", selection: $host) {
+                ForEach(["All devices", "Mac", "Windows"], id: \.self) { Text($0).tag($0) }
+            }.pickerStyle(.segmented).onChange(of: host) { anchor = "" }
+            Picker("Period", selection: $period) {
+                Text("Day").tag("day")
+                Text("Week").tag("week")
+                Text("All retained").tag("all")
+            }.pickerStyle(.segmented)
+            if period != "all" && !dates.isEmpty {
+                Picker(period == "week" ? "Week ending" : "Recorded day",
+                    selection: Binding(get: { end }, set: { anchor = $0 })) {
+                    ForEach(dates, id: \.self) { Text($0).tag($0) }
+                }
+            }
+            LabeledContent("All voice time", value: "Unknown")
+            Text("Complete coverage is not established.").font(.callout).foregroundStyle(.secondary)
+            Text("By tool and device").font(.headline).accessibilityAddTraits(.isHeader)
+            ForEach(sources) { source in
+                sourceSection(source)
+            }
+            Text("More local speech detection coming soon.").font(.headline)
+            Text("ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage.")
+            Text("Wispr recording metadata can include silence and unfinished records. Synced or imported histories can overlap, so device totals are not added together.")
+            Text("America/New_York dates. Missing dates are gaps, not zeros. Transcripts, recordings and credentials are excluded.")
+                .font(.callout).foregroundStyle(.secondary)
         }
     }
 
-    var body: some View {
-        let days = dictationDays(source, latestWeek: latestWeek)
-        let wispr = provider == "Wispr Flow"
-        VStack(alignment: .leading, spacing: 18) {
-            Picker("Product", selection: $provider) {
-                Text("Wispr Flow").tag("Wispr Flow")
-                Text("TypeWhisper").tag("TypeWhisper")
-            }.pickerStyle(.segmented)
-            Picker("Device", selection: $host) {
-                Text("Mac").tag("Mac")
-                Text("Windows").tag("Windows")
-            }.pickerStyle(.segmented)
-            Picker("Period", selection: $latestWeek) {
-                Text("Latest recorded week").tag(true)
-                Text("All retained").tag(false)
-            }.pickerStyle(.segmented)
-            if text(source?["status"]) != "ok" {
-                ContentUnavailableView("Statistics unavailable", systemImage: "mic.slash",
-                    description: Text("Source status: \(text(source?["status"], fallback: "not-connected")). Missing records are unknown, not zero. Hosts and products are not combined."))
-            } else if days.isEmpty {
-                Text("No retained transcription aggregates. This is not a confirmed zero usage total.")
-            } else {
-                Text("\(text(days.first?["date"])) to \(text(days.last?["date"])), \(wispr ? "America/New_York" : "device-local") dates.")
-                    .font(.callout).foregroundStyle(.secondary)
-                LabeledContent(wispr ? "History records" : "Transcriptions", value: formatted(recordedSum(days, field: "transcriptions")))
-                LabeledContent("Words", value: dictationValue(days, field: "words", wispr: wispr))
-                LabeledContent("Recorded audio minutes", value: dictationValue(days, field: "audioSeconds", wispr: wispr))
-                if wispr {
-                    Text("Words recorded for \(formatted(recordedSum(days, field: "wordRecords"))) of \(formatted(recordedSum(days, field: "transcriptions"))) records. Audio duration recorded for \(formatted(recordedSum(days, field: "audioRecords"))) records. Partial coverage is not a full usage total.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                Text("Daily totals").font(.headline).accessibilityAddTraits(.isHeader)
-                ForEach(Array(days.reversed().enumerated()), id: \.offset) { _, day in
-                    DisclosureGroup(text(day["date"])) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            LabeledContent("Records", value: formatted(number(day["transcriptions"])))
-                            LabeledContent("Words", value: dictationValue([day], field: "words", wispr: wispr))
-                            LabeledContent("Audio minutes", value: dictationValue([day], field: "audioSeconds", wispr: wispr))
-                            if !wispr {
-                                let engines = rows(day["engines"])
-                                if engines.isEmpty { Text("Engine breakdown unknown.").foregroundStyle(.secondary) }
-                                ForEach(Array(engines.enumerated()), id: \.offset) { _, engine in
-                                    LabeledContent(text(engine["engine"]), value: formatted(number(engine["transcriptions"])))
-                                }
-                            }
-                        }.padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
+    private func sourceSection(_ source: NativeVoiceSource) -> some View {
+        let days = nativePeriodDays(source.days, period: period, anchor: end)
+        return GroupBox(source.tool + " · " + source.host) {
+            VStack(alignment: .leading, spacing: 10) {
+                LabeledContent("Status", value: source.status == "ok" ? "Recorded history" : source.status)
+                LabeledContent("Last checked", value: source.checkedAt)
+                LabeledContent("Records", value: formatted(recordedSum(days, field: "transcriptions")))
+                LabeledContent("Words", value: dictationValue(days, field: "words", wispr: true))
+                LabeledContent("Recorded audio minutes", value: dictationValue(days, field: "audioSeconds", wispr: true))
+                if days.isEmpty {
+                    Text("No recorded voice statistics in this scope. Missing data is not zero usage.").foregroundStyle(.secondary)
+                } else {
+                    DisclosureGroup("Voice over time") {
+                        ForEach(Array(days.suffix(60).reversed().enumerated()), id: \.offset) { _, day in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(text(day["date"])).font(.headline)
+                                LabeledContent("Records", value: formatted(number(day["transcriptions"])))
+                                LabeledContent("Words", value: dictationValue([day], field: "words", wispr: true))
+                                LabeledContent("Audio minutes", value: dictationValue([day], field: "audioSeconds", wispr: true))
+                            }.padding(.vertical, 6)
+                        }
+                        Text("Latest 60 recorded dates shown. Totals cover the selected period.").font(.caption)
                     }
                 }
-            }
-            Text(wispr ? "Retained history may include unfinished or failed records. Audio duration includes silence. The host identifies the store read, not necessarily the recording device. Synced or imported records can overlap."
-                : "TypeWhisper history can include recovered or imported transcriptions.")
-                .font(.callout).foregroundStyle(.secondary)
-            Text("Hosts and products stay separate. Missing dates are not filled with zeros. Transcripts, recordings, app names and custom model names are excluded.")
-                .font(.callout).foregroundStyle(.secondary)
-            if let date = parseDate(source?["checkedAt"]) {
-                Text("Last checked: \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
-            }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
         }
     }
 }
