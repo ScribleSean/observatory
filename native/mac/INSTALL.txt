@@ -4,9 +4,11 @@ Requires macOS 14 or later. ActivityWatch must already be running for screen tim
 
 Install
 1. Drag Workspace Observatory.app to Applications, or to your own Applications folder.
-2. Launch it from the destination folder. Look for the telescope in the menu bar.
-3. Open Local source settings to select sources. Dictation sources start disabled.
-4. Launch at login is optional and can be changed from the telescope menu.
+2. Launch it from the destination folder and complete the first-run wizard.
+3. Choose sources before collection starts. All sources begin disabled on fresh installs.
+4. Use Settings in the native main window to change sources or launch at login.
+The telescope menu-bar panel stays available when the main window is closed.
+Existing configured installations keep their settings and skip the first-run wizard.
 
 Signing
 This preview is locally signed, not Developer ID signed or notarized by Apple.
@@ -19,12 +21,13 @@ Quit the app before replacing or moving it. Disable Launch at login before remov
 Move the app to Trash to uninstall. Settings and snapshots remain in:
 ~/Library/Application Support/Workspace Observatory
 Keep a private backup before changing versions. A source-configured older preview
-keeps its existing cross-device collector; this release does not silently replace it.
+keeps its existing cross-device collector. This release does not silently replace it.
 
 Privacy and limits
 Collection reads local usage metadata. Prompts, window titles, transcripts, audio
 and credentials are not included in snapshots. Optional cross-device pairing and
-broader integrations remain under development. Missing sources are not zero usage.
+broader integrations remain under development. Provider sign-ins stay on their owning
+devices. Account-limit history is not synchronized yet. Missing sources are not zero usage.
 
 Source and detailed instructions:
 https://github.com/ScribleSean/workspace-observatory
