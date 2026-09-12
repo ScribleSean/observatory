@@ -132,7 +132,11 @@ internal sealed partial class NativeDashboard : Form
                 Snapshot.Text(day["date"]), Snapshot.Text(model["model"]) + (model["inferred"]?.ToJsonString() == "true" ? " (inferred)" : ""), Snapshot.Format(Snapshot.Number(model["totalTokens"])) })));
             Label("Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
         }
-        else Label("Foreground time does not measure attention. Combined activity counts device overlap once. WSL screen time belongs to Windows.");
+        else
+        {
+            Label("Foreground time does not measure attention. Combined activity counts device overlap once. WSL screen time belongs to Windows.");
+            ActivityDetails(selected);
+        }
     }
     private void Allowances(JsonObject? snapshot)
     {

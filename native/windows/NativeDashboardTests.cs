@@ -26,6 +26,10 @@ internal static class NativeDashboardTests
           {"bucket":"spark","window":"primary","remainingPercent":90}],"history":[],"dailyUsageBuckets":[]}}
           """)!.AsObject();
         var refreshes = 0;
+        var activityDay = data["activityHistory"]![0]!["days"]![2]!;
+        activityDay["hours"] = new JsonArray(Enumerable.Range(0, 24).Select(hour => JsonValue.Create(hour == 12 ? 1800 : 0) as JsonNode).ToArray());
+        activityDay["categories"] = JsonNode.Parse("""{"AI apps":1200,"Mixed activity":600}""");
+        activityDay["apps"] = JsonNode.Parse("""{"AI apps":{"ChatGPT / Codex":1200},"Mixed activity":{"Do not attribute":600}}""");
         var settingsRoot = Path.Combine(output, "settings-fixture");
         Directory.CreateDirectory(settingsRoot);
         var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":false,"wslDistribution":null,"quotaWslDistribution":null,"futureSetting":"preserved"}""")!.AsObject();
@@ -48,8 +52,16 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("50 min"), "Calendar week total");
                 await Select(form, "Period", "All retained");
                 Check(Texts(form).Contains("1h 0m"), "Retained total");
-                Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 3, "Missing dates not fabricated");
+                Check(Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded history").Rows.Count == 3, "Missing dates not fabricated");
+                Check(Children(form).OfType<ActivityHourGraph>().Single().AccessibleDescription?.Contains("12:00: 30 recorded minutes") == true, "Hourly accessible values");
+                var appTable = Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded apps");
+                Check(appTable.Rows.Count == 1 && appTable.Rows[0].Cells[1].Value?.ToString() == "ChatGPT / Codex", "App labels and overlap exclusion");
                 Capture(form, output, "native-activity");
+                var activityGraph = Children(form).OfType<ActivityHourGraph>().Single();
+                ((ScrollableControl)activityGraph.Parent!).ScrollControlIntoView(activityGraph);
+                Capture(form, output, "native-activity-detail");
+                await Select(form, "Activity detail date", "2026-09-01");
+                Check(Texts(form).Contains("Hourly breakdown unavailable."), "Missing hourly detail");
                 await Select(form, "Device", "Mac");
                 Check(Texts(form).Any(value => value.StartsWith("No verified records")), "Unavailable host");
                 var sections = Children(form).OfType<ListBox>().Single();
