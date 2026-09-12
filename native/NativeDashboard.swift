@@ -6,7 +6,7 @@ final class NativeDashboardSelection: ObservableObject {
     @Published var section = "activity"
 }
 
-// Read-only native migration preview. It consumes the existing sanitized
+// Native dashboard. It consumes the existing sanitized
 // snapshot and never sums overlapping device records or reads raw source files.
 struct NativeDashboard: View {
     @ObservedObject var store: ObservatoryStore
@@ -57,7 +57,7 @@ struct NativeDashboard: View {
                     } else {
                         dailyHistory
                     }
-                    Text("Native preview. Provider account management and unified account-history sync are still being developed.")
+                    Text("Provider account management and unified account-history sync are still being developed.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(28).frame(maxWidth: 1100, alignment: .leading)
             }.background(Color(nsColor: .windowBackgroundColor))

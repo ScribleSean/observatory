@@ -16,8 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var terminationSignal: DispatchSourceSignal?
     private var panelSize = NSSize.zero
     private var previewRuntime: URL?
-    private weak var lifecycleWebView: WKWebView?
+    private weak var lifecycleContent: NSView?
     private let nativeSelection = NativeDashboardSelection()
+    private var usesNativeDashboard: Bool { !CommandLine.arguments.contains("--legacy-dashboard") }
+    private var expectedDashboardPresent: Bool {
+        usesNativeDashboard ? detail?.contentView is NSHostingView<NativeDashboard> && webView == nil : webView != nil
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -62,7 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if popupTest { DispatchQueue.main.async { [self] in checkUsagePopup() }; return }
         store.start()
         if store.setupRequired { DispatchQueue.main.async { [self] in showSetup() }; return }
-        if CommandLine.arguments.contains("--show") { DispatchQueue.main.async { [self] in togglePanel() } }
+        if CommandLine.arguments.contains("--show") {
+            DispatchQueue.main.async { [self] in togglePanel() }
+        } else if !CommandLine.arguments.contains("--background") {
+            DispatchQueue.main.async { [self] in openDashboard("activity") }
+        }
     }
 
     private func showSetup() {
@@ -232,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func sourceSettings() {
         closeUsage()
-        if previewRuntime != nil && CommandLine.arguments.contains("--native-dashboard") {
+        if usesNativeDashboard {
             openDashboard("settings")
             return
         }
@@ -459,12 +467,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func openDashboard(_ tab: String) {
         closeUsage()
         if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
-        if previewRuntime != nil && CommandLine.arguments.contains("--native-dashboard") {
+        if usesNativeDashboard {
             nativeSelection.section = ["activity", "tokens", "allowances", "agents", "dictation", "sources", "settings"].contains(tab) ? tab : "activity"
             if detail == nil {
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-                window.title = "Observatory native preview"
+                window.title = previewRuntime == nil ? "Workspace Observatory" : "Observatory native preview"
                 window.minSize = NSSize(width: 760, height: 560)
                 window.contentView = NSHostingView(rootView: NativeDashboard(store: store, selection: nativeSelection,
                     settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
@@ -474,6 +482,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 window.delegate = self
                 window.isReleasedWhenClosed = false
                 window.center()
+                if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryNativeDetail") }
                 detail = window
             }
             detail?.deminiaturize(nil)
@@ -523,21 +532,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func checkDashboardLifecycle(remaining: Int) {
         guard remaining > 0 else {
-            print("Native lifecycle passed: three dashboard open/close cycles released their web views; menu-bar app remained running")
+            print("Dashboard lifecycle passed: three open/close cycles released their content views, menu-bar app remained running")
             NSApp.terminate(nil)
             return
         }
         openDashboard("activity")
-        lifecycleWebView = webView
-        guard lifecycleWebView != nil, detail?.isVisible == true else {
+        lifecycleContent = detail?.contentView
+        guard lifecycleContent != nil, expectedDashboardPresent, detail?.isVisible == true else {
             print("Native lifecycle failed: dashboard did not open")
             exit(1)
+        }
+        if usesNativeDashboard {
+            let activityWindow = detail
+            sourceSettings()
+            precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
+            openDashboard("tokens")
+            precondition(detail === activityWindow && nativeSelection.section == "tokens" && expectedDashboardPresent)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
             detail?.performClose(nil)
             // Allow AppKit's close notification and autorelease pool to drain.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
-                guard detail == nil, webView == nil, lifecycleWebView == nil,
+                guard detail == nil, webView == nil, lifecycleContent == nil,
                       statusItem.button != nil, NSApp.isRunning else {
                     print("Native lifecycle failed: closed dashboard retained state or menu-bar app stopped")
                     exit(1)
@@ -606,7 +622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     }
                     closeUsage()
                     afterUsageClosed { [self] in
-                        guard usageWindow == nil, !popover.isShown, detail?.isVisible == true, webView != nil else {
+                        guard usageWindow == nil, !popover.isShown, detail?.isVisible == true, expectedDashboardPresent else {
                             print("Native usage popup failed after close: usageRetained=\(usageWindow != nil) anchoredShown=\(popover.isShown) dashboardPresent=\(detail != nil) dashboardVisible=\(detail?.isVisible ?? false) webRetained=\(webView != nil)")
                             exit(1)
                         }
