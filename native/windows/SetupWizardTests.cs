@@ -38,6 +38,10 @@ internal static class SetupWizardTests
                     Capture("setup-welcome");
                     Button("Continue").PerformClick();
                     Check(Descendants(form).OfType<CheckBox>().All(c => !c.Checked), "A source was enabled by default.");
+                    var typewhisper = Option("typewhisper");
+                    var sourcePanel = typewhisper.Parent!;
+                    Check(sourcePanel.ClientRectangle.Contains(typewhisper.Bounds), "TypeWhisper choice is clipped.");
+                    typewhisper.Checked = true;
                     Check(!Option("wsl").Enabled && !Option("account").Enabled, "Dependent choices were enabled without their source.");
                     Option("codex").Checked = true; Option("wsl").Checked = true;
                     Option("codex").Checked = false;
@@ -48,6 +52,7 @@ internal static class SetupWizardTests
                     Capture("setup-sources");
                     Button("Continue").PerformClick(); Button("Back").PerformClick();
                     Check(Option("quota").Checked && Option("account").Checked, "Back lost source choices.");
+                    Check(Option("typewhisper").Checked, "Back lost TypeWhisper choice.");
                     Button("Continue").PerformClick(); Capture("setup-devices");
                     Button("Finish on this PC").PerformClick();
                 }
@@ -58,6 +63,7 @@ internal static class SetupWizardTests
             Check(form.DialogResult == DialogResult.OK && FirstRunSetup.AllowsCollection(runtime), "Setup did not complete.");
             var config = JsonNode.Parse(File.ReadAllText(Path.Combine(runtime, "collector.config.json")))!;
             Check(config["quota"]!.GetValue<bool>() && config["quotaWslDistribution"]!.GetValue<string>() == "Ubuntu", "Selected account source was not saved.");
+            Check(config["typewhisper"]!.GetValue<bool>(), "Selected TypeWhisper source was not saved.");
             Check(!config["activity"]!.GetValue<bool>() && !config["codex"]!.GetValue<bool>() && config["wslDistribution"] is null, "Unselected sources were enabled.");
             Check(!File.Exists(Path.Combine(runtime, "public/local/usage.json")), "Synthetic setup read real sources.");
             File.WriteAllText(Path.Combine(output, "setup-result.txt"), "setup-wizard: passed");

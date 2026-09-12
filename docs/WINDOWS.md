@@ -74,7 +74,7 @@ Current source adds an off-by-default TypeWhisper aggregate-statistics choice in
 
 Updated peers can receive sanitized Windows TypeWhisper records and still accept older Windows payloads without this source. Update both apps before enabling this source on a paired installation. Older receiving apps reject the added source, and an older payload without it means unknown coverage, not zero usage. Disabling the source removes its current projection without deleting the original aggregate store.
 
-September 12 isolated Windows checks passed the build, native self-tests, Settings opt-in interaction and 22 focused collector/reader/payload tests. A fictional aggregate store was read by the actual Windows collector, then retained unchanged after opt-out. These changes have not been installed on the development machines. The revised first-run choice still needs its own interactive verification.
+September 12 isolated Windows checks passed the build, native self-tests, Settings opt-in interaction and 22 focused collector/reader/payload tests. A fictional aggregate store was read by the actual Windows collector, then retained unchanged after opt-out. A separate native wizard interaction check verified that TypeWhisper starts unchecked, fits in the source panel, retains its selection through Back/Continue and saves only on completion. Its screenshot was visually checked and the test verified that no real collection started. These changes have not been installed on the development machines.
 
 ### Build commands
 
