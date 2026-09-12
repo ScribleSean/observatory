@@ -1,7 +1,6 @@
 'use client';
 import {useState} from 'react';
-import {summarizeDictation} from '../scripts/typewhisper.mjs';
-import {summarizeWispr} from '../scripts/wispr.mjs';
+import {voiceOverview} from '../scripts/voice-overview.mjs';
 import {Button} from '@/components/ui/button';
 import {Table,TableHeader,TableBody,TableRow,TableHead,TableCell} from '@/components/ui/table';
 
@@ -9,42 +8,51 @@ export type DictationSource = {
   host:string; status:string; checkedAt?:string; source?:string;
   days?:{date:string;transcriptions:number;words:number;audioSeconds:number;wordRecords?:number;audioRecords?:number;engines:{engine:string;transcriptions:number}[]}[];
 };
-const fmt=(value:number)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:1}).format(value);
-const missing:Record<string,string>={
-  'not-connected':'Optional source is not connected.',
-  'not-found':'No statistics store was found for this source.',
-  ambiguous:'Multiple statistics stores were found. No totals were combined.',
-  unavailable:'Statistics could not be read. Values are unknown.',
-};
+const fmt=(value:number|null)=>value===null?'Unknown':new Intl.NumberFormat('en-US',{maximumFractionDigits:1}).format(value);
+const statuses:Record<string,string>={ok:'Recorded history','not-supported':'Tracking not yet verified',
+  'not-connected':'Not connected','not-found':'No statistics found',ambiguous:'Ambiguous source',unavailable:'Unavailable'};
+
 export default function Dictation({sources=[]}:{sources?:DictationSource[]}) {
-  const [host,setHost]=useState('Mac');
-  const [provider,setProvider]=useState('Wispr Flow');
-  const [period,setPeriod]=useState<'week'|'all'>('week');
-  const source=sources.find(row=>row.host===host && (row.source || 'TypeWhisper')===provider);
-  const wispr=provider==='Wispr Flow';
-  const days=source?.days || [];
-  const end=days.at(-1)?.date;
-  const start=end && period==='week'?new Date(Date.parse(end+'T12:00:00Z')-6*86400000).toISOString().slice(0,10):undefined;
-  const wisprSummary=wispr?summarizeWispr(source,start,end):null;
-  const summary=wispr?wisprSummary:summarizeDictation(source,start,end);
-  const selected=days.filter(day=>!start || day.date>=start);
+  const [host,setHost]=useState('All');
+  const [tool,setTool]=useState('All');
+  const [period,setPeriod]=useState<'day'|'week'|'all'>('week');
+  const [date,setDate]=useState<string|null>(null);
+  const view=voiceOverview(sources,{host,tool,period,date});
   return <>
-    <div className="view-heading"><div><h1>Dictation</h1><p>{provider} statistics without transcripts or recordings.</p></div><span className="period-chip">Optional source</span></div>
+    <div className="view-heading"><div><h1>Dictation</h1><p>Your voice usage over time, by tool and device.</p></div><span className="period-chip">Partial coverage</span></div>
     <div className="dictation-controls">
-      <div role="group" aria-label="Dictation source">{['Wispr Flow','TypeWhisper'].map(value=><Button key={value} variant={provider===value?'default':'outline'} aria-pressed={provider===value} onClick={()=>setProvider(value)}>{value}{value==='TypeWhisper'?' history':''}</Button>)}</div>
-      <div role="group" aria-label="Dictation device">{['Mac','Windows'].map(value=><Button key={value} variant={host===value?'default':'outline'} aria-pressed={host===value} onClick={()=>setHost(value)}>{value}</Button>)}</div>
-      <div role="group" aria-label="Dictation period">{(['week','all'] as const).map(value=><Button key={value} variant={period===value?'default':'outline'} aria-pressed={period===value} onClick={()=>setPeriod(value)}>{value==='week'?'Latest recorded week':'All retained'}</Button>)}</div>
+      <div role="group" aria-label="Voice tool">{['All','Wispr Flow','ChatGPT'].map(value=><Button key={value} variant={tool===value?'default':'outline'} aria-pressed={tool===value} onClick={()=>{setTool(value);setDate(null);}}>{value==='All'?'All tools':value}</Button>)}</div>
+      <div role="group" aria-label="Voice device">{['All','Mac','Windows'].map(value=><Button key={value} variant={host===value?'default':'outline'} aria-pressed={host===value} onClick={()=>{setHost(value);setDate(null);}}>{value==='All'?'All devices':value}</Button>)}</div>
+      <div role="group" aria-label="Voice period">{(['day','week','all'] as const).map(value=><Button key={value} variant={period===value?'default':'outline'} aria-pressed={period===value} onClick={()=>setPeriod(value)}>{value==='day'?'Day':value==='week'?'Week':'All retained'}</Button>)}</div>
+      {period!=='all'&&view.dates.length>0&&<label>{period==='week'?'Week ending':'Recorded day'} <select value={view.end??''} onChange={event=>setDate(event.target.value)}>{view.dates.map(value=><option key={value}>{value}</option>)}</select></label>}
     </div>
-    {source?.status!=='ok'?<div className="empty-state"><p>{missing[source?.status || 'not-connected'] || missing.unavailable}</p></div>:!summary?<div className="empty-state"><p>No retained transcription aggregates. Usage is unknown, not a confirmed zero.</p></div>:<>
-      <p className="dictation-period">{selected[0]?.date} to {end}, {wispr?'America/New_York':'device-local'} dates. {summary.recordedDays} {summary.recordedDays===1?'date':'dates'} with retained records.</p>
-      <div className="dictation-metrics">
-        <div><span>{wispr?'History records':'Transcriptions'}</span><strong>{fmt(summary.transcriptions)}</strong></div>
-        <div><span>Words</span><strong>{wispr && !wisprSummary?.wordRecords?'Unknown':fmt(summary.words)}</strong></div>
-        <div><span>Recorded audio</span><strong>{wispr && !wisprSummary?.audioRecords?'Unknown':<>{fmt(summary.audioSeconds/60)} <small>min</small></>}</strong></div>
-      </div>
-      {wispr?<p>Available metadata totals. Words recorded for {wisprSummary?.wordRecords} of {summary.transcriptions} records. Audio duration recorded for {wisprSummary?.audioRecords} of {summary.transcriptions}. Incomplete coverage is not a full usage total.</p>:<section className="dictation-detail"><h2>Recorded engines</h2>{summary.engines.length?<ul>{summary.engines.map((engine:{engine:string;transcriptions:number})=><li key={engine.engine}><span>{engine.engine}</span><strong>{fmt(engine.transcriptions)} {engine.transcriptions===1?'transcription':'transcriptions'}</strong></li>)}</ul>:<p>Unknown. Engine breakdown was not recorded.</p>}</section>}
-      <section className="dictation-detail"><h2>Daily totals</h2><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>{wispr?'History records':'Transcriptions'}</TableHead><TableHead>Words</TableHead><TableHead>Audio minutes</TableHead></TableRow></TableHeader><TableBody>{selected.slice().reverse().map(day=><TableRow key={day.date}><TableCell>{day.date}</TableCell><TableCell>{fmt(day.transcriptions)}</TableCell><TableCell>{wispr && !day.wordRecords?'Unknown':fmt(day.words)}{wispr && day.wordRecords!==day.transcriptions?' (partial)':''}</TableCell><TableCell>{wispr && !day.audioRecords?'Unknown':fmt(day.audioSeconds/60)}{wispr && day.audioRecords!==day.transcriptions?' (partial)':''}</TableCell></TableRow>)}</TableBody></Table></section>
-    </>}
-    <div className="dictation-note"><p>{wispr?'Wispr totals describe retained history, including unfinished or failed records when present. Duration includes silence, not speech-only time. A host identifies the store read, not necessarily the device that recorded the audio. Synced or imported records can overlap.':'TypeWhisper history can include recovered or imported transcriptions.'} Missing dates are not filled with zeros.</p><p>Hosts and products stay separate. Clearing source history removes what this reader can show. Transcripts, recordings, app names and custom model names are excluded.</p>{source?.checkedAt && <p>Last checked: {new Date(source.checkedAt).toLocaleString()}</p>}</div>
+    <div className="dictation-metrics">
+      <div><span>All voice time</span><strong>Unknown</strong><small>Complete coverage is not established</small></div>
+      <div><span>Reporting tool/device sources</span><strong>{view.reportingSources}</strong><small>Within the selected period</small></div>
+      <div><span>{period==='all'?'Latest recorded date':'Selected period ending'}</span><strong>{view.end??'Unknown'}</strong></div>
+    </div>
+    <section className="dictation-detail"><h2>By tool and device</h2>
+      <Table><TableHeader><TableRow><TableHead>Tool</TableHead><TableHead>Device</TableHead><TableHead>Records</TableHead><TableHead>Words</TableHead><TableHead>Recorded audio minutes</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+        <TableBody>{view.sources.map(row=><TableRow key={row.source+row.host}><TableCell>{row.source}</TableCell><TableCell>{row.host}</TableCell><TableCell>{fmt(row.records)}</TableCell><TableCell>{fmt(row.words)}{row.words!==null&&row.wordRecords!==row.records?' (partial)':''}</TableCell><TableCell>{fmt(row.audioSeconds===null?null:row.audioSeconds/60)}{row.audioSeconds!==null&&row.audioRecords!==row.records?' (partial)':''}</TableCell><TableCell>{statuses[row.status]??'Unknown'}{row.checkedAt&&<small><br/>Checked {new Date(row.checkedAt).toLocaleString()}</small>}</TableCell></TableRow>)}</TableBody>
+      </Table>
+    </section>
+    <section className="dictation-detail"><h2>Voice over time</h2>
+      {view.daily.length===0?<p>No recorded voice statistics in this scope. Missing data is not zero usage.</p>:view.sources.filter(row=>row.days.length>0).map(row=>{
+        const days=(row.days as NonNullable<DictationSource['days']>).slice(-30),points=days.filter(day=>(day.audioRecords??0)>0);
+        const maximum=Math.max(1,...points.map(day=>day.audioSeconds/60));
+        const first=Date.parse(days[0].date),last=Date.parse(days.at(-1)!.date);
+        const x=(day:string)=>20+(Date.parse(day)-first)/Math.max(86400000,last-first)*550;
+        return <div key={row.source+row.host}><h3>{row.source} · {row.host}</h3>
+          {points.length>0?<svg viewBox="0 0 600 140" role="img" aria-label={row.source+' on '+row.host+': recorded audio minutes by date. Missing dates are gaps.'} style={{width:'100%',maxHeight:180}}>
+            <line x1="10" x2="590" y1="110" y2="110" stroke="currentColor" opacity="0.25"/>
+            {points.map(day=><rect key={day.date} x={x(day.date)} y={110-day.audioSeconds/60/maximum*90} width="10" height={Math.max(1,day.audioSeconds/60/maximum*90)} fill="currentColor"><title>{day.date}: {fmt(day.audioSeconds/60)} recorded audio minutes</title></rect>)}
+            <text x="10" y="135" fill="currentColor" fontSize="12">{days[0].date}</text><text x="590" y="135" textAnchor="end" fill="currentColor" fontSize="12">{days.at(-1)!.date}</text>
+          </svg>:<p>Audio duration was not recorded.</p>}
+          <p>Chart scale: 0 to {fmt(maximum)} recorded audio minutes. Latest 30 recorded dates shown. Missing dates are gaps, not zeros.</p>
+        </div>;
+      })}
+      {view.daily.length>0&&<><p>Latest 60 tool/device rows. Totals above cover the full selected period.</p><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Tool</TableHead><TableHead>Device</TableHead><TableHead>Records</TableHead><TableHead>Words</TableHead><TableHead>Audio minutes</TableHead></TableRow></TableHeader><TableBody>{view.daily.slice(-60).reverse().map(row=><TableRow key={row.date+row.source+row.host}><TableCell>{row.date}</TableCell><TableCell>{row.source}</TableCell><TableCell>{row.host}</TableCell><TableCell>{fmt(row.records)}</TableCell><TableCell>{fmt(row.words)}</TableCell><TableCell>{fmt(row.audioSeconds===null?null:row.audioSeconds/60)}</TableCell></TableRow>)}</TableBody></Table></>}
+    </section>
+    <div className="dictation-note"><p>More local speech detection coming soon.</p><p>ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage. Wispr reports retained recording metadata, including silence and possibly unfinished records. Synced or imported histories can overlap, so device totals are not added together.</p><p>Dates use America/New_York. Transcripts, recordings and credentials are excluded.</p></div>
   </>;
 }
