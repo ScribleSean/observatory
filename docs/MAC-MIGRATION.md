@@ -16,3 +16,9 @@ The mapping preserves enabled Mac dictation sources, the explicit account-client
 - Stop collection, hold the correct collector lock, retain the old configuration and use a recoverable activation with stale-plan checks.
 
 The compatibility adapters and workflow switches are implemented in source. They do not automatically migrate an installed legacy collector, enable allowance sharing or opt new installations into workflow reads.
+
+## Viewing retained snapshots
+
+The native Mac dashboard now has an Open saved snapshot action in source. It opens a user-selected Observatory schema-2 JSON snapshot in a separate read-only view. The original collection timestamp remains visible, refresh and settings mutation are unavailable in that view, and Return to live data restores the current collector snapshot. Live collection continues independently. Archived metrics are never added to current totals.
+
+The reader bounds files to 16 MB, rejects final-path symbolic links, non-regular files, changed files and invalid snapshot headers. Native tests cover retained token visibility, unchanged file bytes and invalid/oversized/link rejection. Interactive file-picker and return-to-live verification remain pending. This viewer does not yet create migration archives or switch collector configuration.

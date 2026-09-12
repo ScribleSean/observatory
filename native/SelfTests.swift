@@ -1,6 +1,34 @@
 import Foundation
 
 func runSelfTests() {
+    do {
+        let object: JSONObject = ["schema": 2, "collectedAt": "2026-09-12T12:00:00Z",
+            "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-01", "totalTokens": 42]]]]]
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let snapshot = try SnapshotArchive.parse(data)
+        precondition(snapshot.recordedDays("tokens", host: "Mac").count == 1)
+        precondition((try? SnapshotArchive.parse(Data("{\"schema\":true}".utf8))) == nil)
+        precondition((try? SnapshotArchive.parse(Data("{\"schema\":2,\"collectedAt\":\"invalid\"}".utf8))) == nil)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-archive-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("saved.json")
+        try data.write(to: file)
+        let loaded = try SnapshotArchive.read(file)
+        precondition(number(loaded.recordedDays("tokens", host: "Mac").first?["totalTokens"]) == 42)
+        let unchanged = try Data(contentsOf: file)
+        precondition(unchanged == data)
+        let link = directory.appendingPathComponent("linked.json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+        precondition((try? SnapshotArchive.read(link)) == nil)
+        precondition((try? SnapshotArchive.read(directory)) == nil)
+        let oversized = directory.appendingPathComponent("oversized.json")
+        _ = FileManager.default.createFile(atPath: oversized.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: oversized)
+        try handle.truncate(atOffset: UInt64(SnapshotArchive.maximumBytes + 1))
+        try handle.close()
+        precondition((try? SnapshotArchive.read(oversized)) == nil)
+    } catch { preconditionFailure("Snapshot archive tests failed: \(error)") }
     let sharingOff = Data("{\"version\":1,\"enabled\":false,\"canEnable\":false,\"reason\":\"account-unavailable\",\"token\":null}".utf8)
     precondition((try? QuotaSharingStatus.parse(sharingOff))?.enabled == false)
     let invalidSharing = Data("{\"version\":1,\"enabled\":true,\"canEnable\":true,\"reason\":\"ready\",\"token\":\"private\"}".utf8)

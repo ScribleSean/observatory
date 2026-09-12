@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UniformTypeIdentifiers
 
 @MainActor
 final class NativeDashboardSelection: ObservableObject {
@@ -15,6 +16,9 @@ struct NativeDashboard: View {
     @State private var host = "Mac"
     @State private var selectedDate = ""
     @State private var period = "day"
+    @State private var archivedSnapshot: Snapshot?
+    @State private var archiveError = false
+    private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
     private let sections = [("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
                             ("allowances", "Allowances", "gauge.with.dots.needle.50percent"), ("agents", "Agents", "point.3.connected.trianglepath.dotted"),
                             ("dictation", "Dictation", "mic"), ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
@@ -33,23 +37,38 @@ struct NativeDashboard: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(sections.first(where: { $0.0 == selection.section })?.1 ?? "Activity").font(.largeTitle.bold())
-                            Text(store.freshness).foregroundStyle(store.stale ? .orange : .secondary)
+                            Text(archivedSnapshot == nil ? store.freshness : "Saved snapshot. Not live data.")
+                                .foregroundStyle(archivedSnapshot != nil || store.stale ? .orange : .secondary)
                         }
                         Spacer()
                         Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                            .disabled(store.refreshing)
+                            .disabled(store.refreshing || archivedSnapshot != nil)
+                    }
+                    HStack {
+                        Button("Open saved snapshot…", action: openArchive)
+                        if archivedSnapshot != nil {
+                            Button("Return to live data") { archivedSnapshot = nil; selectedDate = "" }
+                        }
+                    }
+                    if let archive = archivedSnapshot {
+                        Text("Recorded: \(text(archive.object["collectedAt"])). Read-only. Live collection continues separately. This snapshot is not added to current totals.")
+                            .font(.callout).foregroundStyle(.secondary)
                     }
                     if selection.section == "settings" {
-                        NativeSettings(store: store, actions: settingsActions)
+                        if archivedSnapshot == nil {
+                            NativeSettings(store: store, actions: settingsActions)
+                        } else {
+                            Text("Return to live data to change settings. Archived settings cannot be applied from this view.")
+                        }
                     } else if selection.section == "allowances" {
                         Text("Observed on this Mac").font(.headline)
-                        if let quota = store.snapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
+                        if let quota = displayedSnapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
                             GroupBox { QuotaPanel(quota: quota).padding(12) }
                         } else {
                             ContentUnavailableView("No account connected", systemImage: "gauge.with.dots.needle.50percent",
                                 description: Text("Enable an available account source in local source settings. Saved token records are separate from account limits."))
                         }
-                        if let peer = store.snapshot?.object["peerQuota"] as? JSONObject,
+                        if let peer = displayedSnapshot?.object["peerQuota"] as? JSONObject,
                            ["Mac", "Windows"].contains(text(peer["host"])) {
                             Text("Shared from \(text(peer["host"]))").font(.headline)
                             Text("Received: \(text(peer["receivedAt"])). Separate account observation, never added to this Mac's totals.")
@@ -62,9 +81,9 @@ struct NativeDashboard: View {
                     } else if selection.section == "sources" {
                         sourceList
                     } else if selection.section == "dictation" {
-                        NativeDictation(snapshot: store.snapshot)
+                        NativeDictation(snapshot: displayedSnapshot)
                     } else if selection.section == "agents" {
-                        NativeAgentUsage(snapshot: store.snapshot)
+                        NativeAgentUsage(snapshot: displayedSnapshot)
                     } else {
                         dailyHistory
                     }
@@ -75,12 +94,33 @@ struct NativeDashboard: View {
         }
         .onChange(of: host) { selectedDate = "" }
         .onChange(of: selection.section) { selectedDate = "" }
+        .alert("Snapshot could not be opened", isPresented: $archiveError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Choose a saved Observatory JSON snapshot, no larger than 16 MB. Links, invalid files and changing files are rejected. Your current view and saved data were not changed.")
+        }
+    }
+
+    private func openArchive() {
+        let panel = NSOpenPanel()
+        panel.title = "Open saved Observatory snapshot"
+        panel.allowedContentTypes = [.json]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                let snapshot = try SnapshotArchive.read(url)
+                archivedSnapshot = snapshot
+                selectedDate = ""
+            } catch { archiveError = true }
+        }
     }
 
     private var dailyHistory: some View {
         let key = selection.section == "tokens" ? "tokens" : "activity"
         let field = key == "tokens" ? "totalTokens" : "seconds"
-        let days = store.snapshot?.recordedDays(key, host: host) ?? []
+        let days = displayedSnapshot?.recordedDays(key, host: host) ?? []
         let anchor = text(days.first(where: { text($0["date"]) == selectedDate })?["date"] ?? days.last?["date"])
         let selected = nativePeriodDays(days, period: period, anchor: anchor)
         let chosen = nativePeriodSummary(selected, kind: key)
@@ -93,7 +133,7 @@ struct NativeDashboard: View {
                 Text("Week").tag("week")
                 Text("All retained").tag("all")
             }.pickerStyle(.segmented)
-            if key == "activity", let archive = store.snapshot?.activityArchive(host: host) {
+            if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
                 Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
                     .font(.callout).foregroundStyle(.secondary)
                 if let at = parseDate(archive["asOf"]) {
@@ -127,7 +167,7 @@ struct NativeDashboard: View {
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
                     .font(.callout).foregroundStyle(.secondary)
                 if key == "tokens", let chosen {
-                    NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: store.snapshot, host: host)
+                    NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: displayedSnapshot, host: host)
                 } else if let chosen {
                     NativeActivityDetails(day: chosen, showHours: period == "day")
                 }
@@ -140,7 +180,7 @@ struct NativeDashboard: View {
             ForEach(["activity", "tokens", "settings", "dictation"], id: \.self) { key in
                 GroupBox(key.capitalized) {
                     VStack(alignment: .leading, spacing: 10) {
-                        let sources = rows(store.snapshot?.object[key])
+                        let sources = rows(displayedSnapshot?.object[key])
                         if sources.isEmpty { Text("No source records").foregroundStyle(.secondary) }
                         ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
                             LabeledContent(text(source["host"]) + " · " + text(source["source"], fallback: key), value: text(source["status"]))
