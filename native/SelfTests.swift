@@ -1,6 +1,19 @@
 import Foundation
 
 func runSelfTests() {
+    let countedModel: JSONObject = ["inputTokens": 10, "cacheReadTokens": 20, "cacheCreationTokens": 0, "outputTokens": 5, "totalTokens": 35]
+    precondition(nativeSettingsCoverage(model: countedModel, profiles: [countedModel]).status == "matched")
+    var largerModel = countedModel
+    largerModel["totalTokens"] = 40
+    precondition(nativeSettingsCoverage(model: largerModel, profiles: [countedModel]).status == "partial")
+    var excessiveProfile = countedModel
+    excessiveProfile["inputTokens"] = 11
+    precondition(nativeSettingsCoverage(model: countedModel, profiles: [excessiveProfile]).profiles.isEmpty)
+    var inferredModel = countedModel
+    inferredModel["inferred"] = true
+    precondition(nativeSettingsCoverage(model: inferredModel, profiles: [countedModel]).status == "missing")
+    precondition(nativeSettingsCoverage(model: countedModel, profiles: [[:]]).status == "unreconciled")
+    precondition(nativeCounters(["invalid": -1, "boolean": true, "AI apps": 60, "Editors": 120]).map(\.name) == ["Editors", "AI apps"])
     let dictationRows: [JSONObject] = [
         ["date": "2026-09-01", "transcriptions": 1, "words": 12, "audioSeconds": 60, "wordRecords": 1, "audioRecords": 1],
         ["date": "2026-09-06", "transcriptions": 2, "words": 0, "audioSeconds": 0, "wordRecords": 0, "audioRecords": 0],

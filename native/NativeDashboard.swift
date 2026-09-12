@@ -106,9 +106,9 @@ struct NativeDashboard: View {
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
                     .font(.callout).foregroundStyle(.secondary)
                 if key == "tokens", let chosen {
-                    ForEach(Array(rows(chosen["models"]).enumerated()), id: \.offset) { _, model in
-                        LabeledContent(text(model["model"]), value: formatted(number(model["totalTokens"]), compact: true))
-                    }
+                    NativeTokenDetails(day: chosen, snapshot: store.snapshot, host: host)
+                } else if let chosen {
+                    NativeActivityDetails(day: chosen)
                 }
             }
         }
