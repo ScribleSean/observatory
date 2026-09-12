@@ -1,6 +1,6 @@
 # Windows development preview
 
-The native Windows tray app collects on Windows without a running Mac or open terminal. The current preview uses .NET Windows Forms and the installed Microsoft Edge WebView2 Runtime. Dashboard files are served inside WebView2, with no HTTP server or network listener.
+The native Windows tray app collects on Windows without a running Mac or open terminal. Current source builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener. The installed September 12 preview still uses the legacy main window until updated.
 
 This is a development preview. A per-user installer is implemented and tested, but no public binary release is available yet. Windows x64 is the tested build target. Other Windows architectures are not verified.
 
@@ -14,7 +14,7 @@ The compact overview does not embed full history charts or require scrolling on 
 
 ## Native main-window preview
 
-Launch a development build with `--native-dashboard` to use native Windows controls for Activity, Tokens, Allowances, Dictation, Agents and Sources. Quit any running Observatory instance first. The single-instance activation mechanism opens the existing instance and does not change its display mode.
+Current source builds open native Windows controls for Activity, Tokens, Allowances, Dictation, Agents, Sources and Settings by default. Use `--legacy-dashboard` for the previous embedded dashboard. The older `--native-dashboard` argument remains accepted but is no longer needed. Quit any running Observatory instance before changing modes. The single-instance activation mechanism opens the existing instance and does not change its display mode.
 
 Activity and Tokens offer Day, Week and All retained periods. A week ends on the selected recorded date. Missing dates are not filled with zeros, and all-device token totals require a collector-verified deduplication result. Allowances reuse the saved account-history charts and exclude retired Spark windows. Refresh sources invokes the existing collector without changing its configuration. The view reads sanitized snapshots, not raw logs.
 
@@ -32,7 +32,7 @@ Unsaved source choices survive section changes, Settings-page navigation and ref
 
 Settings also has a This device page for login registration, pairing details, disconnection and repair preparation. These controls reuse the tray handlers, including the disconnect and repair confirmations. The view rejects overlapping device operations. Synthetic desktop checks verified startup-state rereading and callback dispatch without touching real startup or pairing state. Actual login launch and real pairing operations remain separate verification gates. Provider sign-in management is not implemented.
 
-This preview is not the installed default. Full accessibility review and feature parity remain unfinished. Empty history is explained separately from recorded zero usage, and an unknown quota observation time is identified. It does not add device synchronization or provider sign-ins.
+The native default is a source-build change, not yet an installed-release claim. Full accessibility review and feature parity remain unfinished. Empty history is explained separately from recorded zero usage, and an unknown quota observation time is identified. It does not add device synchronization or provider sign-ins.
 
 For an isolated desktop check, run `WorkspaceObservatory.exe --test-native-dashboard C:\absolute\path\to\empty-test-directory`. The directory must already exist, be empty and not be linked. The test uses in-memory fictional records, an inert refresh callback and captures only its own form. It does not start a collector or modify installed settings. On September 12 the Windows build and desktop test passed period totals, missing-data handling, unverified combined-token suppression, retired-allowance filtering, source rows, refresh and repeated reload checks. Activity and Allowances captures were visually inspected. These checks do not establish installed native-window behavior or complete native feature parity.
 

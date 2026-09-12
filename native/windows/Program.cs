@@ -4,12 +4,19 @@ namespace WorkspaceObservatory;
 
 internal static class Program
 {
+    internal static bool UseNativeDashboard(string[] args) => !args.Contains("--legacy-dashboard");
     [STAThread]
     private static void Main(string[] args)
     {
         if (args.Contains("--self-test"))
         {
-            try { Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest(); }
+            try
+            {
+                Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
+                if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
+                    UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
+                Console.WriteLine("Native dashboard default and legacy fallback passed.");
+            }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
             return;
         }
@@ -74,7 +81,7 @@ internal static class Program
             if (!args.Contains("--background")) activation.Set();
             return;
         }
-        Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), args.Contains("--native-dashboard")));
+        Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args)));
     }
 }
 
@@ -90,7 +97,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private UsagePopup? usagePopup;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
 
-    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = false)
+    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true)
     {
         this.nativeDashboard = nativeDashboard;
         Directory.CreateDirectory(runtime);
