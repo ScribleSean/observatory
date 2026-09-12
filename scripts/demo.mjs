@@ -48,7 +48,7 @@ export function demoData() {
     ])}));
   const inventories=Object.fromEntries(tokens.map((s,i)=>[s.host,{status:'ok',keys:[String(i+1).repeat(64)],parents:[]}]));
   return {demo:true,schema:2,timezone:'America/New_York',collectedAt,
-    dictation:['Wispr Flow','TypeWhisper'].flatMap(source=>['Mac','Windows'].map((host,h)=>({host,source,status:'ok',checkedAt:collectedAt,calendar:source==='Wispr Flow'?'America/New_York':'device-local',scope:source==='Wispr Flow'?'retained-history-records':'retained-transcriptions',days:dates.filter((_,i)=>i%4!==0).map((date,i)=>({date,transcriptions:3+i+h,words:42*(i+1+h),audioSeconds:20*(i+1+h),...(source==='Wispr Flow'?{wordRecords:3+i+h,audioRecords:3+i+h}:{}),engines:source==='Wispr Flow'?[]:[{engine:h?'Parakeet / sherpa-onnx':'Apple Speech',transcriptions:3+i+h}]}))}))),
+    dictation:['Mac','Windows'].map((host,h)=>({host,source:'Wispr Flow',status:'ok',checkedAt:collectedAt,calendar:'America/New_York',scope:'retained-history-records',days:dates.filter((_,i)=>i%4!==0).map((date,i)=>({date,transcriptions:3+i+h,words:42*(i+1+h),audioSeconds:20*(i+1+h),wordRecords:3+i+h,audioRecords:3+i+h,engines:[]}))})),
     combined:live[0],activity:live.slice(1),activityHistory:retainActivityHistory([],full,collectedAt),
     tokens,combinedTokens:combineTokens(tokens,inventories),settings,combinedSettings:combineSettings(tokens,settings),
     agents:[

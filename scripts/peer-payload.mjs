@@ -1,7 +1,6 @@
 import {isDeepStrictEqual} from 'node:util';
 import {cleanActivity,cleanSettings} from './collect-dashboard.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
-import {cleanDictation} from './typewhisper.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {validatePeerInventory,combinePeerTokens} from './peer-inventory.mjs';
 import {combineActivity} from './combine-activity.mjs';
@@ -62,15 +61,12 @@ export function createPeerPayload(raw,config) {
     if(matches.length!==1)throw Error('Missing peer source');
     return codex(matches[0],host,config.comparisonId);
   });
-  // Legacy Windows senders have only Wispr. Accept that shape unchanged while
-  // allowing explicitly enabled TypeWhisper from updated Windows senders.
-  const names=config.host==='Mac' || raw.dictation?.some(row=>row?.source==='TypeWhisper')?
-    ['Wispr Flow','TypeWhisper']:['Wispr Flow'];
+  const names=['Wispr Flow'];
   if(!Array.isArray(raw.dictation) || raw.dictation.length!==names.length)throw Error('Invalid peer dictation');
   const dictation=names.map(source=>{
     const matches=raw.dictation.filter(row=>row?.source===source);
     if(matches.length!==1)throw Error('Missing peer dictation');
-    return {...(source==='Wispr Flow'?cleanWispr(matches[0],config.host):cleanDictation(matches[0],config.host)),source};
+    return {...cleanWispr(matches[0],config.host),source};
   });
   return {version:1,host:config.host,comparisonId:config.comparisonId,collectedAt:raw.collectedAt,
     activity:activity(raw.activity,config.host),codex:sources,dictation};

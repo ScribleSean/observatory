@@ -9,7 +9,7 @@ const settings={profiles:[{date:'2026-09-08',model:'gpt-6-astra',effort:'medium'
   tools:[{date:'2026-09-08',category:'Shell',tool:'exec_command',namespace:'functions',count:2,arguments:'PRIVATE'}]};
 
 test('Mac local settings accept only explicit source booleans, without remote command settings',()=>{
-  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,wispr:false,typewhisper:false,quota:false,receipts:false,benchmarks:false});
+  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,wispr:false,quota:false,receipts:false,benchmarks:false});
   for(const value of [null,[],{wispr:'yes'},{windowsHost:'private-host'},{python:'/arbitrary/program'}])assert.throws(()=>macCollectorConfig(value));
 });
 test('disabled local sources are never invoked and missing peers are unavailable',async()=>{
@@ -27,12 +27,12 @@ test('Mac local reports are sanitized and token/settings views share one read',a
     activity:async()=>({start:'2026-09-08T12:00:00Z',end:at,intervals:[{start:'2026-09-08T13:00:00Z',end:'2026-09-08T13:01:00Z',category:'Editors',app:'VS Code',title:'PRIVATE'}]}),
     codex:async()=>{reads++;return settings;},
     wispr:async()=>({status:'ok',days:[{date:'2026-09-08',transcriptions:1,words:10,audioSeconds:2,wordRecords:1,audioRecords:1,engines:[],transcript:'PRIVATE'}]}),
-    typewhisper:async()=>({status:'not-found',privatePath:'PRIVATE'}),
+    typewhisper:async()=>{throw Error('Retired reader must never run');},
   },[],at);
   assert.equal(reads,1);assert.equal(data.tokens[0].days[0].totalTokens,10);
   assert.equal(data.settings[0].tools[0].namespace,'functions');
-  assert.equal(data.dictation[0].source,'Wispr Flow');assert.equal(data.dictation[1].status,'not-found');
-  assert.equal(status.state,'partial');assert.ok(!JSON.stringify(data).includes('PRIVATE'));
+  assert.equal(data.dictation[0].source,'Wispr Flow');assert.equal(data.dictation.length,1);
+  assert.equal(status.state,'ok');assert.ok(!JSON.stringify(data).includes('PRIVATE'));
   assert.equal(data.activity[0].intervals,undefined);
 });
 test('failed reads do not publish error text or invent successful token totals',async()=>{

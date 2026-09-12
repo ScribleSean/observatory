@@ -1,6 +1,5 @@
 import {cleanActivity,cleanSettings} from './collect-dashboard.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
-import {cleanDictation} from './typewhisper.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
@@ -9,7 +8,8 @@ export function macCollectorConfig(raw) {
   const keys=['activity','codex','wispr','typewhisper','quota','receipts','benchmarks'];
   if(!raw || typeof raw!=='object' || Array.isArray(raw) ||
     Object.keys(raw).some(key=>!keys.includes(key) || typeof raw[key]!=='boolean'))throw Error('Invalid local Mac source settings');
-  return {activity:raw.activity!==false,codex:raw.codex!==false,wispr:raw.wispr===true,typewhisper:raw.typewhisper===true,quota:raw.quota===true,
+  // Accept the retired boolean only for reading existing configuration.
+  return {activity:raw.activity!==false,codex:raw.codex!==false,wispr:raw.wispr===true,quota:raw.quota===true,
     receipts:raw.receipts===true,benchmarks:raw.benchmarks===true};
 }
 
@@ -23,7 +23,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
     if(!config[key])return disconnected('Mac');
     try{return {...clean(await readers[key]()),checkedAt:at};}catch{return unavailable('Mac');}
   };
-  const [activity,settings,wispr,typewhisper]=await Promise.all([
+  const [activity,settings,wispr]=await Promise.all([
     read('activity',raw=>{
       const {intervals,trackingIntervals,...safe}=cleanActivity(raw,'Mac');
       if(peerConfig)peerActivity={...raw,status:'ok'};
@@ -35,7 +35,6 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
       return safe;
     }),
     read('wispr',raw=>cleanWispr(raw,'Mac')),
-    read('typewhisper',raw=>cleanDictation(raw,'Mac')),
   ]);
   let tokens=settings.status==='ok'?null:{host:'Mac',status:settings.status,checkedAt:at};
   if(!tokens)try{tokens={...tokensFromSettings(settings,'Mac'),checkedAt:at};}catch{tokens=unavailable('Mac');}
@@ -43,7 +42,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
     activity:[activity,disconnected('Windows')],combined:unavailable('Combined'),
     tokens:[tokens,disconnected('Windows'),disconnected('Ubuntu')],combinedTokens:unavailable('All'),
     settings:[settings],combinedSettings:unavailable('All'),
-    dictation:[{...wispr,source:'Wispr Flow'},{...typewhisper,source:'TypeWhisper'}],
+    dictation:[{...wispr,source:'Wispr Flow'}],
     agents:[],agentSource:disconnected('Local'),quota:disconnected('Codex account'),localModel:disconnected('Ubuntu')};
   data.activityHistory=retainActivityHistory(previous,data.activity,at);
   const sources=[...data.activity,...data.tokens,...data.settings,...data.dictation].filter(source=>source.status!=='not-connected');
@@ -56,7 +55,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
       if(peerConfig.host!=='Mac')throw Error('Wrong local peer identity');
       result.peer={status:'ready',payload:createPeerPayload({collectedAt:new Date(at).toISOString(),
         activity:peerActivity || {status:activity.status},codex:[peerCodex || {host:'Mac',status:settings.status}],
-        dictation:[{...wispr,source:'Wispr Flow'},{...typewhisper,source:'TypeWhisper'}]},peerConfig)};
+        dictation:[{...wispr,source:'Wispr Flow'}]},peerConfig)};
     } catch {result.peer={status:'unavailable'};}
   }
   return result;

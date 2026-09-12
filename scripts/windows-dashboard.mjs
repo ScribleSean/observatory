@@ -1,7 +1,6 @@
 import {cleanActivity,cleanSettings} from './collect-dashboard.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {cleanWispr} from './wispr.mjs';
-import {cleanDictation} from './typewhisper.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 
@@ -28,14 +27,13 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     const {intervals,trackingIntervals,...safe}=cleanActivity(value,'Windows');return safe;
   });
   const wispr=clean(raw.wispr,'Windows',value=>cleanWispr(value,'Windows'),['ok','not-found','ambiguous','unavailable']);
-  const typewhisper=clean(raw.typewhisper??disconnected('Windows'),'Windows',value=>cleanDictation(value,'Windows'),['ok','not-found','ambiguous','unavailable']);
   const tokenSource=source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:
     {host:source.host,status:source.status,checkedAt:source.checkedAt};
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[disconnected('Mac'),windows],combined:unavailable('Combined'),
     tokens:[disconnected('Mac'),tokenSource(localSettings),tokenSource(ubuntuSettings)],combinedTokens:unavailable('All'),
     settings:[localSettings,ubuntuSettings],combinedSettings:unavailable('All'),
-    dictation:[{...wispr,source:'Wispr Flow'},{...typewhisper,source:'TypeWhisper'}],agents:[],agentSource:disconnected('Local'),
+    dictation:[{...wispr,source:'Wispr Flow'}],agents:[],agentSource:disconnected('Local'),
     quota:disconnected('Codex account'),localModel:disconnected('Ubuntu')};
   data.activityHistory=retainActivityHistory(previous,data.activity,at);
   const sources=[...data.activity,...data.tokens,...data.settings,...data.dictation].filter(source=>source.status!=='not-connected');
@@ -52,7 +50,7 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
       });
       result.peer={status:'ready',payload:createPeerPayload({collectedAt:new Date(at).toISOString(),
         activity:windows.status==='ok'?raw.windows:windows,codex,
-        dictation:data.dictation.filter(row=>row.source!=='TypeWhisper' || row.status!=='not-connected')},peerConfig)};
+        dictation:data.dictation},peerConfig)};
     } catch {result.peer={status:'unavailable'};}
   }
   return result;

@@ -2,6 +2,8 @@
 
 Migration is in development. Do not rename or delete `local.config.json` to force the native collector to start. That can change source coverage and account selection before retained data has been checked.
 
+Current source collects and exchanges only Wispr dictation aggregates. The retired reader has been removed. Older boolean source settings are accepted but ignored, and the migration plan no longer enables the retired source. Existing snapshots are not rewritten. Native setup controls and installed bundles still need the matching update. Update both peers before relying on the new single-source dictation payload. Older receivers that require the former two-source Mac payload will reject it rather than silently merge incomplete records.
+
 ## Optional receipt read isolation
 
 Current source runs the optional receipt-directory reader in a separate local process with a 15-second deadline and bounded output. An unavailable directory must not hold the entire dashboard collection open. Timeout reports unavailable receipts without deleting their original files or widening folder permissions. Both the legacy collector and native workflow adapter use this boundary.
@@ -18,12 +20,12 @@ The mapping preserves enabled Mac dictation sources, the explicit account-client
 
 - Confirm the paired peer and its configured source scope. A legacy SSH alias alone is not new device pairing.
 - Archive the prior snapshot and verify that retained history remains accessible after the new collector writes its snapshot. A backup file alone is not proof of dashboard visibility.
-- Compare native reader coverage with the existing collector. Current source supports optional Windows TypeWhisper aggregates, but older installed peers do not. Verify updated binaries and the explicit Windows source choice before clearing this coverage gate.
+- Compare native reader coverage with the existing collector and the user's current source choices. Verify updated binaries and the paired Windows Wispr source before clearing this coverage gate.
 - Stop collection, hold the correct collector lock, retain the old configuration and use a recoverable activation with stale-plan checks.
 
 The compatibility adapters and workflow switches are implemented in source. They do not automatically migrate an installed legacy collector, enable allowance sharing or opt new installations into workflow reads.
 
-The assessment's `windows-typewhisper-not-in-native-peer-payload` review code remains conservative because the assessment does not inspect the remote installed build. Source support alone does not clear the installed-peer coverage gate.
+The source mapping still requires confirmed peer scope. Removing a retired reader does not clear the installed-peer verification gate for the supported sources.
 
 ## Viewing retained snapshots
 

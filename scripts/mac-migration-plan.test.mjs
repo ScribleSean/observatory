@@ -10,14 +10,14 @@ const config={macCodexHome:home+'/.codex',windowsHost:'private-windows',ubuntuHo
 test('mapping preserves selected sources but never claims migration is ready',()=>{
   const plan=planLegacyMacSources(config,home);
   assert.equal(plan.status,'review-required');assert.ok(Object.values(plan.sources).every(Boolean));
-  assert.ok(plan.coverageChanges.includes('windows-typewhisper-not-in-native-peer-payload'));
+  assert.deepEqual(plan.coverageChanges,[]);
   assert.ok(plan.requiredChecks.includes('saved-history-archive-and-visibility'));
   assert.ok(!JSON.stringify(plan).includes('private'));assert.ok(!JSON.stringify(plan).includes(home));
 });
 test('optional absent sources stay disabled and custom log locations block automatic mapping',()=>{
   const plan=planLegacyMacSources({macCodexHome:'/another/.codex',windowsHost:'windows',ubuntuHost:'ubuntu'},home);
   assert.equal(plan.status,'unsupported');assert.ok(plan.blockers.includes('custom-or-missing-mac-codex-home'));
-  for(const key of ['wispr','typewhisper','quota','receipts','benchmarks'])assert.equal(plan.sources[key],false);
+  for(const key of ['wispr','quota','receipts','benchmarks'])assert.equal(plan.sources[key],false);
 });
 test('invalid source choices cannot become an executable migration plan',()=>{
   const plan=planLegacyMacSources({...config,receiptDirectory:42,dictation:{mac:'yes'},ubuntuHost:'bad;command'},home);

@@ -70,7 +70,6 @@ export async function collectMac(runtime,python,peerConfig=null) {
         (pairing?.readerPrefix??'')+`CACHE_DIRECTORY = ${JSON.stringify(cache)}\n`+cacheScript+'\n');
     },
     wispr:()=>report('read-wispr.py',[homedir()]),
-    typewhisper:()=>report('read-typewhisper.py',[homedir()],"MODE = 'mac'\n"),
   },previous,new Date().toISOString(),pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
   await finalizePeerCollection(runtime,result,savedPairing,previous);

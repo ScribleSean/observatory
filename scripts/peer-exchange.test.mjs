@@ -17,7 +17,7 @@ async function fixture(t,publish=true) {
   const at=new Date().toISOString();
   const payload=config=>createPeerPayload({collectedAt:at,activity:{status:'not-connected'},
     codex:[{host:config.host,status:'not-connected'}],
-    dictation:(config.host==='Mac'?['Wispr Flow','TypeWhisper']:['Wispr Flow']).map(source=>({source,status:'not-connected'}))},config);
+    dictation:['Wispr Flow'].map(source=>({source,status:'not-connected'}))},config);
   const local=publish?await publishLocalPayload(runtime,payload(pair.local),pair.local):null;
   const peer=createPeerRecord(payload(pair.peer),pair.peer,1);
   return {runtime,pair,local,peer};

@@ -13,7 +13,6 @@ import { combineActivity } from './combine-activity.mjs';
 import { randomBytes } from 'node:crypto';
 import { powershellCommand } from './powershell-command.mjs';
 import { hostname, homedir } from 'node:os';
-import { cleanDictation } from './typewhisper.mjs';
 import { cleanWispr } from './wispr.mjs';
 import { selectActivityPairs } from './activity-buckets.mjs';
 import { readBoundedReceipts as readAgentReceipts } from './bounded-receipts.mjs';
@@ -253,20 +252,20 @@ export async function collect() {
     return result.settings;
   }):Promise.resolve({host,status:'not-connected'})));
   const receipts = await readAgentReceipts(config.receiptDirectory);
-  const dictationScript = await readFile(path.join(root,'scripts/read-typewhisper.py'),'utf8');
   const wisprScript = await readFile(path.join(root,'scripts/read-wispr.py'),'utf8');
-  const dictation = await Promise.all(['Wispr Flow','TypeWhisper'].flatMap(source => ['Mac','Windows'].map(async host => {
+  const dictation = await Promise.all(['Mac','Windows'].map(async host => {
+    const source='Wispr Flow';
     const enabled = config.dictation?.[host.toLowerCase()] === true;
     if (!enabled || (host === 'Windows' && !config.windowsCodexHome)) return {host,source,status:'not-connected'};
-    const nativeWindows = host === 'Windows' && source === 'Wispr Flow';
-    const result = await guarded(host,async () => (source === 'Wispr Flow' ? cleanWispr : cleanDictation)(await pythonReport(
-      host === 'Mac' ? null : nativeWindows ? config.windowsHost : config.ubuntuHost,
-      `MODE = '${host.toLowerCase()}'\n` + (source === 'Wispr Flow' ? wisprScript : dictationScript),
+    const nativeWindows = host === 'Windows';
+    const result = await guarded(host,async () => cleanWispr(await pythonReport(
+      host === 'Mac' ? null : config.windowsHost,
+      `MODE = '${host.toLowerCase()}'\n` + wisprScript,
       host === 'Mac' ? homedir() : path.posix.dirname(config.windowsCodexHome),
       {nativeWindows},
     ),host));
     return {...result,source};
-  })));
+  }));
   const combined = combineActivity([mac, windows]);
   const combinedTokens = combineTokens(tokenSources,inventories);
   const data = {

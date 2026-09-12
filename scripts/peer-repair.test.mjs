@@ -29,7 +29,7 @@ async function bytes(directory) {
 const retired=async runtime=>(await readdir(runtime)).filter(name=>name.startsWith('private-sync-retired-'));
 const payload=config=>createPeerPayload({collectedAt:new Date().toISOString(),activity:{status:'not-connected'},
   codex:config.codexHosts.map(host=>({host,status:'not-connected'})),
-  dictation:(config.host==='Mac'?['Wispr Flow','TypeWhisper']:['Wispr Flow']).map(source=>({source,status:'not-connected'}))},config);
+  dictation:['Wispr Flow'].map(source=>({source,status:'not-connected'}))},config);
 
 test('both local retirements are required before authenticated setup replaces an existing pairing',async t=>{
   const mac=await fixture(t),windows=await fixture(t);

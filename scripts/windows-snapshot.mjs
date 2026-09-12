@@ -29,5 +29,5 @@ export function windowsCollectorConfig(raw={}) {
   if(distro!==undefined && distro!==null && (typeof distro!=='string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(distro)))throw Error('Invalid WSL distribution');
   if(quotaDistro!==undefined && quotaDistro!==null && (typeof quotaDistro!=='string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(quotaDistro)))throw Error('Invalid quota WSL distribution');
   for(const key of ['activity','codex','wispr','typewhisper','quota'])if(raw[key]!==undefined && typeof raw[key]!=='boolean')throw Error('Invalid source setting');
-  return {activity:raw.activity!==false,codex:raw.codex!==false,wispr:raw.wispr===true,typewhisper:raw.typewhisper===true,wslDistribution:distro || null,quota:raw.quota===true,quotaWslDistribution:quotaDistro || null};
+  return {activity:raw.activity!==false,codex:raw.codex!==false,wispr:raw.wispr===true,wslDistribution:distro || null,quota:raw.quota===true,quotaWslDistribution:quotaDistro || null};
 }

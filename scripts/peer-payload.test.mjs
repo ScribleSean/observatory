@@ -13,26 +13,20 @@ function raw(host) {
       tools:[{date:'2026-09-09',category:'Shell',tool:'exec_command',namespace:'functions',count:1,arguments:'PRIVATE'}],
       inventory:{status:'ok',keys:[(host==='Mac'?'0':'1').repeat(64)],parents:[],rawSession:'PRIVATE'}}],
     dictation:[{source:'Wispr Flow',status:'ok',days:[{date:'2026-09-09',transcriptions:1,words:5,audioSeconds:2,
-      engines:[],wordRecords:1,audioRecords:1,transcript:'PRIVATE'}]},...(host==='Mac'?[{source:'TypeWhisper',status:'not-found',privatePath:'PRIVATE'}]:[])]};
+      engines:[],wordRecords:1,audioRecords:1,transcript:'PRIVATE'}]}]};
 }
 const packet=host=>createPeerPayload(raw(host),config(host));
 
-test('updated peers accept Windows TypeWhisper and still accept legacy Windows packets',()=>{
-  const source=raw('Windows');
-  source.dictation.push({source:'TypeWhisper',status:'ok',days:[{date:'2026-09-09',
-    transcriptions:2,words:12,audioSeconds:7,engines:[],transcript:'PRIVATE'}]});
-  const windows=createPeerPayload(source,config('Windows'));
-  assert.deepEqual(parsePeerPayload(JSON.stringify(windows),config('Windows'),now),windows);
-  assert.equal(parsePeerPayload(JSON.stringify(packet('Windows')),config('Windows'),now).dictation.length,1);
-  const merged=mergePeerPayloads(packet('Mac'),windows,config('Mac'),config('Windows'),[],now);
-  assert.equal(merged.dictation.find(row=>row.host==='Windows' && row.source==='TypeWhisper').days[0].words,12);
-  assert.ok(!JSON.stringify(merged).includes('PRIVATE'));
-  const repeated=mergePeerPayloads(packet('Mac'),windows,config('Mac'),config('Windows'),merged.activityHistory,now);
-  assert.deepEqual(repeated.dictation,merged.dictation);
-  for(const mutate of [p=>p.dictation.push(p.dictation[1]),p=>{p.dictation[1].source='Other';},
-    p=>{p.dictation[1].days[0].transcript='PRIVATE';},p=>{p.dictation[1].days[0].words=-1;}]) {
-    const invalid=structuredClone(windows);mutate(invalid);
-    assert.throws(()=>parsePeerPayload(JSON.stringify(invalid),config('Windows'),now));
+test('peer protocol only accepts the supported Wispr source',()=>{
+  for(const host of ['Mac','Windows']) {
+    const value=packet(host);
+    assert.equal(value.dictation.length,1);
+    assert.equal(value.dictation[0].source,'Wispr Flow');
+    for(const mutate of [p=>p.dictation.push({...p.dictation[0],source:'Retired source'}),
+      p=>{p.dictation[0].source='Other';},p=>{p.dictation[0].days[0].transcript='PRIVATE';}]) {
+      const invalid=structuredClone(value);mutate(invalid);
+      assert.throws(()=>parsePeerPayload(JSON.stringify(invalid),config(host),now));
+    }
   }
 });
 
@@ -52,7 +46,7 @@ test('either app derives the same combined dashboard without leaking private evi
   assert.equal(a.tokens.find(s=>s.host==='Ubuntu').status,'not-connected');
   for(const secret of ['PRIVATE','inventory','comparisonId','intervals','0'.repeat(64),'1'.repeat(64)])
     assert.ok(!JSON.stringify(a).includes(secret));
-  assert.equal(a.dictation.length,3);
+  assert.equal(a.dictation.length,2);
 });
 test('inbound extra fields, host spoofing, changed comparison ID and malformed counts fail closed',()=>{
   for(const mutate of [p=>{p.prompt='PRIVATE';},p=>{p.host='Windows';},p=>{p.comparisonId='b'.repeat(64);},

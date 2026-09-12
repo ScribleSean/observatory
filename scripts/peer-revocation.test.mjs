@@ -20,7 +20,7 @@ async function fixture(t) {
 }
 const payload=config=>createPeerPayload({collectedAt:new Date().toISOString(),activity:{status:'not-connected'},
   codex:config.codexHosts.map(host=>({host,status:'not-connected'})),
-  dictation:(config.host==='Mac'?['Wispr Flow','TypeWhisper']:['Wispr Flow'])
+  dictation:['Wispr Flow']
     .map(source=>({source,status:'not-connected'}))},config);
 
 test('revocation is durable, idempotent, and preserves existing private state',async t=>{

@@ -25,11 +25,11 @@ export function planLegacyMacSources(config,home=homedir()) {
     if(typeof config[key]!=='string' || !/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(config[key]))blockers.push(`invalid-${key}`);
   const selected=key=>absolute(config[key]);
   return {version:1,status:blockers.length?'unsupported':'review-required',
-    sources:{activity:true,codex:true,wispr:config.dictation?.mac===true,typewhisper:config.dictation?.mac===true,
+    sources:{activity:true,codex:true,wispr:config.dictation?.mac===true,
       quota:selected('codexExecutable'),receipts:selected('receiptDirectory'),benchmarks:selected('localModelResults')},
     remoteHosts,blockers,requiredChecks:['confirmed-peer-and-source-scope','saved-history-archive-and-visibility',
       'native-reader-coverage-comparison','collector-lock-and-rollback'],
-    coverageChanges:config.dictation?.windows===true?['windows-typewhisper-not-in-native-peer-payload']:[]};
+    coverageChanges:[]};
 }
 
 export async function assessMacMigration(runtime,{home=homedir()}={}) {

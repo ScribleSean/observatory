@@ -24,7 +24,7 @@ test('WSL collection is optional and settings reject command-like distro names',
   assert.throws(()=>windowsCollectorConfig({wslDistribution:'Ubuntu; whoami'}));
   assert.throws(()=>windowsCollectorConfig({wispr:'true'}));
   assert.equal(windowsCollectorConfig({activity:false}).activity,false);
-  assert.equal(windowsCollectorConfig().typewhisper,false);
-  assert.equal(windowsCollectorConfig({typewhisper:true}).typewhisper,true);
+  assert.equal(windowsCollectorConfig().typewhisper,undefined);
+  assert.equal(windowsCollectorConfig({typewhisper:true}).typewhisper,undefined);
   assert.throws(()=>windowsCollectorConfig({typewhisper:1}));
 });

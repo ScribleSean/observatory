@@ -49,7 +49,7 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify(sourceConfig));
     const at=new Date().toISOString(),peerHost=pair.peer.host;
     const peerPayload=createPeerPayload({collectedAt:at,activity:{status:'not-connected'},
-      codex:[{host:peerHost,status:'not-connected'}],dictation:(peerHost==='Mac'?['Wispr Flow','TypeWhisper']:['Wispr Flow'])
+      codex:[{host:peerHost,status:'not-connected'}],dictation:['Wispr Flow']
         .map(source=>({source,status:'not-connected'}))},pair.peer);
     await acceptPeerState(runtime,createPeerRecord(peerPayload,pair.peer,1),pair.peer);
     const script=fileURLToPath(new URL(mac?'./collect-mac.mjs':'./collect-windows.mjs',import.meta.url));

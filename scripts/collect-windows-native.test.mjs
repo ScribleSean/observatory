@@ -23,7 +23,7 @@ test('native Windows entry point preserves standalone collection without peer co
     assert.equal(status.state,'partial');assert.equal(status.snapshotAt,data.collectedAt);
   });
 
-test('native Windows TypeWhisper opt-in reads fictional aggregates and opt-out removes only projection',
+test('native Windows ignores retired source settings and preserves source files',
   {skip:process.platform!=='win32'},async t=>{
     const root=await mkdtemp(path.join(tmpdir(),'observatory-windows-dictation-test-'));
     t.after(()=>rm(root,{recursive:true,force:true}));
@@ -47,9 +47,9 @@ test('native Windows TypeWhisper opt-in reads fictional aggregates and opt-out r
     };
     const enabled=await collect();
     const source=enabled.dictation.find(row=>row.source==='TypeWhisper');
-    assert.equal(source.status,'ok');assert.equal(source.days[0].words,12);
+    assert.equal(source,undefined);
     assert.ok(!JSON.stringify(enabled).includes('PRIVATE'));
     config.typewhisper=false;
-    assert.equal((await collect()).dictation.find(row=>row.source==='TypeWhisper').status,'not-connected');
+    assert.equal((await collect()).dictation.find(row=>row.source==='TypeWhisper'),undefined);
     assert.equal(await readFile(file,'utf8'),fixture);
   });

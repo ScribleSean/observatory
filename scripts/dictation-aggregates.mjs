@@ -1,3 +1,4 @@
+// Shared aggregate validation. This module does not discover or read any app.
 const engines = new Set(['Apple Speech','Parakeet / sherpa-onnx','WhisperKit','Whisper.cpp','Unknown']);
 const statuses = new Set(['ok','not-found','not-connected','unavailable','ambiguous']);
 const count = value => Number.isSafeInteger(value) && value >= 0;

@@ -1,4 +1,4 @@
-import {cleanDictation, summarizeDictation} from './typewhisper.mjs';
+import {cleanDictation, summarizeDictation} from './dictation-aggregates.mjs';
 
 export function cleanWispr(raw, host) {
   const safe = cleanDictation(raw, host);
