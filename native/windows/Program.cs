@@ -8,6 +8,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--test-sharing-bridge")
+        {
+            try { QuotaSharing.BridgeSelfTest().GetAwaiter().GetResult(); }
+            catch { Console.Error.WriteLine("Native sharing bridge failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--self-test"))
         {
             try

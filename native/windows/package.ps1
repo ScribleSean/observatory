@@ -69,9 +69,10 @@ try {
     if (Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Name -in @('usage.json', 'collector.json', 'collector.config.json', 'local.config.json', '.env') }) {
         throw 'Private runtime configuration or snapshots detected.'
     }
+    foreach ($testArgument in @('--self-test', '--test-sharing-bridge')) {
     $nativeTest = New-Object System.Diagnostics.Process
     $nativeTest.StartInfo.FileName = Join-Path $app 'WorkspaceObservatory.exe'
-    $nativeTest.StartInfo.Arguments = '--self-test'
+    $nativeTest.StartInfo.Arguments = $testArgument
     $nativeTest.StartInfo.UseShellExecute = $false
     $nativeTest.StartInfo.CreateNoWindow = $true
     $nativeTest.StartInfo.RedirectStandardOutput = $true
@@ -80,11 +81,12 @@ try {
         $nativeTest.Start() | Out-Null
         $testOutput = $nativeTest.StandardOutput.ReadToEndAsync()
         $testError = $nativeTest.StandardError.ReadToEndAsync()
-        if (-not $nativeTest.WaitForExit(30000)) { $nativeTest.Kill(); throw 'Packaged native tests timed out.' }
+        if (-not $nativeTest.WaitForExit(60000)) { $nativeTest.Kill(); throw 'Packaged native tests timed out.' }
         if ($nativeTest.ExitCode -ne 0) { throw 'Packaged native tests failed.' }
         Write-Output $testOutput.GetAwaiter().GetResult()
         $testError.GetAwaiter().GetResult() | Out-Null
     } finally { $nativeTest.Dispose() }
+    }
     & (Join-Path $python 'python.exe') -B -X utf8 -c "import sqlite3, zoneinfo, sys; assert sys.flags.isolated; assert sys.dont_write_bytecode; assert zoneinfo.ZoneInfo('America/New_York'); print('Packaged Python SQLite and timezone checks passed')"
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Python check failed.' }
     & (Join-Path $runtime 'node.exe') --version

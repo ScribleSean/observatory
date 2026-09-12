@@ -8,6 +8,27 @@ internal sealed record QuotaSharingStatus(bool Enabled, bool CanEnable, string R
 
 internal static class QuotaSharing
 {
+    internal static async Task BridgeSelfTest()
+    {
+        var runtime = Path.Combine(Path.GetTempPath(), "observatory-sharing-bridge-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(runtime);
+        try
+        {
+            var status = await Run(runtime, "status", null, CancellationToken.None);
+            if (status.Enabled || status.CanEnable || status.Reason != "pairing-unavailable")
+                throw new InvalidOperationException("Unpaired sharing status failed.");
+            var disabled = await Run(runtime, "disable", null, CancellationToken.None);
+            if (disabled.Enabled || Directory.Exists(Path.Combine(runtime, "private-quota")))
+                throw new InvalidOperationException("Disabled sharing created account state.");
+            var rejected = false;
+            try { await Run(runtime, "enable", new string('a', 64), CancellationToken.None); }
+            catch (InvalidOperationException) { rejected = true; }
+            if (!rejected) throw new InvalidOperationException("Unpaired sharing enabled.");
+            Console.WriteLine("Packaged native sharing bridge passed with isolated data.");
+        }
+        finally { Directory.Delete(runtime, recursive: true); }
+    }
+
     internal static QuotaSharingStatus Parse(string text)
     {
         if (text.Length > 4096 || JsonNode.Parse(text) is not JsonObject value || value.Count != 5 ||
