@@ -31,4 +31,6 @@ The legacy Mac collector continues recording real allowance observations and con
 
 See [tracking reuse](TRACKING-REUSE.md) for the open-source review and measurement boundaries.
 
+See [legacy Mac migration](MAC-MIGRATION.md) for the read-only source assessment and activation gates.
+
 The newer Mac collector also preserves an explicitly selected legacy account client instead of discovering a replacement. A legacy configuration without an account selection remains disconnected. The native monitoring switch can disable this read, including discarding an in-flight response. Fresh installations may discover the installed Codex client only after monitoring is enabled. These compatibility paths do not themselves perform configuration migration.
