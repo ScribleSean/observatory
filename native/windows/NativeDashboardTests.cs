@@ -36,14 +36,17 @@ internal static class NativeDashboardTests
         activityDay["apps"] = JsonNode.Parse("""{"AI apps":{"ChatGPT / Codex":1200},"Mixed activity":{"Do not attribute":600}}""");
         var settingsRoot = Path.Combine(output, "settings-fixture");
         Directory.CreateDirectory(settingsRoot);
-        var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":false,"wslDistribution":null,"quotaWslDistribution":null,"futureSetting":"preserved"}""")!.AsObject();
+        var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":true,"wslDistribution":null,"quotaWslDistribution":null,"futureSetting":"preserved"}""")!.AsObject();
         File.WriteAllText(Path.Combine(settingsRoot, "collector.config.json"), initialSettings.ToJsonString());
         using var settingsCollector = new Collector(settingsRoot);
         var startupRegistered = false;
         var pairingDetails = 0; var disconnects = 0; var repairs = 0;
         var devicePending = new TaskCompletionSource();
+        var confirmSettings = false;
+        var confirmations = new List<string>();
         using var form = new NativeDashboard(() => data, () => { refreshes++; return Task.CompletedTask; },
-            new SourceSettingsActions(settingsCollector.ReadConfiguration, settingsCollector.UpdateConfiguration),
+            new SourceSettingsActions(settingsCollector.ReadConfiguration, settingsCollector.UpdateConfiguration,
+                operation => { confirmations.Add(operation); return confirmSettings; }),
             new DeviceSettingsActions(() => startupRegistered, value => startupRegistered = value,
                 () => pairingDetails++, () => { disconnects++; return devicePending.Task; }, () => { repairs++; return Task.CompletedTask; }));
         form.Shown += async (_, _) =>
@@ -143,10 +146,27 @@ internal static class NativeDashboardTests
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Settings loaded existing disabled source");
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
+                await Select(form, "Settings page", "This device");
+                await Select(form, "Settings page", "Sources");
+                form.Reload();
+                Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Draft survives navigation and reload");
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
                 Capture(form, output, "native-settings");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "quota").Checked = false;
+                Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
+                Check(settingsCollector.ReadConfiguration()["quota"]!.GetValue<bool>() && confirmations.Last() == "quota-removal", "Canceled quota removal preserves setting");
+                confirmSettings = true;
+                Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
+                Check(!settingsCollector.ReadConfiguration()["quota"]!.GetValue<bool>(), "Confirmed quota opt-out saved");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
+                confirmSettings = false;
+                Children(form).OfType<Button>().Single(button => button.Text == "Reload saved settings").PerformClick();
+                Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked && confirmations.Last() == "discard", "Canceled discard retains draft");
+                confirmSettings = true;
+                Children(form).OfType<Button>().Single(button => button.Text == "Reload saved settings").PerformClick();
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Confirmed discard reloads saved values");
                 try { settingsCollector.UpdateConfiguration(initialSettings, initialSettings); throw new Exception("Stale settings accepted"); }
                 catch (InvalidOperationException) { }
                 var current = settingsCollector.ReadConfiguration();
