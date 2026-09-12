@@ -9,6 +9,15 @@ import {retainQuotaHistory} from './quota-history.mjs';
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const timestamp=value=>Number.isSafeInteger(value) && value>=0 && value<=8640000000000000;
+const sharingOff=()=>({enabled:false,generation:null,scope:null,pairingId:null});
+function readSharing(value,history) {
+  if(value===undefined)return sharingOff();
+  if(!value || typeof value.enabled!=='boolean')throw Error('Invalid quota sharing state');
+  if(!value.enabled)return sharingOff();
+  if(typeof value.generation!=='string' || !/^[a-f0-9]{32}$/.test(value.generation) || !hex(value.scope) || !hex(value.pairingId))throw Error('Invalid quota sharing identity');
+  if(value.scope!==history?.scope || ['not-connected','needs-auth','unsupported'].includes(history?.status))return sharingOff();
+  return {enabled:true,generation:value.generation,scope:value.scope,pairingId:value.pairingId};
+}
 
 async function safeFile(file,optional=false) {
   try {
@@ -50,7 +59,7 @@ async function withDatabase(runtime,action) {
 
 function read(db,now) {
   const row=db.prepare('SELECT record FROM quota_state WHERE slot=1').get();
-  if(!row)return {version:1,revision:0,salt:randomBytes(32).toString('hex'),history:null,nextAttemptAt:0,failures:0};
+  if(!row)return {version:1,revision:0,salt:randomBytes(32).toString('hex'),history:null,nextAttemptAt:0,failures:0,sharing:sharingOff()};
   if(typeof row.record!=='string' || Buffer.byteLength(row.record)>16_000_000)throw Error('Invalid quota record');
   const value=JSON.parse(row.record);
   if(value?.version!==1 || !Number.isSafeInteger(value.revision) || value.revision<0 || !hex(value.salt) ||
@@ -62,7 +71,8 @@ function read(db,now) {
     else if(hex(value.history.scope))history=retainQuotaHistory(value.history,{status:value.history.latestReadStatus},{scope:value.history.scope,now});
     else throw Error('Invalid quota account scope');
   }
-  return {version:1,revision:value.revision,salt:value.salt,history,nextAttemptAt:value.nextAttemptAt,failures:value.failures};
+  return {version:1,revision:value.revision,salt:value.salt,history,nextAttemptAt:value.nextAttemptAt,failures:value.failures,
+    sharing:readSharing(value.sharing,history)};
 }
 
 function save(db,value) {
@@ -89,6 +99,23 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
   const next={...previous,revision:previous.revision+1,
     history:retainQuotaHistory(previous.history,observation,{scope,enabled,now}),
     nextAttemptAt:enabled?nextAttemptAt:Math.max(previous.nextAttemptAt,nextAttemptAt),failures:enabled?failures:previous.failures};
+  if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
+  next.sharing=readSharing(previous.sharing,next.history);
+  save(db,next);return next;
+});
+
+// Called only after explicit consent for this account and paired device. A new
+// consent rotates the public generation, including when the pairing changes.
+// Disabling changes the revision so an in-flight collection cannot undo it.
+export const setQuotaSharing=(runtime,{revision,enabled,pairingId},now=Date.now())=>withDatabase(runtime,db=>{
+  if(!timestamp(now) || typeof enabled!=='boolean')throw Error('Invalid quota sharing consent');
+  const previous=read(db,now);
+  if(previous.revision!==revision)throw Error('Quota sharing superseded');
+  if(enabled && (!hex(pairingId) || !hex(previous.history?.scope) ||
+      !['ok','stale'].includes(previous.history?.status) || previous.history.latestReadStatus!=='ok'))
+    throw Error('Read the current account before sharing');
+  const next={...previous,revision:previous.revision+1,sharing:enabled?
+    {enabled:true,generation:randomBytes(16).toString('hex'),scope:previous.history.scope,pairingId}:sharingOff()};
   if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
   save(db,next);return next;
 });

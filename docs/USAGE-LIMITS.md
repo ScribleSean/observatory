@@ -8,7 +8,9 @@ Status: development implementation, not a finished public release. The installed
 
 The contract carries the source device, a random sharing generation, original observation times, supported Codex allowance windows and dated token totals. It omits credentials, account identifiers and local account-scope hashes. It rejects unexpected inbound fields and conflicting observations. Duplicate totals are never added together. Retired Spark windows are excluded.
 
-Before transport integration, both devices need explicit sharing controls and an authenticated agreement on the owner's current generation. Account changes, disabling sharing and revocation must invalidate that generation. Receiving code must check freshness and retain device provenance. A matching allowance percentage is not proof that two devices use the same account, so cross-device account totals must not be summed.
+The private quota store now supports account-bound and pairing-bound consent. It defaults off for existing stores. Each explicit enable creates a random generation. Account changes, failed authentication and disabling monitoring revoke consent. A late collector result cannot undo a concurrent settings change. Disabling sharing preserves local readings.
+
+Before transport integration, both devices still need explicit sharing controls and an authenticated agreement on the owner's current generation. Pairing revocation must call the sharing-disable operation. Receiving code must check freshness and retain device provenance. A matching allowance percentage is not proof that two devices use the same account, so cross-device account totals must not be summed.
 
 ## Reference implementation
 
