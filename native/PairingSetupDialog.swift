@@ -6,7 +6,7 @@ enum PairingSetupDialog {
         let alert = NSAlert()
         alert.messageText = saved.status == .paired ? "Verify paired Windows PC" : "Pair with Windows"
         alert.informativeText = "Use an existing SSH alias with trusted host-key and noninteractive key authentication. Both apps need the updated pairing tools. Pairing exchanges approved activity and AI-usage metadata, without enabling sources. A saved target is fixed for retries. Changing it requires repair."
-        let form = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 278))
+        let form = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 312))
         func field(_ title: String, value: String?, placeholder: String, y: CGFloat) -> NSTextField {
             let label = NSTextField(labelWithString: title)
             label.frame = NSRect(x: 0, y: y + 27, width: 500, height: 18)
@@ -32,6 +32,17 @@ enum PairingSetupDialog {
         ubuntu.state = saved.request?.includeUbuntu == true ? .on : .off
         ubuntu.isEnabled = saved.request == nil
         form.addSubview(ubuntu)
+        let pasteAction = PairingDetailsPasteAction(apply: { details in
+            node.stringValue = details.remoteNode
+            script.stringValue = details.remoteScript
+            runtime.stringValue = details.remoteRuntime
+        })
+        let paste = NSButton(title: "Paste Windows details", target: pasteAction, action: #selector(PairingDetailsPasteAction.paste))
+        paste.frame = NSRect(x: 0, y: 280, width: 190, height: 28)
+        paste.isEnabled = saved.request == nil
+        paste.toolTip = "Read connection paths from the clipboard. Does not send a setup request."
+        form.addSubview(paste)
+        defer { withExtendedLifetime(pasteAction) {} }
         alert.accessoryView = form
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: saved.status == .paired ? "Verify pairing" : saved.status == .pending ? "Retry setup" : "Pair devices")

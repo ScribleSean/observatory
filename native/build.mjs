@@ -81,5 +81,6 @@ execFileSync(binary,['--test-collector'],{stdio:'inherit',timeout:30000});
 execFileSync('/usr/bin/codesign',['--verify','--strict',bundle],{stdio:'inherit'});
 execFileSync(binary,['--test-web'],{stdio:'inherit',timeout:35000});
 execFileSync(binary,['--test-lifecycle'],{stdio:'inherit',timeout:20000});
+execFileSync(binary,['--test-popup'],{stdio:'inherit',timeout:15000});
 writeFileSync(path.join(output,'app.json'),JSON.stringify({bundle,builtAt:new Date().toISOString(),sourceRevision:source.revision,sourceDirty:source.dirty}));
 console.log(`Built ${bundle} (native binary ${(statSync(binary).size/1048576).toFixed(1)} MiB, ${runtimeBinaries} signed runtime binaries). No live data bundled.`);

@@ -7,7 +7,7 @@ struct CollectorLaunch {
 }
 
 enum CollectorConfiguration {
-    static let defaults = ["activity": true, "codex": true, "wispr": false, "typewhisper": false]
+    static let defaults = ["activity": true, "codex": true, "wispr": false, "typewhisper": false, "quota": false]
 
     static func validate(_ object: JSONObject) throws -> [String: Bool] {
         var result = defaults
@@ -56,6 +56,16 @@ enum CollectorConfiguration {
         if FileManager.default.fileExists(atPath: file.path) { _ = try read(runtime: runtime) }
         try data.write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+    }
+
+    // Optimistic conflict detection for settings loaded into an editor. This
+    // does not claim an interprocess compare-and-swap transaction.
+    static func saveIfUnchanged(_ sources: [String: Bool], expected: [String: Bool], runtime: URL) throws -> Bool {
+        let checked = try validate(sources)
+        let baseline = try validate(expected)
+        guard try read(runtime: runtime) == baseline else { return false }
+        try save(checked, runtime: runtime)
+        return true
     }
 
     static func launch(runtime: URL, resources: URL, local: Bool) throws -> CollectorLaunch {

@@ -1,12 +1,129 @@
 import Foundation
 
 func runSelfTests() {
+    do {
+        let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-first-run-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: runtime) }
+        precondition((try? FirstRunSetup.prepare(runtime: runtime)) == true)
+        let disabled = try CollectorConfiguration.read(runtime: runtime)
+        precondition(disabled.values.allSatisfy { !$0 })
+        precondition((try? FirstRunSetup.required(runtime: runtime)) == true)
+        precondition((try? FirstRunSetup.prepare(runtime: runtime)) == true)
+        do {
+            try FirstRunSetup.complete(sources: ["quota": true], runtime: runtime)
+            preconditionFailure("Incomplete consent must be rejected")
+        } catch {}
+        precondition((try? FirstRunSetup.required(runtime: runtime)) == true)
+        try FirstRunSetup.complete(sources: disabled, runtime: runtime)
+        precondition((try? FirstRunSetup.required(runtime: runtime)) == false)
+        precondition((try? FirstRunSetup.prepare(runtime: runtime)) == false)
+        precondition((try? CollectorConfiguration.read(runtime: runtime)) == disabled)
+        let marker = runtime.appendingPathComponent("setup-state.json")
+        try Data("invalid".utf8).write(to: marker)
+        precondition((try? FirstRunSetup.required(runtime: runtime)) == nil)
+    } catch { preconditionFailure("First-run persistence checks failed") }
+    do {
+        let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-existing-setup-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: runtime) }
+        _ = try CollectorConfiguration.prepare(runtime: runtime)
+        let file = runtime.appendingPathComponent("collector.config.json")
+        let before = try Data(contentsOf: file)
+        precondition((try? FirstRunSetup.prepare(runtime: runtime)) == false)
+        precondition((try? Data(contentsOf: file)) == before)
+        precondition(!FileManager.default.fileExists(atPath: runtime.appendingPathComponent("setup-state.json").path))
+        try FileManager.default.createSymbolicLink(atPath: runtime.appendingPathComponent("setup-state.json").path,
+                                                   withDestinationPath: runtime.appendingPathComponent("missing-state").path)
+        precondition((try? FirstRunSetup.required(runtime: runtime)) == nil)
+    } catch { preconditionFailure("Existing setup preservation checks failed") }
+    MainActor.assumeIsolated {
+        let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-setup-gate-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: runtime) }
+        let pending = ObservatoryStore(runtime: runtime)
+        precondition(pending.collectionAllowed && pending.setupRequired)
+        pending.refresh()
+        precondition(!pending.refreshing && pending.lastAttempt == "setup-required")
+        precondition(!FileManager.default.fileExists(atPath: runtime.appendingPathComponent("public/local/usage.json").path))
+    }
+    MainActor.assumeIsolated {
+        let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-preview-settings-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: runtime) }
+        let preview = ObservatoryStore(runtime: runtime, collectionAllowed: false)
+        // Even a configuration enabling sources must not start collection in a preview.
+        try! CollectorConfiguration.save(CollectorConfiguration.defaults, runtime: runtime)
+        precondition((try? CollectorConfiguration.read(runtime: runtime))?["codex"] == true)
+        preview.refresh()
+        precondition(!preview.refreshing && preview.lastAttempt == "preview-collection-disabled")
+        precondition(!FileManager.default.fileExists(atPath: runtime.appendingPathComponent("public/local/usage.json").path))
+        do {
+            let baseline = try CollectorConfiguration.read(runtime: runtime)
+            var draft = baseline
+            draft["quota"] = true
+            let saved = try CollectorConfiguration.saveIfUnchanged(draft, expected: baseline, runtime: runtime)
+            precondition(saved && (try? CollectorConfiguration.read(runtime: runtime)) == draft)
+            // An editor holding the old version must not overwrite a newer save.
+            let staleSave = try CollectorConfiguration.saveIfUnchanged(baseline, expected: baseline, runtime: runtime)
+            precondition(!staleSave && (try? CollectorConfiguration.read(runtime: runtime)) == draft)
+            let invalidSave = try? CollectorConfiguration.saveIfUnchanged(["unknown-source": true], expected: draft, runtime: runtime)
+            precondition(invalidSave == nil && (try? CollectorConfiguration.read(runtime: runtime)) == draft)
+            // Reloading the saved version allows a deliberate subsequent edit.
+            let reloadedSave = try CollectorConfiguration.saveIfUnchanged(baseline, expected: draft, runtime: runtime)
+            precondition(reloadedSave && (try? CollectorConfiguration.read(runtime: runtime)) == baseline)
+            preview.refresh()
+            precondition(!preview.refreshing && preview.lastAttempt == "preview-collection-disabled")
+        } catch { preconditionFailure("Synthetic settings save checks failed") }
+    }
+    let nativeHistory = Snapshot(object: [
+        "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-12", "totalTokens": 20], ["date": "2026-09-10", "totalTokens": 10]]],
+                   ["host": "Windows", "status": "unavailable", "days": [["date": "2026-09-12", "totalTokens": 999]]]],
+        "combinedTokens": ["status": "ok", "days": [["date": "2026-09-12", "totalTokens": 999]]]
+    ])
+    precondition(nativeHistory.days("tokens", host: "Mac").map { text($0["date"]) } == ["2026-09-10", "2026-09-12"])
+    precondition(number(nativeHistory.latest("tokens", host: "Mac")?["totalTokens"]) == 20)
+    let archivedActivity = Snapshot(object: [
+        "activity": [["host": "Mac", "status": "unavailable", "days": []]],
+        "activityHistory": [
+            ["host": "Mac", "status": "ok", "latestReadStatus": "unavailable", "days": [
+                ["date": "2026-09-12", "seconds": 20], ["date": "2026-08-01", "seconds": 10]]],
+            ["host": "Combined", "status": "ok", "latestReadStatus": "ok", "days": [["date": "2026-09-12", "seconds": 25]]]
+        ]])
+    precondition(archivedActivity.recordedDays("activity", host: "Mac").map { text($0["date"]) } == ["2026-08-01", "2026-09-12"])
+    precondition(archivedActivity.latest("activity", host: "Mac") == nil)
+    precondition(text(archivedActivity.activityArchive(host: "Mac")?["latestReadStatus"]) == "unavailable")
+    precondition(number(archivedActivity.recordedDays("activity", host: "All").last?["seconds"]) == 25)
+    precondition(archivedActivity.recordedDays("activity", host: "Ubuntu").isEmpty)
+    precondition(nativeHistory.recordedDays("tokens", host: "Mac").count == 2)
+    precondition(nativeHistory.days("tokens", host: "Windows").isEmpty)
+    precondition(nativeHistory.days("tokens", host: "All").isEmpty)
     let pairingRequest = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows", hostAlias: "fixture-host",
         remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"), includeUbuntu: false)
     precondition((try? pairingRequest.validate()) != nil)
     let invalidPairingRequest = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows", hostAlias: "-oBad",
         remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"), includeUbuntu: false)
     precondition((try? invalidPairingRequest.validate()) == nil)
+    let windowsDetails = """
+    {"version":1,"kind":"windows-installation","remoteNode":"C:/Fixture/Runtime/node.exe","remoteScript":"C:/Fixture/Collector/scripts/peer-exchange.mjs","remoteRuntime":"C:/Fixture/Data"}
+    """
+    precondition((try? WindowsPairingDetails.parse(windowsDetails))?.remoteRuntime == "C:/Fixture/Data")
+    for invalid in [windowsDetails.replacingOccurrences(of: "windows-installation", with: "unknown"),
+                    windowsDetails.replacingOccurrences(of: "node.exe", with: "other.exe"),
+                    windowsDetails.replacingOccurrences(of: "C:/Fixture/Data", with: "C:/Fixture/../Data"),
+                    windowsDetails.replacingOccurrences(of: "\"version\":1", with: "\"version\":true"),
+                    windowsDetails.replacingOccurrences(of: "\"version\":1", with: "\"version\":1,\"hostAlias\":\"not-imported\""),
+                    String(repeating: " ", count: 8193), "null", "[]"] {
+        precondition((try? WindowsPairingDetails.parse(invalid)) == nil)
+    }
+    MainActor.assumeIsolated {
+        var reads = 0, applied = 0, failures = 0
+        var pasted: String? = windowsDetails
+        let action = PairingDetailsPasteAction(read: { reads += 1; return pasted },
+            apply: { _ in applied += 1 }, onError: { failures += 1 })
+        precondition(reads == 0 && applied == 0)
+        action.paste()
+        precondition(reads == 1 && applied == 1 && failures == 0)
+        pasted = "invalid"
+        action.paste()
+        precondition(reads == 2 && applied == 1 && failures == 1)
+    }
     for (index, level) in DashboardZoom.levels.enumerated() {
         precondition(DashboardZoom.step(from: level, increasing: true) == DashboardZoom.levels[min(index + 1, DashboardZoom.levels.count - 1)])
         precondition(DashboardZoom.step(from: level, increasing: false) == DashboardZoom.levels[max(index - 1, 0)])
@@ -22,6 +139,16 @@ func runSelfTests() {
     precondition(DashboardZoom.shortcut("c", from: 1) == nil)
     precondition((try? CollectorConfiguration.validate([:])) == CollectorConfiguration.defaults)
     precondition((try? CollectorConfiguration.validate(["wispr": true]))?["wispr"] == true)
+    precondition((try? CollectorConfiguration.validate(["quota": true]))?["quota"] == true)
+    precondition(CollectorConfiguration.defaults["quota"] == false)
+    precondition(visibleQuotaWindows([["bucket": "codex"], ["bucket": "codex_bengalfox"], ["bucket": "SPARK"], ["bucket": "codex_spark"]]).count == 1)
+    let quotaSamples: [JSONObject] = [
+        ["checkedAt": "2026-09-09T12:00:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 80, "resetsAt": "2026-09-09T16:00:00Z"]]],
+        ["checkedAt": "2026-09-09T12:05:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 75, "resetsAt": "2026-09-09T16:00:00Z"]]],
+        ["checkedAt": "2026-09-09T12:10:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 95, "resetsAt": "2026-09-09T21:00:00Z"]]]
+    ]
+    precondition(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary").map(\.segment) == [0, 0, 1])
+    precondition(quotaHistoryPoints(quotaSamples, bucket: "spark", window: "primary").isEmpty)
     precondition((try? CollectorConfiguration.validate(["codex": 1])) == nil)
     precondition((try? CollectorConfiguration.validate(["remote": true])) == nil)
     precondition((try? CollectorConfiguration.validate(["wispr": "true"])) == nil)
@@ -116,6 +243,17 @@ func runCollectorSelfTest() {
         precondition(retainedConfig == originalConfig)
         let disabledStatus = try PairingSetup.readStatus(runtime: runtime, resources: resources)
         precondition(disabledStatus.status == .needsRepair && disabledStatus.request == nil)
+        try PairingMaintenance.runPrepareRepair(runtime: runtime, resources: resources)
+        let retired = try FileManager.default.contentsOfDirectory(at: runtime, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("private-sync-retired-") }
+        precondition(retired.count == 1)
+        precondition(FileManager.default.fileExists(atPath: retired[0].appendingPathComponent("revoked").path))
+        precondition(!FileManager.default.fileExists(atPath: runtime.appendingPathComponent("private-sync").path))
+        let repairedStatus = try PairingSetup.readStatus(runtime: runtime, resources: resources)
+        precondition(repairedStatus.status == .unpaired && repairedStatus.request == nil)
+        let configAfterRepair = try Data(contentsOf: configFile)
+        precondition(configAfterRepair == originalConfig)
+        print("Packaged repair preparation self-test passed with a retained disabled backup")
         print("Packaged pairing status self-test passed without exposing private credentials")
         print("Packaged pairing revocation self-test passed with temporary data")
         print("Packaged collector self-test passed with all sources disabled")

@@ -12,6 +12,7 @@ import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
+import {collectQuota,attachQuota} from './collect-quota.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -70,6 +71,12 @@ export async function collectMac(runtime,python,peerConfig=null) {
   },previous,new Date().toISOString(),pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
   await finalizePeerCollection(runtime,result,savedPairing,previous);
+  // Account-wide history belongs to the observing device, not the peer sum.
+  let quota;
+  try {quota=await collectQuota(runtime,{enabled:config.quota,
+    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota});}
+  catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
+  attachQuota(result,quota);
   const {data,status}=result;
   await atomic('usage.json',data);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

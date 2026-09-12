@@ -9,7 +9,7 @@ const settings={profiles:[{date:'2026-09-08',model:'gpt-6-astra',effort:'medium'
   tools:[{date:'2026-09-08',category:'Shell',tool:'exec_command',namespace:'functions',count:2,arguments:'PRIVATE'}]};
 
 test('Mac local settings accept only explicit source booleans, without remote command settings',()=>{
-  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,wispr:false,typewhisper:false});
+  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,wispr:false,typewhisper:false,quota:false});
   for(const value of [null,[],{wispr:'yes'},{windowsHost:'private-host'},{python:'/arbitrary/program'}])assert.throws(()=>macCollectorConfig(value));
 });
 test('disabled local sources are never invoked and missing peers are unavailable',async()=>{

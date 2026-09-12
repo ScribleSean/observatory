@@ -10,6 +10,9 @@ func number(_ value: Any?) -> Double? {
 }
 
 func rows(_ value: Any?) -> [JSONObject] { value as? [JSONObject] ?? [] }
+func visibleQuotaWindows(_ value: Any?) -> [JSONObject] {
+    rows(value).filter { !["codex_bengalfox", "codex_spark", "spark"].contains(text($0["bucket"]).lowercased()) }
+}
 func text(_ value: Any?, fallback: String = "Unknown") -> String { value as? String ?? fallback }
 
 func readObject(_ url: URL) -> JSONObject? {
@@ -49,7 +52,7 @@ struct Snapshot {
     var collectedAt: Date? { parseDate(object["collectedAt"]) }
     var quotaWindows: [JSONObject] {
         guard let quota = object["quota"] as? JSONObject, text(quota["status"]) == "ok" else { return [] }
-        return rows(quota["windows"])
+        return visibleQuotaWindows(quota["windows"])
     }
     var sourceCounts: (read: Int, total: Int) {
         var sources = ["activity", "tokens", "settings", "dictation"].flatMap { rows(object[$0]) }
@@ -58,6 +61,22 @@ struct Snapshot {
         return (sources.filter { text($0["status"]) == "ok" }.count, sources.count)
     }
     func latest(_ key: String, host: String, source: String? = nil) -> JSONObject? {
+        days(key, host: host, source: source).last
+    }
+    func activityArchive(host: String) -> JSONObject? {
+        let name = host == "All" ? "Combined" : host
+        return rows(object["activityHistory"]).first { text($0["host"]) == name }
+    }
+    func recordedDays(_ key: String, host: String) -> [JSONObject] {
+        // Archived activity is already sanitized and overlap-deduplicated by
+        // the collector. Keep its source status separate from saved records.
+        if key == "activity", let archive = activityArchive(host: host) {
+            guard text(archive["status"]) == "ok" else { return [] }
+            return rows(archive["days"]).sorted { text($0["date"]) < text($1["date"]) }
+        }
+        return days(key, host: host)
+    }
+    func days(_ key: String, host: String, source: String? = nil) -> [JSONObject] {
         let selected: JSONObject?
         if host == "All" {
             // Reuse collector-verified aggregates. Never sum device snapshots here.
@@ -65,16 +84,16 @@ struct Snapshot {
             else if key == "tokens" {
                 let combined = object["combinedTokens"] as? JSONObject
                 guard let verification = combined?["verification"] as? JSONObject,
-                      text(verification["status"]) == "verified" else { return nil }
+                      text(verification["status"]) == "verified" else { return [] }
                 selected = combined
-            } else { return nil }
+            } else { return [] }
         } else {
             selected = rows(object[key]).first(where: {
                 text($0["host"]) == host && (source == nil || text($0["source"]) == source)
             })
         }
-        guard let item = selected, text(item["status"]) == "ok" else { return nil }
-        return rows(item["days"]).sorted { text($0["date"]) < text($1["date"]) }.last
+        guard let item = selected, text(item["status"]) == "ok" else { return [] }
+        return rows(item["days"]).sorted { text($0["date"]) < text($1["date"]) }
     }
 }
 

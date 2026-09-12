@@ -7,7 +7,9 @@ import WebKit
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
+    private var usageWindow: NSPanel?
     private var detail: NSWindow?
+    private var setupWindow: NSWindow?
     private var webView: WKWebView?
     private let navigation = LocalNavigation()
     private var store: ObservatoryStore!
@@ -15,15 +17,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var panelSize = NSSize.zero
     private var previewRuntime: URL?
     private weak var lifecycleWebView: WKWebView?
+    private let nativeSelection = NativeDashboardSelection()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let runtime: URL
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
-        if CommandLine.arguments.contains("--preview") || lifecycleTest {
+        let popupTest = CommandLine.arguments.contains("--test-popup")
+        if CommandLine.arguments.contains("--preview") || lifecycleTest || popupTest {
             // An isolated, empty UI preview never changes installed settings or login state.
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-ui-preview-\(UUID().uuidString)")
             do {
+                if CommandLine.arguments.contains("--preview-setup") { _ = try FirstRunSetup.prepare(runtime: temporary) }
                 _ = try CollectorConfiguration.prepare(runtime: temporary)
                 try CollectorConfiguration.save(Dictionary(uniqueKeysWithValues: CollectorConfiguration.defaults.keys.map { ($0, false) }), runtime: temporary)
             } catch { NSApp.terminate(nil); return }
@@ -33,12 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             runtime = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/Workspace Observatory")
         }
-        store = ObservatoryStore(runtime: runtime)
+        store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
             let image = telescopeImage(template: true)
             button.image = image
             button.toolTip = previewRuntime == nil ? "Workspace Observatory" : "Workspace Observatory (temporary preview)"
+            button.setAccessibilityLabel("Workspace Observatory usage")
             button.target = self
             button.action = #selector(togglePanel)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -53,8 +59,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         terminationSignal = termination
         // Lifecycle tests use empty private settings and never start collection.
         if lifecycleTest { checkDashboardLifecycle(remaining: 3); return }
+        if popupTest { DispatchQueue.main.async { [self] in checkUsagePopup() }; return }
         store.start()
-        if CommandLine.arguments.contains("--show") { togglePanel() }
+        if store.setupRequired { DispatchQueue.main.async { [self] in showSetup() }; return }
+        if CommandLine.arguments.contains("--show") { DispatchQueue.main.async { [self] in togglePanel() } }
+    }
+
+    private func showSetup() {
+        if setupWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
+                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "Set up Observatory"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: SetupWizard(runtime: store.runtime, pairingAllowed: previewRuntime == nil) { [weak self] pair in
+                guard let self else { return }
+                self.setupWindow?.close()
+                self.setupWindow = nil
+                self.openDashboard("activity")
+                if pair && self.previewRuntime == nil { self.setupPairing() }
+                self.store.refresh()
+            })
+            window.center()
+            setupWindow = window
+        }
+        setupWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func makeMenu() {
@@ -62,10 +91,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let application = NSMenuItem()
         let items = NSMenu()
         items.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "o").target = self
+        items.addItem(withTitle: "Show usage popup", action: #selector(showUsage), keyEquivalent: "u").target = self
         items.addItem(withTitle: "Refresh sources", action: #selector(refresh), keyEquivalent: "r").target = self
         items.addItem(withTitle: "Local source settings…", action: #selector(sourceSettings), keyEquivalent: ",").target = self
         items.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
         items.addItem(withTitle: "Disconnect paired device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
+        items.addItem(withTitle: "Prepare pairing repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
         items.addItem(.separator())
         items.addItem(withTitle: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         application.submenu = items
@@ -91,36 +122,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func togglePanel() {
         if NSApp.currentEvent?.type == .rightMouseUp { showMenu(); return }
-        if popover.isShown { popover.performClose(nil); return }
+        if popover.isShown || usageWindow?.isVisible == true { closeUsage(); return }
+        showUsage()
+    }
+
+    private func closeUsage() {
+        // This read-only view has no unsaved edits or delegate veto. Explicit
+        // navigation must close it even if AppKit has attached a child window.
+        popover.close()
+        usageWindow?.close()
+    }
+
+    private func usageContent(size: NSSize) -> NSViewController {
+        let panel = ObservatoryPanel(store: store,
+                open: { [weak self] tab in self?.openDashboard(tab) },
+                settings: { [weak self] in self?.showMenu() }, panelWidth: size.width, compact: size.height < 560)
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .background(ObservatoryBackdrop())
+        .preferredColorScheme(.dark)
+        let controller = NSHostingController(rootView: panel)
+        controller.preferredContentSize = size
+        controller.view.setFrameSize(size)
+        return controller
+    }
+
+    private func showFloatingUsage(size: NSSize, visible: NSRect) {
+        let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        window.title = "Workspace Observatory usage"
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = true
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.contentViewController = usageContent(size: size)
+        window.setContentSize(size)
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.setFrameOrigin(NSPoint(x: max(visible.minX + 8, visible.maxX - window.frame.width - 16),
+                                      y: max(visible.minY + 8, visible.maxY - window.frame.height - 16)))
+        usageWindow = window
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func showUsage() {
         store.reload()
+        NSApp.activate(ignoringOtherApps: true)
+        if popover.isShown { return }
+        if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return }
         guard let button = statusItem.button else { return }
         let visible = button.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let size = NSSize(width: min(370, max(240, visible.width - 32)), height: min(620, max(240, visible.height - 48)))
+        let size = NSSize(width: min(370, max(240, visible.width - 32)), height: min(580, max(240, visible.height - 48)))
+        // A hidden or overflowed menu-bar item cannot anchor an NSPopover.
+        // Keep the same usage view available to the explicit menu/keyboard action.
+        if button.visibleRect.isEmpty || button.window?.isVisible != true {
+            showFloatingUsage(size: size, visible: visible)
+            return
+        }
         if popover.contentViewController == nil || size != panelSize {
             panelSize = size
-            let panel = ScrollView(.vertical) {
-                ObservatoryPanel(store: store,
-                    open: { [weak self] tab in self?.openDashboard(tab) },
-                    settings: { [weak self] in self?.showMenu() }, panelWidth: size.width)
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(width: size.width, height: size.height)
-            .background(ObservatoryBackdrop())
-            .preferredColorScheme(.dark)
-            popover.contentViewController = NSHostingController(rootView: panel)
+            popover.contentViewController = usageContent(size: size)
         }
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        if popover.isShown { popover.contentViewController?.view.window?.makeKey() }
+        else {
+            // Visibility can change between checking the anchor and showing it.
+            popover.close()
+            showFloatingUsage(size: size, visible: visible)
+        }
     }
 
     private func showMenu() {
-        popover.performClose(nil)
+        closeUsage()
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Show usage popup", action: #selector(showUsage), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Refresh sources", action: #selector(refresh), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Local source settings…", action: #selector(sourceSettings), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Disconnect paired device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Prepare pairing repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
         menu.addItem(.separator())
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
@@ -145,9 +226,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             alert.runModal()
         }
     }
-    @objc private func loginSettings() { SMAppService.openSystemSettingsLoginItems() }
+    @objc private func loginSettings() {
+        guard previewRuntime == nil else { return }
+        SMAppService.openSystemSettingsLoginItems()
+    }
     @objc private func sourceSettings() {
-        popover.performClose(nil)
+        closeUsage()
+        if previewRuntime != nil && CommandLine.arguments.contains("--native-dashboard") {
+            openDashboard("settings")
+            return
+        }
         let alert = NSAlert()
         alert.messageText = "Local source settings"
         let local: Bool
@@ -171,6 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let config = try CollectorConfiguration.read(runtime: store.runtime)
             let sources = [("activity", "ActivityWatch screen time (must be running)"),
                            ("codex", "Saved Codex usage and settings"),
+                           ("quota", "Codex account limits and token history (online)"),
                            ("wispr", "Wispr Flow statistics"),
                            ("typewhisper", "TypeWhisper statistics")]
             let buttons = sources.map { key, title in
@@ -182,12 +271,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             stack.orientation = .vertical
             stack.alignment = .leading
             stack.spacing = 10
-            stack.frame = NSRect(x: 0, y: 0, width: 360, height: 115)
+            stack.frame = NSRect(x: 0, y: 0, width: 390, height: 145)
             alert.accessoryView = stack
-            alert.informativeText = "Read usage metadata from this Mac only. Prompts, window titles, transcripts and audio stay out of Observatory snapshots. Dictation sources are optional."
+            alert.informativeText = "Read usage metadata without prompts, window titles, transcripts or audio. Optional account monitoring uses the installed Codex sign-in to read online limits and daily tokens. Turning it off clears its retained readings, not your Codex login."
             alert.addButton(withTitle: "Save")
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() == .alertFirstButtonReturn {
+                guard !store.refreshing else {
+                    let busy = NSAlert()
+                    busy.messageText = "Collection started while settings were open"
+                    busy.informativeText = "Try again after it finishes. Source settings have not changed."
+                    busy.runModal()
+                    return
+                }
                 let updated = Dictionary(uniqueKeysWithValues: zip(sources, buttons).map { ($0.0.0, $0.1.state == .on) })
                 try CollectorConfiguration.save(updated, runtime: store.runtime)
                 store.refresh()
@@ -201,7 +297,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func refresh() { store.refresh() }
     @objc private func setupPairing() {
-        popover.performClose(nil)
+        guard previewRuntime == nil else { return }
+        closeUsage()
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else {
             let busy = NSAlert()
             busy.messageText = "Pairing is waiting"
@@ -218,7 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let saved = try await PairingSetup.status(runtime: store.runtime, resources: resources)
                 guard saved.status != .needsRepair else {
                     result.messageText = "Pairing needs repair"
-                    result.informativeText = "Private state is disabled, conflicting or unreadable. It was not changed. Repair is not available yet. Do not delete private files or remove a revocation marker to reconnect."
+                    result.informativeText = "Private state is disabled, conflicting or unreadable. It was not changed. Use Prepare pairing repair on each device, then pair again from this Mac. If preparation fails, keep the retained state for inspection. Do not delete private files or remove a revocation marker to reconnect."
                     result.runModal()
                     return
                 }
@@ -246,7 +343,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func disconnectPairing() {
-        popover.performClose(nil)
+        guard previewRuntime == nil else { return }
+        closeUsage()
         let alert = NSAlert()
         alert.messageText = "Disconnect paired device?"
         guard !store.refreshing, !store.pairingMaintenance else {
@@ -259,7 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             alert.runModal()
             return
         }
-        alert.informativeText = "Disable pairing on this Mac only. Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect on the other device separately. Reconnection requires explicit repair, which is not available yet."
+        alert.informativeText = "Disable pairing on this Mac only. Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect on the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac."
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Disconnect on this Mac")
         guard alert.runModal() == .alertSecondButtonReturn else { return }
@@ -289,6 +387,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             result.runModal()
         }
     }
+    @objc private func preparePairingRepair() {
+        guard previewRuntime == nil else { return }
+        closeUsage()
+        let alert = NSAlert()
+        alert.messageText = "Prepare pairing repair on this Mac?"
+        guard !store.refreshing, !store.pairingMaintenance else {
+            alert.informativeText = "A local operation is running. Try again when it finishes."
+            alert.runModal()
+            return
+        }
+        alert.informativeText = "If this Mac has pairing state, disable it and retain a private backup. Otherwise, confirm this Mac is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on Windows separately, then use Pair with Windows here to create fresh credentials. Retirement cannot be undone by this action."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Retain backup and prepare")
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        store.collectionPausedForPairing = true
+        guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else {
+            let busy = NSAlert()
+            busy.messageText = "Repair preparation is waiting"
+            busy.informativeText = "Collection is paused for this session. An operation may still be finishing. Retry preparation when it finishes."
+            busy.runModal()
+            return
+        }
+        store.pairingMaintenance = true
+        Task { @MainActor in
+            let result = NSAlert()
+            do {
+                try await PairingMaintenance.prepareRepair(runtime: store.runtime, resources: resources)
+                store.collectionPausedForPairing = false
+                result.messageText = "This Mac is ready for a new pairing"
+                result.informativeText = "Any retired state remains in a disabled private backup. Confirm Prepare pairing repair on Windows separately, then choose Pair with Windows on this Mac. Local collection can continue. No new pairing has been enabled by this action."
+            } catch {
+                result.messageText = "Repair preparation could not be verified"
+                result.informativeText = "Collection is paused for this session. Saved state was not deleted, but it may already be retired. Retry or quit until this installation can be inspected. Do not restore old pairing files over a new pairing."
+            }
+            store.pairingMaintenance = false
+            store.refresh()
+            result.runModal()
+        }
+    }
     @objc private func openDefault() { openDashboard("activity") }
 
     @objc private func zoomIn() {
@@ -305,6 +442,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         let zoom = webView?.pageZoom
         switch item.action {
+        case #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
+             #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil
         case #selector(zoomIn): return zoom.map { $0 < 2 } ?? false
         case #selector(zoomOut): return zoom.map { $0 > 0.75 } ?? false
         case #selector(actualSize):
@@ -318,7 +457,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func openDashboard(_ tab: String) {
-        popover.performClose(nil)
+        closeUsage()
+        if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
+        if previewRuntime != nil && CommandLine.arguments.contains("--native-dashboard") {
+            nativeSelection.section = ["activity", "tokens", "allowances", "sources", "settings"].contains(tab) ? tab : "activity"
+            if detail == nil {
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
+                                      styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                window.title = "Observatory native preview"
+                window.minSize = NSSize(width: 760, height: 560)
+                window.contentView = NSHostingView(rootView: NativeDashboard(store: store, selection: nativeSelection,
+                    settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
+                        disconnect: { [weak self] in self?.disconnectPairing() }, repair: { [weak self] in self?.preparePairingRepair() },
+                        toggleLogin: { [weak self] in self?.toggleLogin() }, loginSettings: { [weak self] in self?.loginSettings() },
+                        preview: previewRuntime != nil)))
+                window.delegate = self
+                window.isReleasedWhenClosed = false
+                window.center()
+                detail = window
+            }
+            detail?.deminiaturize(nil)
+            detail?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
         if detail == nil {
             guard let resources = Bundle.main.resourceURL else { return }
             let web = makeDashboard(runtime: store.runtime, resources: resources)
@@ -333,7 +495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             window.contentView = web
             window.delegate = self
             window.isReleasedWhenClosed = false
-            window.setFrameAutosaveName("ObservatoryDetail")
+            if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryDetail") }
             window.center()
             detail = window
             webView = web
@@ -346,6 +508,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSWindow, window === usageWindow {
+            window.contentViewController = nil
+            usageWindow = nil
+            return
+        }
+        guard let window = notification.object as? NSWindow, window === detail else { return }
         webView?.stopLoading()
         webView?.configuration.userContentController.removeAllScriptMessageHandlers()
         detail?.contentView = nil
@@ -378,8 +546,93 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
         }
     }
+
+    private func checkUsagePopup() {
+        // Exercise the production popup with synthetic data and no collectors.
+        precondition(previewRuntime != nil && !store.collectionAllowed)
+        for action in [#selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
+                       #selector(toggleLogin), #selector(loginSettings)] {
+            precondition(!validateMenuItem(NSMenuItem(title: "Preview action", action: action, keyEquivalent: "")))
+        }
+        // Direct callbacks must refuse before showing a dialog or invoking a tool.
+        setupPairing()
+        disconnectPairing()
+        preparePairingRepair()
+        precondition(!store.pairingMaintenance && !store.collectionPausedForPairing)
+        for folder in ["private-sync", "private-repair"] {
+            precondition(!FileManager.default.fileExists(atPath: store.runtime.appendingPathComponent(folder).path))
+        }
+        let now = Date()
+        let iso = ISO8601DateFormatter()
+        let windows: [JSONObject] = [
+            ["bucket": "codex", "window": "primary", "remainingPercent": 65, "durationMinutes": 300,
+             "resetsAt": iso.string(from: now.addingTimeInterval(3600))],
+            ["bucket": "codex", "window": "secondary", "remainingPercent": 82, "durationMinutes": 10080],
+            ["bucket": "spark", "window": "primary", "remainingPercent": 40, "durationMinutes": 300]
+        ]
+        let history: [JSONObject] = (0..<12).map { index in
+            ["checkedAt": iso.string(from: now.addingTimeInterval(Double(index - 11) * 300)), "windows": windows]
+        }
+        store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": iso.string(from: now),
+            "activity": [], "tokens": [], "settings": [], "dictation": [],
+            "quota": ["status": "ok", "checkedAt": iso.string(from: now), "windows": windows, "history": history,
+                      "dailyUsageBuckets": [["startDate": String(iso.string(from: now).prefix(10)), "tokens": 12000]]]])
+        showUsage()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
+            let view = usageWindow?.contentViewController?.view ?? popover.contentViewController?.view
+            guard popover.isShown || usageWindow?.isVisible == true, let view,
+                  let window = view.window, window.isVisible,
+                  NSScreen.screens.contains(where: { (usageWindow == nil ? $0.frame : $0.visibleFrame).contains(window.frame) }),
+                  view.bounds.width > 200, view.bounds.height > 200 else {
+                let window = usageWindow ?? popover.contentViewController?.view.window
+                let button = statusItem.button
+                print("Native usage popup failed: shown=\(popover.isShown) visible=\(window?.isVisible ?? false) active=\(NSApp.isActive) anchorVisible=\(button?.window?.isVisible ?? false) anchorHidden=\(button?.isHiddenOrHasHiddenAncestor ?? true) screenCount=\(NSScreen.screens.count) window=\(String(describing: window?.frame)) view=\(String(describing: view?.bounds)) screens=\(NSScreen.screens.map(\.visibleFrame))")
+                exit(1)
+            }
+            print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen with synthetic quota and token charts")
+            openDashboard("activity")
+            // AppKit can hide the window before its closing animation updates
+            // isShown. Wait for the closed state with a bounded deadline.
+            afterUsageClosed { [self] in
+                guard usageWindow == nil, !popover.isShown, detail?.isVisible == true else {
+                    print("Native usage popup failed: dashboard handoff did not close the usage view")
+                    exit(1)
+                }
+                showUsage()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+                    guard popover.isShown || usageWindow?.isVisible == true else {
+                        print("Native usage popup failed: usage view did not reopen beside the dashboard")
+                        exit(1)
+                    }
+                    closeUsage()
+                    afterUsageClosed { [self] in
+                        guard usageWindow == nil, !popover.isShown, detail?.isVisible == true, webView != nil else {
+                            print("Native usage popup failed after close: usageRetained=\(usageWindow != nil) anchoredShown=\(popover.isShown) dashboardPresent=\(detail != nil) dashboardVisible=\(detail?.isVisible ?? false) webRetained=\(webView != nil)")
+                            exit(1)
+                        }
+                        print("Native usage popup passed: dashboard handoff and usage reopen/close preserved the dashboard")
+                        detail?.performClose(nil)
+                        NSApp.terminate(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    private func afterUsageClosed(deadline: Date = Date().addingTimeInterval(2), completion: @escaping () -> Void) {
+        if usageWindow == nil, !popover.isShown { completion(); return }
+        guard Date() < deadline else {
+            print("Native usage popup failed: close deadline exceeded, anchoredShown=\(popover.isShown) windowVisible=\(popover.contentViewController?.view.window?.isVisible ?? false) usageRetained=\(usageWindow != nil)")
+            exit(1)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
+            afterUsageClosed(deadline: deadline, completion: completion)
+        }
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return true }
+        if popover.isShown { return true }
         openDashboard("activity")
         return true
     }
@@ -395,6 +648,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
 if CommandLine.arguments.contains("--self-test") {
     runSelfTests()
+} else if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--test-pairing-details" {
+    do {
+        guard CommandLine.arguments[2].hasPrefix("/") else { throw CocoaError(.fileReadCorruptFile) }
+        let file = try FileHandle(forReadingFrom: URL(fileURLWithPath: CommandLine.arguments[2]))
+        defer { try? file.close() }
+        guard let data = try file.read(upToCount: 8193), data.count <= 8192,
+              let value = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadCorruptFile) }
+        _ = try WindowsPairingDetails.parse(value)
+        print("Windows pairing details import passed")
+    } catch { print("Windows pairing details import failed"); exit(1) }
 } else if CommandLine.arguments.contains("--test-collector") {
     runCollectorSelfTest()
 } else if CommandLine.arguments.contains("--test-web") {

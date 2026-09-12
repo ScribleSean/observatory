@@ -6,10 +6,11 @@ struct ObservatoryPanel: View {
     let open: (String) -> Void
     let settings: () -> Void
     var panelWidth: CGFloat = 370
+    var compact = false
     private let accent = Color(red: 245/255, green: 245/255, blue: 245/255)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 Image(nsImage: telescopeImage()).resizable().scaledToFit().frame(width: 28, height: 28)
                 VStack(alignment: .leading, spacing: 3) {
@@ -25,17 +26,21 @@ struct ObservatoryPanel: View {
             }
 
             if let snapshot = store.snapshot {
-                if !snapshot.quotaWindows.isEmpty {
-                    VStack(spacing: 13) {
-                        HStack { Text("ALLOWANCE").font(.system(size: 11, weight: .semibold)).tracking(1.5)
-                            Spacer(); Text("remaining").font(.system(size: 11)) }.foregroundStyle(.secondary)
-                        ForEach(Array(snapshot.quotaWindows.prefix(4).enumerated()), id: \.offset) { _, window in
-                            allowance(window)
-                        }
+                if let quota = snapshot.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
+                    let windows = visibleQuotaWindows(quota["windows"])
+                    if !windows.isEmpty {
+                        VStack(spacing: 10) {
+                            HStack {
+                                Text("ALLOWANCE").font(.system(size: 11, weight: .semibold))
+                                Spacer()
+                                Text(text(quota["status"]) == "stale" ? "saved reading" : "remaining").font(.system(size: 11))
+                            }.foregroundStyle(.secondary)
+                            ForEach(Array(windows.prefix(compact ? 1 : 2).enumerated()), id: \.offset) { _, window in
+                                allowance(window)
+                            }
+                        }.padding(12)
+                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
                     }
-                    .padding(15).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(.white.opacity(0.09), lineWidth: 0.5))
                 }
                 Picker("Source host", selection: $host) {
                     ForEach(["All", "Mac", "Windows", "Ubuntu"], id: \.self) { Text($0).tag($0) }
@@ -49,6 +54,7 @@ struct ObservatoryPanel: View {
                     let tokens = snapshot.latest("tokens", host: host)
                     stat("Tokens", icon: "square.stack.3d.up", value: formatted(number(tokens?["totalTokens"]), compact: true),
                          date: text(tokens?["date"], fallback: host == "All" ? "Combined total unavailable" : "No retained records"), target: "tokens")
+                    if !compact {
                     Divider().opacity(0.35).padding(.leading, 39)
                     let wispr = snapshot.latest("dictation", host: host, source: "Wispr Flow")
                     let covered = number(wispr?["audioRecords"]) ?? 0
@@ -59,6 +65,7 @@ struct ObservatoryPanel: View {
                     } else {
                         stat("Wispr audio", icon: "waveform", value: covered > 0 ? minutes(number(wispr?["audioSeconds"])) : "Unknown",
                              date: text(wispr?["date"], fallback: "No retained records") + (partial ? " · partial" : ""), target: "dictation")
+                    }
                     }
                 }
                 if host == "All" {
@@ -92,7 +99,7 @@ struct ObservatoryPanel: View {
                     .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Observatory settings")
             }
         }
-        .padding(20).frame(width: panelWidth)
+        .padding(14).frame(width: panelWidth)
         .preferredColorScheme(.dark)
     }
 
@@ -112,7 +119,7 @@ struct ObservatoryPanel: View {
                 }
                 Spacer()
                 Text(value).font(.system(size: 19, weight: .medium, design: .rounded)).monospacedDigit()
-            }.padding(.vertical, 11).contentShape(Rectangle())
+            }.padding(.vertical, 8).contentShape(Rectangle())
         }.buttonStyle(.plain)
     }
 

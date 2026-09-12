@@ -10,10 +10,24 @@ enum PairingMaintenance {
 
     // Run off the main actor. Only the bundled CLI owns private-state writes.
     static func runDisconnect(runtime: URL, resources: URL) throws {
+        try runOperation(runtime: runtime, resources: resources, repair: false)
+    }
+
+    static func prepareRepair(runtime: URL, resources: URL) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try runPrepareRepair(runtime: runtime, resources: resources)
+        }.value
+    }
+
+    static func runPrepareRepair(runtime: URL, resources: URL) throws {
+        try runOperation(runtime: runtime, resources: resources, repair: true)
+    }
+
+    private static func runOperation(runtime: URL, resources: URL, repair: Bool) throws {
         let values = try runtime.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true else { throw CocoaError(.fileWriteNoPermission) }
         let node = resources.appendingPathComponent("Runtime/node/bin/node")
-        let script = resources.appendingPathComponent("Collector/scripts/peer-revocation.mjs")
+        let script = resources.appendingPathComponent(repair ? "Collector/scripts/peer-repair.mjs" : "Collector/scripts/peer-revocation.mjs")
         guard FileManager.default.isExecutableFile(atPath: node.path),
               FileManager.default.fileExists(atPath: script.path) else { throw CocoaError(.fileReadNoSuchFile) }
         // Foundation rewrites /private/var to /var even after resolving links.
@@ -23,7 +37,7 @@ enum PairingMaintenance {
         let canonicalRuntime = String(cString: resolved)
         let process = Process()
         process.executableURL = node
-        process.arguments = [script.path, "--runtime", canonicalRuntime, "--revoke"]
+        process.arguments = [script.path, "--runtime", canonicalRuntime, repair ? "--confirm-local-retirement" : "--revoke"]
         process.currentDirectoryURL = runtime
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

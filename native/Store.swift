@@ -9,7 +9,9 @@ final class ObservatoryStore: ObservableObject {
     @Published var lastAttempt = ""
     @Published var now = Date()
     let runtime: URL
+    let collectionAllowed: Bool
     private(set) var localCollection = false
+    private(set) var setupRequired = false
     var pairingMaintenance = false
     var collectionPausedForPairing = false
     private var process: Process?
@@ -17,10 +19,14 @@ final class ObservatoryStore: ObservableObject {
     private var refreshTimer: Timer?
     var onSnapshot: (() -> Void)?
 
-    init(runtime: URL) {
+    init(runtime: URL, collectionAllowed: Bool = true) {
         self.runtime = runtime
-        do { localCollection = try CollectorConfiguration.prepare(runtime: runtime) }
-        catch { lastAttempt = "configuration-unavailable" }
+        self.collectionAllowed = collectionAllowed
+        do {
+            setupRequired = try FirstRunSetup.prepare(runtime: runtime)
+            localCollection = try CollectorConfiguration.prepare(runtime: runtime)
+        }
+        catch { setupRequired = true; lastAttempt = "configuration-unavailable" }
         reload()
     }
 
@@ -61,6 +67,8 @@ final class ObservatoryStore: ObservableObject {
     }
 
     func refresh() {
+        guard collectionAllowed else { lastAttempt = "preview-collection-disabled"; return }
+        guard (try? FirstRunSetup.required(runtime: runtime)) == false else { lastAttempt = "setup-required"; return }
         guard process == nil, !pairingMaintenance, !collectionPausedForPairing else { return }
         guard let resources = Bundle.main.resourceURL,
               let local = try? CollectorConfiguration.prepare(runtime: runtime),
