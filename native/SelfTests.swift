@@ -1,6 +1,21 @@
 import Foundation
 
 func runSelfTests() {
+    let dictationRows: [JSONObject] = [
+        ["date": "2026-09-01", "transcriptions": 1, "words": 12, "audioSeconds": 60, "wordRecords": 1, "audioRecords": 1],
+        ["date": "2026-09-06", "transcriptions": 2, "words": 0, "audioSeconds": 0, "wordRecords": 0, "audioRecords": 0],
+        ["date": "2026-09-12", "transcriptions": 2, "words": 8, "audioSeconds": 30, "wordRecords": 1, "audioRecords": 1]
+    ]
+    let dictationSource: JSONObject = ["status": "ok", "days": dictationRows.reversed().map { $0 }]
+    precondition(dictationDays(dictationSource, latestWeek: true).map { text($0["date"]) } == ["2026-09-06", "2026-09-12"])
+    precondition(dictationDays(dictationSource, latestWeek: false).count == 3)
+    precondition(dictationDays(["status": "unavailable", "days": dictationRows], latestWeek: false).isEmpty)
+    precondition(dictationValue([dictationRows[1]], field: "words", wispr: true) == "Unknown")
+    precondition(dictationValue([dictationRows[2]], field: "words", wispr: true) == "8 (partial)")
+    precondition(dictationValue([dictationRows[1]], field: "words", wispr: false) == "0")
+    precondition(recordedSum([], field: "words") == nil)
+    precondition(recordedSum([["words": 0], [:]], field: "words") == nil)
+    precondition(recordedSum([["words": 0], ["words": 8]], field: "words") == 8)
     do {
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-first-run-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: runtime) }

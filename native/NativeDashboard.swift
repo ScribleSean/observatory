@@ -15,7 +15,8 @@ struct NativeDashboard: View {
     @State private var host = "Mac"
     @State private var selectedDate = ""
     private let sections = [("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
-                            ("allowances", "Allowances", "gauge.with.dots.needle.50percent"), ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
+                            ("allowances", "Allowances", "gauge.with.dots.needle.50percent"), ("agents", "Agents", "point.3.connected.trianglepath.dotted"),
+                            ("dictation", "Dictation", "mic"), ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
 
     var body: some View {
         NavigationSplitView {
@@ -48,10 +49,14 @@ struct NativeDashboard: View {
                         }
                     } else if selection.section == "sources" {
                         sourceList
+                    } else if selection.section == "dictation" {
+                        NativeDictation(snapshot: store.snapshot)
+                    } else if selection.section == "agents" {
+                        NativeAgentUsage(snapshot: store.snapshot)
                     } else {
                         dailyHistory
                     }
-                    Text("Native preview. Dictation and agent details remain in the existing app. Direct provider sign-in and first-run setup are still being developed.")
+                    Text("Native preview. Provider account management and unified account-history sync are still being developed.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(28).frame(maxWidth: 1100, alignment: .leading)
             }.background(Color(nsColor: .windowBackgroundColor))

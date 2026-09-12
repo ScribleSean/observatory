@@ -460,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         closeUsage()
         if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
         if previewRuntime != nil && CommandLine.arguments.contains("--native-dashboard") {
-            nativeSelection.section = ["activity", "tokens", "allowances", "sources", "settings"].contains(tab) ? tab : "activity"
+            nativeSelection.section = ["activity", "tokens", "allowances", "agents", "dictation", "sources", "settings"].contains(tab) ? tab : "activity"
             if detail == nil {
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
