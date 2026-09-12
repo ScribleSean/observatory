@@ -52,6 +52,8 @@ Readings live in `private-quota/state.sqlite` inside the local runtime directory
 
 Successful checks wait at least five minutes before another attempt. Failed checks back off from one minute to fifteen minutes. Retry deadlines survive restart and source toggling. Cached values retain their original timestamp and appear as saved readings. A source disabled during a read discards the result.
 
+Current source treats a saved successful allowance sample as healthy for less than ten minutes from its original observation time. Reloading it during cooldown does not create a new sample or change that time. At ten minutes it becomes stale. A failed latest poll remains stale even when the retained sample is recent. This projection correction is tested in source but is not yet included in the installed development bundles.
+
 Quota observations are bounded to 30 days, 10,000 samples and an 8 MB serialized sample budget. Daily account totals retain up to 366 reported dates. The dashboard data projection includes the last 24 hours ending at the latest quota reading and recent reported daily token totals. These are different time resolutions, not a token-to-percentage conversion. Graphs must show missing quota polls and resets as gaps, and must not fill missing token days with zero.
 
 Turning off the source clears active history, but is not a forensic secure-erasure operation. The retry deadline remains so toggling the source cannot bypass backoff.
