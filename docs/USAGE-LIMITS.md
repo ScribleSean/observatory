@@ -16,6 +16,8 @@ Before transport integration, both devices still need explicit sharing controls 
 
 `quota-sharing-control.mjs` provides the local settings interface for that integration. Status returns only availability, consent state and an opaque confirmation token. Enabling requires a successful observation within ten minutes and a current token bound to the account-store revision and pairing. Disconnect and settings operations share the pairing lock. This interface has synthetic and command-line tests but is not yet exposed in native settings or used by transport.
 
+`quota-exchange.mjs` implements a separate local endpoint intended for the authenticated SSH session. A readiness request sends no readings. Exchange checks the saved peer identity and local consent, then saves the validated peer record and allocates the outgoing revision in one quota-store transaction. Older records cannot replace newer ones, conflicting revisions fail, and revocation clears received records. Synthetic endpoint tests pass. The collector transport, native controls and peer-history rendering are not connected yet, so installed apps still do not exchange allowance history.
+
 ## Reference implementation
 
 Reviewed [Codenotch](https://github.com/vinzdg/codenotch/tree/0a6c6fb62b7fda52e4f8bd1ce7e8c7e7b8595b75), including `UsageStore.swift`, `UsageArchive.swift`, `CodexLocalProvider.swift` and `CodexUsage.swift`, on September 9, 2026. Its root license is MIT. This work uses its behavior as a reference, not copied source or artwork.

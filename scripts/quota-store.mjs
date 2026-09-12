@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {retainQuotaHistory} from './quota-history.mjs';
+import {parseQuotaRecord,selectQuotaRecord} from './quota-record.mjs';
 
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
@@ -71,8 +72,17 @@ function read(db,now) {
     else if(hex(value.history.scope))history=retainQuotaHistory(value.history,{status:value.history.latestReadStatus},{scope:value.history.scope,now});
     else throw Error('Invalid quota account scope');
   }
+  const sharing=readSharing(value.sharing,history);
+  let remote=null;
+  if(sharing.enabled && value.remote) {
+    const saved=value.remote;
+    if(!timestamp(saved.receivedAt) || !['Mac','Windows'].includes(saved.host) || saved.pairingId!==sharing.pairingId)
+      throw Error('Invalid saved peer allowance');
+    remote={receivedAt:saved.receivedAt,host:saved.host,pairingId:saved.pairingId,
+      record:parseQuotaRecord(saved.record,saved.host,saved.receivedAt)};
+  }
   return {version:1,revision:value.revision,salt:value.salt,history,nextAttemptAt:value.nextAttemptAt,failures:value.failures,
-    sharing:readSharing(value.sharing,history)};
+    sharing,remote};
 }
 
 function save(db,value) {
@@ -101,6 +111,7 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
     nextAttemptAt:enabled?nextAttemptAt:Math.max(previous.nextAttemptAt,nextAttemptAt),failures:enabled?failures:previous.failures};
   if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
   next.sharing=readSharing(previous.sharing,next.history);
+  if(!next.sharing.enabled)next.remote=null;
   save(db,next);return next;
 });
 
@@ -114,7 +125,7 @@ export const setQuotaSharing=(runtime,{revision,enabled,pairingId},now=Date.now(
   if(enabled && (!hex(pairingId) || !hex(previous.history?.scope) ||
       !['ok','stale'].includes(previous.history?.status) || previous.history.latestReadStatus!=='ok'))
     throw Error('Read the current account before sharing');
-  const next={...previous,revision:previous.revision+1,sharing:enabled?
+  const next={...previous,revision:previous.revision+1,remote:null,sharing:enabled?
     {enabled:true,generation:randomBytes(16).toString('hex'),scope:previous.history.scope,pairingId}:sharingOff()};
   if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
   save(db,next);return next;
@@ -128,8 +139,26 @@ export async function revokeQuotaSharing(runtime,now=Date.now()) {
   return withDatabase(runtime,db=>{
     if(!timestamp(now))throw Error('Invalid observation time');
     const previous=read(db,now);
-    const next={...previous,revision:previous.revision+1,sharing:sharingOff()};
+    const next={...previous,revision:previous.revision+1,sharing:sharingOff(),remote:null};
     if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
     save(db,next);
   });
 }
+
+// Caller authenticates the peer and holds the pairing lock. Recheck consent in
+// the same transaction as the saved watermark so disable cannot race acceptance.
+export const exchangeQuotaState=(runtime,{revision,pairingId,host,record,outgoing},now=Date.now())=>withDatabase(runtime,db=>{
+  if(!timestamp(now))throw Error('Invalid allowance exchange time');
+  const previous=read(db,now);
+  if(previous.revision!==revision || !previous.sharing.enabled || previous.sharing.pairingId!==pairingId)
+    throw Error('Allowance sharing superseded');
+  const incoming=parseQuotaRecord(record,host,now);
+  const prior=previous.remote?.host===host?previous.remote.record:null;
+  const selected=selectQuotaRecord(prior,incoming);
+  const sequence=previous.revision+1;
+  if(!Number.isSafeInteger(sequence))throw Error('Quota revision exhausted');
+  const exported=parseQuotaRecord({version:1,sequence,payload:outgoing},host==='Mac'?'Windows':'Mac',now);
+  const next={...previous,revision:sequence,remote:selected===prior?previous.remote:{receivedAt:now,host,pairingId,record:incoming}};
+  save(db,next);
+  return exported;
+});
