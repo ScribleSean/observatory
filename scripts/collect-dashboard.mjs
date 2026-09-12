@@ -19,6 +19,7 @@ import { selectActivityPairs } from './activity-buckets.mjs';
 import { readAgentReceipts } from './agent-receipts.mjs';
 export { cleanReceipts } from './agent-receipts.mjs';
 import {previousActivityHistory,retainActivityHistory} from './activity-history.mjs';
+import {cachedSettingsScript} from './cached-settings.mjs';
 const exec = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fields = [
@@ -169,9 +170,12 @@ export async function macActivity({raw=false}={}) {
   };
   return raw?report:cleanActivity(report,'Mac');
 }
-async function guarded(host, fn) {
+export async function guarded(host, fn) {
   try {
-    return {...await fn(), checkedAt:new Date().toISOString()};
+    const result=await fn();
+    const checkedAt=typeof result.checkedAt==='string' && Number.isFinite(Date.parse(result.checkedAt))
+      ? result.checkedAt : new Date().toISOString();
+    return {...result, checkedAt};
   } catch {
     return { host, status: 'unavailable', checkedAt:new Date().toISOString() };
   }
@@ -243,7 +247,8 @@ export async function collect() {
   ].map(([host,ssh,folder],index)=>folder?guarded(host,async()=>{
     const result = await readSettingsSnapshot(tokenSources[index], () => readTokens(host),
       async () => {
-        const raw = await pythonReport(ssh,settingsScript,folder);
+        const script=host==='Mac' ? await cachedSettingsScript(root,settingsScript) : settingsScript;
+        const raw = await pythonReport(ssh,script,folder);
         inventories[host] = raw.inventory;
         return cleanSettings(raw,host);
       });

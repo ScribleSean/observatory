@@ -7,7 +7,18 @@ import {
   cleanTokens,
   cleanReceipts,
   cleanSettings,
+  guarded,
 } from './collect-dashboard.mjs';
+test('collector wrapper preserves saved quota observation time during cooldown',async()=>{
+  const checkedAt='2026-09-12T12:00:00Z';
+  const result=await guarded('Codex',async()=>({status:'stale',checkedAt,latestReadStatus:'ok',windows:[]}));
+  assert.equal(result.checkedAt,checkedAt);
+  assert.equal(result.latestReadStatus,'ok');
+  const failed=await guarded('Mac',async()=>{throw Error('PRIVATE');});
+  assert.equal(failed.status,'unavailable');
+  assert.ok(Number.isFinite(Date.parse(failed.checkedAt)));
+  assert.ok(!JSON.stringify(failed).includes('PRIVATE'));
+});
 test('tool metadata survives sanitization and legacy categories remain explicit',()=>{
   const row={date:'2026-09-06',category:'Other tools',count:2};
   const result=cleanSettings({profiles:[],tools:[row,{...row,tool:'MCP.Tool',namespace:'my_tools',arguments:'PRIVATE'},
