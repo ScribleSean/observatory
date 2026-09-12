@@ -39,7 +39,7 @@ The project is an early preview tested on one Mac, Windows and WSL setup. The Ma
 | Platform | Current status |
 | --- | --- |
 | macOS, Apple Silicon | [Native SwiftUI main window and menu-bar panel](docs/MAC.md), with bundled Node and Python. Public release pending. |
-| Windows x64 | Native system-tray panel and WebView2 main window. [Installer tested](docs/WINDOWS.md). Native main window and public release remain unfinished. |
+| Windows x64 | [Native main window and system-tray panel](docs/WINDOWS.md). Installer tested and installed on the development machine. Public release pending. |
 | Ubuntu / WSL | Configured token and workflow sources. Standalone desktop app planned. |
 
 Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Provider account management, unified allowance history and clean-machine release verification are still in progress. Read the [setup guide](docs/GUIDE.md) and [integration coverage](docs/SOURCE-COVERAGE.md) before connecting records.

@@ -1,6 +1,6 @@
 # Windows development preview
 
-The native Windows tray app collects on Windows without a running Mac or open terminal. Current source builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener. The installed September 12 preview still uses the legacy main window until updated.
+The native Windows tray app collects on Windows without a running Mac or open terminal. Current builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener. The native-default build was installed on the development machine on September 12.
 
 This is a development preview. A per-user installer is implemented and tested, but no public binary release is available yet. Windows x64 is the tested build target. Other Windows architectures are not verified.
 
@@ -10,7 +10,7 @@ Installed builds appear as **Workspace Observatory** in the Start menu. Launchin
 
 The telescope icon lives in the **system tray**, possibly under the hidden-icons arrow. Click it for a compact usage overview, then choose **Open Observatory** for the full window. Closing the main window leaves the tray app running. Use **Quit Observatory** in the tray menu to stop it.
 
-The compact overview does not embed full history charts or require scrolling on the tested desktop. Retired Spark / Bengal-fox allowance windows are excluded. This does not remove historical model-token records. The installed main window still embeds the dashboard. Source builds include an opt-in native main-window preview described below.
+The compact overview does not embed full history charts or require scrolling on the tested desktop. Retired Spark / Bengal-fox allowance windows are excluded. This does not remove historical model-token records. The installed main window uses native controls, with the legacy dashboard available as a fallback.
 
 ## Native main-window preview
 
@@ -32,7 +32,7 @@ Unsaved source choices survive section changes, Settings-page navigation and ref
 
 Settings also has a This device page for login registration, pairing details, disconnection and repair preparation. These controls reuse the tray handlers, including the disconnect and repair confirmations. The view rejects overlapping device operations. Synthetic desktop checks verified startup-state rereading and callback dispatch without touching real startup or pairing state. Actual login launch and real pairing operations remain separate verification gates. Provider sign-in management is not implemented.
 
-The native default is a source-build change, not yet an installed-release claim. Full accessibility review and feature parity remain unfinished. Empty history is explained separately from recorded zero usage, and an unknown quota observation time is identified. It does not add device synchronization or provider sign-ins.
+The native default is installed on the development machine, not a published release. Full accessibility review and feature parity remain unfinished. Empty history is explained separately from recorded zero usage, and an unknown quota observation time is identified. It does not add account-history synchronization or provider sign-ins.
 
 For an isolated desktop check, run `WorkspaceObservatory.exe --test-native-dashboard C:\absolute\path\to\empty-test-directory`. The directory must already exist, be empty and not be linked. The test uses in-memory fictional records, an inert refresh callback and captures only its own form. It does not start a collector or modify installed settings. On September 12 the Windows build and desktop test passed period totals, missing-data handling, unverified combined-token suppression, retired-allowance filtering, source rows, refresh and repeated reload checks. Activity and Allowances captures were visually inspected. These checks do not establish installed native-window behavior or complete native feature parity.
 
@@ -120,7 +120,7 @@ There is no automatic updater. To update, uninstall the current version and inst
 
 Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Ubuntu collection is optional and starts the installed `Ubuntu` WSL distribution in the background during collection. Windows collection does not require WSL. Wispr Flow statistics are separately opt-in.
 
-The app also offers optional [account limits and token history](USAGE-LIMITS.md). Current source builds use the Settings editor's Account client selection for the native Windows Codex client or Ubuntu's existing client. The installed September 12 preview uses separate prompts. Selecting Ubuntu may start WSL and uses Ubuntu's signed-in account, even when Ubuntu log collection is off. Closing without saving leaves settings unchanged. The tested Ubuntu route reads limits and daily totals successfully. The native Windows client could not be launched on the tested machine and is not yet verified for account usage. The September 12 development-machine update preserved its existing monitoring-off choice.
+The app also offers optional [account limits and token history](USAGE-LIMITS.md). The Settings editor's Account client selection chooses the native Windows Codex client or Ubuntu's existing client. Older builds used separate prompts. Selecting Ubuntu may start WSL and uses Ubuntu's signed-in account, even when Ubuntu log collection is off. Closing without saving leaves settings unchanged. The tested Ubuntu route reads limits and daily totals successfully. The native Windows client could not be launched on the tested machine and is not yet verified for account usage. The September 12 development-machine update preserved its existing monitoring-off choice.
 
 The plain development executable requires a working Python 3 installation with timezone data and a Node installation. Package candidates use their bundled copies instead. Local settings and snapshots live under `%LOCALAPPDATA%\Workspace Observatory`, outside the source checkout. Collection runs every five minutes while the configured app is running.
 
@@ -142,6 +142,8 @@ For a synthetic desktop test, prepare a new private test directory with `node na
 
 Development builds also accept `--test-usage-popup C:\absolute\path\to\empty-test-directory`. This test requires an existing empty directory and refuses a linked directory. It uses in-memory synthetic quota data, starts no collectors, and captures only its own form and graph controls. On September 9 it passed window selection, reload, saved/unavailable states, accessible chart summaries and inert refresh/navigation callbacks. The captures were visually reviewed. This is not a test of clicking the real tray icon or of an installed release.
 
-The September 12 clean candidate passed packaged wizard and compact-tray tests and was installed on the development machine with a recoverable application backup. Payload hashes, Start search registration and preserved private settings were checked. Collection completed after restart. This does not prove every source, actual login launch or peer synchronization.
+The September 12 native-default candidate at `d5a2317` passed the full Windows build with 250 JavaScript/reader tests passed, 14 skipped and zero failed. Packaged native-dashboard, wizard and compact-tray tests passed. Package verification covered 1,025 files and 234,884,445 bytes, about 224 MiB unpacked. The unsigned installer is 93,988,602 bytes. These sizes include bundled runtimes and are not CPU or memory measurements.
 
-Remaining work includes native main-window implementation, final public-release checks, clean-environment checks, login and sleep/wake testing, CPU and memory measurements, and private device sync. Do not publish local snapshots or build caches as release artifacts.
+The isolated TEST installer passed install/uninstall, overwrite refusal, linked-path refusal and preservation checks. The ordinary build was then installed on the development machine with a recoverable application backup. Installed payload hashes, Start search registration, existing login registration and unchanged configuration/snapshot hashes were verified. Collection completed after restart. The user confirmed the native sidebar window was visible, although the process API returned no main-window handle. This does not prove every source, actual login launch or peer synchronization.
+
+Remaining work includes native accessibility and feature-parity review, provider account management, unified account history, final public-release checks, clean-environment checks, login and sleep/wake testing, CPU and memory measurements, and completion of the consumer pairing flow. Do not publish local snapshots or build caches as release artifacts.
