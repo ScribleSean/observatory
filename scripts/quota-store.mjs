@@ -162,3 +162,23 @@ export const exchangeQuotaState=(runtime,{revision,pairingId,host,record,outgoin
   save(db,next);
   return exported;
 });
+
+export const publishQuotaState=(runtime,{revision,pairingId,host,payload},now=Date.now())=>withDatabase(runtime,db=>{
+  const previous=read(db,now);
+  if(previous.revision!==revision || !previous.sharing.enabled || previous.sharing.pairingId!==pairingId)
+    throw Error('Allowance sharing superseded');
+  const record=parseQuotaRecord({version:1,sequence:previous.revision+1,payload},host,now);
+  save(db,{...previous,revision:record.sequence});
+  return record;
+});
+
+export const acceptQuotaReply=(runtime,{revision,pairingId,host,record},now=Date.now())=>withDatabase(runtime,db=>{
+  if(!timestamp(now))throw Error('Invalid allowance reply time');
+  const previous=read(db,now);
+  if(previous.revision!==revision || !previous.sharing.enabled || previous.sharing.pairingId!==pairingId)
+    throw Error('Allowance sharing superseded');
+  if(record===null) {save(db,{...previous,remote:null});return;}
+  const incoming=parseQuotaRecord(record,host,now),prior=previous.remote?.host===host?previous.remote.record:null;
+  if(selectQuotaRecord(prior,incoming)===prior)return;
+  save(db,{...previous,remote:{receivedAt:now,host,pairingId,record:incoming}});
+});

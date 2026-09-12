@@ -13,6 +13,7 @@ import {readPairing} from './peer-pairing.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota} from './collect-quota.mjs';
+import {attachQuotaSync} from './quota-sync.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -77,6 +78,7 @@ export async function collectMac(runtime,python,peerConfig=null) {
     isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota});}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
+  await attachQuotaSync(runtime,result,{enabled:config.quota});
   const {data,status}=result;
   await atomic('usage.json',data);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
