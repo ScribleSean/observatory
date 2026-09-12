@@ -1,0 +1,61 @@
+using System.Diagnostics;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+
+namespace WorkspaceObservatory;
+
+internal sealed record QuotaSharingStatus(bool Enabled, bool CanEnable, string Reason, string? Token);
+
+internal static class QuotaSharing
+{
+    internal static QuotaSharingStatus Parse(string text)
+    {
+        if (text.Length > 4096 || JsonNode.Parse(text) is not JsonObject value || value.Count != 5 ||
+            value.Any(entry => entry.Key is not ("version" or "enabled" or "canEnable" or "reason" or "token")) ||
+            value["version"]?.GetValue<int>() != 1 ||
+            value["enabled"] is not JsonValue enabled || !enabled.TryGetValue<bool>(out var on) ||
+            value["canEnable"] is not JsonValue available || !available.TryGetValue<bool>(out var canEnable))
+            throw new InvalidOperationException("Invalid sharing status.");
+        var reason = value["reason"]?.GetValue<string>();
+        var token = value["token"]?.GetValue<string>();
+        if (reason is not ("ready" or "account-unavailable" or "pairing-unavailable") ||
+            (canEnable ? token is null || !Regex.IsMatch(token, "^[a-f0-9]{64}$") || reason != "ready" : token is not null))
+            throw new InvalidOperationException("Invalid sharing status.");
+        return new(on, canEnable, reason, token);
+    }
+
+    internal static async Task<QuotaSharingStatus> Run(string runtime, string action, string? token, CancellationToken cancellation)
+    {
+        if (action is not ("status" or "enable" or "disable") ||
+            (action == "enable" ? token is null || !Regex.IsMatch(token, "^[a-f0-9]{64}$") : token is not null) ||
+            !Path.IsPathFullyQualified(runtime) || !Directory.Exists(runtime) ||
+            File.GetAttributes(runtime).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Invalid sharing request.");
+        var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
+        var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "quota-sharing-control.mjs");
+        if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Sharing tools are unavailable.");
+        using var process = new Process { StartInfo = new(node) { UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true } };
+        foreach (var arg in new[] { script, "--runtime", runtime }) process.StartInfo.ArgumentList.Add(arg);
+        process.Start();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        try
+        {
+            var request = new JsonObject { ["action"] = action };
+            if (token is not null) request["token"] = token;
+            await process.StandardInput.WriteAsync(request.ToJsonString()); process.StandardInput.Close();
+            await process.WaitForExitAsync(timeout.Token);
+            await Task.WhenAll(output, error);
+            if (process.ExitCode != 0) throw new InvalidOperationException("Sharing settings changed or are unavailable.");
+            return Parse(await output);
+        }
+        catch
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw;
+        }
+    }
+}

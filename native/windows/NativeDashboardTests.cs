@@ -44,11 +44,25 @@ internal static class NativeDashboardTests
         var devicePending = new TaskCompletionSource();
         var confirmSettings = false;
         var confirmations = new List<string>();
+        var sharingEnabled = false; var sharingConfirmed = false; var sharingChanges = 0;
+        var sharingToken = new string('a', 64);
+        Check(QuotaSharing.Parse("{\"version\":1,\"enabled\":false,\"canEnable\":false,\"reason\":\"account-unavailable\",\"token\":null}").CanEnable == false, "Unknown sharing status parsed");
+        try { QuotaSharing.Parse("{\"version\":1,\"enabled\":true,\"canEnable\":true,\"reason\":\"ready\",\"token\":\"private\"}"); throw new Exception("Malformed sharing token accepted"); }
+        catch (InvalidOperationException) { }
         using var form = new NativeDashboard(() => data, () => { refreshes++; return Task.CompletedTask; },
             new SourceSettingsActions(settingsCollector.ReadConfiguration, settingsCollector.UpdateConfiguration,
                 operation => { confirmations.Add(operation); return confirmSettings; }),
             new DeviceSettingsActions(() => startupRegistered, value => startupRegistered = value,
-                () => pairingDetails++, () => { disconnects++; return devicePending.Task; }, () => { repairs++; return Task.CompletedTask; }));
+                () => pairingDetails++, () => { disconnects++; return devicePending.Task; }, () => { repairs++; return Task.CompletedTask; },
+                (action, token) =>
+                {
+                    if (action != "status")
+                    {
+                        Check(action != "enable" || token == sharingToken, "Sharing confirmation token forwarded");
+                        sharingChanges++; sharingEnabled = action == "enable";
+                    }
+                    return Task.FromResult(new QuotaSharingStatus(sharingEnabled, true, "ready", sharingToken));
+                }, () => sharingConfirmed));
         form.Shown += async (_, _) =>
         {
             try
@@ -189,7 +203,22 @@ internal static class NativeDashboardTests
                 await Task.Delay(100);
                 ClickDevice("Prepare pairing repair");
                 Check(repairs == 1, "Repair callback after operation completion");
+                ClickDevice("Check sharing status");
+                await Task.Delay(50);
+                ClickDevice("Change allowance sharing");
+                Check(sharingChanges == 0 && !sharingEnabled, "Cancelled sharing consent does not write");
+                sharingConfirmed = true;
+                ClickDevice("Change allowance sharing");
+                await Task.Delay(50);
+                Check(sharingEnabled && sharingChanges == 1, "Explicit sharing consent applied");
+                ClickDevice("Change allowance sharing");
+                await Task.Delay(50);
+                Check(!sharingEnabled && sharingChanges == 2, "Sharing disable applied");
                 Capture(form, output, "native-device-settings");
+                var sharingButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Change allowance sharing");
+                ((ScrollableControl)sharingButton.Parent!).ScrollControlIntoView(sharingButton);
+                await Task.Delay(50);
+                Capture(form, output, "native-sharing-settings");
                 sections.SelectedItem = "Sources";
                 Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 7, "Source rows");
                 Capture(form, output, "native-sources");

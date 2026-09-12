@@ -153,7 +153,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
     private DeviceSettingsActions DeviceActions() => new(LoginStartup.Registered, LoginStartup.SetRegistered,
-        ShowPairingDetails, DisconnectPairing, PreparePairingRepair);
+        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing);
 
     private void ShowUsage()
     {

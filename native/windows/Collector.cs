@@ -27,6 +27,19 @@ internal sealed class Collector : IDisposable
     internal Task DisconnectPairing() => MaintainPairing(false);
     internal Task PreparePairingRepair() => MaintainPairing(true);
 
+    internal async Task<QuotaSharingStatus> Sharing(string action, string? token)
+    {
+        if (busy || lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime))
+            throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
+        busy = true;
+        try
+        {
+            using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return await QuotaSharing.Run(runtime, action, token, lifetime.Token);
+        }
+        finally { busy = false; }
+    }
+
     private async Task MaintainPairing(bool repair)
     {
         // The timer may have started work while the confirmation was open.
