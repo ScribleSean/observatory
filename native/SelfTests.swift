@@ -1,6 +1,10 @@
 import Foundation
 
 func runSelfTests() {
+    let sharingOff = Data("{\"version\":1,\"enabled\":false,\"canEnable\":false,\"reason\":\"account-unavailable\",\"token\":null}".utf8)
+    precondition((try? QuotaSharingStatus.parse(sharingOff))?.enabled == false)
+    let invalidSharing = Data("{\"version\":1,\"enabled\":true,\"canEnable\":true,\"reason\":\"ready\",\"token\":\"private\"}".utf8)
+    precondition((try? QuotaSharingStatus.parse(invalidSharing)) == nil)
     let countedModel: JSONObject = ["inputTokens": 10, "cacheReadTokens": 20, "cacheCreationTokens": 0, "outputTokens": 5, "totalTokens": 35]
     precondition(nativeSettingsCoverage(model: countedModel, profiles: [countedModel]).status == "matched")
     var largerModel = countedModel

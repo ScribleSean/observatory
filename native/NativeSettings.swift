@@ -17,7 +17,11 @@ struct NativeSettings: View {
     @State private var original: [String: Bool] = [:]
     @State private var message = ""
     @State private var loaded = false
-    private var busy: Bool { store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing }
+    @State private var sharing: QuotaSharingStatus?
+    @State private var sharingMessage = "Check sharing status to review this Mac's consent."
+    @State private var sharingBusy = false
+    @State private var confirmSharing = false
+    private var busy: Bool { store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing || sharingBusy }
     private let sources = [("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
                            ("wispr", "Wispr Flow statistics"), ("typewhisper", "TypeWhisper statistics")]
 
@@ -58,13 +62,27 @@ struct NativeSettings: View {
             if !message.isEmpty { Text(message).font(.callout).accessibilityLabel(message) }
             settingsSection("Device connection") {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Device pairing is separate from provider sign-in. Pairing shares supported sanitized usage records, not provider credentials. Account-limit history is not synchronized yet.")
+                    Text("Device pairing is separate from provider sign-in. Pairing shares supported sanitized usage records, not provider credentials.")
                     HStack {
                         Button("Pair with Windows…", action: actions.pair)
                         Button("Disconnect…", action: actions.disconnect)
                         Button("Repair…", action: actions.repair)
                     }.disabled(busy || actions.preview)
                     if actions.preview { Text("Device changes are disabled in this preview.").font(.caption).foregroundStyle(.secondary) }
+                }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            settingsSection("Allowance history sharing") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals. Credentials stay on their own device. Different devices' account totals are never added together.")
+                    Text(sharingMessage).font(.callout).accessibilityLabel(sharingMessage)
+                    HStack {
+                        Button("Check sharing status") { changeSharing("status") }
+                            .disabled(busy || actions.preview)
+                        Button(sharing?.enabled == true ? "Disable allowance sharing" : "Enable allowance sharing") {
+                            if sharing?.enabled == true { changeSharing("disable") } else { confirmSharing = true }
+                        }.disabled(busy || actions.preview || !(sharing?.enabled == true || sharing?.canEnable == true))
+                    }
+                    if actions.preview { Text("Sharing changes are disabled in this isolated preview.").font(.caption) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             settingsSection("Startup") {
@@ -77,6 +95,33 @@ struct NativeSettings: View {
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
         }.onAppear(perform: load)
+        .alert("Enable allowance sharing?", isPresented: $confirmSharing) {
+            Button("Cancel", role: .cancel) {}
+            Button("Enable sharing") { changeSharing("enable") }
+        } message: {
+            Text("Share this account's allowance history and dated token totals with the paired device? Enable sharing on the other device separately. Account changes revoke this consent.")
+        }
+    }
+
+    private func changeSharing(_ action: String) {
+        guard !busy, !actions.preview, let resources = Bundle.main.resourceURL else { return }
+        let token = action == "enable" ? sharing?.token : nil
+        sharingBusy = true
+        store.pairingMaintenance = true
+        Task { @MainActor in
+            defer { sharingBusy = false; store.pairingMaintenance = false }
+            do {
+                let result = try await QuotaSharing.run(runtime: store.runtime, resources: resources, action: action, token: token)
+                sharing = result
+                sharingMessage = result.enabled ? "Sharing is enabled for this account and paired device. This is consent, not proof of a completed exchange." :
+                    result.reason == "pairing-unavailable" ? "Sharing is off. Pair this Mac first." :
+                    result.canEnable ? "Sharing is off. A recent account reading is available." :
+                    "Sharing is off. Enable account monitoring and refresh the account before sharing."
+            } catch {
+                sharing = nil
+                sharingMessage = "Sharing could not be verified. Check status before retrying. A setting change may already have completed."
+            }
+        }
     }
 
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

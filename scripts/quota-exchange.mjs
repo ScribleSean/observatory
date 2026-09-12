@@ -1,4 +1,5 @@
 import {lstat} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {withPeerStateLock} from './peer-lock.mjs';
@@ -38,6 +39,6 @@ async function main(runtime) {
     process.stdout.write(JSON.stringify(await exchangeQuota(runtime,request)));
   } finally {clearTimeout(timer);}
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))main(process.argv[2]).catch(()=>{
+if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))main(process.argv[2]).catch(()=>{
   process.stderr.write('Private allowance exchange unavailable\n');process.exitCode=1;
 });

@@ -1,4 +1,5 @@
 import {lstat} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -56,6 +57,6 @@ async function main() {
     process.stdout.write(JSON.stringify(await quotaSharingControl(args[1],request))+'\n');
   } finally {clearTimeout(timeout);}
 }
-if(process.argv[1]===fileURLToPath(import.meta.url))main().catch(()=>{
+if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))main().catch(()=>{
   process.stderr.write('Allowance sharing settings could not be verified. Refresh settings before retrying.\n');process.exitCode=1;
 });
