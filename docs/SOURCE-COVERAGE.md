@@ -18,7 +18,7 @@ Both independent native collectors derive token and settings views from the same
 | Codex tool metadata | Allowlisted categories of saved tool-call requests | Not an execution-success report, duration measure or full SSH history |
 | Codex limits | Read-only account quota windows and reset timestamps | Optional five-minute polling with retained observations and failure backoff, not other providers' limits |
 | Local model receipts | Saved benchmark call counts, output tokens, latency and GPU measurements | Not general local-model history or proof the runtime is currently running |
-| Dictation statistics | Wispr metadata on Mac/Windows and optional retained TypeWhisper metadata on Mac | Counts and durations only; not transcripts, recordings or microphone monitoring |
+| Dictation statistics | Wispr metadata on Mac/Windows and optional retained TypeWhisper metadata on both platforms in current source | Counts and durations only; not transcripts, recordings or microphone monitoring. Windows TypeWhisper requires an updated build and explicit opt-in. |
 
 ## Foreground app detail
 

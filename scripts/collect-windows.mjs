@@ -4,6 +4,7 @@ import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {cleanWispr} from './wispr.mjs';
+import {cleanDictation} from './typewhisper.mjs';
 import {previousActivityHistory} from './activity-history.mjs';
 import {windowsCollectorConfig} from './windows-snapshot.mjs';
 import {windowsSnapshot} from './windows-dashboard.mjs';
@@ -54,7 +55,7 @@ export async function collectWindows(runtime,peerConfig=null) {
   const pythonArgs=path.basename(python).toLowerCase()==='py.exe'?['-3','-B','-X','utf8','-']:['-B','-X','utf8','-'];
   const wsl=path.join(process.env.SystemRoot || 'C:/Windows','System32/wsl.exe');
   const settingsScript=(pairing?.readerPrefix??'')+await readFile(path.join(scripts,'read-settings.py'),'utf8');
-  const [localSettings,ubuntuSettings,windows,wispr]=await Promise.all([guarded('Windows',async()=>{
+  const [localSettings,ubuntuSettings,windows,wispr,typewhisper]=await Promise.all([guarded('Windows',async()=>{
     if(!config.codex)return disconnected('Windows');
     const cache=await privateCollectorDirectory(runtime,'private-codex',true);
     const cacheScript=await readFile(path.join(scripts,'read-settings-cache.py'),'utf8');
@@ -76,11 +77,15 @@ export async function collectWindows(runtime,peerConfig=null) {
     if(!config.wispr)return {...disconnected('Windows'),source:'Wispr Flow'};
     const script="MODE = 'windows'\n"+await readFile(path.join(scripts,'read-wispr.py'),'utf8');
     return cleanWispr(JSON.parse(await run(python,[...pythonArgs,homedir()],script)),'Windows');
+  }),guarded('Windows',async()=>{
+    if(!config.typewhisper)return disconnected('Windows');
+    const script="MODE = 'windows'\n"+await readFile(path.join(scripts,'read-typewhisper.py'),'utf8');
+    return cleanDictation(JSON.parse(await run(python,[...pythonArgs,homedir()],script)),'Windows');
   })]);
   let previous=[];
   try{previous=await previousActivityHistory(path.join(folder,'usage.json'));}catch{}
   const collectedAt=new Date().toISOString();
-  const result=windowsSnapshot({localSettings,ubuntuSettings,windows,wispr},previous,collectedAt,pairing?.config??null);
+  const result=windowsSnapshot({localSettings,ubuntuSettings,windows,wispr,typewhisper},previous,collectedAt,pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
   await finalizePeerCollection(runtime,result,savedPairing,previous);
   let quota;

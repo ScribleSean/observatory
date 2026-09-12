@@ -4,7 +4,7 @@ internal sealed class SetupWizard : Form
 {
     private readonly Collector collector;
     private readonly string runtime;
-    private readonly Dictionary<string, bool> selected = new() { ["activity"] = false, ["codex"] = false, ["wispr"] = false, ["quota"] = false, ["wsl"] = false };
+    private readonly Dictionary<string, bool> selected = new() { ["activity"] = false, ["codex"] = false, ["wispr"] = false, ["typewhisper"] = false, ["quota"] = false, ["wsl"] = false };
     private readonly FlowLayoutPanel content = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private readonly Button next = new() { Text = "Continue", AutoSize = true };
     private readonly Button back = new() { Text = "Back", AutoSize = true };
@@ -41,7 +41,7 @@ internal sealed class SetupWizard : Form
         }
         else if (step == 1)
         {
-            foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("wispr", "Wispr Flow statistics"), ("wsl", "Include Ubuntu WSL records with saved Codex"), ("quota", "Codex account limits online") })
+            foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("wispr", "Wispr Flow statistics"), ("typewhisper", "TypeWhisper aggregate statistics"), ("wsl", "Include Ubuntu WSL records with saved Codex"), ("quota", "Codex account limits online") })
             {
                 var check = new CheckBox { Text = title, Tag = key, Checked = selected[key], AutoSize = true, Margin = new Padding(0, 0, 0, 8), Enabled = key != "wsl" || selected["codex"] };
                 check.CheckedChanged += (_, _) =>
@@ -78,7 +78,7 @@ internal sealed class SetupWizard : Form
         try
         {
             FirstRunSetup.Complete(runtime, () => collector.Configure(selected["wsl"] ? "Ubuntu" : null, selected["wispr"], selected["quota"],
-                selected["quota"] && ubuntuAccount ? "Ubuntu" : null, selected["activity"], selected["codex"]));
+                selected["quota"] && ubuntuAccount ? "Ubuntu" : null, selected["activity"], selected["codex"], selected["typewhisper"]));
             DialogResult = DialogResult.OK; Close();
         }
         catch { MessageBox.Show("Setup could not be saved. Collection remains paused. Check local storage and try again.", "Setup incomplete"); }

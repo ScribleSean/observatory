@@ -17,6 +17,25 @@ function raw(host) {
 }
 const packet=host=>createPeerPayload(raw(host),config(host));
 
+test('updated peers accept Windows TypeWhisper and still accept legacy Windows packets',()=>{
+  const source=raw('Windows');
+  source.dictation.push({source:'TypeWhisper',status:'ok',days:[{date:'2026-09-09',
+    transcriptions:2,words:12,audioSeconds:7,engines:[],transcript:'PRIVATE'}]});
+  const windows=createPeerPayload(source,config('Windows'));
+  assert.deepEqual(parsePeerPayload(JSON.stringify(windows),config('Windows'),now),windows);
+  assert.equal(parsePeerPayload(JSON.stringify(packet('Windows')),config('Windows'),now).dictation.length,1);
+  const merged=mergePeerPayloads(packet('Mac'),windows,config('Mac'),config('Windows'),[],now);
+  assert.equal(merged.dictation.find(row=>row.host==='Windows' && row.source==='TypeWhisper').days[0].words,12);
+  assert.ok(!JSON.stringify(merged).includes('PRIVATE'));
+  const repeated=mergePeerPayloads(packet('Mac'),windows,config('Mac'),config('Windows'),merged.activityHistory,now);
+  assert.deepEqual(repeated.dictation,merged.dictation);
+  for(const mutate of [p=>p.dictation.push(p.dictation[1]),p=>{p.dictation[1].source='Other';},
+    p=>{p.dictation[1].days[0].transcript='PRIVATE';},p=>{p.dictation[1].days[0].words=-1;}]) {
+    const invalid=structuredClone(windows);mutate(invalid);
+    assert.throws(()=>parsePeerPayload(JSON.stringify(invalid),config('Windows'),now));
+  }
+});
+
 test('outbound peer payload strips raw fields and inbound canonical form round-trips',()=>{
   for(const host of ['Mac','Windows']) {
     const payload=packet(host),text=JSON.stringify(payload);

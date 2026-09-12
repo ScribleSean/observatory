@@ -62,7 +62,10 @@ export function createPeerPayload(raw,config) {
     if(matches.length!==1)throw Error('Missing peer source');
     return codex(matches[0],host,config.comparisonId);
   });
-  const names=config.host==='Mac'?['Wispr Flow','TypeWhisper']:['Wispr Flow'];
+  // Legacy Windows senders have only Wispr. Accept that shape unchanged while
+  // allowing explicitly enabled TypeWhisper from updated Windows senders.
+  const names=config.host==='Mac' || raw.dictation?.some(row=>row?.source==='TypeWhisper')?
+    ['Wispr Flow','TypeWhisper']:['Wispr Flow'];
   if(!Array.isArray(raw.dictation) || raw.dictation.length!==names.length)throw Error('Invalid peer dictation');
   const dictation=names.map(source=>{
     const matches=raw.dictation.filter(row=>row?.source===source);

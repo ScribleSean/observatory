@@ -46,3 +46,26 @@ test('disabled sources and invalid timestamps cannot leak private metadata',()=>
   assert.equal(result.status.sourcesConfigured,0);assert.equal(result.status.state,'partial');
   assert.ok(!JSON.stringify(result).includes('PRIVATE'));
 });
+
+test('Windows TypeWhisper reaches local and peer views only as sanitized aggregates',()=>{
+  const input=raw();
+  input.typewhisper={status:'ok',privatePath:'PRIVATE',days:[{date:'2026-09-09',transcriptions:2,
+    words:12,audioSeconds:7,engines:[],transcript:'PRIVATE'}]};
+  const result=windowsSnapshot(input,[],at,peerConfig);
+  assert.equal(result.data.dictation[1].source,'TypeWhisper');
+  assert.equal(result.data.dictation[1].days[0].words,12);
+  assert.equal(result.peer.status,'ready');
+  assert.equal(result.peer.payload.dictation[1].days[0].words,12);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+  input.typewhisper={status:'not-connected'};
+  const disabled=windowsSnapshot(input,[],at,peerConfig);
+  assert.equal(disabled.data.dictation[1].status,'not-connected');
+  assert.equal(disabled.peer.payload.dictation.length,1);
+  for(const status of ['not-found','ambiguous','unavailable']) {
+    input.typewhisper={status,days:[{transcript:'PRIVATE'}]};
+    const missing=windowsSnapshot(input,[],at,peerConfig);
+    assert.equal(missing.data.dictation[1].status,status);
+    assert.equal(missing.peer.payload.dictation[1].status,status);
+    assert.ok(!JSON.stringify(missing).includes('PRIVATE'));
+  }
+});

@@ -31,7 +31,7 @@ internal sealed partial class NativeDashboard
         var draft = sourceDraft;
         Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.");
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
-            ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits") })
+            ("wispr", "Wispr Flow statistics"), ("typewhisper", "TypeWhisper aggregate statistics"), ("quota", "Online Codex account limits") })
         {
             var check = new CheckBox { Text = title, AccessibleName = key, AutoSize = true, Margin = new Padding(0, 0, 0, 12),
                 Checked = draft[key] is JsonValue value && value.TryGetValue<bool>(out var enabled) && enabled };

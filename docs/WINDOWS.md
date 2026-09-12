@@ -68,6 +68,16 @@ The build runs native snapshot and startup-contract tests plus the JavaScript an
 
 ## Prepare a package candidate
 
+### Optional TypeWhisper source
+
+Current source adds an off-by-default TypeWhisper aggregate-statistics choice in first-run setup and native source settings. It reuses the bounded aggregate reader for Store and direct installations. If both stores exist, collection reports an ambiguous source instead of choosing or adding them. No transcript or audio store is read.
+
+Updated peers can receive sanitized Windows TypeWhisper records and still accept older Windows payloads without this source. Update both apps before enabling this source on a paired installation. Older receiving apps reject the added source, and an older payload without it means unknown coverage, not zero usage. Disabling the source removes its current projection without deleting the original aggregate store.
+
+September 12 isolated Windows checks passed the build, native self-tests, Settings opt-in interaction and 22 focused collector/reader/payload tests. A fictional aggregate store was read by the actual Windows collector, then retained unchanged after opt-out. These changes have not been installed on the development machines. The revised first-run choice still needs its own interactive verification.
+
+### Build commands
+
 ```powershell
 .\native\windows\package.ps1
 ```

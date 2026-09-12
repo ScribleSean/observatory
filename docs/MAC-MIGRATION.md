@@ -12,10 +12,12 @@ The mapping preserves enabled Mac dictation sources, the explicit account-client
 
 - Confirm the paired peer and its configured source scope. A legacy SSH alias alone is not new device pairing.
 - Archive the prior snapshot and verify that retained history remains accessible after the new collector writes its snapshot. A backup file alone is not proof of dashboard visibility.
-- Compare native reader coverage with the existing collector. Windows TypeWhisper is not currently included in the native peer payload and must not disappear without an explicit coverage decision.
+- Compare native reader coverage with the existing collector. Current source supports optional Windows TypeWhisper aggregates, but older installed peers do not. Verify updated binaries and the explicit Windows source choice before clearing this coverage gate.
 - Stop collection, hold the correct collector lock, retain the old configuration and use a recoverable activation with stale-plan checks.
 
 The compatibility adapters and workflow switches are implemented in source. They do not automatically migrate an installed legacy collector, enable allowance sharing or opt new installations into workflow reads.
+
+The assessment's `windows-typewhisper-not-in-native-peer-payload` review code remains conservative because the assessment does not inspect the remote installed build. Source support alone does not clear the installed-peer coverage gate.
 
 ## Viewing retained snapshots
 
