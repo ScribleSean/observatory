@@ -17,12 +17,25 @@ async function selection(runtime) {
 
 // Preserve the legacy installation's explicit client choice. No discovery,
 // account fallback, new source opt-in or credential copying during migration.
-export async function collectLegacyQuota(runtime,{clock,readSnapshot}={}) {
+export async function collectLegacyQuota(runtime,{clock,readSnapshot,isEnabled=async()=>true}={}) {
   const executable=await selection(runtime);
   return collectQuota(runtime,{
     enabled:executable!==null,
     resolveExecutable:async()=>executable,
-    isEnabled:async()=>await selection(runtime)===executable,
+    isEnabled:async()=>await isEnabled()===true && await selection(runtime)===executable,
     ...(clock?{clock}:{}),...(readSnapshot?{readSnapshot}:{})
   });
+}
+
+// Native migration keeps the explicitly selected legacy client. Only a fresh
+// installation without legacy configuration may discover an installed client.
+export async function collectConfiguredMacQuota(runtime,{enabled=false,...options}={}) {
+  if(typeof enabled!=='boolean')throw Error('Explicit quota setting required');
+  if(!enabled)return collectQuota(runtime,{...options,enabled:false});
+  try {await lstat(path.join(runtime,'local.config.json'));}
+  catch(error) {
+    if(error.code!=='ENOENT')throw error;
+    return collectQuota(runtime,{...options,enabled:true});
+  }
+  return collectLegacyQuota(runtime,options);
 }

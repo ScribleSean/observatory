@@ -12,7 +12,8 @@ import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
-import {collectQuota,attachQuota} from './collect-quota.mjs';
+import {attachQuota} from './collect-quota.mjs';
+import {collectConfiguredMacQuota} from './legacy-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 
@@ -75,7 +76,7 @@ export async function collectMac(runtime,python,peerConfig=null) {
   await finalizePeerCollection(runtime,result,savedPairing,previous);
   // Account-wide history belongs to the observing device, not the peer sum.
   let quota;
-  try {quota=await collectQuota(runtime,{enabled:config.quota,
+  try {quota=await collectConfiguredMacQuota(runtime,{enabled:config.quota,
     isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota});}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);

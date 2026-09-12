@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,realpath,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {collectLegacyQuota} from './legacy-quota.mjs';
+import {collectLegacyQuota,collectConfiguredMacQuota} from './legacy-quota.mjs';
 
 async function fixture(run) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-legacy-quota-')));
@@ -49,4 +49,39 @@ test('invalid legacy configuration fails without silently finding another accoun
   await save({codexExecutable:'relative/client'});
   await assert.rejects(collectLegacyQuota(runtime,{readSnapshot:()=>{throw Error('Unexpected read');}}),/Invalid configured/);
   assert.deepEqual(await readdir(runtime),['local.config.json']);
+}));
+test('native migration retains explicit client and does not discover a replacement',()=>fixture(async(runtime,save,file)=>{
+  await save({codexExecutable:'/selected/client'});
+  const before=await readFile(file,'utf8');
+  const result=await collectConfiguredMacQuota(runtime,{enabled:true,clock:()=>start,
+    resolveExecutable:()=>{throw Error('Must not discover');},readSnapshot:async executable=>{
+      assert.equal(executable,'/selected/client');return {status:'ok',scope:'a'.repeat(64),checkedAt:new Date(start).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:80}]};
+    }});
+  assert.equal(result.status,'ok');assert.equal(await readFile(file,'utf8'),before);
+}));
+test('native workflow source settings do not implicitly enable an unselected legacy account',()=>fixture(async(runtime,save)=>{
+  await save({receiptDirectory:'/receipts'});
+  const fail=()=>{throw Error('Unexpected client access');};
+  const result=await collectConfiguredMacQuota(runtime,{enabled:true,resolveExecutable:fail,readSnapshot:fail});
+  assert.equal(result.status,'not-connected');assert.deepEqual(await readdir(runtime),['local.config.json']);
+}));
+test('native quota opt-out bypasses malformed legacy config without starting a client',()=>fixture(async(runtime,save)=>{
+  await save({codexExecutable:42});
+  const result=await collectConfiguredMacQuota(runtime,{enabled:false,readSnapshot:()=>{throw Error('Unexpected client access');}});
+  assert.equal(result.status,'not-connected');
+  await assert.rejects(collectConfiguredMacQuota(runtime,{enabled:true}),/Invalid configured/);
+}));
+test('native opt-out during legacy read discards the response',()=>fixture(async(runtime,save)=>{
+  await save({codexExecutable:'/selected/client'});
+  const result=await collectConfiguredMacQuota(runtime,{enabled:true,clock:()=>start,isEnabled:async()=>false,
+    readSnapshot:async()=>({status:'ok',scope:'a'.repeat(64),checkedAt:new Date(start).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:80}]})});
+  assert.equal(result.status,'not-connected');assert.deepEqual(result.history,[]);
+}));
+test('fresh native installation may use installed-client discovery when explicitly enabled',()=>fixture(async runtime=>{
+  let calls=0;
+  const result=await collectConfiguredMacQuota(runtime,{enabled:true,clock:()=>start,resolveExecutable:async()=>{calls++;return '/installed/client';},
+    readSnapshot:async executable=>{
+      assert.equal(executable,'/installed/client');return {status:'ok',scope:'a'.repeat(64),checkedAt:new Date(start).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:80}]};
+    }});
+  assert.equal(calls,1);assert.equal(result.status,'ok');
 }));
