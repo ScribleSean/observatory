@@ -26,7 +26,13 @@ internal static class NativeDashboardTests
           {"bucket":"spark","window":"primary","remainingPercent":90}],"history":[],"dailyUsageBuckets":[]}}
           """)!.AsObject();
         var refreshes = 0;
-        using var form = new NativeDashboard(() => data, () => { refreshes++; return Task.CompletedTask; });
+        var settingsRoot = Path.Combine(output, "settings-fixture");
+        Directory.CreateDirectory(settingsRoot);
+        var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":false,"wslDistribution":null,"quotaWslDistribution":null,"futureSetting":"preserved"}""")!.AsObject();
+        File.WriteAllText(Path.Combine(settingsRoot, "collector.config.json"), initialSettings.ToJsonString());
+        using var settingsCollector = new Collector(settingsRoot);
+        using var form = new NativeDashboard(() => data, () => { refreshes++; return Task.CompletedTask; },
+            new SourceSettingsActions(settingsCollector.ReadConfiguration, settingsCollector.UpdateConfiguration));
         form.Shown += async (_, _) =>
         {
             try
@@ -94,6 +100,22 @@ internal static class NativeDashboardTests
                 Capture(form, output, "native-tools");
                 await Select(form, "Device", "Mac");
                 Check(Texts(form).Contains("Tool records unavailable."), "Unavailable tool host");
+                sections.SelectedItem = "Settings";
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Settings loaded existing disabled source");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
+                Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
+                Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
+                Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
+                Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
+                Capture(form, output, "native-settings");
+                try { settingsCollector.UpdateConfiguration(initialSettings, initialSettings); throw new Exception("Stale settings accepted"); }
+                catch (InvalidOperationException) { }
+                var current = settingsCollector.ReadConfiguration();
+                using (var held = new FileStream(Path.Combine(settingsRoot, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                {
+                    try { settingsCollector.UpdateConfiguration(current, initialSettings); throw new Exception("Collection lock ignored"); }
+                    catch (IOException) { }
+                }
                 sections.SelectedItem = "Sources";
                 Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 7, "Source rows");
                 Capture(form, output, "native-sources");

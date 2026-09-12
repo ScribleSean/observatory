@@ -57,6 +57,33 @@ internal sealed class Collector : IDisposable
 
     internal string? Distribution => Snapshot.Read(Path.Combine(runtime, "collector.config.json"))?["wslDistribution"]?.GetValue<string>();
 
+    internal JsonObject ReadConfiguration() => Snapshot.Read(Path.Combine(runtime, "collector.config.json"))
+        ?? throw new InvalidOperationException("Source settings are unavailable.");
+
+    internal void UpdateConfiguration(JsonObject expected, JsonObject desired)
+    {
+        if (busy || !FirstRunSetup.AllowsCollection(runtime)) throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
+        using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        var file = Path.Combine(runtime, "collector.config.json");
+        if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Linked configuration is not editable here.");
+        var current = ReadConfiguration();
+        if (!JsonNode.DeepEquals(current, expected)) throw new InvalidOperationException("Settings changed elsewhere. Reload before saving.");
+        foreach (var key in new[] { "activity", "codex", "wispr", "quota" })
+        {
+            if (desired[key] is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
+            current[key] = enabled;
+        }
+        foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" })
+        {
+            var distro = desired[key]?.GetValue<string>();
+            if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution.");
+            current[key] = distro;
+        }
+        var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try { File.WriteAllText(temporary, current.ToJsonString()); File.Move(temporary, file, true); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
     internal async Task Refresh()
     {
         if (busy || pairingPaused || !Configured || lifetime.IsCancellationRequested) return;

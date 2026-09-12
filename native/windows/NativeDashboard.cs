@@ -15,9 +15,10 @@ internal sealed partial class NativeDashboard : Form
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
 
-    internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh)
+    internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null)
     {
         this.read = read; this.refresh = refresh;
+        this.sourceSettings = sourceSettings;
         Text = "Observatory native preview"; AccessibleName = Text;
         Font = regular; BackColor = Color.FromArgb(30, 30, 32); ForeColor = Color.WhiteSmoke;
         ClientSize = new Size(1000, 720); MinimumSize = new Size(800, 560); StartPosition = FormStartPosition.CenterScreen;
@@ -35,12 +36,12 @@ internal sealed partial class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Agents", "Sources"]);
+        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Agents", "Sources", "Settings"]);
         Controls.Add(body); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); };
         sections.SelectedIndex = 0;
         body.ClientSizeChanged += (_, _) => ResizeRows();
-        timer.Tick += (_, _) => { if (!ContainsFocus) Reload(); };
+        timer.Tick += (_, _) => { if (!ContainsFocus && sections.SelectedItem?.ToString() != "Settings") Reload(); };
         timer.Start();
     }
     private int ContentWidth => Math.Max(400, body.ClientSize.Width - 66);
@@ -100,8 +101,9 @@ internal sealed partial class NativeDashboard : Form
             else if (section == "Allowances") Allowances(snapshot);
             else if (section == "Dictation") Dictation(snapshot);
             else if (section == "Agents") Agents(snapshot);
+            else if (section == "Settings") SourceSettings();
             else Sources(snapshot);
-            Label("Native migration preview. Integrated Settings remain in the current dashboard and tray menu.");
+            Label("Native migration preview. Startup and pairing controls remain in the system-tray menu.");
             ResizeRows();
         }
         finally { body.ResumeLayout(true); }

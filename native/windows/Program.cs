@@ -219,26 +219,11 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (!FirstRunSetup.AllowsCollection(runtime)) { Open(); return; }
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
-        var answer = MessageBox.Show("Enable local ActivityWatch and saved Codex usage collection? Only approved usage metadata enters the dashboard, not prompts or window titles.",
-            "Workspace Observatory", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-        if (answer != DialogResult.Yes) return;
-        var wsl = MessageBox.Show("Also collect Ubuntu logs? This starts the installed Ubuntu WSL distribution in the background when collecting, without an open terminal. Choose No for Windows-only collection.",
-            "Ubuntu collection", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
-        var wispr = MessageBox.Show("Include Wispr Flow word counts and recorded audio duration? Transcripts and recordings are not read.",
-            "Optional dictation statistics", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
-        var quota = MessageBox.Show("Read online Codex account limits and daily token history using the installed Codex sign-in? Readings stay on this PC. Choosing No clears Observatory's retained account readings without signing Codex out.",
-            "Optional account usage", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
-        string? quotaDistro = null;
-        if (quota)
-        {
-            var accountSource = MessageBox.Show("Use Ubuntu's existing Codex client and signed-in account for usage limits? This may start Ubuntu WSL during refreshes, independently of log collection. Yes selects Ubuntu. No selects the native Windows Codex client. Cancel leaves settings unchanged. No client is installed and no credentials are copied.",
-                "Account usage source", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button3);
-            if (accountSource == DialogResult.Cancel) return;
-            quotaDistro = accountSource == DialogResult.Yes ? "Ubuntu" : null;
-        }
-        if (collector.Busy) { MessageBox.Show("Collection started while settings were open. Try again after it finishes. Settings have not changed.", "Source settings"); return; }
-        collector.Configure(wsl ? "Ubuntu" : null, wispr, quota, quotaDistro);
-        collector.Start();
+        if (dashboard is NativeDashboard existing) { existing.ShowSourceSettings(); return; }
+        using var settings = new NativeDashboard(Data, collector.Refresh,
+            new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }));
+        settings.ShowSourceSettings();
+        settings.ShowDialog();
     }
 
     private void RefreshStatus()
@@ -282,7 +267,8 @@ internal sealed class ObservatoryContext : ApplicationContext
         catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
-            dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh) : new Dashboard(runtime);
+            dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
+                new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); })) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         dashboard.Show();
