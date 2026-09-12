@@ -119,3 +119,17 @@ export const setQuotaSharing=(runtime,{revision,enabled,pairingId},now=Date.now(
   if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
   save(db,next);return next;
 });
+
+// Pairing retirement is unconditional and atomic with respect to collectors.
+// Do not initialize quota storage for users who never enabled monitoring.
+export async function revokeQuotaSharing(runtime,now=Date.now()) {
+  try {await lstat(path.join(runtime,'private-quota'));}
+  catch(error) {if(error.code==='ENOENT')return;throw error;}
+  return withDatabase(runtime,db=>{
+    if(!timestamp(now))throw Error('Invalid observation time');
+    const previous=read(db,now);
+    const next={...previous,revision:previous.revision+1,sharing:sharingOff()};
+    if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
+    save(db,next);
+  });
+}

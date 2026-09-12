@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
+import {revokeQuotaSharing} from './quota-store.mjs';
 
 const marker='revoked';
 
@@ -42,6 +43,9 @@ async function revokePairingLocked(runtime) {
     const parent=await open(directory,constants.O_RDONLY);
     try {await parent.sync();}finally{await parent.close();}
   }
+  // Write the pairing fence first. If quota storage needs repair, transfers
+  // remain disabled and the caller reports incomplete cleanup, not success.
+  await revokeQuotaSharing(runtime);
   return {status:'revoked'};
 }
 

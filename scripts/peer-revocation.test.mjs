@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readFile,writeFile,symlink} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,writeFile,symlink,lstat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -11,6 +11,7 @@ import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,readPeerState,acceptPeerState,createPeerRecord} from './peer-store.mjs';
 import {exchangePeerRecord} from './peer-exchange.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
+import {readQuotaState,updateQuotaState,setQuotaSharing} from './quota-store.mjs';
 
 async function fixture(t) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-revocation-')));
@@ -49,11 +50,35 @@ test('revocation is durable, idempotent, and preserves existing private state',a
 test('revocation works before setup and with malformed pairing, without implicit repair',async t=>{
   const runtime=await fixture(t);
   await revokePairing(runtime);
+  await assert.rejects(lstat(path.join(runtime,'private-quota')),{code:'ENOENT'});
   await assert.rejects(initializePairing(runtime,createPairingConfigurations().Mac));
   await writeFile(path.join(runtime,'private-sync/pairing.json'),'{broken',{mode:0o600});
   await revokePairing(runtime);
   await assert.rejects(readPairing(runtime));
   assert.equal(await readFile(path.join(runtime,'private-sync/pairing.json'),'utf8'),'{broken');
+});
+
+test('disconnect revokes quota consent, preserves local readings and fences late collection',async t=>{
+  const runtime=await fixture(t),now=Date.now(),scope='a'.repeat(64);
+  await initializePairing(runtime,createPairingConfigurations().Mac);
+  const initial=await readQuotaState(runtime,now);
+  const observation={status:'ok',checkedAt:new Date(now).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:75}]};
+  const collected=await updateQuotaState(runtime,{revision:initial.revision,scope,observation},now);
+  const shared=await setQuotaSharing(runtime,{revision:collected.revision,enabled:true,pairingId:'c'.repeat(64)},now);
+  await revokePairing(runtime);
+  const after=await readQuotaState(runtime,now);
+  assert.equal(after.sharing.enabled,false);assert.equal(after.sharing.generation,null);
+  assert.deepEqual(after.history.samples,shared.history.samples);
+  await assert.rejects(updateQuotaState(runtime,{revision:shared.revision,scope,observation},now),/superseded/);
+});
+
+test('quota cleanup failure leaves the pairing fence in place',async t=>{
+  const runtime=await fixture(t);
+  await initializePairing(runtime,createPairingConfigurations().Mac);
+  await readQuotaState(runtime);
+  await writeFile(path.join(runtime,'private-quota/state.sqlite'),'invalid database');
+  await assert.rejects(revokePairing(runtime));
+  await assert.rejects(readPairing(runtime),/revoked/);
 });
 
 test('even an empty interrupted marker disables pairing',async t=>{

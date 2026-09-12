@@ -10,7 +10,9 @@ The contract carries the source device, a random sharing generation, original ob
 
 The private quota store now supports account-bound and pairing-bound consent. It defaults off for existing stores. Each explicit enable creates a random generation. Account changes, failed authentication and disabling monitoring revoke consent. A late collector result cannot undo a concurrent settings change. Disabling sharing preserves local readings.
 
-Before transport integration, both devices still need explicit sharing controls and an authenticated agreement on the owner's current generation. Pairing revocation must call the sharing-disable operation. Receiving code must check freshness and retain device provenance. A matching allowance percentage is not proof that two devices use the same account, so cross-device account totals must not be summed.
+Pairing disconnection now revokes local sharing consent and invalidates in-flight quota collection without deleting local readings. It writes the pairing fence before attempting quota cleanup. A cleanup failure is reported while pairing remains disabled. Users who never enabled quota monitoring do not get a quota database just by disconnecting.
+
+Before transport integration, both devices still need explicit sharing controls and an authenticated agreement on the owner's current generation. Receiving code must check freshness and retain device provenance. A matching allowance percentage is not proof that two devices use the same account, so cross-device account totals must not be summed.
 
 ## Reference implementation
 
