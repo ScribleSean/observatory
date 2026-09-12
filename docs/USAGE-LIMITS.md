@@ -2,6 +2,14 @@
 
 Status: development implementation, not a finished public release. The installed legacy Mac collector saved its first real retained allowance observation on September 12, 2026. The update preserved configuration and retained a backup of the previous scripts. The database was verified as owner-readable and owner-writable only. The installed Windows app includes optional account-source controls, but account-limit collection remains disabled in its current configuration. Cross-device allowance history, the finished graph and final release checks remain open.
 
+## Allowance sharing under development
+
+`scripts/quota-peer.mjs` defines a tested, opt-in payload contract. It is not connected to the peer transport or enabled in installed apps. Existing pairings do not share allowance history.
+
+The contract carries the source device, a random sharing generation, original observation times, supported Codex allowance windows and dated token totals. It omits credentials, account identifiers and local account-scope hashes. It rejects unexpected inbound fields and conflicting observations. Duplicate totals are never added together. Retired Spark windows are excluded.
+
+Before transport integration, both devices need explicit sharing controls and an authenticated agreement on the owner's current generation. Account changes, disabling sharing and revocation must invalidate that generation. Receiving code must check freshness and retain device provenance. A matching allowance percentage is not proof that two devices use the same account, so cross-device account totals must not be summed.
+
 ## Reference implementation
 
 Reviewed [Codenotch](https://github.com/vinzdg/codenotch/tree/0a6c6fb62b7fda52e4f8bd1ce7e8c7e7b8595b75), including `UsageStore.swift`, `UsageArchive.swift`, `CodexLocalProvider.swift` and `CodexUsage.swift`, on September 9, 2026. Its root license is MIT. This work uses its behavior as a reference, not copied source or artwork.
