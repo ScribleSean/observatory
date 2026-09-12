@@ -14,6 +14,7 @@ import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
+import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -79,6 +80,12 @@ export async function collectMac(runtime,python,peerConfig=null) {
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
+  // Preserve explicitly configured workflows during a future legacy migration.
+  // These owner-local results are attached after peer merge, never exported.
+  let workflows;
+  try {workflows=await collectLegacyWorkflows(runtime);}
+  catch {workflows={agents:[],agentSource:{status:'unavailable'},localModel:{host:'Ubuntu',status:'unavailable'}};}
+  attachWorkflows(result,workflows);
   const {data,status}=result;
   await atomic('usage.json',data);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

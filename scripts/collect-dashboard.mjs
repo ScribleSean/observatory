@@ -17,6 +17,7 @@ import { cleanDictation } from './typewhisper.mjs';
 import { cleanWispr } from './wispr.mjs';
 import { selectActivityPairs } from './activity-buckets.mjs';
 import { readAgentReceipts } from './agent-receipts.mjs';
+import {cleanLocalModel} from './legacy-workflows.mjs';
 export { cleanReceipts } from './agent-receipts.mjs';
 import {previousActivityHistory,retainActivityHistory} from './activity-history.mjs';
 import {cachedSettingsScript} from './cached-settings.mjs';
@@ -230,12 +231,7 @@ export async function collect() {
     guarded('Codex', () => collectLegacyQuota(root)),
     config.localModelResults ? guarded('Ubuntu', async () => {
       const raw=await pythonReport(config.ubuntuHost, await readFile(path.join(root,'scripts/read-local-model.py'),'utf8'),config.localModelResults);
-      if (!Array.isArray(raw.records)) throw Error('Invalid local receipts');
-      return {host:'Ubuntu',status:'ok',records:raw.records.map(r=>({
-        model:typeof r.model==='string' && /^[a-zA-Z0-9._:/-]{1,100}$/.test(r.model)?r.model:'unknown',
-        status:r.status==='complete'?'complete':'incomplete', recordedAt:Number.isFinite(Date.parse(r.recordedAt))?new Date(r.recordedAt).toISOString():null,
-        ...Object.fromEntries(['seconds','input','cached','output','ttft','peakGpuMiB'].map(k=>[k,numeric(r[k])]))
-      }))};
+      return cleanLocalModel(raw);
     }) : Promise.resolve({host:'Ubuntu',status:'not-connected'}),
   ]);
   // Comparison keys change every collection and never enter the saved report.
