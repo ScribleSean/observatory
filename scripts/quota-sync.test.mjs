@@ -38,6 +38,8 @@ test('two device runtimes exchange through the SSH adapter with readiness before
   const result=await syncQuota(Mac,{request,clock:()=>now});
   assert.equal(result.status,'ok');assert.equal(result.peer.host,'Windows');
   assert.equal(result.peer.history[0].windows[0].remainingPercent,70);
+  assert.equal(result.peer.windows[0].remainingPercent,70);
+  assert.equal(Object.hasOwn(result.peer,'generation'),false);
   assert.equal(requests[0].action,'status');assert.equal(Object.hasOwn(requests[0],'record'),false);
   assert.equal(requests[1].action,'exchange');
   const windows=await syncQuota(Windows,{request:()=>{throw Error('Windows must be passive');},clock:()=>now});

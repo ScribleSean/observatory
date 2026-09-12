@@ -141,7 +141,18 @@ internal sealed partial class NativeDashboard : Form
     }
     private void Allowances(JsonObject? snapshot)
     {
-        var quota = snapshot?["quota"] as JsonObject;
+        Label("Observed on this device");
+        AccountAllowance(snapshot?["quota"] as JsonObject);
+        if (snapshot?["peerQuota"] is JsonObject peer && Snapshot.Text(peer["host"]) is "Mac" or "Windows")
+        {
+            Label("Shared from " + Snapshot.Text(peer["host"]));
+            Label("Received: " + Snapshot.Text(peer["receivedAt"]) + ". Separate account observation, never added to this device's totals.");
+            AccountAllowance(peer);
+        }
+        else Label("No shared account history. Enable allowance sharing on both paired devices to receive it.");
+    }
+    private void AccountAllowance(JsonObject? quota)
+    {
         Label("Account source: " + Snapshot.Text(quota?["status"]) + ". Last observation: " + Snapshot.Text(quota?["checkedAt"]));
         var windows = NativeHistory.Rows(quota?["windows"]).Where(row => !new[] { "spark", "codex_spark", "codex_bengalfox" }
             .Contains(Snapshot.Text(row["bucket"]), StringComparer.OrdinalIgnoreCase)).ToArray();

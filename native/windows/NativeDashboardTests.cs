@@ -125,6 +125,18 @@ internal static class NativeDashboardTests
                 Capture(form, output, "native-unknown-time");
                 Check(quotaGraph.AccessibleDescription?.Contains("observation time is unknown") == true, "Invalid quota time explained");
                 Check(tokenGraph.AccessibleDescription?.Contains("unknown, not zero") == true, "Empty summary replaces previous values");
+                var localQuota = data["quota"]!.DeepClone();
+                data["quota"] = null;
+                data["peerQuota"] = JsonNode.Parse("""{"host":"Mac","provider":"Codex","status":"stale","checkedAt":"2026-09-12T12:00:00.000Z","receivedAt":"2026-09-12T12:05:00.000Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70}],"history":[{"checkedAt":"2026-09-12T12:00:00.000Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70}]}],"dailyUsageBuckets":[{"startDate":"2026-09-12","tokens":100}]}""");
+                form.Reload();
+                Check(Texts(form).Contains("Shared from Mac"), "Shared allowance owner label");
+                Check(Texts(form).Any(value => value.Contains("never added to this device's totals")), "Peer totals are separate");
+                Check(Children(form).OfType<QuotaGraph>().Count() == 1, "Peer graph survives missing local quota");
+                Check(Texts(form).Any(value => value.Contains("Account source: stale")), "Peer stale status visible");
+                Capture(form, output, "native-shared-allowances");
+                data["peerQuota"] = null; form.Reload();
+                Check(Children(form).OfType<QuotaGraph>().Count() == 0, "Revoked peer graph removed");
+                data["quota"] = localQuota;
                 sections.SelectedItem = "Dictation";
                 string Cell(string table, int row, int column) => Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == table).Rows[row].Cells[column].Value?.ToString() ?? "";
                 Check(Cell("Dictation totals", 0, 1) == "4", "Dictation week excludes older records");

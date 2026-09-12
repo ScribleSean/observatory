@@ -14,7 +14,7 @@ export function projectPeerQuota(state,pair,now=Date.now()) {
   const fresh=Number.isFinite(Date.parse(payload.checkedAt)) && now-Date.parse(payload.checkedAt)>=0 &&
     now-Date.parse(payload.checkedAt)<=600000 && now-remote.receivedAt>=0 && now-remote.receivedAt<=600000;
   return {host:remote.host,provider:payload.provider,status:fresh?payload.status:'stale',checkedAt:payload.checkedAt,
-    receivedAt:new Date(remote.receivedAt).toISOString(),history:payload.history,
+    receivedAt:new Date(remote.receivedAt).toISOString(),history:payload.history,windows:payload.history.at(-1)?.windows??[],
     accountUsageCheckedAt:payload.dailyCheckedAt,dailyUsageBuckets:payload.dailyUsageBuckets};
 }
 

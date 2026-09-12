@@ -42,11 +42,22 @@ struct NativeDashboard: View {
                     if selection.section == "settings" {
                         NativeSettings(store: store, actions: settingsActions)
                     } else if selection.section == "allowances" {
+                        Text("Observed on this Mac").font(.headline)
                         if let quota = store.snapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
                             GroupBox { QuotaPanel(quota: quota).padding(12) }
                         } else {
                             ContentUnavailableView("No account connected", systemImage: "gauge.with.dots.needle.50percent",
                                 description: Text("Enable an available account source in local source settings. Saved token records are separate from account limits."))
+                        }
+                        if let peer = store.snapshot?.object["peerQuota"] as? JSONObject,
+                           ["Mac", "Windows"].contains(text(peer["host"])) {
+                            Text("Shared from \(text(peer["host"]))").font(.headline)
+                            Text("Received: \(text(peer["receivedAt"])). Separate account observation, never added to this Mac's totals.")
+                                .font(.callout).foregroundStyle(.secondary)
+                            GroupBox { QuotaPanel(quota: peer).padding(12) }
+                        } else {
+                            Text("No shared account history. Enable allowance sharing on both paired devices to receive it.")
+                                .font(.callout).foregroundStyle(.secondary)
                         }
                     } else if selection.section == "sources" {
                         sourceList
