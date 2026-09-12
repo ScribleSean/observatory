@@ -9,7 +9,7 @@ internal static class Program
     {
         if (args.Contains("--self-test"))
         {
-            try { Snapshot.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); }
+            try { Snapshot.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest(); }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
             return;
         }
@@ -30,6 +30,14 @@ internal static class Program
             return;
         }
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && args[0] == "--test-setup-wizard")
+        {
+            if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
+                File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint)) { Environment.ExitCode = 1; return; }
+            try { SetupWizardTests.Run(args[1]); }
+            catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 2 && args[0] == "--test-usage-popup")
         {
             if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
@@ -69,6 +77,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly Collector collector;
     private readonly System.Windows.Forms.Timer activationTimer = new() { Interval = 200 };
     private Dashboard? dashboard;
+    private SetupWizard? setupWizard;
     private UsagePopup? usagePopup;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
 
@@ -76,6 +85,9 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
+        var setupPending = true;
+        try { setupPending = FirstRunSetup.Prepare(runtime); }
+        catch { MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup"); }
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
@@ -116,10 +128,10 @@ internal sealed class ObservatoryContext : ApplicationContext
         timer.Start();
         RefreshStatus();
         collector.Changed += RefreshStatus;
-        if (collector.Configured) collector.Start();
+        if (collector.Configured && !setupPending) collector.Start();
         activationTimer.Tick += (_, _) => { if (activation.WaitOne(0)) Open(); };
         activationTimer.Start();
-        if (show) Open();
+        if (show || setupPending) Open();
     }
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
@@ -195,6 +207,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void Configure()
     {
+        if (!FirstRunSetup.AllowsCollection(runtime)) { Open(); return; }
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
         var answer = MessageBox.Show("Enable local ActivityWatch and saved Codex usage collection? Only approved usage metadata enters the dashboard, not prompts or window titles.",
             "Workspace Observatory", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
@@ -243,6 +256,20 @@ internal sealed class ObservatoryContext : ApplicationContext
     private void Open()
     {
         usagePopup?.Close();
+        if (setupWizard is not null && !setupWizard.IsDisposed) { setupWizard.Activate(); return; }
+        try
+        {
+            if (FirstRunSetup.Required(runtime))
+            {
+                using var setup = new SetupWizard(runtime, collector);
+                setupWizard = setup;
+                DialogResult result;
+                try { result = setup.ShowDialog(); } finally { setupWizard = null; }
+                if (result != DialogResult.OK) return;
+                collector.Start();
+            }
+        }
+        catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
             dashboard = new Dashboard(runtime);

@@ -44,14 +44,15 @@ internal sealed class Collector : IDisposable
         finally { busy = false; }
     }
 
-    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null)
+    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true)
     {
         if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution");
         if (quotaDistro is not null && !Regex.IsMatch(quotaDistro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid quota distribution");
         var file = Path.Combine(runtime, "collector.config.json");
-        var settings = new JsonObject { ["activity"] = true, ["codex"] = true, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["quotaWslDistribution"] = quotaDistro };
-        File.WriteAllText(file + ".tmp", settings.ToJsonString());
-        File.Move(file + ".tmp", file, true);
+        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["quotaWslDistribution"] = quotaDistro };
+        var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     internal string? Distribution => Snapshot.Read(Path.Combine(runtime, "collector.config.json"))?["wslDistribution"]?.GetValue<string>();
@@ -59,6 +60,7 @@ internal sealed class Collector : IDisposable
     internal async Task Refresh()
     {
         if (busy || pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
+        if (!FirstRunSetup.AllowsCollection(runtime)) return;
         busy = true;
         try
         {
