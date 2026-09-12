@@ -170,8 +170,8 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("Tool records unavailable."), "Unavailable tool host");
                 sections.SelectedItem = "Settings";
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Settings loaded existing disabled source");
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "typewhisper").Checked, "Existing settings default TypeWhisper off");
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "typewhisper").Checked = true;
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Existing settings default Wispr off");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
                 await Select(form, "Settings page", "This device");
@@ -180,7 +180,7 @@ internal static class NativeDashboardTests
                 Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Draft survives navigation and reload");
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
-                Check(settingsCollector.ReadConfiguration()["typewhisper"]!.GetValue<bool>(), "TypeWhisper opt-in saved");
+                Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
                 Capture(form, output, "native-settings");
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "quota").Checked = false;

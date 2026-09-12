@@ -18,8 +18,7 @@ struct SetupWizard: View {
                 Text("This release uses direct encrypted device pairing. There is no Observatory account or hosted sync service.")
             } else if step == 1 {
                 ForEach([("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
-                         ("quota", "Codex account limits online"), ("wispr", "Wispr Flow statistics"),
-                         ("typewhisper", "TypeWhisper statistics")], id: \.0) { key, title in
+                         ("quota", "Codex account limits online"), ("wispr", "Wispr Flow statistics")], id: \.0) { key, title in
                     Toggle(title, isOn: Binding(get: { sources[key] == true }, set: { sources[key] = $0 }))
                 }
                 Text("ActivityWatch must already be running. Account monitoring uses the installed Codex sign-in and reads online limits without making model requests. Other sources need their applications and local records. Enabling a source does not prove it is available.")

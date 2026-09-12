@@ -252,6 +252,7 @@ func runSelfTests() {
         try CollectorConfiguration.save(["activity": false, "codex": false, "wispr": true, "typewhisper": false], runtime: directory)
         let updated = try CollectorConfiguration.read(runtime: directory)
         precondition(updated["wispr"] == true)
+        precondition(updated["typewhisper"] == nil)
         let config = directory.appendingPathComponent("collector.config.json")
         try Data("{\"codex\":1}".utf8).write(to: config)
         precondition((try? CollectorConfiguration.prepare(runtime: directory)) == nil)

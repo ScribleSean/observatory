@@ -37,7 +37,7 @@ internal sealed partial class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Activity", "Tokens", "Allowances", "Dictation", "Agents", "Sources", "Settings"]);
+        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings"]);
         Controls.Add(body); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;

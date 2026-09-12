@@ -23,7 +23,7 @@ struct NativeSettings: View {
     @State private var confirmSharing = false
     private var busy: Bool { store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing || sharingBusy }
     private let sources = [("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
-                           ("wispr", "Wispr Flow statistics"), ("typewhisper", "TypeWhisper statistics")]
+                           ("wispr", "Wispr Flow statistics")]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {

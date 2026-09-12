@@ -57,12 +57,12 @@ internal sealed class Collector : IDisposable
         finally { busy = false; }
     }
 
-    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool typewhisper = false)
+    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true)
     {
         if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution");
         if (quotaDistro is not null && !Regex.IsMatch(quotaDistro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid quota distribution");
         var file = Path.Combine(runtime, "collector.config.json");
-        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["wispr"] = wispr, ["typewhisper"] = typewhisper, ["wslDistribution"] = distro, ["quota"] = quota, ["quotaWslDistribution"] = quotaDistro };
+        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["quotaWslDistribution"] = quotaDistro };
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -81,7 +81,7 @@ internal sealed class Collector : IDisposable
         if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Linked configuration is not editable here.");
         var current = ReadConfiguration();
         if (!JsonNode.DeepEquals(current, expected)) throw new InvalidOperationException("Settings changed elsewhere. Reload before saving.");
-        foreach (var key in new[] { "activity", "codex", "wispr", "typewhisper", "quota" })
+        foreach (var key in new[] { "activity", "codex", "wispr", "quota" })
         {
             if (desired[key] is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
             current[key] = enabled;

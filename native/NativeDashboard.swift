@@ -19,9 +19,10 @@ struct NativeDashboard: View {
     @State private var archivedSnapshot: Snapshot?
     @State private var archiveError = false
     private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
-    private let sections = [("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
-                            ("allowances", "Allowances", "gauge.with.dots.needle.50percent"), ("agents", "Agents", "point.3.connected.trianglepath.dotted"),
-                            ("dictation", "Dictation", "mic"), ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
+    private let sections = [("allowances", "Allowances", "gauge.with.dots.needle.50percent"),
+                            ("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
+                            ("dictation", "Dictation", "mic"), ("agents", "Agents", "point.3.connected.trianglepath.dotted"),
+                            ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
 
     var body: some View {
         NavigationSplitView {

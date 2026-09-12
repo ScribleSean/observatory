@@ -126,8 +126,8 @@ const icons: Record<string, typeof Activity> = {
 const views = [
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'tokens', label: 'Tokens', icon: Layers3 },
-  { id: 'agents', label: 'Agents', icon: Workflow },
   { id: 'dictation', label: 'Dictation', icon: Mic },
+  { id: 'agents', label: 'Agents', icon: Workflow },
   { id: 'sources', label: 'Sources', icon: Database },
 ];
 function State({ children }: { children: React.ReactNode }) {

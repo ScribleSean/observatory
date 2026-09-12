@@ -270,8 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let sources = [("activity", "ActivityWatch screen time (must be running)"),
                            ("codex", "Saved Codex usage and settings"),
                            ("quota", "Codex account limits and token history (online)"),
-                           ("wispr", "Wispr Flow statistics"),
-                           ("typewhisper", "TypeWhisper statistics")]
+                           ("wispr", "Wispr Flow statistics")]
             let buttons = sources.map { key, title in
                 let button = NSButton(checkboxWithTitle: title, target: nil, action: nil)
                 button.state = config[key] == true ? .on : .off
