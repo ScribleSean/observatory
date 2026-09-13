@@ -51,6 +51,31 @@ export function inspectPayloadRecovery({installed,staged,recovery,verify}) {
   return {state,payloads};
 }
 
+// Caller must hold the installer and collector locks and keep the app stopped.
+// Restore only the unambiguous gap before candidate promotion. No files are deleted.
+export function restoreInterruptedPayload(options) {
+  const {installed,recovery,verify}=options;
+  if(inspectPayloadRecovery(options).state!=='previous-awaiting-restore')
+    throw Error('Interrupted payload requires manual inspection');
+  const previous=path.join(recovery,'previous');
+  const expected=verify(previous,'previous');
+  // Refuse even an empty obstruction. The caller must exclude concurrent writers.
+  let absent=false;
+  try { lstatSync(installed); } catch(error) { if(error.code==='ENOENT')absent=true; else throw error; }
+  if(!absent)throw Error('Installed path appeared during recovery');
+  renameSync(previous,installed);
+  try {
+    const restored=verify(installed,'previous');
+    if(restored.sourceRevision!==expected.sourceRevision || restored.buildNumber!==expected.buildNumber)
+      throw Error('Restored payload identity changed');
+    return {state:'previous-restored',installed,recovery,sourceRevision:restored.sourceRevision};
+  } catch(error) {
+    // Leave the relocated bytes in place for inspection, never delete or retry them.
+    throw Object.assign(new Error('Restored payload verification failed. Manual inspection required.',{cause:error}),
+      {installed,recovery});
+  }
+}
+
 // The updater must run outside the directory being replaced. Before calling,
 // hold the installer and collector locks, stop the app, authenticate the staged
 // release and capture registration. This primitive changes only payload paths.

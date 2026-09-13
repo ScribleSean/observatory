@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,existsSync,symlinkSync,realpathSync,renameSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {replacePayload,inspectPayloadRecovery} from '../native/windows/replace-payload.mjs';
+import {replacePayload,inspectPayloadRecovery,restoreInterruptedPayload} from '../native/windows/replace-payload.mjs';
 import {spawnSync} from 'node:child_process';
 
 function fixture(t) {
@@ -139,4 +139,53 @@ test('recovery rejects linked paths and ambiguous verification',t=>{
   symlinkSync(f.staged,path.join(recovery,'previous'),process.platform==='win32'?'junction':'dir');
   assert.throws(()=>inspectPayloadRecovery({...f,recovery}));
   assert.throws(()=>inspectPayloadRecovery({...f,recovery:f.root}));
+});
+
+function interrupted(t) {
+  const f=setup(t),recovery=path.join(f.root,'.observatory-update-gap');mkdirSync(recovery);
+  renameSync(f.installed,path.join(recovery,'previous'));
+  return {...f,recovery};
+}
+test('recovery restores the previous app into a missing path and retains the candidate',t=>{
+  const f=interrupted(t),result=restoreInterruptedPayload(f);
+  assert.equal(result.state,'previous-restored');
+  assert.equal(readFileSync(path.join(f.installed,'payload'),'utf8'),'old');
+  assert.equal(readFileSync(path.join(f.staged,'payload'),'utf8'),'new');
+  assert.equal(readFileSync(path.join(f.root,'private-data','history'),'utf8'),'private fixture unchanged');
+  assert.equal(inspectPayloadRecovery(f).state,'previous-active');
+  assert.throws(()=>restoreInterruptedPayload(f),/manual inspection/);
+});
+test('recovery refuses an occupied installed path or a corrupt retained copy',t=>{
+  const f=interrupted(t);
+  mkdirSync(f.installed);
+  assert.throws(()=>restoreInterruptedPayload(f),/manual inspection/);
+  assert.deepEqual(readdirSync(f.installed),[]);
+  rmSync(f.installed,{recursive:true});
+  writeFileSync(path.join(f.recovery,'previous','payload'),'corrupt');
+  assert.throws(()=>restoreInterruptedPayload(f),/manual inspection/);
+  assert.equal(existsSync(f.installed),false);
+  assert.equal(readFileSync(path.join(f.recovery,'previous','payload'),'utf8'),'corrupt');
+});
+test('failed post-restore verification keeps both copies available for inspection',t=>{
+  const f=interrupted(t),base=f.verify;
+  f.verify=(folder,kind)=>{
+    if(folder===f.installed)throw Error('Injected post-restore failure');
+    return base(folder,kind);
+  };
+  assert.throws(()=>restoreInterruptedPayload(f),/verification failed/);
+  assert.equal(readFileSync(path.join(f.installed,'payload'),'utf8'),'old');
+  assert.equal(readFileSync(path.join(f.staged,'payload'),'utf8'),'new');
+});
+
+test('recovery refuses a destination appearing during preflight',t=>{
+  const f=interrupted(t),base=f.verify;
+  let previousChecks=0;
+  f.verify=(folder,kind)=>{
+    const identity=base(folder,kind);
+    if(kind==='previous' && ++previousChecks===2)mkdirSync(f.installed);
+    return identity;
+  };
+  assert.throws(()=>restoreInterruptedPayload(f),/appeared during recovery/);
+  assert.deepEqual(readdirSync(f.installed),[]);
+  assert.equal(readFileSync(path.join(f.recovery,'previous','payload'),'utf8'),'old');
 });
