@@ -26,8 +26,9 @@ export function validatePairing(value) {
     local.comparisonId!==peer.comparisonId)throw Error('Mismatched private pairing');
   const result={version:1,local:{...safe.config,comparisonSalt:local.comparisonSalt},peer:remote.config};
   if(Object.hasOwn(value,'transport')) {
-    if(local.host!=='Mac' || peer.host!=='Windows')throw Error('Unsupported transport direction');
     result.transport=validatePeerTransport(value.transport);
+    if(result.transport.kind==='ssh-windows' && (local.host!=='Mac' || peer.host!=='Windows'))
+      throw Error('Unsupported transport direction');
   }
   if(Object.hasOwn(value,'repair')) {
     if(!exact(value.repair,['mac','windows']) || !validRepairNonce(value.repair.mac) ||

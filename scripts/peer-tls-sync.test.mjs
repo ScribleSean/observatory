@@ -14,6 +14,8 @@ import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,createPeerRecord,readPeerState} from './peer-store.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {startTrustedSyncListener} from './peer-tls-sync.mjs';
+import {tlsPeerExchange} from './peer-tls-outbound.mjs';
+import {finalizePeerCollection} from './peer-finalize.mjs';
 
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 const fingerprint=pem=>new X509Certificate(pem).fingerprint256.replaceAll(':','').toLowerCase();
@@ -66,4 +68,50 @@ test('trusted TLS exchange uses the existing record store and revocation fence',
       await assert.rejects(send({version:1,record:incoming},guest,()=>revokePairing(root)));
       await assert.rejects(send({version:1,record:incoming}));
     } finally {await listener.close();}
+    await t.test('collector outbound TLS sends only its saved local record and merges the validated response',async()=>{
+      const runtime=await mkdtemp(path.join(root,'outbound-')),connections=new Set();
+      let responseRecord,captured,early=false;
+      const remote=tls.createServer({key:guest.key,cert:guest.cert,ca:localIdentity.cert,
+        requestCert:true,rejectUnauthorized:true,minVersion:'TLSv1.3',ALPNProtocols:['observatory-sync/1'],allowHalfOpen:true},socket=>{
+        if(early){socket.on('error',()=>{});socket.end(JSON.stringify({version:1,record:responseRecord}));return;}
+        const chunks=[];socket.on('error',()=>{});socket.on('data',chunk=>chunks.push(chunk));
+        socket.once('end',()=>{
+          captured=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          socket.end(JSON.stringify({version:1,record:responseRecord}));
+        });
+      });
+      remote.on('tlsClientError',()=>{});
+      remote.on('connection',socket=>{connections.add(socket);socket.once('close',()=>connections.delete(socket));});
+      await new Promise(resolve=>remote.listen(0,'127.0.0.1',resolve));
+      try {
+        const pairing={...createPairingConfigurations()[pair.local.host],
+          transport:{kind:'tls',address:'10.0.0.2',port:remote.address().port}};
+        await initializeDeviceIdentity(runtime,localIdentity);await initializePairing(runtime,pairing);
+        await saveConfirmedPeerTrust(runtime,{pairId:pairing.local.pairId,localCertificateSha256:fingerprint(localIdentity.cert),
+          peerCertificate:guest.cert,peerCertificateSha256:fingerprint(guest.cert)});
+        responseRecord=createPeerRecord(payload(pairing.peer),pairing.peer,1);
+        const exchangeTLS=(location,transport,record)=>tlsPeerExchange(location,transport,record,
+          {connect:options=>tls.connect({...options,host:'127.0.0.1'})});
+        const result=await finalizePeerCollection(runtime,{data:[],peer:{status:'ready',payload:payload(pairing.local)}},
+          pairing,[],Date.now(),{exchangeTLS});
+        assert.equal(result.peer.status,'merged');assert.equal(result.peer.transport,'ok');
+        assert.deepEqual(captured,{version:1,record:await readPeerState(runtime,pairing.local,Date.now(),'local')});
+        assert.deepEqual(await readPeerState(runtime,pairing.peer),responseRecord);
+        assert.equal(JSON.stringify(captured).includes(pairing.local.comparisonSalt),false);
+        let dialed=false;
+        await assert.rejects(tlsPeerExchange(runtime,pairing.transport,{not:'saved'},
+          {connect:()=>{dialed=true;throw Error('unexpected');}}));
+        assert.equal(dialed,false);
+        early=true;
+        await assert.rejects(exchangeTLS(runtime,pairing.transport,await readPeerState(runtime,pairing.local,Date.now(),'local')));
+        early=false;
+        const fallback=await finalizePeerCollection(runtime,{data:[{localFixture:true}],peer:{status:'ready',payload:payload(pairing.local)}},
+          pairing,[],Date.now(),{exchangeTLS:async()=>{throw Error('offline');}});
+        assert.equal(fallback.peer.transport,'unavailable');
+        assert.equal(fallback.peer.status,'merged');
+      } finally {
+        for(const socket of connections)socket.destroy();
+        await new Promise(resolve=>remote.close(resolve));
+      }
+    });
   });

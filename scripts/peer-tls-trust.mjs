@@ -14,7 +14,7 @@ const fields=['version','pairId','localDeviceId','peerDeviceId','localCertificat
 
 async function context(runtime) {
   const pairing=await readPairing(runtime),identity=await readDeviceIdentity(runtime);
-  if(!pairing || !identity || pairing.transport ||
+  if(!pairing || !identity || (pairing.transport && pairing.transport.kind!=='tls') ||
     pairing.local.host!==(process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null))throw fail();
   return {pairing,localFingerprint:hash(new X509Certificate(identity.cert))};
 }

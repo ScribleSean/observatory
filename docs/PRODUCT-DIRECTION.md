@@ -33,8 +33,10 @@ storage are also present in source. See [local pairing](LOCAL-PAIRING.md) for
 the verified boundaries and remaining security work. These modules are not
 enabled in the installed applications.
 
-The collector still uses `sshPeerExchange` through `finalizePeerCollection`.
-A successful TLS claim therefore does not mean data sync is working. Before
+The collector now supports explicit TLS transport through `finalizePeerCollection`
+while preserving the existing SSH path. The native application still does not
+start a trusted TLS listener or establish the new setup flow. A successful
+TLS claim therefore does not mean data sync is working. Before
 the native wizard can replace the existing SSH setup, connect these steps:
 
 1. Explicit identity setup with the chosen key-protection policy and recovery

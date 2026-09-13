@@ -1,5 +1,6 @@
 import {execFile} from 'node:child_process';
 import path from 'node:path';
+import {isPairingAddress} from './peer-invitation.mjs';
 
 const fields=['kind','hostAlias','remoteNode','remoteScript','remoteRuntime'];
 function windowsPath(value) {
@@ -8,6 +9,11 @@ function windowsPath(value) {
     !value.slice(2).includes(':');
 }
 export function validatePeerTransport(value) {
+  if(value?.kind==='tls') {
+    if(Object.keys(value).length!==3 || !isPairingAddress(value.address) ||
+      !Number.isInteger(value.port) || value.port<1024 || value.port>65535)throw Error('Invalid private TLS transport');
+    return {kind:'tls',address:value.address,port:value.port};
+  }
   if(!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).length!==fields.length ||
     Object.keys(value).some(key=>!fields.includes(key)) || value.kind!=='ssh-windows' ||
     typeof value.hostAlias!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value.hostAlias) ||
@@ -30,6 +36,7 @@ function runSSH(args,input) {
 // account and updates its dashboard on its next independent collection cycle.
 async function sshRequest(transport,request,endpoint,invoke,limit) {
   const safe=validatePeerTransport(transport);
+  if(safe.kind!=='ssh-windows')throw Error('Explicit SSH transport required');
   const script=endpoint==='setup'?path.win32.join(path.win32.dirname(safe.remoteScript),'peer-setup-endpoint.mjs'):
     endpoint==='quota'?path.win32.join(path.win32.dirname(safe.remoteScript),'quota-exchange.mjs'):safe.remoteScript;
   const quote=value=>"'"+value.replaceAll("'","''")+"'";

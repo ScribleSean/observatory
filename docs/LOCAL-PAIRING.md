@@ -131,15 +131,30 @@ deadline bound each listener. Errors return no private state.
 
 The record listener is not started by the app yet. It exposes only the existing
 record exchange shape, not commands, files or the separate allowance-sharing
-endpoint. The collector's outbound path remains SSH. Native lifecycle,
-outbound TLS transport and both-device setup acknowledgement still need
+endpoint. Native lifecycle and both-device setup acknowledgement still need
 integration. Synthetic loopback tests verify saved-record exchange, rejection
 of wrong certificates and record identities, duplicate delivery and revocation.
+
+The outbound path in `peer-tls-outbound.mjs` is now selected by
+`finalizePeerCollection` for an explicit TLS transport on either platform.
+Saved pairing configuration permits a numeric private address and port, while
+existing SSH remains Mac-initiated and cannot accidentally consume a TLS
+configuration. The TLS client requires saved trust and an exact match to the
+published local record. It rechecks trust and the configured destination before
+writing, validates the certificate pin and application protocol, and bounds
+the response and connection lifetime. It does not hold a local peer lock over
+network waits. Responses still pass through `acceptPeerState` before merging.
+Network failure preserves valid local and previously accepted peer data.
+
+This is collector source integration, not installed cross-device sync. The
+native app does not yet start the trusted listener or establish mutually
+acknowledged TLS pairing configuration. Separate allowance-history exchange
+has not been connected to TLS.
 
 `scripts/peer-tls-trust.mjs` persists a confirmed peer certificate in
 `private-sync/tls-trust.json`. The record is bound to the saved pair ID, both
 device IDs and the local certificate fingerprint. It requires a saved pairing
-without a local SSH transport and refuses overwrites, mismatched fingerprints,
+with no transport or an explicit TLS transport and refuses overwrites, mismatched fingerprints,
 self-pairing, corrupt files, links and changed identities. The existing peer
 lock serializes creation and reads. Existing revocation blocks trust reads,
 and explicit repair retains the trust file with the retired generation.

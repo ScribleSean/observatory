@@ -5,6 +5,16 @@ import {createPairingConfigurations,validatePairing} from './peer-pairing.mjs';
 
 const transport=()=>({kind:'ssh-windows',hostAlias:'windows-codex',remoteNode:'C:/Apps/Observatory/node.exe',
   remoteScript:'C:/Apps/Observatory/peer-exchange.mjs',remoteRuntime:"C:/Users/Example's Account/Observatory"});
+test('explicit TLS addresses work for either host and cannot enter SSH execution',async()=>{
+  const value={kind:'tls',address:'100.64.0.2',port:43128};
+  for(const pair of Object.values(createPairingConfigurations()))
+    assert.deepEqual(validatePairing({...pair,transport:value}).transport,value);
+  for(const change of [{address:'example.com'},{address:'8.8.8.8'},{port:0},{port:65536},{extra:true}])
+    assert.throws(()=>validatePeerTransport({...value,...change}));
+  let invoked=false;
+  await assert.rejects(sshPeerExchange(value,{},async()=>{invoked=true;}));
+  assert.equal(invoked,false);
+});
 test('SSH uses verified keys, bounded fixed commands, and stdin for private records',async()=>{
   const record={privateFixture:'not-an-argument'};
   const result=await sshPeerExchange(transport(),record,async(args,input)=>{
