@@ -225,6 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     @objc private func toggleLogin() {
+        guard !store.shuttingDown else { return }
         guard previewRuntime == nil else { return }
         do {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
@@ -241,6 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         SMAppService.openSystemSettingsLoginItems()
     }
     @objc private func sourceSettings() {
+        guard !store.shuttingDown else { return }
         closeUsage()
         if usesNativeDashboard {
             openDashboard("settings")
@@ -286,6 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             alert.addButton(withTitle: "Save")
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() == .alertFirstButtonReturn {
+                guard !store.shuttingDown else { return }
                 guard !store.refreshing else {
                     let busy = NSAlert()
                     busy.messageText = "Collection started while settings were open"
@@ -306,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func refresh() { store.refresh() }
     @objc private func setupPairing() {
+        guard !store.shuttingDown else { return }
         guard previewRuntime == nil else { return }
         closeUsage()
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else {
@@ -352,6 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func disconnectPairing() {
+        guard !store.shuttingDown else { return }
         guard previewRuntime == nil else { return }
         closeUsage()
         let alert = NSAlert()
@@ -397,6 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func preparePairingRepair() {
+        guard !store.shuttingDown else { return }
         guard previewRuntime == nil else { return }
         closeUsage()
         let alert = NSAlert()
@@ -449,6 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func doubleSize() { webView?.pageZoom = 2 }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if store.shuttingDown { return false }
         let zoom = webView?.pageZoom
         switch item.action {
         case #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
@@ -647,6 +654,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let store else { return .terminateNow }
+        if store.shuttingDown { return .terminateLater }
+        store.drainForQuit { completed in
+            sender.reply(toApplicationShouldTerminate: completed)
+            if !completed {
+                let alert = NSAlert()
+                alert.messageText = "Observatory is still finishing work"
+                alert.informativeText = "The app stayed open to preserve active collection or pairing work. Try quitting again after it finishes."
+                alert.runModal()
+            }
+        }
+        return .terminateLater
+    }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return true }
         if popover.isShown { return true }
@@ -663,7 +684,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
-if CommandLine.arguments.contains("--self-test") {
+if CommandLine.arguments.contains("--test-shutdown") {
+    Task { @MainActor in
+        do { try await testShutdownDrain(); print("Mac shutdown drain, timeout resume and refresh exclusion passed"); exit(0) }
+        catch { print("Mac shutdown drain test failed"); exit(1) }
+    }
+    NSApplication.shared.run()
+} else if CommandLine.arguments.contains("--self-test") {
     runSelfTests()
 } else if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--test-pairing-details" {
     do {

@@ -21,7 +21,7 @@ struct NativeSettings: View {
     @State private var sharingMessage = "Check sharing status to review this Mac's consent."
     @State private var sharingBusy = false
     @State private var confirmSharing = false
-    private var busy: Bool { store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing || sharingBusy }
+    private var busy: Bool { store.shuttingDown || store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing || sharingBusy }
     private let sources = [("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
                            ("wispr", "Wispr Flow statistics")]
 

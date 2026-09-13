@@ -6,6 +6,7 @@ import Foundation
 final class ObservatoryStore: ObservableObject {
     @Published var snapshot: Snapshot?
     @Published var refreshing = false
+    @Published private(set) var shuttingDown = false
     @Published var lastAttempt = ""
     @Published var now = Date()
     let runtime: URL
@@ -67,6 +68,7 @@ final class ObservatoryStore: ObservableObject {
     }
 
     func refresh() {
+        guard !shuttingDown else { return }
         guard collectionAllowed else { lastAttempt = "preview-collection-disabled"; return }
         guard (try? FirstRunSetup.required(runtime: runtime)) == false else { lastAttempt = "setup-required"; return }
         guard process == nil, !pairingMaintenance, !collectionPausedForPairing else { return }
@@ -81,13 +83,20 @@ final class ObservatoryStore: ObservableObject {
         task.executableURL = launch.executable
         task.arguments = launch.arguments
         task.currentDirectoryURL = runtime
+        startCollection(task)
+    }
+
+    func startCollection(_ task: Process) {
+        guard !shuttingDown, process == nil else { return }
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
         task.terminationHandler = { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.process = nil
-                self?.refreshing = false
-                self?.reload()
+            RunLoop.main.perform(inModes: [.default, .modalPanel, .eventTracking]) {
+                MainActor.assumeIsolated {
+                    self?.process = nil
+                    self?.refreshing = false
+                    self?.reload()
+                }
             }
         }
         do {
@@ -95,6 +104,34 @@ final class ObservatoryStore: ObservableObject {
             process = task
             refreshing = true
         } catch { lastAttempt = "failed" }
+    }
+
+    func drainForQuit(timeout: TimeInterval = 260, completion: @escaping (Bool) -> Void) {
+        guard timeout > 0, timeout <= 300, !shuttingDown else { completion(false); return }
+        shuttingDown = true
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); completion(false); return }
+                if self.process == nil && !self.refreshing && !self.pairingMaintenance {
+                    timer.invalidate()
+                    completion(true)
+                } else if ProcessInfo.processInfo.systemUptime >= deadline {
+                    timer.invalidate()
+                    self.shuttingDown = false
+                    completion(false)
+                }
+            }
+        }
+        // AppKit delayed termination uses its modal run loop, not only the main queue.
+        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .modalPanel)
+    }
+
+    func drainForQuit(timeout: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            drainForQuit(timeout: timeout) { continuation.resume(returning: $0) }
+        }
     }
 
     func stop() {

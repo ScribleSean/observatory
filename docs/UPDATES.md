@@ -6,7 +6,7 @@ Automatic production updates are requested but not yet implemented. Source chang
 
 `native/Release.props` is the version source for the Mac bundle, Windows application and installer filename. `native/release-version.mjs` validates its numeric fields for JavaScript build tools. The Mac uses the shared display version and build number. Windows uses the same display version and a four-component file version. Advance the build number for each published release, even when its display version stays unchanged. Never reuse an existing release asset URL for different bytes.
 
-Version 0.3.1, build 7, from clean source `30f91ca` is installed on both development machines through verified recoverable updates. Matching release artifacts are prepared but unpublished. This manual update is not an automatic update mechanism. Focused tests cover shared values, invalid versions and existing installer/package checks. Broader release gates remain in the release checklist.
+Windows now runs 0.3.2, build 8, from clean source `2265c86` after a verified recoverable update. Mac remains 0.3.1, build 7, with 0.3.2 staged. Matching 0.3.2 release artifacts are prepared but unpublished. These manual updates are not an automatic update mechanism. Focused tests cover shared values, invalid versions and existing installer/package checks. Broader release gates remain in the release checklist.
 
 ## Update integration
 
@@ -28,7 +28,13 @@ The production path must build and verify both platforms from one reviewed sourc
 
 Before enabling automatic updates, verify clean and existing installations, application shutdown, collector locking, preservation of settings/history/pairing, failed-download recovery, invalid-signature rejection, stale-version rejection, relaunch and rollback. A newer application may require data migration, so a binary rollback alone does not prove saved-data compatibility. Updates must show their version and outcome and must not reset collection or sharing consent.
 
-## Windows upgrade compatibility gate
+## Mac graceful quit preparation
+
+The current Mac source requests delayed application termination while local collection or pairing work is active. New refreshes, menu actions and native settings writes are refused during that wait. It waits up to 260 seconds using monotonic elapsed time. If draining times out, the app cancels termination, re-enables work and explains that it stayed open. Existing collection and pairing work is not cancelled by this normal quit path. Forced process termination and OS shutdown deadlines remain outside that guarantee.
+
+The isolated `--test-shutdown` mode covers pending pairing state, refresh exclusion, completion, timeout and retry. It also runs a short synthetic subprocess through the production child completion path while servicing only AppKit's modal run-loop mode. It uses temporary setup state and does not read live collection sources. The standard Mac build runs it with a 15-second outer bound. Full updater-callback integration and live in-flight collection and pairing shutdown verification remain open. These source changes are not in the staged `2265c86` bundle or either installed application.
+
+## Windows upgrade compatibility
 
 Windows startup now briefly shares the NSIS setup mutex until the application singleton exists, closing the installer/startup race. Command-line collection holds that setup gate for its complete run. Normal tray-menu quit stops new collector work and waits for active collection or pairing work to finish before disposing application resources. If draining exceeds 260 seconds, the app remains open and resumes scheduling. Native self-tests cover operation exclusion, draining and resume. This does not establish safe forced OS termination, an external process kill or the future updater callback integration.
 
