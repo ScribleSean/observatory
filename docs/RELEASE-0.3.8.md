@@ -2,7 +2,7 @@
 
 Prepared September 13, 2026. Version 0.3.8, build 14. Both packages embed clean source `40d2fb77d0ab5e4e2cbcdf642dbb114c853b97b6`. This is preparation evidence, not a published release or installation guarantee.
 
-This candidate contains the Observatory branding, allowance pace and reset-time comparison, due-aware allowance-only collection, hourly caching of daily account usage, and Windows allowance-attempt status recovery. The allowance scheduler retains the provider cooldown and checks due state separately from full source scans. Actual background timing and performance still require installed verification.
+This candidate contains the Observatory branding, allowance pace and reset-time comparison, due-aware allowance-only collection, hourly caching of daily account usage, and Windows allowance-attempt status recovery. The allowance scheduler retains the provider cooldown and checks due state separately from full source scans. An installed independent refresh has been observed on each platform. Sustained timing and performance remain unverified.
 
 ## Artifacts
 
@@ -21,7 +21,7 @@ The Mac bundle is 180,648,946 bytes unpacked. The Windows package is 257,786,595
 - Mac ZIP extraction, relocated runtime checks, signatures, DMG checksum and read-only mounted-content verification passed.
 - Windows source suite: 365 tests passed, 30 explicit skips, no failures. Native compilation and self-tests passed.
 - Windows fresh dashboard build, packaged sharing bridge with isolated data, Python SQLite/timezone checks, package privacy checks and full manifest verification passed.
-- The Windows installer compiled successfully and its checksum was recorded. It was not executed.
+- The Windows installer compiled successfully and its checksum was recorded. Its subsequent development-machine installation is recorded below.
 
 ## Subsequent clean-runner verification
 
@@ -30,6 +30,14 @@ The [clean Windows installer run for source `892503f`](https://github.com/Scribl
 Its TEST-identity installer passed per-user installation, every payload hash, shortcut and quoted registration checks, native self-tests, running-app refusal, existing-install overwrite refusal, linked-directory rejection, data-preserving uninstall, and reinstall/uninstall while retaining an unrelated startup owner. The run also checked the installer compiler archive and corrupt-cache rejection.
 
 This run did not execute the earlier local installer listed above, change an ordinary app registration, publish an artifact or verify interactive first launch, login startup or sleep/wake. Keep the two artifact identities separate.
+
+## Installed background refresh evidence
+
+On September 13, the installed Mac performed an allowance-only refresh at 08:35:31 UTC, about 24.5 seconds after its deadline. The full snapshot timestamp and a hash of its non-allowance data stayed unchanged across that refresh.
+
+The installed Windows full scan finished at 08:37:45 UTC. Its separate allowance-only attempt completed successfully at 08:38:13 UTC, with the quota observation at 08:38:11 UTC and the next deadline five minutes later. The full snapshot retained its 08:37:42 UTC collection timestamp. These observations were read-only and did not trigger manual refreshes.
+
+This is evidence of an independent timer-driven cycle on each platform, not proof of sustained cadence, low resource use or sleep/wake recovery.
 
 ## Remaining release gates
 
