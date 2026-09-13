@@ -8,6 +8,8 @@ internal sealed class Collector : IDisposable
 {
     private readonly string runtime;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 300000 };
+    private readonly System.Windows.Forms.Timer allowanceTimer = new() { Interval = 30000 };
+    private long nextAllowanceAttemptTick;
     private readonly CancellationTokenSource lifetime = new();
     private readonly OperationDrain operations = new();
     private bool pairingPaused;
@@ -18,9 +20,10 @@ internal sealed class Collector : IDisposable
         this.runtime = runtime;
         Directory.CreateDirectory(Path.Combine(runtime, "public", "local"));
         timer.Tick += async (_, _) => await Refresh();
+        allowanceTimer.Tick += async (_, _) => await RefreshAllowancesIfDue();
     }
 
-    internal void Start() { if (operations.Stopping) return; timer.Start(); _ = Refresh(); }
+    internal void Start() { if (operations.Stopping) return; timer.Start(); allowanceTimer.Start(); _ = Refresh(); }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
 
@@ -29,12 +32,15 @@ internal sealed class Collector : IDisposable
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(5))
             throw new ArgumentOutOfRangeException(nameof(timeout));
         var restartTimer = timer.Enabled;
+        var restartAllowanceTimer = allowanceTimer.Enabled;
         timer.Stop();
+        allowanceTimer.Stop();
         try { await operations.Stop().WaitAsync(timeout); return true; }
         catch (TimeoutException)
         {
             operations.Resume();
             if (restartTimer) timer.Start();
+            if (restartAllowanceTimer) allowanceTimer.Start();
             return false;
         }
     }
@@ -111,7 +117,23 @@ internal sealed class Collector : IDisposable
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    internal async Task Refresh()
+    internal static bool AllowanceRefreshDue(JsonObject? quota, DateTimeOffset now) =>
+        DateTimeOffset.TryParse(Snapshot.Text(quota?["nextAttemptAt"]), out var deadline) && deadline <= now;
+
+    private async Task RefreshAllowancesIfDue()
+    {
+        if (Busy || pairingPaused || lifetime.IsCancellationRequested || Environment.TickCount64 < nextAllowanceAttemptTick) return;
+        try
+        {
+            if (ReadConfiguration()["quota"]?.GetValue<bool>() != true ||
+                !AllowanceRefreshDue(Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"))?["quota"] as JsonObject, DateTimeOffset.UtcNow)) return;
+            nextAllowanceAttemptTick = Environment.TickCount64 + 60000;
+            await Refresh(quotaOnly: true);
+        }
+        catch { /* Missing or invalid state waits for the normal full refresh. */ }
+    }
+
+    internal async Task Refresh(bool quotaOnly = false)
     {
         if (pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
         if (!FirstRunSetup.AllowsCollection(runtime)) return;
@@ -127,6 +149,7 @@ internal sealed class Collector : IDisposable
             using var process = new Process { StartInfo = new ProcessStartInfo(node)
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
             process.StartInfo.ArgumentList.Add(script);
+            if (quotaOnly) process.StartInfo.ArgumentList.Add("--quota-only");
             process.StartInfo.Environment["OBSERVATORY_RUNTIME"] = runtime;
             var python = Path.Combine(AppContext.BaseDirectory, "Runtime", "python", "python.exe");
             if (File.Exists(python)) process.StartInfo.Environment["OBSERVATORY_PYTHON"] = python;
@@ -145,7 +168,7 @@ internal sealed class Collector : IDisposable
         {
             try
             {
-                var file = Path.Combine(runtime, "public", "local", "collector.json");
+                var file = Path.Combine(runtime, "public", "local", quotaOnly ? "allowance-collector.json" : "collector.json");
                 var status = new JsonObject { ["state"] = "failed", ["finishedAt"] = DateTimeOffset.UtcNow.ToString("O"), ["intervalSeconds"] = 300 };
                 File.WriteAllText(file + ".tmp", status.ToJsonString()); File.Move(file + ".tmp", file, true);
             }
@@ -154,10 +177,16 @@ internal sealed class Collector : IDisposable
         finally { operations.Complete(); if (!lifetime.IsCancellationRequested) Changed?.Invoke(); }
     }
 
-    public void Dispose() { timer.Stop(); timer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
+    public void Dispose() { timer.Stop(); timer.Dispose(); allowanceTimer.Stop(); allowanceTimer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
 
     internal static void ShutdownSelfTest()
     {
+        var dueNow = DateTimeOffset.Parse("2026-09-09T12:00:00Z");
+        if (!AllowanceRefreshDue(new JsonObject { ["nextAttemptAt"] = "2026-09-09T12:00:00Z" }, dueNow) ||
+            !AllowanceRefreshDue(new JsonObject { ["nextAttemptAt"] = "2026-09-09T11:59:00Z" }, dueNow) ||
+            AllowanceRefreshDue(new JsonObject { ["nextAttemptAt"] = "2026-09-09T12:00:01Z" }, dueNow) ||
+            AllowanceRefreshDue(new JsonObject { ["nextAttemptAt"] = "invalid" }, dueNow) || AllowanceRefreshDue(null, dueNow))
+            throw new Exception("Allowance deadline selection failed.");
         var root = Path.Combine(Path.GetTempPath(), "observatory-drain-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

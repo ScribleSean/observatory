@@ -249,6 +249,12 @@ func runSelfTests() {
     precondition(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary").map(\.segment) == [0, 0, 1])
     precondition(quotaHistoryPoints(quotaSamples, bucket: "spark", window: "primary").isEmpty)
     let paceWindow: JSONObject = ["bucket": "codex", "window": "primary"]
+    let dueNow = parseDate("2026-09-09T12:00:00Z")!
+    precondition(allowanceRefreshDue(["nextAttemptAt": "2026-09-09T12:00:00Z"], now: dueNow))
+    precondition(allowanceRefreshDue(["nextAttemptAt": "2026-09-09T11:59:00Z"], now: dueNow))
+    precondition(!allowanceRefreshDue(["nextAttemptAt": "2026-09-09T12:00:01Z"], now: dueNow))
+    precondition(!allowanceRefreshDue(["nextAttemptAt": "invalid"], now: dueNow))
+    precondition(!allowanceRefreshDue(nil, now: dueNow))
     let paceQuota: JSONObject = ["status": "ok", "checkedAt": "2026-09-09T12:00:00Z",
         "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "summary": "Synthetic pace"]]]
     precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:01:00Z")!) == "Synthetic pace")
