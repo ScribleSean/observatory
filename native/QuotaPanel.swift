@@ -181,8 +181,16 @@ struct QuotaPanel: View {
                         }
                     }
                     .chartYAxis { AxisMarks(values: [0, 50, 100]) }
+                    .chartXAxis(dashboard ? .hidden : .automatic)
                     .frame(height: 130)
                     .accessibilityLabel("Allowance history. Gaps and resets are separate segments.")
+                    if dashboard {
+                        HStack {
+                            Text(points.first!.at.formatted(date: .omitted, time: .shortened))
+                            Spacer()
+                            Text(points.last!.at.formatted(date: .omitted, time: .shortened))
+                        }.font(ObservatoryTheme.font(12)).foregroundStyle(ObservatoryTheme.muted)
+                    }
                     let hourly = quotaHourlyPace(points)
                     if !hourly.isEmpty {
                         Text("Usage pace by hour").font(ObservatoryTheme.font(dashboard ? 19 : 13, weight: .semibold)).tracking(dashboard ? 0.6 : 0)
@@ -193,8 +201,9 @@ struct QuotaPanel: View {
                                 .accessibilityLabel(hour.hour.formatted(date: .abbreviated, time: .shortened))
                                 .accessibilityValue("\(formatted(hour.percentagePointsPerHour)) percentage points per hour, based on \(formatted(hour.observedMinutes)) observed minutes")
                         }
-                        .chartXScale(domain: (dashboard ? min(points.first!.at, points.last!.at.addingTimeInterval(-3600)) : points.last!.at.addingTimeInterval(-86400))...points.last!.at)
-                        .chartXAxis { AxisMarks(values: .stride(by: .hour, count: dashboard ? 1 : 6)) { AxisValueLabel(format: .dateTime.hour()) } }
+                        .chartXScale(domain: (dashboard ? hourly.first!.hour : points.last!.at.addingTimeInterval(-86400))...hourly.last!.hour.addingTimeInterval(3600))
+                        .chartXAxis { AxisMarks(values: .stride(by: .hour, count: dashboard ? 1 : 6)) { AxisValueLabel(format: .dateTime.hour(), centered: true) } }
+                        .chartPlotStyle { plot in plot.clipped() }
                         .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
                         .frame(height: 115)
                         Text("Rates use observed intervals within each hour. Missing polls, resets and intervals crossing an hour boundary are excluded.")
