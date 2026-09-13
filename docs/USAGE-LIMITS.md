@@ -1,6 +1,6 @@
 # Usage limits and token history
 
-Status: development implementation, not a finished public release. Both development machines have updated native apps with allowance graphs and sharing controls. The legacy Mac collector retains real readings, while Windows account monitoring remains disabled in its current configuration. Real paired consent, legacy migration and clean-machine release checks remain open.
+Status: development implementation, not a finished public release. Both development machines have native apps with allowance graphs and sharing controls. Mac collection retains real readings. On September 13, 2026 UTC the installed Windows collector also saved a successful reading from its explicitly selected Ubuntu Codex client. Allowance sharing remains off. Real paired consent, broader migration coverage and clean-machine release checks remain open.
 
 ## Allowance sharing under development
 
@@ -18,7 +18,7 @@ Both devices require explicit sharing consent. The authenticated exchange valida
 
 Windows synthetic callback tests cover cancelled consent, enable and disable. Both native-to-Node bridges pass isolated empty-runtime checks against bundled runtimes for status, disable and rejecting unpaired enable. The Mac bridge also passed fictional paired enable, expired-token rejection and disable while preserving local history. Its installed Settings panel was visually checked, including disabled enable controls when unpaired. Successful paired consent through both actual interfaces remains unverified.
 
-Installed development revisions are Mac `fa8681d` and Windows `65bfe3d`. Their verified packages passed native checks, and both bundled script sets passed actual SSH exchange using fictional readings. Windows installer integration covered install/uninstall, overwrite refusal and preservation of unrelated files. Installed updates retained rollback copies and verified private data was unchanged during replacement. These are not public releases or clean-machine certification.
+Historical development revisions Mac `fa8681d` and Windows `65bfe3d` passed native package checks, and both bundled script sets passed actual SSH exchange using fictional readings. Windows installer integration covered install/uninstall, overwrite refusal and preservation of unrelated files. Installed updates retained rollback copies and verified private data was unchanged during replacement. See the [release checklist](RELEASE-CHECKLIST.md) for newer installed revisions. These are not public releases or clean-machine certification.
 
 An actual SSH test with two isolated runtimes and fictional readings exposed a roughly nine-second difference between device clocks. The receiving parser now permits at most five minutes of future source-clock skew, matching the core peer protocol, without changing observation timestamps. Future-dated readings remain stale. History validation uses the source observation time so reopening a retained record cannot silently prune it into a different canonical payload.
 

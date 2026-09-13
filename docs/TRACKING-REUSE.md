@@ -1,6 +1,6 @@
 # Unified usage tracking: reuse review
 
-Reviewed September 12, 2026. This is an implementation direction and first-pass source review, not a claim that every integration works. No third-party code has been copied by this review.
+Reviewed September 12, 2026, with a sampling follow-up on September 13. This is an implementation direction and source review, not a claim that every integration works. No third-party code has been copied by this review.
 
 ## Useful upstream projects
 
@@ -28,10 +28,22 @@ The target is a unified Mac and Windows history with offline local collection, q
 
 ## Current gaps and sequence
 
-1. Verify continued collection across startup, sleep and reconnect. Retained quota collection is wired into the legacy Mac collector and has saved real background observations. Successful reads have a five-minute minimum interval with persistent deadlines. The Windows installation preserves its existing quota-off setting.
+1. Verify continued collection across startup, sleep and reconnect. Retained quota collection has saved real background observations. Successful reads have a five-minute minimum interval with persistent deadlines. On September 13 the installed Windows collector saved a successful allowance observation using an explicitly selected Ubuntu Codex client. The credentials remained with that client. This does not establish sleep/wake or rendered-graph coverage.
 2. Make the cadence visible and configurable per supported provider. Coordinate polling for a shared account, respect rate limits, and test account switches and source disabling.
-3. Complete installed native-history verification, with gap/reset handling consistent with the selected cadence. The Mac native main window includes the retained graph and has passed synthetic checks. Windows native main-window work remains open. Keep tray panels compact.
-4. Extend the reviewed private sync schema to account observations, with explicit account linking and deterministic duplicate handling. The current quota history is local, not unified across devices.
+3. Complete installed native-history verification, with gap/reset handling consistent with the selected cadence. Both native main windows include retained graphs with synthetic test coverage. Complete live rendered-history and accessibility checks. Keep tray panels compact.
+4. Complete installed consent and account-history exchange verification. The implemented quota-sharing contract has isolated bidirectional tests, but sharing remains off on the development pair. Account linking and device observations must not be inferred from matching percentages.
 5. Evaluate additional adapters in priority order: Antigravity, Claude, Gemini, Copilot and Cursor. Reuse already working integrations instead of claiming a universal sign-in flow.
 
 Current retention is bounded to 30 days of raw quota observations, with a 10,000-sample and 8 MB limit. It is not permanent history. Long-term retention and rollups need a visible policy before promising that all past allowance statistics remain available.
+
+## Faster sampling investigation
+
+The requested next direction is the most frequent practical sampling without noticeable performance impact. No faster production cadence has been enabled yet. Five-minute collection remains the current behavior.
+
+A September 13 read through the installed Windows-to-Ubuntu account adapter completed in 1.615 seconds. A separate bounded diagnostic allowing graceful process shutdown measured 1.181 seconds, 0.30 user CPU seconds, 0.25 system CPU seconds and 139,944 KiB maximum resident memory for the Linux timed command. These measurements exclude Windows Node overhead, WSL VM overhead, network bytes and Mac collection. A short read is not proof of zero battery or responsiveness impact.
+
+The next candidate is an allowance-only one-minute lane, with heavier token, activity and dictation scans scheduled separately. Daily account-token history should not be downloaded on every quick limits check. Preserve persistent backoff, serialized collection, settings-change fencing, original observation times and sleep/offline gaps. A one-minute timer must not create catch-up bursts after a long read or wake.
+
+The pinned CodexBar revision `afa483f2a287ebb999adbfaa060a2c3d0cfa1cc8` provides useful reference behavior. Its [fixed timer](https://github.com/steipete/CodexBar/blob/afa483f2a287ebb999adbfaa060a2c3d0cfa1cc8/Sources/CodexBar/UsageStore%2BAdaptiveRefresh.swift) advances from scheduled ticks and skips missed ticks. Its [provider coordinator](https://github.com/steipete/CodexBar/blob/afa483f2a287ebb999adbfaa060a2c3d0cfa1cc8/Sources/CodexBar/ProviderRefreshCoordinator.swift) groups concurrent requests and invalidates superseded publication generations. Its [token sequence](https://github.com/steipete/CodexBar/blob/afa483f2a287ebb999adbfaa060a2c3d0cfa1cc8/Sources/CodexBar/UsageStore%2BTokenRefreshSequence.swift) serializes heavier scans separately. These are architectural references, not evidence of a provider-approved polling rate or code already integrated into Observatory.
+
+Before enabling the faster lane, test both native schedulers, real repeated reads, process cleanup, low-power behavior, source/account changes and peer publication. Address history storage too: one-minute observations reach 10,000 samples in about seven days. Do not silently shorten retention or replace genuine missing observations with interpolation to make the graph appear more detailed.
