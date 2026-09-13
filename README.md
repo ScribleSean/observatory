@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="public/favicon.svg" width="80" height="80" alt="Workspace Observatory telescope">
-  <h1>Workspace Observatory</h1>
+  <img src="public/favicon.svg" width="80" height="80" alt="Observatory telescope">
+  <h1>Observatory</h1>
   <p>Screen time and AI usage across your devices.</p>
   <p>
-    <a href="https://scriblesean.github.io/workspace-observatory/">Explore the demo</a>
+    <a href="https://scriblesean.github.io/observatory/">Explore the demo</a>
     &nbsp; · &nbsp;
     <a href="docs/GUIDE.md">Get started</a>
     &nbsp; · &nbsp;
@@ -32,7 +32,7 @@ Saved history can be displayed again after a UI repair, but observations that we
 
 ## Try it
 
-**[Open the interactive demo](https://scriblesean.github.io/workspace-observatory/)** to explore fictional records without connecting any accounts or devices.
+**[Open the interactive demo](https://scriblesean.github.io/observatory/)** to explore fictional records without connecting any accounts or devices.
 
 The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.**
 

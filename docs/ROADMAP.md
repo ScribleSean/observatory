@@ -1,6 +1,6 @@
 # Roadmap
 
-Workspace Observatory is building toward one trustworthy view of screen time and AI usage across devices. The first audience is developers who work with AI. The product is local-first, with optional private device pairing and no required hosted account.
+Observatory is building toward one trustworthy view of screen time and AI usage across devices. The first audience is developers who work with AI. The product is local-first, with optional private device pairing and no required hosted account.
 
 These are planned milestones, not shipped capabilities or promised dates. See the [README](../README.md) for current platform status.
 

@@ -21,9 +21,9 @@ internal static class UsagePopupTests
                 // Native progress bars animate toward their assigned values.
                 await Task.Delay(1000);
                 Check(popup.Visible && Screen.AllScreens.Any(screen => screen.WorkingArea.Contains(popup.Bounds)), "Popup is not fully on screen.");
-                var headingFont = Descendants(popup).OfType<Label>().Single(label => label.Text == "Workspace Observatory").Font;
+                var headingFont = Descendants(popup).OfType<Label>().Single(label => label.Text == "Observatory").Font;
                 for (var repeat = 0; repeat < 20; repeat++) popup.Reload();
-                Check(ReferenceEquals(headingFont, Descendants(popup).OfType<Label>().Single(label => label.Text == "Workspace Observatory").Font), "Refresh should reuse its font resources.");
+                Check(ReferenceEquals(headingFont, Descendants(popup).OfType<Label>().Single(label => label.Text == "Observatory").Font), "Refresh should reuse its font resources.");
                 var controls = Descendants(popup).ToArray();
                 Check(controls.OfType<AllowanceMeter>().Count() == 2, "Expected two compact allowance bars.");
                 Check(controls.OfType<AllowanceMeter>().Select(bar => bar.Value).SequenceEqual(new[] { 568, 584 }), "Allowance bar values differ from fixture.");

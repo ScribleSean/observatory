@@ -42,7 +42,7 @@ return http.createServer(async (req, res) => {
     else {
       const requested = decodeURIComponent(url.pathname);
       const entry = ['/', '/index.html', '/404.html', '/favicon.svg', '/vinext-client-entry-manifest.json'].includes(requested);
-      const asset = ['/assets/', '/_next/static/', '/workspace-observatory/_next/static/', '/brand/'].some(prefix => requested.startsWith(prefix));
+      const asset = ['/assets/', '/_next/static/', '/observatory/_next/static/', '/brand/'].some(prefix => requested.startsWith(prefix));
       if ((!entry && !asset) || requested.includes('\\') || requested.split('/').includes('..') ||
           (path.extname(requested) === '.json' && requested !== '/vinext-client-entry-manifest.json')) throw Error('Unavailable static route');
       file = await realpath(

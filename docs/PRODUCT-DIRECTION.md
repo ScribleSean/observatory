@@ -2,7 +2,7 @@
 
 Updated September 12, 2026.
 
-Workspace Observatory is one installable application for viewing supported usage across devices. The primary outcome is a working setup-to-history flow, not separate scripts or a polished but disconnected dashboard.
+Observatory is one installable application for viewing supported usage across devices. The primary outcome is a working setup-to-history flow, not separate scripts or a polished but disconnected dashboard.
 
 ## First release priorities
 

@@ -48,8 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let button = statusItem.button {
             let image = telescopeImage(template: true)
             button.image = image
-            button.toolTip = previewRuntime == nil ? "Workspace Observatory" : "Workspace Observatory (temporary preview)"
-            button.setAccessibilityLabel("Workspace Observatory usage")
+            button.toolTip = previewRuntime == nil ? "Observatory" : "Observatory (temporary preview)"
+            button.setAccessibilityLabel("Observatory usage")
             button.target = self
             button.action = #selector(togglePanel)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func showFloatingUsage(size: NSSize, visible: NSRect) {
         let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
-        window.title = "Workspace Observatory usage"
+        window.title = "Observatory usage"
         window.appearance = NSAppearance(named: .darkAqua)
         window.isFloatingPanel = true
         window.hidesOnDeactivate = true
@@ -257,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         } catch {
             let alert = NSAlert()
             alert.messageText = "Launch at login needs attention"
-            alert.informativeText = "Open Login Items in System Settings to allow Workspace Observatory."
+            alert.informativeText = "Open Login Items in System Settings to allow Observatory."
             alert.runModal()
         }
     }
@@ -504,7 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             if detail == nil {
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-                window.title = previewRuntime == nil ? "Workspace Observatory" : "Observatory native preview"
+                window.title = previewRuntime == nil ? "Observatory" : "Observatory native preview"
                 window.minSize = NSSize(width: 760, height: 560)
                 window.contentView = NSHostingView(rootView: NativeDashboard(store: store, selection: nativeSelection,
                     settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
@@ -530,7 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1150, height: 770),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
-            window.title = "Workspace Observatory"
+            window.title = "Observatory"
             window.titlebarAppearsTransparent = true
             window.minSize = NSSize(width: 800, height: 550)
             window.contentView = web

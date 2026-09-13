@@ -1,10 +1,10 @@
-<img src="../public/favicon.svg" width="56" height="56" alt="Workspace Observatory telescope mark">
+<img src="../public/favicon.svg" width="56" height="56" alt="Observatory telescope mark">
 
-# Workspace Observatory guide
+# Observatory guide
 
 A lightweight Mac menu-bar app and local dashboard for workspace activity, AI usage and dictation. It reads existing records from ActivityWatch, Codex, Wispr Flow and configured agent receipts across Mac, Windows and WSL.
 
-[Try the interactive demo](https://scriblesean.github.io/workspace-observatory/). It uses the same interface with 14 days of fictional records. No personal activity, account data or connected devices are included.
+[Try the interactive demo](https://scriblesean.github.io/observatory/). It uses the same interface with 14 days of fictional records. No personal activity, account data or connected devices are included.
 
 The app runs on your computer. It does not send usage records to a hosted service or make model requests.
 
@@ -31,8 +31,8 @@ Tokens shows model-level counts and shares. Expand a model for its token categor
 You need Node.js 22.13 or later.
 
 ```sh
-git clone https://github.com/ScribleSean/workspace-observatory.git
-cd workspace-observatory
+git clone https://github.com/ScribleSean/observatory.git
+cd observatory
 npm ci
 npm run demo
 npm run build

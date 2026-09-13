@@ -3,7 +3,7 @@ import './globals.css';
 import './observatory.css';
 
 export const metadata: Metadata = {
-  title: 'Workspace Observatory',
+  title: 'Observatory',
   description: 'A lightweight local workspace monitor for activity, AI usage and dictation.',
 };
 

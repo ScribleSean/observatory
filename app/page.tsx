@@ -887,7 +887,7 @@ export default function Home() {
           <footer>
             <span>{data?.demo?'Synthetic data only. No personal activity or account records.':'Saved records stay on the dashboard host.'}</span>
             <a
-              href="https://github.com/ScribleSean/workspace-observatory"
+              href="https://github.com/ScribleSean/observatory"
               target="_blank"
               rel="noreferrer"
             >

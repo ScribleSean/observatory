@@ -14,7 +14,7 @@ struct ObservatoryPanel: View {
             HStack(spacing: 10) {
                 Image(nsImage: telescopeImage()).resizable().scaledToFit().frame(width: 28, height: 28)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Workspace Observatory").font(.system(size: 15, weight: .semibold))
+                    Text("Observatory").font(.system(size: 15, weight: .semibold))
                     Text(store.refreshing ? "Refreshing sources…" : store.freshness)
                         .font(.system(size: 12)).foregroundStyle(store.stale ? .orange : .secondary)
                 }

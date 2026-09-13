@@ -13,7 +13,7 @@ function fixture() {
     const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-setup.exe';
     return {...release,platform,data,sha256:createHash('sha256').update(data).digest('hex'),
       edSignature:sign(null,data,privateKey).toString('base64'),
-      url:`https://github.com/ScribleSean/workspace-observatory/releases/download/v0.3.2-build.8/Workspace-Observatory-0.3.2-${suffix}`};
+      url:`https://github.com/ScribleSean/observatory/releases/download/v0.3.2-build.8/Workspace-Observatory-0.3.2-${suffix}`};
   });
   return {release,artifacts,publicKeys};
 }

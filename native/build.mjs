@@ -62,8 +62,8 @@ writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UT
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>io.workspace-observatory.app</string>
-<key>CFBundleName</key><string>Workspace Observatory</string>
-<key>CFBundleDisplayName</key><string>Workspace Observatory</string>
+<key>CFBundleName</key><string>Observatory</string>
+<key>CFBundleDisplayName</key><string>Observatory</string>
 <key>CFBundleExecutable</key><string>WorkspaceObservatory</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>

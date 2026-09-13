@@ -167,7 +167,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Observatory", null, async (_, _) => await RequestQuit());
         tray = new NotifyIcon { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
-            Text = "Workspace Observatory", ContextMenuStrip = menu, Visible = true };
+            Text = "Observatory", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_, _) => Open();
         tray.MouseClick += (_, args) => { if (args.Button == MouseButtons.Left) ShowUsage(); };
         timer.Tick += (_, _) => RefreshStatus();
@@ -283,7 +283,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             $"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))}\n" +
             $"Recorded date: {Snapshot.Text(tokens?["date"])}";
         if (host == "All") message += "\n\nOnly verified combined totals are shown. WSL screen time is part of Windows.";
-        MessageBox.Show(message, $"Workspace Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void Open()
