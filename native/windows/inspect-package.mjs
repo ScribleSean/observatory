@@ -11,6 +11,8 @@ const project=fileURLToPath(new URL('../..',import.meta.url));
 const required=['WorkspaceObservatory.exe','WorkspaceObservatory.dll','WorkspaceObservatory.runtimeconfig.json',
   'Web/index.html','Runtime/node.exe','Runtime/python/python.exe','Runtime/python/python313._pth',
   'Licenses/Node-LICENSE.txt','Licenses/Python-LICENSE.txt','Licenses/Dashboard-LICENSES.txt',
+  'Licenses/Python-dependencies/LICENSE.openssl-3.txt','Licenses/Python-dependencies/LICENSE.sqlite.txt',
+  'Runtime/python/observatory-python-manifest.json',
   'Licenses/Microsoft.NETCore.App.Runtime.win-x64-LICENSE.TXT','Licenses/Microsoft.NETCore.App.Runtime.win-x64-THIRD-PARTY-NOTICES.TXT',
   'Licenses/Microsoft.WindowsDesktop.App.Runtime.win-x64-LICENSE','Licenses/Microsoft.Web.WebView2-LICENSE.txt','Licenses/Microsoft.Web.WebView2-NOTICE.txt',
   'Licenses/tzdata/LICENSE','Licenses/tzdata/licenses/LICENSE_APACHE'];

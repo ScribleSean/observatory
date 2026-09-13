@@ -7,9 +7,17 @@
   },
   "python": {
     "version": "3.13.15",
-    "filename": "python-3.13.15-embed-amd64.zip",
-    "url": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-embed-amd64.zip",
-    "sha256": "d1f04d990aee1253d8569e8e5104e30fa9f5fa830899f14843448872d936a2cf"
+    "build": "20260901",
+    "filename": "cpython-3.13.15+20260901-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.13.15%2B20260901-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "sha256": "63d263ab0162f34a241a56dc5b283c22d6e131f5516117e6a921350c69ba7d4f"
+  },
+  "pythonFull": {
+    "version": "3.13.15",
+    "build": "20260901",
+    "filename": "cpython-3.13.15+20260901-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.13.15%2B20260901-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "sha256": "b8630abcc99a26f3c3ed4022664d9c741fc14a6b8fbfc88a489b25f8de67f85e"
   },
   "tzdata": {
     "version": "2026.3",

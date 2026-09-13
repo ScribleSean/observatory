@@ -60,3 +60,5 @@ node --test scripts/test-python.test.mjs scripts/wispr.test.mjs scripts/read-set
 ```
 
 Remaining before adoption: inventory dependency licenses and runtime contents, preserve isolated Python startup behavior, account for the different archive layout and timezone location, inspect unpacked size, then verify packaged collection and native lifecycle. Do not treat this reader-only probe as installer or upgrade verification.
+
+The subsequent prepared-layout check retained 19 upstream dependency notices from the checksum-verified matching full archive. Its 2,638 payload files totaled 44,201,183 bytes before the generated manifest. An explicit `python313._pth` enables isolated startup without importing site packages. The preparer excludes pip, ensurepip, test trees and bytecode caches, and places the verified timezone package on the isolated import path. On Windows this prepared layout passed isolation, timezone and all 14 reader checks. Source packaging now selects these archives and copies the dependency notices into the package. Full-package, clean-install and deployment verification remain open. The installed app is unchanged.

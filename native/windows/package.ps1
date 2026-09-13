@@ -13,6 +13,7 @@ if (Test-Path (Join-Path $sourceRoot '.native-build\web\local')) { throw 'Privat
 
 $nodeArchive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
 $pythonArchive = Get-ObservatoryArchive -Name python -CacheRoot $CacheRoot
+$pythonFullArchive = Get-ObservatoryArchive -Name pythonFull -CacheRoot $CacheRoot
 $timezoneArchive = Get-ObservatoryArchive -Name tzdata -CacheRoot $CacheRoot
 $candidateName = 'candidate-' + [guid]::NewGuid().ToString('N')
 $candidate = Join-Path $PSScriptRoot "release\$candidateName"
@@ -37,9 +38,10 @@ try {
         [IO.Compression.ZipFileExtensions]::ExtractToFile($nodeZip.GetEntry("$nodeFolder/LICENSE"), (Join-Path $notices 'Node-LICENSE.txt'))
     } finally { $nodeZip.Dispose() }
     $python = Join-Path $runtime 'python'
-    Expand-Archive -LiteralPath $pythonArchive -DestinationPath $python
-    [IO.Compression.ZipFile]::ExtractToDirectory($timezoneArchive, $python)
+    & (Join-Path $env:SystemRoot 'py.exe') -3 -B (Join-Path $PSScriptRoot 'prepare-python.py') --cache $CacheRoot --output $python --assets (Join-Path $PSScriptRoot 'runtime-assets.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Verified Python runtime preparation failed.' }
     Copy-Item -LiteralPath (Join-Path $python 'LICENSE.txt') -Destination (Join-Path $notices 'Python-LICENSE.txt')
+    Copy-Item -LiteralPath (Join-Path $python 'licenses') -Destination (Join-Path $notices 'Python-dependencies') -Recurse
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'LICENSE') -Destination $app
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'THIRD-PARTY-NOTICES.md') -Destination $app
     Copy-Item -LiteralPath (Join-Path $app 'Web\assets\third-party-licenses.txt') -Destination (Join-Path $notices 'Dashboard-LICENSES.txt')
