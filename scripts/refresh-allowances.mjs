@@ -14,7 +14,7 @@ export async function refreshAllowances(runtime,{enabled,readQuota,sync=attachQu
   }
   let info;
   try {info=await lstat(file);}catch(error) {if(error.code==='ENOENT')return {needsFullCollection:true};throw error;}
-  if(!info.isFile() || info.isSymbolicLink() || info.size>32_000_000)throw Error('Unsafe allowance snapshot');
+  if(!info.isFile() || info.isSymbolicLink() || info.size>16_000_000)throw Error('Unsafe allowance snapshot');
   const original=await readFile(file,'utf8');
   const data=JSON.parse(original);
   if(!data || data.schema!==2 || typeof data.collectedAt!=='string' || !Number.isFinite(Date.parse(data.collectedAt)))throw Error('Invalid saved snapshot');
@@ -22,7 +22,7 @@ export async function refreshAllowances(runtime,{enabled,readQuota,sync=attachQu
   data.quota=await readQuota();
   await sync(runtime,result,{enabled});
   const next=JSON.stringify(data);
-  if(Buffer.byteLength(next)>32_000_000)throw Error('Allowance snapshot too large');
+  if(Buffer.byteLength(next)>16_000_000)throw Error('Allowance snapshot too large');
   // Detect unexpected external writers as well as respecting the caller lock.
   const current=await lstat(file);
   if(!current.isFile() || current.isSymbolicLink() || await readFile(file,'utf8')!==original)throw Error('Snapshot changed during allowance refresh');

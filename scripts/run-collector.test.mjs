@@ -67,3 +67,34 @@ test('packaged runner keeps writable state separate from the bundled script',asy
   assert.equal(output.collection,'ok');assert.equal((await status(runtime)).state,'ok');
   await assert.rejects(status(bundle));
 });
+
+test('allowance-only runner keeps full collection status and timestamps unchanged',async t=>{
+  const root=await fixture(t,'');
+  await mkdir(path.join(root,'public/local'),{recursive:true});
+  const previous={collectedAt:'2026-01-01T00:00:00Z',activity:[{status:'stale'}],quota:{status:'ok',checkedAt:'2026-01-01T00:00:00Z'}};
+  await writeFile(path.join(root,'public/local/usage.json'),JSON.stringify(previous));
+  await writeFile(path.join(root,'public/local/collector.json'),'preserved full status');
+  const entry=path.join(root,'scripts/collect-mac.mjs');
+  await writeFile(entry,"if(!process.argv.includes('--quota-only'))throw Error('Wrong mode');");
+  const result=JSON.parse(execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,'--collector',entry,'--quota-only'],{encoding:'utf8'}));
+  assert.equal(result.collection,'ok');
+  assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'preserved full status');
+  assert.deepEqual(JSON.parse(await readFile(path.join(root,'public/local/usage.json'),'utf8')),previous);
+  const attempt=JSON.parse(await readFile(path.join(root,'public/local/allowance-collector.json'),'utf8'));
+  assert.equal(attempt.sourcesConfigured,1);assert.equal(attempt.sourcesRead,1);
+  assert.equal(attempt.snapshotAt,previous.collectedAt);
+});
+
+test('failed allowance-only child reports separately and preserves previous data',async t=>{
+  const root=await fixture(t,'');
+  await mkdir(path.join(root,'public/local'),{recursive:true});
+  await writeFile(path.join(root,'public/local/collector.json'),'full status');
+  await writeFile(path.join(root,'public/local/usage.json'),'saved data');
+  const entry=path.join(root,'scripts/collect-mac.mjs');
+  await writeFile(entry,"throw Error('PRIVATE');");
+  assert.throws(()=>execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,'--collector',entry,'--quota-only'],{encoding:'utf8'}));
+  const attempt=await readFile(path.join(root,'public/local/allowance-collector.json'),'utf8');
+  assert.equal(JSON.parse(attempt).state,'failed');assert.equal(attempt.includes('PRIVATE'),false);
+  assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'full status');
+  assert.equal(await readFile(path.join(root,'public/local/usage.json'),'utf8'),'saved data');
+});
