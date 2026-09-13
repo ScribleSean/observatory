@@ -28,6 +28,8 @@ The builder requires a `tar` implementation with Zstandard support to read the m
 
 The manually dispatched `Clean Mac runtime` workflow runs the preparation tests on a fresh standard Mac runner, downloads the pinned archives into a new temporary cache, verifies their hashes and prepares the runtime archive. It does not execute downloaded binaries, build or install the application, use signing keys or publish artifacts. Its result covers runtime preparation only, not a clean application build or first launch.
 
+Runtime-only verification passed on [source `2a29da3`](https://github.com/ScribleSean/workspace-observatory/actions/runs/34738671031), producing a 61,556,651-byte archive with SHA-256 `3c9c9581711fb02f5dbc78554343279914d62d86817e2e724e5e093ce08e9709` and 14 dependency notices. The optional `build_app` input extends later runs with the complete dashboard/native build, isolated native checks and ZIP extraction verification. It requires an arm64 runner. This opt-in mode executes the verified runtime and uses ad hoc local signing, but still does not install or publish the app. Its result must be verified separately from the runtime-only run.
+
 Extract the prepared payload into a new directory. Build the web assets with the pinned project dependencies, or transfer a verified web bundle from another build machine. On an Apple Silicon Mac with Xcode tools:
 
 ```sh
