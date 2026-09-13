@@ -81,12 +81,17 @@ export function readAccountSnapshot(executable,salt,options) {
 
 async function withAccountClient(executable,action,{timeoutMs=15000,spawnProcess=spawn}={}) {
   if(!Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>60000)throw Error('Invalid account read timeout');
-  const child=spawnProcess(executable,['app-server'],{windowsHide:true,stdio:['pipe','pipe','ignore']});
+  const launchFailure=error=>unavailable('unavailable',
+    ['EACCES','EPERM'].includes(error?.code)?'launch-permission-denied':error?.code==='ENOENT'?'launch-not-found':'launch');
+  let child;
+  try {child=spawnProcess(executable,['app-server'],{windowsHide:true,stdio:['pipe','pipe','ignore']});}
+  catch(error) {throw launchFailure(error);}
   let buffer='',sequence=0,closed=false,failure=null;
   const pending=new Map();
-  const fail=error=>{failure=error;for(const item of pending.values())item.reject(unavailable(error.status,item.method));pending.clear();};
+  const fail=error=>{failure=error;for(const item of pending.values())item.reject(unavailable(error.status,
+    error.stage.startsWith('launch')?error.stage:item.method));pending.clear();};
   const closedPromise=new Promise(resolve=>child.once('close',()=>{closed=true;fail(unavailable());resolve();}));
-  child.once('error',()=>fail(unavailable()));
+  child.once('error',error=>fail(launchFailure(error)));
   child.stdin.on('error',()=>fail(unavailable()));
   child.stdout.setEncoding('utf8');
   child.stdout.on('data',bytes=>{

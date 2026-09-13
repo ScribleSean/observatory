@@ -93,6 +93,31 @@ test('a hung client times out and closes without exposing its output',async()=>{
   await assert.rejects(readAccountSnapshot('/fake/codex','a'.repeat(64),{...client,timeoutMs:10}),/unavailable/);
   assert.equal(client.isClosed(),true);
 });
+test('synchronous launch errors expose only an allowlisted diagnostic stage',async()=>{
+  for(const [code,stage] of [['EACCES','launch-permission-denied'],['EPERM','launch-permission-denied'],['ENOENT','launch-not-found'],['PRIVATE','launch']]) {
+    await assert.rejects(readAccountSnapshot('/PRIVATE/client','a'.repeat(64),{spawnProcess:()=>{
+      throw Object.assign(Error('PRIVATE account and path'),{code,path:'/PRIVATE/client'});
+    }}),error=>{
+      assert.equal(error.status,'unavailable');assert.equal(error.stage,stage);
+      assert.ok(!JSON.stringify(error).includes('PRIVATE'));assert.ok(!error.message.includes('PRIVATE'));
+      return true;
+    });
+  }
+});
+test('asynchronous launch refusal retains its stage and closes the failed client',async()=>{
+  const client=fakeClient(()=>undefined);
+  const original=client.spawnProcess;
+  client.spawnProcess=()=>{
+    const child=original();
+    setImmediate(()=>child.emit('error',Object.assign(Error('PRIVATE'),{code:'EACCES'})));
+    return child;
+  };
+  await assert.rejects(readAccountSnapshot('/PRIVATE/client','a'.repeat(64),client),error=>{
+    assert.equal(error.stage,'launch-permission-denied');assert.equal(error.status,'unavailable');
+    assert.ok(!JSON.stringify(error).includes('PRIVATE'));return true;
+  });
+  assert.equal(client.isClosed(),true);
+});
 test('a failed usage read preserves the observed opaque account scope for invalidation',async()=>{
   const client=fakeClient(row=>row.method==='account/rateLimits/read'?{error:{code:429,message:'PRIVATE'}}:normalReply(row));
   const salt='a'.repeat(64);

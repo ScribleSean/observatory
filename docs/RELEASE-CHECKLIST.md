@@ -2,7 +2,9 @@
 
 Status reviewed September 13, 2026 UTC. A passing development-machine test is not a clean-install result. This checklist tracks the requested desktop release, not every future integration in the [roadmap](ROADMAP.md).
 
-Windows now runs version 0.3.2, build 8, from clean source `2265c86`. Mac still runs 0.3.1, build 7, from `30f91ca`. Its verified 0.3.2 bundle is staged but not activated. The 0.3.2 Mac ZIP/DMG and Windows installer remain unpublished. Later source-only commits do not change those binaries.
+Both development apps now run version 0.3.3, build 9, from clean source `862af49`. Mac ZIP and Windows installer preparation and recoverable activation completed. The first checked Mac collection read 12 of 13 configured sources, with the legacy agent source unavailable. The checked Windows collection read six of seven, with account limits unavailable. Neither release is published. Later source-only commits do not change those binaries.
+
+The table below retains revision-specific preparation evidence from earlier builds. References there to an installed or staged older version describe that historical check, not the current installation. Current activation does not turn an earlier test into 0.3.3 clean-install coverage.
 
 ## Verified preparation
 
@@ -29,7 +31,7 @@ Binary candidates retain their embedded source revisions even when later source-
 ## Required release gates still open
 
 - **Private connection:** both installed development collectors incorporated recent peer activity, token, settings and dictation records in the September 13 UTC read-only check. Combined activity and token validation succeeded on both sides, with allowance sharing off. See [installed collection evidence](PRIVATE-SYNC.md#installed-live-collection-september-13-2026-utc). Complete rendered-dashboard verification, authenticated repair/rotation, actual network-disconnection recovery and the remaining native onboarding/confirmation checks. Repeated-transfer and overlap tests do not prove every recovery path. Retain migration backups. Rebuild and verify the updated installers before treating development-source checks as release coverage.
-- **Mac activation and distribution:** the `2265c86` 0.3.2 ZIP and DMG passed packaging checks. DMG SHA-256 is `3a535849116ff6dc2042d2bc8d8cfdaa8656dda8ab81195a99ff09174c2765a7`. Activate the staged bundle after the installed app quits, preserve private data and verify paired collection after reopening. The candidate is not notarized and does not establish clean-install coverage. No system protections were disabled.
+- **Mac distribution:** the `862af49` 0.3.3 ZIP passed packaging checks and its bundle was activated with private-data preservation. ZIP SHA-256 is `f028524f0e7c4064a0cc5aedf62f3219edc2eb5a57b8fd1a98b065978602905c`. A 0.3.3 DMG has not been prepared. The earlier `2265c86` 0.3.2 DMG is not a substitute. The app is not notarized and development activation does not establish clean-install coverage. No system protections were disabled.
 - **Clean environment:** verify installation and first launch without development dependencies. Exercise the documented supported OS/runtime prerequisites and disclose untested versions.
 - **Lifecycle:** verify actual login startup and sleep/wake, idle and collection resource use, and orderly shutdown on both platforms. A short all-sources-disabled Mac baseline was about 69 MiB for the native process only; it does not establish normal collection cost or total WebKit memory.
 - **Migration coverage:** the development Mac completed explicit source mapping, retained archive creation, stale-plan checks, recoverable native configuration activation and a successful paired collection. Broaden permission, interrupted-activation and migration coverage in clean environments before treating this as a general release guarantee. The Windows isolated test covers same-schema reinstall, not every future migration. See [Mac migration](MAC-MIGRATION.md).
