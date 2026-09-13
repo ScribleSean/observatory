@@ -6,6 +6,7 @@ import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {retainQuotaHistory} from './quota-history.mjs';
 import {parseQuotaRecord,selectQuotaRecord} from './quota-record.mjs';
+import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage} from './quota-archive.mjs';
 
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
@@ -23,7 +24,7 @@ function readSharing(value,history) {
 async function safeFile(file,optional=false) {
   try {
     const info=await lstat(file);
-    if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1 || info.size>64*1024*1024 ||
+    if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1 || info.size>8*1024*1024*1024 ||
       (process.platform!=='win32' && (info.mode&0o077)))throw Error('Unsafe quota database file');
     return info;
   } catch(error) {if(optional && error.code==='ENOENT')return null;throw error;}
@@ -45,11 +46,19 @@ async function withDatabase(runtime,action) {
     db.exec('PRAGMA busy_timeout=5000; PRAGMA trusted_schema=OFF; PRAGMA synchronous=FULL');
     if(db.prepare('PRAGMA journal_mode').get().journal_mode!=='delete' || db.prepare('PRAGMA page_size').get().page_size!==4096)
       throw Error('Unsupported quota database mode');
-    db.exec('BEGIN IMMEDIATE; PRAGMA max_page_count=16384');
+    db.exec('BEGIN IMMEDIATE; PRAGMA max_page_count=2097152');
     let objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
     if(!objects.length && before.size===0) {db.exec(schema);objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();}
-    if(objects.length!==1 || objects[0].type!=='table' || objects[0].name!=='quota_state' || objects[0].sql!==schema)
+    const cache=objects.find(object=>object.name==='quota_state');
+    if(!cache || cache.type!=='table' || cache.sql!==schema)
       throw Error('Invalid quota database schema');
+    if(objects.length===1) {
+      const old=db.prepare('SELECT record FROM quota_state WHERE slot=1').get();
+      read(db,Date.now());
+      db.exec(archiveSchema);db.exec(archiveIndex);
+      if(old)backfillQuotaArchive(db,JSON.parse(old.record).history);
+    } else if(objects.length!==3 || !objects.some(object=>object.type==='table' && object.name==='quota_archive' && object.sql===archiveSchema) ||
+      !objects.some(object=>object.type==='index' && object.name==='quota_archive_lookup' && object.sql===archiveIndex))throw Error('Invalid quota archive schema');
     const result=action(db);
     db.exec('COMMIT');
     return result;
@@ -112,8 +121,11 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
   if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
   next.sharing=readSharing(previous.sharing,next.history);
   if(!next.sharing.enabled)next.remote=null;
+  archiveQuotaPoll(db,{scope,observation,enabled},now);
   save(db,next);return next;
 });
+
+export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
 
 // Called only after explicit consent for this account and paired device. A new
 // consent rotates the public generation, including when the pairing changes.

@@ -56,18 +56,36 @@ Successful checks wait at least five minutes before another attempt. Failed chec
 
 Current source treats a saved successful allowance sample as healthy for less than ten minutes from its original observation time. Reloading it during cooldown does not create a new sample or change that time. At ten minutes it becomes stale. A failed latest poll remains stale even when the retained sample is recent. The correction passed focused Mac and Windows tests and was applied separately to the legacy Mac runtime with backup and private-data preservation checks. An installed-app refresh verified a healthy reading with its original observation time retained through a later cooldown refresh. It is not yet included in the packaged development bundles.
 
-Quota observations are bounded to 30 days, 10,000 samples and an 8 MB serialized sample budget. Daily account totals retain up to 366 reported dates. The dashboard data projection includes the last 24 hours ending at the latest quota reading and recent reported daily token totals. These are different time resolutions, not a token-to-percentage conversion. Graphs must show missing quota polls and resets as gaps, and must not fill missing token days with zero.
+The recent quota cache is bounded to 30 days, 10,000 samples and an 8 MB serialized sample budget. Its daily account totals retain up to 366 reported dates. The dashboard data projection includes the last 24 hours ending at the latest quota reading and recent reported daily token totals. These are different time resolutions, not a token-to-percentage conversion. Graphs must show missing quota polls and resets as gaps, and must not fill missing token days with zero.
 
-The requested product behavior is now all-time allowance and usage history, not
-automatic deletion after 30 days. That storage migration is not implemented yet.
-Keep the bounded recent cache for fast refreshes, but add a separate durable,
-account-scoped history with paginated date-range reads and explicit deletion.
-Polling outcomes should distinguish successful observations from unavailable or
-failed checks without saving credentials or raw provider responses. Disabling
-collection must stop new reads, not erase the historical usage log. Account
-changes must never merge histories. Existing records can be backfilled only
-where retained evidence exists. Already discarded observations and time before
-collection began cannot be reconstructed without a supported historical source.
+Current source now adds `quota_archive` to the private quota database, separate
+from that recent cache. It keeps sanitized allowance observations, dated token
+reports and polling outcomes without a rolling expiry. Exact duplicate records
+are ignored. Different reports for the same date remain separate evidence, not
+values to add together. Writes share the cache transaction and revision fence.
+Disabling collection clears the active display but preserves the archive.
+Account scopes remain separate, and raw provider replies and credentials are
+not stored. Failed checks carry their status, not invented usage. A poll's
+account scope describes its collection context, not proof of a successful login.
+
+The migration backfills existing retained records before the first cache prune.
+Already discarded observations and time before collection began cannot be
+reconstructed without a supported historical source. Owner-local date-range
+queries require an account scope and record kind, use indexed pagination, and
+return at most 200 records or 512 KB per page. The archive is not included in
+snapshots or shared automatically with paired devices. Existing sharing limits
+and consent remain unchanged.
+
+Storage has an 8 GiB safety ceiling and no automatic historical deletion. Disk
+exhaustion or the ceiling causes a failed transaction, not silent record pruning.
+Archive browsing, explicit deletion controls, storage-status UI and historical
+sync are still unfinished. This is tested source, not installed all-time history.
+Migration is incompatible with older binaries' strict single-table validator.
+Installation must preserve a verified database backup, and rollback must not
+point an older binary at the migrated database or discard newer observations.
+Synthetic Mac and Windows tests cover migration, a 400-day cache expiry,
+account changes, monitoring disable, duplicate delivery, pagination, failed
+polls, superseded writes and unexpected-schema rejection.
 
 Current Mac source adds a large live pace estimate and reset countdown, refreshed
 every 30 seconds without provider polling. The coverage bar recalculates against
