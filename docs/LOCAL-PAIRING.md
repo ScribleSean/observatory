@@ -57,8 +57,15 @@ own exactly one child process and close it when setup ends.
 reply parsing, request correlation, a 45-second command timeout and child
 shutdown. A temporary native harness verified status, cancellation and child
 exit against the real Node controller. It is not connected to Settings yet.
-Windows native pipe integration and full setup-window lifecycle tests remain
-open. Existing installed SSH setup has not been replaced.
+`native/windows/TlsSetupProcess.cs` provides the corresponding Windows wrapper.
+It uses bounded replies, correlated requests, a 45-second command timeout,
+discarded child diagnostics and verified child shutdown. Source `72e88b8`
+compiled with zero warnings or errors and passed the native self-tests. The
+`--test-tls-setup-bridge` check exercised the real copied Node controller with
+status, cancellation, concurrent requests and repeated cleanup in an empty
+temporary runtime. Neither wrapper is connected to Settings yet. Full
+setup-window lifecycle tests remain open. Existing installed SSH setup has not
+been replaced.
 
 ### Pairing commit
 
