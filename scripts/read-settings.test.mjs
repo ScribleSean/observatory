@@ -153,3 +153,47 @@ print(json.dumps(dict(ok=True)))
   const output=execPython(['-c',fixture],{input:JSON.stringify([settings('ultra','priority'),usage(100),usage(100),settings('medium','default'),reset,reset])}).toString();
   assert.deepEqual(JSON.parse(output),{ok:true});
 });
+
+test('cache retries one transient log change without expanding its scan budget',()=>{
+  const fixture=code.slice(0,code.indexOf('print(json.dumps'))+`
+import pathlib,tempfile
+exec(pathlib.Path('scripts/read-settings-cache.py').read_text(encoding='utf-8'),m.__dict__)
+events=json.load(sys.stdin)
+for event in events: event['timestamp']=dt.datetime.now(dt.timezone.utc).isoformat()
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve(); logs=root/'logs'; (logs/'sessions').mkdir(parents=True)
+    cache=root/'cache'; cache.mkdir(mode=0o700)
+    file=logs/'sessions/one.jsonl'
+    rows=[dict(type='session_meta',payload=dict(id='PRIVATE_ID'))]+events
+    file.write_text('\\n'.join(json.dumps(row) for row in rows)+'\\n',encoding='utf-8')
+    expected=m.collect(logs)
+    original=m.SettingsCache
+    class ChangingCache(original):
+        attempts=0
+        spent=0
+        change_always=False
+        def __init__(self,*args,**kwargs):
+            super().__init__(*args,**kwargs)
+            ChangingCache.attempts+=1
+        def events(self,file,expected):
+            if ChangingCache.attempts==1 or ChangingCache.change_always:
+                with file.open('a',encoding='utf-8') as stream: stream.write('\\n')
+            return super().events(file,expected)
+        def close(self):
+            ChangingCache.spent+=self.scanned_bytes
+            super().close()
+    m.SettingsCache=ChangingCache; m.CACHE_DIRECTORY=str(cache); m.CACHE_SCAN_BUDGET=100000
+    assert m.collect(logs)==expected
+    assert ChangingCache.attempts==2 and ChangingCache.spent<=m.CACHE_SCAN_BUDGET
+    ChangingCache.attempts=0; ChangingCache.change_always=True
+    try:
+        m.collect(logs)
+        raise AssertionError('Continuously changing log reported success')
+    except ValueError as error:
+        assert 'warming' in str(error)
+    assert ChangingCache.attempts==2
+    print(json.dumps(dict(ok=True)))
+`;
+  const output=execPython(['-c',fixture],{input:JSON.stringify([settings('high','standard'),usage(100)])}).toString();
+  assert.deepEqual(JSON.parse(output),{ok:true});
+});

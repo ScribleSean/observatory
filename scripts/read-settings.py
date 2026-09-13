@@ -156,7 +156,7 @@ def summarize_sessions(sessions, cutoff, cache):
     return profiles, tools
 
 
-def collect(folder):
+def collect(folder, *, retry_cache=True, cache_budget=None):
     root = pathlib.Path(folder).resolve(strict=True)
     cutoff = dt.datetime.now(dt.timezone.utc)-dt.timedelta(days=8)
     candidates = []
@@ -192,7 +192,8 @@ def collect(folder):
         identity = identity or str(file)
         if identity not in sessions or info.st_size > sessions[identity][1].st_size:
             sessions[identity] = (file,info)
-    cache = SettingsCache(globals()['CACHE_DIRECTORY'], globals().get('CACHE_SCAN_BUDGET', 1_000_000_000)) if globals().get('CACHE_DIRECTORY') else None
+    budget = globals().get('CACHE_SCAN_BUDGET', 1_000_000_000) if cache_budget is None else cache_budget
+    cache = SettingsCache(globals()['CACHE_DIRECTORY'], budget) if globals().get('CACHE_DIRECTORY') else None
     if not cache and sum(info.st_size for _,info in sessions.values()) > 1_000_000_000:
         raise ValueError('Report exceeds scan budget')
     try:
@@ -202,6 +203,11 @@ def collect(folder):
             cache.close()
     if cache:
         if cache.pending:
+            # Rebuild metadata and inventory after a transient file change. A
+            # second attempt shares the original byte budget and never returns
+            # an incomplete first-pass total as a successful report.
+            if retry_cache and cache.remaining > 0:
+                return collect(folder, retry_cache=False, cache_budget=cache.remaining)
             raise ValueError('Private Codex cache warming; complete report unavailable')
     result = dict(status='ok',profiles=list(profiles.values()),tools=[dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in sorted(tools.items())],scope='Recent saved Codex logs only')
     if salt:
