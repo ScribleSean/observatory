@@ -133,7 +133,9 @@ internal sealed class Collector : IDisposable
         catch { /* Missing or invalid state waits for the normal full refresh. */ }
     }
 
-    internal async Task Refresh(bool quotaOnly = false)
+    internal Task Refresh() => Refresh(quotaOnly: false);
+
+    private async Task Refresh(bool quotaOnly)
     {
         if (pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
         if (!FirstRunSetup.AllowsCollection(runtime)) return;
