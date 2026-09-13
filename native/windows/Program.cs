@@ -22,6 +22,7 @@ internal static class Program
                 InstallationGate.SelfTest();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();
+                PowerResumeWindow.SelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
                     UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
                 Console.WriteLine("Native dashboard default and legacy fallback passed.");
@@ -118,6 +119,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly string runtime = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Workspace Observatory");
     private readonly NotifyIcon tray;
     private readonly Collector collector;
+    private readonly PowerResumeWindow powerNotifications;
     private readonly System.Windows.Forms.Timer activationTimer = new() { Interval = 200 };
     private Form? dashboard;
     private readonly bool nativeDashboard;
@@ -131,6 +133,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         this.nativeDashboard = nativeDashboard;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
+        powerNotifications = new PowerResumeWindow(collector.RequestResumeRefresh);
         var setupPending = true;
         try { setupPending = FirstRunSetup.Prepare(runtime); }
         catch { MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup"); }
@@ -333,6 +336,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        powerNotifications.Dispose();
         activationTimer.Stop(); activationTimer.Dispose();
         timer.Stop(); timer.Dispose(); collector.Dispose(); dashboard?.Close(); usagePopup?.Close(); tray.Visible = false; tray.Dispose();
         base.ExitThreadCore();

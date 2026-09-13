@@ -13,6 +13,7 @@ internal sealed class Collector : IDisposable
     private readonly CancellationTokenSource lifetime = new();
     private readonly OperationDrain operations = new();
     private bool pairingPaused;
+    private bool resumePending;
     internal event Action? Changed;
 
     internal Collector(string runtime)
@@ -20,12 +21,27 @@ internal sealed class Collector : IDisposable
         this.runtime = runtime;
         Directory.CreateDirectory(Path.Combine(runtime, "public", "local"));
         timer.Tick += async (_, _) => await Refresh();
-        allowanceTimer.Tick += async (_, _) => await RefreshAllowancesIfDue();
+        allowanceTimer.Tick += async (_, _) => await RefreshAfterResumeOrAllowances();
     }
 
     internal void Start() { if (operations.Stopping) return; timer.Start(); allowanceTimer.Start(); _ = Refresh(); }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
+
+    // Queue only. Never perform file or network work inside a power broadcast.
+    internal void RequestResumeRefresh() { if (!lifetime.IsCancellationRequested) resumePending = true; }
+
+    private async Task RefreshAfterResumeOrAllowances()
+    {
+        if (resumePending)
+        {
+            if (Busy || pairingPaused || lifetime.IsCancellationRequested) return;
+            resumePending = false;
+            await Refresh();
+            return;
+        }
+        await RefreshAllowancesIfDue();
+    }
 
     internal async Task<bool> StopGracefully(TimeSpan timeout)
     {
@@ -151,6 +167,7 @@ internal sealed class Collector : IDisposable
         if (pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
         if (!FirstRunSetup.AllowsCollection(runtime)) return;
         if (!operations.TryBegin()) return;
+        if (!quotaOnly) resumePending = false;
         try
         {
             // Serialize app and command-line collection without relying on a stale PID file.
@@ -219,6 +236,24 @@ internal sealed class Collector : IDisposable
             if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change." || Directory.GetFiles(local, "*.tmp").Length != 0)
                 throw new Exception("Allowance attempt changed full collection status or left temporary files.");
             using var collector = new Collector(root);
+            collector.RequestResumeRefresh();
+            collector.RequestResumeRefresh();
+            collector.pairingPaused = true;
+            collector.RefreshAfterResumeOrAllowances().GetAwaiter().GetResult();
+            if (!collector.resumePending) throw new Exception("Pairing pause lost pending resume.");
+            collector.pairingPaused = false;
+            collector.operations.TryBegin();
+            collector.RefreshAfterResumeOrAllowances().GetAwaiter().GetResult();
+            if (!collector.resumePending) throw new Exception("Busy collector lost pending resume.");
+            collector.operations.Complete();
+            collector.operations.Stop().GetAwaiter().GetResult();
+            collector.RefreshAfterResumeOrAllowances().GetAwaiter().GetResult();
+            if (!collector.resumePending) throw new Exception("Shutdown allowed pending resume work.");
+            collector.operations.Resume();
+            collector.RefreshAfterResumeOrAllowances().GetAwaiter().GetResult();
+            if (collector.resumePending || File.Exists(Path.Combine(root, "collection.lock")) ||
+                File.ReadAllText(heavyStatus) != "Full collection freshness must not change.")
+                throw new Exception("Unconfigured resume bypassed collection consent.");
             var sentinel = Path.Combine(root, "saved-history-test.txt");
             File.WriteAllText(sentinel, "Synthetic saved history. Do not change.");
             if (!collector.operations.TryBegin()) throw new Exception("Test operation did not start.");
