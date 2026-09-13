@@ -26,6 +26,8 @@ python3 native/mac/prepare-runtime.py --cache /absolute/build-cache --output /ab
 
 The builder requires a `tar` implementation with Zstandard support to read the matching Python build's license metadata. It verifies the three archive checksums before preparing a new output file. Node's npm and development files are excluded, as are Python bytecode caches. Python's bundled package notices and 14 dependency notices are retained. One documented upstream manifest reference to zlib-ng is omitted because this exact build links macOS system zlib instead. Missing notices from other builds fail preparation.
 
+The manually dispatched `Clean Mac runtime` workflow runs the preparation tests on a fresh standard Mac runner, downloads the pinned archives into a new temporary cache, verifies their hashes and prepares the runtime archive. It does not execute downloaded binaries, build or install the application, use signing keys or publish artifacts. Its result covers runtime preparation only, not a clean application build or first launch.
+
 Extract the prepared payload into a new directory. Build the web assets with the pinned project dependencies, or transfer a verified web bundle from another build machine. On an Apple Silicon Mac with Xcode tools:
 
 ```sh

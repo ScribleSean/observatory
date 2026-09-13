@@ -1,0 +1,48 @@
+name: Clean Mac runtime
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-runtime-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  runtime:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify runtime preparation contracts
+        run: python3 -B -m unittest discover -s native/mac -p 'test_prepare_runtime.py'
+      - name: Fetch pinned runtime archives into a new cache
+        env:
+          OBSERVATORY_RUNTIME_CACHE: ${{ runner.temp }}/observatory-runtime-cache
+        run: |
+          python3 -B - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, urllib.parse
+          cache = pathlib.Path(os.environ['OBSERVATORY_RUNTIME_CACHE'])
+          cache.mkdir()
+          assets = json.loads(pathlib.Path('native/mac/runtime-assets.json').read_text())
+          for asset in assets.values():
+              name = asset['filename']
+              if pathlib.Path(name).name != name or '\\' in name:
+                  raise ValueError('Invalid archive filename')
+              url = urllib.parse.urlsplit(asset['url'])
+              node = url.hostname == 'nodejs.org' and url.path.startswith('/dist/')
+              python = url.hostname == 'github.com' and url.path.startswith('/astral-sh/python-build-standalone/releases/download/')
+              if url.scheme != 'https' or url.username or url.password or not (node or python):
+                  raise ValueError('Unexpected runtime origin')
+              target = cache / name
+              subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error',
+                  '--proto', '=https', '--proto-redir', '=https', '--max-time', '180',
+                  '--retry', '2', '--output', str(target), asset['url']], check=True, timeout=600)
+              if hashlib.sha256(target.read_bytes()).hexdigest() != asset['sha256']:
+                  raise ValueError('Runtime checksum mismatch')
+          PY
+      - name: Prepare verified redistributable runtime
+        env:
+          OBSERVATORY_RUNTIME_CACHE: ${{ runner.temp }}/observatory-runtime-cache
+          OBSERVATORY_RUNTIME_OUTPUT: ${{ runner.temp }}/observatory-runtime.tar.gz
+        run: python3 -B native/mac/prepare-runtime.py --cache "$OBSERVATORY_RUNTIME_CACHE" --output "$OBSERVATORY_RUNTIME_OUTPUT"
+      # Archive assembly does not execute downloaded binaries. No artifact upload,
+      # live collection, application installation or signing keys are involved.
