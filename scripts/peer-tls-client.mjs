@@ -1,6 +1,9 @@
 import tls from 'node:tls';
 import {createHash,X509Certificate} from 'node:crypto';
 import {validateInvitation} from './peer-invitation.mjs';
+import {validatePairing} from './peer-pairing.mjs';
+import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
+import {isDeepStrictEqual} from 'node:util';
 
 const protocol='observatory-pair/1';
 const failure=()=>Error('Authenticated pairing connection unavailable');
@@ -50,7 +53,42 @@ export async function claimFromInvitation(invitation,identity,options={}) {
 // The certificate may be obtained over an untrusted discovery channel. Its DER
 // fingerprint must match the out-of-band invitation before it becomes a CA.
 // The supplied identity must be a private, locally owned TLS client identity.
-export async function requestPeerClaim(invitation,certificatePem,identity,
+export async function requestPeerClaim(invitation,certificatePem,identity,options={}) {
+  return pairingRequest(invitation,certificatePem,identity,{version:1,action:'claim',secret:invitation?.secret},response=>{
+    if(!response || Object.keys(response).length!==2 || response.version!==1 ||
+      response.status!=='awaiting-confirmation')throw failure();
+    return {status:'awaiting-confirmation'};
+  },options);
+}
+
+// The controller supplies the local source scope selected by this user. A
+// remote proposal may not expand it, and may not change the invitation pin.
+export async function requestPeerSetup(invitation,certificatePem,identity,expected,options={}) {
+  if(!expected || !['Mac','Windows'].includes(expected.host) || typeof expected.includeUbuntu!=='boolean' ||
+    (expected.host==='Mac' && expected.includeUbuntu))throw failure();
+  return pairingRequest(invitation,certificatePem,identity,{version:1,action:'setup'},response=>{
+    if(response?.version!==1)throw failure();
+    if(response.status==='awaiting-confirmation' && Object.keys(response).length===2)return {status:response.status};
+    if(response.status!=='configuration' || Object.keys(response).length!==3 || !Object.hasOwn(response,'pairing'))throw failure();
+    const pairing=validatePairing(response.pairing);
+    if(pairing.transport?.kind!=='tls' || pairing.peerCertificateSha256!==invitation.certificateSha256 ||
+      pairing.local.host!==expected.host || !isDeepStrictEqual(pairing.local.codexHosts,
+        expected.includeUbuntu?['Windows','Ubuntu']:[expected.host]))throw failure();
+    return {status:'configuration',pairing};
+  },options);
+}
+
+// Only call after the local controller has verified its durable pairing commit.
+export async function acknowledgePeerSetup(invitation,certificatePem,identity,pairing,options={}) {
+  if(pairing?.peerCertificateSha256!==invitation?.certificateSha256)throw failure();
+  return pairingRequest(invitation,certificatePem,identity,
+    {version:1,action:'acknowledge',digest:setupConfigurationDigest(pairing)},response=>{
+      if(response?.version!==1 || response.status!=='acknowledged' || Object.keys(response).length!==2)throw failure();
+      return {status:'acknowledged'};
+    },options);
+}
+
+async function pairingRequest(invitation,certificatePem,identity,request,validateResponse,
   {connect=tls.connect,timeoutMs=8000,signal}={}) {
   let safe,certificate;
   try {
@@ -89,7 +127,7 @@ export async function requestPeerClaim(invitation,certificatePem,identity,
           if(!socket.authorized || socket.alpnProtocol!==protocol || !peer.raw ||
             fingerprint(peer.raw)!==safe.certificateSha256)throw failure();
           // No invitation bytes are written before all authentication checks.
-          socket.end(JSON.stringify({version:1,action:'claim',secret:safe.secret})+'\n');
+          socket.end(JSON.stringify(request)+'\n');
         } catch {finish(failure());}
       });
       socket.on('data',chunk=>{
@@ -100,9 +138,7 @@ export async function requestPeerClaim(invitation,certificatePem,identity,
       socket.once('end',()=>{
         try {
           const response=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
-          if(!response || Object.keys(response).length!==2 || response.version!==1 ||
-            response.status!=='awaiting-confirmation')throw failure();
-          finish(null,{status:'awaiting-confirmation'});
+          finish(null,validateResponse(response));
         } catch {finish(failure());}
       });
       socket.once('error',()=>finish(failure()));

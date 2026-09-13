@@ -2,6 +2,8 @@ import tls from 'node:tls';
 import {createHash,X509Certificate} from 'node:crypto';
 import {InvitationSession} from './peer-invitation-session.mjs';
 import {isPairingAddress,invitationLifetimeMs} from './peer-invitation.mjs';
+import {validatePairing} from './peer-pairing.mjs';
+import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 
 const failure=()=>Error('Pairing listener unavailable');
 function deviceCertificate(raw) {
@@ -25,9 +27,9 @@ export async function startPairingListener({address,port=0,identity},
   let fingerprint;
   try {fingerprint=deviceCertificate(identity.cert);}catch{throw failure();}
   const session=new InvitationSession(),sockets=new Set();
-  let pending=null,attempts=0,server,expiry,closing;
+  let pending=null,delivery=null,attempts=0,server,expiry,closing;
   const close=()=>{
-    session.cancel();pending=null;clearTimeout(expiry);
+    session.cancel();pending=null;delivery=null;clearTimeout(expiry);
     if(closing)return closing;
     for(const socket of sockets)socket.destroy();
     closing=new Promise(resolve=>{if(server)server.close(()=>resolve());else resolve();});
@@ -43,7 +45,7 @@ export async function startPairingListener({address,port=0,identity},
       let peerFingerprint,peerCertificate;
       socket.on('error',()=>{});
       try {
-        if(socket.alpnProtocol!=='observatory-pair/1' || session.status()!=='waiting')throw failure();
+        if(socket.alpnProtocol!=='observatory-pair/1' || (!delivery && session.status()==='inactive'))throw failure();
         peerFingerprint=deviceCertificate(socket.getPeerCertificate().raw);
         peerCertificate=new X509Certificate(socket.getPeerCertificate().raw).toString();
       } catch {socket.destroy();return;}
@@ -61,6 +63,22 @@ export async function startPairingListener({address,port=0,identity},
       socket.once('end',()=>{
         try {
           const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
+          if(request?.version===1 && ['setup','acknowledge'].includes(request.action)) {
+            const expected=delivery?.peerCertificateSha256??pending?.peerCertificateSha256;
+            if(peerFingerprint!==expected || (!delivery && session.status()!=='confirming'))throw failure();
+            if(request.action==='setup' && Object.keys(request).length===2) {
+              socket.end(JSON.stringify(delivery?{version:1,status:'configuration',pairing:delivery.pairing}:
+                {version:1,status:'awaiting-confirmation'}));
+              return;
+            }
+            if(request.action==='acknowledge' && Object.keys(request).length===3 && delivery &&
+              Object.hasOwn(request,'digest') && request.digest===delivery.digest) {
+              delivery.acknowledged=true;
+              socket.end(JSON.stringify({version:1,status:'acknowledged'}));
+              return;
+            }
+            throw failure();
+          }
           if(!request || Object.keys(request).length!==3 || request.version!==1 ||
             request.action!=='claim' || !Object.hasOwn(request,'secret'))throw failure();
           pending={...session.claim(request.secret,peerFingerprint),peerCertificate};claimed=true;
@@ -88,13 +106,22 @@ export async function startPairingListener({address,port=0,identity},
     expiry=setTimeout(()=>{void close();},invitationLifetimeMs);
     return {
       invitation,
-      status:()=>session.status(),
+      status:()=>delivery?(delivery.acknowledged?'acknowledged':'configuration-ready'):session.status(),
       pending:()=>session.status()==='confirming' && pending?{...pending}:null,
       cancel:close,
       confirm:async claimId=>{
         const result=session.confirm(claimId);
         await close();
         return result;
+      },
+      // The native controller must commit its own complementary pairing before
+      // publishing this peer configuration. No storage or consent is implied.
+      confirmSetup:(claimId,pairing)=>{
+        const safe=validatePairing(pairing);
+        if(safe.transport?.kind!=='tls' || safe.peerCertificateSha256!==fingerprint)throw failure();
+        const digest=setupConfigurationDigest(safe),result=session.confirm(claimId);
+        delivery={...result,pairing:safe,digest,acknowledged:false};pending=null;
+        return {digest};
       },
     };
   } catch {await close();throw failure();}

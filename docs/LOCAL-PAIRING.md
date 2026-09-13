@@ -47,9 +47,9 @@ overwritten and existing revocation checks still apply.
 This is a local persistence step, not a network endpoint or a consent prompt.
 Its caller must supply the pairing from the pinned setup exchange and the
 certificate observed on that connection after local user confirmation. It
-returns `local-ready`, not `paired`. The complementary configuration exchange,
-remote acknowledgement, native controller and installed-app activation remain
-unfinished. It does not start listeners or enable allowance sharing.
+returns `local-ready`, not `paired`. Native controller integration and
+installed-app activation remain unfinished. It does not start listeners or
+enable allowance sharing.
 
 ## Invitation format
 
@@ -106,9 +106,9 @@ again before writing the invitation secret. A local client certificate and key
 are required. Responses are bounded to 8 KiB with an eight-second absolute
 deadline. Errors contain no remote response or invitation details.
 
-The client only requests a claim. It does not persist trust or treat an
-awaiting-confirmation response as completed pairing. Certificate discovery,
-private identity setup and native confirmation remain unconnected. The
+The claim operation does not persist trust or treat an awaiting-confirmation
+response as completed pairing. Native identity setup and confirmation remain
+unconnected. The
 original synthetic mutual-TLS fixture already knows the client certificate.
 Additional tests exercise first-pair admission through the listener below.
 
@@ -137,12 +137,28 @@ invitation secret for provisional admission. It accepts RSA keys of at least
 certificate verification. The server's lack of initial CA trust is not a
 general certificate bypass and must never be used for normal data exchange.
 
-Only a bounded claim message is accepted. There is no snapshot, quota, file or
+Only bounded claim, setup-fetch and setup-acknowledgement messages are accepted.
+There is no snapshot, quota, file or
 command endpoint. Four simultaneous sockets, 64 total connection attempts,
 eight-second connection deadlines, a 1 KiB request limit and invitation expiry
 bound the setup session. A valid claim exposes its certificate fingerprint and
 confirmation handle only through the local module API. Explicit confirmation
-returns the fingerprint and closes the listener. It does not save trust.
+through `confirm` returns the fingerprint and closes the listener. It does not
+save trust. The separate `confirmSetup` operation keeps the bounded listener
+available to the claimed certificate only and publishes the supplied peer
+configuration after validating its TLS transport and local server pin. The
+local controller must persist its own complementary pairing before calling it.
+
+`requestPeerSetup` fetches this configuration over pinned TLS and verifies the
+joining user's expected host and source scope. `receiveConfirmedTLSPairing`
+uses the saved local identity, persists and verifies the received pairing and
+trust, then sends an acknowledgement digest covering the entire canonical
+configuration. A lost acknowledgement returns `local-ready`. An explicit
+identical retry can finish without changing the pairing. The listener accepts
+repeated matching acknowledgements until cancellation or expiry, but rejects
+another certificate or a changed configuration digest. Its acknowledged state
+is in memory, not a durable host-side receipt. This is not proof of both-device
+readiness after a listener restart, and no UI should label it as such.
 
 Cancellation closes sockets and invalidates pending confirmation. Native UI,
 cross-process listener ownership, secure key storage, discovery and atomic

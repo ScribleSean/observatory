@@ -2,13 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate,createHash} from 'node:crypto';
-import {mkdtempSync,readFileSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,existsSync,realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createInvitation} from './peer-invitation.mjs';
-import {requestPeerClaim,claimFromInvitation,discoverPeerCertificate} from './peer-tls-client.mjs';
+import {requestPeerClaim,claimFromInvitation,discoverPeerCertificate,requestPeerSetup,acknowledgePeerSetup} from './peer-tls-client.mjs';
+import {createPairingConfigurations,readPairing} from './peer-pairing.mjs';
+import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
+import {initializeDeviceIdentity} from './peer-device-identity.mjs';
+import {readPeerTrust} from './peer-tls-trust.mjs';
+import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
 import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
 
@@ -90,6 +95,69 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
     listener.listen=(binding,ready)=>listen({...binding,host:'127.0.0.1'},ready);
     return listener;
   };
+  await t.test('joining controller commits before acknowledgement and resumes a lost acknowledgement',
+    {skip:!['darwin','win32'].includes(process.platform)},async()=>{
+      const runtime=realpathSync(mkdtempSync(path.join(root,'joining-')));
+      await initializeDeviceIdentity(runtime,{version:1,...clientIdentity});
+      const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+      try {
+        await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+        const receive=options=>receiveConfirmedTLSPairing(runtime,listener.invitation,{includeUbuntu:false},options);
+        assert.deepEqual(await receive({connect}),{status:'awaiting-confirmation'});
+        assert.equal(await readPairing(runtime),null);
+        const pair=createPairingConfigurations()[process.platform==='darwin'?'Mac':'Windows'];
+        pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+        listener.confirmSetup(listener.pending().claimId,pair);
+        let connections=0;
+        assert.deepEqual(await receive({connect:options=>{
+          connections++;
+          if(connections===3)throw Error('Synthetic acknowledgement connection lost');
+          return connect(options);
+        }}),{status:'local-ready'});
+        assert.equal(connections,3);
+        assert.deepEqual(await readPairing(runtime),pair);assert.ok(await readPeerTrust(runtime));
+        assert.equal(listener.status(),'configuration-ready');
+        assert.deepEqual(await receive({connect}),{status:'acknowledged'});
+        assert.equal(listener.status(),'acknowledged');
+        assert.deepEqual(await readPairing(runtime),pair);
+      } finally {await listener.cancel();}
+    });
+  await t.test('confirmed configuration reaches only the claimed device with exact source scope and repeatable acknowledgement',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+    const expected={host:'Windows',includeUbuntu:false};
+    const get=(identity=clientIdentity,scope=expected)=>requestPeerSetup(listener.invitation,serverIdentity.cert,identity,scope,{connect});
+    try {
+      await assert.rejects(get());
+      await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+      assert.deepEqual(await get(),{status:'awaiting-confirmation'});
+      const pair=createPairingConfigurations().Windows;
+      pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+      const reverse=value=>Object.fromEntries(Object.entries(value).reverse());
+      assert.equal(setupConfigurationDigest(pair),setupConfigurationDigest(reverse({...pair,
+        local:reverse(pair.local),peer:reverse(pair.peer),transport:reverse(pair.transport)})));
+      await assert.rejects(acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,pair,{connect}));
+      const claim=listener.pending();
+      assert.throws(()=>listener.confirmSetup(claim.claimId,{...pair,peerCertificateSha256:'0'.repeat(64)}));
+      assert.equal(listener.status(),'confirming');
+      listener.confirmSetup(claim.claimId,pair);
+      assert.equal(listener.status(),'configuration-ready');assert.equal(listener.pending(),null);
+      assert.throws(()=>listener.confirmSetup(claim.claimId,pair));
+      await assert.rejects(get(serverIdentity));
+      await assert.rejects(get(clientIdentity,{host:'Windows',includeUbuntu:true}));
+      await assert.rejects(get(clientIdentity,{host:'Mac',includeUbuntu:false}));
+      assert.deepEqual(await get(),{status:'configuration',pairing:pair});
+      const changed={...pair,transport:{...pair.transport,port:43129}};
+      await assert.rejects(acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,changed,{connect}));
+      assert.equal(listener.status(),'configuration-ready');
+      for(let attempt=0;attempt<2;attempt++)
+        assert.deepEqual(await acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,pair,{connect}),
+          {status:'acknowledged'});
+      assert.equal(listener.status(),'acknowledged');
+      assert.deepEqual(await get(),{status:'configuration',pairing:pair});
+      await listener.cancel();
+      assert.equal(listener.status(),'inactive');await assert.rejects(get());
+    } finally {await listener.cancel();}
+  });
   await t.test('real first-pair listener accepts an unknown device only with invitation and local confirmation',async()=>{
     const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
     try {
