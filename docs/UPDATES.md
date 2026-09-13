@@ -40,6 +40,24 @@ Before enabling automatic updates, verify clean and existing installations, appl
 
 ## Mac graceful quit preparation
 
+`native/mac/replace-app.mjs` now adapts the existing retained-payload transaction
+for local Mac updates. It requires independently trusted previous and candidate
+package manifests, canonical sibling app directories and an advancing build.
+It checks full contents and strict code signatures before and after promotion,
+refuses replacement while an Observatory app is running, and holds an exclusive
+installer lock beside the installed bundle. The native startup gate refuses to
+start collection while that lock exists. A stale lock requires inspection, not
+automatic deletion. Older installed binaries do not yet contain this gate.
+
+This entry point never launches an app, reads the collection runtime or restores
+a database. Failed pre-launch verification can restore the previous app without
+replacing newer usage records. After an upgraded app has run a data migration,
+binary rollback alone is not safe. Preserve the newer database and reconcile
+obsolete consent before any recovery. The synthetic tests cover retained copies,
+running-app and lock refusal, tampered content, injected signature failure and
+unchanged adjacent history. Actual package replacement, restart and first-upgrade
+compatibility remain separate gates. This is not an automatic update service.
+
 The current Mac source requests delayed application termination while local collection or pairing work is active. New refreshes, menu actions and native settings writes are refused during that wait. It waits up to 260 seconds using monotonic elapsed time. If draining times out, the app cancels termination, re-enables work and explains that it stayed open. Existing collection and pairing work is not cancelled by this normal quit path. Forced process termination and OS shutdown deadlines remain outside that guarantee.
 
 The isolated `--test-shutdown` mode covers pending pairing state, refresh exclusion, completion, timeout and retry. It also runs a short synthetic subprocess through the production child completion path while servicing only AppKit's modal run-loop mode. It uses temporary setup state and does not read live collection sources. The standard Mac build runs it with a 15-second outer bound. Full updater-callback integration and live in-flight collection and pairing shutdown verification remain open. These changes are included in the installed Mac `862af49` bundle.

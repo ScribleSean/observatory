@@ -26,6 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if MacUpdateGate.isBlocked(bundle: Bundle.main.bundleURL) {
+            // The installer retains the previous app and removes its lock only
+            // after verification. Do not start collection during replacement.
+            NSApp.terminate(nil)
+            return
+        }
         ObservatoryTheme.registerFont()
         NSApp.setActivationPolicy(.accessory)
         let runtime: URL

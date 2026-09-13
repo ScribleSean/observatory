@@ -3,9 +3,9 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {forbiddenPackageName,containsBuildPath} from '../windows/package-content.mjs';
 
-export function inspectMacPackage(bundle,{revision,buildRoots=[]}={}) {
+export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedBundle=false}={}) {
   const root=realpathSync(bundle);
-  if(path.basename(root)!=='Workspace Observatory.app' || !lstatSync(root).isDirectory())throw Error('Expected the Observatory app bundle');
+  if((!allowRelocatedBundle && path.basename(root)!=='Workspace Observatory.app') || !lstatSync(root).isDirectory())throw Error('Expected the Observatory app bundle');
   const info=JSON.parse(readFileSync(path.join(root,'Contents/Resources/build-info.json'),'utf8'));
   if(info.sourceDirty!==false || !/^[a-f0-9]{40}$/.test(info.sourceRevision) ||
     (revision && info.sourceRevision!==revision) || !/^\d+\.\d+\.\d+$/.test(info.version))throw Error('A matching clean-source app build is required');

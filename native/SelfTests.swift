@@ -1,6 +1,20 @@
 import Foundation
 
 func runSelfTests() {
+    do {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-update-gate-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bundle = directory.appendingPathComponent("Workspace Observatory.app")
+        let lock = directory.appendingPathComponent(".observatory-install.lock")
+        precondition(!MacUpdateGate.isBlocked(bundle: bundle))
+        try Data().write(to: lock, options: .withoutOverwriting)
+        precondition(MacUpdateGate.isBlocked(bundle: bundle))
+        try FileManager.default.removeItem(at: lock)
+        precondition(!MacUpdateGate.isBlocked(bundle: bundle))
+        try FileManager.default.createSymbolicLink(at: lock, withDestinationURL: directory.appendingPathComponent("missing"))
+        precondition(MacUpdateGate.isBlocked(bundle: bundle))
+    } catch { preconditionFailure("Mac update gate self-test failed: \(error)") }
     TLSSetupReply.selfTest()
     for status in TailscaleReadiness.messages.keys {
         let value = Data("{\"version\":1,\"status\":\"\(status)\",\"peerReachability\":\"not-checked\"}".utf8)

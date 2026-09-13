@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=name=>readFileSync(new URL('../native/windows/'+name,import.meta.url),'utf8');
+test('Mac update gate runs before the collection store is created',()=>{
+  const main=readFileSync(new URL('../native/main.swift',import.meta.url),'utf8');
+  const launch=main.slice(main.indexOf('func applicationDidFinishLaunching'));
+  const gate=launch.indexOf('MacUpdateGate.isBlocked(bundle: Bundle.main.bundleURL)');
+  assert.ok(gate>=0 && gate<launch.indexOf('store = ObservatoryStore('));
+  assert.match(launch.slice(gate,launch.indexOf('ObservatoryTheme.registerFont()')),/NSApp.terminate\(nil\)\s+return/);
+});
 test('native startup uses the installer mutex until the singleton exists',()=>{
   const program=read('Program.cs'),gate=read('InstallationGate.cs');
   assert.match(gate,/Name = "Local\\\\WorkspaceObservatorySetup"/);
