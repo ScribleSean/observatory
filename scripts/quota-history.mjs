@@ -1,4 +1,5 @@
 import {visibleQuotaBucket} from './quota-buckets.mjs';
+import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
 
 // Retained account observations, not a conversion from tokens to allowance.
 // The caller supplies a local, opaque account scope and never a raw account ID.
@@ -79,7 +80,7 @@ export function retainQuotaHistory(previous, current, {scope,enabled=true,now=Da
 
 // Explicit line segments prevent a renderer from drawing through missed polls
 // or an allowance reset. A falling used percentage is not negative token use.
-export function quotaChartSegments(history,bucket,window,maxGapMs=10*60000) {
+export function quotaChartSegments(history,bucket,window,maxGapMs=quotaHistoryMaxGapMs) {
   if (!Number.isSafeInteger(maxGapMs) || maxGapMs < 1) throw Error('Invalid chart gap');
   const result=[];
   let segment=[],previous=null;
@@ -87,7 +88,7 @@ export function quotaChartSegments(history,bucket,window,maxGapMs=10*60000) {
     const row=sample.windows.find(value=>value.bucket===bucket && value.window===window);
     if (!row) {if(segment.length)result.push(segment);segment=[];previous=null;continue;}
     const point={at:sample.checkedAt,usedPercent:100-row.remainingPercent,resetsAt:row.resetsAt};
-    if (previous && (Date.parse(point.at)-Date.parse(previous.at)>maxGapMs || point.resetsAt!==previous.resetsAt || point.usedPercent<previous.usedPercent)) {
+    if (previous && (Date.parse(point.at)-Date.parse(previous.at)>maxGapMs || !sameQuotaReset(point.resetsAt,previous.resetsAt) || point.usedPercent<previous.usedPercent)) {
       result.push(segment);segment=[];
     }
     segment.push(point);previous=point;

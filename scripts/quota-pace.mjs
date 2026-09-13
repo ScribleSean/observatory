@@ -1,3 +1,4 @@
+import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
 const minute = 60000;
 const timestamp = value => typeof value === 'string' ? Date.parse(value) : NaN;
 const percent = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
@@ -25,11 +26,11 @@ export function quotaPace(quota, now = Date.now()) {
         row?.bucket === window.bucket && row.window === window.window);
       const row = matches.length === 1 ? matches[0] : null;
       if (!Number.isFinite(at) || at > asOf || !row || !percent(row.remainingPercent) ||
-          row.resetsAt !== window.resetsAt || row.durationMinutes !== window.durationMinutes) {
+          !sameQuotaReset(row.resetsAt,window.resetsAt) || row.durationMinutes !== window.durationMinutes) {
         segment = []; continue;
       }
       const previous = segment.at(-1);
-      if (previous && (at <= previous.at || at-previous.at > 10*minute || row.remainingPercent > previous.remaining)) segment = [];
+      if (previous && (at <= previous.at || at-previous.at > quotaHistoryMaxGapMs || row.remainingPercent > previous.remaining)) segment = [];
       segment.push({at,remaining:row.remainingPercent});
     }
     // Use actual endpoints within the last hour, without interpolating across
