@@ -21,8 +21,8 @@ internal sealed class UsagePopup : Form
     internal UsagePopup(Func<JsonObject?> read, Func<Task> refresh, Action open)
     {
         this.read = read; this.refresh = refresh; this.open = open;
-        Text = "Workspace Observatory";
-        AccessibleName = "Workspace Observatory usage overview";
+        Text = "Observatory";
+        AccessibleName = "Observatory usage overview";
         BackColor = Color.FromArgb(39, 39, 41); ForeColor = Color.WhiteSmoke;
         Font = normalFont;
         ClientSize = new Size(388, 560);
@@ -79,7 +79,7 @@ internal sealed class UsagePopup : Form
         content.SuspendLayout();
         foreach (var control in content.Controls.Cast<Control>().ToArray()) control.Dispose();
         var data = read();
-        var title = Label("Workspace Observatory", true);
+        var title = Label("Observatory", true);
         title.Font = titleFont;
         if (DateTimeOffset.TryParse(Snapshot.Text(data?["collectedAt"]), out var collected))
         {

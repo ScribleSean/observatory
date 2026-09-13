@@ -20,7 +20,7 @@ internal sealed partial class NativeDashboard : Form
         this.read = read; this.refresh = refresh;
         this.sourceSettings = sourceSettings;
         this.deviceSettings = deviceSettings;
-        Text = "Workspace Observatory"; AccessibleName = Text;
+        Text = "Observatory"; AccessibleName = Text;
         Font = regular; BackColor = Color.FromArgb(30, 30, 32); ForeColor = Color.WhiteSmoke;
         ClientSize = new Size(1000, 720); MinimumSize = new Size(800, 560); StartPosition = FormStartPosition.CenterScreen;
         sections.BackColor = Color.FromArgb(39, 39, 41); sections.ForeColor = ForeColor;

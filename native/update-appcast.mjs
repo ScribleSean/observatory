@@ -1,7 +1,7 @@
 import {createHash,createPublicKey,verify} from 'node:crypto';
 import {parseReleaseVersion} from './release-version.mjs';
 
-const repository='https://github.com/ScribleSean/workspace-observatory';
+const repository='https://github.com/ScribleSean/observatory';
 const platforms=['macos-arm64','windows-x64'];
 function base64(value,bytes) {
   if(typeof value!=='string' || Buffer.from(value,'base64').length!==bytes ||
@@ -46,11 +46,11 @@ export function buildUpdateAppcasts(release,artifacts,publicKeys,previousBuild) 
     result[platform]=`<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
-    <title>Workspace Observatory updates</title>
+    <title>Observatory updates</title>
     <link>${repository}</link>
     <description>Verified desktop release downloads</description>
     <item>
-      <title>Workspace Observatory ${version}</title>
+      <title>Observatory ${version}</title>
       <sparkle:version>${buildNumber}</sparkle:version>
       <sparkle:shortVersionString>${version}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>${minimum}</sparkle:minimumSystemVersion>

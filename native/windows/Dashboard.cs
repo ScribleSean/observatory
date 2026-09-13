@@ -17,7 +17,7 @@ internal sealed class Dashboard : Form
         this.runtime = runtime;
         this.smokeTest = smokeTest;
         this.firstRunTest = firstRunTest;
-        Text = "Workspace Observatory";
+        Text = "Observatory";
         Size = new Size(1150, 770);
         MinimumSize = new Size(800, 550);
         StartPosition = FormStartPosition.CenterScreen;
@@ -61,7 +61,7 @@ internal sealed class Dashboard : Form
                 {
                     await Task.Delay(200);
                     if (IsDisposed) return;
-                    var ready = await core.ExecuteScriptAsync("Boolean(window.observatoryBundleReady && document.body.innerText.includes('Workspace Observatory'))");
+                    var ready = await core.ExecuteScriptAsync("Boolean(window.observatoryBundleReady && document.body.innerText.includes('Observatory'))");
                     if (ready != "true") continue;
                     if (firstRunTest)
                     {

@@ -5,6 +5,6 @@ func telescopeImage(template: Bool = false) -> NSImage {
         .flatMap { NSImage(contentsOf: $0) } ?? NSImage(size: NSSize(width: 24, height: 24))
     image.size = NSSize(width: 18, height: 18)
     image.isTemplate = template
-    image.accessibilityDescription = "Workspace Observatory telescope"
+    image.accessibilityDescription = "Observatory telescope"
     return image
 }

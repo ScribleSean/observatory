@@ -16,7 +16,7 @@ for(const name of new Set(files)) {
 }
 symlinkSync(path.join(root,'node_modules'),path.join(target,'node_modules'),'dir');
 for(const args of [['run','demo'],['run','build']]) {
-  execFileSync('npm',args,{cwd:target,stdio:'inherit',env:{...process.env,DASHBOARD_BASE_PATH:'/workspace-observatory'}});
+  execFileSync('npm',args,{cwd:target,stdio:'inherit',env:{...process.env,DASHBOARD_BASE_PATH:'/observatory'}});
 }
 execFileSync(process.execPath,['scripts/prepare-pages.mjs'],{cwd:target,stdio:'inherit'});
 console.log(`Synthetic public package verified at ${path.join(target,'dist/pages')}. No live snapshot was copied.`);

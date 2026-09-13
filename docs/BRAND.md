@@ -1,6 +1,8 @@
-# Workspace Observatory
+# Observatory
 
-The product name is **Workspace Observatory**. Use **Observatory** where space is limited. The repository and package name are `workspace-observatory`.
+The product name is **Observatory**. The repository and package name are `observatory`.
+
+Existing data directories, bundle paths and installation identifiers may retain the former Workspace Observatory name for upgrade compatibility. These are storage and installation details, not the public brand. Do not rename them without a tested migration that preserves saved history and settings.
 
 The canonical mark is [the telescope](../public/brand/telescope.svg). It represents observation rather than control. Use this same silhouette in the menu bar, application icon, dashboard, favicon and documentation. The favicon and native icons are generated from it, not redrawn independently.
 
