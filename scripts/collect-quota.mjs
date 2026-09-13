@@ -8,6 +8,7 @@ import path from 'node:path';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
 import {readAccountSnapshot} from './read-quota.mjs';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
+import {quotaPace} from './quota-pace.mjs';
 
 const execute=promisify(execFile);
 const disconnected=()=>({status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]});
@@ -44,11 +45,12 @@ function project(state,now) {
   const status=history.latestReadStatus==='ok' && ['ok','stale'].includes(history.status)?
     (Number.isFinite(age) && age>=0 && age<600000?'ok':'stale'):history.status;
   // Do not expose the salt, account scope key, revision or private store path.
-  return {status,provider:'Codex',scope:'account',checkedAt:history.asOf,
+  const projected = {status,provider:'Codex',scope:'account',checkedAt:history.asOf,
     latestReadStatus:history.latestReadStatus,nextAttemptAt:new Date(state.nextAttemptAt).toISOString(),
     windows:history.samples.at(-1)?.windows || [],
     history:history.samples.filter(row=>Date.parse(row.checkedAt)>=Date.parse(history.asOf)-86400000),
     accountUsageCheckedAt:history.dailyAsOf,dailyUsageBuckets:history.dailyUsageBuckets};
+  return {...projected,pace:quotaPace(projected,now)};
 }
 
 export async function collectQuota(runtime,{enabled=false,isEnabled=async()=>enabled,resolveExecutable=findCodexExecutable,readSnapshot=readAccountSnapshot,clock=Date.now}={}) {

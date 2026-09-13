@@ -31,6 +31,7 @@ test('an accepted future-dated reading is displayed as stale, not current',()=>{
   const pair={local:{pairId:'fixture'},peer:{host:'Windows'}};
   const projected=projectPeerQuota({sharing:{enabled:true,pairingId:'fixture'},remote:{host:'Windows',pairingId:'fixture',receivedAt:now,record}},pair,now);
   assert.equal(projected.status,'stale');
+  assert.equal(projected.pace[0].status,'stale');
   assert.equal(projected.checkedAt,record.payload.checkedAt);
   assert.equal(projected.windows[0].remainingPercent,70);
 });
