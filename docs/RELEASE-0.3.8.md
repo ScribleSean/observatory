@@ -23,7 +23,15 @@ The Mac bundle is 180,648,946 bytes unpacked. The Windows package is 257,786,595
 - Windows fresh dashboard build, packaged sharing bridge with isolated data, Python SQLite/timezone checks, package privacy checks and full manifest verification passed.
 - The Windows installer compiled successfully and its checksum was recorded. It was not executed.
 
-## Still required
+## Subsequent clean-runner verification
+
+The [clean Windows installer run for source `892503f`](https://github.com/ScribleSean/observatory/actions/runs/34747078437) passed on September 13, 2026. This later source includes the running-version label. It produced a fresh runner package with 3,030 verified files and 257,787,107 unpacked bytes, after 365 passing tests and 30 explicit skips.
+
+Its TEST-identity installer passed per-user installation, every payload hash, shortcut and quoted registration checks, native self-tests, running-app refusal, existing-install overwrite refusal, linked-directory rejection, data-preserving uninstall, and reinstall/uninstall while retaining an unrelated startup owner. The run also checked the installer compiler archive and corrupt-cache rejection.
+
+This run did not execute the earlier local installer listed above, change an ordinary app registration, publish an artifact or verify interactive first launch, login startup or sleep/wake. Keep the two artifact identities separate.
+
+## Remaining release gates
 
 The Mac candidate is ad hoc signed and not notarized. The Windows installer is unsigned. Neither candidate has been installed or published. Verify exact-candidate installation, data-preserving upgrades, interactive first launch, login startup, sleep/wake, background collection cadence, resource use and supported-source behavior before distribution. Earlier checks of other versions are not substitutes.
 
