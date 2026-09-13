@@ -2,7 +2,7 @@
 
 Status reviewed September 13, 2026 UTC. A passing development-machine test is not a clean-install result. This checklist tracks the requested desktop release, not every future integration in the [roadmap](ROADMAP.md).
 
-The current candidate is **0.3.8, build 14**, from clean build source `40d2fb7`. Both platform packages have been prepared, but neither candidate has been installed or published. The inspected development Mac remains on 0.3.6 (`1328deb`) and the Windows installed manifest remains at `862af49`. Source synchronization does not update installed binaries.
+Both development machines now run **0.3.8, build 14**, from clean build source `40d2fb7`, after approved recoverable updates. Full installed payload checks and private-data inventory comparisons passed. The Mac reopened visibly and its first collection read 13 of 13 configured sources. Windows reopened as a responsive desktop process with login registration restored, then read seven of seven configured sources. These are development-machine checks, not general clean-install or lifecycle guarantees. The release remains unpublished. Source synchronization does not update installed binaries.
 
 See [0.3.8 candidate evidence](RELEASE-0.3.8.md) for sizes, checksums and remaining verification. The table below retains revision-specific preparation evidence from earlier builds. References there to an installed or staged older version describe that historical check, not the current installation. Older installation tests do not establish 0.3.8 clean-install coverage.
 

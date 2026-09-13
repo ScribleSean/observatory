@@ -33,6 +33,8 @@ This run did not execute the earlier local installer listed above, change an ord
 
 ## Remaining release gates
 
-The Mac candidate is ad hoc signed and not notarized. The Windows installer is unsigned. Neither candidate has been installed or published. Verify exact-candidate installation, data-preserving upgrades, interactive first launch, login startup, sleep/wake, background collection cadence, resource use and supported-source behavior before distribution. Earlier checks of other versions are not substitutes.
+Both local candidates were subsequently installed on the development machines with recoverable previous-app backups and unchanged private-data inventories during replacement. The Mac reopened visibly and read all 13 configured sources. Windows restored its login registration, reopened a responsive desktop process and read all seven configured sources. Both retained recent peer records. These checks apply to the `40d2fb7` artifacts listed above, not a later source build.
+
+The Mac candidate is ad hoc signed and not notarized. The Windows installer is unsigned. Neither candidate is published. Verify interactive first launch in clean environments, actual login startup, sleep/wake, background collection cadence, resource use and broader supported-source behavior before distribution. Earlier checks of other versions are not substitutes. Ad hoc Mac builds have changing designated requirements, so folder permission grants may not persist across updates. Stable signing remains required.
 
 Broader release requirements remain in the [release checklist](RELEASE-CHECKLIST.md). No private user records are included in these artifacts.
