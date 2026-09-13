@@ -83,6 +83,7 @@ func quotaHistoryPoints(_ history: [JSONObject], bucket: String, window: String)
 
 struct QuotaPanel: View {
     let quota: JSONObject
+    var dashboard = false
     @State private var selected = ""
     private var windows: [JSONObject] { visibleQuotaWindows(quota["windows"]) }
     private var chosen: JSONObject? { windows.first(where: { key($0) == selected }) ?? windows.first }
@@ -107,41 +108,41 @@ struct QuotaPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("ACCOUNT USAGE").font(.system(size: 11, weight: .semibold)).tracking(1.3)
+                Text("Account usage").font(ObservatoryTheme.font(14.5, weight: .semibold))
                 Spacer()
                 if let at = parseDate(quota["checkedAt"]) {
-                    Text(at, style: .relative).font(.system(size: 11)).help("Time since the last successful limit read")
+                    Text(at, style: .relative).font(ObservatoryTheme.font(12)).help("Time since the last successful limit read")
                 }
             }.foregroundStyle(.secondary)
-            Text(statusLabel).font(.system(size: 11)).foregroundStyle(text(quota["status"]) == "ok" ? Color.secondary : Color.orange)
+            Text(statusLabel).font(ObservatoryTheme.font(12)).foregroundStyle(text(quota["status"]) == "ok" ? ObservatoryTheme.muted : Color.orange)
             ForEach(Array(windows.enumerated()), id: \.offset) { _, row in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(label(row)).font(.system(size: 12, weight: .medium))
+                        Text(label(row)).font(ObservatoryTheme.font(dashboard ? 19 : 12, weight: .semibold)).tracking(dashboard ? 0.6 : 0)
                         Spacer()
-                        Text("\(formatted(number(row["remainingPercent"])))% left").font(.system(size: 12)).monospacedDigit()
+                        Text("\(formatted(number(row["remainingPercent"])))% left").font(ObservatoryTheme.font()).monospacedDigit()
                     }
-                    ProgressView(value: number(row["remainingPercent"]) ?? 0, total: 100).tint(.accentColor)
+                    ProgressView(value: number(row["remainingPercent"]) ?? 0, total: 100).progressViewStyle(ObservatoryProgressStyle())
                         .accessibilityLabel("Allowance remaining for \(label(row))")
                         .accessibilityValue("\(formatted(number(row["remainingPercent"]))) percent")
                     Text(parseDate(row["resetsAt"]).map { "Resets \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Reset time unknown")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .font(ObservatoryTheme.font(12)).foregroundStyle(ObservatoryTheme.muted)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         if let live = quotaLivePace(quota, window: row, now: context.date) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(live.remaining).font(.system(size: 22, weight: .semibold)).monospacedDigit()
+                                Text(live.remaining).font(ObservatoryTheme.font(dashboard ? 36 : 22, weight: .semibold)).tracking(-1).monospacedDigit()
                                 Text("Estimated at this pace · reset in \(live.reset)")
-                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                                    .font(ObservatoryTheme.font()).foregroundStyle(ObservatoryTheme.muted)
                                 Text("\(formatted(live.rate)) percentage points / hour")
-                                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                                    .font(ObservatoryTheme.font()).monospacedDigit()
                             }
                         } else {
                             Text(quotaPaceText(quota, window: row, now: context.date))
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .font(ObservatoryTheme.font()).foregroundStyle(ObservatoryTheme.muted)
                         }
                         if let fraction = quotaPaceCoverage(quota, window: row, now: context.date) {
                             VStack(spacing: 3) {
-                                ProgressView(value: fraction, total: 1).tint(.accentColor)
+                                ProgressView(value: fraction, total: 1).progressViewStyle(ObservatoryProgressStyle(color: ObservatoryTheme.purple))
                                 HStack {
                                     Text("Now")
                                     Spacer()
@@ -156,22 +157,24 @@ struct QuotaPanel: View {
                     .accessibilityLabel(label(row))
             }
             if let chosen {
-                Picker("Limit history", selection: Binding(get: { key(chosen) }, set: { selected = $0 })) {
-                    ForEach(Array(windows.enumerated()), id: \.offset) { _, row in Text(label(row)).tag(key(row)) }
-                }.labelsHidden().accessibilityLabel("Limit history window")
+                if windows.count > 1 {
+                    Picker("Limit history", selection: Binding(get: { key(chosen) }, set: { selected = $0 })) {
+                        ForEach(Array(windows.enumerated()), id: \.offset) { _, row in Text(label(row)).tag(key(row)) }
+                    }.labelsHidden().accessibilityLabel("Limit history window")
+                }
                 let points = quotaHistoryPoints(rows(quota["history"]), bucket: text(chosen["bucket"]), window: text(chosen["window"]))
-                Text("Allowance used · 24h to last read").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("Allowance used").font(ObservatoryTheme.font(dashboard ? 19 : 12, weight: .semibold)).tracking(dashboard ? 0.6 : 0)
                 if !points.isEmpty {
                     Chart(points) { point in
                         LineMark(x: .value("Time", point.at), y: .value("Used percent", point.used), series: .value("Reading segment", point.segment))
-                            .foregroundStyle(Color.accentColor)
-                        PointMark(x: .value("Time", point.at), y: .value("Used percent", point.used)).symbolSize(8).foregroundStyle(Color.accentColor)
+                            .foregroundStyle(ObservatoryTheme.sage)
+                        PointMark(x: .value("Time", point.at), y: .value("Used percent", point.used)).symbolSize(8).foregroundStyle(ObservatoryTheme.sage)
                             .accessibilityHidden(true)
                     }
                     .chartYScale(domain: 0...100)
-                    .chartXScale(domain: (points.last!.at.addingTimeInterval(-86400))...points.last!.at)
+                    .chartXScale(domain: (dashboard ? min(points.first!.at, points.last!.at.addingTimeInterval(-3600)) : points.last!.at.addingTimeInterval(-86400))...points.last!.at)
                     .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 3)) {
+                        AxisMarks(values: .stride(by: .hour, count: dashboard ? 1 : 6)) {
                             AxisGridLine()
                             AxisTick()
                             AxisValueLabel(format: .dateTime.hour(.defaultDigits(amPM: .abbreviated)))
@@ -182,16 +185,16 @@ struct QuotaPanel: View {
                     .accessibilityLabel("Allowance history. Gaps and resets are separate segments.")
                     let hourly = quotaHourlyPace(points)
                     if !hourly.isEmpty {
-                        Text("Usage pace by hour").font(.system(size: 13, weight: .semibold))
+                        Text("Usage pace by hour").font(ObservatoryTheme.font(dashboard ? 19 : 13, weight: .semibold)).tracking(dashboard ? 0.6 : 0)
                         Chart(hourly) { hour in
                             BarMark(x: .value("Hour", hour.hour, unit: .hour),
                                     y: .value("Percentage points per hour", hour.percentagePointsPerHour))
-                                .foregroundStyle(Color.accentColor.opacity(0.75))
+                                .foregroundStyle(ObservatoryTheme.purple)
                                 .accessibilityLabel(hour.hour.formatted(date: .abbreviated, time: .shortened))
                                 .accessibilityValue("\(formatted(hour.percentagePointsPerHour)) percentage points per hour, based on \(formatted(hour.observedMinutes)) observed minutes")
                         }
-                        .chartXScale(domain: points.last!.at.addingTimeInterval(-86400)...points.last!.at)
-                        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 6)) { AxisValueLabel(format: .dateTime.hour()) } }
+                        .chartXScale(domain: (dashboard ? min(points.first!.at, points.last!.at.addingTimeInterval(-3600)) : points.last!.at.addingTimeInterval(-86400))...points.last!.at)
+                        .chartXAxis { AxisMarks(values: .stride(by: .hour, count: dashboard ? 1 : 6)) { AxisValueLabel(format: .dateTime.hour()) } }
                         .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
                         .frame(height: 115)
                         Text("Rates use observed intervals within each hour. Missing polls, resets and intervals crossing an hour boundary are excluded.")
@@ -218,7 +221,7 @@ struct QuotaPanel: View {
             Text("Account-wide readings, not a device sum. Tokens and allowance use different units. Daily totals may lag.")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }
-        .padding(15).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
+        .padding(dashboard ? 0 : 15).background(dashboard ? Color.clear : Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
     }
 }
 

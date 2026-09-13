@@ -6,6 +6,8 @@ The generated components/ui source is derived from shadcn/ui (MIT), Copyright (c
 
 ActivityWatch and ccusage are independent external tools. They are not bundled, re-licensed or represented as this project's original work.
 
+Inter Tight is bundled from the Google Fonts repository under the SIL Open Font License 1.1. Its complete copyright and license text is retained in `public/fonts/OFL.txt`, copied into Mac Resources and included in generated web notices. The app makes no font-service requests.
+
 ## Native package notices
 
 Mac candidates include Node and the Astral python-build-standalone distribution of CPython. Versions and archive checksums are pinned in `native/mac/runtime-assets.json`. Their original notices, Python dependency notices, and the generated web notices live inside the app's Resources directory. See [Mac packaging](docs/MAC.md) for the documented system-zlib manifest exception. The app does not replace system runtimes.

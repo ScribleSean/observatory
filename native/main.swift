@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ObservatoryTheme.registerFont()
         NSApp.setActivationPolicy(.accessory)
         let runtime: URL
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
@@ -73,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if CommandLine.arguments.contains("--show") {
             DispatchQueue.main.async { [self] in togglePanel() }
         } else if !CommandLine.arguments.contains("--background") {
-            DispatchQueue.main.async { [self] in openDashboard("activity") }
+            DispatchQueue.main.async { [self] in openDashboard("allowances") }
         }
     }
 
@@ -525,7 +526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         closeUsage()
         if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
         if usesNativeDashboard {
-            nativeSelection.section = ["activity", "tokens", "allowances", "agents", "dictation", "sources", "settings"].contains(tab) ? tab : "activity"
+            nativeSelection.section = tab == "agents" ? "sources" : (["activity", "tokens", "allowances", "dictation", "sources", "settings"].contains(tab) ? tab : "activity")
             if detail == nil {
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -566,7 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             detail = window
             webView = web
         }
-        let safeTab = ["activity", "tokens", "agents", "dictation", "sources"].contains(tab) ? tab : "activity"
+        let safeTab = tab == "agents" ? "sources" : (["activity", "tokens", "dictation", "sources"].contains(tab) ? tab : "activity")
         webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
         detail?.deminiaturize(nil)
         detail?.makeKeyAndOrderFront(nil)
@@ -751,7 +752,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
-if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trusted-sync-owner" {
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-style" {
+    MainActor.assumeIsolated {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        ObservatoryTheme.registerFont()
+        do { try renderStylePreview(output: URL(fileURLWithPath: CommandLine.arguments[2])) }
+        catch { print("Style preview failed: \(error)"); exit(1) }
+    }
+} else if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trusted-sync-owner" {
     Task { @MainActor in
         do {
             try await TrustedSyncProcess.selfTest(node: URL(fileURLWithPath: CommandLine.arguments[2]),

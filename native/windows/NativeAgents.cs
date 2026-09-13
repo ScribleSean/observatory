@@ -5,6 +5,7 @@ namespace WorkspaceObservatory;
 internal sealed partial class NativeDashboard
 {
     private string agentView = "Handoff receipts", agentRecord = "", toolHost = "Windows";
+    private bool showExecutionDetails;
 
     private JsonObject PickRecord(JsonObject[] records)
     {

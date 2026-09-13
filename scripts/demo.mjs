@@ -57,7 +57,11 @@ export function demoData() {
       {id:'synthetic-coordinator',model:'example-coordinator',role:'Coordinator',status:'completed',seconds:46,total:9200,recordedAt:collectedAt},
     ],
     agentSource:{status:'ok',checkedAt:collectedAt,skipped:0,limited:false},
-    quota:{status:'ok',checkedAt:collectedAt,windows:[{bucket:'Example allowance',window:'Five-hour',remainingPercent:72,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'},{bucket:'Example allowance',window:'Weekly',remainingPercent:58,durationMinutes:10080,resetsAt:'2026-09-14T00:00:00Z'}]},
+    quota:{status:'ok',checkedAt:collectedAt,windows:[{bucket:'Example allowance',window:'Five-hour',remainingPercent:72,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'},{bucket:'Example allowance',window:'Weekly',remainingPercent:58,durationMinutes:10080,resetsAt:'2026-09-14T00:00:00Z'}],
+      history:Array.from({length:25},(_,i)=>({checkedAt:new Date(Date.parse(collectedAt)-(24-i)*300000).toISOString(),windows:[
+        {bucket:'Example allowance',window:'Five-hour',remainingPercent:96-i,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'},
+        {bucket:'Example allowance',window:'Weekly',remainingPercent:64-i*.25,durationMinutes:10080,resetsAt:'2026-09-14T00:00:00Z'},
+      ]}))},
     localModel:{status:'ok',checkedAt:collectedAt,records:[{model:'example-local-model',status:'complete',recordedAt:collectedAt,seconds:31,input:120,cached:0,output:60,ttft:null,peakGpuMiB:6200}]},
   };
 }

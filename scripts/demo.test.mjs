@@ -4,10 +4,13 @@ import {demoData} from './demo.mjs';
 import {selectTokenDays} from './token-periods.mjs';
 import {cleanDictation,summarizeDictation} from './dictation-aggregates.mjs';
 import {cleanWispr} from './wispr.mjs';
+import {quotaPace} from './quota-pace.mjs';
 test('demo is deterministic and covers every delivered view without live reads',()=>{
   const d=demoData();
   assert.deepEqual(d,demoData());
   assert.equal(d.demo,true);
+  assert.equal(d.quota.history.length,25);
+  assert.ok(quotaPace(d.quota,Date.parse(d.collectedAt)).every(p=>['projected','resets-first'].includes(p.status)));
   assert.equal(d.dictation.length,2);
   for (const source of d.dictation) {
     assert.equal(cleanDictation(source,source.host).status,'ok');

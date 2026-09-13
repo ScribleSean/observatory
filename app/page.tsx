@@ -7,6 +7,7 @@ import { needsWindowsSetup } from '../scripts/setup-state.mjs';
 import WeekTimeline from './week-timeline';
 import ToolDetail from './tool-detail';
 import Dictation, {type DictationSource} from './dictation';
+import Allowances, {type Quota} from './allowances';
 import { selectTokenDays, aggregateProfiles } from '../scripts/token-periods.mjs';
 import telescopeMark from '../public/brand/telescope.svg';
 import {imageSource} from '../scripts/image-source.mjs';
@@ -30,6 +31,8 @@ import {
   Sun,
   Moon,
   Mic,
+  Gauge,
+  Settings,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -82,7 +85,7 @@ type Report = {
   dictation?:DictationSource[];
   activityHistory?:ActivityRow[];
   agentSource?:{status:string;checkedAt?:string;skipped:number;limited:boolean};
-  quota?: {status:string;checkedAt?:string;windows?:{bucket:string;window:string;remainingPercent:number;durationMinutes:number|null;resetsAt:string|null}[]};
+  quota?: Quota;
   localModel?: {status:string;checkedAt?:string;records?:{model:string;status:string;recordedAt:string|null;seconds:number|null;input:number|null;cached:number|null;output:number|null;ttft:number|null;peakGpuMiB:number|null}[]};
   settings?: {host:string;status:string;checkedAt?:string;snapshotStable?:boolean;profiles?:{date:string;model:string;effort:string;speed:string;totalTokens:number;inputTokens:number;cacheReadTokens:number;cacheCreationTokens:number;outputTokens:number}[];tools?:{date:string;category:string;count:number;tool?:string|null;namespace?:string}[]}[];
   combinedTokens?: {host:string;status:string;days?:Tokens[];verification?:{status:string}};
@@ -124,11 +127,12 @@ const icons: Record<string, typeof Activity> = {
   Other: Shapes,
 };
 const views = [
+  { id: 'allowances', label: 'Allowances', icon: Gauge },
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'tokens', label: 'Tokens', icon: Layers3 },
   { id: 'dictation', label: 'Dictation', icon: Mic },
-  { id: 'agents', label: 'Agents', icon: Workflow },
   { id: 'sources', label: 'Sources', icon: Database },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 function State({ children }: { children: React.ReactNode }) {
   return (
@@ -165,7 +169,7 @@ export default function Home() {
   const [setupRequired,setSetupRequired] = useState(false);
   const [now,setNow] = useState(0);
   const inFlight = useRef(false);
-  const [view, setView] = useState('activity'),
+  const [view, setView] = useState('allowances'),
     [host, setHost] = useState('Combined'),
     [selectedDate, setSelectedDate] = useState(''),
     [period, setPeriod] = useState('day'),
@@ -207,7 +211,8 @@ export default function Home() {
   useEffect(() => {
     void load();
     const hash = location.hash.slice(1);
-    if (views.some((v) => v.id === hash)) setView(hash);
+    if (hash === 'agents') setView('sources');
+    else if (views.some((v) => v.id === hash)) setView(hash);
     const q = matchMedia('(max-width: 700px)');
     setMobile(q.matches);
     const changed = () => setMobile(q.matches);
@@ -261,7 +266,7 @@ export default function Home() {
   const tokenPrevious=tokenAnchor?shiftDate(tokenAnchor,tokenPeriod==='week'?-7:-1):'';
   const tokenNext=tokenAnchor?shiftDate(tokenAnchor,tokenPeriod==='week'?7:1):'';
   const sourceRows = data ? [
-    ...(data.dictation||[]).map(s=>({host:s.host,kind:`${s.source || 'TypeWhisper'} aggregates`,status:s.status,checkedAt:s.checkedAt})),
+    ...(data.dictation||[]).map(s=>({host:s.host,kind:`${s.source || 'Voice'} aggregates`,status:s.status,checkedAt:s.checkedAt})),
     ...(data.agentSource?[{host:'Local',kind:'Handoff receipts',status:data.agentSource.status,checkedAt:data.agentSource.checkedAt}]:[]),
     ...data.activity.map(a=>({...a,kind:'ActivityWatch'})), ...data.tokens.map(t=>({...t,kind:'Codex logs'})),
     ...(data.quota?[{host:'Codex account',kind:'Limits snapshot',status:data.quota.status,checkedAt:data.quota.checkedAt}]:[]),
@@ -272,7 +277,6 @@ export default function Home() {
   const sourceTotal=sourceRows.length;
   const settingsSource=tokenHost==='All'?data?.combinedSettings:data?.settings?.find(s=>s.host===tokenHost);
   const localRecords=data?.localModel?.records || [];
-  const providerWindows=data?.quota?.windows || [];
   const snapshotAge=freshness(data?.collectedAt,now || Date.now());
   const collectorAge=freshness(collector?.startedAt,now || Date.now(),collector?.maxRunSeconds || 240);
   const collectorRunning=collector?.state==='running' && collectorAge.state==='recent';
@@ -284,7 +288,7 @@ export default function Home() {
             <img src={imageSource(telescopeMark)} width="28" height="28" alt=""/>
           </span>
           <span>
-            <span className="wordmark-detail">Workspace </span>Observatory
+            Observatory
           </span>
         </div>
         <div className="app-actions">
@@ -361,6 +365,12 @@ export default function Home() {
             </State>
           ) : (
             <>
+              <TabsContent value="allowances" className="view-panel"><Allowances quota={data.quota} demo={data.demo}/></TabsContent>
+              <TabsContent value="settings" className="view-panel">
+                <div className="view-heading"><div><h1>Settings</h1><p>Appearance and device configuration</p></div></div>
+                <section className="usage-card"><h2>Appearance</h2><p>Use the same calm palette in light or dark mode.</p><Button className="reload" onClick={toggleTheme}>{dark?'Switch to light mode':'Switch to dark mode'}</Button></section>
+                <section className="usage-card" style={{marginTop:18}}><h2>Connections and collection</h2><p>{data.demo?'The demo uses fictional records. Provider sign-ins, device pairing and collection are managed in the installed Observatory application.':'Manage provider sources, device pairing, login startup and collection in the native Observatory settings.'}</p></section>
+              </TabsContent>
               <TabsContent value="activity" className="view-panel">
                 <div className="view-heading">
                   <div>
@@ -547,15 +557,6 @@ export default function Home() {
                     <small>New York time</small>
                   </div>
                 </div>
-                {data.quota && <details className="allowance-panel">
-                  <summary>Codex limits <span>{data.quota.status==='ok'?'Latest check':'Unavailable'}</span></summary>
-                  {providerWindows.map(w=><div className="allowance-row" key={w.bucket+w.window}>
-                    <span>{w.bucket.replaceAll('_',' ')}<small>{w.durationMinutes==null?'Window unknown':w.durationMinutes>=1440?`${(w.durationMinutes/1440).toFixed(0)}-day window`:`${(w.durationMinutes/60).toFixed(1)}-hour window`}</small></span>
-                    <strong>{w.remainingPercent.toFixed(1)}% left</strong>
-                    <small>Resets {w.resetsAt?new Date(w.resetsAt).toLocaleString():'Unknown'}</small>
-                  </div>)}
-                  <p>Read from Codex at {data.quota.checkedAt?new Date(data.quota.checkedAt).toLocaleString():'Unknown'}. This is a snapshot, not a live countdown. Bucket IDs come from the service. No resets are redeemed.</p>
-                </details>}
                 <Tabs
                   value={tokenHost}
                   onValueChange={(v) =>
@@ -722,14 +723,17 @@ export default function Home() {
                   </p>
                 </details>
               </TabsContent>
-              <TabsContent value="agents" className="view-panel">
+              <TabsContent value="dictation" className="view-panel"><Dictation sources={data.dictation}/></TabsContent>
+              <TabsContent value="sources" className="view-panel">
                 <div className="view-heading">
                   <div>
-                    <h1>Agent work</h1>
-                    <p>Agent requests and their recorded results.</p>
+                    <h1>Sources</h1>
+                    <p>Connected sources and optional saved execution details.</p>
                   </div>
-                  <span className="source-caption">Saved handoff receipts</span>
+                  <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
                 </div>
+                <p className="quiet-note">{data.agents.length} handoff receipts · {data.agents.filter(a=>a.status==='failed').length} saved failures. Not a live agent monitor. Newest receipt: {data.agents.map(a=>a.recordedAt).filter(Boolean).sort().at(-1) || 'Unknown'}.</p>
+                <details className="receipt-panel"><summary>Execution details: receipts, benchmarks and tool requests</summary>
                 <section className="agent-list">
                   {data.agents.map((a) => (
                     <article className="agent-row" key={a.id}>
@@ -813,16 +817,7 @@ export default function Home() {
                   <p>Expand a tool for dated counts. Names and namespaces come from recorded metadata. Calls nested inside a wrapper are not inferred from its code or arguments.</p>
                   {data.settings.map(source=><div key={source.host} className="tool-host"><h3>{source.host}</h3>{source.status==='ok'?<ToolDetail rows={source.tools}/>:<p>Unavailable</p>}</div>)}
                 </details>}
-              </TabsContent>
-              <TabsContent value="dictation" className="view-panel"><Dictation sources={data.dictation}/></TabsContent>
-              <TabsContent value="sources" className="view-panel">
-                <div className="view-heading">
-                  <div>
-                    <h1>Sources</h1>
-                    <p>See which sources are connected and what is still missing.</p>
-                  </div>
-                  <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
-                </div>
+                </details>
                 <div className="source-grid">
                   {sourceRows.map((s) => (
                     <div className="source-row" key={s.host + s.kind}>

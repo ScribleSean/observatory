@@ -344,6 +344,8 @@ func runSelfTests() {
     let resolver = AssetResolver(root: URL(fileURLWithPath: "/tmp/observatory-test-assets"))
     precondition(resolver.resolve(URL(string: "observatory://app/index.html")!) != nil)
     precondition(resolver.resolve(URL(string: "observatory://app/assets/app.js")!) != nil)
+    precondition(resolver.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil)
+    precondition(resolver.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil)
     for url in ["https://app/index.html", "observatory://other/index.html", "observatory://app/../secret.json",
                 "observatory://app/%2e%2e/secret.json", "observatory://app/local/usage.json",
                 "observatory://app/.env", "observatory://app/native-runtime.json/../../secret.json",

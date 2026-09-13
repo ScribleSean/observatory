@@ -109,7 +109,7 @@ struct AssetResolver {
         let base = root.standardizedFileURL.resolvingSymlinksInPath()
         let file = base.appendingPathComponent(path).standardizedFileURL.resolvingSymlinksInPath()
         guard file.path.hasPrefix(base.path + "/"),
-              ["html", "js", "css", "svg", "png", "ico", "woff2", "woff", "txt"].contains(file.pathExtension) else { return nil }
+              ["html", "js", "css", "svg", "png", "ico", "woff2", "woff", "ttf", "txt"].contains(file.pathExtension) else { return nil }
         return file
     }
 }

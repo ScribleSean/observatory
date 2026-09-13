@@ -27,7 +27,7 @@ final class BundledAssets: NSObject, WKURLSchemeHandler {
         }
         let types = ["html": "text/html", "js": "text/javascript", "css": "text/css",
                      "svg": "image/svg+xml", "png": "image/png", "ico": "image/x-icon",
-                     "woff2": "font/woff2", "woff": "font/woff", "json": "application/json"]
+                     "woff2": "font/woff2", "woff": "font/woff", "ttf": "font/ttf", "json": "application/json"]
         let headers = ["Content-Type": types[file.pathExtension] ?? "application/octet-stream",
                        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                        "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'"]

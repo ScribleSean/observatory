@@ -85,7 +85,7 @@ internal static class NativeDashboardTests
             {
                 await Task.Delay(200);
                 var sections = Children(form).OfType<ListBox>().Single();
-                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
+                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Sources", "Settings" }), "Dashboard navigation order");
                 sections.SelectedItem = "Activity";
                 Check(Texts(form).Contains("30 min"), "Day total");
                 await Select(form, "Period", "Week");
@@ -191,7 +191,12 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("More local speech detection coming soon."), "Future local speech coverage copy");
                 Check(!Children(form).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Any(item => item.ToString() == "TypeWhisper"), "Retired source selector removed");
                 Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
-                sections.SelectedItem = "Agents";
+                sections.SelectedItem = "Sources";
+                Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Handoff receipt"), "Execution details initially collapsed");
+                Check(Texts(form).Any(value => value.Contains("1 saved failures")), "Saved failure summary visible when collapsed");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "Show execution details").Checked = true;
+                await Task.Delay(50);
+                Application.DoEvents();
                 Check(Cell("Handoff receipt", 5, 1) == "Unknown", "Failed receipt tokens withheld");
                 Check(Texts(form).Contains("Failure: Synthetic failure"), "Receipt failure detail");
                 Capture(form, output, "native-agents");

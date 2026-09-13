@@ -37,7 +37,7 @@ internal sealed partial class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings"]);
+        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Sources", "Settings"]);
         Controls.Add(body); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;
@@ -101,7 +101,6 @@ internal sealed partial class NativeDashboard : Form
             if (section is "Activity" or "Tokens") History(snapshot, section == "Activity" ? "activity" : "tokens");
             else if (section == "Allowances") Allowances(snapshot);
             else if (section == "Dictation") Dictation(snapshot);
-            else if (section == "Agents") Agents(snapshot);
             else if (section == "Settings") SourceSettings();
             else Sources(snapshot);
             Label("Native migration preview. Provider sign-ins remain in their owning applications.");
@@ -208,7 +207,15 @@ internal sealed partial class NativeDashboard : Form
         foreach (var kind in new[] { "quota", "localModel", "agentSource" })
             if (snapshot?[kind] is JsonObject source) rows.Add([kind, Snapshot.Text(source["host"], ""), Snapshot.Text(source["provider"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         Table("Source health", ["Kind", "Device", "Source", "Status", "Last check"], rows);
-        Label("Provider sign-ins remain on their owning devices. Account-limit history is not synchronized yet.");
+        var receipts = NativeHistory.Rows(snapshot?["agents"]);
+        Label($"{receipts.Length} handoff receipts · {receipts.Count(row => Snapshot.Text(row["status"]) == "failed")} saved failures. Not a live agent monitor.");
+        Label("Newest receipt: " + (receipts.Select(row => Snapshot.Text(row["recordedAt"])).Order().LastOrDefault() ?? "Unknown"));
+        var details = new CheckBox { Text = "Show execution details", AccessibleName = "Show execution details", Checked = showExecutionDetails,
+            AutoSize = true, ForeColor = ForeColor };
+        details.CheckedChanged += (_, _) => { showExecutionDetails = details.Checked; BeginInvoke(Reload); };
+        body.Controls.Add(details);
+        if (showExecutionDetails) Agents(snapshot);
+        Label("Provider sign-ins remain on their owning devices. Saved execution records do not show which agents are running now.");
     }
     protected override void Dispose(bool disposing)
     {

@@ -32,6 +32,8 @@ const contents=path.join(bundle,'Contents');
 const resources=path.join(contents,'Resources');
 mkdirSync(path.join(contents,'MacOS'),{recursive:true});
 mkdirSync(resources,{recursive:true});
+cpSync(path.join(root,'public/fonts/InterTight.ttf'),path.join(resources,'InterTight.ttf'));
+cpSync(path.join(root,'public/fonts/OFL.txt'),path.join(resources,'InterTight-OFL.txt'));
 for(const name of ['LICENSE','THIRD-PARTY-NOTICES.md'])cpSync(path.join(root,name),path.join(resources,name));
 writeFileSync(path.join(resources,'build-info.json'),JSON.stringify({...release,sourceRevision:source.revision,sourceDirty:source.dirty}));
 const runtimeBinaries=bundleRuntime(runtimeSource,path.join(resources,'Runtime'),
