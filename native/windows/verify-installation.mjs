@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {verifyManifest} from './verify-manifest.mjs';
 import {replacePayload} from './replace-payload.mjs';
+import {authenticateInstallationReceipt} from './signed-receipt.mjs';
 
 const digest=data=>createHash('sha256').update(data).digest('hex');
 function readRegular(root,name,limit) {
@@ -47,4 +48,12 @@ export function verifyInstallation(root,receipt) {
 export function replaceVerifiedInstallation({installed,staged,previousReceipt,candidateReceipt}) {
   return replacePayload({installed,staged,verify:(root,kind)=>
     verifyInstallation(root,kind==='previous'?previousReceipt:candidateReceipt)});
+}
+
+// The installed receipt and public key must already be trusted locally.
+// Authenticate the downloaded receipt before any replacement operation begins.
+export function replaceSignedInstallation({installed,staged,previousReceipt,candidateEnvelope,trustedPublicKey}) {
+  const previous=verifyInstallation(installed,previousReceipt);
+  const candidateReceipt=authenticateInstallationReceipt(candidateEnvelope,trustedPublicKey,previous.buildNumber);
+  return replaceVerifiedInstallation({installed,staged,previousReceipt,candidateReceipt});
 }
