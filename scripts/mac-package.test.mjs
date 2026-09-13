@@ -7,6 +7,13 @@ import {inspectMacPackage,verifyMacPackage} from '../native/mac/inspect-package.
 import {recordVerifiedZip} from '../native/mac/release-record.mjs';
 import {createHash} from 'node:crypto';
 
+test('DMG creation leaves source ownership unchanged and bounds the child',()=>{
+  const source=readFileSync(new URL('../native/mac/package.mjs',import.meta.url),'utf8');
+  assert.match(source,/'-srcowners','any'/);
+  assert.doesNotMatch(source,/'-srcowners','(?:off|on)'/);
+  assert.match(source,/timeout:120000,killSignal:'SIGKILL'/);
+});
+
 function fixture(run) {
   const folder=mkdtempSync(path.join(tmpdir(),'observatory-mac-package-'));
   const bundle=path.join(folder,'Workspace Observatory.app'),revision='a'.repeat(40);

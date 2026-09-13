@@ -55,8 +55,9 @@ const dmg=path.join(output,name+'.dmg');
 try {
   // hdiutil can remain inside AuthorizationCopyRights after SIGTERM. Creation
   // has not attached our image, so bound this child without touching any mounts.
+  // Leave source-volume ownership unchanged. 'off' can attempt a source remount.
   execFileSync('/usr/bin/hdiutil',['create','-srcfolder',contents,'-volname','Workspace Observatory',
-    '-format','UDZO','-fs','HFS+','-nospotlight','-srcowners','off',dmg],
+    '-format','UDZO','-fs','HFS+','-nospotlight','-srcowners','any',dmg],
   {stdio:'inherit',timeout:120000,killSignal:'SIGKILL'});
 } catch(error) {
   console.error('DMG creation failed. The verified ZIP and its receipt remain available; any DMG file is unverified. Temporary copies are preserved.');
