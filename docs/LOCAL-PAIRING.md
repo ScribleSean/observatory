@@ -21,6 +21,18 @@ The local-network modules have synthetic client/listener integration tests,
 but are not an operational pairing wizard. Importing them does not listen on a
 port, contact a device, save credentials or change sharing consent.
 
+The existing SSH setup entrypoints reject TLS transports before creating any
+pending pairing or contacting the peer. TLS setup needs its own complementary
+configuration and acknowledgement flow. It must not reuse SSH pending setup.
+The current native setup status contract is still SSH-only and must be extended
+before TLS configurations are enabled in installed apps.
+
+First-release setup targets the same local network or an existing trusted VPN.
+Optional Tailscale guidance should open the owning Tailscale client for sign-in
+and check connectivity afterward. Observatory must not collect Tailscale
+passwords or authentication keys. Network membership does not replace explicit
+Observatory device confirmation or data-sharing consent.
+
 ## Invitation format
 
 `scripts/peer-invitation.mjs` creates and validates a versioned, copyable payload

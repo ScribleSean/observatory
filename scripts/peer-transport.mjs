@@ -10,7 +10,8 @@ function windowsPath(value) {
 }
 export function validatePeerTransport(value) {
   if(value?.kind==='tls') {
-    if(Object.keys(value).length!==3 || !isPairingAddress(value.address) ||
+    if(typeof value!=='object' || Array.isArray(value) || Object.keys(value).length!==3 ||
+      !['kind','address','port'].every(key=>Object.hasOwn(value,key)) || !isPairingAddress(value.address) ||
       !Number.isInteger(value.port) || value.port<1024 || value.port>65535)throw Error('Invalid private TLS transport');
     return {kind:'tls',address:value.address,port:value.port};
   }

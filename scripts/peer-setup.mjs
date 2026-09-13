@@ -37,7 +37,7 @@ export async function setupStatus(runtime,platform=process.platform) {
 
 export function complementaryWindowsPairing(mac) {
   const safe=validatePairing(mac);
-  if(safe.local.host!=='Mac' || !safe.transport)throw Error('Mac setup pairing required');
+  if(safe.local.host!=='Mac' || safe.transport?.kind!=='ssh-windows')throw Error('Mac SSH setup pairing required');
   const {comparisonSalt,...peer}=safe.local;
   return validatePairing({version:1,local:{...safe.peer,comparisonSalt},peer,...(safe.repair?{repair:safe.repair}:{})});
 }
@@ -50,6 +50,7 @@ async function setupPairingLocked(runtime,request,send,platform,readiness) {
     Object.keys(request).length!==2 || !Object.hasOwn(request,'transport') || typeof request.includeUbuntu!=='boolean')
     throw Error('Explicit Mac setup request required');
   const transport=validatePeerTransport(request.transport);
+  if(transport.kind!=='ssh-windows')throw Error('Explicit SSH setup transport required');
   const localConsent=await readRepairConsent(runtime);
   let pending=await readPendingPairing(runtime),active=await readPairing(runtime);
   if(pending && active && !isDeepStrictEqual(pending,active))throw Error('Conflicting setup state');

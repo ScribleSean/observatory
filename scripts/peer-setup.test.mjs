@@ -17,6 +17,20 @@ const request=()=>({includeUbuntu:false,transport:{kind:'ssh-windows',hostAlias:
   remoteNode:'C:/Test/Runtime/node.exe',remoteScript:'C:/Test/Collector/peer-exchange.mjs',remoteRuntime:'C:/Test/Private'}});
 const sendTo=windows=>async(_transport,pairing)=>ensureWindowsPairing(windows,{version:1,pairing},'win32');
 
+test('SSH setup rejects TLS before staging a pairing or contacting the peer',async t=>{
+  const mac=await fixture(t),transport={kind:'tls',address:'100.64.0.2',port:43128};
+  let calls=0;
+  const remote=async()=>{calls++;throw Error('Must not contact peer');};
+  await assert.rejects(setupPairing(mac,{includeUbuntu:false,transport},remote,'darwin',remote),/SSH/);
+  const pair={...createPairingConfigurations().Mac,transport};
+  assert.throws(()=>complementaryWindowsPairing(pair),/SSH/);
+  await assert.rejects(preparePendingPairing(mac,pair),/SSH/);
+  assert.equal(calls,0);
+  assert.equal(await readPendingPairing(mac),null);
+  assert.equal(await readPairing(mac),null);
+  await assert.rejects(access(path.join(mac,'private-sync')),{code:'ENOENT'});
+});
+
 test('status is read-only and exposes only the saved request through pending and active setup',async t=>{
   const mac=await fixture(t),windows=await fixture(t),input=request();
   assert.deepEqual(await setupStatus(mac,'darwin'),{status:'unpaired',request:null});

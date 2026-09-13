@@ -107,7 +107,7 @@ export const preparePendingPairing=(runtime,value)=>withPeerStateLock(runtime,()
 async function preparePendingPairingLocked(runtime,value) {
   const safe=validatePairing(value);
   await checkLocalRepairConsent(runtime,safe);
-  if(safe.local.host!=='Mac' || !safe.transport)throw Error('Mac setup transport required');
+  if(safe.local.host!=='Mac' || safe.transport?.kind!=='ssh-windows')throw Error('Mac SSH setup transport required');
   const directory=await privateSyncDirectory(runtime,true);
   await assertPeerNotRevoked(directory);
   if((await readdir(directory)).length)throw Error('Existing private state requires resume or repair');

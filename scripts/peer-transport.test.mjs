@@ -11,6 +11,12 @@ test('explicit TLS addresses work for either host and cannot enter SSH execution
     assert.deepEqual(validatePairing({...pair,transport:value}).transport,value);
   for(const change of [{address:'example.com'},{address:'8.8.8.8'},{port:0},{port:65536},{extra:true}])
     assert.throws(()=>validatePeerTransport({...value,...change}));
+  assert.throws(()=>validatePeerTransport(Object.assign([],value)));
+  for(const key of Object.keys(value)) {
+    const inherited={...value};delete inherited[key];
+    Object.setPrototypeOf(inherited,{[key]:value[key]});inherited.extra=true;
+    assert.throws(()=>validatePeerTransport(inherited));
+  }
   let invoked=false;
   await assert.rejects(sshPeerExchange(value,{},async()=>{invoked=true;}));
   assert.equal(invoked,false);
