@@ -305,6 +305,30 @@ requirement. Mac shutdown regression tests and Windows native self-tests passed.
 These tests use temporary runtimes and do not demonstrate installed two-device
 sync or successful network recovery on the user's devices.
 
+### Opt-in two-device verification
+
+`scripts/peer-live-fixture.test.mjs --live-peer PRIVATE_IP` is a test-only worker
+for a private stdin/stdout controller. It is excluded from both native collector
+packages. It creates its own temporary runtime and synthetic identity, supports
+host/join confirmation, service start/stop, record publication, exchange and
+revocation, then removes its runtime after verified service exit. It never opens
+an installed application's runtime. The fixture uses test OpenSSL installations,
+not the native production identity generators. Its payloads contain synthetic
+source-status records, not the user's activity or provider usage.
+
+The worker protocol can return an invitation to its private parent pipe. Do not
+record that output in logs or pass it through shell arguments. A five-minute
+fixture deadline closes input and starts cleanup. The test controller must also
+await worker exit and treat any cleanup failure as unresolved.
+
+The September 13 two-device attempt did not establish pairing. Each fixture
+listener accepted local TCP connections, while cross-device attempts timed out
+before TLS. The Windows test token matched enabled sandbox-managed outbound
+firewall block rules. Those rules were not changed or bypassed. Test processes
+exited and removed their temporary runtimes. An approved network-enabled test
+environment is required before repeating the live check. This result does not
+invalidate the local tests, but it is not evidence of working two-device sync.
+
 The outbound path in `peer-tls-outbound.mjs` is now selected by
 `finalizePeerCollection` for an explicit TLS transport on either platform.
 Saved pairing configuration permits a numeric private address and port, while
