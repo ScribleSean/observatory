@@ -112,7 +112,18 @@ final class TLSSetupProcess {
         }
     }
 
-    func close() { queue.async { [weak self] in self?.stop() } }
+    func close() { queue.async { [self] in stop() } }
+
+    func closeAndWait(completion: @escaping (Bool) -> Void) {
+        close()
+        let child = process
+        DispatchQueue.global().async {
+            let deadline = Date().addingTimeInterval(5)
+            while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+            let stopped = !child.isRunning
+            DispatchQueue.main.async { completion(stopped) }
+        }
+    }
 
     // UI must first disclose the restricted-file storage policy and obtain consent.
     func prepareIdentity(storageConsent: Bool, completion: @escaping Completion) {

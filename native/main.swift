@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var usageWindow: NSPanel?
     private var detail: NSWindow?
     private var setupWindow: NSWindow?
+    private var directPairingWindow: DirectPairingWindowController?
     private var webView: WKWebView?
     private let navigation = LocalNavigation()
     private var store: ObservatoryStore!
@@ -332,6 +333,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func refresh() { store.refresh() }
+    private func setupDirectPairing() {
+        guard !store.shuttingDown, previewRuntime == nil else { return }
+        if let directPairingWindow { directPairingWindow.showWindow(nil); directPairingWindow.window?.makeKeyAndOrderFront(nil); return }
+        guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else { return }
+        closeUsage()
+        do {
+            let bridge = try TLSSetupProcess(runtime: store.runtime, resources: resources)
+            store.pairingMaintenance = true
+            let controller = DirectPairingWindowController(bridge: bridge) { [weak self] in
+                self?.directPairingWindow = nil
+                bridge.closeAndWait { [weak self] stopped in
+                    guard let self else { return }
+                    if !stopped { self.store.collectionPausedForPairing = true }
+                    self.store.pairingMaintenance = false
+                }
+            }
+            directPairingWindow = controller; controller.showWindow(nil)
+            controller.window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        } catch {
+            let alert = NSAlert(); alert.messageText = "Pairing tools unavailable"
+            alert.informativeText = "The bundled setup controller could not start. Saved data and pairing state were not changed."
+            alert.runModal()
+        }
+    }
     @objc private func setupPairing() {
         guard !store.shuttingDown else { return }
         guard previewRuntime == nil else { return }
@@ -510,7 +535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
                         disconnect: { [weak self] in self?.disconnectPairing() }, repair: { [weak self] in self?.preparePairingRepair() },
                         toggleLogin: { [weak self] in self?.toggleLogin() }, loginSettings: { [weak self] in self?.loginSettings() },
-                        preview: previewRuntime != nil)))
+                        preview: previewRuntime != nil, directPair: { [weak self] in self?.setupDirectPairing() })))
                 window.delegate = self
                 window.isReleasedWhenClosed = false
                 window.center()
@@ -713,6 +738,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {
+        directPairingWindow?.close()
         store?.stop()
         // Keep a preview directory if collection is still shutting down. It contains
         // only this preview's settings/snapshots, never installed application state.
@@ -722,7 +748,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
-if CommandLine.arguments.contains("--test-shutdown") {
+if CommandLine.arguments.contains("--test-direct-pairing-model") {
+    Task { @MainActor in
+        await testDirectPairingModel(); print("Native pairing model consent, confirmation, cancellation and cleanup passed"); exit(0)
+    }
+    NSApplication.shared.run()
+} else if CommandLine.arguments.contains("--test-shutdown") {
     Task { @MainActor in
         do { try await testShutdownDrain(); print("Mac shutdown drain, timeout resume and refresh exclusion passed"); exit(0) }
         catch { print("Mac shutdown drain test failed"); exit(1) }

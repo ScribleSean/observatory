@@ -63,21 +63,35 @@ state exists. Cancellation before persistence prevents a new identity write.
 The reply reports identity status only, not key material. This is a restricted
 plaintext file, not Keychain or DPAPI storage. The UI must disclose that policy
 before requesting consent. Native bridge tests on both platforms exercised
-consent rejection, creation and reuse in temporary runtimes. The Settings UI
-does not invoke this step yet.
+consent rejection, creation and reuse in temporary runtimes. The Mac Settings
+source now invokes this step only after disclosure and user consent. The
+Windows Settings flow remains to be connected.
 
 `native/TLSSetupProcess.swift` implements the Mac pipe wrapper with bounded
 reply parsing, request correlation, a 45-second command timeout and child
 shutdown. A temporary native harness verified status, cancellation and child
-exit against the real Node controller. It is not connected to Settings yet.
+exit against the real Node controller. Mac Settings now opens a native
+`DirectPairingWindowController` for separate Host and Join actions, manual
+private-address/port entry, explicit invitation copying, device confirmation
+and cancellation. The existing SSH action remains available. Late replies
+after cancellation cannot start another operation. Window close stops the
+timer and child process. Pairing maintenance remains active until child exit
+is verified, with collection paused if exit cannot be verified.
+
+The Mac `--test-direct-pairing-model` check uses a fake bridge to test consent,
+confirmation, cancellation and cleanup without keys or network access. Full
+native compilation and self-tests passed. Visual inspection was blocked by
+the locked Mac, so layout and live interactive usability remain unverified.
+No installed application was replaced. The saved TLS transport still needs
+the app-owned sync-listener lifecycle before live data sync can be claimed.
 `native/windows/TlsSetupProcess.cs` provides the corresponding Windows wrapper.
 It uses bounded replies, correlated requests, a 45-second command timeout,
 discarded child diagnostics and verified child shutdown. Source `72e88b8`
 compiled with zero warnings or errors and passed the native self-tests. The
 `--test-tls-setup-bridge` check exercised the real copied Node controller with
 status, cancellation, concurrent requests and repeated cleanup in an empty
-temporary runtime. Neither wrapper is connected to Settings yet. Full
-setup-window lifecycle tests remain open. Existing installed SSH setup has not
+temporary runtime. The Windows wrapper is not connected to Settings yet. Full
+interactive setup-window lifecycle tests remain open. Existing installed SSH setup has not
 been replaced.
 
 ### Pairing commit
