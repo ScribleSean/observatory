@@ -39,6 +39,28 @@ struct QuotaLivePace {
     let coverage: Double
 }
 
+func quotaHourlyTickStride(_ hours: [QuotaHourlyPace]) -> Int {
+    guard let first = hours.first, let last = hours.last else { return 1 }
+    let span = max(1, last.hour.timeIntervalSince(first.hour) / 3600 + 1)
+    let minimum = span / 6
+    return [1, 2, 3, 4, 6, 12, 24].first { Double($0) >= minimum } ?? max(24, Int(ceil(minimum / 24)) * 24)
+}
+
+func quotaHourlyTickDates(_ hours: [QuotaHourlyPace]) -> [Date] {
+    guard let first = hours.first, let last = hours.last else { return [] }
+    let count = max(0, Int(last.hour.timeIntervalSince(first.hour) / 3600))
+    let ticks = stride(from: 0, through: count, by: quotaHourlyTickStride(hours)).map {
+        first.hour.addingTimeInterval(Double($0) * 3600 + 1800)
+    }
+    // A last-hour label has too little trailing space in a dense day chart.
+    // Keep the bar and the explicit date range, omit only that crowded tick.
+    return count >= 6 && ticks.count > 1 ? ticks.filter { $0 < last.hour } : ticks
+}
+
+func quotaCoverageLabel(_ fraction: Double) -> String {
+    fraction > 0 && fraction < 0.01 ? "Less than 1 percent" : "\(Int((fraction * 100).rounded())) percent"
+}
+
 func quotaLivePace(_ quota: JSONObject, window: JSONObject, now: Date) -> QuotaLivePace? {
     guard text(quota["status"]) == "ok", let at = parseDate(quota["checkedAt"]),
           now >= at, now.timeIntervalSince(at) < 600, let reset = parseDate(window["resetsAt"]), reset > now,
@@ -133,7 +155,8 @@ struct QuotaPanel: View {
                                 Text(live.remaining).font(ObservatoryTheme.font(dashboard ? 36 : 22, weight: .semibold)).tracking(-1).monospacedDigit()
                                 Text("Estimated at this pace · reset in \(live.reset)")
                                     .font(ObservatoryTheme.font()).foregroundStyle(ObservatoryTheme.muted)
-                                Text("\(formatted(live.rate)) percentage points / hour")
+                                let rate = formatted(live.rate)
+                                Text("\(rate) \(rate == "1" ? "percentage point" : "percentage points") / hour")
                                     .font(ObservatoryTheme.font()).monospacedDigit()
                             }
                         } else {
@@ -150,7 +173,7 @@ struct QuotaPanel: View {
                                 }.font(.system(size: 10)).foregroundStyle(.secondary)
                             }.accessibilityElement(children: .ignore)
                                 .accessibilityLabel("Estimated time coverage until reset at the last observed pace")
-                                .accessibilityValue("\(Int((fraction * 100).rounded())) percent. Filled portion ends at estimated exhaustion or reset, whichever comes first.")
+                                .accessibilityValue("\(quotaCoverageLabel(fraction)). Filled portion ends at estimated exhaustion or reset, whichever comes first.")
                         }
                     }
                 }.accessibilityElement(children: .contain)
@@ -186,9 +209,9 @@ struct QuotaPanel: View {
                     .accessibilityLabel("Allowance history. Gaps and resets are separate segments.")
                     if dashboard {
                         HStack {
-                            Text(points.first!.at.formatted(date: .omitted, time: .shortened))
+                            Text(points.first!.at, format: .dateTime.month(.abbreviated).day().hour().minute())
                             Spacer()
-                            Text(points.last!.at.formatted(date: .omitted, time: .shortened))
+                            Text(points.last!.at, format: .dateTime.month(.abbreviated).day().hour().minute())
                         }.font(ObservatoryTheme.font(12)).foregroundStyle(ObservatoryTheme.muted)
                     }
                     let hourly = quotaHourlyPace(points)
@@ -202,7 +225,13 @@ struct QuotaPanel: View {
                                 .accessibilityValue("\(formatted(hour.percentagePointsPerHour)) percentage points per hour, based on \(formatted(hour.observedMinutes)) observed minutes")
                         }
                         .chartXScale(domain: (dashboard ? hourly.first!.hour : points.last!.at.addingTimeInterval(-86400))...hourly.last!.hour.addingTimeInterval(3600))
-                        .chartXAxis { AxisMarks(values: .stride(by: .hour, count: dashboard ? 1 : 6)) { AxisValueLabel(format: .dateTime.hour(), centered: true) } }
+                        .chartXAxis {
+                            if dashboard {
+                                AxisMarks(values: quotaHourlyTickDates(hourly)) { AxisValueLabel(format: .dateTime.hour()) }
+                            } else {
+                                AxisMarks(values: .stride(by: .hour, count: 6)) { AxisValueLabel(format: .dateTime.hour()) }
+                            }
+                        }
                         .chartPlotStyle { plot in plot.clipped() }
                         .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
                         .frame(height: 115)

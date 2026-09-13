@@ -89,7 +89,7 @@ struct ObservatoryPanel: View {
                 }.padding(.vertical, 20)
             }
             HStack {
-                Button(action: { open("activity") }) {
+                Button(action: { open("allowances") }) {
                     HStack { Text("Open Observatory"); Spacer(); Image(systemName: "arrow.up.right") }
                         .font(.system(size: 13, weight: .medium)).padding(.horizontal, 13).padding(.vertical, 11)
                         .foregroundStyle(accent)

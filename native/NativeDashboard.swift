@@ -74,8 +74,13 @@ struct NativeDashboard: View {
                     } else if selection.section == "allowances" {
                         Text("Observed on this Mac").font(ObservatoryTheme.font(19, weight: .semibold)).tracking(0.6)
                         if let quota = displayedSnapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 18)], alignment: .leading, spacing: 18) {
-                                ForEach(Array(visibleQuotaWindows(quota["windows"]).enumerated()), id: \.offset) { _, window in
+                            let windows = visibleQuotaWindows(quota["windows"])
+                            let columns = windows.count == 1 ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 420), spacing: 18)]
+                            if windows.isEmpty {
+                                QuotaPanel(quota: quota, dashboard: true).modifier(ObservatoryCard())
+                            }
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
+                                ForEach(Array(windows.enumerated()), id: \.offset) { _, window in
                                     QuotaPanel(quota: quota.merging(["windows": [window]]) { _, new in new }, dashboard: true)
                                         .modifier(ObservatoryCard())
                                 }

@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=name=>readFileSync(new URL('../native/windows/'+name,import.meta.url),'utf8');
+test('Mac default menu and compact-panel entries open Allowances',()=>{
+  const main=readFileSync(new URL('../native/main.swift',import.meta.url),'utf8');
+  const panel=readFileSync(new URL('../native/Panel.swift',import.meta.url),'utf8');
+  assert.match(main,/private func openDefault\(\) \{ openDashboard\("allowances"\) \}/);
+  assert.match(panel,/Button\(action: \{ open\("allowances"\) \}\) \{\s+HStack \{ Text\("Open Observatory"\)/);
+});
 test('Mac update gate runs before the collection store is created',()=>{
   const main=readFileSync(new URL('../native/main.swift',import.meta.url),'utf8');
   const launch=main.slice(main.indexOf('func applicationDidFinishLaunching'));

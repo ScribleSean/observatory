@@ -1,6 +1,18 @@
 import Foundation
 
 func runSelfTests() {
+    let tickStart = Date(timeIntervalSince1970: 0)
+    let fullDay = (0...24).map { QuotaHourlyPace(hour: tickStart.addingTimeInterval(Double($0) * 3600), percentagePointsPerHour: 1, observedMinutes: 60) }
+    precondition(quotaHourlyTickStride(fullDay) == 6)
+    precondition(quotaHourlyTickStride(Array(fullDay.prefix(3))) == 1)
+    precondition(quotaHourlyTickStride([fullDay[0], fullDay[24]]) == 6)
+    precondition(quotaHourlyTickStride([]) == 1)
+    precondition(quotaHourlyTickDates(fullDay).count == 4)
+    precondition(quotaHourlyTickDates(fullDay).first == tickStart.addingTimeInterval(1800))
+    precondition(quotaHourlyTickDates(fullDay).last == tickStart.addingTimeInterval(18 * 3600 + 1800))
+    precondition(quotaCoverageLabel(0.003) == "Less than 1 percent")
+    precondition(quotaCoverageLabel(0) == "0 percent")
+    precondition(quotaCoverageLabel(1) == "100 percent")
     do {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-update-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)

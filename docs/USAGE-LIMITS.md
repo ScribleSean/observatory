@@ -79,7 +79,8 @@ and consent remain unchanged.
 Storage has an 8 GiB safety ceiling and no automatic historical deletion. Disk
 exhaustion or the ceiling causes a failed transaction, not silent record pruning.
 Native archive browsing, deletion controls, storage-status UI and historical
-sync are still unfinished. This is tested source, not installed all-time history.
+sync are still unfinished. The Mac development installation now uses this archive.
+The installed Windows app has not yet received this migration.
 Migration is incompatible with older binaries' strict single-table validator.
 Installation must preserve a verified database backup, and rollback must not
 point an older binary at the migrated database or discard newer observations.

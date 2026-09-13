@@ -28,7 +28,7 @@ Missing data stays missing. Estimates stay labeled. Token counts are not subscri
 
 The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional allowance-history exchange is tested with fictional records. Real-device allowance sharing remains unverified and is off on the development pair.
 
-Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Allowance history has [bounded retention](docs/USAGE-LIMITS.md).
+Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Recent allowance graphs use a bounded cache. The Mac development app also keeps an owner-local archive without automatic expiry. See [history coverage and recovery](docs/USAGE-LIMITS.md).
 
 ## Try it
 

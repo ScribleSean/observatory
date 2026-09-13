@@ -94,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 guard let self else { return }
                 self.setupWindow?.close()
                 self.setupWindow = nil
-                self.openDashboard("activity")
+                self.openDashboard("allowances")
                 if pair && self.previewRuntime == nil { self.setupPairing() }
                 self.store.refresh()
             })
@@ -497,7 +497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             result.runModal()
         }
     }
-    @objc private func openDefault() { openDashboard("activity") }
+    @objc private func openDefault() { openDashboard("allowances") }
 
     @objc private func zoomIn() {
         guard let webView else { return }
@@ -684,7 +684,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
             print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen with synthetic quota and token charts")
             if CommandLine.arguments.contains("--preview-pace") { return }
-            openDashboard("activity")
+            openDefault()
+            if usesNativeDashboard { precondition(nativeSelection.section == "allowances") }
             // AppKit can hide the window before its closing animation updates
             // isShown. Wait for the closed state with a bounded deadline.
             afterUsageClosed { [self] in
@@ -744,7 +745,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return true }
         if popover.isShown { return true }
-        openDashboard("activity")
+        openDashboard("allowances")
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {
