@@ -124,8 +124,13 @@ initial setup from loss of an established identity.
 The Mac generator passed validation and the real loopback TLS claim flow.
 Windows source `b02f20c` compiled with zero warnings or errors and passed native
 self-tests, including key/certificate matching and signature verification.
-Windows generator-to-Node TLS interoperability is not verified yet. The
-Windows implementation uses the existing shipped .NET runtime, not Git or an
+Windows source `587e359` also compiled cleanly and passed
+`--test-device-identity-bridge` with the pinned Windows Node runtime. That check
+generates two identities in .NET, passes them through stdin to the copied
+collector script, validates them in Node, and completes a real loopback TLS
+claim and explicit confirmation. It writes no identities to disk. This is
+native-to-Node interoperability evidence, not a cross-device setup-wizard test.
+The Windows implementation uses the existing shipped .NET runtime, not Git or an
 external OpenSSL installation. See Microsoft's
 [CertificateRequest API](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.x509certificates.certificaterequest?view=net-10.0).
 
