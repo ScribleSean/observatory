@@ -1,6 +1,11 @@
 name: Clean Windows package
 on:
   workflow_dispatch:
+    inputs:
+      verify_installer:
+        description: Compile and exercise the isolated test-identity installer
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -9,7 +14,7 @@ concurrency:
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
@@ -33,6 +38,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pinned build timezone preparation failed.' }
           $env:OBSERVATORY_TEST_PYTHON = $builder
           ./native/windows/package.ps1 -BuildPython $builder
+      - name: Compile and verify the isolated installer lifecycle
+        if: inputs.verify_installer
+        shell: pwsh
+        run: |
+          $release = Join-Path $env:GITHUB_WORKSPACE 'native/windows/release'
+          $packages = @(Get-ChildItem -LiteralPath $release -Directory -Filter 'candidate-*' | ForEach-Object {
+            $app = Join-Path $_.FullName 'Workspace Observatory'
+            if (Test-Path -LiteralPath (Join-Path $app 'package-manifest.json')) { $app }
+          })
+          if ($packages.Count -ne 1) { throw 'Expected exactly one clean-run package.' }
+          $app = $packages[0]
+          & (Join-Path $app 'Runtime/node.exe') native/windows/verify-manifest.mjs $app
+          if ($LASTEXITCODE -ne 0) { throw 'Clean package verification failed.' }
+          ./native/windows/installer.ps1 -PackageDirectory $app -TestIdentity
+          $receipts = @(Get-ChildItem -LiteralPath $release -Directory -Filter 'installer-*' | ForEach-Object {
+            $receipt = Join-Path $_.FullName 'artifacts/installer-build.json'
+            if (Test-Path -LiteralPath $receipt) { $receipt }
+          })
+          if ($receipts.Count -ne 1) { throw 'Expected exactly one installer build receipt.' }
+          $receipt = Get-Content -LiteralPath $receipts[0] -Raw | ConvertFrom-Json
+          if (-not $receipt.testIdentity) { throw 'Only the isolated test identity is permitted.' }
+          $installer = Join-Path (Split-Path $receipts[0]) $receipt.installerName
+          ./native/windows/test-installer.ps1 -InstallerPath $installer
       - name: Diagnose private-directory failure with a disposable fixture
         if: failure()
         shell: pwsh
@@ -42,5 +70,5 @@ jobs:
           $directory = Join-Path $fixture 'private-sync'
           & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -File scripts/private-sync-acl.ps1 -Directory $directory -Initialize -Diagnostic
           exit $LASTEXITCODE
-      # No live sources, signing secrets, installation or artifact publication.
+      # No live sources, signing secrets, ordinary installation or publication.
       # A packaged build is not a clean first-launch or desktop usability test.

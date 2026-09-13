@@ -4,6 +4,10 @@ The native Windows tray app collects on Windows without a running Mac or open te
 
 This is a development preview. A per-user installer is implemented and tested, but no public binary release is available yet. Windows x64 is the tested build target. Other Windows architectures are not verified.
 
+The [clean Windows package run for f980326](https://github.com/ScribleSean/workspace-observatory/actions/runs/34738823435) passed on September 13, 2026 UTC. It recorded 345 passing source tests and 26 explicit skips, then verified packaged native checks and all 3,027 manifest files, totaling 257,766,732 bytes. That run did not install the application or publish a release.
+
+The manual clean-package workflow now also offers isolated installer verification, enabled by default. It compiles a TEST-identity installer and runs the existing installation, overwrite refusal, linked-directory rejection, uninstall and saved-data preservation checks. This uses synthetic data on the disposable runner, not the ordinary application registration. A successful package-only run does not establish installer or desktop first-launch coverage.
+
 ## Open the app
 
 Installed builds appear as **Workspace Observatory** in the Start menu. Launching the app opens its main window. Launching it again requests the existing window instead of starting another collector in the same Windows session.
