@@ -22,7 +22,8 @@ test('normal quit drains collection before releasing application resources',()=>
   assert.ok(quit.indexOf('await collector.StopGracefully')<quit.indexOf('ExitThread();'));
   assert.match(collector,/await operations.Stop\(\).WaitAsync\(timeout\)/);
   assert.match(collector,/catch \(TimeoutException\)[\s\S]*operations.Resume\(\)/);
-  assert.equal((collector.match(/operations.TryBegin\(\)/g)||[]).length,3);
-  assert.equal((collector.match(/operations.Complete\(\)/g)||[]).length,3);
+  const production=collector.slice(0,collector.indexOf('internal static void ShutdownSelfTest()'));
+  assert.equal((production.match(/operations.TryBegin\(\)/g)||[]).length,3);
+  assert.equal((production.match(/operations.Complete\(\)/g)||[]).length,3);
   assert.match(program,/OperationDrain.SelfTest\(\)/);
 });
