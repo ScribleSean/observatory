@@ -1,0 +1,40 @@
+name: Desktop update safety
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'scripts/*installation*.test.mjs'
+      - 'scripts/replace-payload.test.mjs'
+      - 'scripts/update-appcast.test.mjs'
+      - '.github/workflows/update-safety.yml'
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'scripts/*installation*.test.mjs'
+      - 'scripts/replace-payload.test.mjs'
+      - 'scripts/update-appcast.test.mjs'
+      - '.github/workflows/update-safety.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: update-safety-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  update-safety:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Dependency-free tests create only disposable keys and synthetic payloads.
+      # This workflow neither builds releases nor accesses production signing keys.
+      - name: Verify signatures, replacement and rollback
+        run: node --test scripts/verify-installation.test.mjs scripts/replace-payload.test.mjs scripts/update-appcast.test.mjs
