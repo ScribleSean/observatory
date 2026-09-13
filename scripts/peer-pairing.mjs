@@ -16,7 +16,7 @@ const hosts=host=>host==='Mac'?['Mac']:['Windows'];
 export function validatePairing(value) {
   if(!value || typeof value!=='object' || Array.isArray(value) ||
     !['version','local','peer'].every(key=>Object.hasOwn(value,key)) ||
-    Object.keys(value).some(key=>!['version','local','peer','transport','repair'].includes(key)) || value.version!==1 ||
+    Object.keys(value).some(key=>!['version','local','peer','transport','repair','peerCertificateSha256'].includes(key)) || value.version!==1 ||
     !exact(value.peer,['pairId','deviceId','comparisonId','host','codexHosts']))throw Error('Invalid private pairing');
   const local=value.local,peer=value.peer;
   const configured=source=>source.host==='Windows' && source.codexHosts?.length===2?['Windows','Ubuntu']:hosts(source.host);
@@ -34,6 +34,11 @@ export function validatePairing(value) {
     if(!exact(value.repair,['mac','windows']) || !validRepairNonce(value.repair.mac) ||
       !validRepairNonce(value.repair.windows) || value.repair.mac===value.repair.windows)throw Error('Invalid repair confirmations');
     result.repair={mac:value.repair.mac,windows:value.repair.windows};
+  }
+  if(Object.hasOwn(value,'peerCertificateSha256')) {
+    if(result.transport?.kind!=='tls' || typeof value.peerCertificateSha256!=='string' ||
+      !/^[a-f0-9]{64}$/.test(value.peerCertificateSha256))throw Error('Invalid TLS peer certificate binding');
+    result.peerCertificateSha256=value.peerCertificateSha256;
   }
   return result;
 }

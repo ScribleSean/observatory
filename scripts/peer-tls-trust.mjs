@@ -2,7 +2,7 @@ import {createHash,X509Certificate} from 'node:crypto';
 import {lstat,open} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
-import {readPairing} from './peer-pairing.mjs';
+import {readPairing,validatePairing} from './peer-pairing.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
@@ -12,8 +12,9 @@ const fail=()=>Error('Confirmed peer trust unavailable');
 const hash=cert=>createHash('sha256').update(cert.raw).digest('hex');
 const fields=['version','pairId','localDeviceId','peerDeviceId','localCertificateSha256','peerCertificate'];
 
-async function context(runtime) {
-  const pairing=await readPairing(runtime),identity=await readDeviceIdentity(runtime);
+async function context(runtime,pairing=undefined) {
+  pairing=pairing===undefined?await readPairing(runtime):pairing;
+  const identity=await readDeviceIdentity(runtime);
   if(!pairing || !identity || (pairing.transport && pairing.transport.kind!=='tls') ||
     pairing.local.host!==(process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null))throw fail();
   return {pairing,localFingerprint:hash(new X509Certificate(identity.cert))};
@@ -26,7 +27,9 @@ function validate(value,{pairing,localFingerprint}) {
     typeof value.peerCertificate!=='string' || value.peerCertificate.length>16384)throw fail();
   const cert=new X509Certificate(value.peerCertificate),now=Date.now(),key=cert.publicKey;
   const details=key.asymmetricKeyDetails;
-  if(hash(cert)===localFingerprint || !cert.checkIssued(cert) || !cert.verify(key) ||
+  if(hash(cert)===localFingerprint ||
+    (pairing.peerCertificateSha256 && pairing.peerCertificateSha256!==hash(cert)) ||
+    !cert.checkIssued(cert) || !cert.verify(key) ||
     !(Date.parse(cert.validFrom)<=now && now<Date.parse(cert.validTo)) ||
     !(key.asymmetricKeyType==='rsa' && details.modulusLength>=2048 && details.modulusLength<=8192 ||
       key.asymmetricKeyType==='ec' && ['prime256v1','secp384r1'].includes(details.namedCurve)))throw fail();
@@ -52,18 +55,28 @@ export const readPeerTrust=runtime=>withPeerStateLock(runtime,async()=>{
   } catch {throw fail();}finally{await file.close();}
 });
 
-// Only the local confirmation handler may supply this verified claim binding.
-// Requires an already saved complementary pairing, never converts SSH in place.
-export const saveConfirmedPeerTrust=(runtime,claim)=>withPeerStateLock(runtime,async()=>{
-  const current=await context(runtime);
-  if(!claim || Object.keys(claim).length!==4 || claim.pairId!==current.pairing.local.pairId ||
+function claimRecord(claim,current) {
+  if(!claim || typeof claim!=='object' || Array.isArray(claim) || Object.keys(claim).length!==4 ||
+    !['pairId','localCertificateSha256','peerCertificate','peerCertificateSha256'].every(key=>Object.hasOwn(claim,key)) ||
+    claim.pairId!==current.pairing.local.pairId ||
     claim.localCertificateSha256!==current.localFingerprint ||
     typeof claim.peerCertificate!=='string' || claim.peerCertificate.length>16384)throw fail();
   const peer=new X509Certificate(claim.peerCertificate);
   if(hash(peer)!==claim.peerCertificateSha256)throw fail();
-  const safe=validate({version:1,pairId:claim.pairId,localDeviceId:current.pairing.local.deviceId,
+  return validate({version:1,pairId:claim.pairId,localDeviceId:current.pairing.local.deviceId,
     peerDeviceId:current.pairing.peer.deviceId,localCertificateSha256:current.localFingerprint,
     peerCertificate:peer.toString()},current);
+}
+
+// Validate against a proposed pairing before saving any configuration. This
+// checks cryptographic bindings, not whether the user confirmed the device.
+export const validateConfirmedPeerTrust=(runtime,pairing,claim)=>withPeerStateLock(runtime,async()=>
+  claimRecord(claim,await context(runtime,validatePairing(pairing))));
+
+// Only the local confirmation handler may supply this verified claim binding.
+// Requires an already saved complementary pairing, never converts SSH in place.
+export const saveConfirmedPeerTrust=(runtime,claim)=>withPeerStateLock(runtime,async()=>{
+  const safe=claimRecord(claim,await context(runtime));
   const directory=await privateSyncDirectory(runtime),bytes=JSON.stringify(safe);
   if(Buffer.byteLength(bytes)>limit)throw fail();
   const file=await open(path.join(directory,filename),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);

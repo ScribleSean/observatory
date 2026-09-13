@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {X509Certificate} from 'node:crypto';
-import {mkdtemp,realpath,rm,readFile,writeFile,link,readdir} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,writeFile,link,readdir,stat} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
-import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
+import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
+import {commitConfirmedTLSPairing} from './peer-tls-setup.mjs';
 import {saveConfirmedPeerTrust,readPeerTrust} from './peer-tls-trust.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
@@ -26,13 +27,54 @@ test('TLS trust is bound to persistent identities and pairing generation',
     }
     const local=await identity('local'),peer=await identity('peer');
     const host=process.platform==='darwin'?'Mac':'Windows';
-    async function fixture() {
+    async function fixture({initialize=true,tls=false}={}) {
       const runtime=await mkdtemp(path.join(root,'runtime-')),pairing=createPairingConfigurations()[host];
-      await initializeDeviceIdentity(runtime,local);await initializePairing(runtime,pairing);
+      if(tls)pairing.transport={kind:'tls',address:'100.64.0.2',port:43128};
+      await initializeDeviceIdentity(runtime,local);
+      if(initialize)await initializePairing(runtime,pairing);
       const claim={pairId:pairing.local.pairId,localCertificateSha256:fingerprint(local.cert),
         peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert)};
       return {runtime,pairing,claim,file:path.join(runtime,'private-sync','tls-trust.json')};
     }
+    await t.test('confirmed TLS setup persists and identical retries do not rewrite files',async()=>{
+      const f=await fixture({initialize:false,tls:true}),request={pairing:f.pairing,claim:f.claim};
+      assert.deepEqual(await commitConfirmedTLSPairing(f.runtime,request),{version:1,status:'local-ready'});
+      const before=await readFile(f.file),pairFile=path.join(f.runtime,'private-sync','pairing.json');
+      const pairBefore=await readFile(pairFile);
+      const unchanged=async file=>{const s=await stat(file,{bigint:true});return {ino:s.ino,mtimeNs:s.mtimeNs};};
+      const trustStat=await unchanged(f.file),pairStat=await unchanged(pairFile);
+      assert.deepEqual(await commitConfirmedTLSPairing(f.runtime,request),{version:1,status:'local-ready'});
+      assert.deepEqual(await readFile(f.file),before);assert.deepEqual(await readFile(pairFile),pairBefore);
+      assert.deepEqual(await unchanged(f.file),trustStat);assert.deepEqual(await unchanged(pairFile),pairStat);
+      assert.equal(existsSync(path.join(f.runtime,'private-quota')),false);
+      const changed={...f.pairing,transport:{...f.pairing.transport,port:43129}};
+      await assert.rejects(commitConfirmedTLSPairing(f.runtime,{...request,pairing:changed}));
+      assert.deepEqual(await readFile(pairFile),pairBefore);
+    });
+    await t.test('confirmed TLS setup resumes after configuration write but before trust write',async()=>{
+      const f=await fixture({initialize:false,tls:true});
+      await initializePairing(f.runtime,{...f.pairing,peerCertificateSha256:f.claim.peerCertificateSha256});
+      assert.equal(await readPeerTrust(f.runtime),null);
+      const other=await identity('interrupted-other');
+      await assert.rejects(commitConfirmedTLSPairing(f.runtime,{pairing:f.pairing,
+        claim:{...f.claim,peerCertificate:other.cert,peerCertificateSha256:fingerprint(other.cert)}}));
+      assert.equal(await readPeerTrust(f.runtime),null);
+      assert.deepEqual(await commitConfirmedTLSPairing(f.runtime,{pairing:f.pairing,claim:f.claim}),
+        {version:1,status:'local-ready'});
+      assert.ok(await readPeerTrust(f.runtime));
+    });
+    await t.test('invalid confirmation cannot create pairing and conflicting trust cannot replace it',async()=>{
+      const f=await fixture({initialize:false,tls:true}),request={pairing:f.pairing,claim:f.claim};
+      await assert.rejects(commitConfirmedTLSPairing(f.runtime,{...request,claim:{...f.claim,peerCertificateSha256:'0'.repeat(64)}}));
+      assert.equal(await readPairing(f.runtime),null);assert.equal(existsSync(f.file),false);
+      await commitConfirmedTLSPairing(f.runtime,request);
+      const before=await readFile(f.file),other=await identity('other');
+      await assert.rejects(commitConfirmedTLSPairing(f.runtime,{...request,
+        claim:{...f.claim,peerCertificate:other.cert,peerCertificateSha256:fingerprint(other.cert)}}));
+      assert.deepEqual(await readFile(f.file),before);
+      await revokePairing(f.runtime);
+      await assert.rejects(commitConfirmedTLSPairing(f.runtime,request));
+    });
     await t.test('explicit trust persists once without changing sharing settings',async()=>{
       const f=await fixture();assert.equal(await readPeerTrust(f.runtime),null);
       const saved=await saveConfirmedPeerTrust(f.runtime,f.claim);

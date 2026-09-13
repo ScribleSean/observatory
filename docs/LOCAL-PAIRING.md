@@ -33,6 +33,24 @@ and check connectivity afterward. Observatory must not collect Tailscale
 passwords or authentication keys. Network membership does not replace explicit
 Observatory device confirmation or data-sharing consent.
 
+## Local confirmation persistence
+
+`scripts/peer-tls-setup.mjs` provides `commitConfirmedTLSPairing` for a future
+local confirmation controller. It validates the proposed pairing and actual
+peer certificate against the saved local identity before writing pairing data.
+The first configuration write includes the peer certificate fingerprint. If
+the process stops before trust is saved, a retry cannot substitute a different
+certificate, endpoint or pairing generation. An identical retry verifies the
+existing files without rewriting them. Corrupt or conflicting state is not
+overwritten and existing revocation checks still apply.
+
+This is a local persistence step, not a network endpoint or a consent prompt.
+Its caller must supply the pairing from the pinned setup exchange and the
+certificate observed on that connection after local user confirmation. It
+returns `local-ready`, not `paired`. The complementary configuration exchange,
+remote acknowledgement, native controller and installed-app activation remain
+unfinished. It does not start listeners or enable allowance sharing.
+
 ## Invitation format
 
 `scripts/peer-invitation.mjs` creates and validates a versioned, copyable payload
