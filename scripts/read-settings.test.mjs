@@ -1,10 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import path from 'node:path';
-const execPython=(args,options)=>execFileSync(
-  process.platform==='win32'?path.join(process.env.SystemRoot || 'C:/Windows','py.exe'):'python3',
-  process.platform==='win32'?['-3',...args]:args,options);
+import {execPython} from './test-python.mjs';
 const code = `import importlib.util,json,sys,datetime as dt
 spec=importlib.util.spec_from_file_location('reader','scripts/read-settings.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
