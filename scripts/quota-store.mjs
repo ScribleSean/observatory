@@ -1,12 +1,13 @@
 import {open,lstat} from 'node:fs/promises';
 import {constants} from 'node:fs';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {retainQuotaHistory} from './quota-history.mjs';
 import {parseQuotaRecord,selectQuotaRecord} from './quota-record.mjs';
 import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage} from './quota-archive.mjs';
+import {withPeerStateLock} from './peer-lock.mjs';
 
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
@@ -126,6 +127,41 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
 });
 
 export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
+
+const archiveDeletionToken=(state,scope)=>createHash('sha256')
+  .update(JSON.stringify(['observatory-quota-archive-delete-v1',state.salt,state.revision,scope])).digest('hex');
+
+// Internal owner-local API. Native controls must resolve the selected account
+// locally, never accept arbitrary database paths or expose scope keys to peers.
+export const inspectQuotaArchive=(runtime,{scope},now=Date.now())=>withDatabase(runtime,db=>{
+  if(!hex(scope) || !timestamp(now))throw Error('Invalid archive selection');
+  const state=read(db,now);
+  const groups=db.prepare('SELECT kind,COUNT(*) AS count,MIN(observed_at) AS firstAt,MAX(observed_at) AS lastAt FROM quota_archive WHERE scope=? GROUP BY kind').all(scope);
+  const bytes=db.prepare('PRAGMA page_count').get().page_count*4096;
+  return {groups,storageBytes:bytes,storageLimitBytes:8*1024*1024*1024,
+    token:groups.length?archiveDeletionToken(state,scope):null};
+});
+
+// Logical deletion is atomic with invalidation of pending collectors. It does
+// not claim secure erasure of backups, filesystem snapshots or paired devices.
+export const deleteQuotaArchive=async(runtime,{scope,token,confirmation},now=Date.now())=>{
+  if(!hex(scope) || !hex(token) || confirmation!=='delete-account-history' || !timestamp(now))throw Error('Invalid archive deletion confirmation');
+  await lstat(path.join(runtime,'private-quota'));
+  return withPeerStateLock(runtime,()=>withDatabase(runtime,db=>{
+  const previous=read(db,now);
+  if(token!==archiveDeletionToken(previous,scope))throw Error('Archive deletion confirmation expired');
+  if(!db.prepare('SELECT 1 FROM quota_archive WHERE scope=? LIMIT 1').get(scope))throw Error('Archive already empty');
+  const next={...previous,revision:previous.revision+1};
+  if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
+  if(previous.history?.scope===scope) {
+    next.history=retainQuotaHistory(null,null,{enabled:false,now});
+    next.sharing=sharingOff();next.remote=null;
+  }
+  const removed=db.prepare('DELETE FROM quota_archive WHERE scope=?').run(scope).changes;
+  save(db,next);
+  return {deletedRecords:removed};
+  }));
+};
 
 // Called only after explicit consent for this account and paired device. A new
 // consent rotates the public generation, including when the pairing changes.

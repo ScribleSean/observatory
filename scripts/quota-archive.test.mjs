@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,lstat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
-import {readQuotaState,updateQuotaState,readQuotaArchive} from './quota-store.mjs';
+import {readQuotaState,updateQuotaState,readQuotaArchive,inspectQuotaArchive,deleteQuotaArchive,setQuotaSharing} from './quota-store.mjs';
 
 const start=Date.parse('2025-01-01T12:00:00Z'),scope='a'.repeat(64),other='b'.repeat(64);
 const sample=(at=start)=>({status:'ok',checkedAt:new Date(at).toISOString(),privateToken:'not-retained',
@@ -72,4 +72,42 @@ test('unexpected archive schema fails closed without updating cache',async t=>{
   await assert.rejects(readQuotaArchive(root,{scope,kind:'observation'}));
   const after=new DatabaseSync(file);
   try {assert.equal(after.prepare('SELECT record FROM quota_state').get().record,before);} finally {after.close();}
+});
+
+test('explicit deletion invalidates collectors, clears current cache and sharing, and preserves other accounts',async t=>{
+  const root=await fixture(t);await save(root,start,{scope:other});await save(root,start+1);
+  const current=await readQuotaState(root,start+1);
+  await setQuotaSharing(root,{revision:current.revision,enabled:true,pairingId:'c'.repeat(64)},start+1);
+  const pending=await readQuotaState(root,start+1);
+  const before=await inspectQuotaArchive(root,{scope},start+1);
+  assert.ok(before.storageBytes>0 && before.storageBytes<before.storageLimitBytes);
+  assert.equal(before.groups.reduce((sum,row)=>sum+row.count,0),3);
+  await assert.rejects(deleteQuotaArchive(root,{scope,token:before.token,confirmation:'yes'},start+1));
+  await assert.rejects(deleteQuotaArchive(root,{scope:other,token:before.token,confirmation:'delete-account-history'},start+1));
+  assert.equal((await deleteQuotaArchive(root,{scope,token:before.token,confirmation:'delete-account-history'},start+1)).deletedRecords,3);
+  await assert.rejects(updateQuotaState(root,{revision:pending.revision,scope,observation:sample(start+2)},start+2),/superseded/);
+  assert.equal((await readQuotaArchive(root,{scope,kind:'observation'})).records.length,0);
+  assert.equal((await readQuotaArchive(root,{scope:other,kind:'observation'})).records.length,1);
+  const after=await readQuotaState(root,start+2);
+  assert.equal(after.history.samples.length,0);assert.equal(after.sharing.enabled,false);
+  assert.equal((await inspectQuotaArchive(root,{scope},start+2)).token,null);
+  await assert.rejects(deleteQuotaArchive(root,{scope,token:before.token,confirmation:'delete-account-history'},start+2));
+});
+
+test('stale deletion cannot erase newer records and deleting an old account preserves the active account',async t=>{
+  const root=await fixture(t);await save(root,start);
+  const old=await inspectQuotaArchive(root,{scope},start);
+  await save(root,start+1,{scope:other});
+  await assert.rejects(deleteQuotaArchive(root,{scope,token:old.token,confirmation:'delete-account-history'},start+1),/expired/);
+  const fresh=await inspectQuotaArchive(root,{scope},start+1);
+  await deleteQuotaArchive(root,{scope,token:fresh.token,confirmation:'delete-account-history'},start+1);
+  assert.equal((await readQuotaState(root,start+1)).history.scope,other);
+  assert.equal((await readQuotaArchive(root,{scope:other,kind:'observation'})).records.length,1);
+});
+
+test('deletion cannot initialize an unconfigured quota store',async t=>{
+  const root=await fixture(t);
+  await assert.rejects(deleteQuotaArchive(root,{scope,token:'c'.repeat(64),confirmation:'delete-account-history'},start));
+  await assert.rejects(lstat(path.join(root,'private-quota')),{code:'ENOENT'});
+  await assert.rejects(lstat(path.join(root,'private-repair')),{code:'ENOENT'});
 });

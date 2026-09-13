@@ -78,7 +78,7 @@ and consent remain unchanged.
 
 Storage has an 8 GiB safety ceiling and no automatic historical deletion. Disk
 exhaustion or the ceiling causes a failed transaction, not silent record pruning.
-Archive browsing, explicit deletion controls, storage-status UI and historical
+Native archive browsing, deletion controls, storage-status UI and historical
 sync are still unfinished. This is tested source, not installed all-time history.
 Migration is incompatible with older binaries' strict single-table validator.
 Installation must preserve a verified database backup, and rollback must not
@@ -86,6 +86,26 @@ point an older binary at the migrated database or discard newer observations.
 Synthetic Mac and Windows tests cover migration, a 400-day cache expiry,
 account changes, monitoring disable, duplicate delivery, pagination, failed
 polls, superseded writes and unexpected-schema rejection.
+
+The internal owner-local `inspectQuotaArchive` API reports per-kind record
+counts, observation bounds and allocated database bytes for a selected account,
+plus a deletion confirmation token. `deleteQuotaArchive` requires that token and
+an explicit confirmation value. Tokens are bound to the local salt, account
+scope and current store revision. A later write expires the confirmation. The
+delete operation holds the pairing lock and a database transaction, removes
+only that account's archive records, and advances the revision to reject stale
+collectors. Deleting the active account's history also clears its recent cache
+and revokes sharing. Deleting an older account preserves the active account.
+It does not change source configuration or disable future collection.
+New provider reports may include cumulative totals or older reported dates.
+Users who also want to stop receiving those reports must disable collection.
+
+These are internal APIs, not an installed Delete button or a public endpoint.
+Deletion is logical removal from this device. It does not promise secure erasure
+of free database pages, filesystem snapshots, backups or data already shared to
+another device. Allocated database size may not shrink after deletion. Native
+confirmation UI must communicate these limits and resolve the selected account
+locally without exposing private account-scope keys to a peer.
 
 Current Mac source adds a large live pace estimate and reset countdown, refreshed
 every 30 seconds without provider polling. The coverage bar recalculates against
