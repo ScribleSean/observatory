@@ -32,7 +32,7 @@ final class DirectPairingModel: ObservableObject {
         self.bridge = bridge
         if polling {
             timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.poll() }
+                Task { @MainActor [weak self] in self?.poll() }
             }
         }
     }
