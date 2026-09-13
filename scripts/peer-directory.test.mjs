@@ -6,6 +6,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {fileURLToPath} from 'node:url';
+import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 async function fixture(t) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-private-acl-')));
@@ -18,7 +19,7 @@ function grantEveryone(file) {
     $sid=New-Object Security.Principal.SecurityIdentifier('S-1-1-0');
     $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'Read','Allow');
     $acl.AddAccessRule($rule); Set-Acl -LiteralPath $file -AclObject $acl;`;
-  execFileSync(executable,['-NoProfile','-NonInteractive','-Command','-'],{input,encoding:'utf8',timeout:15000});
+  execFileSync(executable,['-NoProfile','-NonInteractive','-Command','-'],{input,encoding:'utf8',timeout:15000,env:windowsPowerShellEnvironment()});
 }
 test('private directory is created with verified permissions and can be reused',async t=>{
   const runtime=await fixture(t),directory=await privateSyncDirectory(runtime,true);

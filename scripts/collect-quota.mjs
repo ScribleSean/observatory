@@ -7,6 +7,7 @@ import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
 import {readAccountSnapshot} from './read-quota.mjs';
+import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 const execute=promisify(execFile);
 const disconnected=()=>({status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]});
@@ -20,7 +21,7 @@ export async function findCodexExecutable() {
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
     const {stdout}=await execute(powershell,['-NoProfile','-NonInteractive','-Command',
       "Get-AppxPackage -Name OpenAI.Codex | Sort-Object Version -Descending | Select-Object -First 1 -ExpandProperty InstallLocation"],
-    {windowsHide:true,timeout:10000,maxBuffer:4096});
+    {windowsHide:true,timeout:10000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
     const root=stdout.trim();
     if(path.isAbsolute(root) && !root.includes('\n') && !root.includes('\r'))candidates=[path.join(root,'app/resources/codex.exe')];
   }

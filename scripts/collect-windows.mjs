@@ -14,14 +14,15 @@ import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
+import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const unavailable=host=>({host,status:'unavailable',checkedAt:new Date().toISOString()});
 const disconnected=host=>({host,status:'not-connected'});
 
-function run(file,args,input='') {
+function run(file,args,input='',environment=process.env) {
   return new Promise((resolve,reject)=>{
-    const child=spawn(file,args,{windowsHide:true,stdio:['pipe','pipe','ignore']});
+    const child=spawn(file,args,{windowsHide:true,stdio:['pipe','pipe','ignore'],env:environment});
     let output='',done=false;
     const finish=(error)=>{if(done)return;done=true;clearTimeout(timer);error?reject(error):resolve(output);};
     const stop=()=>{
@@ -70,7 +71,7 @@ export async function collectWindows(runtime,peerConfig=null) {
   }),guarded('Windows',async()=>{
     if(!config.activity)return disconnected('Windows');
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
-    const raw=JSON.parse(await run(powershell,['-NoProfile','-NonInteractive','-File',path.join(scripts,'windows-aggregate-activity.ps1')]));
+    const raw=JSON.parse(await run(powershell,['-NoProfile','-NonInteractive','-File',path.join(scripts,'windows-aggregate-activity.ps1')],'',windowsPowerShellEnvironment()));
     return {...raw,host:'Windows',status:'ok'};
   }),guarded('Windows',async()=>{
     if(!config.wispr)return {...disconnected('Windows'),source:'Wispr Flow'};
