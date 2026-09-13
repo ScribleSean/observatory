@@ -82,7 +82,7 @@ confirmation, cancellation and cleanup without keys or network access. Full
 native compilation and self-tests passed. Visual inspection was blocked by
 the locked Mac, so layout and live interactive usability remain unverified.
 No installed application was replaced. The saved TLS transport still needs
-the app-owned sync-listener lifecycle before live data sync can be claimed.
+installed-app and two-device verification before live data sync can be claimed.
 `native/windows/TlsSetupProcess.cs` provides the corresponding Windows wrapper.
 It uses bounded replies, correlated requests, a 45-second command timeout,
 discarded child diagnostics and verified child shutdown. Source `72e88b8`
@@ -262,9 +262,9 @@ duplicate handling and revocation rather than creating another store. Two
 simultaneous sockets, a 17 MB request/response ceiling and a 30-second socket
 deadline bound each listener. Errors return no private state.
 
-The record listener is not started by the app yet. It exposes only the existing
+Native app source now owns the record-listener process. It exposes only the existing
 record exchange shape, not commands, files or the separate allowance-sharing
-endpoint. Native process ownership still needs integration. Synthetic loopback
+endpoint. Installed-app verification remains open. Synthetic loopback
 tests verify saved-record exchange, rejection of wrong certificates and record
 identities, duplicate delivery and revocation. Closing the listener now waits
 for in-flight record handlers after closing its sockets.
@@ -276,7 +276,8 @@ endpoint. Existing SSH and older TLS configurations remain unchanged. A TLS
 configuration without a local endpoint cannot start the background service.
 
 `scripts/peer-tls-service.mjs` provides that service behind a private parent-child
-pipe. The first status request activates a 30-second reconciliation timer. It
+pipe. Native launch activates a 30-second reconciliation timer without repeated
+parent commands, so the bounded command-ID space cannot expire during normal use. It
 loads saved pairing and trust, binds only the saved numeric private endpoint,
 reuses an unchanged live listener, and closes before replacing a changed one.
 It retries a failed listener on a later tick, closes after revocation or failed
@@ -285,8 +286,24 @@ checks the exact expected pairing under the peer lock before binding and before
 accepting a record. No identity or pairing is created by this service.
 Parent EOF or termination stops it. Replies contain only service status, not
 addresses, certificates or records. `sync-listening` means a local listener is
-open, not that the peer is connected or data has synchronized. Native launch,
-restart and shutdown ownership are the next integration step.
+open, not that the peer is connected or data has synchronized.
+
+`TrustedSyncProcess.swift` and `native/windows/TrustedSyncProcess.cs` each own one
+helper. The native collection lifecycle launches it only after first-run consent
+and when a saved TLS trust file exists. The helper still validates that file and
+the pairing before listening. Preview and unpaired startup do not launch it.
+The normal 30-second app tick can restart an exited helper, but never overlaps a
+still-running one. Shutdown closes stdin and verifies process exit without a
+forced kill. A quit timeout keeps the application open. Output is discarded
+without retaining private diagnostics, and Node runtime overrides are
+removed from the child's environment.
+
+Both native builds and owner tests passed, including sustained startup, duplicate
+prevention, graceful exit, restart and a deliberately slow helper. The Mac uses
+`realpath` for its runtime argument, matching the controller's canonical-path
+requirement. Mac shutdown regression tests and Windows native self-tests passed.
+These tests use temporary runtimes and do not demonstrate installed two-device
+sync or successful network recovery on the user's devices.
 
 The outbound path in `peer-tls-outbound.mjs` is now selected by
 `finalizePeerCollection` for an explicit TLS transport on either platform.
@@ -300,8 +317,8 @@ network waits. Responses still pass through `acceptPeerState` before merging.
 Network failure preserves valid local and previously accepted peer data.
 
 This is collector source integration, not installed cross-device sync. The
-native app does not yet start the trusted listener or establish mutually
-acknowledged TLS pairing configuration. Separate allowance-history exchange
+native source can now start the trusted listener, but installed mutually
+acknowledged TLS pairing still needs verification. Separate allowance-history exchange
 has not been connected to TLS.
 
 `scripts/peer-tls-trust.mjs` persists a confirmed peer certificate in

@@ -73,7 +73,12 @@ async function main() {
   const controller=createTrustedSyncService(args[1]);
   const stop=()=>process.stdin.destroy();
   process.once('SIGTERM',stop);process.once('SIGINT',stop);
-  try {await serveTLSSetupControl(args[1],process.stdin,process.stdout,{controller});}
+  try {
+    // Native launch itself is the lifecycle action. No polling commands are
+    // required from the parent, so the bounded command-ID space cannot expire.
+    await Promise.all([serveTLSSetupControl(args[1],process.stdin,process.stdout,{controller}),
+      controller.run({action:'status'})]);
+  }
   finally {await controller.cancel();}
 }
 if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))

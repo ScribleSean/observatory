@@ -12,6 +12,7 @@ internal sealed class Collector : IDisposable
     private long nextAllowanceAttemptTick;
     private readonly CancellationTokenSource lifetime = new();
     private readonly OperationDrain operations = new();
+    private readonly TrustedSyncProcess trustedSync;
     private bool pairingPaused;
     private bool resumePending;
     internal event Action? Changed;
@@ -19,12 +20,20 @@ internal sealed class Collector : IDisposable
     internal Collector(string runtime)
     {
         this.runtime = runtime;
+        trustedSync = new TrustedSyncProcess(runtime);
         Directory.CreateDirectory(Path.Combine(runtime, "public", "local"));
         timer.Tick += async (_, _) => await Refresh();
         allowanceTimer.Tick += async (_, _) => await RefreshAfterResumeOrAllowances();
     }
 
-    internal void Start() { if (operations.Stopping) return; timer.Start(); allowanceTimer.Start(); _ = Refresh(); }
+    internal void Start() { if (operations.Stopping) return; timer.Start(); allowanceTimer.Start(); EnsureTrustedSync(); _ = Refresh(); }
+    private void EnsureTrustedSync()
+    {
+        if (Busy) return;
+        if (pairingPaused || lifetime.IsCancellationRequested || !Configured || !FirstRunSetup.AllowsCollection(runtime) ||
+            !File.Exists(Path.Combine(runtime, "private-sync", "tls-trust.json"))) { trustedSync.RequestStop(); return; }
+        try { trustedSync.Resume(); trustedSync.EnsureStarted(); } catch { /* Retry on the next normal tick. */ }
+    }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
 
@@ -33,6 +42,7 @@ internal sealed class Collector : IDisposable
 
     private async Task RefreshAfterResumeOrAllowances()
     {
+        EnsureTrustedSync();
         if (resumePending)
         {
             if (Busy || pairingPaused || lifetime.IsCancellationRequested) return;
@@ -51,10 +61,16 @@ internal sealed class Collector : IDisposable
         var restartAllowanceTimer = allowanceTimer.Enabled;
         timer.Stop();
         allowanceTimer.Stop();
-        try { await operations.Stop().WaitAsync(timeout); return true; }
+        try
+        {
+            await operations.Stop().WaitAsync(timeout);
+            if (!await trustedSync.Stop(TimeSpan.FromSeconds(5))) throw new TimeoutException();
+            return true;
+        }
         catch (TimeoutException)
         {
             operations.Resume();
+            trustedSync.Resume();
             if (restartTimer) timer.Start();
             if (restartAllowanceTimer) allowanceTimer.Start();
             return false;
@@ -221,7 +237,7 @@ internal sealed class Collector : IDisposable
         finally { operations.Complete(); if (!lifetime.IsCancellationRequested) Changed?.Invoke(); }
     }
 
-    public void Dispose() { timer.Stop(); timer.Dispose(); allowanceTimer.Stop(); allowanceTimer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
+    public void Dispose() { trustedSync.RequestStop(); timer.Stop(); timer.Dispose(); allowanceTimer.Stop(); allowanceTimer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
 
     internal static void ShutdownSelfTest()
     {

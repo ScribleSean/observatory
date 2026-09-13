@@ -32,6 +32,12 @@ internal static class Program
             catch { Console.Error.WriteLine("Direct pairing window test failed."); Environment.ExitCode = 1; }
             return;
         }
+        if (args.Length == 2 && args[0] == "--test-trusted-sync-owner")
+        {
+            try { TrustedSyncProcess.SelfTest(args[1]).GetAwaiter().GetResult(); }
+            catch { Console.Error.WriteLine("Trusted sync owner test failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--self-test"))
         {
             try

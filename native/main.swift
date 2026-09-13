@@ -748,7 +748,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
-if CommandLine.arguments.contains("--test-direct-pairing-model") {
+if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trusted-sync-owner" {
+    Task { @MainActor in
+        do {
+            try await TrustedSyncProcess.selfTest(node: URL(fileURLWithPath: CommandLine.arguments[2]),
+                script: URL(fileURLWithPath: CommandLine.arguments[3]))
+            exit(0)
+        } catch { print("Trusted sync owner test failed"); exit(1) }
+    }
+    NSApplication.shared.run()
+} else if CommandLine.arguments.contains("--test-direct-pairing-model") {
     Task { @MainActor in
         await testDirectPairingModel(); print("Native pairing model consent, confirmation, cancellation and cleanup passed"); exit(0)
     }

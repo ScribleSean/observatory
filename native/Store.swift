@@ -16,6 +16,7 @@ final class ObservatoryStore: ObservableObject {
     var pairingMaintenance = false
     var collectionPausedForPairing = false
     private var process: Process?
+    private var trustedSync: TrustedSyncProcess?
     private var pollTimer: Timer?
     private var refreshTimer: Timer?
     private var nextAllowanceAttemptUptime: TimeInterval = 0
@@ -33,8 +34,9 @@ final class ObservatoryStore: ObservableObject {
     }
 
     func start() {
+        ensureTrustedSync()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload(); self?.refreshAllowancesIfDue() }
+            MainActor.assumeIsolated { self?.ensureTrustedSync(); self?.reload(); self?.refreshAllowancesIfDue() }
         }
         pollTimer?.tolerance = 5
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -82,6 +84,7 @@ final class ObservatoryStore: ObservableObject {
         guard collectionAllowed else { lastAttempt = "preview-collection-disabled"; return }
         guard (try? FirstRunSetup.required(runtime: runtime)) == false else { lastAttempt = "setup-required"; return }
         guard process == nil, !pairingMaintenance, !collectionPausedForPairing else { return }
+        ensureTrustedSync()
         guard let resources = Bundle.main.resourceURL,
               let local = try? CollectorConfiguration.prepare(runtime: runtime),
               let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, local: local, quotaOnly: quotaOnly) else {
@@ -94,6 +97,17 @@ final class ObservatoryStore: ObservableObject {
         task.arguments = launch.arguments
         task.currentDirectoryURL = runtime
         startCollection(task)
+    }
+
+    private func ensureTrustedSync() {
+        guard !shuttingDown else { return }
+        guard collectionAllowed, !pairingMaintenance, !collectionPausedForPairing,
+              (try? FirstRunSetup.required(runtime: runtime)) == false,
+              FileManager.default.fileExists(atPath: runtime.appendingPathComponent("private-sync/tls-trust.json").path),
+              let resources = Bundle.main.resourceURL else { trustedSync?.requestStop(); return }
+        if trustedSync == nil { trustedSync = TrustedSyncProcess(runtime: runtime, resources: resources) }
+        trustedSync?.resume()
+        trustedSync?.ensureStarted()
     }
 
     func startCollection(_ task: Process) {
@@ -120,16 +134,18 @@ final class ObservatoryStore: ObservableObject {
     func drainForQuit(timeout: TimeInterval = 260, completion: @escaping (Bool) -> Void) {
         guard timeout > 0, timeout <= 300, !shuttingDown else { completion(false); return }
         shuttingDown = true
+        trustedSync?.requestStop()
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
                 guard let self else { timer.invalidate(); completion(false); return }
-                if self.process == nil && !self.refreshing && !self.pairingMaintenance {
+                if self.process == nil && !self.refreshing && !self.pairingMaintenance && self.trustedSync?.running != true {
                     timer.invalidate()
                     completion(true)
                 } else if ProcessInfo.processInfo.systemUptime >= deadline {
                     timer.invalidate()
                     self.shuttingDown = false
+                    self.trustedSync?.resume()
                     completion(false)
                 }
             }
@@ -146,6 +162,7 @@ final class ObservatoryStore: ObservableObject {
     }
 
     func stop() {
+        trustedSync?.requestStop()
         pollTimer?.invalidate()
         refreshTimer?.invalidate()
         // The runner catches termination and stops only its own collection process group.
