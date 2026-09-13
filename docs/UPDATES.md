@@ -24,6 +24,14 @@ The Mac feed is intended only for the arm64 distribution. Use a platform-specifi
 
 The existing package pipeline verifies clean source, file inventories, privacy boundaries and packaged runtime behavior. Reuse those checks before publishing either platform. The present GitHub workflow publishes a synthetic web demo, not desktop application updates. Before deploying that demo, it verifies that the run still matches the current main revision. Superseded or non-main runs skip deployment, and an unavailable or malformed revision response fails closed. Serialized deployment avoids an older queued run replacing a newer published demo. Local tests exercised all five decision paths against the workflow's actual shell block.
 
+Both package build paths now require the native trusted-sync owner self-test,
+using the staged Node runtime and collector scripts. It verifies sustained
+helper startup, duplicate exclusion, graceful shutdown and restart in an empty
+temporary runtime without creating a device identity or contacting a peer.
+The Mac owner test passed against current scripts. The exact Windows package
+test block passed against the rebuilt application, including a Node path with
+spaces. These checks do not constitute a new complete package or installation.
+
 [Sparkle for Mac](https://sparkle-project.org/documentation/publishing/) supports signed archive updates through an appcast and a monotonically increasing bundle version. [WinSparkle](https://winsparkle.org/guides/getting-started/) provides a native Windows update flow using an appcast and an embedded public verification key. Their integration and compatibility with Observatory's existing installers still require validation. A checksum alone is not publisher authentication.
 
 The production path must build and verify both platforms from one reviewed source revision, sign the update artifacts, publish immutable artifacts and update metadata, then verify receipt and activation on the development machines. Signing keys remain outside Git and application packages. Do not introduce paid signing services or bypass operating-system protections.

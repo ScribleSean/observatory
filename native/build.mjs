@@ -79,6 +79,8 @@ for (const attribute of ['com.apple.FinderInfo','com.apple.ResourceFork']) {
 }
 execFileSync('/usr/bin/codesign',['--force','--sign','-','--timestamp=none',bundle],{stdio:'inherit'});
 execFileSync(binary,['--self-test'],{stdio:'inherit'});
+execFileSync(binary,['--test-trusted-sync-owner',path.join(resources,'Runtime/node/bin/node'),
+  path.join(scripts,'peer-tls-service.mjs')],{stdio:'inherit',timeout:30000});
 execFileSync(binary,['--test-shutdown'],{stdio:'inherit',timeout:15000});
 execFileSync(binary,['--test-collector'],{stdio:'inherit',timeout:30000});
 execFileSync('/usr/bin/codesign',['--verify','--strict',bundle],{stdio:'inherit'});

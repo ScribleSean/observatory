@@ -74,10 +74,13 @@ try {
     if (Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Name -in @('usage.json', 'collector.json', 'collector.config.json', 'local.config.json', '.env') }) {
         throw 'Private runtime configuration or snapshots detected.'
     }
-    foreach ($testArgument in @('--self-test', '--test-sharing-bridge')) {
+    foreach ($testArgument in @('--self-test', '--test-sharing-bridge', '--test-trusted-sync-owner')) {
     $nativeTest = New-Object System.Diagnostics.Process
     $nativeTest.StartInfo.FileName = Join-Path $app 'WorkspaceObservatory.exe'
     $nativeTest.StartInfo.Arguments = $testArgument
+    if ($testArgument -eq '--test-trusted-sync-owner') {
+        $nativeTest.StartInfo.Arguments += ' "' + (Join-Path $runtime 'node.exe') + '"'
+    }
     $nativeTest.StartInfo.UseShellExecute = $false
     $nativeTest.StartInfo.CreateNoWindow = $true
     $nativeTest.StartInfo.RedirectStandardOutput = $true
