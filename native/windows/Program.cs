@@ -20,6 +20,7 @@ internal static class Program
             {
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 InstallationGate.SelfTest();
+                OperationDrain.SelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
                     UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
                 Console.WriteLine("Native dashboard default and legacy fallback passed.");
@@ -122,6 +123,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private SetupWizard? setupWizard;
     private UsagePopup? usagePopup;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
+    private bool quitting;
 
     internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true)
     {
@@ -162,7 +164,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             totals.DropDownItems.Add(host, null, (_, _) => ShowTotals(host));
         menu.Items.Add(totals);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit Observatory", null, (_, _) => ExitThread());
+        menu.Items.Add("Quit Observatory", null, async (_, _) => await RequestQuit());
         tray = new NotifyIcon { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
             Text = "Workspace Observatory", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_, _) => Open();
@@ -309,6 +311,23 @@ internal sealed class ObservatoryContext : ApplicationContext
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
         dashboard.Activate();
+    }
+
+    private async Task RequestQuit()
+    {
+        if (quitting) return;
+        quitting = true;
+        try
+        {
+            tray.Text = "Observatory · finishing collection before quitting";
+            if (!await collector.StopGracefully(TimeSpan.FromSeconds(260)))
+            {
+                MessageBox.Show("The current operation has not finished. Observatory stayed open and collection was not interrupted. Try quitting again after it finishes.", "Observatory is still working");
+                return;
+            }
+            ExitThread();
+        }
+        finally { quitting = false; }
     }
 
     protected override void ExitThreadCore()

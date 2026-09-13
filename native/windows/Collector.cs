@@ -9,7 +9,7 @@ internal sealed class Collector : IDisposable
     private readonly string runtime;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 300000 };
     private readonly CancellationTokenSource lifetime = new();
-    private bool busy;
+    private readonly OperationDrain operations = new();
     private bool pairingPaused;
     internal event Action? Changed;
 
@@ -20,24 +20,36 @@ internal sealed class Collector : IDisposable
         timer.Tick += async (_, _) => await Refresh();
     }
 
-    internal void Start() { timer.Start(); _ = Refresh(); }
+    internal void Start() { if (operations.Stopping) return; timer.Start(); _ = Refresh(); }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
-    internal bool Busy => busy;
+    internal bool Busy => operations.Busy || operations.Stopping;
+
+    internal async Task<bool> StopGracefully(TimeSpan timeout)
+    {
+        var restartTimer = timer.Enabled;
+        timer.Stop();
+        try { await operations.Stop().WaitAsync(timeout); return true; }
+        catch (TimeoutException)
+        {
+            operations.Resume();
+            if (restartTimer) timer.Start();
+            return false;
+        }
+    }
 
     internal Task DisconnectPairing() => MaintainPairing(false);
     internal Task PreparePairingRepair() => MaintainPairing(true);
 
     internal async Task<QuotaSharingStatus> Sharing(string action, string? token)
     {
-        if (busy || lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime))
+        if (lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
             throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
-        busy = true;
         try
         {
             using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             return await QuotaSharing.Run(runtime, action, token, lifetime.Token);
         }
-        finally { busy = false; }
+        finally { operations.Complete(); }
     }
 
     private async Task MaintainPairing(bool repair)
@@ -45,8 +57,7 @@ internal sealed class Collector : IDisposable
         // The timer may have started work while the confirmation was open.
         // Preserve the request to stop future collection even in that race.
         pairingPaused = true;
-        if (busy || lifetime.IsCancellationRequested) throw new InvalidOperationException("A local operation is running.");
-        busy = true;
+        if (lifetime.IsCancellationRequested || !operations.TryBegin()) throw new InvalidOperationException("A local operation is running.");
         try
         {
             using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -54,11 +65,12 @@ internal sealed class Collector : IDisposable
             else await PairingMaintenance.Disconnect(runtime, lifetime.Token);
             pairingPaused = false;
         }
-        finally { busy = false; }
+        finally { operations.Complete(); }
     }
 
     internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true)
     {
+        if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
         if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution");
         if (quotaDistro is not null && !Regex.IsMatch(quotaDistro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid quota distribution");
         var file = Path.Combine(runtime, "collector.config.json");
@@ -75,7 +87,7 @@ internal sealed class Collector : IDisposable
 
     internal void UpdateConfiguration(JsonObject expected, JsonObject desired)
     {
-        if (busy || !FirstRunSetup.AllowsCollection(runtime)) throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
+        if (Busy || !FirstRunSetup.AllowsCollection(runtime)) throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
         using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var file = Path.Combine(runtime, "collector.config.json");
         if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Linked configuration is not editable here.");
@@ -99,9 +111,9 @@ internal sealed class Collector : IDisposable
 
     internal async Task Refresh()
     {
-        if (busy || pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
+        if (pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
         if (!FirstRunSetup.AllowsCollection(runtime)) return;
-        busy = true;
+        if (!operations.TryBegin()) return;
         try
         {
             // Serialize app and command-line collection without relying on a stale PID file.
@@ -137,7 +149,7 @@ internal sealed class Collector : IDisposable
             }
             catch { }
         }
-        finally { busy = false; if (!lifetime.IsCancellationRequested) Changed?.Invoke(); }
+        finally { operations.Complete(); if (!lifetime.IsCancellationRequested) Changed?.Invoke(); }
     }
 
     public void Dispose() { timer.Stop(); timer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }

@@ -15,3 +15,14 @@ test('native startup uses the installer mutex until the singleton exists',()=>{
   assert.match(program,/InstallationGate.SelfTest\(\)/);
   assert.match(program,/using var installation = TryEnterInstallation\(\);[\s\S]*?using var collector = new Collector/);
 });
+test('normal quit drains collection before releasing application resources',()=>{
+  const program=read('Program.cs'),collector=read('Collector.cs');
+  assert.match(program,/Quit Observatory", null, async .*await RequestQuit\(\)/);
+  const quit=program.slice(program.indexOf('private async Task RequestQuit()'),program.indexOf('protected override void ExitThreadCore()'));
+  assert.ok(quit.indexOf('await collector.StopGracefully')<quit.indexOf('ExitThread();'));
+  assert.match(collector,/await operations.Stop\(\).WaitAsync\(timeout\)/);
+  assert.match(collector,/catch \(TimeoutException\)[\s\S]*operations.Resume\(\)/);
+  assert.equal((collector.match(/operations.TryBegin\(\)/g)||[]).length,3);
+  assert.equal((collector.match(/operations.Complete\(\)/g)||[]).length,3);
+  assert.match(program,/OperationDrain.SelfTest\(\)/);
+});
