@@ -1,0 +1,7 @@
+{
+  "version": "0.9.4",
+  "url": "https://github.com/vslavik/winsparkle/releases/download/v0.9.4/WinSparkle-0.9.4.zip",
+  "sha256": "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976",
+  "tool": "WinSparkle-0.9.4/bin/winsparkle-tool.exe",
+  "scope": "Verified signing interoperability tool. Not yet bundled into Observatory."
+}
