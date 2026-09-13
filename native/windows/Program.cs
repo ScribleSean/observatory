@@ -19,6 +19,7 @@ internal static class Program
             try
             {
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
+                InstallationGate.SelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
                     UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
                 Console.WriteLine("Native dashboard default and legacy fallback passed.");
@@ -35,6 +36,8 @@ internal static class Program
         if (args.Length == 2 && args[0] == "--collect-once")
         {
             if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1])) { Environment.ExitCode = 1; return; }
+            using var installation = TryEnterInstallation();
+            if (installation is null) { Environment.ExitCode = 1; return; }
             using var collector = new Collector(args[1]);
             collector.Refresh().GetAwaiter().GetResult();
             var state = Snapshot.Text(Snapshot.Read(Path.Combine(args[1], "public", "local", "collector.json"))?["state"]);
@@ -80,7 +83,17 @@ internal static class Program
             Application.Run(new Dashboard(args[1], smokeTest: true, firstRunTest: args[0] == "--test-first-run"));
             return;
         }
+        using var installationGate = TryEnterInstallation();
+        if (installationGate is null)
+        {
+            if (!args.Contains("--background")) MessageBox.Show("An installation or update is running, or its lock is unavailable. Try opening Observatory again when it finishes.", "Observatory update");
+            Environment.ExitCode = 1;
+            return;
+        }
         using var singleton = new Mutex(true, "Local\\WorkspaceObservatory", out var first);
+        // The singleton now prevents an installer from modifying this process's
+        // files. Release the startup gate so existing-instance activation works.
+        installationGate.Dispose();
         using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\WorkspaceObservatory.Open");
         if (!first)
         {
@@ -88,6 +101,13 @@ internal static class Program
             return;
         }
         Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args)));
+    }
+
+    private static InstallationGate? TryEnterInstallation()
+    {
+        try { return InstallationGate.TryEnter(); }
+        catch (Exception error) when (error is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
+        { return null; }
     }
 }
 
