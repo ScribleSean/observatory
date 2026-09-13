@@ -58,6 +58,28 @@ Current source treats a saved successful allowance sample as healthy for less th
 
 Quota observations are bounded to 30 days, 10,000 samples and an 8 MB serialized sample budget. Daily account totals retain up to 366 reported dates. The dashboard data projection includes the last 24 hours ending at the latest quota reading and recent reported daily token totals. These are different time resolutions, not a token-to-percentage conversion. Graphs must show missing quota polls and resets as gaps, and must not fill missing token days with zero.
 
+The requested product behavior is now all-time allowance and usage history, not
+automatic deletion after 30 days. That storage migration is not implemented yet.
+Keep the bounded recent cache for fast refreshes, but add a separate durable,
+account-scoped history with paginated date-range reads and explicit deletion.
+Polling outcomes should distinguish successful observations from unavailable or
+failed checks without saving credentials or raw provider responses. Disabling
+collection must stop new reads, not erase the historical usage log. Account
+changes must never merge histories. Existing records can be backfilled only
+where retained evidence exists. Already discarded observations and time before
+collection began cannot be reconstructed without a supported historical source.
+
+Current Mac source adds a large live pace estimate and reset countdown, refreshed
+every 30 seconds without provider polling. The coverage bar recalculates against
+the current time. Estimates disappear after ten minutes without a fresh reading.
+Hourly bars show percentage points per hour normalized over observed intervals
+within each hour, with observed minutes exposed to accessibility clients. Gaps,
+resets and intervals crossing hour boundaries are omitted rather than filled.
+The chart is taller for readability. Native calculation tests cover countdown,
+staleness, reset coverage and hourly segmentation. This iteration has compiled
+and passed native self-tests, but has not been visually reviewed, installed or
+ported to the Windows renderer.
+
 Turning off the source clears active history, but is not a forensic secure-erasure operation. The retry deadline remains so toggling the source cannot bypass backoff.
 
 ## Remaining verification

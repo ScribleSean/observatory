@@ -8,6 +8,57 @@ struct QuotaHistoryPoint: Identifiable {
     let segment: Int
 }
 
+struct QuotaHourlyPace: Identifiable {
+    var id: Date { hour }
+    let hour: Date
+    let percentagePointsPerHour: Double
+    let observedMinutes: Double
+}
+
+func quotaHourlyPace(_ points: [QuotaHistoryPoint], calendar: Calendar = .current) -> [QuotaHourlyPace] {
+    var totals: [Date: (used: Double, seconds: Double)] = [:]
+    for (previous, current) in zip(points, points.dropFirst()) {
+        let seconds = current.at.timeIntervalSince(previous.at)
+        guard previous.segment == current.segment, seconds > 0, seconds <= 630,
+              current.used >= previous.used,
+              let hour = calendar.dateInterval(of: .hour, for: previous.at), current.at <= hour.end else { continue }
+        let before = totals[hour.start] ?? (used: 0, seconds: 0)
+        totals[hour.start] = (before.used + current.used - previous.used, before.seconds + seconds)
+    }
+    return totals.keys.sorted().map { hour in
+        let value = totals[hour]!
+        return QuotaHourlyPace(hour: hour, percentagePointsPerHour: value.used * 3600 / value.seconds,
+                               observedMinutes: value.seconds / 60)
+    }
+}
+
+struct QuotaLivePace {
+    let remaining: String
+    let reset: String
+    let rate: Double
+    let coverage: Double
+}
+
+func quotaLivePace(_ quota: JSONObject, window: JSONObject, now: Date) -> QuotaLivePace? {
+    guard text(quota["status"]) == "ok", let at = parseDate(quota["checkedAt"]),
+          now >= at, now.timeIntervalSince(at) < 600, let reset = parseDate(window["resetsAt"]), reset > now,
+          let pace = rows(quota["pace"]).first(where: {
+              text($0["bucket"]) == text(window["bucket"]) && text($0["window"]) == text(window["window"])
+          }), text(pace["asOf"]) == text(quota["checkedAt"]),
+          ["projected", "resets-first"].contains(text(pace["status"])),
+          let rate = number(pace["percentagePointsPerHour"]), rate.isFinite, rate > 0,
+          let remaining = number(window["remainingPercent"]), remaining.isFinite, remaining > 0, remaining <= 100 else { return nil }
+    let exhaustion = at.addingTimeInterval(remaining / rate * 3600)
+    guard exhaustion > now else { return nil }
+    func duration(_ seconds: Double) -> String {
+        let minutes = Int(ceil(seconds / 60))
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+    return QuotaLivePace(remaining: exhaustion >= reset ? "Lasts until reset" : duration(exhaustion.timeIntervalSince(now)),
+                         reset: duration(reset.timeIntervalSince(now)), rate: rate,
+                         coverage: min(1, exhaustion.timeIntervalSince(now) / reset.timeIntervalSince(now)))
+}
+
 func quotaHistoryPoints(_ history: [JSONObject], bucket: String, window: String) -> [QuotaHistoryPoint] {
     var result: [QuotaHistoryPoint] = []
     var previous: (at: Date, used: Double, reset: String)?
@@ -76,8 +127,18 @@ struct QuotaPanel: View {
                     Text(parseDate(row["resetsAt"]).map { "Resets \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Reset time unknown")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
-                        Text(quotaPaceText(quota, window: row, now: context.date))
+                        if let live = quotaLivePace(quota, window: row, now: context.date) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(live.remaining).font(.system(size: 22, weight: .semibold)).monospacedDigit()
+                                Text("Estimated at this pace · reset in \(live.reset)")
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                                Text("\(formatted(live.rate)) percentage points / hour")
+                                    .font(.system(size: 12, weight: .medium)).monospacedDigit()
+                            }
+                        } else {
+                            Text(quotaPaceText(quota, window: row, now: context.date))
                             .font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
                         if let fraction = quotaPaceCoverage(quota, window: row, now: context.date) {
                             VStack(spacing: 3) {
                                 ProgressView(value: fraction, total: 1).tint(.accentColor)
@@ -87,7 +148,7 @@ struct QuotaPanel: View {
                                     Text("Reset")
                                 }.font(.system(size: 10)).foregroundStyle(.secondary)
                             }.accessibilityElement(children: .ignore)
-                                .accessibilityLabel("Estimated time coverage until reset, at last check")
+                                .accessibilityLabel("Estimated time coverage until reset at the last observed pace")
                                 .accessibilityValue("\(Int((fraction * 100).rounded())) percent. Filled portion ends at estimated exhaustion or reset, whichever comes first.")
                         }
                     }
@@ -117,8 +178,25 @@ struct QuotaPanel: View {
                         }
                     }
                     .chartYAxis { AxisMarks(values: [0, 50, 100]) }
-                    .frame(height: 85)
+                    .frame(height: 130)
                     .accessibilityLabel("Allowance history. Gaps and resets are separate segments.")
+                    let hourly = quotaHourlyPace(points)
+                    if !hourly.isEmpty {
+                        Text("Usage pace by hour").font(.system(size: 13, weight: .semibold))
+                        Chart(hourly) { hour in
+                            BarMark(x: .value("Hour", hour.hour, unit: .hour),
+                                    y: .value("Percentage points per hour", hour.percentagePointsPerHour))
+                                .foregroundStyle(Color.accentColor.opacity(0.75))
+                                .accessibilityLabel(hour.hour.formatted(date: .abbreviated, time: .shortened))
+                                .accessibilityValue("\(formatted(hour.percentagePointsPerHour)) percentage points per hour, based on \(formatted(hour.observedMinutes)) observed minutes")
+                        }
+                        .chartXScale(domain: points.last!.at.addingTimeInterval(-86400)...points.last!.at)
+                        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 6)) { AxisValueLabel(format: .dateTime.hour()) } }
+                        .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
+                        .frame(height: 115)
+                        Text("Rates use observed intervals within each hour. Missing polls, resets and intervals crossing an hour boundary are excluded.")
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
                 } else {
                     Text("History begins with the first successful reading.").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
@@ -145,15 +223,7 @@ struct QuotaPanel: View {
 }
 
 func quotaPaceCoverage(_ quota: JSONObject, window: JSONObject, now: Date) -> Double? {
-    guard text(quota["status"]) == "ok", let at = parseDate(quota["checkedAt"]),
-          now >= at, now.timeIntervalSince(at) < 600,
-          let reset = parseDate(window["resetsAt"]), reset > now,
-          let pace = rows(quota["pace"]).first(where: {
-              text($0["bucket"]) == text(window["bucket"]) && text($0["window"]) == text(window["window"])
-          }), text(pace["asOf"]) == text(quota["checkedAt"]),
-          ["projected", "resets-first"].contains(text(pace["status"])),
-          let fraction = number(pace["coverageFraction"]), fraction.isFinite, fraction >= 0, fraction <= 1 else { return nil }
-    return fraction
+    quotaLivePace(quota, window: window, now: now)?.coverage
 }
 
 func quotaPaceText(_ quota: JSONObject, window: JSONObject, now: Date) -> String {
@@ -165,6 +235,12 @@ func quotaPaceText(_ quota: JSONObject, window: JSONObject, now: Date) -> String
         text($0["bucket"]) == text(window["bucket"]) && text($0["window"]) == text(window["window"])
     }), text(pace["asOf"]) == text(quota["checkedAt"]), let summary = pace["summary"] as? String else {
         return "Not enough recent history to estimate time left."
+    }
+    if let reset = parseDate(window["resetsAt"]), reset <= now {
+        return "Reset time reached. Waiting for a fresh reading."
+    }
+    if text(pace["status"]) == "projected", let exhaustion = parseDate(pace["estimatedExhaustionAt"]), exhaustion <= now {
+        return "Projection elapsed. Waiting for a fresh reading."
     }
     return summary
 }

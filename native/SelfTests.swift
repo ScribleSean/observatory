@@ -269,14 +269,27 @@ func runSelfTests() {
     precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:01:00Z")!) == "Synthetic pace")
     precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:10:00Z")!) == "Estimate unavailable until a fresh reading.")
     precondition(quotaPaceText(paceQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == "Not enough recent history to estimate time left.")
-    let coverageWindow: JSONObject = ["bucket": "codex", "window": "primary", "resetsAt": "2026-09-09T16:00:00Z"]
-    for fraction in [-0.1, 0, 0.625, 1, 1.1] {
+    let coverageWindow: JSONObject = ["bucket": "codex", "window": "primary", "remainingPercent": 40, "resetsAt": "2026-09-09T16:00:00Z"]
+    for rate in [-1.0, 0, 10, 20, Double.infinity] {
         let coverageQuota: JSONObject = ["status": "ok", "checkedAt": "2026-09-09T12:00:00Z",
-            "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "status": "projected", "coverageFraction": fraction]]]
-        precondition(quotaPaceCoverage(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:01:00Z")!) == (fraction >= 0 && fraction <= 1 ? fraction : nil))
+            "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "status": "projected", "percentagePointsPerHour": rate]]]
+        let live = quotaLivePace(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:01:00Z")!)
+        if rate == 20 {
+            precondition(live?.remaining == "1h 59m" && live?.reset == "3h 59m")
+            precondition(abs(live!.coverage - 119.0 / 239.0) < 0.000001)
+            precondition(quotaLivePace(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:02:00Z")!)?.remaining == "1h 58m")
+        } else if rate == 10 { precondition(live?.remaining == "Lasts until reset" && live?.coverage == 1) }
+        else { precondition(live == nil) }
         precondition(quotaPaceCoverage(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:10:00Z")!) == nil)
         precondition(quotaPaceCoverage(coverageQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == nil)
     }
+    var hourlyCalendar = Calendar(identifier: .gregorian)
+    hourlyCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    let hourly = quotaHourlyPace(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary"), calendar: hourlyCalendar)
+    precondition(hourly.count == 1 && hourly[0].percentagePointsPerHour == 60 && hourly[0].observedMinutes == 5)
+    let boundary = [QuotaHistoryPoint(id: 0, at: dueNow.addingTimeInterval(-60), used: 10, segment: 0),
+                    QuotaHistoryPoint(id: 1, at: dueNow.addingTimeInterval(60), used: 12, segment: 0)]
+    precondition(quotaHourlyPace(boundary, calendar: hourlyCalendar).isEmpty)
     precondition((try? CollectorConfiguration.validate(["codex": 1])) == nil)
     precondition((try? CollectorConfiguration.validate(["remote": true])) == nil)
     precondition((try? CollectorConfiguration.validate(["wispr": "true"])) == nil)

@@ -644,13 +644,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             ["bucket": "spark", "window": "primary", "remainingPercent": 40, "durationMinutes": 300]
         ]
         let history: [JSONObject] = (0..<12).map { index in
-            ["checkedAt": iso.string(from: now.addingTimeInterval(Double(index - 11) * 300)), "windows": windows]
+            var sampleWindows = windows
+            sampleWindows[0]["remainingPercent"] = 65 + Double(11 - index) * 5 / 3
+            return ["checkedAt": iso.string(from: now.addingTimeInterval(Double(index - 11) * 300)), "windows": sampleWindows]
         }
         store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": iso.string(from: now),
             "activity": [], "tokens": [], "settings": [], "dictation": [],
             "quota": ["status": "ok", "checkedAt": iso.string(from: now), "windows": windows, "history": history,
                       "pace": [["bucket": "codex", "window": "primary", "asOf": iso.string(from: now),
-                                "status": "projected", "coverageFraction": 0.8125,
+                                "status": "projected", "coverageFraction": 0.8125, "percentagePointsPerHour": 20,
+                                "estimatedExhaustionAt": iso.string(from: now.addingTimeInterval(3.25 * 3600)),
                                 "summary": "20.0% of allowance/hour over 60 min. Approximately 3h 15m left at this pace (at last check). Reset in 4h 0m. Estimated allowance covers 81% of the time until reset (at last check)."]],
                       "dailyUsageBuckets": [["startDate": String(iso.string(from: now).prefix(10)), "tokens": 12000]]]])
         showUsage()
