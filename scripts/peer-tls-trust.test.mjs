@@ -9,6 +9,8 @@ import path from 'node:path';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
 import {commitConfirmedTLSPairing} from './peer-tls-setup.mjs';
+import {prepareHostTLSSetup,readHostTLSSetup,recordHostTLSAcknowledgement} from './peer-tls-host.mjs';
+import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {saveConfirmedPeerTrust,readPeerTrust} from './peer-tls-trust.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
@@ -36,6 +38,45 @@ test('TLS trust is bound to persistent identities and pairing generation',
         peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert)};
       return {runtime,pairing,claim,file:path.join(runtime,'private-sync','tls-trust.json')};
     }
+    await t.test('host persists complementary offer and acknowledgement across a fresh process',async()=>{
+      const f=await fixture({initialize:false,tls:true});
+      const request={peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert),includeUbuntu:false,
+        localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerEndpoint:f.pairing.transport};
+      const offer=await prepareHostTLSSetup(f.runtime,request),localPair=await readPairing(f.runtime);
+      assert.equal(offer.local.deviceId,localPair.peer.deviceId);
+      assert.equal(offer.peer.deviceId,localPair.local.deviceId);
+      assert.equal(offer.local.comparisonSalt,localPair.local.comparisonSalt);
+      assert.equal(offer.peerCertificateSha256,fingerprint(local.cert));
+      assert.deepEqual(await prepareHostTLSSetup(f.runtime,request),offer);
+      assert.deepEqual(await readHostTLSSetup(f.runtime),{pairing:offer,acknowledged:false});
+      const ack={peerCertificateSha256:fingerprint(peer.cert),digest:setupConfigurationDigest(offer)};
+      await assert.rejects(recordHostTLSAcknowledgement(f.runtime,{...ack,digest:'0'.repeat(64)}));
+      await assert.rejects(recordHostTLSAcknowledgement(f.runtime,{...ack,peerCertificateSha256:fingerprint(local.cert)}));
+      for(let attempt=0;attempt<2;attempt++)
+        assert.deepEqual(await recordHostTLSAcknowledgement(f.runtime,ack),{version:1,status:'acknowledged'});
+      const module=new URL('./peer-tls-host.mjs',import.meta.url).href;
+      const restarted=execFileSync(process.execPath,['--input-type=module','-e',
+        `import {readHostTLSSetup} from ${JSON.stringify(module)}; console.log((await readHostTLSSetup(process.argv[1])).acknowledged);`,
+        f.runtime],{encoding:'utf8',timeout:30000,stdio:['ignore','pipe','pipe']});
+      assert.equal(restarted.trim(),'true');
+      await assert.rejects(prepareHostTLSSetup(f.runtime,{...request,localEndpoint:{...request.localEndpoint,port:43129}}));
+      assert.deepEqual(await readHostTLSSetup(f.runtime),{pairing:offer,acknowledged:true});
+      await revokePairing(f.runtime);await assert.rejects(readHostTLSSetup(f.runtime));
+      await assert.rejects(recordHostTLSAcknowledgement(f.runtime,ack));
+    });
+    await t.test('host resumes a configuration-only save and rejects corrupt acknowledgement',async()=>{
+      const f=await fixture({initialize:false,tls:true});
+      await initializePairing(f.runtime,{...f.pairing,peerCertificateSha256:fingerprint(peer.cert)});
+      const offer=await prepareHostTLSSetup(f.runtime,{peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert),
+        includeUbuntu:false,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerEndpoint:f.pairing.transport});
+      assert.equal(offer.local.pairId,f.pairing.local.pairId);
+      const ackFile=path.join(f.runtime,'private-sync','tls-acknowledgement.json');
+      await writeFile(ackFile,'null',{mode:0o600});
+      await assert.rejects(readHostTLSSetup(f.runtime));
+      await assert.rejects(recordHostTLSAcknowledgement(f.runtime,
+        {peerCertificateSha256:fingerprint(peer.cert),digest:setupConfigurationDigest(offer)}));
+      assert.equal(await readFile(ackFile,'utf8'),'null');
+    });
     await t.test('confirmed TLS setup persists and identical retries do not rewrite files',async()=>{
       const f=await fixture({initialize:false,tls:true}),request={pairing:f.pairing,claim:f.claim};
       assert.deepEqual(await commitConfirmedTLSPairing(f.runtime,request),{version:1,status:'local-ready'});

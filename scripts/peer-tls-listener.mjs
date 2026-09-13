@@ -19,11 +19,12 @@ function deviceCertificate(raw) {
 
 // Explicit setup only. No auto-start, discovery, file writes or trust activation.
 export async function startPairingListener({address,port=0,identity},
-  {createServer=tls.createServer}={}) {
+  {createServer=tls.createServer,onAcknowledged}={}) {
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
     (port!==0 && (port<1024 || port>65535)) || !identity ||
     typeof identity.key!=='string' || identity.key.length>16384 ||
-    typeof identity.cert!=='string' || identity.cert.length>16384)throw failure();
+    typeof identity.cert!=='string' || identity.cert.length>16384 ||
+    (onAcknowledged!==undefined && typeof onAcknowledged!=='function'))throw failure();
   let fingerprint;
   try {fingerprint=deviceCertificate(identity.cert);}catch{throw failure();}
   const session=new InvitationSession(),sockets=new Set();
@@ -60,7 +61,7 @@ export async function startPairingListener({address,port=0,identity},
         if(size>1024){socket.destroy();return;}
         chunks.push(chunk);
       });
-      socket.once('end',()=>{
+      socket.once('end',async()=>{
         try {
           const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
           if(request?.version===1 && ['setup','acknowledge'].includes(request.action)) {
@@ -73,6 +74,12 @@ export async function startPairingListener({address,port=0,identity},
             }
             if(request.action==='acknowledge' && Object.keys(request).length===3 && delivery &&
               Object.hasOwn(request,'digest') && request.digest===delivery.digest) {
+              const current=delivery;
+              if(onAcknowledged) {
+                const saved=await onAcknowledged({peerCertificateSha256:peerFingerprint,digest:request.digest});
+                if(saved?.version!==1 || saved.status!=='acknowledged' || Object.keys(saved).length!==2)throw failure();
+              }
+              if(delivery!==current || socket.destroyed)return;
               delivery.acknowledged=true;
               socket.end(JSON.stringify({version:1,status:'acknowledged'}));
               return;

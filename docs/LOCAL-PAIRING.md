@@ -157,8 +157,26 @@ configuration. A lost acknowledgement returns `local-ready`. An explicit
 identical retry can finish without changing the pairing. The listener accepts
 repeated matching acknowledgements until cancellation or expiry, but rejects
 another certificate or a changed configuration digest. Its acknowledged state
-is in memory, not a durable host-side receipt. This is not proof of both-device
-readiness after a listener restart, and no UI should label it as such.
+is in memory unless a persistence callback is supplied. The host controller
+below supplies that callback. An acknowledgement is not proof of current
+remote connectivity, and no UI should label it as such.
+
+`scripts/peer-tls-host.mjs` provides `startHostTLSSetup` for the native controller.
+It loads the saved identity, starts an explicit listener and binds its
+acknowledgement callback to durable storage. Local confirmation derives the
+peer certificate from the pending TLS claim, commits the complementary host
+pairing, saves the peer offer, then makes that offer available to the peer.
+The peer offer and acknowledgement live in protected `private-sync` files,
+so existing revocation and repair boundaries apply. An identical retry reads
+the saved generation rather than creating new identifiers. Changed endpoints,
+certificates, source scope or corrupt state are rejected without replacement.
+
+`readHostTLSSetup` revalidates the saved offer and acknowledgement against the
+active pairing and certificate trust. A fresh-process test verifies that the
+receipt survives restart. Reopening the setup listener still requires a new
+invitation and local confirmation. Native UI, cross-device endpoint selection
+and real two-device restart recovery remain unverified. No installed app starts
+this controller yet.
 
 Cancellation closes sockets and invalidates pending confirmation. Native UI,
 cross-process listener ownership, secure key storage, discovery and atomic
