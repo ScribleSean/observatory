@@ -11,6 +11,46 @@ function unlinkedDirectory(value) {
   }
 }
 
+// Read-only recovery assessment. Caller supplies trusted paths and a verifier
+// bound to the previous and candidate receipts. Journal text is not authority.
+export function inspectPayloadRecovery({installed,staged,recovery,verify}) {
+  if(typeof verify!=='function')throw Error('Payload verification is required');
+  for(const value of [installed,staged,recovery]) {
+    if(typeof value!=='string' || !path.isAbsolute(value) || path.resolve(value)!==value)
+      throw Error('Canonical recovery paths are required');
+  }
+  const parent=path.dirname(installed);
+  unlinkedDirectory(parent);
+  unlinkedDirectory(recovery);
+  if(installed===staged || installed===recovery || staged===recovery ||
+    path.dirname(staged)!==parent || path.dirname(recovery)!==parent ||
+    !path.basename(recovery).startsWith('.observatory-update-'))throw Error('Invalid recovery layout');
+  const assess=folder=>{
+    try { lstatSync(folder); } catch(error) { if(error.code==='ENOENT')return 'missing'; throw error; }
+    unlinkedDirectory(folder);
+    const matched=[];
+    for(const kind of ['previous','candidate']) {
+      try {
+        const identity=verify(folder,kind);
+        if(identity && /^[a-f0-9]{40}$/.test(identity.sourceRevision) &&
+          Number.isSafeInteger(identity.buildNumber) && identity.buildNumber>0)matched.push(kind);
+      } catch {}
+    }
+    return matched.length===1?matched[0]:'unverified';
+  };
+  const payloads={installed:assess(installed),staged:assess(staged),
+    previous:assess(path.join(recovery,'previous')),rejected:assess(path.join(recovery,'rejected'))};
+  let state='manual-inspection';
+  if(payloads.installed==='candidate' && payloads.previous==='previous' &&
+    payloads.staged==='missing' && payloads.rejected==='missing')state='candidate-active';
+  else if(payloads.installed==='missing' && payloads.previous==='previous' &&
+    payloads.staged==='candidate' && payloads.rejected==='missing')state='previous-awaiting-restore';
+  else if(payloads.installed==='previous' && payloads.previous==='missing' &&
+    ((payloads.staged==='candidate' && payloads.rejected==='missing') ||
+     (payloads.staged==='missing' && payloads.rejected==='candidate')))state='previous-active';
+  return {state,payloads};
+}
+
 // The updater must run outside the directory being replaced. Before calling,
 // hold the installer and collector locks, stop the app, authenticate the staged
 // release and capture registration. This primitive changes only payload paths.
