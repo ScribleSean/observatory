@@ -12,7 +12,7 @@ async function fixture(t) {
     'dist/client/index.html':'<html>synthetic-public</html>',
     'dist/client/assets/test.js':'// public asset',
     'dist/client/_next/static/chunks/test.js':'// public chunk',
-    'dist/client/workspace-observatory/_next/static/chunks/test.js':'// prefixed public chunk',
+    'dist/client/observatory/_next/static/chunks/test.js':'// prefixed public chunk',
     'dist/client/brand/telescope.svg':'<svg/>',
     'dist/client/favicon.svg':'<svg/>',
     'dist/client/vinext-client-entry-manifest.json':'{}',
@@ -48,7 +48,7 @@ test('private pairing files are unavailable even if accidentally copied into sta
     assert.equal(response.status,404,route);assert.equal(response.body.includes('privateCanary'),false);
   }
   for(const route of ['/','/assets/test.js','/_next/static/chunks/test.js',
-    '/workspace-observatory/_next/static/chunks/test.js','/brand/telescope.svg','/favicon.svg',
+    '/observatory/_next/static/chunks/test.js','/brand/telescope.svg','/favicon.svg',
     '/vinext-client-entry-manifest.json','/local/usage.json','/local/collector.json'])
     assert.equal((await request(route)).status,200,route);
   assert.equal((await request('/local/usage.json',{'Sec-Fetch-Site':'cross-site'})).status,403);
