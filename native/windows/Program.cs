@@ -26,6 +26,12 @@ internal static class Program
             catch { Console.Error.WriteLine("Native sharing bridge failed."); Environment.ExitCode = 1; }
             return;
         }
+        if (args.Length == 2 && args[0] == "--test-direct-pairing-window")
+        {
+            try { DirectPairingWindow.SelfTest(args[1]); }
+            catch { Console.Error.WriteLine("Direct pairing window test failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--self-test"))
         {
             try
@@ -139,6 +145,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private Form? dashboard;
     private readonly bool nativeDashboard;
     private SetupWizard? setupWizard;
+    private DirectPairingWindow? directPairing;
     private UsagePopup? usagePopup;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool quitting;
@@ -200,7 +207,34 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
     private DeviceSettingsActions DeviceActions() => new(LoginStartup.Registered, LoginStartup.SetRegistered,
-        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing, ReadNetwork: TailscaleReadiness.Read);
+        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing, ReadNetwork: TailscaleReadiness.Read, DirectPair: ShowDirectPairing);
+
+    private void ShowDirectPairing()
+    {
+        if (quitting) return;
+        if (directPairing is not null) { directPairing.Activate(); return; }
+        Action<bool>? release = null;
+        TlsSetupProcess? bridge = null;
+        try
+        {
+            release = collector.BeginDirectPairing();
+            bridge = new TlsSetupProcess(runtime);
+            directPairing = new DirectPairingWindow(bridge, release);
+            directPairing.FormClosed += (_, _) => directPairing = null;
+            directPairing.Show();
+        }
+        catch
+        {
+            if (bridge is null) release?.Invoke(true);
+            else _ = Cleanup();
+            MessageBox.Show("Pairing setup is unavailable. Wait for collection to finish or check this installation's setup tools.", "Direct device pairing");
+        }
+        async Task Cleanup()
+        {
+            try { await bridge!.DisposeAsync(); } catch { }
+            finally { release?.Invoke(bridge!.ExitVerified); directPairing?.Dispose(); directPairing = null; }
+        }
+    }
 
     private void ShowUsage()
     {
@@ -339,6 +373,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         try
         {
             tray.Text = "Observatory · finishing collection before quitting";
+            if (directPairing is { } pairingWindow) { await pairingWindow.Shutdown(); if (!pairingWindow.IsDisposed) pairingWindow.Close(); }
             if (!await collector.StopGracefully(TimeSpan.FromSeconds(260)))
             {
                 MessageBox.Show("The current operation has not finished. Observatory stayed open and collection was not interrupted. Try quitting again after it finishes.", "Observatory is still working");

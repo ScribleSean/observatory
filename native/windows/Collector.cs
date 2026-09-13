@@ -64,6 +64,20 @@ internal sealed class Collector : IDisposable
     internal Task DisconnectPairing() => MaintainPairing(false);
     internal Task PreparePairingRepair() => MaintainPairing(true);
 
+    internal Action<bool> BeginDirectPairing()
+    {
+        if (pairingPaused || lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
+            throw new InvalidOperationException("Collection or setup is active.");
+        var released = 0;
+        return exitVerified =>
+        {
+            if (Interlocked.Exchange(ref released, 1) != 0) return;
+            // Retain a collection pause if the owned helper may still be writing.
+            if (!exitVerified) pairingPaused = true;
+            operations.Complete();
+        };
+    }
+
     internal async Task<QuotaSharingStatus> Sharing(string action, string? token)
     {
         if (lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
@@ -273,6 +287,22 @@ internal sealed class Collector : IDisposable
             if (!collector.operations.Busy || collector.operations.Stopping || collector.lifetime.IsCancellationRequested)
                 throw new Exception("Timeout cancelled work or failed to resume.");
             collector.operations.Complete();
+            collector.Configure(null, activity: false, codex: false);
+            var releasePairing = collector.BeginDirectPairing();
+            if (!collector.Busy || collector.operations.TryBegin()) throw new Exception("Pairing did not reserve collection.");
+            var duplicateDenied = false;
+            try { collector.BeginDirectPairing(); } catch (InvalidOperationException) { duplicateDenied = true; }
+            if (!duplicateDenied) throw new Exception("Concurrent pairing was permitted.");
+            var pairingDrain = collector.StopGracefully(TimeSpan.FromSeconds(2));
+            if (pairingDrain.IsCompleted) throw new Exception("Shutdown did not wait for pairing.");
+            releasePairing(true); releasePairing(false);
+            if (!pairingDrain.GetAwaiter().GetResult() || collector.pairingPaused) throw new Exception("Verified pairing cleanup failed.");
+            collector.operations.Resume();
+            collector.BeginDirectPairing()(false);
+            if (!collector.pairingPaused || collector.Busy) throw new Exception("Unverified helper exit did not preserve collection pause.");
+            collector.Refresh().GetAwaiter().GetResult();
+            if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change.") throw new Exception("Paused pairing allowed collection.");
+            collector.pairingPaused = false;
             if (!collector.StopGracefully(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult()) throw new Exception("Idle shutdown failed.");
             if (File.ReadAllText(sentinel) != "Synthetic saved history. Do not change.") throw new Exception("Shutdown changed saved data.");
             Console.WriteLine("Collector shutdown waits, blocks settings, preserves work and resumes after timeout.");

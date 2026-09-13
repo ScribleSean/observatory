@@ -63,9 +63,8 @@ state exists. Cancellation before persistence prevents a new identity write.
 The reply reports identity status only, not key material. This is a restricted
 plaintext file, not Keychain or DPAPI storage. The UI must disclose that policy
 before requesting consent. Native bridge tests on both platforms exercised
-consent rejection, creation and reuse in temporary runtimes. The Mac Settings
-source now invokes this step only after disclosure and user consent. The
-Windows Settings flow remains to be connected.
+consent rejection, creation and reuse in temporary runtimes. Both native Settings
+flows now invoke this step only after disclosure and user consent.
 
 `native/TLSSetupProcess.swift` implements the Mac pipe wrapper with bounded
 reply parsing, request correlation, a 45-second command timeout and child
@@ -90,9 +89,18 @@ discarded child diagnostics and verified child shutdown. Source `72e88b8`
 compiled with zero warnings or errors and passed the native self-tests. The
 `--test-tls-setup-bridge` check exercised the real copied Node controller with
 status, cancellation, concurrent requests and repeated cleanup in an empty
-temporary runtime. The Windows wrapper is not connected to Settings yet. Full
-interactive setup-window lifecycle tests remain open. Existing installed SSH setup has not
-been replaced.
+temporary runtime. Windows Settings now opens `DirectPairingWindow` with Host
+and Join actions, private-address entry, identity-storage consent, invitation
+copying, device confirmation and cancellation. One collector reservation lasts
+until helper cleanup, and unverified helper exit keeps collection paused.
+Application quit waits for window cleanup before draining other operations.
+The Windows build passed with zero warnings or errors. Native self-tests cover
+pairing exclusion, shutdown waiting, repeated release and fail-closed collection.
+`--test-direct-pairing-window ABS_NODE` uses a hidden window and temporary runtime
+to verify consent rejection, actual helper exit and collector release. It does
+not create an identity or connect to another device. Full interactive host/join,
+visual layout and cross-device sync verification remain open. Existing installed
+SSH setup has not been replaced.
 
 ### Pairing commit
 
