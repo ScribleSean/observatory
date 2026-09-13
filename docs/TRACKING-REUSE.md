@@ -40,11 +40,11 @@ Current retention is bounded to 30 days of raw quota observations, with a 10,000
 
 ### Allowance pace estimates
 
-The source now calculates percentage points of allowance consumed per hour and approximate hours and minutes remaining. Each account observation and limit window is handled separately. The calculation uses up to one hour of contiguous readings, requires at least three readings spanning 15 minutes, and does not join gaps longer than ten minutes, resets, corrections or conflicting observations. Account switches discard the previous account's pace.
+The source now calculates percentage points of allowance consumed per hour and approximate hours and minutes remaining. Each account observation and limit window is handled separately. The calculation uses up to one hour of contiguous readings and requires at least three readings spanning 15 minutes. History continuity allows ten minutes plus 30 seconds of native timer tolerance. Reset timestamps may vary by up to two seconds to accommodate observed provider rounding. Larger gaps, larger reset changes, allowance increases and conflicting observations split the history. Account switches discard the previous account's pace.
 
 An estimate is not a measured countdown. The display identifies its observation interval and labels remaining time as approximate at the last check. It reports when the reset should arrive before exhaustion, when no recent consumption is observed, or when history is insufficient. Readings ten minutes old cannot supply a current estimate. These calculations do not change stored observations, retention or polling frequency.
 
-Both native displays consume the same summary. Focused calculation tests pass on Mac and Windows. Windows synthetic native tests verify fresh text appears and stale text is withheld. Installed delivery and Mac rendered-pace inspection remain separate verification gates.
+Both native displays consume the same summary. Focused calculation tests pass on Mac and Windows. Windows synthetic native tests verify fresh text appears and stale text is withheld. Mac visual and accessibility checks verified the synthetic pace display. Packaged collectors on both platforms preserve pace fields in saved snapshots. Mac 0.3.5 is installed, but delivery of the timing correction remains pending. Windows 0.3.5 installer preparation and read-only upgrade preflight passed without replacing the installed app.
 
 ### Sampling cadence
 
