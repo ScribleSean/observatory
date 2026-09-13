@@ -8,6 +8,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--test-device-identity-bridge")
+        {
+            try { DeviceIdentity.BridgeSelfTest(args[1]).GetAwaiter().GetResult(); }
+            catch { Console.Error.WriteLine("Device identity bridge failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 1 && args[0] == "--test-sharing-bridge")
         {
             try { QuotaSharing.BridgeSelfTest().GetAwaiter().GetResult(); }
