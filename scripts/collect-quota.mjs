@@ -64,8 +64,10 @@ export async function collectQuota(runtime,{enabled=false,isEnabled=async()=>ena
   }
   const before=await readQuotaState(runtime,clock());
   if(before.nextAttemptAt>clock())return project(before,clock());
+  const dailyAge=clock()-Date.parse(before.history?.dailyAsOf);
+  const dailyUsageScope=Number.isFinite(dailyAge) && dailyAge>=0 && dailyAge<3600000 ? before.history.scope : null;
   let observation;
-  try {observation=await readSnapshot(await resolveExecutable(),before.salt);}
+  try {observation=await readSnapshot(await resolveExecutable(),before.salt,{dailyUsageScope});}
   catch(error) {
     observation={status:['needs-auth','unsupported','rate-limited'].includes(error.status)?error.status:'unavailable'};
     if(typeof error.scope==='string' && /^[a-f0-9]{64}$/.test(error.scope))observation.scope=error.scope;

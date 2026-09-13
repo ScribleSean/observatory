@@ -26,7 +26,7 @@ export async function findWindowsQuotaClient(distribution=null,{run=execute,find
   throw Error('Selected WSL Codex client unavailable');
 }
 
-export function readWindowsQuotaSnapshot(client,salt,{spawnProcess=spawn,read=readAccountSnapshot}={}) {
-  return read(client.executable,salt,{spawnProcess:(executable,args,options)=>
+export function readWindowsQuotaSnapshot(client,salt,{spawnProcess=spawn,read=readAccountSnapshot,dailyUsageScope=null}={}) {
+  return read(client.executable,salt,{dailyUsageScope,spawnProcess:(executable,args,options)=>
     spawnProcess(executable,[...client.prefix,...args],options)});
 }

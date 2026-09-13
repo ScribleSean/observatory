@@ -24,6 +24,41 @@ test('collected pace uses retained observations and cannot survive an account sw
   assert.equal(switched.history.length,1);
 }));
 async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-collection-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
+test('daily history refresh is hourly while limits retain independent observations',async()=>fixture(async runtime=>{
+  const scope='a'.repeat(64), requests=[];
+  let latest;
+  for(const offset of [0,300000,3300000,3600000]) {
+    const at=now+offset;
+    latest=await collectQuota(runtime,{enabled:true,clock:()=>at,resolveExecutable:async()=>'/fake/codex',
+      readSnapshot:async(file,salt,{dailyUsageScope})=>{
+        requests.push(dailyUsageScope);
+        return {scope,status:'ok',checkedAt:new Date(at).toISOString(),
+          windows:[{bucket:'codex',window:'primary',remainingPercent:75}],
+          ...(dailyUsageScope===scope?{}:{accountUsage:{status:'ok',checkedAt:new Date(at).toISOString(),
+            dailyUsageBuckets:[{startDate:'2026-09-09',tokens:offset===0?12:18}]}})};
+      }});
+    assert.equal(latest.accountUsageCheckedAt,new Date(offset<3600000?now:at).toISOString());
+    assert.equal(latest.dailyUsageBuckets[0].tokens,offset<3600000?12:18);
+    assert.equal(latest.checkedAt,new Date(at).toISOString());
+    assert.equal(JSON.stringify(latest).includes(scope),false);
+  }
+  assert.deepEqual(requests,[null,scope,scope,null]);
+  assert.equal(latest.history.length,4);
+}));
+test('failed daily refresh preserves its timestamp and remains due on the next allowed read',async()=>fixture(async runtime=>{
+  const scope='a'.repeat(64);
+  for(const offset of [0,3600000,3900000]) {
+    const at=now+offset;
+    const result=await collectQuota(runtime,{enabled:true,clock:()=>at,resolveExecutable:async()=>'/fake/codex',
+      readSnapshot:async(file,salt,{dailyUsageScope})=>{
+        assert.equal(dailyUsageScope,null);
+        return {scope,status:'ok',checkedAt:new Date(at).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:75}],
+          accountUsage:offset===0?{status:'ok',checkedAt:new Date(at).toISOString(),dailyUsageBuckets:[{startDate:'2026-09-09',tokens:12}]}:{status:'unavailable'}};
+      }});
+    assert.equal(result.accountUsageCheckedAt,new Date(now).toISOString());
+    assert.equal(result.dailyUsageBuckets[0].tokens,12);
+  }
+}));
 test('disabled quota never discovers clients or creates a private store',async()=>fixture(async runtime=>{
   const result=await collectQuota(runtime,{resolveExecutable:()=>{throw Error('Should not run');}});
   assert.equal(result.status,'not-connected');assert.deepEqual(await readdir(runtime),[]);
