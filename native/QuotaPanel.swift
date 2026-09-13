@@ -70,6 +70,10 @@ struct QuotaPanel: View {
                     ProgressView(value: number(row["remainingPercent"]) ?? 0, total: 100).tint(.accentColor)
                     Text(parseDate(row["resetsAt"]).map { "Resets \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Reset time unknown")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        Text(quotaPaceText(quota, window: row, now: context.date))
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
                 }.accessibilityElement(children: .combine)
             }
             if let chosen {
@@ -120,4 +124,17 @@ struct QuotaPanel: View {
         }
         .padding(15).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
     }
+}
+
+func quotaPaceText(_ quota: JSONObject, window: JSONObject, now: Date) -> String {
+    guard text(quota["status"]) == "ok", let at = parseDate(quota["checkedAt"]),
+          now.timeIntervalSince(at) >= 0, now.timeIntervalSince(at) < 600 else {
+        return "Estimate unavailable until a fresh reading."
+    }
+    guard let pace = rows(quota["pace"]).first(where: {
+        text($0["bucket"]) == text(window["bucket"]) && text($0["window"]) == text(window["window"])
+    }), text(pace["asOf"]) == text(quota["checkedAt"]), let summary = pace["summary"] as? String else {
+        return "Not enough recent history to estimate time left."
+    }
+    return summary
 }

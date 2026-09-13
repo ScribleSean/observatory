@@ -248,6 +248,12 @@ func runSelfTests() {
     ]
     precondition(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary").map(\.segment) == [0, 0, 1])
     precondition(quotaHistoryPoints(quotaSamples, bucket: "spark", window: "primary").isEmpty)
+    let paceWindow: JSONObject = ["bucket": "codex", "window": "primary"]
+    let paceQuota: JSONObject = ["status": "ok", "checkedAt": "2026-09-09T12:00:00Z",
+        "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "summary": "Synthetic pace"]]]
+    precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:01:00Z")!) == "Synthetic pace")
+    precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:10:00Z")!) == "Estimate unavailable until a fresh reading.")
+    precondition(quotaPaceText(paceQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == "Not enough recent history to estimate time left.")
     precondition((try? CollectorConfiguration.validate(["codex": 1])) == nil)
     precondition((try? CollectorConfiguration.validate(["remote": true])) == nil)
     precondition((try? CollectorConfiguration.validate(["wispr": "true"])) == nil)
