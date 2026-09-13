@@ -174,6 +174,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         window.makeKeyAndOrderFront(nil)
     }
 
+    private func recoverOffscreenUsage(size: NSSize, visible: NSRect) {
+        guard popover.isShown, let window = popover.contentViewController?.view.window else { return }
+        guard !NSScreen.screens.contains(where: { $0.frame.contains(window.frame) }) else { return }
+        // AppKit can accept a visible menu item but place its popover outside
+        // the display. Reuse the bounded fallback, never leave controls clipped.
+        popover.close()
+        showFloatingUsage(size: size, visible: visible)
+    }
+
     @objc private func showUsage() {
         store.reload()
         NSApp.activate(ignoringOtherApps: true)
@@ -194,7 +203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        if popover.isShown { popover.contentViewController?.view.window?.makeKey() }
+        if popover.isShown {
+            popover.contentViewController?.view.window?.makeKey()
+            DispatchQueue.main.async { [weak self] in
+                self?.recoverOffscreenUsage(size: size, visible: visible)
+            }
+        }
         else {
             // Visibility can change between checking the anchor and showing it.
             popover.close()
@@ -602,6 +616,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             "quota": ["status": "ok", "checkedAt": iso.string(from: now), "windows": windows, "history": history,
                       "dailyUsageBuckets": [["startDate": String(iso.string(from: now).prefix(10)), "tokens": 12000]]]])
         showUsage()
+        if CommandLine.arguments.contains("--force-offscreen-popup"),
+           let window = popover.contentViewController?.view.window, popover.isShown {
+            window.setFrameOrigin(NSPoint(x: -100000, y: -100000))
+            let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
+            recoverOffscreenUsage(size: panelSize, visible: visible)
+            precondition(usageWindow?.isVisible == true && !popover.isShown)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
             let view = usageWindow?.contentViewController?.view ?? popover.contentViewController?.view
             guard popover.isShown || usageWindow?.isVisible == true, let view,
