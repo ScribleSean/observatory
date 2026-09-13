@@ -1,0 +1,31 @@
+name: Clean Windows package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-package-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build and verify complete package from a clean checkout
+        shell: pwsh
+        run: |
+          $builder = (Get-Command python -CommandType Application).Source
+          $env:OBSERVATORY_TEST_PYTHON = $builder
+          ./native/windows/package.ps1 -BuildPython $builder
+      # No live sources, signing secrets, installation or artifact publication.
+      # A packaged build is not a clean first-launch or desktop usability test.

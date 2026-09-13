@@ -94,6 +94,10 @@ Installer-tool preparation uses the pinned NSIS archive in `native/windows/insta
 
 `-SkipWebBuild` is an explicit development shortcut for packaging-only changes after a successful dashboard build. Do not use it for final release verification. Windows downloads, dependency caches and output stay on the Windows machine.
 
+`package.ps1 -BuildPython C:\path\to\python.exe` selects the build interpreter explicitly. Its default remains the Windows Python launcher, with `-3` added only for `py.exe`. Both paths disable bytecode writes. This interpreter prepares the pinned packaged Python runtime, rather than replacing it.
+
+The manually dispatched `Clean Windows package` workflow uses a fresh standard Windows runner, an explicit build Python and the complete packaging command without `-SkipWebBuild`. It exercises dependency restoration, dashboard build, source tests, runtime preparation and packaged checks. It does not install the application, collect live records, use signing secrets or publish artifacts. A successful run is clean-build evidence, not a clean first-launch or release-publication result.
+
 The tested candidate is about 224 MiB unpacked, including its private runtimes. This is a disk-size measurement, not a memory or CPU claim. Candidates are unsigned and may trigger Windows security warnings.
 
 ## Build and test the installer

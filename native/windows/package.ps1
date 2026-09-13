@@ -1,5 +1,6 @@
 param(
     [string]$Dotnet = 'dotnet',
+    [string]$BuildPython = (Join-Path $env:SystemRoot 'py.exe'),
     [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache'),
     [switch]$SkipWebBuild
 )
@@ -38,7 +39,9 @@ try {
         [IO.Compression.ZipFileExtensions]::ExtractToFile($nodeZip.GetEntry("$nodeFolder/LICENSE"), (Join-Path $notices 'Node-LICENSE.txt'))
     } finally { $nodeZip.Dispose() }
     $python = Join-Path $runtime 'python'
-    & (Join-Path $env:SystemRoot 'py.exe') -3 -B (Join-Path $PSScriptRoot 'prepare-python.py') --cache $CacheRoot --output $python --assets (Join-Path $PSScriptRoot 'runtime-assets.json')
+    $pythonBuilder = @('-B', (Join-Path $PSScriptRoot 'prepare-python.py'), '--cache', $CacheRoot, '--output', $python, '--assets', (Join-Path $PSScriptRoot 'runtime-assets.json'))
+    if ([IO.Path]::GetFileName($BuildPython) -ieq 'py.exe') { $pythonBuilder = @('-3') + $pythonBuilder }
+    & $BuildPython @pythonBuilder
     if ($LASTEXITCODE -ne 0) { throw 'Verified Python runtime preparation failed.' }
     Copy-Item -LiteralPath (Join-Path $python 'LICENSE.txt') -Destination (Join-Path $notices 'Python-LICENSE.txt')
     Copy-Item -LiteralPath (Join-Path $python 'licenses') -Destination (Join-Path $notices 'Python-dependencies') -Recurse
