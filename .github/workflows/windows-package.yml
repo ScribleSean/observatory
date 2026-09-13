@@ -27,7 +27,7 @@ jobs:
       - name: Verify the compiler archive without executing downloaded content
         if: inputs.verify_compiler_only
         shell: pwsh
-        run: ./native/windows/installer.ps1 -VerifyCompilerOnly
+        run: ./native/windows/test-installer-download.ps1
       - uses: actions/setup-dotnet@v4
         if: '!inputs.verify_compiler_only'
         with:
@@ -63,6 +63,7 @@ jobs:
           & (Join-Path $app 'Runtime/node.exe') native/windows/verify-manifest.mjs $app
           if ($LASTEXITCODE -ne 0) { throw 'Clean package verification failed.' }
           ./native/windows/installer.ps1 -PackageDirectory $app -TestIdentity
+          ./native/windows/test-installer-download.ps1
           $receipts = @(Get-ChildItem -LiteralPath $release -Directory -Filter 'installer-*' | ForEach-Object {
             $receipt = Join-Path $_.FullName 'artifacts/installer-build.json'
             if (Test-Path -LiteralPath $receipt) { $receipt }
