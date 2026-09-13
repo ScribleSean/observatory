@@ -11,7 +11,7 @@ test('Tailscale states never imply peer reachability or expose identity fields',
 });
 
 test('malformed, unexpected and excessive Tailscale output fails closed',()=>{
-  for(const value of ['{','null','[]','{}','{"BackendState":"FutureState"}','{"BackendState":"Running"}',
+  for(const value of ['{','null','[]','{}','{"BackendState":{"toString":null}}','{"BackendState":"FutureState"}','{"BackendState":"Running"}',
     '{"BackendState":"Running","Self":{"Online":"true"}}','x'.repeat(1024*1024+1),null])
     assert.equal(summarizeTailscale(value).status,'unavailable');
 });
@@ -40,4 +40,5 @@ test('missing client differs from denied access, failed command and unsupported 
   assert.equal((await inspectTailscale({platform:'win32',available:async()=>{throw Error('private error');}})).status,'unavailable');
   assert.equal((await inspectTailscale({platform:'darwin',available:async()=>{},run:async()=>{throw Error('private account detail');}})).status,'unavailable');
   assert.equal((await inspectTailscale({platform:'linux'})).status,'unsupported');
+  assert.equal((await inspectTailscale({platform:'win32',programFiles:'relative'})).status,'unavailable');
 });

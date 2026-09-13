@@ -14,7 +14,7 @@ export function summarizeTailscale(raw) {
   if(typeof raw!=='string' || Buffer.byteLength(raw)>limit)return result('unavailable');
   let data;
   try {data=JSON.parse(raw);}catch{return result('unavailable');}
-  if(!data || typeof data!=='object' || Array.isArray(data))return result('unavailable');
+  if(!data || typeof data!=='object' || Array.isArray(data) || typeof data.BackendState!=='string')return result('unavailable');
   const states={NeedsLogin:'needs-login',NeedsMachineAuth:'needs-device-approval',Stopped:'stopped',Starting:'starting',NoState:'starting',InUseOtherUser:'other-user'};
   if(data.BackendState==='Running')return result(data.Self?.Online===true?'running':data.Self?.Online===false?'offline':'unavailable');
   return result(Object.hasOwn(states,data.BackendState)?states[data.BackendState]:'unavailable');
@@ -33,7 +33,9 @@ export function tailscaleCandidates(platform=process.platform,programFiles=proce
 export async function inspectTailscale({platform=process.platform,programFiles=process.env.ProgramFiles,
   available=async file=>{await access(file,constants.X_OK);},run=execute}={}) {
   if(!['darwin','win32'].includes(platform))return result('unsupported');
-  for(const candidate of tailscaleCandidates(platform,programFiles)) {
+  const candidates=tailscaleCandidates(platform,programFiles);
+  if(!candidates.length)return result('unavailable');
+  for(const candidate of candidates) {
     try {await available(candidate);}catch(error){
       if(error.code==='ENOENT' || error.code==='ENOTDIR')continue;
       return result('unavailable');
