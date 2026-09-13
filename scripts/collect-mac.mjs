@@ -16,6 +16,7 @@ import {attachQuota} from './collect-quota.mjs';
 import {collectConfiguredMacQuota} from './legacy-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
+import {refreshAllowances} from './refresh-allowances.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -35,7 +36,7 @@ function pythonReport(python,script,args) {
   });
 }
 
-export async function collectMac(runtime,python,peerConfig=null) {
+export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false}={}) {
   if(process.platform!=='darwin' || !path.isAbsolute(runtime) || !path.isAbsolute(python || ''))throw Error('Absolute Mac runtime and Python executable required');
   for(const folder of [runtime,path.join(runtime,'public'),path.join(runtime,'public/local')]) {
     await mkdir(folder,{recursive:true,mode:0o700});
@@ -46,6 +47,9 @@ export async function collectMac(runtime,python,peerConfig=null) {
   const info=await lstat(configFile);
   if(!info.isFile() || info.isSymbolicLink() || info.size>4096)throw Error('Invalid local Mac configuration');
   const config=macCollectorConfig(JSON.parse(await readFile(configFile,'utf8')));
+  const readQuota=()=>collectConfiguredMacQuota(runtime,{enabled:config.quota,
+    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota});
+  if(quotaOnly) return refreshAllowances(runtime,{enabled:config.quota,readQuota});
   let savedPairing=null,pairingFailed=false;
   if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
   let pairing=null;
@@ -75,8 +79,7 @@ export async function collectMac(runtime,python,peerConfig=null) {
   await finalizePeerCollection(runtime,result,savedPairing,previous);
   // Account-wide history belongs to the observing device, not the peer sum.
   let quota;
-  try {quota=await collectConfiguredMacQuota(runtime,{enabled:config.quota,
-    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota});}
+  try {quota=await readQuota();}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
@@ -98,5 +101,5 @@ export async function collectMac(runtime,python,peerConfig=null) {
 
 // macOS presents /var and /private/var as aliases. Compare filesystem identities,
 // not spelling, so launching from an app bundle in a temporary folder still runs.
-if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))collectMac(process.env.OBSERVATORY_RUNTIME || '',process.env.OBSERVATORY_PYTHON)
+if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))collectMac(process.env.OBSERVATORY_RUNTIME || '',process.env.OBSERVATORY_PYTHON,null,{quotaOnly:process.argv.includes('--quota-only')})
   .catch(()=>{console.error('Mac collection unavailable');process.exitCode=1;});

@@ -15,6 +15,7 @@ import {collectQuota,attachQuota} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
+import {refreshAllowances} from './refresh-allowances.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const unavailable=host=>({host,status:'unavailable',checkedAt:new Date().toISOString()});
@@ -37,9 +38,16 @@ function run(file,args,input='',environment=process.env) {
   });
 }
 
-export async function collectWindows(runtime,peerConfig=null) {
+export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false}={}) {
   if(process.platform!=='win32' || !path.isAbsolute(runtime))throw Error('Native Windows runtime required');
   const config=windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8')));
+  const readQuota=()=>collectQuota(runtime,{enabled:config.quota,
+    resolveExecutable:()=>findWindowsQuotaClient(config.quotaWslDistribution),readSnapshot:readWindowsQuotaSnapshot,
+    isEnabled:async()=>{
+      const current=windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8')));
+      return current.quota && current.quotaWslDistribution===config.quotaWslDistribution;
+    }});
+  if(quotaOnly) return refreshAllowances(runtime,{enabled:config.quota,readQuota});
   let savedPairing=null,pairingFailed=false;
   if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
   let pairing=null;
@@ -85,12 +93,7 @@ export async function collectWindows(runtime,peerConfig=null) {
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
   await finalizePeerCollection(runtime,result,savedPairing,previous);
   let quota;
-  try {quota=await collectQuota(runtime,{enabled:config.quota,
-    resolveExecutable:()=>findWindowsQuotaClient(config.quotaWslDistribution),readSnapshot:readWindowsQuotaSnapshot,
-    isEnabled:async()=>{
-      const current=windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8')));
-      return current.quota && current.quotaWslDistribution===config.quotaWslDistribution;
-    }});}
+  try {quota=await readQuota();}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
@@ -102,4 +105,4 @@ export async function collectWindows(runtime,peerConfig=null) {
   return result;
 }
 
-if(process.argv[1]===fileURLToPath(import.meta.url))collectWindows(process.env.OBSERVATORY_RUNTIME || '').catch(()=>{console.error('Windows collection unavailable');process.exitCode=1;});
+if(process.argv[1]===fileURLToPath(import.meta.url))collectWindows(process.env.OBSERVATORY_RUNTIME || '',null,{quotaOnly:process.argv.includes('--quota-only')}).catch(()=>{console.error('Windows collection unavailable');process.exitCode=1;});
