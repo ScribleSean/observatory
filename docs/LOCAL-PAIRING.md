@@ -35,6 +35,33 @@ Observatory device confirmation or data-sharing consent.
 
 ## Local confirmation persistence
 
+### Native control process
+
+`scripts/peer-tls-control.mjs --runtime <canonical-runtime>` provides a
+newline-delimited JSON channel on parent-child stdin/stdout. Requests contain
+an integer `id` and a `command` object. Supported actions are `host-start`,
+`host-confirm`, `join-claim`, `join-confirm`, `status` and `cancel`. Invitation
+text belongs only in this private pipe or the native setup view, never command
+arguments or logs. Replies omit device keys, internal confirmation handles,
+pairing configuration and comparison salts. Only host-start returns the
+invitation, and status may return the pending peer certificate fingerprint.
+
+The process limits frame buffers, response size and request count, rejects
+duplicate IDs, reports generic errors and closes the listener on parent EOF,
+termination or a ten-minute session limit. Cancellation interrupts pending
+network operations and closes a host that finishes starting after cancellation.
+It does not generate identities or grant sharing consent. A native window must
+own exactly one child process and close it when setup ends.
+
+`native/TLSSetupProcess.swift` implements the Mac pipe wrapper with bounded
+reply parsing, request correlation, a 45-second command timeout and child
+shutdown. A temporary native harness verified status, cancellation and child
+exit against the real Node controller. It is not connected to Settings yet.
+Windows native pipe integration and full setup-window lifecycle tests remain
+open. Existing installed SSH setup has not been replaced.
+
+### Pairing commit
+
 `scripts/peer-tls-setup.mjs` provides `commitConfirmedTLSPairing` for a future
 local confirmation controller. It validates the proposed pairing and actual
 peer certificate against the saved local identity before writing pairing data.

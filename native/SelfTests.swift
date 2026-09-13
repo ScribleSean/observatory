@@ -1,6 +1,7 @@
 import Foundation
 
 func runSelfTests() {
+    TLSSetupReply.selfTest()
     for status in TailscaleReadiness.messages.keys {
         let value = Data("{\"version\":1,\"status\":\"\(status)\",\"peerReachability\":\"not-checked\"}".utf8)
         precondition((try? TailscaleReadiness.parse(value)) == TailscaleReadiness.messages[status])
