@@ -1,8 +1,8 @@
 import {isDeepStrictEqual} from 'node:util';
 import {cleanQuotaObservation} from './quota-history.mjs';
 
-// This contract is not connected to the transport yet. The owner must opt in
-// before calling it with live readings. Generation is random, not an account ID.
+// Authenticated SSH and TLS exchanges share this opt-in contract.
+// Generation is random, not an account ID.
 export const sharedQuotaLimits=Object.freeze({bytes:1_000_000,samples:10000,days:366,historyMs:86400000});
 const stamp=value=>typeof value==='string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString()===value;
 const statuses=['ok','stale','unavailable','needs-auth','unsupported','rate-limited','not-connected'];

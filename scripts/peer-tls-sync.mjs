@@ -5,6 +5,7 @@ import {readPeerTrust} from './peer-tls-trust.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {exchangePeerRecord} from './peer-exchange.mjs';
+import {exchangeQuota} from './quota-exchange.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {isDeepStrictEqual} from 'node:util';
 
@@ -60,7 +61,11 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
             current.localCertificateSha256!==state.trust.localCertificateSha256 ||
             fingerprint(new X509Certificate(current.peerCertificate))!==peerFingerprint)throw unavailable();
           const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
-          const response=await exchangePeerRecord(runtime,request);
+          let response;
+          if(request?.channel==='quota') {
+            if(size>1_100_000 || request.version!==1 || Object.keys(request).length!==3 || !Object.hasOwn(request,'request'))throw unavailable();
+            response=await exchangeQuota(runtime,request.request);
+          } else response=await exchangePeerRecord(runtime,request);
           const bytes=JSON.stringify(response);
           if(Buffer.byteLength(bytes)>limit || socket.destroyed)throw unavailable();
           socket.end(bytes);

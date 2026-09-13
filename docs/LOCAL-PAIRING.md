@@ -262,9 +262,9 @@ duplicate handling and revocation rather than creating another store. Two
 simultaneous sockets, a 17 MB request/response ceiling and a 30-second socket
 deadline bound each listener. Errors return no private state.
 
-Native app source now owns the record-listener process. It exposes only the existing
-record exchange shape, not commands, files or the separate allowance-sharing
-endpoint. Installed-app verification remains open. Synthetic loopback
+Native app source now owns the record-listener process. It exposes the existing
+record exchange shape and a fixed quota channel with separate sharing consent,
+not commands or files. Installed-app verification remains open. Synthetic loopback
 tests verify saved-record exchange, rejection of wrong certificates and record
 identities, duplicate delivery and revocation. Closing the listener now waits
 for in-flight record handlers after closing its sockets.
@@ -342,8 +342,29 @@ Network failure preserves valid local and previously accepted peer data.
 
 This is collector source integration, not installed cross-device sync. The
 native source can now start the trusted listener, but installed mutually
-acknowledged TLS pairing still needs verification. Separate allowance-history exchange
-has not been connected to TLS.
+acknowledged TLS pairing still needs verification.
+
+### Allowance history over TLS
+
+The same pinned listener dispatches a bounded `quota` channel to `exchangeQuota`.
+Both owners must separately enable allowance sharing. A readiness request sends
+no readings. The outbound client validates the saved pairing, consent and exact
+sanitized payload again after the handshake, before writing application data.
+Quota envelopes have a 1.1 MB limit. Account identifiers and local scope hashes
+are not included.
+
+Either TLS peer can initiate `syncQuota`. Network waits do not hold the local
+pairing lock. After each wait, the collector rechecks the exact pairing and
+sharing generation before committing a reply. Concurrent inbound exchanges may
+advance storage revisions without revoking consent. Disable followed by
+re-enable creates a new generation and cannot resume an older exchange.
+Existing SSH synchronization remains Mac-initiated.
+
+Mac synthetic loopback tests cover pinned quota exchange, receiver identity
+checks, omitted private scope hashes, unexpected-field rejection, post-handshake
+revocation and remote disable. Simulated concurrent exchanges cover both roles
+without opening a network connection. These checks do not prove installed
+two-device exchange or remove the Windows network verification gate above.
 
 `scripts/peer-tls-trust.mjs` persists a confirmed peer certificate in
 `private-sync/tls-trust.json`. The record is bound to the saved pair ID, both

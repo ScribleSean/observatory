@@ -7,8 +7,8 @@ import {readPairing} from './peer-pairing.mjs';
 import {readQuotaState,exchangeQuotaState} from './quota-store.mjs';
 import {createSharedQuota} from './quota-peer.mjs';
 
-// Local stdin/stdout endpoint for the paired, authenticated SSH account. Status
-// contains no readings. A caller must establish readiness before sending data.
+// Shared handler for the authenticated SSH endpoint and pinned TLS listener.
+// Status contains no readings. Establish readiness before sending data.
 export const exchangeQuota=(runtime,request,now=Date.now())=>withPeerStateLock(runtime,async()=>{
   const keys=request?.action==='status'?['version','action','pairId','deviceId']:['version','action','pairId','deviceId','record'];
   if(!request || request.version!==1 || !['status','exchange'].includes(request.action) ||

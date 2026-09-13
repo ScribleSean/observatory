@@ -4,7 +4,7 @@ Status: development implementation, not a finished public release. Both developm
 
 ## Allowance sharing under development
 
-`scripts/quota-peer.mjs` defines the tested, opt-in payload contract used by the authenticated SSH quota endpoint. Installed apps contain the implementation, but existing pairings do not opt into allowance sharing automatically.
+`scripts/quota-peer.mjs` defines the tested, opt-in payload contract used by the authenticated SSH quota endpoint and the source-level pinned TLS quota channel. Installed apps contain the SSH implementation, but existing pairings do not opt into allowance sharing automatically. TLS changes are not yet installed or verified across the user's devices.
 
 The contract carries the source device, a random sharing generation, original observation times, supported Codex allowance windows and dated token totals. It omits credentials, account identifiers and local account-scope hashes. It rejects unexpected inbound fields and conflicting observations. Duplicate totals are never added together. Retired Spark windows are excluded.
 
@@ -24,9 +24,11 @@ An actual SSH test with two isolated runtimes and fictional readings exposed a r
 
 Actual SSH exchange using the corrected Mac and Windows bundles passed bidirectional retention, duplicate delivery and both disable checks. Real accounts were not enabled. Older `3c81dcb` candidates are superseded. Successful paired consent through both native interfaces remains a separate verification gate.
 
-`quota-exchange.mjs` implements a separate local endpoint for the authenticated SSH session. A readiness request sends no readings. Exchange checks the saved peer identity and local consent, then saves the validated peer record and allocates the outgoing revision in one quota-store transaction. Older records cannot replace newer ones, conflicting revisions fail, and local revocation clears received records.
+`quota-exchange.mjs` implements the handler for the separate authenticated SSH endpoint and the pinned TLS quota channel. A readiness request sends no readings. Exchange checks the saved peer identity and local consent, then saves the validated peer record and allocates the outgoing revision in one quota-store transaction. Older records cannot replace newer ones, conflicting revisions fail, and local revocation clears received records.
 
 The source collectors now call `quota-sync.mjs` after local quota collection. Only an explicitly enabled Mac initiates the SSH readiness and exchange requests. Windows reads the saved peer projection on its next collection. The snapshot keeps this in `peerQuota`, separate from the local quota and all combined totals. Failed transport preserves dated peer readings with a stale label after ten minutes. Disabled peer readiness clears the Mac's peer projection without sending readings. Two temporary device runtimes have passed exchange tests through the SSH adapter with a synthetic transport.
+
+For an explicitly configured TLS pairing, either platform can initiate the exchange. The client rechecks consent before sending and after network waits, and never holds the pairing lock while awaiting the peer. Disabling and re-enabling sharing cannot reuse an in-flight request from the old sharing generation. Mac loopback tests and simulated concurrent exchanges cover this source integration. Installed two-device verification remains open. See [local pairing](LOCAL-PAIRING.md) for transport limits and the Windows network test gate.
 
 Both installed native allowance views render shared history beneath local observations, with a source-device label, original reading time and receipt time. They reuse the gap/reset-aware graphs without adding device totals. Windows synthetic UI tests cover missing local quota, stale peer history and removing the peer graph, and the rendered fixture was visually checked. Mac shared-history visual interaction and real installed-device exchanges remain unverified. Sharing remains off until pairing and consent prerequisites are satisfied.
 

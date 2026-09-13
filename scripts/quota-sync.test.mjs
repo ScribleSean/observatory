@@ -9,11 +9,15 @@ import {syncQuota,attachQuotaSync} from './quota-sync.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
 import {sshQuotaRequest} from './peer-transport.mjs';
 const now=Date.now();
-async function fixture(t) {
+async function fixture(t,{tls=false}={}) {
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-sync-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const pair=createPairingConfigurations();
   pair.Mac.transport={kind:'ssh-windows',hostAlias:'synthetic',remoteNode:'C:/App/node.exe',remoteScript:'C:/App/peer-exchange.mjs',remoteRuntime:'C:/Runtime'};
+  if(tls) {
+    pair.Mac.transport={kind:'tls',address:'10.0.0.2',port:43128};
+    pair.Windows.transport={kind:'tls',address:'10.0.0.1',port:43128};
+  }
   const runtimes={};
   for(const host of ['Mac','Windows']) {
     const runtime=await realpath(await mkdtemp(path.join(root,host)));runtimes[host]=runtime;
@@ -76,4 +80,27 @@ test('collector hook preserves local readings on failure and skips disabled coll
   let called=false;
   await attachQuotaSync(Mac,result,{enabled:false,request:async()=>{called=true;}});
   assert.equal(called,false);assert.equal(result.data.quota,quota);assert.equal(result.data.peerQuota,null);
+});
+
+test('both TLS roles can initiate concurrently without holding each other\'s pairing lock',async t=>{
+  const {Mac,Windows}=await fixture(t,{tls:true});
+  const requestFor=remote=>async(_transport,input)=>exchangeQuota(remote,input,now);
+  const [mac,windows]=await Promise.all([
+    syncQuota(Mac,{clock:()=>now,request:requestFor(Windows)}),
+    syncQuota(Windows,{clock:()=>now,request:requestFor(Mac)})]);
+  assert.equal(mac.status,'ok');assert.equal(windows.status,'ok');
+  assert.equal(mac.peer.windows[0].remainingPercent,70);
+  assert.equal(windows.peer.windows[0].remainingPercent,40);
+});
+
+test('disable and re-enable while readiness waits cannot reuse the old sharing epoch',async t=>{
+  const {Mac}=await fixture(t,{tls:true});let calls=0;
+  const result=await syncQuota(Mac,{clock:()=>now,request:async()=>{
+    calls++;const before=await readQuotaState(Mac,now);
+    await revokeQuotaSharing(Mac,now);
+    const disabled=await readQuotaState(Mac,now);
+    await setQuotaSharing(Mac,{revision:disabled.revision,enabled:true,pairingId:before.sharing.pairingId},now);
+    return {version:1,status:'ready',record:null};
+  }});
+  assert.equal(result.status,'disabled');assert.equal(calls,1);
 });

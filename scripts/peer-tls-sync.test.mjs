@@ -5,6 +5,8 @@ import {X509Certificate} from 'node:crypto';
 import {mkdtemp,realpath,rm,readFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {createTrustedSyncService} from './peer-tls-service.mjs';
+import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing,publishQuotaState} from './quota-store.mjs';
+import {createSharedQuota} from './quota-peer.mjs';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -86,6 +88,35 @@ test('trusted TLS exchange uses the existing record store and revocation fence',
       socket.once('close',()=>{clearTimeout(deadline);try{resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));}catch{reject(Error('Exchange rejected'));}});
     });
     try {
+      await t.test('quota channel requires consent and keeps allowance data separate from activity records',async()=>{
+        const identity={version:1,pairId:pair.peer.pairId,deviceId:pair.peer.deviceId};
+        const wrap=request=>({version:1,channel:'quota',request});
+        assert.deepEqual(await send(wrap({...identity,action:'status'})),{version:1,status:'disabled',record:null});
+        assert.equal(existsSync(path.join(root,'private-quota')),false);
+        await assert.rejects(send(wrap({...identity,deviceId:'0'.repeat(64),action:'status'})));
+        const peerRuntime=await mkdtemp(path.join(root,'quota-peer-'));
+        for(const [runtime,scope,remaining] of [[root,'a'.repeat(64),40],[peerRuntime,'b'.repeat(64),70]]) {
+          const state=await readQuotaState(runtime),now=Date.now();
+          const updated=await updateQuotaState(runtime,{revision:state.revision,scope,
+            observation:{status:'ok',checkedAt:new Date(now).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:remaining}]}},now);
+          await setQuotaSharing(runtime,{revision:updated.revision,enabled:true,pairingId:pair.local.pairId});
+        }
+        assert.deepEqual(await send(wrap({...identity,action:'status'})),{version:1,status:'ready',record:null});
+        const peerState=await readQuotaState(peerRuntime),history=peerState.history;
+        const payload=createSharedQuota({status:history.status,checkedAt:history.asOf,history:history.samples,
+          accountUsageCheckedAt:history.dailyAsOf,dailyUsageBuckets:history.dailyUsageBuckets},
+          {enabled:true,host:pair.peer.host,generation:peerState.sharing.generation});
+        const record=await publishQuotaState(peerRuntime,{revision:peerState.revision,pairingId:pair.local.pairId,host:pair.peer.host,payload});
+        const request=wrap({...identity,action:'exchange',record});
+        await assert.rejects(send({...request,extra:true}));
+        const response=await send(request);
+        assert.equal(response.status,'ready');
+        assert.equal(response.record.payload.history[0].windows[0].remainingPercent,40);
+        assert.equal((await readQuotaState(root)).remote.record.payload.history[0].windows[0].remainingPercent,70);
+        await revokeQuotaSharing(root);
+        assert.deepEqual(await send(request),{version:1,status:'disabled',record:null});
+        assert.equal((await readQuotaState(root)).remote,null);
+      });
       await assert.rejects(send({version:1,record:incoming},localIdentity));
       assert.equal(await readPeerState(root,pair.peer),null);
       await assert.rejects(send({version:1,record:incoming,command:'not-allowed'}));
