@@ -121,6 +121,22 @@ loopback listeners and synthetic identities, not the user's paired devices.
 
 ## Required integration before enabling pairing
 
+`scripts/peer-tls-trust.mjs` persists a confirmed peer certificate in
+`private-sync/tls-trust.json`. The record is bound to the saved pair ID, both
+device IDs and the local certificate fingerprint. It requires a saved pairing
+without a local SSH transport and refuses overwrites, mismatched fingerprints,
+self-pairing, corrupt files, links and changed identities. The existing peer
+lock serializes creation and reads. Existing revocation blocks trust reads,
+and explicit repair retains the trust file with the retired generation.
+
+The listener's local pending-claim API now includes the certificate obtained
+from the TLS connection. A native confirmation handler still needs to bind
+that claim to complementary pairing configuration acknowledged by both
+devices before calling the trust store. The trust store itself is not a
+remote endpoint and does not verify UI intent. It grants no sharing scope,
+starts no listener, and is not called by installed collectors. Trust
+persistence does not yet replace SSH exchange or complete the setup flow.
+
 The storage primitive in `scripts/peer-device-identity.mjs` validates that a
 supplied private key matches its current self-signed certificate. Explicit
 initialization writes once into `private-device-identity`, using the existing

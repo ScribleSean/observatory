@@ -40,11 +40,12 @@ export async function startPairingListener({address,port=0,identity},
       // the invitation secret and subsequent local approval. No data is shared.
       rejectUnauthorized:false,minVersion:'TLSv1.3',maxVersion:'TLSv1.3',
       ALPNProtocols:['observatory-pair/1'],handshakeTimeout:8000,allowHalfOpen:true},socket=>{
-      let peerFingerprint;
+      let peerFingerprint,peerCertificate;
       socket.on('error',()=>{});
       try {
         if(socket.alpnProtocol!=='observatory-pair/1' || session.status()!=='waiting')throw failure();
         peerFingerprint=deviceCertificate(socket.getPeerCertificate().raw);
+        peerCertificate=new X509Certificate(socket.getPeerCertificate().raw).toString();
       } catch {socket.destroy();return;}
       let size=0,claimed=false,acknowledged=false;
       const chunks=[],deadline=setTimeout(()=>socket.destroy(),8000);
@@ -62,7 +63,7 @@ export async function startPairingListener({address,port=0,identity},
           const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
           if(!request || Object.keys(request).length!==3 || request.version!==1 ||
             request.action!=='claim' || !Object.hasOwn(request,'secret'))throw failure();
-          pending=session.claim(request.secret,peerFingerprint);claimed=true;
+          pending={...session.claim(request.secret,peerFingerprint),peerCertificate};claimed=true;
           socket.end(JSON.stringify({version:1,status:'awaiting-confirmation'}),()=>{acknowledged=true;});
         } catch {socket.destroy();}
       });
