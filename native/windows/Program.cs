@@ -8,6 +8,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--test-tls-setup-bridge")
+        {
+            try { TlsSetupProcess.BridgeSelfTest(args[1]).GetAwaiter().GetResult(); }
+            catch { Console.Error.WriteLine("Native setup process bridge failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 2 && args[0] == "--test-device-identity-bridge")
         {
             try { DeviceIdentity.BridgeSelfTest(args[1]).GetAwaiter().GetResult(); }
@@ -31,6 +37,7 @@ internal static class Program
                 PowerResumeWindow.SelfTest();
                 TailscaleReadiness.SelfTest();
                 DeviceIdentity.SelfTest();
+                TlsSetupReply.SelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
                     UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
                 Console.WriteLine("Native dashboard default and legacy fallback passed.");
