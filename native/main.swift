@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var store: ObservatoryStore!
     private var terminationSignal: DispatchSourceSignal?
     private var panelSize = NSSize.zero
+    private var unreliableUsageAnchor: NSRect?
     private var previewRuntime: URL?
     private weak var lifecycleContent: NSView?
     private let nativeSelection = NativeDashboardSelection()
@@ -179,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !NSScreen.screens.contains(where: { $0.frame.contains(window.frame) }) else { return }
         // AppKit can accept a visible menu item but place its popover outside
         // the display. Reuse the bounded fallback, never leave controls clipped.
+        unreliableUsageAnchor = statusItem.button?.window?.frame
         popover.close()
         showFloatingUsage(size: size, visible: visible)
     }
@@ -197,6 +199,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             showFloatingUsage(size: size, visible: visible)
             return
         }
+        // An unchanged anchor that already produced an offscreen popover is
+        // not a new opportunity to retry it on every dashboard handoff.
+        // A display or menu-bar layout change permits anchored placement again.
+        if let unreliableUsageAnchor, button.window?.frame == unreliableUsageAnchor {
+            showFloatingUsage(size: size, visible: visible)
+            return
+        }
+        unreliableUsageAnchor = nil
         if popover.contentViewController == nil || size != panelSize {
             panelSize = size
             popover.contentViewController = usageContent(size: size)
@@ -646,8 +656,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 showUsage()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
                     guard popover.isShown || usageWindow?.isVisible == true else {
-                        print("Native usage popup failed: usage view did not reopen beside the dashboard")
+                        print("Native usage popup failed: usage view did not reopen beside the dashboard, active=\(NSApp.isActive) anchoredShown=\(popover.isShown) fallbackRetained=\(usageWindow != nil) fallbackVisible=\(usageWindow?.isVisible ?? false) anchor=\(String(describing: statusItem.button?.window?.frame)) failedAnchor=\(String(describing: unreliableUsageAnchor))")
                         exit(1)
+                    }
+                    if let unreliableUsageAnchor, statusItem.button?.window?.frame == unreliableUsageAnchor {
+                        precondition(usageWindow?.isVisible == true && !popover.isShown)
                     }
                     closeUsage()
                     afterUsageClosed { [self] in
