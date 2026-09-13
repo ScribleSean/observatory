@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.setActivationPolicy(.accessory)
         let runtime: URL
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
-        let popupTest = CommandLine.arguments.contains("--test-popup")
+        let popupTest = CommandLine.arguments.contains("--test-popup") || CommandLine.arguments.contains("--preview-pace")
         if CommandLine.arguments.contains("--preview") || lifecycleTest || popupTest {
             // An isolated, empty UI preview never changes installed settings or login state.
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-ui-preview-\(UUID().uuidString)")
@@ -614,7 +614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let iso = ISO8601DateFormatter()
         let windows: [JSONObject] = [
             ["bucket": "codex", "window": "primary", "remainingPercent": 65, "durationMinutes": 300,
-             "resetsAt": iso.string(from: now.addingTimeInterval(3600))],
+             "resetsAt": iso.string(from: now.addingTimeInterval(4 * 3600))],
             ["bucket": "codex", "window": "secondary", "remainingPercent": 82, "durationMinutes": 10080],
             ["bucket": "spark", "window": "primary", "remainingPercent": 40, "durationMinutes": 300]
         ]
@@ -624,6 +624,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": iso.string(from: now),
             "activity": [], "tokens": [], "settings": [], "dictation": [],
             "quota": ["status": "ok", "checkedAt": iso.string(from: now), "windows": windows, "history": history,
+                      "pace": [["bucket": "codex", "window": "primary", "asOf": iso.string(from: now),
+                                "summary": "20.0% of allowance/hour over 60 min. Approximately 3h 15m left at this pace (at last check)."]],
                       "dailyUsageBuckets": [["startDate": String(iso.string(from: now).prefix(10)), "tokens": 12000]]]])
         showUsage()
         if CommandLine.arguments.contains("--force-offscreen-popup"),
@@ -645,6 +647,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 exit(1)
             }
             print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen with synthetic quota and token charts")
+            if CommandLine.arguments.contains("--preview-pace") { return }
             openDashboard("activity")
             // AppKit can hide the window before its closing animation updates
             // isShown. Wait for the closed state with a bounded deadline.
