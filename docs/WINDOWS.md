@@ -96,6 +96,8 @@ This rejects modified, additional or missing payload files, invalid Windows path
 
 Installer-tool preparation uses the pinned NSIS archive in `native/windows/installer-tool.json`. Its SHA-256 was computed after matching the official release listing's SHA-1 over an HTTPS download. It is not a vendor-published SHA-256. The compiler stays in the Windows build cache and is not installed system-wide.
 
+To verify only that download, run `native/windows/installer.ps1 -VerifyCompilerOnly`. This mode checks the pinned checksum without extracting or executing the archive. The clean-package workflow exposes the same check through `verify_compiler_only`, which skips application building and installation. Compiler downloads use Windows system curl with HTTPS-only redirects and bounded timeouts. A failed or mismatched response is never used as a compiler.
+
 `-SkipWebBuild` is an explicit development shortcut for packaging-only changes after a successful dashboard build. Do not use it for final release verification. Windows downloads, dependency caches and output stay on the Windows machine.
 
 `package.ps1 -BuildPython C:\path\to\python.exe` selects the build interpreter explicitly. Its default remains the Windows Python launcher, with `-3` added only for `py.exe`. Both paths disable bytecode writes. This interpreter prepares the pinned packaged Python runtime, rather than replacing it.

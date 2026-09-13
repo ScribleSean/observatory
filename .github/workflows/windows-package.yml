@@ -2,6 +2,10 @@ name: Clean Windows package
 on:
   workflow_dispatch:
     inputs:
+      verify_compiler_only:
+        description: Verify only the pinned installer compiler download, without executing it
+        type: boolean
+        default: false
       verify_installer:
         description: Compile and exercise the isolated test-identity installer
         type: boolean
@@ -20,13 +24,20 @@ jobs:
       DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
     steps:
       - uses: actions/checkout@v4
+      - name: Verify the compiler archive without executing downloaded content
+        if: inputs.verify_compiler_only
+        shell: pwsh
+        run: ./native/windows/installer.ps1 -VerifyCompilerOnly
       - uses: actions/setup-dotnet@v4
+        if: '!inputs.verify_compiler_only'
         with:
           dotnet-version: '10.0.x'
       - uses: actions/setup-python@v5
+        if: '!inputs.verify_compiler_only'
         with:
           python-version: '3.13'
       - name: Build and verify complete package from a clean checkout
+        if: '!inputs.verify_compiler_only'
         shell: pwsh
         run: |
           $builder = Join-Path $env:pythonLocation 'python.exe'
@@ -39,7 +50,7 @@ jobs:
           $env:OBSERVATORY_TEST_PYTHON = $builder
           ./native/windows/package.ps1 -BuildPython $builder
       - name: Compile and verify the isolated installer lifecycle
-        if: inputs.verify_installer
+        if: inputs.verify_installer && !inputs.verify_compiler_only
         shell: pwsh
         run: |
           $release = Join-Path $env:GITHUB_WORKSPACE 'native/windows/release'
@@ -62,7 +73,7 @@ jobs:
           $installer = Join-Path (Split-Path $receipts[0]) $receipt.installerName
           ./native/windows/test-installer.ps1 -InstallerPath $installer
       - name: Diagnose private-directory failure with a disposable fixture
-        if: failure()
+        if: failure() && !inputs.verify_compiler_only
         shell: pwsh
         run: |
           $fixture = Join-Path $env:RUNNER_TEMP ('observatory-acl-diagnostic-' + [guid]::NewGuid().ToString('N'))
