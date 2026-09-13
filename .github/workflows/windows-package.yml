@@ -24,8 +24,18 @@ jobs:
       - name: Build and verify complete package from a clean checkout
         shell: pwsh
         run: |
-          $builder = (Get-Command python -CommandType Application).Source
+          $builder = Join-Path $env:pythonLocation 'python.exe'
+          if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) { throw 'Configured build Python is missing.' }
           $env:OBSERVATORY_TEST_PYTHON = $builder
           ./native/windows/package.ps1 -BuildPython $builder
+      - name: Diagnose private-directory failure with a disposable fixture
+        if: failure()
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP ('observatory-acl-diagnostic-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $fixture | Out-Null
+          $directory = Join-Path $fixture 'private-sync'
+          & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -File scripts/private-sync-acl.ps1 -Directory $directory -Initialize -Diagnostic
+          exit $LASTEXITCODE
       # No live sources, signing secrets, installation or artifact publication.
       # A packaged build is not a clean first-launch or desktop usability test.
