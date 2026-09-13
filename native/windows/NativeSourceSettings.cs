@@ -21,6 +21,13 @@ internal sealed partial class NativeDashboard
 
     private void SourceSettings()
     {
+        var fileVersion = System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyFileVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyFileVersionAttribute>().FirstOrDefault()?.Version;
+        var versionLabel = Version.TryParse(fileVersion, out var version) && version.Build >= 0 && version.Revision >= 0
+            ? $"Version {version.Major}.{version.Minor}.{version.Build} (build {version.Revision})" : "Version Unknown";
+        Label($"Observatory · {versionLabel}");
+        Label("This identifies the running app. Building or downloading an update does not change this version.");
         Choice("Settings page", ["Sources", "This device"], settingsPage, value => settingsPage = value);
         if (settingsPage == "This device") { DeviceSettings(); return; }
         if (sourceSettings is null) { Label("Source settings are unavailable in this preview session."); return; }

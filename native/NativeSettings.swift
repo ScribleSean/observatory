@@ -27,6 +27,13 @@ struct NativeSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
+            settingsSection("About Observatory") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") (build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"))")
+                    Text(actions.preview ? "Isolated preview. This is not the installed app." : "This identifies the running app. Building or downloading an update does not change this version.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
             settingsSection("Collection on this Mac") {
                 VStack(alignment: .leading, spacing: 12) {
                     if !store.localCollection {
