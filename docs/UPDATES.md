@@ -10,6 +10,8 @@ Both development apps now run 0.3.2, build 8, from clean source `2265c86` after 
 
 ## Update integration
 
+Source now targets 0.3.3, build 9. Candidate preparation includes the bounded Codex cache retry and Mac graceful-quit changes. Both installed development apps remain 0.3.2 until a new package is verified and activated. The Windows updater primitives remain unconnected, and this version change does not enable automatic updates.
+
 `native/update-appcast.mjs` now provides the shared feed renderer. It requires both platform artifacts from one source revision and release version, an increasing build number, exact versioned GitHub download URLs, matching SHA-256 digests and Ed25519 signatures verified against separately supplied trusted public keys. It emits separate Mac and Windows feeds. It does not publish anything or enable update checks in installed applications.
 
 The caller supplies `release` with `version`, `buildNumber`, `sourceRevision` and canonical UTC `publishedAt`, two `artifacts` with those identity fields plus `platform`, `data` as a Buffer, `sha256`, `edSignature` and `url`, a trusted public-key map keyed by `macos-arm64` and `windows-x64`, and the previous published build number. Release tags use `v<version>-build.<buildNumber>`. A versioned URL is not inherently immutable: the publishing workflow must refuse replacement of existing tags and assets. Verify packaging receipts before invoking this renderer. A matching signature authenticates artifact bytes, not their safety or the accuracy of caller-supplied build identity.
