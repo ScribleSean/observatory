@@ -1,5 +1,7 @@
 # Dependency and runtime review
 
+Current deployment update: Windows 0.3.2 build 8 (`2265c86`) is installed. Post-activation runtime inspection confirmed OpenSSL 3.5.8 and SQLite 3.53.1. Private-data preservation and fresh paired collection passed. Mac 0.3.2 is verified and staged but not activated. The sections below retain the earlier audit and candidate evidence chronologically. See the [release checklist](RELEASE-CHECKLIST.md) for current gates.
+
 Observed September 13, 2026 UTC. Source baseline `34856e3`. Installed development apps remain `30f91ca`, version 0.3.1. No runtime or package was changed by this review.
 
 ## Package advisory checks
