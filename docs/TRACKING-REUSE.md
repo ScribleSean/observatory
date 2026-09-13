@@ -38,7 +38,21 @@ Current retention is bounded to 30 days of raw quota observations, with a 10,000
 
 ## Faster sampling investigation
 
-The requested next direction is the most frequent practical sampling without noticeable performance impact. No faster production cadence has been enabled yet. Five-minute collection remains the current behavior.
+### Allowance pace estimates
+
+The source now calculates percentage points of allowance consumed per hour and approximate hours and minutes remaining. Each account observation and limit window is handled separately. The calculation uses up to one hour of contiguous readings and requires at least three readings spanning 15 minutes. History continuity allows ten minutes plus 30 seconds of native timer tolerance. Reset timestamps may vary by up to two seconds to accommodate observed provider rounding. Larger gaps, larger reset changes, allowance increases and conflicting observations split the history. Account switches discard the previous account's pace.
+
+An estimate is not a measured countdown. The display identifies its observation interval and labels remaining time as approximate at the last check. It reports when the reset should arrive before exhaustion, when no recent consumption is observed, or when history is insufficient. Readings ten minutes old cannot supply a current estimate. These calculations do not change stored observations, retention or polling frequency.
+
+The 0.3.7 candidate also compares estimated exhaustion with the remaining time until reset. A compact Now-to-Reset bar represents the portion of that interval the allowance is expected to cover. For example, 2 hours 30 minutes until exhaustion against 4 hours until reset produces 62.5% coverage. This is a time comparison, not another allowance percentage or a guarantee of future availability. When reset comes first, coverage is capped at 100% and the text explains why. Stale or insufficient estimates have no comparison bar.
+
+The Mac 0.3.7 candidate passed a synthetic visual check of the estimate, reset duration and coverage bar. Windows native tests verify the rendered bar value, endpoint label and removal for stale readings. Installed Mac 0.3.6 has a live-verified hourly pace display, but the new reset comparison is not yet installed. Building, packaging, installing and publishing a signed release remain separate verification steps.
+
+Both native displays consume the same summary. Focused calculation tests pass on Mac and Windows. Windows synthetic native tests verify fresh text appears and stale text is withheld. Mac visual and accessibility checks verified the synthetic pace display. Packaged collectors on both platforms preserve pace fields in saved snapshots. Mac 0.3.5 is installed, but delivery of the timing correction remains pending. Windows 0.3.5 installer preparation and read-only upgrade preflight passed without replacing the installed app.
+
+### Sampling cadence
+
+The requested next direction is the most frequent practical sampling without noticeable performance impact. No faster production cadence has been enabled yet. Both native schedulers request collection every five minutes, while successful quota reads set a separate five-minute retry deadline after completion. A scheduled tick before that deadline skips the read, so actual allowance observations can be about ten minutes apart. Do not describe the timer interval as a guaranteed observation interval.
 
 A September 13 read through the installed Windows-to-Ubuntu account adapter completed in 1.615 seconds. A separate bounded diagnostic allowing graceful process shutdown measured 1.181 seconds, 0.30 user CPU seconds, 0.25 system CPU seconds and 139,944 KiB maximum resident memory for the Linux timed command. These measurements exclude Windows Node overhead, WSL VM overhead, network bytes and Mac collection. A short read is not proof of zero battery or responsiveness impact.
 
