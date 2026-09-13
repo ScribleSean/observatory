@@ -27,6 +27,8 @@ The compatibility adapters and workflow switches are implemented in source. They
 
 The source mapping still requires confirmed peer scope. Removing a retired reader does not clear the installed-peer verification gate for the supported sources.
 
+`scripts/mac-migration-config.mjs` publishes a complete native configuration through an exclusive filesystem link after checking the expected legacy-configuration hash and exact source mapping. It refuses an existing native target, linked input and broadly accessible runtime directory. The legacy configuration and private staging copy remain available for recovery. The caller must still stop the app, hold the collector lock and verify peer coverage and archive visibility. This primitive does not perform those steps or establish that migration is complete. Thirteen focused configuration, mapping and archive tests passed on Mac with fictional files.
+
 ## Viewing retained snapshots
 
 `scripts/mac-snapshot-archive.mjs` prepares a retained snapshot in an existing canonical, owner-only archive directory on Mac. It verifies a bounded, stable schema-2 source file, writes an exclusive private copy, verifies its checksum and flushes the copy and receipt to disk. Every preparation uses a new directory and preserves the original collection timestamp. It neither changes collector configuration nor merges historical data into current totals. The caller must still hold the collector lock during migration and verify the saved file in the native viewer before activation. An interrupted preparation is not a successful migration.
