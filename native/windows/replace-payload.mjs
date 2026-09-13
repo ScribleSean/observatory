@@ -125,6 +125,10 @@ export function replacePayload({installed,staged,verify}) {
     try {
       if(movedNew)renameSync(installed,rejected);
       if(movedOld)renameSync(previous,installed);
+      unlinkedDirectory(installed);
+      const restoredIdentity=verify(installed,'previous');
+      if(restoredIdentity?.sourceRevision!==oldIdentity.sourceRevision || restoredIdentity?.buildNumber!==oldIdentity.buildNumber)
+        throw Error('Restored payload identity changed');
       restored=true;
       record('previous-restored');
     } catch {

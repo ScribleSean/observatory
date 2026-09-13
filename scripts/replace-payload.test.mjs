@@ -84,6 +84,37 @@ test('blocked rollback retains every payload and reports recovery required',t=>{
   assert.equal(readFileSync(path.join(failure.recovery,'rejected','unrelated'),'utf8'),'preserve');
   assert.match(readFileSync(path.join(failure.recovery,'transaction.jsonl'),'utf8'),/recovery-required/);
 });
+test('rollback does not claim success when the retained previous payload is corrupt',t=>{
+  const f=setup(t),base=f.verify;
+  f.verify=(folder,kind)=>{
+    if(folder===f.installed && kind==='candidate') {
+      const recovery=path.join(f.root,readdirSync(f.root).find(name=>name.startsWith('.observatory-update-')));
+      writeFileSync(path.join(recovery,'previous','payload'),'corrupt previous');
+      throw Error('Injected candidate failure');
+    }
+    return base(folder,kind);
+  };
+  let failure;
+  try {replacePayload(f);}catch(error){failure=error;}
+  assert.equal(failure?.restored,false);
+  assert.equal(readFileSync(path.join(f.installed,'payload'),'utf8'),'corrupt previous');
+  assert.equal(readFileSync(path.join(failure.recovery,'rejected','payload'),'utf8'),'new');
+  const journal=readFileSync(path.join(failure.recovery,'transaction.jsonl'),'utf8');
+  assert.match(journal,/recovery-required/);assert.doesNotMatch(journal,/previous-restored/);
+  assert.equal(readFileSync(path.join(f.root,'private-data','history'),'utf8'),'private fixture unchanged');
+});
+test('rollback verifies the original identity before reporting restoration',t=>{
+  const f=setup(t),base=f.verify;let previousChecks=0;
+  f.verify=(folder,kind)=>{
+    if(folder===f.installed && kind==='candidate')throw Error('Injected candidate failure');
+    const identity=base(folder,kind);
+    if(kind==='previous' && ++previousChecks>1)return {...identity,buildNumber:99};
+    return identity;
+  };
+  assert.throws(()=>replacePayload(f),error=>error.restored===false);
+  assert.equal(previousChecks,2);
+  assert.equal(readFileSync(path.join(f.installed,'payload'),'utf8'),'old');
+});
 test('linked and nested candidates are refused before any move',t=>{
   const f=setup(t),linked=path.join(f.root,'linked');
   symlinkSync(f.staged,linked,process.platform==='win32'?'junction':'dir');
