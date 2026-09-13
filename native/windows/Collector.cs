@@ -26,6 +26,8 @@ internal sealed class Collector : IDisposable
 
     internal async Task<bool> StopGracefully(TimeSpan timeout)
     {
+        if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(5))
+            throw new ArgumentOutOfRangeException(nameof(timeout));
         var restartTimer = timer.Enabled;
         timer.Stop();
         try { await operations.Stop().WaitAsync(timeout); return true; }
@@ -153,4 +155,37 @@ internal sealed class Collector : IDisposable
     }
 
     public void Dispose() { timer.Stop(); timer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
+
+    internal static void ShutdownSelfTest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "observatory-drain-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var collector = new Collector(root);
+            var sentinel = Path.Combine(root, "saved-history-test.txt");
+            File.WriteAllText(sentinel, "Synthetic saved history. Do not change.");
+            if (!collector.operations.TryBegin()) throw new Exception("Test operation did not start.");
+            var stopped = collector.StopGracefully(TimeSpan.FromSeconds(2));
+            if (stopped.IsCompleted || !collector.Busy) throw new Exception("Collector did not wait for active work.");
+            var denied = false;
+            try { collector.Configure(null); } catch (InvalidOperationException) { denied = true; }
+            if (!denied || File.Exists(Path.Combine(root, "collector.config.json"))) throw new Exception("Configuration changed during shutdown.");
+            collector.operations.Complete();
+            if (!stopped.GetAwaiter().GetResult()) throw new Exception("Completed collector operation did not drain.");
+            if (!collector.operations.Stopping || collector.lifetime.IsCancellationRequested) throw new Exception("Graceful stop cancelled work or resumed prematurely.");
+
+            collector.operations.Resume();
+            if (!collector.operations.TryBegin()) throw new Exception("Test operation could not restart.");
+            if (collector.StopGracefully(TimeSpan.FromMilliseconds(10)).GetAwaiter().GetResult())
+                throw new Exception("Collector shutdown ignored active work.");
+            if (!collector.operations.Busy || collector.operations.Stopping || collector.lifetime.IsCancellationRequested)
+                throw new Exception("Timeout cancelled work or failed to resume.");
+            collector.operations.Complete();
+            if (!collector.StopGracefully(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult()) throw new Exception("Idle shutdown failed.");
+            if (File.ReadAllText(sentinel) != "Synthetic saved history. Do not change.") throw new Exception("Shutdown changed saved data.");
+            Console.WriteLine("Collector shutdown waits, blocks settings, preserves work and resumes after timeout.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 }

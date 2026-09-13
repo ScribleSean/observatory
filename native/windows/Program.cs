@@ -21,6 +21,7 @@ internal static class Program
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 InstallationGate.SelfTest();
                 OperationDrain.SelfTest();
+                Collector.ShutdownSelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
                     UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
                 Console.WriteLine("Native dashboard default and legacy fallback passed.");
