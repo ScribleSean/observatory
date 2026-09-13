@@ -111,9 +111,23 @@ same user or an administrator. The native setup must not enable it silently
 or claim stronger protection. OS-backed key protection remains a release
 security decision. No real device identity has been created by these tests.
 
-Identity generation and expiration/rotation UX are still missing. The module
-does not automatically generate a replacement if a directory is absent. Its
-caller must distinguish initial setup from loss of an established identity.
+Identity generation is available in source. The Mac helper creates a P-256 key
+in memory and passes it through stdin to `/usr/bin/openssl`, using the fixed
+system request configuration and a clean environment. Windows uses .NET
+`CertificateRequest` in `native/windows/DeviceIdentity.cs`. Neither generator
+writes files, installs a trust root or logs its returned key. Both use a generic
+certificate subject and a roughly one-year validity period. Native setup and
+expiration/rotation UX remain missing. Storage does not automatically generate
+a replacement when its directory is absent. The caller must distinguish
+initial setup from loss of an established identity.
+
+The Mac generator passed validation and the real loopback TLS claim flow.
+Windows source `b02f20c` compiled with zero warnings or errors and passed native
+self-tests, including key/certificate matching and signature verification.
+Windows generator-to-Node TLS interoperability is not verified yet. The
+Windows implementation uses the existing shipped .NET runtime, not Git or an
+external OpenSSL installation. See Microsoft's
+[CertificateRequest API](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.x509certificates.certificaterequest?view=net-10.0).
 
 1. Generate and privately persist a device TLS key and certificate. The
    invitation fingerprint must be computed from that actual certificate.

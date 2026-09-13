@@ -10,6 +10,7 @@ import {once} from 'node:events';
 import {createInvitation} from './peer-invitation.mjs';
 import {requestPeerClaim} from './peer-tls-client.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
+import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
 
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 
@@ -123,6 +124,17 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
       {createServer:()=>{created=true;throw Error('unexpected');}}));
     assert.equal(created,false);
   });
+  await t.test('Mac-generated identities work through the real first-pair TLS flow',
+    {skip:process.platform!=='darwin'},async()=>{
+      const host=await generateMacDeviceIdentity(),guest=await generateMacDeviceIdentity();
+      const listener=await startPairingListener({address:'10.0.0.2',identity:host},{createServer});
+      try {
+        await requestPeerClaim(listener.invitation,host.cert,guest,{connect});
+        const claim=listener.pending();
+        assert.equal(claim.peerCertificateSha256,new X509Certificate(guest.cert).fingerprint256.replaceAll(':','').toLowerCase());
+        await listener.confirm(claim.claimId);
+      } finally {await listener.cancel();}
+    });
   await t.test('listener refuses missing client certificate and oversized or extra request fields',async()=>{
     const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
     const send=(body,withIdentity=true)=>new Promise((resolve,reject)=>{
