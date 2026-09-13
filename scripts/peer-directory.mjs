@@ -3,6 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 const execute=promisify(execFile);
 async function windowsPermissions(directory,initialize=false) {
@@ -10,7 +11,7 @@ async function windowsPermissions(directory,initialize=false) {
   const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
   try {
     const {stdout}=await execute(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,
-      ...(initialize?['-Initialize']:[])],{windowsHide:true,timeout:15000,maxBuffer:4096});
+      ...(initialize?['-Initialize']:[])],{windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
     if(stdout.trim()!=='private-sync-acl: ok')throw Error('Invalid verification result');
   } catch {throw Error('Private sync access-control verification failed');}
 }

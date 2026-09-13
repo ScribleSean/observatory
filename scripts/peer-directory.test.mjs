@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {privateSyncDirectory} from './peer-directory.mjs';
+import {fileURLToPath} from 'node:url';
 
 async function fixture(t) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-private-acl-')));
@@ -37,4 +38,28 @@ test('Windows file-level broad grants are rejected despite a private parent',
     const runtime=await fixture(t),directory=await privateSyncDirectory(runtime,true);
     const file=path.join(directory,'pairing.json');await writeFile(file,'{}');grantEveryone(file);
     await assert.rejects(privateSyncDirectory(runtime));
+  });
+test('Windows ACL verification ignores incompatible inherited modules',
+  {skip:process.platform!=='win32'},async t=>{
+    const runtime=await fixture(t),modules=path.join(runtime,'modules');
+    const module=path.join(modules,'Microsoft.PowerShell.Security');
+    await mkdir(module,{recursive:true});
+    await writeFile(path.join(module,'Microsoft.PowerShell.Security.psd1'),
+      "@{RootModule='fixture.psm1';ModuleVersion='1.0';FunctionsToExport=@('Get-Acl')}\n");
+    await writeFile(path.join(module,'fixture.psm1'),
+      "function Get-Acl { throw 'Synthetic incompatible module' }\nExport-ModuleMember -Function Get-Acl\n");
+    const before=process.env.PSModulePath;
+    process.env.PSModulePath=modules;
+    try {
+      const directory=await privateSyncDirectory(runtime,true);
+      const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
+      const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
+      // Control reproduces the former inherited-environment failure.
+      assert.throws(()=>execFileSync(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory],
+        {env:{...process.env},stdio:'pipe',timeout:15000}));
+      assert.equal(await privateSyncDirectory(runtime),directory);
+      assert.equal(process.env.PSModulePath,modules);
+    } finally {
+      if(before===undefined)delete process.env.PSModulePath;else process.env.PSModulePath=before;
+    }
   });

@@ -26,6 +26,11 @@ jobs:
         run: |
           $builder = Join-Path $env:pythonLocation 'python.exe'
           if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) { throw 'Configured build Python is missing.' }
+          . ./native/windows/runtime-assets.ps1
+          $cache = Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild/cache'
+          $timezone = Get-ObservatoryArchive -Name tzdata -CacheRoot $cache
+          & $builder -B -m pip install --no-index --no-deps $timezone
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned build timezone preparation failed.' }
           $env:OBSERVATORY_TEST_PYTHON = $builder
           ./native/windows/package.ps1 -BuildPython $builder
       - name: Diagnose private-directory failure with a disposable fixture
