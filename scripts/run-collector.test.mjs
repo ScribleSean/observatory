@@ -1,9 +1,10 @@
 import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, writeFile, readFile, rm} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile, readFile, rm, realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
+import {collectQuota} from './collect-quota.mjs';
 // This runner uses POSIX process groups and flock. Windows uses Collector.cs,
 // whose contracts are exercised by the native Windows build and live checks.
 const test=(name,fn)=>nodeTest(name,{skip:process.platform==='win32'?'POSIX runner only; Windows uses the native collector':false},fn);
@@ -11,7 +12,7 @@ const reader=path.resolve('scripts/run-collector.py');
 const code=`import importlib.util,sys\ns=importlib.util.spec_from_file_location('runner',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nprint(m.run_collection(sys.argv[2],sys.argv[3],300,float(sys.argv[4])))`;
 const success=`require('fs').writeFileSync('public/local/usage.json',JSON.stringify({collectedAt:new Date().toISOString(),activity:[{status:'ok'}],tokens:[],settings:[]}));`;
 async function fixture(t,script) {
-  const root=await mkdtemp(path.join(tmpdir(),'dashboard-runner-'));
+  const root=await realpath(await mkdtemp(path.join(tmpdir(),'dashboard-runner-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   await mkdir(path.join(root,'scripts'));
   await writeFile(path.join(root,'scripts/collect-dashboard.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${script}`);
@@ -97,4 +98,25 @@ test('failed allowance-only child reports separately and preserves previous data
   assert.equal(JSON.parse(attempt).state,'failed');assert.equal(attempt.includes('PRIVATE'),false);
   assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'full status');
   assert.equal(await readFile(path.join(root,'public/local/usage.json'),'utf8'),'saved data');
+});
+
+test('real native allowance-only entry runs under the lock without rescanning saved data',async t=>{
+  if(process.platform!=='darwin')return;
+  const root=await fixture(t,'');
+  await mkdir(path.join(root,'public/local'),{recursive:true});
+  await writeFile(path.join(root,'collector.config.json'),JSON.stringify({activity:false,codex:false,wispr:false,quota:true}));
+  const at=Date.now();
+  const quota=await collectQuota(root,{enabled:true,clock:()=>at,resolveExecutable:async()=>'/synthetic-client',
+    readSnapshot:async()=>({scope:'a'.repeat(64),status:'ok',checkedAt:new Date(at).toISOString(),
+      windows:[{bucket:'codex',window:'primary',remainingPercent:75}]})});
+  const saved={schema:2,collectedAt:'2026-01-01T00:00:00Z',activity:[{seconds:12}],tokens:[{totalTokens:34}],dictation:[{words:56}],quota,peerQuota:null};
+  await writeFile(path.join(root,'public/local/usage.json'),JSON.stringify(saved));
+  await writeFile(path.join(root,'public/local/collector.json'),'saved full collection status');
+  const output=JSON.parse(execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,
+    '--collector',path.resolve('scripts/collect-mac.mjs'),'--quota-only'],{encoding:'utf8'}));
+  assert.equal(output.collection,'ok');
+  const after=JSON.parse(await readFile(path.join(root,'public/local/usage.json'),'utf8'));
+  assert.deepEqual(after,saved);
+  assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'saved full collection status');
+  assert.equal(JSON.parse(await readFile(path.join(root,'public/local/allowance-collector.json'),'utf8')).sourcesRead,1);
 });
