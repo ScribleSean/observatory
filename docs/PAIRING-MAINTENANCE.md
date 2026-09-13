@@ -1,6 +1,6 @@
 # Private pairing maintenance
 
-Pairing setup has a source CLI and a Mac setup dialog. Repair is still under development. Do not hand-edit identifiers, remove a revocation marker to reconnect, or reset a sequence counter. No permanent pairing is installed by the release build process.
+Pairing setup has a CLI and a Mac setup dialog. Both native apps can prepare their own installation for repair, followed by authenticated setup from the Mac. This is an explicit two-device operation, not automatic recovery. Do not hand-edit identifiers, remove a revocation marker to reconnect, or reset a sequence counter. No permanent pairing is installed by the release build process.
 
 ## Set up or resume a pairing
 
@@ -14,7 +14,7 @@ On Mac, **Paste Windows details** reads the clipboard only when selected. It val
 
 Saved pending and active targets are prefilled and read-only. The form does not receive comparison salts, device identifiers or records. Revoked, corrupt or conflicting local state shows a repair message instead of a replacement form. The read-only CLI `--status` mode supplies these fields without creating pairing state. It is not a remote health check.
 
-The September 9 Mac preview check covered form layout, rejection of empty fields, cancellation without a pairing write, acknowledged setup over the existing SSH route, saved-target verification without changing the generation and an unavailable-peer error. The two pairings were temporary and removed afterward. The later details-import form was inspected without accessing the owner's clipboard. Windows copy and Mac paste handlers have synthetic clipboard tests. Windows dialog visual review and real clipboard transfer remain unverified. This is not a clean-machine authentication/setup check, and repair/rotation remains unavailable.
+The September 9 Mac preview check covered form layout, rejection of empty fields, cancellation without a pairing write, acknowledged setup over the existing SSH route, saved-target verification without changing the generation and an unavailable-peer error. The two pairings were temporary and removed afterward. The later details-import form was inspected without accessing the owner's clipboard. Windows copy and Mac paste handlers have synthetic clipboard tests. Windows dialog visual review and real clipboard transfer remain unverified. This is not a clean-machine authentication/setup check. Subsequent repair support is described below.
 
 The command reads an explicit request from stdin:
 
@@ -49,7 +49,7 @@ Partial or corrupt files fail closed. A process interrupted during a file write 
 
 The native Mac and Windows menus now include **Disconnect paired device…** in source. The confirmation defaults to Cancel or No and explains that the operation affects this installation only. It refuses to start during local collection. If the bundled tool fails, collection is paused for that app session so an automatic refresh does not immediately attempt another exchange. Retry disconnection or quit until the state can be inspected. This pause is not a persistent setting and does not stop another process or device.
 
-These controls have native build and temporary-runtime integration coverage. On Mac, the unpaired-state message, confirmation layout, cancellation without revocation, confirmed revocation and subsequent local collection were verified in an isolated all-sources-disabled preview. Windows interactive confirmation/cancellation and both platforms' failure/retry presentation still need desktop verification. These controls are not in the previously generated release installers yet.
+These controls have native build and temporary-runtime integration coverage. On Mac, the unpaired-state message, confirmation layout, cancellation without revocation, confirmed revocation and subsequent local collection were verified in an isolated all-sources-disabled preview. Windows interactive confirmation/cancellation and both platforms' failure/retry presentation still need desktop verification. For the current installed build and package boundaries, see the [release evidence](RELEASE-0.3.8.md).
 
 The source CLI supports an explicit local disable operation:
 
@@ -67,8 +67,19 @@ Subsequent collection runs locally without exporting or merging the peer snapsho
 
 ## Repair or rotate
 
-An automated repair/rotation workflow is not available yet. Keep the old generation disabled until an explicit authenticated two-device setup can create new comparison credentials and sequence state. Do not delete the old database or marker as a repair shortcut. A future repair must account for both devices, in-flight work, retained private data and interrupted setup before claiming reconnection is complete.
+Use repair only when you intend to replace the existing pairing. Temporary network loss does not by itself require retirement. First restore the existing authenticated connection and retry the saved target.
+
+1. On Windows, choose **Prepare pairing repair…** and review the local confirmation. This disables existing pairing state and retains it in a private backup. It does not contact the Mac or create a new pairing.
+2. On Mac, choose **Prepare pairing repair…** and confirm separately. Both devices must consent. Preparing only one device cannot replace the other device's generation.
+3. From the Mac, choose **Pair with Windows…**, verify the intended SSH target and Windows installation paths, then confirm setup. The existing authenticated SSH route must still work.
+4. Check that setup succeeds and subsequent source observations are fresh on both devices. A prepared-repair message alone does not mean the devices are connected.
+
+The new pairing uses fresh comparison credentials and sequence state. Retired state remains disabled in a `private-sync-retired-*` directory. Do not copy it over the new generation or delete it as a repair shortcut. Retirement does not revoke SSH credentials, erase saved dashboard history or recall an in-flight transfer.
+
+If an acknowledgement is lost, retry the same saved setup request. The pending generation is reused. If preparation fails, stop and inspect that installation before changing files: state may already have been retired. Native collection is paused for that session on failure. Repeated blind repair attempts are not a recovery strategy.
+
+Synthetic protocol tests cover both preparation orders, refusal without both confirmations, fresh credentials, rejection of old-generation writes, lost-reply retry, retained corrupt state and linked-path refusal. These do not establish the complete interactive two-device repair flow, actual network-loss recovery or power-loss durability on the installed apps.
 
 ## Verification limits
 
-Synthetic tests cover local revocation, unchanged stored bytes, refusal to initialize over revoked state, malformed configuration, interrupted markers, stale in-memory pairing, exchange refusal and standalone native collection. They do not prove immediate cancellation of an in-flight transfer, remote SSH-access revocation, power-loss durability or complete two-device onboarding. The Mac dialog is a source-build feature and is not in the previously generated installers.
+Synthetic tests cover local revocation, unchanged stored bytes, refusal to initialize over revoked state, malformed configuration, interrupted markers, stale in-memory pairing, exchange refusal and standalone native collection. They do not prove immediate cancellation of an in-flight transfer, remote SSH-access revocation, power-loss durability or complete two-device onboarding. Source, packaged and installed evidence must remain distinct.
