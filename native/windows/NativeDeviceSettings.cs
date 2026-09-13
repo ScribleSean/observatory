@@ -2,7 +2,8 @@ namespace WorkspaceObservatory;
 
 internal sealed record DeviceSettingsActions(Func<bool> ReadStartup, Action<bool> SetStartup,
     Action PairingDetails, Func<Task> Disconnect, Func<Task> Repair,
-    Func<string, string?, Task<QuotaSharingStatus>>? Sharing = null, Func<bool>? ConfirmSharing = null);
+    Func<string, string?, Task<QuotaSharingStatus>>? Sharing = null, Func<bool>? ConfirmSharing = null,
+    Func<Task<string>>? ReadNetwork = null);
 
 internal sealed partial class NativeDashboard
 {
@@ -35,6 +36,27 @@ internal sealed partial class NativeDashboard
         body.Controls.Add(startup);
         Label("Registration is not proof of a successful login launch. Windows or organizational policy may disable startup.");
         Label("Direct device pairing");
+        if (deviceSettings.ReadNetwork is not null)
+        {
+            var networkStatus = Label("Optional VPN connection. Tailscale has not been checked.");
+            var networkCheck = new Button { Text = "Check Tailscale", AccessibleName = "Check Tailscale", Height = 36, FlatStyle = FlatStyle.Flat };
+            networkCheck.Click += async (_, _) =>
+            {
+                networkCheck.Enabled = false;
+                try { var message = await deviceSettings.ReadNetwork(); if (!networkStatus.IsDisposed) networkStatus.Text = message; }
+                catch { if (!networkStatus.IsDisposed) networkStatus.Text = TailscaleReadiness.Messages["unavailable"]; }
+                finally { if (!networkCheck.IsDisposed) networkCheck.Enabled = true; }
+            };
+            body.Controls.Add(networkCheck);
+            var guide = new LinkLabel { Text = "Tailscale setup guide", AutoSize = true, AccessibleName = "Open official Tailscale setup guide" };
+            guide.LinkClicked += (_, _) =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://tailscale.com/docs/install") { UseShellExecute = true }); }
+                catch { if (!networkStatus.IsDisposed) networkStatus.Text = "The setup guide could not be opened. Visit tailscale.com/docs/install in your browser."; }
+            };
+            body.Controls.Add(guide);
+            Label("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Local-network code pairing is still being developed.");
+        }
         Label("Review Windows pairing details, then pair from the Mac using an existing trusted SSH connection. These controls do not enable SSH or automatically discover devices.");
         var operationStatus = Label("");
         foreach (var (name, action) in new (string, Func<Task>)[] {

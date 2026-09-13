@@ -23,6 +23,7 @@ internal static class Program
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();
                 PowerResumeWindow.SelfTest();
+                TailscaleReadiness.SelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
                     UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
                 Console.WriteLine("Native dashboard default and legacy fallback passed.");
@@ -185,7 +186,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
     private DeviceSettingsActions DeviceActions() => new(LoginStartup.Registered, LoginStartup.SetRegistered,
-        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing);
+        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing, ReadNetwork: TailscaleReadiness.Read);
 
     private void ShowUsage()
     {

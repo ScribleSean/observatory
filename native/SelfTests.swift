@@ -1,6 +1,14 @@
 import Foundation
 
 func runSelfTests() {
+    for status in TailscaleReadiness.messages.keys {
+        let value = Data("{\"version\":1,\"status\":\"\(status)\",\"peerReachability\":\"not-checked\"}".utf8)
+        precondition((try? TailscaleReadiness.parse(value)) == TailscaleReadiness.messages[status])
+    }
+    for invalid in ["{}", "{\"version\":true,\"status\":\"running\",\"peerReachability\":\"not-checked\"}",
+                    "{\"version\":1,\"status\":\"running\",\"peerReachability\":\"connected\"}"] {
+        precondition((try? TailscaleReadiness.parse(Data(invalid.utf8))) == nil)
+    }
     do {
         let object: JSONObject = ["schema": 2, "collectedAt": "2026-09-12T12:00:00Z",
             "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-01", "totalTokens": 42]]]]]

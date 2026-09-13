@@ -56,6 +56,7 @@ internal static class NativeDashboardTests
         using var settingsCollector = new Collector(settingsRoot);
         var startupRegistered = false;
         var pairingDetails = 0; var disconnects = 0; var repairs = 0;
+        var networkChecks = 0;
         var devicePending = new TaskCompletionSource();
         var confirmSettings = false;
         var confirmations = new List<string>();
@@ -77,7 +78,7 @@ internal static class NativeDashboardTests
                         sharingChanges++; sharingEnabled = action == "enable";
                     }
                     return Task.FromResult(new QuotaSharingStatus(sharingEnabled, true, "ready", sharingToken));
-                }, () => sharingConfirmed));
+                }, () => sharingConfirmed, () => { networkChecks++; return Task.FromResult("Synthetic Tailscale status. Peer not checked."); }));
         form.Shown += async (_, _) =>
         {
             try
@@ -244,6 +245,10 @@ internal static class NativeDashboardTests
                 }
                 await Select(form, "Settings page", "This device");
                 void ClickDevice(string name) => Children(form).OfType<Button>().Single(button => button.AccessibleName == name).PerformClick();
+                Check(networkChecks == 0, "Network readiness is not read automatically");
+                ClickDevice("Check Tailscale");
+                await Task.Delay(50);
+                Check(networkChecks == 1 && Texts(form).Contains("Synthetic Tailscale status. Peer not checked."), "Explicit readiness result displayed");
                 Check(Texts(form).Any(value => value.StartsWith("This installation is not registered")), "Startup state read");
                 ClickDevice("Toggle login startup");
                 Check(startupRegistered && Texts(form).Any(value => value.StartsWith("This installation is registered")), "Startup toggle reread");

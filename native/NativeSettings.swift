@@ -80,6 +80,7 @@ struct NativeSettings: View {
             settingsSection("Device connection") {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Device pairing is separate from provider sign-in. Pairing shares supported sanitized usage records, not provider credentials.")
+                    TailscaleReadinessView(enabled: !busy && !actions.preview)
                     HStack {
                         Button("Pair with Windows…", action: actions.pair)
                         Button("Disconnect…", action: actions.disconnect)
