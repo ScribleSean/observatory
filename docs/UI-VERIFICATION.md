@@ -1,6 +1,12 @@
 # Native interface verification
 
-Development-machine checks on September 9, 2026. These results are not a full accessibility review or a clean-install result.
+Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
+
+## Mac allowance accessibility follow-up, September 13
+
+The installed 0.3.8 dashboard exposed the saved pace estimate and reset comparison through its accessibility tree. However, combining the entire allowance card into one accessibility element merged the remaining-allowance progress value with the separate time-coverage label. These percentages measure different things.
+
+Source now keeps the card's children separately accessible and explicitly labels the allowance-remaining bar. The reset-coverage bar retains its own label and percentage. Swift typechecking passed without launching or replacing an app. A rebuilt native accessibility-tree and screen-reader check remain required before claiming this correction works in the installed interface.
 
 ## Mac candidate `7d3b2cc`
 

@@ -71,6 +71,8 @@ struct QuotaPanel: View {
                         Text("\(formatted(number(row["remainingPercent"])))% left").font(.system(size: 12)).monospacedDigit()
                     }
                     ProgressView(value: number(row["remainingPercent"]) ?? 0, total: 100).tint(.accentColor)
+                        .accessibilityLabel("Allowance remaining for \(label(row))")
+                        .accessibilityValue("\(formatted(number(row["remainingPercent"]))) percent")
                     Text(parseDate(row["resetsAt"]).map { "Resets \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Reset time unknown")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -89,7 +91,8 @@ struct QuotaPanel: View {
                                 .accessibilityValue("\(Int((fraction * 100).rounded())) percent. Filled portion ends at estimated exhaustion or reset, whichever comes first.")
                         }
                     }
-                }.accessibilityElement(children: .combine)
+                }.accessibilityElement(children: .contain)
+                    .accessibilityLabel(label(row))
             }
             if let chosen {
                 Picker("Limit history", selection: Binding(get: { key(chosen) }, set: { selected = $0 })) {
