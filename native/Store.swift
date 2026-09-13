@@ -91,11 +91,12 @@ final class ObservatoryStore: ObservableObject {
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
         task.terminationHandler = { [weak self] _ in
+            guard let self else { return }
             RunLoop.main.perform(inModes: [.default, .modalPanel, .eventTracking]) {
                 MainActor.assumeIsolated {
-                    self?.process = nil
-                    self?.refreshing = false
-                    self?.reload()
+                    self.process = nil
+                    self.refreshing = false
+                    self.reload()
                 }
             }
         }
