@@ -12,6 +12,16 @@ internal static class NativeDashboardTests
         if (NativeDashboard.AllowancePaceText(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:01:00Z")) != "Synthetic pace" ||
             NativeDashboard.AllowancePaceText(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:10:00Z")) != "Estimate unavailable until a fresh reading.")
             throw new InvalidOperationException("Allowance pace freshness failed");
+        paceWindow["resetsAt"] = "2026-09-09T16:00:00Z";
+        paceQuota["pace"]![0]!["status"] = "projected";
+        foreach (var fraction in new[] { -0.1, 0, 0.625, 1, 1.1 })
+        {
+            paceQuota["pace"]![0]!["coverageFraction"] = fraction;
+            double? expected = fraction >= 0 && fraction <= 1 ? fraction : null;
+            if (NativeDashboard.AllowancePaceCoverage(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:01:00Z")) != expected ||
+                NativeDashboard.AllowancePaceCoverage(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:10:00Z")) is not null)
+                throw new InvalidOperationException("Allowance reset coverage validation failed");
+        }
         var data = JsonNode.Parse("""
           {"schema":2,"collectedAt":"2026-09-12T12:00:00Z",
           "activityHistory":[{"host":"Windows","status":"ok","days":[

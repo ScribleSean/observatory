@@ -49,7 +49,17 @@ export function quotaPace(quota, now = Date.now()) {
     if (exhaustion <= now) return {...measured,status:'awaiting-observation'};
     return {...measured,status:'projected',remainingMinutes:Math.ceil((exhaustion-now)/minute),
       estimatedExhaustionAt:new Date(exhaustion).toISOString()};
-  }).map(result => ({...result,summary:quotaPaceSummary(result)}));
+  }).map((result,index) => {
+    const reset = timestamp(quota.windows[index].resetsAt);
+    const comparable = ['projected','resets-first'].includes(result.status) && reset > now;
+    const timeUntilResetMinutes = comparable ? Math.ceil((reset-now)/minute) : null;
+    const coverageFraction = !comparable ? null : result.status === 'resets-first' ? 1 :
+      Math.max(0,Math.min(1,(timestamp(result.estimatedExhaustionAt)-now)/(reset-now)));
+    const comparisonSummary = comparable ?
+      `Reset in ${Math.floor(timeUntilResetMinutes/60)}h ${timeUntilResetMinutes%60}m. Estimated allowance covers ${Math.round(coverageFraction*100)}% of the time until reset (at last check).` : null;
+    return {...result,timeUntilResetMinutes,coverageFraction,comparisonSummary,
+      summary:quotaPaceSummary(result) + (comparisonSummary ? ' ' + comparisonSummary : '')};
+  });
 }
 
 export function quotaPaceSummary(result) {

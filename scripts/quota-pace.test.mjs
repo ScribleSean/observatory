@@ -39,10 +39,26 @@ test('observed hourly pace projects hours and minutes without changing readings'
   assert.equal(result.percentagePointsPerHour,20);
   assert.equal(result.observedMinutes,60);
   assert.equal(result.remainingMinutes,150);
-  assert.equal(result.summary,'20.0% of allowance/hour over 60 min. Approximately 2h 30m left at this pace (at last check).');
+  assert.equal(result.summary,'20.0% of allowance/hour over 60 min. Approximately 2h 30m left at this pace (at last check). Reset in 4h 0m. Estimated allowance covers 63% of the time until reset (at last check).');
+  assert.equal(result.timeUntilResetMinutes,240);
+  assert.equal(result.coverageFraction,0.625);
   assert.equal(result.estimatedExhaustionAt,iso(now+150*60000));
   assert.deepEqual(quota,before);
   assert.equal(quotaPace(quota,now+60000)[0].remainingMinutes,149);
+});
+test('reset comparison remains bounded and unavailable estimates have no timeline',()=>{
+  const q=fixture();q.windows[0].resetsAt=iso(now+60*60000);
+  for(const s of q.history)s.windows[0].resetsAt=q.windows[0].resetsAt;
+  assert.equal(pace(q).coverageFraction,1);
+  assert.equal(pace(q).timeUntilResetMinutes,60);
+  assert.match(pace(q).summary,/Expected to reset before running out/);
+  for(const result of [quotaPace(q,now+600000)[0],pace({...q,history:[]}),quotaPace(q,now+3600000)[0]]) {
+    assert.equal(result.coverageFraction,null);
+    assert.equal(result.comparisonSummary,null);
+  }
+  const later=quotaPace(fixture(),now+60000)[0];
+  assert.equal(later.timeUntilResetMinutes,239);
+  assert.equal(later.coverageFraction,149/239);
 });
 test('requires sufficient fresh observations',()=>{
   for(const mutate of [q=>q.history=q.history.slice(-2),q=>q.history=q.history.slice(-3),
