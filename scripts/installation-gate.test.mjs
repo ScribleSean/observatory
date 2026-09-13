@@ -23,7 +23,22 @@ test('normal quit drains collection before releasing application resources',()=>
   assert.match(collector,/await operations.Stop\(\).WaitAsync\(timeout\)/);
   assert.match(collector,/catch \(TimeoutException\)[\s\S]*operations.Resume\(\)/);
   const production=collector.slice(0,collector.indexOf('internal static void ShutdownSelfTest()'));
-  assert.equal((production.match(/operations.TryBegin\(\)/g)||[]).length,3);
-  assert.equal((production.match(/operations.Complete\(\)/g)||[]).length,3);
+  const guardedOperations = [
+    ['internal Action<bool> BeginDirectPairing()', 'internal async Task<QuotaSharingStatus> Sharing('],
+    ['internal async Task<QuotaSharingStatus> Sharing(', 'private async Task MaintainPairing('],
+    ['private async Task MaintainPairing(', 'internal void Configure('],
+    ['private async Task Refresh(bool quotaOnly)', 'internal static void ShutdownSelfTest()'],
+  ];
+  for (const [start,end] of guardedOperations) {
+    const from = collector.indexOf(start), to = collector.indexOf(end,from+start.length);
+    assert.ok(from >= 0 && to > from, `Missing lifecycle boundary: ${start}`);
+    const operation = collector.slice(from,to);
+    assert.equal((operation.match(/operations.TryBegin\(\)/g)||[]).length,1, start);
+    assert.equal((operation.match(/operations.Complete\(\)/g)||[]).length,1, start);
+    if (start.includes('BeginDirectPairing')) assert.match(operation,/Interlocked.Exchange\(ref released, 1\)/);
+    else assert.match(operation,/finally\s*\{\s*operations.Complete\(\)/);
+  }
+  assert.equal((production.match(/operations.TryBegin\(\)/g)||[]).length,guardedOperations.length);
+  assert.equal((production.match(/operations.Complete\(\)/g)||[]).length,guardedOperations.length);
   assert.match(program,/OperationDrain.SelfTest\(\)/);
 });
