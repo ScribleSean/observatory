@@ -25,6 +25,34 @@ Native Settings now includes an explicit **Check Tailscale** action and a link t
 
 Provider authentication and Observatory device linking are separate flows. Connecting one provider must not silently authorize another service or a broader sync scope. Keep credentials on the owning device and use supported authentication mechanisms. Never sync raw transcripts or window titles. Do not introduce a hosted account service or paid services as part of this release.
 
+### Local pairing integration gate
+
+The shared TLS client and opt-in listener now support invitation-pinned device
+claims in synthetic tests. Device identity generation and restricted-file
+storage are also present in source. See [local pairing](LOCAL-PAIRING.md) for
+the verified boundaries and remaining security work. These modules are not
+enabled in the installed applications.
+
+The collector still uses `sshPeerExchange` through `finalizePeerCollection`.
+A successful TLS claim therefore does not mean data sync is working. Before
+the native wizard can replace the existing SSH setup, connect these steps:
+
+1. Explicit identity setup with the chosen key-protection policy and recovery
+   behavior. Do not regenerate an established identity after a read failure.
+2. Native invitation entry/display, cancellation and peer confirmation, with
+   one listener owner and no credential-bearing URLs or logs.
+3. Durable trust and complementary pairing configuration acknowledged by both
+   devices. A lost acknowledgement must resume the same generation safely.
+4. Authenticated TLS data exchange through the existing sanitization,
+   revocation, locking, deduplication and per-category consent checks.
+5. A verified saved observation received on the other device, followed by
+   disconnect, restart and interrupted-setup recovery tests on both platforms.
+
+Expose distinct states for awaiting confirmation, establishing trust and
+active sync. Do not label a device as actively syncing solely because it is
+reachable, connected to Tailscale, or has completed a TLS claim. Keep working
+SSH configurations intact during this integration.
+
 ## Deferred
 
 Customizable widgets, rearranging the dashboard and choosing every glanceable metric are future work. Do not implement them until setup, collection, account management and synchronization work end to end. iOS is a later platform, subject to its supported permissions and collection capabilities.

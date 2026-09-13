@@ -1,5 +1,19 @@
 # Local pairing implementation
 
+## Regression checkpoint
+
+On September 13, source `d18cca8` passed the full Mac JavaScript suite with
+433 passes, six platform skips and no failures. The source checkout had no
+frontend dependencies, so the run used an existing cached TypeScript 5.9.3
+through a test-only module loader. No dependency installation was performed.
+
+The first full Windows run exposed Python fixture imports that depended on
+the SSH working directory. Source `9e9ef16` anchors the test helper to its
+repository and adds a regression test for unrelated launch directories.
+All helper consumers then passed targeted Windows checks. The complete
+Windows rerun finished with 407 passes, 33 platform skips and no failures.
+These are source regression checks, not installer or live-device sync proof.
+
 ## Current boundary
 
 The installed application still uses the existing authenticated SSH transport.
