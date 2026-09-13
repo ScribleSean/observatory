@@ -1,6 +1,6 @@
 # Private device sync
 
-Implementation in progress. Both native collectors support explicitly paired Mac and Windows records over authenticated SSH. Real allowance sharing remains off on the development installations. The legacy Mac collector is preserved until its source coverage can be migrated without silent loss. Synthetic exchange tests do not establish a finished consumer setup flow.
+Implementation in progress. Both native collectors support explicitly paired Mac and Windows records over authenticated SSH. Real allowance sharing remains off on the development installations. The development Mac has completed native migration with retained legacy configuration and a snapshot archive. Synthetic exchange tests do not establish a finished consumer setup flow.
 
 See [pairing maintenance](PAIRING-MAINTENANCE.md) for local revocation and the remaining repair limitations.
 
@@ -36,11 +36,21 @@ The digest is not a signature. Revision selection is not payload validation or t
 
 ## Remaining implementation and verification
 
-1. Verify paired native collection against live sources, including actual comparison evidence from the same read as aggregate records.
+1. Repeat the installed paired-collection check below for final release binaries and clean environments, including actual comparison evidence from the same read as aggregate records.
 2. Complete Windows setup visual verification, explicit rotation and corrupt-state repair, and verify the Windows revocation controls and failure/retry presentation interactively. Verify browser routes cannot read private state.
 3. Exercise an actual network disconnect/reconnect. Desktop-launched Mac exchange and key availability have passed a synthetic check. No reverse SSH access or new remote service is required.
 4. Verify the implemented native merge in both running app dashboards, including per-device timestamps and stale-source visibility. Never imply that an offline cached peer is current.
-5. Verify real disconnection, reconnection, repeated delivery, rotation, revocation and migration before replacing the working legacy collector or repackaging releases.
+5. Verify real disconnection, reconnection, repeated delivery, rotation, revocation and broader migration coverage before treating the development connection as a general release guarantee.
+
+## Installed live collection, September 13, 2026 UTC
+
+Read-only inspection of the installed `30f91ca` collectors' saved output confirmed recent native collection and peer incorporation on both development devices. No manual refresh, pairing edit or collector invocation was performed for this observation.
+
+- Mac at 00:59:53 UTC: successful collection, 13 of 13 configured sources read, snapshot 161 seconds old. Its Mac records were 163 seconds old and received Windows/Ubuntu records were 347 seconds old.
+- Windows at 01:00:16 UTC: successful collection, 6 of 6 configured sources read, snapshot 70 seconds old. Its received Mac records were 187 seconds old.
+- Both outputs reported successful Mac/Windows activity and dictation, plus Mac/Windows/Ubuntu tokens and settings. Combined activity and settings were successful. Combined tokens reported verified comparison evidence with no shared sessions or cross-host parents. Peer allowance data was absent, consistent with sharing remaining off.
+
+These observations establish that both installed collectors incorporated recent peer records within the ten-minute freshness boundary at those times. They do not establish uninterrupted historical coverage, ChatGPT voice support, network-disconnection recovery, rotation, clean-machine onboarding or rendered dashboard behavior. Native Mac UI inspection was unavailable because the computer-control connection closed before returning a view. Private source content and pairing credentials were not included in this evidence.
 
 Thirty-two focused synthetic checks pass with the existing Mac arm64 and Windows x64 candidates' bundled Node 22.23.2 runtimes, including bidirectional projection, stale-source handling and private-field rejection. Windows checks used a separate source-only validation directory. These checks do not establish an end-to-end sync connection or change the shipped candidates.
 
