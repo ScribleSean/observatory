@@ -247,7 +247,7 @@ struct QuotaPanel: View {
                 Text("Account tokens · recent daily totals").font(.system(size: 11)).foregroundStyle(.secondary)
                 Chart(Array(daily.enumerated()), id: \.offset) { _, day in
                     if let date = parseDate(text(day["startDate"]) + "T00:00:00Z"), let tokens = number(day["tokens"]) {
-                        BarMark(x: .value("Day", date, unit: .day), y: .value("Tokens", tokens)).foregroundStyle(Color.accentColor.opacity(0.65))
+                        BarMark(x: .value("Day", date, unit: .day), y: .value("Tokens", tokens)).foregroundStyle(ObservatoryTheme.purple)
                     }
                 }
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) }

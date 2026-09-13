@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../app/observatory.css', import.meta.url), 'utf8');
+test('native allowance charts use the Observatory palette, not the system accent', () => {
+  const panel = readFileSync(new URL('../native/QuotaPanel.swift', import.meta.url), 'utf8');
+  assert.ok(!panel.includes('Color.accentColor'));
+  assert.match(panel, /y: \.value\("Tokens", tokens\)\)\.foregroundStyle\(ObservatoryTheme\.purple\)/);
+});
 function luminance(hex) {
   let digits = hex.slice(1);
   if (digits.length === 3) digits = [...digits].map(x => x + x).join('');
