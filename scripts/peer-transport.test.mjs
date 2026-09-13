@@ -5,6 +5,18 @@ import {createPairingConfigurations,validatePairing} from './peer-pairing.mjs';
 
 const transport=()=>({kind:'ssh-windows',hostAlias:'windows-codex',remoteNode:'C:/Apps/Observatory/node.exe',
   remoteScript:'C:/Apps/Observatory/peer-exchange.mjs',remoteRuntime:"C:/Users/Example's Account/Observatory"});
+test('local listener endpoints are explicit TLS-only private addresses',()=>{
+  const pair=createPairingConfigurations().Mac;
+  const remote={kind:'tls',address:'100.64.0.2',port:43128};
+  const localEndpoint={kind:'tls',address:'10.0.0.2',port:43129};
+  assert.deepEqual(validatePairing({...pair,transport:remote,localEndpoint}).localEndpoint,localEndpoint);
+  assert.equal(validatePairing({...pair,transport:remote}).localEndpoint,undefined);
+  for(const invalid of [{...localEndpoint,address:'0.0.0.0'},{...localEndpoint,address:'8.8.8.8'},
+    {...localEndpoint,port:0},{...localEndpoint,address:'example.com'},transport()])
+    assert.throws(()=>validatePairing({...pair,transport:remote,localEndpoint:invalid}));
+  assert.throws(()=>validatePairing({...pair,transport:transport(),localEndpoint}));
+  assert.throws(()=>validatePairing({...pair,localEndpoint}));
+});
 test('explicit TLS addresses work for either host and cannot enter SSH execution',async()=>{
   const value={kind:'tls',address:'100.64.0.2',port:43128};
   for(const pair of Object.values(createPairingConfigurations()))

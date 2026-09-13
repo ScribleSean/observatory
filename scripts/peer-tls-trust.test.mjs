@@ -47,6 +47,9 @@ test('TLS trust is bound to persistent identities and pairing generation',
       assert.equal(offer.peer.deviceId,localPair.local.deviceId);
       assert.equal(offer.local.comparisonSalt,localPair.local.comparisonSalt);
       assert.equal(offer.peerCertificateSha256,fingerprint(local.cert));
+      assert.deepEqual(localPair.localEndpoint,request.localEndpoint);
+      assert.deepEqual(offer.localEndpoint,request.peerEndpoint);
+      assert.deepEqual(offer.transport,request.localEndpoint);
       assert.deepEqual(await prepareHostTLSSetup(f.runtime,request),offer);
       assert.deepEqual(await readHostTLSSetup(f.runtime),{pairing:offer,acknowledged:false});
       const ack={peerCertificateSha256:fingerprint(peer.cert),digest:setupConfigurationDigest(offer)};
@@ -66,7 +69,7 @@ test('TLS trust is bound to persistent identities and pairing generation',
     });
     await t.test('host resumes a configuration-only save and rejects corrupt acknowledgement',async()=>{
       const f=await fixture({initialize:false,tls:true});
-      await initializePairing(f.runtime,{...f.pairing,peerCertificateSha256:fingerprint(peer.cert)});
+      await initializePairing(f.runtime,{...f.pairing,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerCertificateSha256:fingerprint(peer.cert)});
       const offer=await prepareHostTLSSetup(f.runtime,{peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert),
         includeUbuntu:false,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerEndpoint:f.pairing.transport});
       assert.equal(offer.local.pairId,f.pairing.local.pairId);

@@ -264,9 +264,29 @@ deadline bound each listener. Errors return no private state.
 
 The record listener is not started by the app yet. It exposes only the existing
 record exchange shape, not commands, files or the separate allowance-sharing
-endpoint. Native lifecycle and both-device setup acknowledgement still need
-integration. Synthetic loopback tests verify saved-record exchange, rejection
-of wrong certificates and record identities, duplicate delivery and revocation.
+endpoint. Native process ownership still needs integration. Synthetic loopback
+tests verify saved-record exchange, rejection of wrong certificates and record
+identities, duplicate delivery and revocation. Closing the listener now waits
+for in-flight record handlers after closing its sockets.
+
+New confirmed TLS pairings persist `localEndpoint` as well as the remote
+`transport`. The complementary offer reverses these endpoints, and the setup
+acknowledgement digest covers both. A retry cannot silently change either
+endpoint. Existing SSH and older TLS configurations remain unchanged. A TLS
+configuration without a local endpoint cannot start the background service.
+
+`scripts/peer-tls-service.mjs` provides that service behind a private parent-child
+pipe. The first status request activates a 30-second reconciliation timer. It
+loads saved pairing and trust, binds only the saved numeric private endpoint,
+reuses an unchanged live listener, and closes before replacing a changed one.
+It retries a failed listener on a later tick, closes after revocation or failed
+validation, and drains a late-starting listener on cancellation. The listener
+checks the exact expected pairing under the peer lock before binding and before
+accepting a record. No identity or pairing is created by this service.
+Parent EOF or termination stops it. Replies contain only service status, not
+addresses, certificates or records. `sync-listening` means a local listener is
+open, not that the peer is connected or data has synchronized. Native launch,
+restart and shutdown ownership are the next integration step.
 
 The outbound path in `peer-tls-outbound.mjs` is now selected by
 `finalizePeerCollection` for an explicit TLS transport on either platform.

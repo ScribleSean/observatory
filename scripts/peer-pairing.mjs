@@ -16,7 +16,7 @@ const hosts=host=>host==='Mac'?['Mac']:['Windows'];
 export function validatePairing(value) {
   if(!value || typeof value!=='object' || Array.isArray(value) ||
     !['version','local','peer'].every(key=>Object.hasOwn(value,key)) ||
-    Object.keys(value).some(key=>!['version','local','peer','transport','repair','peerCertificateSha256'].includes(key)) || value.version!==1 ||
+    Object.keys(value).some(key=>!['version','local','peer','transport','localEndpoint','repair','peerCertificateSha256'].includes(key)) || value.version!==1 ||
     !exact(value.peer,['pairId','deviceId','comparisonId','host','codexHosts']))throw Error('Invalid private pairing');
   const local=value.local,peer=value.peer;
   const configured=source=>source.host==='Windows' && source.codexHosts?.length===2?['Windows','Ubuntu']:hosts(source.host);
@@ -29,6 +29,11 @@ export function validatePairing(value) {
     result.transport=validatePeerTransport(value.transport);
     if(result.transport.kind==='ssh-windows' && (local.host!=='Mac' || peer.host!=='Windows'))
       throw Error('Unsupported transport direction');
+  }
+  if(Object.hasOwn(value,'localEndpoint')) {
+    const endpoint=validatePeerTransport(value.localEndpoint);
+    if(result.transport?.kind!=='tls' || endpoint.kind!=='tls')throw Error('Invalid local TLS endpoint');
+    result.localEndpoint=endpoint;
   }
   if(Object.hasOwn(value,'repair')) {
     if(!exact(value.repair,['mac','windows']) || !validRepairNonce(value.repair.mac) ||

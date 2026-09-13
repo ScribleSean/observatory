@@ -51,6 +51,7 @@ async function saveIdentical(directory,name,value) {
 function complementary(pair,transport,localFingerprint) {
   const {comparisonSalt,...peer}=pair.local;
   return validatePairing({version:1,local:{...pair.peer,comparisonSalt},peer,transport,
+    localEndpoint:pair.transport,
     peerCertificateSha256:localFingerprint,...(pair.repair?{repair:pair.repair}:{})});
 }
 
@@ -66,9 +67,9 @@ export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,as
   const localFingerprint=fingerprint(identity.cert);
   let pair=await readPairing(runtime);
   if(!pair)pair=validatePairing({...createPairingConfigurations(request.includeUbuntu)[host],
-    transport:peerEndpoint,peerCertificateSha256:request.peerCertificateSha256});
+    transport:peerEndpoint,localEndpoint,peerCertificateSha256:request.peerCertificateSha256});
   const windows=host==='Windows'?pair.local:pair.peer;
-  if(pair.local.host!==host || !isDeepStrictEqual(pair.transport,peerEndpoint) ||
+  if(pair.local.host!==host || !isDeepStrictEqual(pair.transport,peerEndpoint) || !isDeepStrictEqual(pair.localEndpoint,localEndpoint) ||
     pair.peerCertificateSha256!==request.peerCertificateSha256 ||
     !isDeepStrictEqual(windows.codexHosts,request.includeUbuntu?['Windows','Ubuntu']:['Windows']))throw fail();
   const claim={pairId:pair.local.pairId,localCertificateSha256:localFingerprint,
@@ -82,11 +83,11 @@ export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,as
 
 async function hostState(runtime) {
   const pair=await readPairing(runtime),trust=await readPeerTrust(runtime),directory=await privateSyncDirectory(runtime);
-  if(!pair?.peerCertificateSha256 || !trust)throw fail();
+  if(!pair?.peerCertificateSha256 || !pair.localEndpoint || !trust)throw fail();
   const raw=await readStored(directory,offerFile);
   if(!raw)throw fail();
   const offer=validatePairing(raw);
-  if(!isDeepStrictEqual(raw,offer) || !isDeepStrictEqual(offer,complementary(pair,offer.transport,trust.localCertificateSha256)))throw fail();
+  if(!isDeepStrictEqual(raw,offer) || !isDeepStrictEqual(offer,complementary(pair,pair.localEndpoint,trust.localCertificateSha256)))throw fail();
   const receipt={version:1,pairId:pair.local.pairId,deviceId:pair.peer.deviceId,
     peerCertificateSha256:pair.peerCertificateSha256,digest:setupConfigurationDigest(offer)};
   const ack=await readStored(directory,ackFile);

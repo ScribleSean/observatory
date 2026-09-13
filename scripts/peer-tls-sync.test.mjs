@@ -4,6 +4,7 @@ import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {mkdtemp,realpath,rm,readFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
+import {createTrustedSyncService} from './peer-tls-service.mjs';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -42,6 +43,36 @@ test('trusted TLS exchange uses the existing record store and revocation fence',
       const server=tls.createServer(options,callback),listen=server.listen.bind(server);
       server.listen=(binding,ready)=>listen({...binding,host:'127.0.0.1'},ready);return server;
     };
+    let bound=false;
+    await assert.rejects(startTrustedSyncListener(root,{address:'10.0.0.2',port:43128},
+      {expectedPairing:{...pair,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128}},
+        createServer:()=>{bound=true;throw Error('Must not bind');}}));
+    assert.equal(bound,false);
+    await t.test('service reads actual saved bindings and closes a revoked listener',async()=>{
+      const runtime=await mkdtemp(path.join(root,'service-'));
+      const configured={...pair,transport:{kind:'tls',address:'10.0.0.3',port:43128},
+        localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128}};
+      await initializeDeviceIdentity(runtime,localIdentity);await initializePairing(runtime,configured);
+      await saveConfirmedPeerTrust(runtime,{pairId:pair.local.pairId,localCertificateSha256:fingerprint(localIdentity.cert),
+        peerCertificate:guest.cert,peerCertificateSha256:fingerprint(guest.cert)});
+      let started=0,active;
+      const service=createTrustedSyncService(runtime,{start:async(location,endpoint,options)=>{
+        started++;
+        active=await startTrustedSyncListener(location,endpoint,{...options,createServer:(settings,callback)=>{
+          const server=tls.createServer(settings,callback),listen=server.listen.bind(server);
+          server.listen=(binding,ready)=>listen({...binding,host:'127.0.0.1',port:0},ready);return server;
+        }});
+        return active;
+      }});
+      try {
+        assert.deepEqual(await service.run({action:'status'}),{status:'sync-listening'});
+        assert.deepEqual(await service.reconcile(),{status:'sync-listening'});
+        assert.equal(started,1);assert.equal(active.isListening(),true);
+        await revokePairing(runtime);
+        assert.deepEqual(await service.reconcile(),{status:'unavailable'});
+        assert.equal(active.isListening(),false);
+      } finally {await service.cancel();}
+    });
     const listener=await startTrustedSyncListener(root,{address:'10.0.0.2'},{createServer});
     const send=(request,identity=guest,beforeSend=()=>{})=>new Promise((resolve,reject)=>{
       const socket=tls.connect({host:'127.0.0.1',port:listener.port,key:identity.key,cert:identity.cert,

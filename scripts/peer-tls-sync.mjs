@@ -5,6 +5,8 @@ import {readPeerTrust} from './peer-tls-trust.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {exchangePeerRecord} from './peer-exchange.mjs';
+import {readPairing} from './peer-pairing.mjs';
+import {isDeepStrictEqual} from 'node:util';
 
 const protocol='observatory-sync/1',limit=17_000_000;
 const fingerprint=cert=>createHash('sha256').update(cert.raw).digest('hex');
@@ -12,20 +14,25 @@ const unavailable=()=>Error('Trusted sync listener unavailable');
 
 // Explicit lifecycle only. A setup claim cannot start this listener without
 // previously saved pairing configuration, local identity and peer trust.
-export async function startTrustedSyncListener(runtime,{address,port=0},{createServer=tls.createServer}={}) {
+export async function startTrustedSyncListener(runtime,{address,port=0},{createServer=tls.createServer,expectedPairing}={}) {
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
     (port!==0 && (port<1024 || port>65535)))throw unavailable();
   const state=await withPeerStateLock(runtime,async()=>{
     const trust=await readPeerTrust(runtime),identity=await readDeviceIdentity(runtime);
     if(!trust || !identity)throw unavailable();
+    if(expectedPairing && (!isDeepStrictEqual(await readPairing(runtime),expectedPairing) ||
+      !isDeepStrictEqual(expectedPairing.localEndpoint,{kind:'tls',address,port})))throw unavailable();
     return {trust,identity};
   });
   const peerFingerprint=fingerprint(new X509Certificate(state.trust.peerCertificate));
-  const sockets=new Set();let server,closing;
+  const sockets=new Set(),exchanges=new Set();let server,closing;
   const close=()=>{
     if(closing)return closing;
     for(const socket of sockets)socket.destroy();
-    closing=new Promise(resolve=>{if(server)server.close(()=>resolve());else resolve();});
+    closing=(async()=>{
+      await new Promise(resolve=>{if(server)server.close(()=>resolve());else resolve();});
+      await Promise.allSettled([...exchanges]);
+    })();
     return closing;
   };
   try {
@@ -43,10 +50,11 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
         chunks.push(chunk);
       });
       socket.once('end',()=>{
-        void withPeerStateLock(runtime,async()=>{
+        const exchange=withPeerStateLock(runtime,async()=>{
           // Read trust again under the same lock as record acceptance. An open
           // TLS connection cannot outlive revocation or a generation change.
           const current=await readPeerTrust(runtime);
+          if(expectedPairing && !isDeepStrictEqual(await readPairing(runtime),expectedPairing))throw unavailable();
           if(socket.destroyed || !current || current.pairId!==state.trust.pairId ||
             current.localDeviceId!==state.trust.localDeviceId || current.peerDeviceId!==state.trust.peerDeviceId ||
             current.localCertificateSha256!==state.trust.localCertificateSha256 ||
@@ -57,6 +65,7 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
           if(Buffer.byteLength(bytes)>limit || socket.destroyed)throw unavailable();
           socket.end(bytes);
         }).catch(()=>socket.destroy());
+        exchanges.add(exchange);void exchange.finally(()=>exchanges.delete(exchange));
       });
     });
     server.on('connection',socket=>{
@@ -71,6 +80,6 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
       server.once('error',reject);
       server.listen({host:address,port,exclusive:true},()=>{server.removeListener('error',reject);resolve();});
     });
-    return {port:server.address().port,close};
+    return {port:server.address().port,close,isListening:()=>server.listening && !closing};
   } catch {await close();throw unavailable();}
 }
