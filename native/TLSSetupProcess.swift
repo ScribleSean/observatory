@@ -23,7 +23,8 @@ struct TLSSetupReply: Decodable {
         }
         let reply = try JSONDecoder().decode(TLSSetupReply.self, from: data)
         guard reply.id > 0, ["idle", "working", "waiting", "confirming", "inactive", "hosting", "cancelled",
-            "configuration-ready", "awaiting-confirmation", "local-ready", "acknowledged", "unavailable"].contains(reply.status),
+            "configuration-ready", "awaiting-confirmation", "local-ready", "acknowledged", "unavailable",
+            "identity-ready", "identity-required", "identity-recovery-required"].contains(reply.status),
               (reply.status == "hosting") == (reply.invitation != nil) else { throw CocoaError(.fileReadCorruptFile) }
         if let invitation = reply.invitation {
             guard invitation.utf8.count <= 2048, invitation.hasPrefix("observatory-pair:v1:") else {
@@ -112,6 +113,14 @@ final class TLSSetupProcess {
     }
 
     func close() { queue.async { [weak self] in self?.stop() } }
+
+    // UI must first disclose the restricted-file storage policy and obtain consent.
+    func prepareIdentity(storageConsent: Bool, completion: @escaping Completion) {
+        guard storageConsent else {
+            DispatchQueue.main.async { completion(.failure(CocoaError(.userCancelled))) }; return
+        }
+        send(["action": "identity-create", "storage": "restricted-file", "identity": NSNull()], completion: completion)
+    }
 
     private func received(_ data: Data) {
         guard !closed else { return }

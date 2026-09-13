@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readFile,writeFile,chmod,unlink,link,symlink} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,writeFile,chmod,unlink,link,symlink,mkdir,readdir} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {generateKeyPairSync} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {initializeDeviceIdentity,readDeviceIdentity,validateDeviceIdentity} from './peer-device-identity.mjs';
+import {prepareDeviceIdentity,deviceIdentitySetupStatus} from './peer-identity-setup.mjs';
 
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 test('protected device identity storage',{skip:!existsSync(openssl)},async t=>{
@@ -17,6 +18,35 @@ test('protected device identity storage',{skip:!existsSync(openssl)},async t=>{
     '-out',cert,'-days','1','-subj','/CN=Observatory synthetic identity'],{stdio:'ignore',timeout:15000});
   const identity={version:1,key:await readFile(key,'utf8'),cert:await readFile(cert,'utf8')};
   const runtime=()=>mkdtemp(path.join(root,'runtime-'));
+  await t.test('explicit setup creates once, returns no key and reuses valid identity',async()=>{
+    const directory=await runtime();let calls=0;
+    const options={storage:'restricted-file',generate:async()=>{calls++;return identity;}};
+    assert.deepEqual(await deviceIdentitySetupStatus(directory),{status:'identity-required'});
+    await assert.rejects(prepareDeviceIdentity(directory,{...options,storage:'automatic'}));
+    assert.equal(calls,0);
+    assert.deepEqual(await readdir(directory),[]);
+    assert.deepEqual(await prepareDeviceIdentity(directory,options),{status:'identity-ready'});
+    const before=await readFile(path.join(directory,'private-device-identity','identity.json'));
+    assert.deepEqual(await prepareDeviceIdentity(directory,options),{status:'identity-ready'});assert.equal(calls,1);
+    assert.deepEqual(await readFile(path.join(directory,'private-device-identity','identity.json')),before);
+  });
+  await t.test('missing identity for existing pairing and damaged identity do not regenerate',async()=>{
+    const directory=await runtime();let calls=0;
+    const options={storage:'restricted-file',generate:async()=>{calls++;return identity;}};
+    await mkdir(path.join(directory,'private-sync'),{mode:0o700});
+    assert.deepEqual(await deviceIdentitySetupStatus(directory),{status:'identity-recovery-required'});
+    await assert.rejects(prepareDeviceIdentity(directory,options));assert.equal(calls,0);
+    const damaged=await runtime();await initializeDeviceIdentity(damaged,identity);
+    await writeFile(path.join(damaged,'private-device-identity','identity.json'),'{');
+    assert.deepEqual(await deviceIdentitySetupStatus(damaged),{status:'identity-recovery-required'});
+    await assert.rejects(prepareDeviceIdentity(damaged,options));assert.equal(calls,0);
+  });
+  await t.test('cancellation during generation prevents identity persistence',async()=>{
+    const directory=await runtime(),cancel=new AbortController();
+    await assert.rejects(prepareDeviceIdentity(directory,{storage:'restricted-file',signal:cancel.signal,
+      generate:async()=>{cancel.abort();return identity;}}));
+    assert.equal(await readDeviceIdentity(directory),null);
+  });
   await t.test('explicit creation persists the same validated identity and refuses replacement',async()=>{
     const directory=await runtime();
     assert.equal(await readDeviceIdentity(directory),null);

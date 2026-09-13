@@ -7,6 +7,8 @@ import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {claimFromInvitation} from './peer-tls-client.mjs';
 import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
 import {encodeInvitation,decodeInvitation} from './peer-invitation.mjs';
+import {deviceIdentitySetupStatus,prepareDeviceIdentity} from './peer-identity-setup.mjs';
+import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
 
 const fail=()=>Error('Setup command unavailable');
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
@@ -33,6 +35,16 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
     if(busy!==null)throw fail();
     const token=epoch;busy=token;
     try {
+      if(exact(request,['action']) && request.action==='identity-status') {
+        const result=await deviceIdentitySetupStatus(runtime);
+        return token===epoch?result:{status:'cancelled'};
+      }
+      if(exact(request,['action','storage','identity']) && request.action==='identity-create') {
+        if(host || invitation)throw fail();
+        const result=await prepareDeviceIdentity(runtime,{storage:request.storage,signal:abort.signal,
+          generate:()=>request.identity===null?generateMacDeviceIdentity():request.identity});
+        return token===epoch?result:{status:'cancelled'};
+      }
       if(exact(request,['action','address','port']) && request.action==='host-start') {
         if(host || invitation)throw fail();
         const created=await startHost(runtime,{address:request.address,port:request.port});

@@ -8,9 +8,9 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Length == 2 && args[0] == "--test-tls-setup-bridge")
+        if (args.Length == 2 && args[0] is "--test-tls-setup-bridge" or "--test-tls-identity-bridge")
         {
-            try { TlsSetupProcess.BridgeSelfTest(args[1]).GetAwaiter().GetResult(); }
+            try { TlsSetupProcess.BridgeSelfTest(args[1], args[0] == "--test-tls-identity-bridge").GetAwaiter().GetResult(); }
             catch { Console.Error.WriteLine("Native setup process bridge failed."); Environment.ExitCode = 1; }
             return;
         }

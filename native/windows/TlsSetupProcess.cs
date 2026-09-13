@@ -15,7 +15,8 @@ internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, 
             value["id"] is not JsonValue idValue || !idValue.TryGetValue<int>(out var id) || id < 1 ||
             value["status"]?.GetValue<string>() is not string status ||
             status is not ("idle" or "working" or "waiting" or "confirming" or "inactive" or "hosting" or "cancelled" or
-                "configuration-ready" or "awaiting-confirmation" or "local-ready" or "acknowledged" or "unavailable"))
+                "configuration-ready" or "awaiting-confirmation" or "local-ready" or "acknowledged" or "unavailable" or
+                "identity-ready" or "identity-required" or "identity-recovery-required"))
             throw new InvalidOperationException("Invalid setup reply.");
         var invitation = value["invitation"]?.GetValue<string>();
         var fingerprint = value["peerCertificateSha256"]?.GetValue<string>();
@@ -105,6 +106,18 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
         finally { pending.TryRemove(id, out _); }
     }
 
+    // Caller must obtain consent after disclosing restricted-file storage.
+    internal async Task<TlsSetupReply> PrepareIdentity(bool storageConsent, CancellationToken cancellation = default)
+    {
+        if (!storageConsent) throw new InvalidOperationException("Identity storage consent required.");
+        var status = await Send(new JsonObject { ["action"] = "identity-status" }, cancellation);
+        if (status.Status == "identity-ready") return status;
+        if (status.Status != "identity-required") throw new InvalidOperationException("Identity recovery required.");
+        var identity = DeviceIdentity.Generate();
+        return await Send(new JsonObject { ["action"] = "identity-create", ["storage"] = "restricted-file",
+            ["identity"] = new JsonObject { ["version"] = 1, ["key"] = identity.Key, ["cert"] = identity.Certificate } }, cancellation);
+    }
+
     private async Task ReadReplies()
     {
         var chars = new char[1024]; var frame = new StringBuilder();
@@ -160,7 +173,7 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
         process.Dispose();
     }
 
-    internal static async Task BridgeSelfTest(string node)
+    internal static async Task BridgeSelfTest(string node, bool identitySetup = false)
     {
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-native-control-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(runtime);
@@ -175,11 +188,20 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
                 var replies = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => bridge.Send(new JsonObject { ["action"] = "status" })));
                 if (replies.Any(reply => reply.Status != "idle") || replies.Select(reply => reply.Id).Distinct().Count() != 4)
                     throw new InvalidOperationException("Setup request correlation failed.");
+                if (identitySetup)
+                {
+                    var refused = false;
+                    try { await bridge.PrepareIdentity(false); } catch { refused = true; }
+                    if (!refused || (await bridge.Send(new JsonObject { ["action"] = "identity-status" })).Status != "identity-required" ||
+                        (await bridge.PrepareIdentity(true)).Status != "identity-ready" ||
+                        (await bridge.PrepareIdentity(true)).Status != "identity-ready")
+                        throw new InvalidOperationException("Explicit identity setup failed.");
+                }
             }
             await bridge.DisposeAsync();
             if (!bridge.ExitVerified) throw new InvalidOperationException("Setup bridge exit not verified.");
             Console.WriteLine("Windows setup process bridge passed.");
         }
-        finally { Directory.Delete(runtime, recursive: false); }
+        finally { Directory.Delete(runtime, recursive: identitySetup); }
     }
 }
