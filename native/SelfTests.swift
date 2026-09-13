@@ -254,6 +254,14 @@ func runSelfTests() {
     precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:01:00Z")!) == "Synthetic pace")
     precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:10:00Z")!) == "Estimate unavailable until a fresh reading.")
     precondition(quotaPaceText(paceQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == "Not enough recent history to estimate time left.")
+    let coverageWindow: JSONObject = ["bucket": "codex", "window": "primary", "resetsAt": "2026-09-09T16:00:00Z"]
+    for fraction in [-0.1, 0, 0.625, 1, 1.1] {
+        let coverageQuota: JSONObject = ["status": "ok", "checkedAt": "2026-09-09T12:00:00Z",
+            "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "status": "projected", "coverageFraction": fraction]]]
+        precondition(quotaPaceCoverage(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:01:00Z")!) == (fraction >= 0 && fraction <= 1 ? fraction : nil))
+        precondition(quotaPaceCoverage(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:10:00Z")!) == nil)
+        precondition(quotaPaceCoverage(coverageQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == nil)
+    }
     precondition((try? CollectorConfiguration.validate(["codex": 1])) == nil)
     precondition((try? CollectorConfiguration.validate(["remote": true])) == nil)
     precondition((try? CollectorConfiguration.validate(["wispr": "true"])) == nil)

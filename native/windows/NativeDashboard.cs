@@ -161,6 +161,18 @@ internal sealed partial class NativeDashboard : Form
         {
             Label(Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + ": " + Snapshot.Format(Snapshot.Number(window["remainingPercent"])) + "% remaining");
             Label(AllowancePaceText(quota, window, DateTimeOffset.UtcNow));
+            if (AllowancePaceCoverage(quota, window, DateTimeOffset.UtcNow) is double coverage)
+            {
+                body.Controls.Add(new ProgressBar { Width = ContentWidth, Height = 12, Minimum = 0, Maximum = 1000,
+                    Value = (int)Math.Round(coverage * 1000), AccessibleName = "Estimated time coverage until reset, at last check",
+                    AccessibleDescription = $"{Math.Round(coverage * 100)} percent. Filled portion ends at estimated exhaustion or reset, whichever comes first." });
+                var endpoints = new TableLayoutPanel { Width = ContentWidth, Height = 24, ColumnCount = 2 };
+                endpoints.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+                endpoints.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+                endpoints.Controls.Add(new Label { Text = "Now", Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft }, 0, 0);
+                endpoints.Controls.Add(new Label { Text = "Reset (at last check)", Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopRight }, 1, 0);
+                body.Controls.Add(endpoints);
+            }
             body.Controls.Add(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth });
         }
         body.Controls.Add(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth });
@@ -174,6 +186,19 @@ internal sealed partial class NativeDashboard : Form
             Snapshot.Text(row["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(row["window"]) == Snapshot.Text(window["window"]));
         return pace is not null && Snapshot.Text(pace["asOf"]) == Snapshot.Text(quota["checkedAt"]) && pace["summary"] is JsonValue value && value.TryGetValue<string>(out var summary)
             ? summary : "Not enough recent history to estimate time left.";
+    }
+    internal static double? AllowancePaceCoverage(JsonObject quota, JsonObject window, DateTimeOffset now)
+    {
+        if (Snapshot.Text(quota["status"]) != "ok" || !DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var at) ||
+            now < at || now - at >= TimeSpan.FromMinutes(10) ||
+            !DateTimeOffset.TryParse(Snapshot.Text(window["resetsAt"]), out var reset) || reset <= now) return null;
+        var pace = NativeHistory.Rows(quota["pace"]).FirstOrDefault(row =>
+            Snapshot.Text(row["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(row["window"]) == Snapshot.Text(window["window"]));
+        if (pace is null || Snapshot.Text(pace["asOf"]) != Snapshot.Text(quota["checkedAt"]) ||
+            Snapshot.Text(pace["status"]) is not ("projected" or "resets-first") ||
+            pace["coverageFraction"] is not JsonValue value || !value.TryGetValue<double>(out var fraction) ||
+            !double.IsFinite(fraction) || fraction < 0 || fraction > 1) return null;
+        return fraction;
     }
     private void Sources(JsonObject? snapshot)
     {

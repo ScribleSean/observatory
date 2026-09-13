@@ -76,6 +76,18 @@ struct QuotaPanel: View {
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(quotaPaceText(quota, window: row, now: context.date))
                             .font(.system(size: 11)).foregroundStyle(.secondary)
+                        if let fraction = quotaPaceCoverage(quota, window: row, now: context.date) {
+                            VStack(spacing: 3) {
+                                ProgressView(value: fraction, total: 1).tint(.accentColor)
+                                HStack {
+                                    Text("Now")
+                                    Spacer()
+                                    Text("Reset")
+                                }.font(.system(size: 10)).foregroundStyle(.secondary)
+                            }.accessibilityElement(children: .ignore)
+                                .accessibilityLabel("Estimated time coverage until reset, at last check")
+                                .accessibilityValue("\(Int((fraction * 100).rounded())) percent. Filled portion ends at estimated exhaustion or reset, whichever comes first.")
+                        }
                     }
                 }.accessibilityElement(children: .combine)
             }
@@ -127,6 +139,18 @@ struct QuotaPanel: View {
         }
         .padding(15).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16))
     }
+}
+
+func quotaPaceCoverage(_ quota: JSONObject, window: JSONObject, now: Date) -> Double? {
+    guard text(quota["status"]) == "ok", let at = parseDate(quota["checkedAt"]),
+          now >= at, now.timeIntervalSince(at) < 600,
+          let reset = parseDate(window["resetsAt"]), reset > now,
+          let pace = rows(quota["pace"]).first(where: {
+              text($0["bucket"]) == text(window["bucket"]) && text($0["window"]) == text(window["window"])
+          }), text(pace["asOf"]) == text(quota["checkedAt"]),
+          ["projected", "resets-first"].contains(text(pace["status"])),
+          let fraction = number(pace["coverageFraction"]), fraction.isFinite, fraction >= 0, fraction <= 1 else { return nil }
+    return fraction
 }
 
 func quotaPaceText(_ quota: JSONObject, window: JSONObject, now: Date) -> String {
