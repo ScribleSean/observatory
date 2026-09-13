@@ -1,0 +1,54 @@
+name: Native compilation
+on:
+  push:
+    branches: [main]
+    paths: ['native/**', '.github/workflows/native-compile.yml']
+  pull_request:
+    paths: ['native/**', '.github/workflows/native-compile.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-compile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore locked dependencies
+        run: dotnet restore native/windows/WorkspaceObservatory.csproj --locked-mode -r win-x64
+      - name: Compile self-contained native test binary
+        run: dotnet publish native/windows/WorkspaceObservatory.csproj -c Release -r win-x64 --self-contained true --no-restore -o native-test
+      - name: Run isolated native contracts
+        shell: pwsh
+        run: |
+          $test = Start-Process -FilePath ./native-test/WorkspaceObservatory.exe -ArgumentList '--self-test' -PassThru -NoNewWindow
+          if (-not $test.WaitForExit(60000)) {
+            $test.Kill()
+            throw 'Native self-test timed out.'
+          }
+          if ($test.ExitCode -ne 0) { throw 'Native self-test failed.' }
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile native Swift sources
+        shell: bash
+        run: |
+          mkdir -p native-test/module-cache
+          xcrun swiftc -swift-version 5 -O -module-cache-path native-test/module-cache \
+            -target "$(uname -m)-apple-macosx14.0" \
+            -framework AppKit -framework SwiftUI -framework WebKit -framework ServiceManagement \
+            native/*.swift -o native-test/WorkspaceObservatory
+      - name: Run isolated native contracts
+        run: native-test/WorkspaceObservatory --self-test
+      # No app installation, live sources, UI automation or release artifacts.
