@@ -8,6 +8,8 @@ The [clean Windows package run for f980326](https://github.com/ScribleSean/works
 
 The manual clean-package workflow now also offers isolated installer verification, enabled by default. It compiles a TEST-identity installer and runs the existing installation, overwrite refusal, linked-directory rejection, uninstall and saved-data preservation checks. This uses synthetic data on the disposable runner, not the ordinary application registration. A successful package-only run does not establish installer or desktop first-launch coverage.
 
+The [full installer run for 04b6fa6](https://github.com/ScribleSean/workspace-observatory/actions/runs/34740480607) passed on September 13, 2026 UTC. After 345 passing source tests, 26 explicit skips and full manifest verification, it compiled and exercised the 0.3.3 TEST-identity installer. Checks covered running-app refusal, per-user installation, payload hashes, the Start-menu shortcut, quoted registration, native self-tests, overwrite refusal, linked-directory rejection, uninstall/reinstall, and preservation of saved data and unrelated files and registry values. No ordinary app registration was changed and no artifact was published. This does not prove interactive first-run, login or sleep/wake behavior, or a later candidate's installation.
+
 ## Open the app
 
 Installed builds appear as **Workspace Observatory** in the Start menu. Launching the app opens its main window. Launching it again requests the existing window instead of starting another collector in the same Windows session.
