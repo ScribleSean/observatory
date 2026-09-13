@@ -1,6 +1,6 @@
 # Product direction
 
-Updated September 12, 2026.
+Updated September 13, 2026.
 
 Observatory is one installable application for viewing supported usage across devices. The primary outcome is a working setup-to-history flow, not separate scripts or a polished but disconnected dashboard.
 
@@ -14,6 +14,10 @@ Observatory is one installable application for viewing supported usage across de
 6. Provide a clean native main window, a compact Mac menu-bar or Windows system-tray overview, Start menu discovery on Windows and user-controlled login startup.
 
 First-release sync uses direct encrypted device pairing, as selected on September 12, 2026. No Observatory account or hosted sync service is required. The setup wizard must explain device identity, connection requirements, the sanitized records being shared, connection status and how to revoke pairing. Existing SSH-based pairing remains the implementation starting point, not proof of a finished consumer setup flow.
+
+The first-release network scope is the same local network or an existing trusted VPN. Offer optional Tailscale setup for devices on different networks, without making a Tailscale account mandatory for local pairing. The intended wizard has a local-network path and a Tailscale-assisted path. Neither path is implemented as a consumer-ready code/QR flow yet.
+
+Initially prefer integration with the installed Tailscale client to avoid bundling another networking runtime. Guide users through its supported sign-in flow, then verify actual device reachability and permissions. Observatory must not collect Tailscale passwords, ask users to paste reusable authentication keys, enable public exposure, or silently alter network policies. Tailscale membership does not replace explicit Observatory device confirmation and data-sharing consent. Evaluate embedded networking separately against installer size, lifecycle and credential-storage requirements.
 
 Provider authentication and Observatory device linking are separate flows. Connecting one provider must not silently authorize another service or a broader sync scope. Keep credentials on the owning device and use supported authentication mechanisms. Never sync raw transcripts or window titles. Do not introduce a hosted account service or paid services as part of this release.
 
