@@ -121,6 +121,21 @@ loopback listeners and synthetic identities, not the user's paired devices.
 
 ## Required integration before enabling pairing
 
+The opt-in record listener in `scripts/peer-tls-sync.mjs` uses strict mutual
+TLS against saved peer trust and the separate `observatory-sync/1` protocol.
+It rereads generation-bound trust under the peer lock before calling the
+existing `exchangePeerRecord` handler. This preserves record validation,
+duplicate handling and revocation rather than creating another store. Two
+simultaneous sockets, a 17 MB request/response ceiling and a 30-second socket
+deadline bound each listener. Errors return no private state.
+
+The record listener is not started by the app yet. It exposes only the existing
+record exchange shape, not commands, files or the separate allowance-sharing
+endpoint. The collector's outbound path remains SSH. Native lifecycle,
+outbound TLS transport and both-device setup acknowledgement still need
+integration. Synthetic loopback tests verify saved-record exchange, rejection
+of wrong certificates and record identities, duplicate delivery and revocation.
+
 `scripts/peer-tls-trust.mjs` persists a confirmed peer certificate in
 `private-sync/tls-trust.json`. The record is bound to the saved pair ID, both
 device IDs and the local certificate fingerprint. It requires a saved pairing
