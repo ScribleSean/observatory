@@ -26,7 +26,7 @@ Missing data stays missing. Estimates stay labeled. Token counts are not subscri
 
 ## Data and privacy
 
-The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional allowance-history exchange is implemented and tested with fictional records, but real paired consent and legacy migration remain unfinished.
+The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional allowance-history exchange is tested with fictional records. Real-device allowance sharing remains unverified and is off on the development pair.
 
 Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Allowance history has [bounded retention](docs/USAGE-LIMITS.md).
 
