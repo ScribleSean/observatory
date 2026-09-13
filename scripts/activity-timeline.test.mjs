@@ -10,6 +10,14 @@ test('app detail is allowlisted and overlap is counted once', () => {
   assert.ok(!JSON.stringify(r).includes('private-secret'));
 });
 const start = '2026-09-06T04:00:00Z', end = '2026-09-07T04:00:00Z';
+test('idle coverage advances freshness without inventing active time',()=>{
+  const tracking=cleanIntervals([{start,end,category:'Other'}],start,end);
+  const report=summarizeTracked([],tracking,start,end);
+  assert.equal(report.trackingThrough,new Date(end).toISOString());
+  assert.equal(report.days.reduce((sum,day)=>sum+day.seconds,0),0);
+  assert.equal(summarizeTracked([],[],start,end).trackingThrough,null);
+  assert.equal(summarizeTracked([],undefined,start,end).trackingThrough,undefined);
+});
 const row = (a, b, category = 'AI apps') => ({ start: `2026-09-06T${a}:00Z`, end: `2026-09-06T${b}:00Z`, category, title: 'private' });
 test('overlap counts once with explicit mixed categories', () => {
   const rows = cleanIntervals([row('12:00','13:00'), row('12:30','13:30','Editors')], start, end);

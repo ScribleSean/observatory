@@ -59,6 +59,9 @@ type Tokens = {
   models: { model: string; inferred: boolean; inputTokens?: number | null; cacheReadTokens?: number | null; cacheCreationTokens?: number | null; outputTokens?: number | null; totalTokens?: number | null; apiEstimate?: { usd: number | null; parts?:Record<string,number>|null } }[];
 };
 type ActivityRow = {
+  trackingStatus?: string;
+  trackingThrough?: string | null;
+  trackingMessage?: string;
   asOf?:string|null;
   latestReadStatus?:string;
   maxDates?:number;
@@ -235,6 +238,7 @@ export default function Home() {
     return retained && (period==='all' || (selectedDate && selectedDate<(source.days?.[0]?.date || ''))) ? retained : source;
   });
   const current = activitySources.find((a) => a.host === host) || activitySources[0];
+  const trackingHealth = data?.activityHistory?.find(row => row.host === current?.host);
   const activeDate = selectedDate || current?.days?.at(-1)?.date || '';
   const dailyActivity = current?.days?.find(d => d.date === activeDate);
   const weekDays = activeDate ? Array.from({length:7},(_,i) => {
@@ -391,6 +395,10 @@ export default function Home() {
                     <small>New York time</small>
                   </div>
                 </div>
+                <p role={trackingHealth?.trackingStatus === 'stale' ? 'status' : undefined}>
+                  {trackingHealth?.trackingMessage || 'Tracking freshness is unknown for this saved snapshot.'}
+                  {trackingHealth?.trackingThrough ? ` Last tracking coverage: ${new Date(trackingHealth.trackingThrough).toLocaleString()}.` : ''}
+                </p>
                 <Tabs
                   value={host}
                   onValueChange={(v) => typeof v === 'string' && setHost(v)}

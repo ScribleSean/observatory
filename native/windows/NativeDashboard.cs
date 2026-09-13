@@ -113,6 +113,12 @@ internal sealed partial class NativeDashboard : Form
         Choice("Device", ["All", "Mac", "Windows", "Ubuntu"], host, value => { host = value; anchor = ""; });
         Choice("Period", ["Day", "Week", "All retained"], period, value => period = value);
         var days = NativeHistory.Days(snapshot, kind, host);
+        if (kind == "activity")
+        {
+            var archive = NativeHistory.Rows(snapshot?["activityHistory"]).FirstOrDefault(row => Snapshot.Text(row["host"]) == (host == "All" ? "Combined" : host));
+            Label(Snapshot.Text(archive?["trackingMessage"], "Tracking freshness is unknown for this saved snapshot."));
+            Label("Last tracking coverage: " + Snapshot.Text(archive?["trackingThrough"]));
+        }
         if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); return; }
         var dates = days.Select(day => Snapshot.Text(day["date"])).ToArray();
         if (!dates.Contains(anchor)) anchor = dates[^1];

@@ -159,6 +159,12 @@ struct NativeDashboard: View {
             if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
                 Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
                     .font(.callout).foregroundStyle(.secondary)
+                Text(text(archive["trackingMessage"], fallback: "Tracking freshness is unknown for this saved snapshot."))
+                    .font(.callout).foregroundStyle(text(archive["trackingStatus"]) == "stale" ? Color.orange : ObservatoryTheme.muted)
+                if let through = parseDate(archive["trackingThrough"]) {
+                    Text("Last tracking coverage: \(through.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if let at = parseDate(archive["asOf"]) {
                     Text("Last successful collection: \(at.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption).foregroundStyle(.secondary)

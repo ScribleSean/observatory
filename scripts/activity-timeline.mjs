@@ -71,6 +71,8 @@ export function summarize(rows, start, end) {
 export function summarizeTracked(rows, tracking, start, end) {
   const result = summarize(rows,start,end);
   if (!Array.isArray(tracking)) return result;
+  const through = [...tracking, ...rows].reduce((latest, row) => Math.max(latest, row.end), -Infinity);
+  result.trackingThrough = Number.isFinite(through) ? new Date(through).toISOString() : null;
   // Include idle intervals and deduplicate overlapping tracking evidence.
   const observed = summarize([...tracking,...rows].map(r=>({...r,category:'Other',app:'Unknown app'})),start,end);
   result.days = result.days.map(day=>{

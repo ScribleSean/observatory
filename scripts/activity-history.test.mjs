@@ -1,12 +1,32 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {retainActivityHistory,previousActivityHistory} from './activity-history.mjs';
+import {retainActivityHistory,previousActivityHistory,activityTrackingHealth} from './activity-history.mjs';
 import {mkdtemp,writeFile,symlink,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 const day=(date,seconds)=>({date,seconds,hours:Array(24).fill(seconds/24),categories:{Editors:seconds},apps:{Editors:{'VS Code':seconds}},trackedSeconds:seconds,trackedHours:Array(24).fill(seconds/24)});
 const source=(host,start,end,days)=>({host,status:'ok',start,end,days});
 const at='2026-09-08T16:00:00Z';
+test('freshness measures tracking coverage rather than activity or read success',()=>{
+  const healthy={host:'Mac',status:'ok',trackingThrough:'2026-09-08T15:50:00Z'};
+  assert.equal(activityTrackingHealth(healthy,at).trackingStatus,'recent');
+  assert.equal(activityTrackingHealth({...healthy,trackingThrough:'2026-09-08T15:49:59Z'},at).trackingStatus,'stale');
+  for(const input of [{...healthy,status:'unavailable'},{status:'ok'},
+    {...healthy,trackingThrough:'invalid'},{...healthy,trackingThrough:'2026-09-08T16:01:00Z'}]) {
+    assert.equal(activityTrackingHealth(input,at).trackingStatus,'unknown');
+  }
+  assert.match(activityTrackingHealth({...healthy,host:'Combined'},at).trackingMessage,/does not verify every device/);
+});
+test('stale tracking retains measured days and cannot reuse a previous healthy status on read failure',()=>{
+  const raw={...source('Mac','2026-09-01T12:00Z',at,[day('2026-09-08',300)]),trackingThrough:'2026-09-08T12:00:00Z'};
+  const prior=retainActivityHistory([],[raw],at);
+  assert.equal(prior.find(r=>r.host==='Mac').trackingStatus,'stale');
+  assert.equal(prior.find(r=>r.host==='Mac').days[0].seconds,300);
+  const failed=retainActivityHistory(prior,[{host:'Mac',status:'unavailable'}],at).find(r=>r.host==='Mac');
+  assert.equal(failed.trackingStatus,'unknown');
+  assert.equal(failed.trackingThrough,null);
+  assert.equal(failed.days[0].seconds,300);
+});
 test('complete days survive truncated rolling-window boundary reads',()=>{
   const prior=retainActivityHistory([], [source('Mac','2026-09-01T12:00Z',at,[day('2026-09-02',300)])],at);
   const next=retainActivityHistory(prior,[source('Mac','2026-09-02T13:00Z',at,[day('2026-09-02',100)])],at);

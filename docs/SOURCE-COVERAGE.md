@@ -2,6 +2,8 @@
 
 The dashboard reads several kinds of records. A successful read means that adapter returned data, not that every activity or model call has been captured. Per-source check times measure the read, not the latest user activity. Snapshot ages update while the page is open. A stale snapshot is not presented as a current read.
 
+Activity also reports the latest observed tracking coverage, including idle intervals. Coverage within ten minutes of collection is recent. Older coverage produces a warning, without deleting saved activity or treating missing tracking as inactivity. Failed reads, missing coverage metadata and future timestamps are unknown. This status describes the collection time, not continuous watcher monitoring. Recent combined coverage does not prove every paired device is currently tracking. Sleep, an offline device and a stopped watcher can all produce stale coverage.
+
 ## Which collector supplies these views?
 
 - The self-contained Mac collector reads local ActivityWatch, saved Codex usage/settings, and optional Wispr statistics. Explicit private pairing enables supported Windows records and verified combined totals. Fresh installations remain unpaired.
