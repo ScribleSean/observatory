@@ -5,6 +5,24 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {collectQuota} from './collect-quota.mjs';
 const now=Date.parse('2026-09-09T12:00:00Z');
+test('collected pace uses retained observations and cannot survive an account switch',async()=>fixture(async runtime=>{
+  let result;
+  for(let i=0;i<=12;i++) {
+    const at=now+i*300000;
+    result=await collectQuota(runtime,{enabled:true,clock:()=>at,resolveExecutable:async()=>'/fake/codex',
+      readSnapshot:async()=>({scope:'a'.repeat(64),status:'ok',checkedAt:new Date(at).toISOString(),
+        windows:[{bucket:'codex',window:'primary',remainingPercent:74-i*2,durationMinutes:300,
+          resetsAt:new Date(now+5*3600000).toISOString()}]})});
+  }
+  assert.equal(result.pace[0].percentagePointsPerHour,24);
+  assert.equal(result.pace[0].remainingMinutes,125);
+  const switched=await collectQuota(runtime,{enabled:true,clock:()=>now+3900000,resolveExecutable:async()=>'/fake/codex',
+    readSnapshot:async()=>({scope:'b'.repeat(64),status:'ok',checkedAt:new Date(now+3900000).toISOString(),
+      windows:[{bucket:'codex',window:'primary',remainingPercent:50,durationMinutes:300,
+        resetsAt:new Date(now+5*3600000).toISOString()}]})});
+  assert.equal(switched.pace[0].status,'insufficient-history');
+  assert.equal(switched.history.length,1);
+}));
 async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-collection-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
 test('disabled quota never discovers clients or creates a private store',async()=>fixture(async runtime=>{
   const result=await collectQuota(runtime,{resolveExecutable:()=>{throw Error('Should not run');}});
@@ -19,6 +37,7 @@ test('quota collection survives restart, respects cooldown, and excludes account
   const first=await collectQuota(runtime,options);
   const cached=await collectQuota(runtime,options);
   assert.equal(calls,1);assert.equal(first.status,'ok');assert.equal(cached.status,'ok');
+  assert.equal(first.pace[0].status,'insufficient-history');
   assert.equal(cached.checkedAt,first.checkedAt);
   assert.deepEqual(cached.history,first.history);
   assert.equal(cached.history.length,1);assert.equal(cached.scope,'account');
@@ -35,6 +54,7 @@ test('successful cached samples age out and failed polls remain stale even with 
     windows:[{bucket:'codex',window:'primary',remainingPercent:75}]})};
   const old=await collectQuota(runtime,options);
   assert.equal(old.status,'stale');assert.equal(old.latestReadStatus,'ok');
+  assert.equal(old.pace[0].status,'stale');
   assert.equal(old.checkedAt,new Date(now-600000).toISOString());
   const fresh=await collectQuota(runtime,{...options,clock:()=>now+300001,readSnapshot:async()=>({
     scope:'a'.repeat(64),status:'ok',checkedAt:new Date(now+300001).toISOString(),

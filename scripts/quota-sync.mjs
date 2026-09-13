@@ -5,6 +5,7 @@ import {withPeerStateLock} from './peer-lock.mjs';
 import {readQuotaState,publishQuotaState,acceptQuotaReply} from './quota-store.mjs';
 import {createSharedQuota} from './quota-peer.mjs';
 import {sshQuotaRequest} from './peer-transport.mjs';
+import {quotaPace} from './quota-pace.mjs';
 
 export function projectPeerQuota(state,pair,now=Date.now()) {
   const remote=state?.remote;
@@ -13,9 +14,10 @@ export function projectPeerQuota(state,pair,now=Date.now()) {
   const payload=remote.record.payload;
   const fresh=Number.isFinite(Date.parse(payload.checkedAt)) && now-Date.parse(payload.checkedAt)>=0 &&
     now-Date.parse(payload.checkedAt)<=600000 && now-remote.receivedAt>=0 && now-remote.receivedAt<=600000;
-  return {host:remote.host,provider:payload.provider,status:fresh?payload.status:'stale',checkedAt:payload.checkedAt,
+  const projected = {host:remote.host,provider:payload.provider,status:fresh?payload.status:'stale',checkedAt:payload.checkedAt,
     receivedAt:new Date(remote.receivedAt).toISOString(),history:payload.history,windows:payload.history.at(-1)?.windows??[],
     accountUsageCheckedAt:payload.dailyCheckedAt,dailyUsageBuckets:payload.dailyUsageBuckets};
+  return {...projected,pace:quotaPace(projected,now)};
 }
 
 // No caller may supply pairing identity or enable sharing implicitly. All
