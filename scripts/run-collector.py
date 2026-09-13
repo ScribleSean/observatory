@@ -16,7 +16,9 @@ def stamp():
     return dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
-def write_status(folder, value):
+def write_status(folder, value, name='collector.json'):
+    if name not in ('collector.json', 'allowance-collector.json'):
+        raise ValueError('Unsupported status record')
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     if folder.is_symlink():
         raise ValueError('Status folder must not be a symlink')
@@ -24,7 +26,7 @@ def write_status(folder, value):
     try:
         with os.fdopen(handle, 'w') as stream:
             json.dump(value, stream, allow_nan=False)
-        os.replace(temporary, folder / 'collector.json')
+        os.replace(temporary, folder / name)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
@@ -44,7 +46,11 @@ def stop_child(child):
         pass
 
 
-def run_collection(root, node, interval=0, timeout=240, *, collector=None, python=None):
+def run_collection(root, node, interval=0, timeout=240, *, collector=None, python=None, quota_only=False):
+    if not isinstance(quota_only, bool):
+        raise ValueError('Invalid collection mode')
+    if quota_only and (collector is None or pathlib.Path(collector).name != 'collect-mac.mjs'):
+        raise ValueError('Allowance mode requires the native collector')
     root = pathlib.Path(root).resolve(strict=True)
     runtime = root / '.runtime'
     runtime.mkdir(mode=0o700, exist_ok=True)
@@ -60,7 +66,8 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
         state = dict(state='running', startedAt=started, finishedAt=None,
                      intervalSeconds=interval, maxRunSeconds=timeout)
         folder = root / 'public' / 'local'
-        write_status(folder, state)
+        status_name = 'allowance-collector.json' if quota_only else 'collector.json'
+        write_status(folder, state, status_name)
         child = None
         try:
             # Keep the normal installed tool locations available at login.
@@ -76,7 +83,10 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
                 env['OBSERVATORY_PYTHON'] = python or sys.executable
                 if not os.path.isabs(env['OBSERVATORY_PYTHON']):
                     raise ValueError('Absolute Python executable required')
-            child = subprocess.Popen([node, str(collector or root / 'scripts' / 'collect-dashboard.mjs')],
+            command = [node, str(collector or root / 'scripts' / 'collect-dashboard.mjs')]
+            if quota_only:
+                command.append('--quota-only')
+            child = subprocess.Popen(command,
                                      cwd=root, env=env, stdout=subprocess.DEVNULL,
                                      stderr=subprocess.DEVNULL, start_new_session=True)
             if child.wait(timeout=timeout) != 0:
@@ -86,10 +96,15 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
                 raise ValueError('Snapshot too large')
             snapshot = json.loads(snapshot_file.read_text())
             snapshot_at = snapshot.get('collectedAt')
-            if not isinstance(snapshot_at, str) or dt.datetime.fromisoformat(snapshot_at.replace('Z', '+00:00')) < dt.datetime.fromisoformat(started.replace('Z', '+00:00')):
+            if not isinstance(snapshot_at, str) or (not quota_only and dt.datetime.fromisoformat(snapshot_at.replace('Z', '+00:00')) < dt.datetime.fromisoformat(started.replace('Z', '+00:00'))):
                 raise ValueError('No new snapshot')
+            dt.datetime.fromisoformat(snapshot_at.replace('Z', '+00:00'))
             sources = snapshot.get('activity', []) + snapshot.get('tokens', []) + snapshot.get('settings', []) + snapshot.get('dictation', [])
             sources += [snapshot[k] for k in ('quota', 'localModel', 'agentSource') if isinstance(snapshot.get(k), dict)]
+            if quota_only:
+                if not isinstance(snapshot.get('quota'), dict):
+                    raise ValueError('Missing allowance result')
+                sources = [snapshot['quota']]
             sources = [s for s in sources if s.get('status') != 'not-connected']
             read = sum(s.get('status') == 'ok' for s in sources)
             state.update(state='ok' if sources and read == len(sources) else 'partial',
@@ -99,7 +114,7 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
                 stop_child(child)
             state['state'] = 'failed'
         state['finishedAt'] = stamp()
-        write_status(folder, state)
+        write_status(folder, state, status_name)
         return state['state']
     finally:
         os.close(lock)
@@ -112,6 +127,7 @@ if __name__ == '__main__':
     parser.add_argument('--runtime', type=pathlib.Path)
     parser.add_argument('--collector', type=pathlib.Path)
     parser.add_argument('--python', default=sys.executable)
+    parser.add_argument('--quota-only', action='store_true')
     args = parser.parse_args()
     if not args.node or not os.path.isabs(args.node) or args.interval not in (0, 300):
         parser.error('Use an absolute Node path and a zero or 300-second cadence')
@@ -121,6 +137,6 @@ if __name__ == '__main__':
         raise InterruptedError('Collection stopped')
     signal.signal(signal.SIGTERM, interrupted)
     result = run_collection(args.runtime or pathlib.Path(__file__).resolve().parent.parent, args.node, args.interval,
-                            collector=args.collector, python=args.python)
+                            collector=args.collector, python=args.python, quota_only=args.quota_only)
     print(json.dumps(dict(collection=result)))
     raise SystemExit(1 if result == 'failed' else 0)
