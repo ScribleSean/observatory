@@ -96,6 +96,25 @@ loopback listeners and synthetic identities, not the user's paired devices.
 
 ## Required integration before enabling pairing
 
+The storage primitive in `scripts/peer-device-identity.mjs` validates that a
+supplied private key matches its current self-signed certificate. Explicit
+initialization writes once into `private-device-identity`, using the existing
+cross-process peer lock, exclusive file creation and a flushed write. Reads
+reject linked, oversized, changing or malformed files. Existing empty or
+damaged identity directories require recovery and are not overwritten.
+
+On macOS the directory and file use owner-only permissions. Windows uses the
+existing verified ACL policy for the current user, SYSTEM and Administrators.
+This is access-controlled plaintext key storage, not Keychain, DPAPI or
+hardware-backed encryption. It cannot protect against code running as the
+same user or an administrator. The native setup must not enable it silently
+or claim stronger protection. OS-backed key protection remains a release
+security decision. No real device identity has been created by these tests.
+
+Identity generation and expiration/rotation UX are still missing. The module
+does not automatically generate a replacement if a directory is absent. Its
+caller must distinguish initial setup from loss of an established identity.
+
 1. Generate and privately persist a device TLS key and certificate. The
    invitation fingerprint must be computed from that actual certificate.
 2. Start a bounded TLS listener only for explicit setup on the selected private
