@@ -60,18 +60,23 @@ function accountScope(result,salt) {
 
 // No raw account fields leave this function. The owner client performs auth.
 // Checking the account on both sides prevents mixing readings across a switch.
-export function readAccountSnapshot(executable,salt,options) {
+export function readAccountSnapshot(executable,salt,options={}) {
   if(typeof salt!=='string' || !/^[a-f0-9]{64}$/.test(salt))throw Error('Private account salt required');
+  const dailyUsageScope=options.dailyUsageScope ?? null;
+  if(dailyUsageScope!==null && (typeof dailyUsageScope!=='string' || !/^[a-f0-9]{64}$/.test(dailyUsageScope)))throw Error('Invalid daily usage scope');
   let observedScope;
   return withAccountClient(executable,async request=>{
     const scope=accountScope(await request('account/read',{refreshToken:false}),salt);
     observedScope=scope;
     const [quota,accountUsage]=await Promise.all([
       request('account/rateLimits/read').then(cleanQuota),
-      request('account/usage/read').then(cleanAccountUsage).catch(error=>({status:error.status || 'unavailable',provider:'Codex',scope:'account',dailyUsageBuckets:[]})),
+      // A recent daily observation only suppresses a read for the same verified
+      // account. An account switch must never reuse the previous daily series.
+      scope===dailyUsageScope ? Promise.resolve(null) :
+        request('account/usage/read').then(cleanAccountUsage).catch(error=>({status:error.status || 'unavailable',provider:'Codex',scope:'account',dailyUsageBuckets:[]})),
     ]);
     if(accountScope(await request('account/read',{refreshToken:false}),salt)!==scope)throw unavailable('needs-auth');
-    return {scope,...quota,accountUsage};
+    return {scope,...quota,...(accountUsage?{accountUsage}:{})};
   },options).catch(error=>{
     // A later request or process-close failure must not hide an account change
     // already observed by the owner client. Only its opaque key leaves here.

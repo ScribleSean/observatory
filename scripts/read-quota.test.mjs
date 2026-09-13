@@ -77,6 +77,30 @@ test('older client token API failure does not discard valid quota windows',async
   const result=await readAccountSnapshot('/fake/codex','a'.repeat(64),client);
   assert.equal(result.status,'ok');assert.equal(result.accountUsage.status,'unsupported');
 });
+test('limits-only reads skip daily usage only for the same verified account',async()=>{
+  const salt='a'.repeat(64);
+  const scope=createHmac('sha256',Buffer.from(salt,'hex')).update('codex-account:PRIVATE-ID').digest('hex');
+  for(const dailyUsageScope of [scope,'b'.repeat(64),null]) {
+    const client=fakeClient(normalReply);
+    const result=await readAccountSnapshot('/fake/codex',salt,{...client,dailyUsageScope});
+    assert.equal(result.status,'ok');
+    assert.equal(client.methods.includes('account/usage/read'),dailyUsageScope!==scope);
+    assert.equal(Object.hasOwn(result,'accountUsage'),dailyUsageScope!==scope);
+    assert.equal(client.methods.filter(method=>method==='account/read').length,2);
+    assert.equal(client.isClosed(),true);
+  }
+  assert.throws(()=>readAccountSnapshot('/fake/codex',salt,{dailyUsageScope:'invalid'}),/Invalid daily usage scope/);
+});
+test('limits-only account switches during a request fail closed',async()=>{
+  const salt='a'.repeat(64);
+  const scope=createHmac('sha256',Buffer.from(salt,'hex')).update('codex-account:PRIVATE-ID').digest('hex');
+  let accounts=0;
+  const client=fakeClient(row=>row.method==='account/read' && ++accounts>1 ?
+    {result:{account:{type:'chatgpt',id:'OTHER'}}}:normalReply(row));
+  await assert.rejects(readAccountSnapshot('/fake/codex',salt,{...client,dailyUsageScope:scope}),error=>error.status==='needs-auth');
+  assert.equal(client.methods.includes('account/usage/read'),false);
+  assert.equal(client.isClosed(),true);
+});
 test('sign-out and an account switch cannot return mixed account readings',async()=>{
   for(const signedOut of [false,true]) {
     let accounts=0;

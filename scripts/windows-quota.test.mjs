@@ -30,8 +30,10 @@ test('WSL invocation retains the account reader protocol and privacy options',as
   let invocation;
   const client={executable:'C:\\Windows\\System32\\wsl.exe',prefix:['--distribution','Ubuntu','--exec','/usr/bin/timeout','--kill-after=2s','20s','/home/fixture/.local/bin/codex']};
   const result=await readWindowsQuotaSnapshot(client,'a'.repeat(64),{
+    dailyUsageScope:'b'.repeat(64),
     read:async(file,salt,options)=>{
       assert.equal(salt,'a'.repeat(64));
+      assert.equal(options.dailyUsageScope,'b'.repeat(64));
       options.spawnProcess(file,['app-server'],{windowsHide:true,stdio:['pipe','pipe','ignore']});
       return {status:'ok'};
     },spawnProcess:(...args)=>{invocation=args;},
