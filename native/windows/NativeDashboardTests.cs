@@ -7,6 +7,11 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        var paceQuota = JsonNode.Parse("""{"status":"ok","checkedAt":"2026-09-09T12:00:00Z","pace":[{"bucket":"codex","window":"primary","asOf":"2026-09-09T12:00:00Z","summary":"Synthetic pace"}]}""")!.AsObject();
+        var paceWindow = new JsonObject { ["bucket"] = "codex", ["window"] = "primary" };
+        if (NativeDashboard.AllowancePaceText(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:01:00Z")) != "Synthetic pace" ||
+            NativeDashboard.AllowancePaceText(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:10:00Z")) != "Estimate unavailable until a fresh reading.")
+            throw new InvalidOperationException("Allowance pace freshness failed");
         var data = JsonNode.Parse("""
           {"schema":2,"collectedAt":"2026-09-12T12:00:00Z",
           "activityHistory":[{"host":"Windows","status":"ok","days":[

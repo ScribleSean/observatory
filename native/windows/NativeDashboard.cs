@@ -42,7 +42,7 @@ internal sealed partial class NativeDashboard : Form
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;
         body.ClientSizeChanged += (_, _) => ResizeRows();
-        timer.Tick += (_, _) => { if (!ContainsFocus && sections.SelectedItem?.ToString() != "Settings") Reload(); };
+        timer.Tick += (_, _) => { if (sections.SelectedItem?.ToString() == "Allowances" || (!ContainsFocus && sections.SelectedItem?.ToString() != "Settings")) Reload(); };
         timer.Start();
     }
     private int ContentWidth => Math.Max(400, body.ClientSize.Width - 66);
@@ -160,10 +160,20 @@ internal sealed partial class NativeDashboard : Form
         foreach (var window in windows)
         {
             Label(Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + ": " + Snapshot.Format(Snapshot.Number(window["remainingPercent"])) + "% remaining");
+            Label(AllowancePaceText(quota, window, DateTimeOffset.UtcNow));
             body.Controls.Add(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth });
         }
         body.Controls.Add(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth });
         Label("Account-wide observations, not a device sum. Gaps and resets are separate segments. Daily token totals may lag.");
+    }
+    internal static string AllowancePaceText(JsonObject quota, JsonObject window, DateTimeOffset now)
+    {
+        if (Snapshot.Text(quota["status"]) != "ok" || !DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var at) ||
+            now < at || now - at >= TimeSpan.FromMinutes(10)) return "Estimate unavailable until a fresh reading.";
+        var pace = NativeHistory.Rows(quota["pace"]).FirstOrDefault(row =>
+            Snapshot.Text(row["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(row["window"]) == Snapshot.Text(window["window"]));
+        return pace is not null && Snapshot.Text(pace["asOf"]) == Snapshot.Text(quota["checkedAt"]) && pace["summary"] is JsonValue value && value.TryGetValue<string>(out var summary)
+            ? summary : "Not enough recent history to estimate time left.";
     }
     private void Sources(JsonObject? snapshot)
     {

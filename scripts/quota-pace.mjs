@@ -48,5 +48,26 @@ export function quotaPace(quota, now = Date.now()) {
     if (exhaustion <= now) return {...measured,status:'awaiting-observation'};
     return {...measured,status:'projected',remainingMinutes:Math.ceil((exhaustion-now)/minute),
       estimatedExhaustionAt:new Date(exhaustion).toISOString()};
-  });
+  }).map(result => ({...result,summary:quotaPaceSummary(result)}));
+}
+
+export function quotaPaceSummary(result) {
+  const rate = result.percentagePointsPerHour;
+  const prefix = typeof rate === 'number' && Number.isFinite(rate) ?
+    `${rate > 0 && rate < 0.1 ? '<0.1' : rate.toFixed(1)}% of allowance/hour over ${Math.round(result.observedMinutes)} min. ` : '';
+  const messages = {
+    'insufficient-history':'Not enough recent history to estimate time left.',
+    stale:'Estimate unavailable until a fresh reading.',
+    'reset-pending':'Reset time reached. Waiting for a fresh reading.',
+    exhausted:'No allowance remaining at the last reading.',
+    'no-recent-consumption':'No recent consumption observed. Time left is unknown.',
+    'reset-unknown':'Reset time unknown. Time left is not projected.',
+    'resets-first':'Expected to reset before running out at this pace.',
+    'awaiting-observation':'Projection elapsed. Waiting for a fresh reading.'
+  };
+  if (result.status === 'projected') {
+    const minutes = result.remainingMinutes;
+    return prefix + `Approximately ${Math.floor(minutes/60)}h ${minutes%60}m left at this pace (at last check).`;
+  }
+  return prefix + (messages[result.status] ?? messages['insufficient-history']);
 }

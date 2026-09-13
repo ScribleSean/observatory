@@ -17,6 +17,7 @@ test('observed hourly pace projects hours and minutes without changing readings'
   assert.equal(result.percentagePointsPerHour,20);
   assert.equal(result.observedMinutes,60);
   assert.equal(result.remainingMinutes,150);
+  assert.equal(result.summary,'20.0% of allowance/hour over 60 min. Approximately 2h 30m left at this pace (at last check).');
   assert.equal(result.estimatedExhaustionAt,iso(now+150*60000));
   assert.deepEqual(quota,before);
   assert.equal(quotaPace(quota,now+60000)[0].remainingMinutes,149);
