@@ -48,7 +48,8 @@ internal sealed partial class NativeDashboard
                 finally { if (!networkCheck.IsDisposed) networkCheck.Enabled = true; }
             };
             body.Controls.Add(networkCheck);
-            var guide = new LinkLabel { Text = "Tailscale setup guide", AutoSize = true, AccessibleName = "Open official Tailscale setup guide" };
+            var guide = new LinkLabel { Text = "Tailscale setup guide", AutoSize = true, AccessibleName = "Open official Tailscale setup guide",
+                LinkColor = Color.LightSkyBlue, ActiveLinkColor = Color.White, VisitedLinkColor = Color.LightSkyBlue };
             guide.LinkClicked += (_, _) =>
             {
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://tailscale.com/docs/install") { UseShellExecute = true }); }
