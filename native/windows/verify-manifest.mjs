@@ -13,7 +13,7 @@ export function validPackagePath(value) {
       !forbiddenPackageName(part));
 }
 
-export function verifyManifest(root,{allowDirty=false}={}) {
+export function verifyManifest(root,{allowDirty=false,installerFiles=[]}={}) {
   if(!path.isAbsolute(root) || lstatSync(root).isSymbolicLink())throw Error('An absolute, unlinked package directory is required');
   const manifestPath=path.join(root,'package-manifest.json');
   if(!lstatSync(manifestPath).isFile() || lstatSync(manifestPath).isSymbolicLink())throw Error('Invalid package manifest');
@@ -31,6 +31,16 @@ export function verifyManifest(root,{allowDirty=false}={}) {
     total+=file.bytes;
   }
   if(!Number.isSafeInteger(total) || total!==manifest.totalBytes)throw Error('Manifest byte total mismatch');
+  // Installed copies have exactly two NSIS-generated files outside the package
+  // manifest. Only a separately verified receipt may provide their digests.
+  if(!Array.isArray(installerFiles) || (installerFiles.length!==0 && installerFiles.length!==2))
+    throw Error('Invalid installer receipt');
+  for(const file of installerFiles) {
+    if(!['Uninstall.exe','installer-owner.ini'].includes(file?.path) || expected.has(file.path.toLowerCase()) ||
+      !Number.isSafeInteger(file.bytes) || file.bytes<1 || !/^[a-f0-9]{64}$/.test(file.sha256))
+      throw Error('Invalid installer receipt');
+    expected.set(file.path.toLowerCase(),file);
+  }
   const seen=new Set();
   function visit(folder) {
     for(const name of readdirSync(folder)) {
