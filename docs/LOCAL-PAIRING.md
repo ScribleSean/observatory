@@ -48,7 +48,29 @@ This state machine is not connected to a listener or native confirmation UI.
 Its single-process guarantee does not coordinate multiple listener processes.
 The integration must enforce one listener owner and hold the existing peer
 state lock while committing trust. A network disconnect must cancel a pending
-claim rather than silently restore a consumed secret.
+claim when setup is interrupted rather than silently restore a consumed secret.
+An intentionally completed claim response is not an interrupted setup. Pending
+local confirmation may outlive that connection until cancellation or expiry.
+
+## Authenticated claim client
+
+`scripts/peer-tls-client.mjs` checks a supplied certificate against the
+invitation fingerprint before dialing. It uses that exact certificate as its
+trust anchor, keeps `rejectUnauthorized` enabled, requires TLS 1.3 and the
+Observatory pairing application protocol, and checks the connected certificate
+again before writing the invitation secret. A local client certificate and key
+are required. Responses are bounded to 8 KiB with an eight-second absolute
+deadline. Errors contain no remote response or invitation details.
+
+The client only requests a claim. It does not persist trust or treat an
+awaiting-confirmation response as completed pairing. Certificate discovery,
+private identity creation, the production listener and native confirmation
+remain unconnected. The synthetic mutual-TLS test server already knows the
+client certificate. First-pairing identity admission still requires a reviewed
+listener implementation, not an assumption that this fixture solves it.
+
+The implementation follows the certificate and connection APIs in the
+[Node.js 22 TLS documentation](https://nodejs.org/docs/latest-v22.x/api/tls.html).
 
 ## Required integration before enabling pairing
 
