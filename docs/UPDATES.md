@@ -6,7 +6,7 @@ Automatic production updates are requested but not yet implemented. Source chang
 
 `native/Release.props` is the version source for the Mac bundle, Windows application and installer filename. `native/release-version.mjs` validates its numeric fields for JavaScript build tools. The Mac uses the shared display version and build number. Windows uses the same display version and a four-component file version. Advance the build number for each published release, even when its display version stays unchanged. Never reuse an existing release asset URL for different bytes.
 
-The next candidate is 0.3.1, build 7, following the installed 0.3.0 build 6. This version assignment does not announce publication or an installed update. Focused tests cover shared values, invalid versions and existing installer/package checks. Native build and installed-update verification are separate gates.
+Version 0.3.1, build 7, from clean source `30f91ca` is installed on both development machines through verified recoverable updates. Matching release artifacts are prepared but unpublished. This manual update is not an automatic update mechanism. Focused tests cover shared values, invalid versions and existing installer/package checks. Broader release gates remain in the release checklist.
 
 ## Update integration
 
