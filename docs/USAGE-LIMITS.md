@@ -83,6 +83,19 @@ sync are still unfinished. This is tested source, not installed all-time history
 Migration is incompatible with older binaries' strict single-table validator.
 Installation must preserve a verified database backup, and rollback must not
 point an older binary at the migrated database or discard newer observations.
+Before migrating a populated legacy store, the collector now creates a private
+`private-quota/migration-v1-<random>.sqlite` recovery copy. It contains the
+exact legacy record and schema, including private account state. The original
+database stays write-locked until migration completes. Backup failure prevents
+migration. Fresh stores do not need a copy, and successful migration does not
+repeat it on subsequent reads. A failed migration can leave an additional copy.
+Interrupted backup files must pass SQLite integrity and schema checks before use.
+
+Recovery copies stay on the owning device and are not dashboard or sync payloads.
+They are not restored automatically. A rollback must first stop collection and
+preserve the newer database separately. Restoring an older copy alone would hide
+later observations and could restore obsolete sharing consent. Full installer
+rollback and consent reconciliation still require separate verification.
 Synthetic Mac and Windows tests cover migration, a 400-day cache expiry,
 account changes, monitoring disable, duplicate delivery, pagination, failed
 polls, superseded writes and unexpected-schema rejection.

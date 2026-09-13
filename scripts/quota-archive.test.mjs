@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,lstat} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,lstat,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
@@ -57,11 +57,50 @@ test('legacy migration backfills before an expired cache is pruned and never rep
   const root=await fixture(t);await save(root,start);
   const file=path.join(root,'private-quota','state.sqlite');
   const db=new DatabaseSync(file);
-  try {db.exec('DROP TABLE quota_archive');} finally {db.close();}
+  let original;
+  try {db.exec('DROP TABLE quota_archive');original=db.prepare('SELECT record FROM quota_state').get().record;} finally {db.close();}
   await readQuotaState(root,start+400*86400000);
+  const directory=path.dirname(file);
+  const backups=(await readdir(directory)).filter(name=>name.startsWith('migration-v1-'));
+  assert.equal(backups.length,1);
+  const backup=path.join(directory,backups[0]);
+  const saved=new DatabaseSync(backup,{readOnly:true});
+  try {
+    assert.equal(saved.prepare('PRAGMA quick_check').get().quick_check,'ok');
+    assert.equal(saved.prepare('SELECT record FROM quota_state').get().record,original);
+    assert.deepEqual(saved.prepare("SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all().map(row=>row.name),['quota_state']);
+  } finally {saved.close();}
+  if(process.platform!=='win32') {
+    assert.equal((await lstat(backup)).mode&0o077,0);
+    assert.equal((await lstat(path.dirname(backup))).mode&0o077,0);
+  }
   assert.equal((await readQuotaArchive(root,{scope,kind:'observation'})).records.length,1);
   await readQuotaState(root,start+401*86400000);
   assert.equal((await readQuotaArchive(root,{scope,kind:'observation'})).records.length,1);
+  assert.deepEqual((await readdir(directory)).filter(name=>name.startsWith('migration-v1-')),backups);
+});
+
+test('fresh quota stores do not create migration backups',async t=>{
+  const root=await fixture(t);await save(root,start);
+  assert.deepEqual((await readdir(path.join(root,'private-quota'))).filter(name=>name.startsWith('migration-v1-')),[]);
+});
+
+test('failed migration action rolls back the original and leaves a readable recovery copy',async t=>{
+  const root=await fixture(t);await save(root,start);
+  const directory=path.join(root,'private-quota'),file=path.join(directory,'state.sqlite');
+  const db=new DatabaseSync(file);
+  let original;
+  try {db.exec('DROP TABLE quota_archive');original=db.prepare('SELECT record FROM quota_state').get().record;} finally {db.close();}
+  await assert.rejects(updateQuotaState(root,{revision:-1,scope,observation:sample(start+1)},start+1),/superseded/);
+  const current=new DatabaseSync(file,{readOnly:true});
+  try {
+    assert.equal(current.prepare('SELECT record FROM quota_state').get().record,original);
+    assert.equal(current.prepare("SELECT COUNT(*) AS count FROM sqlite_schema WHERE name='quota_archive'").get().count,0);
+  } finally {current.close();}
+  const backups=(await readdir(directory)).filter(name=>name.startsWith('migration-v1-'));
+  assert.equal(backups.length,1);
+  const recovery=new DatabaseSync(path.join(directory,backups[0]),{readOnly:true});
+  try {assert.equal(recovery.prepare('SELECT record FROM quota_state').get().record,original);} finally {recovery.close();}
 });
 test('unexpected archive schema fails closed without updating cache',async t=>{
   const root=await fixture(t);await save(root,start);

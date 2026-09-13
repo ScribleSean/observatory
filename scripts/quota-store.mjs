@@ -1,5 +1,5 @@
 import {open,lstat} from 'node:fs/promises';
-import {constants} from 'node:fs';
+import {constants,openSync,closeSync,fsyncSync} from 'node:fs';
 import {randomBytes,createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
@@ -13,6 +13,29 @@ const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const timestamp=value=>Number.isSafeInteger(value) && value>=0 && value<=8640000000000000;
 const sharingOff=()=>({enabled:false,generation:null,scope:null,pairingId:null});
+
+// Keep an independently readable legacy database before changing its schema.
+// The caller holds BEGIN IMMEDIATE on the original, so the saved row cannot race
+// another writer. Never restore this automatically over newer observations.
+function backupLegacyQuota(directory,record) {
+  const file=path.join(directory,'migration-v1-'+randomBytes(16).toString('hex')+'.sqlite');
+  const descriptor=openSync(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
+  closeSync(descriptor);
+  const saved=new DatabaseSync(file);
+  try {
+    saved.exec('PRAGMA synchronous=FULL; BEGIN IMMEDIATE');
+    saved.exec(schema);
+    saved.prepare('INSERT INTO quota_state(slot,record) VALUES(1,?)').run(record);
+    saved.exec('COMMIT');
+    if(saved.prepare('PRAGMA quick_check').get().quick_check!=='ok')throw Error('Quota migration backup verification failed');
+  } finally {saved.close();}
+  const durable=openSync(file,constants.O_RDWR);
+  try {fsyncSync(durable);} finally {closeSync(durable);}
+  if(process.platform!=='win32') {
+    const handle=openSync(directory,constants.O_RDONLY);
+    try {fsyncSync(handle);} finally {closeSync(handle);}
+  }
+}
 function readSharing(value,history) {
   if(value===undefined)return sharingOff();
   if(!value || typeof value.enabled!=='boolean')throw Error('Invalid quota sharing state');
@@ -56,6 +79,7 @@ async function withDatabase(runtime,action) {
     if(objects.length===1) {
       const old=db.prepare('SELECT record FROM quota_state WHERE slot=1').get();
       read(db,Date.now());
+      if(old)backupLegacyQuota(directory,old.record);
       db.exec(archiveSchema);db.exec(archiveIndex);
       if(old)backfillQuotaArchive(db,JSON.parse(old.record).history);
     } else if(objects.length!==3 || !objects.some(object=>object.type==='table' && object.name==='quota_archive' && object.sql===archiveSchema) ||
