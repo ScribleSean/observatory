@@ -625,7 +625,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             "activity": [], "tokens": [], "settings": [], "dictation": [],
             "quota": ["status": "ok", "checkedAt": iso.string(from: now), "windows": windows, "history": history,
                       "pace": [["bucket": "codex", "window": "primary", "asOf": iso.string(from: now),
-                                "summary": "20.0% of allowance/hour over 60 min. Approximately 3h 15m left at this pace (at last check)."]],
+                                "status": "projected", "coverageFraction": 0.8125,
+                                "summary": "20.0% of allowance/hour over 60 min. Approximately 3h 15m left at this pace (at last check). Reset in 4h 0m. Estimated allowance covers 81% of the time until reset (at last check)."]],
                       "dailyUsageBuckets": [["startDate": String(iso.string(from: now).prefix(10)), "tokens": 12000]]]])
         showUsage()
         if CommandLine.arguments.contains("--force-offscreen-popup"),
