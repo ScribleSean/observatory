@@ -135,6 +135,17 @@ internal sealed class Collector : IDisposable
 
     internal Task Refresh() => Refresh(quotaOnly: false);
 
+    private static void WriteAttemptStatus(string runtime, bool quotaOnly, string state)
+    {
+        var file = Path.Combine(runtime, "public", "local", quotaOnly ? "allowance-collector.json" : "collector.json");
+        var status = new JsonObject { ["state"] = state, ["intervalSeconds"] = 300 };
+        status[state == "running" ? "startedAt" : "finishedAt"] = DateTimeOffset.UtcNow.ToString("O");
+        if (quotaOnly) status["mode"] = "allowances-only";
+        var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try { File.WriteAllText(temporary, status.ToJsonString()); File.Move(temporary, file, true); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
     private async Task Refresh(bool quotaOnly)
     {
         if (pairingPaused || !Configured || lifetime.IsCancellationRequested) return;
@@ -148,6 +159,7 @@ internal sealed class Collector : IDisposable
             if (!File.Exists(node)) node = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe");
             var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "collect-windows.mjs");
             if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Collector runtime unavailable");
+            if (quotaOnly) WriteAttemptStatus(runtime, true, "running");
             using var process = new Process { StartInfo = new ProcessStartInfo(node)
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
             process.StartInfo.ArgumentList.Add(script);
@@ -164,15 +176,14 @@ internal sealed class Collector : IDisposable
             catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
             await Task.WhenAll(output, error);
             if (process.ExitCode != 0) throw new InvalidOperationException("Collection failed");
+            if (quotaOnly) WriteAttemptStatus(runtime, true, "ok");
         }
         catch (IOException) { /* An existing collector or unavailable storage remains visible through freshness. */ }
         catch
         {
             try
             {
-                var file = Path.Combine(runtime, "public", "local", quotaOnly ? "allowance-collector.json" : "collector.json");
-                var status = new JsonObject { ["state"] = "failed", ["finishedAt"] = DateTimeOffset.UtcNow.ToString("O"), ["intervalSeconds"] = 300 };
-                File.WriteAllText(file + ".tmp", status.ToJsonString()); File.Move(file + ".tmp", file, true);
+                WriteAttemptStatus(runtime, quotaOnly, "failed");
             }
             catch { }
         }
@@ -193,6 +204,20 @@ internal sealed class Collector : IDisposable
         Directory.CreateDirectory(root);
         try
         {
+            var local = Path.Combine(root, "public", "local");
+            Directory.CreateDirectory(local);
+            var heavyStatus = Path.Combine(local, "collector.json");
+            File.WriteAllText(heavyStatus, "Full collection freshness must not change.");
+            foreach (var state in new[] { "failed", "running", "ok" })
+            {
+                WriteAttemptStatus(root, true, state);
+                var attempt = Snapshot.Read(Path.Combine(local, "allowance-collector.json"));
+                if (Snapshot.Text(attempt?["state"]) != state || Snapshot.Text(attempt?["mode"]) != "allowances-only" ||
+                    !DateTimeOffset.TryParse(Snapshot.Text(attempt?[state == "running" ? "startedAt" : "finishedAt"]), out _))
+                    throw new Exception("Allowance attempt status did not advance.");
+            }
+            if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change." || Directory.GetFiles(local, "*.tmp").Length != 0)
+                throw new Exception("Allowance attempt changed full collection status or left temporary files.");
             using var collector = new Collector(root);
             var sentinel = Path.Combine(root, "saved-history-test.txt");
             File.WriteAllText(sentinel, "Synthetic saved history. Do not change.");
