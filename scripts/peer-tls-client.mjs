@@ -6,18 +6,59 @@ const protocol='observatory-pair/1';
 const failure=()=>Error('Authenticated pairing connection unavailable');
 const fingerprint=raw=>createHash('sha256').update(raw).digest('hex');
 
+// Bootstrap retrieves only the public certificate. No client identity or
+// application data is sent, and the out-of-band pin is mandatory. The actual
+// claim uses normal certificate validation with this exact trust anchor.
+export async function discoverPeerCertificate(invitation,{connect=tls.connect,timeoutMs=8000,signal}={}) {
+  const safe=validateInvitation(invitation);
+  if(!Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>8000 || signal?.aborted)throw failure();
+  return new Promise((resolve,reject)=>{
+    let socket,done=false;
+    const abort=()=>finish(failure());
+    const finish=(error,result)=>{
+      if(done)return;
+      done=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);socket?.destroy();
+      if(error)reject(failure());else resolve(result);
+    };
+    const timer=setTimeout(abort,timeoutMs);
+    signal?.addEventListener('abort',abort,{once:true});
+    try {
+      socket=connect({host:safe.address,port:safe.port,rejectUnauthorized:false,
+        minVersion:'TLSv1.3',maxVersion:'TLSv1.3',ALPNProtocols:[protocol]});
+      socket.once('secureConnect',()=>{
+        try {
+          validateInvitation(safe);
+          const raw=socket.getPeerCertificate().raw;
+          if(socket.alpnProtocol!==protocol || !raw || raw.length>16384 ||
+            fingerprint(raw)!==safe.certificateSha256)throw failure();
+          finish(null,new X509Certificate(raw).toString());
+        } catch {finish(failure());}
+      });
+      socket.once('error',abort);socket.once('close',abort);
+    } catch {finish(failure());}
+  });
+}
+
+export async function claimFromInvitation(invitation,identity,options={}) {
+  const timeoutMs=options.timeoutMs??8000,started=performance.now();
+  const certificate=await discoverPeerCertificate(invitation,{...options,timeoutMs});
+  const remaining=Math.floor(timeoutMs-(performance.now()-started));
+  if(remaining<1 || options.signal?.aborted)throw failure();
+  return requestPeerClaim(invitation,certificate,identity,{...options,timeoutMs:remaining});
+}
+
 // The certificate may be obtained over an untrusted discovery channel. Its DER
 // fingerprint must match the out-of-band invitation before it becomes a CA.
 // The supplied identity must be a private, locally owned TLS client identity.
 export async function requestPeerClaim(invitation,certificatePem,identity,
-  {connect=tls.connect,timeoutMs=8000}={}) {
+  {connect=tls.connect,timeoutMs=8000,signal}={}) {
   let safe,certificate;
   try {
     safe=validateInvitation(invitation);
     if(typeof certificatePem!=='string' || Buffer.byteLength(certificatePem)>16384 ||
       !identity || typeof identity.key!=='string' || typeof identity.cert!=='string' ||
       identity.key.length>16384 || identity.cert.length>16384 ||
-      !Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>8000)throw failure();
+      !Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>8000 || signal?.aborted)throw failure();
     certificate=new X509Certificate(certificatePem);
     if(fingerprint(certificate.raw)!==safe.certificateSha256)throw failure();
   } catch {throw failure();}
@@ -25,12 +66,14 @@ export async function requestPeerClaim(invitation,certificatePem,identity,
   return new Promise((resolve,reject)=>{
     let socket,done=false,total=0;
     const chunks=[];
+    const abort=()=>finish(failure());
     const finish=(error,result)=>{
       if(done)return;
-      done=true;clearTimeout(timer);socket?.destroy();
+      done=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);socket?.destroy();
       if(error)reject(failure());else resolve(result);
     };
     const timer=setTimeout(()=>finish(failure()),timeoutMs);
+    signal?.addEventListener('abort',abort,{once:true});
     try {
       socket=connect({host:safe.address,port:safe.port,
         ca:certificate.toString(),key:identity.key,cert:identity.cert,

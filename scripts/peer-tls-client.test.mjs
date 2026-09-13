@@ -8,7 +8,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createInvitation} from './peer-invitation.mjs';
-import {requestPeerClaim} from './peer-tls-client.mjs';
+import {requestPeerClaim,claimFromInvitation,discoverPeerCertificate} from './peer-tls-client.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
 import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
 
@@ -123,6 +123,40 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
     await assert.rejects(startPairingListener({address:'0.0.0.0',identity:serverIdentity},
       {createServer:()=>{created=true;throw Error('unexpected');}}));
     assert.equal(created,false);
+  });
+  await t.test('invitation-only connection discovers the pinned certificate without disclosing client identity',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+    const calls=[];
+    try {
+      const result=await claimFromInvitation(listener.invitation,clientIdentity,{connect:options=>{
+        calls.push({hasKey:Object.hasOwn(options,'key'),hasCert:Object.hasOwn(options,'cert'),
+          rejectUnauthorized:options.rejectUnauthorized});
+        return connect(options);
+      }});
+      assert.deepEqual(result,{status:'awaiting-confirmation'});
+      assert.deepEqual(calls,[{hasKey:false,hasCert:false,rejectUnauthorized:false},
+        {hasKey:true,hasCert:true,rejectUnauthorized:true}]);
+      await listener.confirm(listener.pending().claimId);
+    } finally {await listener.cancel();}
+  });
+  await t.test('wrong invitation pin cannot progress from discovery to a claim',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+    let calls=0;
+    try {
+      await assert.rejects(claimFromInvitation({...listener.invitation,certificateSha256:'00'.repeat(32)},
+        clientIdentity,{connect:options=>{calls++;return connect(options);}}));
+      assert.equal(calls,1);assert.equal(listener.pending(),null);assert.equal(listener.status(),'waiting');
+    } finally {await listener.cancel();}
+  });
+  await t.test('cancellation refuses pre-aborted discovery and stops an in-flight bootstrap',async()=>{
+    const controller=new AbortController();controller.abort();
+    let calls=0;
+    await assert.rejects(discoverPeerCertificate(invitation,{signal:controller.signal,
+      connect:()=>{calls++;throw Error('unexpected');}}));
+    assert.equal(calls,0);
+    const active=new AbortController();
+    const pending=discoverPeerCertificate(invitation,{signal:active.signal,connect});
+    active.abort();await assert.rejects(pending);
   });
   await t.test('Mac-generated identities work through the real first-pair TLS flow',
     {skip:process.platform!=='darwin'},async()=>{

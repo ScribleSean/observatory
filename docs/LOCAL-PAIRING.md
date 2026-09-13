@@ -64,9 +64,20 @@ deadline. Errors contain no remote response or invitation details.
 
 The client only requests a claim. It does not persist trust or treat an
 awaiting-confirmation response as completed pairing. Certificate discovery,
-private identity creation and native confirmation remain unconnected. The
+private identity setup and native confirmation remain unconnected. The
 original synthetic mutual-TLS fixture already knows the client certificate.
 Additional tests exercise first-pair admission through the listener below.
+
+`claimFromInvitation` removes the need to supply a certificate manually. A
+first TLS connection retrieves the server's public certificate without
+presenting a client identity or sending application bytes. This bootstrap
+connection has no CA trust yet and must match the invitation's exact SHA-256
+pin and application protocol before returning the certificate. A second
+connection uses that certificate as the explicit trust anchor with normal
+verification enabled and sends the claim. Both phases share an eight-second
+deadline and support cancellation. A wrong pin stops before the second
+connection. This is direct connection to the invitation address, not a
+network scan, DNS discovery service or certificate trust-store change.
 
 The implementation follows the certificate and connection APIs in the
 [Node.js 22 TLS documentation](https://nodejs.org/docs/latest-v22.x/api/tls.html).
