@@ -18,6 +18,7 @@ final class ObservatoryStore: ObservableObject {
     private var process: Process?
     private var pollTimer: Timer?
     private var refreshTimer: Timer?
+    private var nextAllowanceAttemptUptime: TimeInterval = 0
     var onSnapshot: (() -> Void)?
 
     init(runtime: URL, collectionAllowed: Bool = true) {
@@ -33,7 +34,7 @@ final class ObservatoryStore: ObservableObject {
 
     func start() {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
+            MainActor.assumeIsolated { self?.reload(); self?.refreshAllowancesIfDue() }
         }
         pollTimer?.tolerance = 5
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -67,14 +68,23 @@ final class ObservatoryStore: ObservableObject {
         lastAttempt = text(status?["state"], fallback: "not-started")
     }
 
-    func refresh() {
+    func refreshAllowancesIfDue() {
+        guard collectionAllowed, !shuttingDown, process == nil, !pairingMaintenance, !collectionPausedForPairing,
+              ProcessInfo.processInfo.systemUptime >= nextAllowanceAttemptUptime,
+              (try? CollectorConfiguration.read(runtime: runtime)["quota"]) == true,
+              allowanceRefreshDue(snapshot?.object["quota"] as? JSONObject, now: Date()) else { return }
+        nextAllowanceAttemptUptime = ProcessInfo.processInfo.systemUptime + 60
+        refresh(quotaOnly: true)
+    }
+
+    func refresh(quotaOnly: Bool = false) {
         guard !shuttingDown else { return }
         guard collectionAllowed else { lastAttempt = "preview-collection-disabled"; return }
         guard (try? FirstRunSetup.required(runtime: runtime)) == false else { lastAttempt = "setup-required"; return }
         guard process == nil, !pairingMaintenance, !collectionPausedForPairing else { return }
         guard let resources = Bundle.main.resourceURL,
               let local = try? CollectorConfiguration.prepare(runtime: runtime),
-              let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, local: local) else {
+              let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, local: local, quotaOnly: quotaOnly) else {
             lastAttempt = "runtime-unavailable"
             return
         }
@@ -141,4 +151,9 @@ final class ObservatoryStore: ObservableObject {
         // The runner catches termination and stops only its own collection process group.
         process?.terminate()
     }
+}
+
+func allowanceRefreshDue(_ quota: JSONObject?, now: Date) -> Bool {
+    guard let deadline = parseDate(quota?["nextAttemptAt"]) else { return false }
+    return deadline <= now
 }

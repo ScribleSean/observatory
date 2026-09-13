@@ -69,7 +69,8 @@ enum CollectorConfiguration {
         return true
     }
 
-    static func launch(runtime: URL, resources: URL, local: Bool) throws -> CollectorLaunch {
+    static func launch(runtime: URL, resources: URL, local: Bool, quotaOnly: Bool = false) throws -> CollectorLaunch {
+        if quotaOnly && !local { throw CocoaError(.featureUnsupported) }
         if local {
             _ = try read(runtime: runtime)
             let python = resources.appendingPathComponent("Runtime/python/bin/python3")
@@ -79,7 +80,7 @@ enum CollectorConfiguration {
                   FileManager.default.isExecutableFile(atPath: node.path) else { throw CocoaError(.fileReadNoSuchFile) }
             return CollectorLaunch(executable: python, arguments: ["-I", "-B", scripts.appendingPathComponent("run-collector.py").path,
                 "--runtime", runtime.path, "--collector", scripts.appendingPathComponent("collect-mac.mjs").path,
-                "--node", node.path, "--python", python.path, "--interval", "300"])
+                "--node", node.path, "--python", python.path, "--interval", "300"] + (quotaOnly ? ["--quota-only"] : []))
         }
         guard let config = readObject(runtime.appendingPathComponent("native-runtime.json")),
               let python = config["python"] as? String, let node = config["node"] as? String,
