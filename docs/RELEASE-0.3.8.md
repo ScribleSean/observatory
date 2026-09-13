@@ -1,0 +1,30 @@
+# 0.3.8 candidate evidence
+
+Prepared September 13, 2026. Version 0.3.8, build 14. Both packages embed clean source `40d2fb77d0ab5e4e2cbcdf642dbb114c853b97b6`. This is preparation evidence, not a published release or installation guarantee.
+
+This candidate contains the Observatory branding, allowance pace and reset-time comparison, due-aware allowance-only collection, hourly caching of daily account usage, and Windows allowance-attempt status recovery. The allowance scheduler retains the provider cooldown and checks due state separately from full source scans. Actual background timing and performance still require installed verification.
+
+## Artifacts
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Mac ARM64 ZIP | 63,076,733 | `844bf071f1330a941932c3cdc423188e1fd41a5a1556184a8325598402e92671` |
+| Mac ARM64 DMG | 70,088,359 | `150e438766df2105f8d4a71bde3ea8664ca6f5fbb5be285058806d71f89d3fdb` |
+| Windows x64 setup EXE | 97,008,298 | `bfcce64a15af47ff7d9a08ed8da943464d04c43c8cf29772f57c278519d2ec2f` |
+
+The Mac bundle is 180,648,946 bytes unpacked. The Windows package is 257,786,595 bytes across 3,030 verified manifest entries. These are file sizes, not memory measurements. Artifact and internal installation names retain the former Workspace Observatory spelling for compatibility.
+
+## Completed checks
+
+- Mac source suite: 390 tests passed, five platform/tool skips, no failures. TypeScript checking passed.
+- Mac fresh dashboard build, native self-tests, packaged disabled-source collector, renderer bridge, window lifecycle and menu-bar popup checks passed with synthetic data.
+- Mac ZIP extraction, relocated runtime checks, signatures, DMG checksum and read-only mounted-content verification passed.
+- Windows source suite: 365 tests passed, 30 explicit skips, no failures. Native compilation and self-tests passed.
+- Windows fresh dashboard build, packaged sharing bridge with isolated data, Python SQLite/timezone checks, package privacy checks and full manifest verification passed.
+- The Windows installer compiled successfully and its checksum was recorded. It was not executed.
+
+## Still required
+
+The Mac candidate is ad hoc signed and not notarized. The Windows installer is unsigned. Neither candidate has been installed or published. Verify exact-candidate installation, data-preserving upgrades, interactive first launch, login startup, sleep/wake, background collection cadence, resource use and supported-source behavior before distribution. Earlier checks of other versions are not substitutes.
+
+Broader release requirements remain in the [release checklist](RELEASE-CHECKLIST.md). No private user records are included in these artifacts.
