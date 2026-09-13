@@ -8,6 +8,12 @@ The installed 0.3.8 dashboard exposed the saved pace estimate and reset comparis
 
 Source now keeps the card's children separately accessible and explicitly labels the allowance-remaining bar. The reset-coverage bar retains its own label and percentage. Swift typechecking passed without launching or replacing an app. A rebuilt native accessibility-tree and screen-reader check remain required before claiming this correction works in the installed interface.
 
+## Windows optional-network settings, September 13
+
+The synthetic native dashboard test passed for source `62f0860`, including an injected Tailscale readiness callback. Entering the device-settings page did not invoke that callback. Selecting **Check Tailscale** invoked it once and displayed its fictional result. The test did not read or modify a real VPN configuration or open the setup website.
+
+The device-settings capture was inspected after correcting the guide link's dark-background contrast. The status, action and guide were visible. This is not a full settings accessibility audit or a packaged live-client integration check. The ordinary installed app was not replaced.
+
 ## Mac candidate `7d3b2cc`
 
 The checks used an isolated `--preview --show` launch with collection sources disabled. The installed application and its collector were not replaced. The shared web assets were built on Windows and packaged into the Mac candidate.
