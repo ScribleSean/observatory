@@ -9,6 +9,7 @@ import {execFileSync} from 'node:child_process';
 import {once} from 'node:events';
 import {createInvitation} from './peer-invitation.mjs';
 import {requestPeerClaim} from './peer-tls-client.mjs';
+import {startPairingListener} from './peer-tls-listener.mjs';
 
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 
@@ -82,5 +83,66 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
     mode='hang';
     await assert.rejects(requestPeerClaim(invitation,serverIdentity.cert,clientIdentity,{connect,timeoutMs:150}),
       {message:'Authenticated pairing connection unavailable'});
+  });
+  const createServer=(options,callback)=>{
+    const listener=tls.createServer(options,callback),listen=listener.listen.bind(listener);
+    listener.listen=(binding,ready)=>listen({...binding,host:'127.0.0.1'},ready);
+    return listener;
+  };
+  await t.test('real first-pair listener accepts an unknown device only with invitation and local confirmation',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+    try {
+      assert.equal(listener.pending(),null);
+      await assert.rejects(requestPeerClaim({...listener.invitation,secret:'00'.repeat(32)},
+        serverIdentity.cert,clientIdentity,{connect}));
+      assert.equal(listener.status(),'waiting');
+      assert.deepEqual(await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect}),
+        {status:'awaiting-confirmation'});
+      const claim=listener.pending();
+      assert.equal(claim.peerCertificateSha256,createHash('sha256').update(new X509Certificate(clientIdentity.cert).raw).digest('hex'));
+      await assert.rejects(requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect}));
+      assert.equal(listener.status(),'confirming');
+      assert.deepEqual(await listener.confirm(claim.claimId),{peerCertificateSha256:claim.peerCertificateSha256});
+      assert.equal(listener.status(),'inactive');
+      await assert.rejects(listener.confirm(claim.claimId));
+    } finally {await listener.cancel();}
+  });
+  await t.test('listener cancellation invalidates a pending real TLS claim',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+    try {
+      await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+      const claim=listener.pending();
+      await listener.cancel();
+      await assert.rejects(listener.confirm(claim.claimId));
+      assert.equal(listener.pending(),null);
+    } finally {await listener.cancel();}
+  });
+  await t.test('public bind addresses are rejected before creating a server',async()=>{
+    let created=false;
+    await assert.rejects(startPairingListener({address:'0.0.0.0',identity:serverIdentity},
+      {createServer:()=>{created=true;throw Error('unexpected');}}));
+    assert.equal(created,false);
+  });
+  await t.test('listener refuses missing client certificate and oversized or extra request fields',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+    const send=(body,withIdentity=true)=>new Promise((resolve,reject)=>{
+      let received='';
+      const socket=tls.connect({host:'127.0.0.1',port:listener.invitation.port,
+        ca:serverIdentity.cert,rejectUnauthorized:true,minVersion:'TLSv1.3',
+        ALPNProtocols:['observatory-pair/1'],checkServerIdentity:()=>undefined,
+        ...(withIdentity?clientIdentity:{})},()=>socket.end(body));
+      const timer=setTimeout(()=>{socket.destroy();reject(Error('Test connection timeout'));},2000);
+      socket.on('data',chunk=>{received+=chunk.toString();});
+      socket.on('error',()=>{});
+      socket.once('close',()=>{clearTimeout(timer);resolve(received);});
+    });
+    try {
+      const body={version:1,action:'claim',secret:listener.invitation.secret};
+      assert.equal(await send(JSON.stringify(body),false),'');
+      assert.equal(await send('x'.repeat(2048)),'');
+      assert.equal(await send(JSON.stringify({...body,peerCertificateSha256:pin})),'');
+      assert.equal(listener.status(),'waiting');
+      assert.equal(listener.pending(),null);
+    } finally {await listener.cancel();}
   });
 });

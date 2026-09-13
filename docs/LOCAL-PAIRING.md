@@ -3,9 +3,9 @@
 ## Current boundary
 
 The installed application still uses the existing authenticated SSH transport.
-The local-network invitation module is an unconnected building block, not an
-operational pairing wizard. Importing it does not listen on a port, contact a
-device, save credentials or change sharing consent.
+The local-network modules have synthetic client/listener integration tests,
+but are not an operational pairing wizard. Importing them does not listen on a
+port, contact a device, save credentials or change sharing consent.
 
 ## Invitation format
 
@@ -44,7 +44,7 @@ change from extending the session. Restarting loses all invitation state and
 requires a new invitation. Only secret hashes remain in the session object.
 Returned invitations and confirmation handles still require private handling.
 
-This state machine is not connected to a listener or native confirmation UI.
+This state machine is connected to the opt-in listener module, but not a native confirmation UI.
 Its single-process guarantee does not coordinate multiple listener processes.
 The integration must enforce one listener owner and hold the existing peer
 state lock while committing trust. A network disconnect must cancel a pending
@@ -64,13 +64,35 @@ deadline. Errors contain no remote response or invitation details.
 
 The client only requests a claim. It does not persist trust or treat an
 awaiting-confirmation response as completed pairing. Certificate discovery,
-private identity creation, the production listener and native confirmation
-remain unconnected. The synthetic mutual-TLS test server already knows the
-client certificate. First-pairing identity admission still requires a reviewed
-listener implementation, not an assumption that this fixture solves it.
+private identity creation and native confirmation remain unconnected. The
+original synthetic mutual-TLS fixture already knows the client certificate.
+Additional tests exercise first-pair admission through the listener below.
 
 The implementation follows the certificate and connection APIs in the
 [Node.js 22 TLS documentation](https://nodejs.org/docs/latest-v22.x/api/tls.html).
+
+## Opt-in setup listener
+
+`scripts/peer-tls-listener.mjs` binds only when explicitly called, on a selected
+private address. It requires a locally supplied identity. First-pair clients
+are not yet trusted by a CA, so the server requests a client certificate and
+uses TLS proof of key possession, a valid self-signed certificate and the
+invitation secret for provisional admission. It accepts RSA keys of at least
+2048 bits or P-256/P-384 EC keys. The client still uses strict pinned server
+certificate verification. The server's lack of initial CA trust is not a
+general certificate bypass and must never be used for normal data exchange.
+
+Only a bounded claim message is accepted. There is no snapshot, quota, file or
+command endpoint. Four simultaneous sockets, 64 total connection attempts,
+eight-second connection deadlines, a 1 KiB request limit and invitation expiry
+bound the setup session. A valid claim exposes its certificate fingerprint and
+confirmation handle only through the local module API. Explicit confirmation
+returns the fingerprint and closes the listener. It does not save trust.
+
+Cancellation closes sockets and invalidates pending confirmation. Native UI,
+cross-process listener ownership, secure key storage, discovery and atomic
+trust persistence still need integration. Current network tests use ephemeral
+loopback listeners and synthetic identities, not the user's paired devices.
 
 ## Required integration before enabling pairing
 
