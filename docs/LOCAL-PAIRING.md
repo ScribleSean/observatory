@@ -311,7 +311,8 @@ sync or successful network recovery on the user's devices.
 for a private stdin/stdout controller. It is excluded from both native collector
 packages. It creates its own temporary runtime and synthetic identity, supports
 host/join confirmation, service start/stop, record publication, exchange and
-revocation, then removes its runtime after verified service exit. It never opens
+revocation, plus separately consented synthetic allowance exchange, then removes
+its runtime after verified service exit. It never opens
 an installed application's runtime. The fixture uses test OpenSSL installations,
 not the native production identity generators. Its payloads contain synthetic
 source-status records, not the user's activity or provider usage.
@@ -320,6 +321,23 @@ The worker protocol can return an invitation to its private parent pipe. Do not
 record that output in logs or pass it through shell arguments. A five-minute
 fixture deadline closes input and starts cleanup. The test controller must also
 await worker exit and treat any cleanup failure as unresolved.
+
+After both services report listening, the private controller can send
+`quota-enable` to each fixture. This creates fictional Mac 40% and Windows 70%
+readings inside their temporary stores and enables sharing only there.
+`quota-exchange` uses the production transport. `quota-status` reports only
+sharing state, separate local/peer percentages and the peer sample count.
+It does not report account scope, keys, certificates or raw histories.
+
+The live acceptance sequence is to exchange from both devices, repeat delivery
+without increasing the peer sample count, restart each service and verify
+retained values, then send `quota-disable` to one device and exchange from the
+other. The peer projection must clear without deleting local readings. A
+disabled sender must return `disabled` without contacting its peer. Repeat with
+the opposite device, then revoke pairing and await fixture cleanup. Each step
+needs a successful reply before proceeding. Do not infer it passed from the
+fixture's existence. `peer-live-quota.test.mjs` verifies the allowance actions
+with synthetic in-memory transport, not a live network or service restart.
 
 The September 13 two-device attempt did not establish pairing. Each fixture
 listener accepted local TCP connections, while cross-device attempts timed out

@@ -1,5 +1,5 @@
 // Opt-in two-device fixture. Never included in an installed collector bundle.
-import {mkdtemp,realpath,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,realpath,readFile,rm,lstat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -16,6 +16,44 @@ import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload} from './peer-store.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 import {revokePairing} from './peer-revocation.mjs';
+import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
+import {syncQuota} from './quota-sync.mjs';
+
+// Only called with the fixture's owned temporary runtime. No provider is read.
+export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
+  async function summary() {
+    try {await lstat(path.join(runtime,'private-quota'));}
+    catch(error) {
+      if(error.code==='ENOENT')return {sharing:false,localRemaining:null,peerRemaining:null,peerSamples:0};
+      throw error;
+    }
+    const state=await readQuotaState(runtime),samples=state.remote?.record.payload.history??[];
+    return {sharing:state.sharing.enabled,
+      localRemaining:state.history?.samples.at(-1)?.windows[0]?.remainingPercent??null,
+      peerRemaining:samples.at(-1)?.windows[0]?.remainingPercent??null,peerSamples:samples.length};
+  }
+  switch(action) {
+    case 'quota-enable': {
+      const pair=await readPairing(runtime);
+      if(!pair)throw Error('Fixture must be paired');
+      const before=await readQuotaState(runtime),now=Date.now(),mac=pair.local.host==='Mac';
+      const updated=await updateQuotaState(runtime,{revision:before.revision,scope:(mac?'a':'b').repeat(64),
+        observation:{status:'ok',checkedAt:new Date(now).toISOString(),
+          windows:[{bucket:'codex',window:'primary',remainingPercent:mac?40:70}]}},now);
+      await setQuotaSharing(runtime,{revision:updated.revision,enabled:true,pairingId:pair.local.pairId});
+      return summary();
+    }
+    case 'quota-status': return summary();
+    case 'quota-disable':
+      if((await summary()).sharing)await revokeQuotaSharing(runtime);
+      return summary();
+    case 'quota-exchange': {
+      const result=await syncQuota(runtime,{request});
+      return {status:result.status,...await summary()};
+    }
+    default: throw Error('Unknown synthetic quota action');
+  }
+}
 
 async function main(address) {
   if(!['darwin','win32'].includes(process.platform) || !isPairingAddress(address))throw Error('Invalid fixture host');
@@ -98,6 +136,8 @@ async function main(address) {
         return (await finalizePeerCollection(runtime,{data:[],peer:{status:'ready',payload:payload(pair)}},pair)).peer;
       }
       case 'revoke': await revokePairing(runtime);return {status:'revoked'};
+      case 'quota-enable': case 'quota-status': case 'quota-disable': case 'quota-exchange':
+        return runSyntheticQuotaAction(runtime,command.action);
       default: throw Error('Unknown fixture action');
     }
   }
