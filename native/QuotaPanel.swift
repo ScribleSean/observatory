@@ -20,7 +20,10 @@ func quotaHistoryPoints(_ history: [JSONObject], bucket: String, window: String)
         }
         let used = 100 - remaining
         let reset = text(row["resetsAt"])
-        if let previous, at.timeIntervalSince(previous.at) > 600 || at <= previous.at || used < previous.used || reset != previous.reset { segment += 1 }
+        let sameReset = previous.map { prior in
+            reset == prior.reset || (parseDate(reset).flatMap { current in parseDate(prior.reset).map { abs(current.timeIntervalSince($0)) <= 2 } } ?? false)
+        } ?? true
+        if let previous, at.timeIntervalSince(previous.at) > 630 || at <= previous.at || used < previous.used || !sameReset { segment += 1 }
         result.append(QuotaHistoryPoint(id: result.count, at: at, used: used, segment: segment))
         previous = (at, used, reset)
     }

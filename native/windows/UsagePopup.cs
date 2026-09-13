@@ -232,7 +232,8 @@ internal sealed class QuotaGraph : Control
             { previous = null; previousAt = null; continue; }
             var used = 100 - remaining; var reset = Snapshot.Text(row?["resetsAt"]);
             var point = new PointF(box.Left + box.Width * (float)((at - start).TotalSeconds / 86400), box.Bottom - box.Height * (float)(used / 100));
-            if (previous is PointF prior && previousAt is DateTimeOffset time && at > time && (at - time).TotalSeconds <= 600 && used >= previousUsed && reset == previousReset)
+            var sameReset = reset == previousReset || (DateTimeOffset.TryParse(reset, out var resetTime) && DateTimeOffset.TryParse(previousReset, out var previousResetTime) && Math.Abs((resetTime - previousResetTime).TotalSeconds) <= 2);
+            if (previous is PointF prior && previousAt is DateTimeOffset time && at > time && (at - time).TotalSeconds <= 630 && used >= previousUsed && sameReset)
                 g.DrawLine(line, prior, point);
             g.FillEllipse(brush, point.X - 2, point.Y - 2, 4, 4);
             firstUsed ??= used; lastUsed = used;
