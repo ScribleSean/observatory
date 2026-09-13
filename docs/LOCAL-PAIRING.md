@@ -39,7 +39,8 @@ Observatory device confirmation or data-sharing consent.
 
 `scripts/peer-tls-control.mjs --runtime <canonical-runtime>` provides a
 newline-delimited JSON channel on parent-child stdin/stdout. Requests contain
-an integer `id` and a `command` object. Supported actions are `host-start`,
+an integer `id` and a `command` object. Supported actions are `identity-status`,
+`identity-create`, `host-start`,
 `host-confirm`, `join-claim`, `join-confirm`, `status` and `cancel`. Invitation
 text belongs only in this private pipe or the native setup view, never command
 arguments or logs. Replies omit device keys, internal confirmation handles,
@@ -50,8 +51,20 @@ The process limits frame buffers, response size and request count, rejects
 duplicate IDs, reports generic errors and closes the listener on parent EOF,
 termination or a ten-minute session limit. Cancellation interrupts pending
 network operations and closes a host that finishes starting after cancellation.
-It does not generate identities or grant sharing consent. A native window must
+It does not automatically generate identities or grant sharing consent. A native window must
 own exactly one child process and close it when setup ends.
+
+Identity creation requires the explicit `restricted-file` storage-consent value.
+Mac creation uses the existing system-backed generator inside the child.
+Windows generates a P-256 identity in native code and sends it only over the
+private input pipe. Both paths reuse a valid saved identity, reject damaged
+identity state, and refuse to initialize a missing identity when active pairing
+state exists. Cancellation before persistence prevents a new identity write.
+The reply reports identity status only, not key material. This is a restricted
+plaintext file, not Keychain or DPAPI storage. The UI must disclose that policy
+before requesting consent. Native bridge tests on both platforms exercised
+consent rejection, creation and reuse in temporary runtimes. The Settings UI
+does not invoke this step yet.
 
 `native/TLSSetupProcess.swift` implements the Mac pipe wrapper with bounded
 reply parsing, request correlation, a 45-second command timeout and child
