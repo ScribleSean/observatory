@@ -9,6 +9,7 @@ on:
       - 'scripts/mac-replacement.test.mjs'
       - 'scripts/mac-package.test.mjs'
       - 'scripts/update-appcast.test.mjs'
+      - 'scripts/sparkle-interop.test.mjs'
       - '.github/workflows/update-safety.yml'
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - 'scripts/mac-replacement.test.mjs'
       - 'scripts/mac-package.test.mjs'
       - 'scripts/update-appcast.test.mjs'
+      - 'scripts/sparkle-interop.test.mjs'
       - '.github/workflows/update-safety.yml'
   workflow_dispatch:
 permissions:
@@ -42,3 +44,21 @@ jobs:
       # This workflow neither builds releases nor accesses production signing keys.
       - name: Verify signatures, replacement and rollback
         run: node --test scripts/verify-installation.test.mjs scripts/replace-payload.test.mjs scripts/mac-replacement.test.mjs scripts/mac-package.test.mjs scripts/update-appcast.test.mjs
+      - name: Verify official Sparkle signing interoperability
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir="$(mktemp -d)"
+          archive="$tool_dir/Sparkle.tar.xz"
+          url="$(node -p "require('./native/mac/updater-tool.json').url")"
+          curl --fail --location --proto '=https' --proto-redir '=https' --max-time 120 --max-filesize 134217728 "$url" --output "$archive"
+          node --input-type=module - "$archive" <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const pin=JSON.parse(readFileSync('native/mac/updater-tool.json','utf8'));
+          const actual=createHash('sha256').update(readFileSync(process.argv[2])).digest('hex');
+          if(actual!==pin.sha256)throw Error('Official Sparkle archive checksum mismatch');
+          NODE
+          tar -xf "$archive" -C "$tool_dir" ./bin/sign_update ./LICENSE
+          OBSERVATORY_TEST_SPARKLE_TOOL="$tool_dir/bin/sign_update" node --test scripts/sparkle-interop.test.mjs
