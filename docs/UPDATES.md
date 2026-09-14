@@ -8,6 +8,8 @@ Automatic production updates are requested but not yet implemented. Source chang
 
 Development-machine updates have used verified, recoverable manual activation with retained application backups and private-data checks. These procedures are not an automatic update mechanism. The [release checklist](RELEASE-CHECKLIST.md) distinguishes installed versions from candidates, and [0.3.8 candidate evidence](RELEASE-0.3.8.md) records artifact-specific checks. Release artifacts remain unpublished.
 
+The Mac replacement helper now retains the caller-supplied previous and candidate manifests in its recovery directory before moving either app. Both manifests must first pass the existing package and signature checks. Each file is created exclusively with owner-only permissions and flushed before replacement proceeds. A persistence failure prevents promotion. These retained copies preserve evidence for later inspection, but are not independently authenticated merely because they are on disk. This does not reconstruct a missing receipt for an earlier installation, enable automatic updates or establish power-loss durability.
+
 ## Update integration
 
 The Windows updater primitives remain unconnected. Native Settings now has a running-version label in source, using the Mac bundle metadata or Windows assembly file version. It does not check for downloads, identify the latest release or enable automatic updates. Installed apps and already-built candidates acquire source changes only after a new build and installation.

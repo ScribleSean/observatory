@@ -80,8 +80,9 @@ export function restoreInterruptedPayload(options) {
 // hold the installer and collector locks, stop the app, authenticate the staged
 // release and capture registration. This primitive changes only payload paths.
 // verify must synchronously check full inventories, revisions and ownership.
-export function replacePayload({installed,staged,verify}) {
+export function replacePayload({installed,staged,verify,prepareRecovery=()=>{}}) {
   if(typeof verify!=='function')throw Error('Payload verification is required');
+  if(typeof prepareRecovery!=='function')throw Error('Recovery preparation must be a function');
   unlinkedDirectory(installed);
   unlinkedDirectory(staged);
   if(installed===staged || path.dirname(installed)!==path.dirname(staged))
@@ -106,6 +107,10 @@ export function replacePayload({installed,staged,verify}) {
   };
   let movedOld=false,movedNew=false;
   try {
+    // Retain caller-authenticated evidence before moving either payload.
+    // Preparation must be synchronous and must throw if persistence fails.
+    const preparation=prepareRecovery(recovery);
+    if(preparation && typeof preparation.then==='function')throw Error('Recovery preparation must be synchronous');
     record('prepared');
     renameSync(installed,previous);
     movedOld=true;

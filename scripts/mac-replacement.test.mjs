@@ -41,6 +41,8 @@ test('Mac replacement verifies relocated bundles, retains previous app and leave
   assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-1');
   assert.equal(readFileSync(path.join(result.previous,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
   assert.equal(readFileSync(f.history,'utf8'),'newer private observations');
+  assert.deepEqual(JSON.parse(readFileSync(path.join(result.recovery,'previous-manifest.json'),'utf8')),f.previousManifest);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(result.recovery,'candidate-manifest.json'),'utf8')),f.candidateManifest);
   assert.deepEqual(checked,[f.installed,f.staged,f.installed]);
   assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
 });
@@ -57,6 +59,7 @@ test('Mac signature failure after promotion restores verified previous app witho
   try {replaceMacApp({...f,verifySignature:()=>{if(++signatures===3)throw Error('Rejected signature');}});}
   catch(error) {failure=error;}
   assert.equal(failure?.restored,true);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(failure.recovery,'previous-manifest.json'),'utf8')),f.previousManifest);
   assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
   assert.equal(readFileSync(path.join(failure.recovery,'rejected/Contents/Resources/LICENSE'),'utf8'),'fixture-1');
   assert.equal(readFileSync(f.history,'utf8'),'newer private observations');

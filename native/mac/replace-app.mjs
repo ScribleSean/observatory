@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process';
-import {readFileSync,realpathSync,lstatSync,openSync,closeSync,unlinkSync} from 'node:fs';
+import {readFileSync,realpathSync,lstatSync,openSync,closeSync,unlinkSync,writeFileSync,fsyncSync} from 'node:fs';
 import path from 'node:path';
 import {replacePayload} from '../windows/replace-payload.mjs';
 import {verifyMacPackage} from './inspect-package.mjs';
@@ -44,7 +44,16 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
       const info=JSON.parse(readFileSync(path.join(folder,'Contents/Resources/build-info.json'),'utf8'));
       return {sourceRevision:info.sourceRevision,buildNumber:info.buildNumber};
     };
-    return replacePayload({installed,staged,verify});
+    const prepareRecovery=recovery=>{
+      for(const [name,receipt] of [['previous-manifest.json',previousManifest],['candidate-manifest.json',candidateManifest]]) {
+        const descriptor=openSync(path.join(recovery,name),'wx',0o600);
+        try {
+          writeFileSync(descriptor,JSON.stringify(receipt)+'\n');
+          fsyncSync(descriptor);
+        } finally { closeSync(descriptor); }
+      }
+    };
+    return replacePayload({installed,staged,verify,prepareRecovery});
   } finally {
     closeSync(handle);
     unlinkSync(lock);

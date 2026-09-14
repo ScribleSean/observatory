@@ -33,6 +33,24 @@ test('promotion retains old payload and a durable journal without touching priva
   const states=readFileSync(result.journal,'utf8').trim().split('\n').map(line=>JSON.parse(line).state);
   assert.deepEqual(states,['prepared','previous-retained','candidate-promoted','payload-verified']);
 });
+test('recovery evidence is prepared before either payload moves',t=>{
+  const f=setup(t);
+  const result=replacePayload({...f,prepareRecovery:recovery=>{
+    assert.equal(readFileSync(path.join(f.installed,'payload'),'utf8'),'old');
+    assert.equal(readFileSync(path.join(f.staged,'payload'),'utf8'),'new');
+    writeFileSync(path.join(recovery,'receipt'),'authenticated fixture',{flag:'wx'});
+  }});
+  assert.equal(readFileSync(path.join(result.recovery,'receipt'),'utf8'),'authenticated fixture');
+});
+test('failed or asynchronous evidence preparation leaves both payloads in place',t=>{
+  const f=setup(t);
+  for(const prepareRecovery of [()=>{throw Error('Cannot retain receipt');},()=>Promise.resolve()]) {
+    assert.throws(()=>replacePayload({...f,prepareRecovery}),/replacement failed/);
+    assert.equal(readFileSync(path.join(f.installed,'payload'),'utf8'),'old');
+    assert.equal(readFileSync(path.join(f.staged,'payload'),'utf8'),'new');
+    assert.equal(readFileSync(path.join(f.root,'private-data','history'),'utf8'),'private fixture unchanged');
+  }
+});
 test('failed post-promotion verification restores the old payload and retains the rejected candidate',t=>{
   const f=setup(t),base=f.verify;
   f.verify=(folder,kind)=>{
