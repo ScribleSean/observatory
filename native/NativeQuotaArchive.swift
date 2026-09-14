@@ -235,12 +235,13 @@ struct NativeQuotaArchive: View {
         var request: [String: Any] = ["action": "page", "scope": scope, "kind": kind,
             "from": max(0, Int64(start.timeIntervalSince1970 * 1000)), "to": Int64(end.timeIntervalSince1970 * 1000) - 1]
         if let after { request["after"] = ["at": after.at, "id": after.id] }
+        let pageRequest = request
         busy = true
         let generation = requests.begin()
         Task { @MainActor in
             defer { busy = false }
             do {
-                let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
+                let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: pageRequest)
                 guard requests.accepts(generation) else { return }
                 readings = reply.records ?? []
                 if case .page(let value) = reply.next { next = value } else { next = nil }
