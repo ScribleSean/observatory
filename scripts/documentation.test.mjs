@@ -22,4 +22,6 @@ test('public documentation links resolve and release status stays explicit',asyn
   const readme=await readFile(path.join(root,'README.md'),'utf8');
   assert.match(readme,/early preview/);
   assert.match(readme,/Public installers are being prepared, not yet available/);
+  assert.match(readme,/Automatic app updates are not available yet/);
+  assert.match(readme,/\[desktop updates\]\(docs\/UPDATES\.md\)/);
 });

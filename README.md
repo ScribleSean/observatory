@@ -44,6 +44,8 @@ The project is an early preview tested on one Mac, Windows and WSL setup. Verifi
 
 Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Provider account management, unified allowance history and clean-machine release verification are still in progress. Read the [setup guide](docs/GUIDE.md) and [integration coverage](docs/SOURCE-COVERAGE.md) before connecting records.
 
+Automatic app updates are not available yet. Changes pushed to this repository do not update an installed app. See [desktop updates](docs/UPDATES.md) for the signing, installation and recovery work required before enabling them.
+
 ## Go deeper
 
 [Product direction](docs/PRODUCT-DIRECTION.md) · [Usage limits](docs/USAGE-LIMITS.md) · [Tracking reuse](docs/TRACKING-REUSE.md) · [Private sync](docs/PRIVATE-SYNC.md) · [Security](SECURITY.md) · [Roadmap](docs/ROADMAP.md)
