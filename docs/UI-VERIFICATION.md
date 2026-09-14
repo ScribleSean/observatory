@@ -4,6 +4,10 @@ Revision-specific development-machine checks. These results are not a full acces
 
 ## Mac saved allowance history, September 14
 
+A later preview-only `--preview-light` option allows testing without changing the system appearance. The empty and populated history sheet were inspected in light mode at the tested 760-point width. Controls, row text and the footer were visible, with scrolling confined to records. Loading the first synthetic account returned 100 readings. The isolated process exited without captured warnings. This is a light-mode spot check, not an enlarged-text or contrast-ratio audit, and the preview option is not included in the retained build 20 artifacts.
+
+A keyboard spot check on build 20 found that Tab cycled through the date editor components without reaching action buttons under the current Mac keyboard settings. Opening the account menu by mouse and using Down/Return selected an account correctly. No global keyboard preference was changed. Full keyboard-only navigation remains unverified.
+
 The build 19 history view was exercised in a separate synthetic preview using its real local archive process. The fixture held 105 allowance observations for one account group and three for another, with separate daily reports and collection checks. It did not contain real account history.
 
 - The first account returned 100 readings, then five on the final page. Next page disabled at the end.

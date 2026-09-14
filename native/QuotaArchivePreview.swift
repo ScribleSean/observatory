@@ -46,7 +46,8 @@ final class QuotaArchivePreview: NSObject, NSApplicationDelegate {
             guard seed.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
             ObservatoryTheme.registerFont()
             NSApp.setActivationPolicy(.regular)
-            let view = NSHostingView(rootView: ArchivePreviewRoot(runtime: root).preferredColorScheme(.dark))
+            let appearance: ColorScheme = CommandLine.arguments.contains("--preview-light") ? .light : .dark
+            let view = NSHostingView(rootView: ArchivePreviewRoot(runtime: root).preferredColorScheme(appearance))
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 660),
                 styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             panel.title = "Observatory · Synthetic history preview"

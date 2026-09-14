@@ -759,7 +759,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
-if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--preview-quota-archive" {
+if Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive"] ||
+   Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive", "--preview-light"] {
     MainActor.assumeIsolated {
         let application = NSApplication.shared
         let delegate = QuotaArchivePreview()
