@@ -10,6 +10,7 @@ on:
       - 'scripts/mac-package.test.mjs'
       - 'scripts/update-appcast.test.mjs'
       - 'scripts/sparkle-interop.test.mjs'
+      - 'scripts/updater-interop.test.mjs'
       - '.github/workflows/update-safety.yml'
   pull_request:
     paths:
@@ -20,6 +21,7 @@ on:
       - 'scripts/mac-package.test.mjs'
       - 'scripts/update-appcast.test.mjs'
       - 'scripts/sparkle-interop.test.mjs'
+      - 'scripts/updater-interop.test.mjs'
       - '.github/workflows/update-safety.yml'
   workflow_dispatch:
 permissions:
@@ -62,3 +64,21 @@ jobs:
           NODE
           tar -xf "$archive" -C "$tool_dir" ./bin/sign_update ./LICENSE
           OBSERVATORY_TEST_SPARKLE_TOOL="$tool_dir/bin/sign_update" node --test scripts/sparkle-interop.test.mjs
+      - name: Verify official WinSparkle signing interoperability
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pin = Get-Content native/windows/updater-tool.json -Raw | ConvertFrom-Json
+          $toolDir = Join-Path ([IO.Path]::GetTempPath()) ('observatory-winsparkle-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $toolDir | Out-Null
+          $archive = Join-Path $toolDir 'WinSparkle.zip'
+          curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 120 --max-filesize 134217728 $pin.url --output $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Official WinSparkle download failed' }
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $pin.sha256) {
+            throw 'Official WinSparkle archive checksum mismatch'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $toolDir
+          $env:OBSERVATORY_TEST_WINSPARKLE_TOOL = Join-Path $toolDir $pin.tool
+          node --test scripts/updater-interop.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'WinSparkle signing interoperability failed' }
