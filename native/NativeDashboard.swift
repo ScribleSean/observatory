@@ -224,6 +224,11 @@ struct NativeDashboard: View {
                 .font(.callout).foregroundStyle(.secondary)
             Text("Newest receipt: \(latest.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown"). Source: \(text((displayedSnapshot?.object["agentSource"] as? JSONObject)?["status"])).")
                 .font(.caption).foregroundStyle(.secondary)
+            if let help = receiptSourceHelp(displayedSnapshot?.object["agentSource"] as? JSONObject) {
+                Label(help, systemImage: "exclamationmark.circle")
+                    .font(.callout).foregroundStyle(ObservatoryTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             DisclosureGroup("Execution details: receipts, benchmarks and tool requests") {
                 NativeAgentUsage(snapshot: displayedSnapshot).padding(.top, 8)
             }

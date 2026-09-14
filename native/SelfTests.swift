@@ -1,6 +1,22 @@
 import Foundation
 
 func runSelfTests() {
+    precondition(receiptSourceHelp(nil) == nil)
+    for status in ["ok", "not-connected"] {
+        precondition(receiptSourceHelp(["status": status, "reason": "access-denied"]) == nil)
+    }
+    let denied = receiptSourceHelp(["status": "unavailable", "reason": "access-denied"])!
+    let timedOut = receiptSourceHelp(["status": "unavailable", "reason": "read-timeout"])!
+    precondition(denied.contains("macOS denied access"))
+    precondition(timedOut.contains("does not prove that access was denied"))
+    precondition(receiptSourceHelp(["status": "unavailable"])!.contains("no recognized failure detail"))
+    precondition(receiptSourceHelp(["status": "partial", "reason": "/PRIVATE/receipt.json"])!.contains("no recognized failure detail"))
+    for reason in ["access-denied", "read-timeout", "directory-missing", "unsafe-directory",
+                   "directory-read-failed", "worker-start-failed", "worker-input-failed", "worker-output-failed",
+                   "worker-invalid-output", "worker-output-limit", "worker-failed", "/PRIVATE/receipt.json"] {
+        let help = receiptSourceHelp(["status": "unavailable", "reason": reason, "error": "PRIVATE"])!
+        precondition(!help.contains("PRIVATE"))
+    }
     var archiveFence = ArchiveRequestFence()
     let firstArchiveRequest = archiveFence.begin()
     precondition(archiveFence.accepts(firstArchiveRequest))
