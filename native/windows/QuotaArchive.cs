@@ -163,19 +163,6 @@ internal sealed class QuotaArchiveWindow : Form
     {
         this.read = read;
         Text = "Saved allowance history"; AccessibleName = Text;
-        foreach (var selector in new[] { account, kind })
-        {
-            selector.DrawMode = DrawMode.OwnerDrawFixed;
-            selector.DrawItem += (_, args) =>
-            {
-                args.DrawBackground();
-                if (args.Index >= 0)
-                    TextRenderer.DrawText(args.Graphics, selector.Items[args.Index]?.ToString(), args.Font ?? selector.Font,
-                        args.Bounds, selector.Enabled ? args.ForeColor : SystemColors.GrayText,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                args.DrawFocusRectangle();
-            };
-        }
         ClientSize = new Size(820, 560); MinimumSize = new Size(700, 460); StartPosition = FormStartPosition.CenterParent;
         from.MinDate = through.MinDate = new DateTime(1970, 1, 2);
         from.MaxDate = through.MaxDate = new DateTime(9998, 12, 31);
