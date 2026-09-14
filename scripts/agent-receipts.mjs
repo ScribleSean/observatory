@@ -28,7 +28,9 @@ export async function readAgentReceipts(directory) {
   let scanned=0,matched=0,skipped=0,bytes=0,limited=false;
   try {
     const info=await lstat(directory);
-    if(!info.isDirectory() || info.isSymbolicLink()) throw Error('Invalid receipt directory');
+    if(!info.isDirectory() || info.isSymbolicLink()) {
+      return {agents:[],source:{status:'unavailable',checkedAt:new Date().toISOString(),skipped,limited,reason:'unsafe-directory'}};
+    }
     const entries=await opendir(directory);
     for await(const entry of entries) {
       if(++scanned>10000){limited=true;break;}
@@ -52,8 +54,12 @@ export async function readAgentReceipts(directory) {
         rows.push({value,modified:before.mtimeMs,name:entry.name});
       } catch {skipped++;} finally {await file?.close();}
     }
-  } catch {
-    return {agents:cleanReceipts(rows),source:{status:rows.length?'partial':'unavailable',checkedAt:new Date().toISOString(),skipped,limited}};
+  } catch(error) {
+    // Emit only fixed diagnostic categories. Never persist OS error messages,
+    // receipt names, configured paths or other private filesystem details.
+    const reason=['EACCES','EPERM'].includes(error?.code)?'access-denied':
+      error?.code==='ENOENT'?'directory-missing':'directory-read-failed';
+    return {agents:cleanReceipts(rows),source:{status:rows.length?'partial':'unavailable',checkedAt:new Date().toISOString(),skipped,limited,reason}};
   }
   return {agents:cleanReceipts(rows),source:{status:skipped||limited?'partial':'ok',checkedAt:new Date().toISOString(),skipped,limited}};
 }

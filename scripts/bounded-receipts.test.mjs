@@ -26,6 +26,7 @@ test('stalled optional worker is killed and resolves unavailable without blockin
     spawnProcess:()=>child=spawn(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
       {stdio:['pipe','pipe','ignore']})});
   assert.equal(result.source.status,'unavailable');assert.deepEqual(result.agents,[]);
+  assert.equal(result.source.reason,'read-timeout');
   assert.ok(Date.now()-started<3000);assert.ok(child.killed);
   // Production intentionally unreferences the stopped worker. The test must
   // keep its handle referenced while independently verifying termination.
@@ -37,8 +38,27 @@ test('stalled optional worker is killed and resolves unavailable without blockin
 test('spawn errors and malformed worker output fail without exposing error text',async()=>{
   const failure=await readBoundedReceipts(tmpdir(),{spawnProcess:()=>{throw Error('PRIVATE');}});
   assert.equal(failure.source.status,'unavailable');
+  assert.equal(failure.source.reason,'worker-start-failed');
   const malformed=await readBoundedReceipts(tmpdir(),{spawnProcess:()=>spawn(process.execPath,
     ['-e',"process.stdin.resume();process.stdin.on('end',()=>process.stdout.write('PRIVATE'))"],{stdio:['pipe','pipe','ignore']})});
   assert.equal(malformed.source.status,'unavailable');assert.ok(!JSON.stringify(malformed).includes('PRIVATE'));
+  assert.equal(malformed.source.reason,'worker-invalid-output');
   assert.throws(()=>readBoundedReceipts('relative'));
+});
+
+test('missing and unsafe directories report fixed categories without private paths',async t=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'observatory-receipt-reasons-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const missing=await readBoundedReceipts(path.join(dir,'PRIVATE-missing'));
+  assert.equal(missing.source.reason,'directory-missing');
+  const file=path.join(dir,'PRIVATE-file');
+  await writeFile(file,'PRIVATE');
+  const unsafe=await readBoundedReceipts(file);
+  assert.equal(unsafe.source.reason,'unsafe-directory');
+  for(const result of [missing,unsafe]) {
+    assert.equal(result.source.status,'unavailable');
+    assert.deepEqual(result.agents,[]);
+    assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+    assert.ok(!JSON.stringify(result).includes(dir));
+  }
 });
