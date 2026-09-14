@@ -78,8 +78,8 @@ and consent remain unchanged.
 
 Storage has an 8 GiB safety ceiling and no automatic historical deletion. Disk
 exhaustion or the ceiling causes a failed transaction, not silent record pruning.
-Native archive browsing, deletion controls, storage-status UI and historical
-sync are still unfinished. The Mac development installation now uses this archive.
+Native archive browsing is being connected in Mac source. Deletion controls and
+historical sync are still unfinished. The Mac development installation now uses this archive.
 The installed Windows app has not yet received this migration.
 Migration is incompatible with older binaries' strict single-table validator.
 Installation must preserve a verified database backup, and rollback must not
@@ -123,7 +123,14 @@ the existing 200-record and 512 KB bounds. Requests use stdin, are limited to
 2 KB and accept only catalogue or page actions. No network route or delete
 action is exposed. Opening a never-enabled source does not initialize storage.
 Existing legacy databases still use the backup-aware migration path when read.
-The native history controls remain to be connected and verified.
+Mac source now connects this process to a saved-history sheet in Allowances.
+It has separate account groups, local-calendar date filters, allowance readings,
+reported daily tokens, collection checks and bounded next-page navigation.
+It displays allocated database bytes and the storage ceiling. Account names are
+not retained, so groups use numbered labels with an explicit current marker.
+The sheet is unavailable for saved snapshots and isolated dashboard previews.
+Native compilation and reply-parser self-tests pass. Packaged interaction and
+visual checks remain pending, and this UI is not installed yet.
 
 Deletion is logical removal from this device. It does not promise secure erasure
 of free database pages, filesystem snapshots, backups or data already shared to

@@ -1,6 +1,14 @@
 import Foundation
 
 func runSelfTests() {
+    let emptyArchive = Data(#"{"version":1,"accounts":[],"next":null,"storageBytes":0,"storageLimitBytes":8589934592}"#.utf8)
+    precondition((try? ArchiveReply.parse(emptyArchive))?.accounts?.count == 0)
+    precondition((try? ArchiveReply.parse(Data(#"{"version":1,"records":[],"next":null}"#.utf8)))?.records?.count == 0)
+    for invalid in [#"{"version":2,"records":[]}"#, #"{"version":1,"records":[],"accounts":[]}"#,
+                    #"{"version":1,"records":[],"next":"raw-account"}"#,
+                    #"{"version":1,"records":[{"checkedAt":"not-a-date"}]}"#] {
+        precondition((try? ArchiveReply.parse(Data(invalid.utf8))) == nil)
+    }
     let tickStart = Date(timeIntervalSince1970: 0)
     let fullDay = (0...24).map { QuotaHourlyPace(hour: tickStart.addingTimeInterval(Double($0) * 3600), percentagePointsPerHour: 1, observedMinutes: 60) }
     precondition(quotaHourlyTickStride(fullDay) == 6)

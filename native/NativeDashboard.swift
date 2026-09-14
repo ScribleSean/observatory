@@ -18,6 +18,7 @@ struct NativeDashboard: View {
     @State private var period = "day"
     @State private var archivedSnapshot: Snapshot?
     @State private var archiveError = false
+    @State private var quotaHistoryOpen = false
     @AppStorage("observatoryAppearance") private var appearance = "dark"
     private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
     private let sections = [("allowances", "Allowances", "gauge.with.dots.needle.50percent"),
@@ -72,6 +73,10 @@ struct NativeDashboard: View {
                             Text("Return to live data to change settings. Archived settings cannot be applied from this view.")
                         }
                     } else if selection.section == "allowances" {
+                        if archivedSnapshot == nil && !settingsActions.preview {
+                            Button("Browse saved allowance history") { quotaHistoryOpen = true }
+                                .disabled(store.shuttingDown || store.pairingMaintenance)
+                        }
                         Text("Observed on this Mac").font(ObservatoryTheme.font(19, weight: .semibold)).tracking(0.6)
                         if let quota = displayedSnapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
                             let windows = visibleQuotaWindows(quota["windows"])
@@ -116,6 +121,7 @@ struct NativeDashboard: View {
         .groupBoxStyle(ObservatoryGroupBoxStyle()).buttonStyle(ObservatoryButtonStyle())
         .preferredColorScheme(appearance == "dark" ? .dark : .light)
         .onChange(of: host) { selectedDate = "" }
+        .sheet(isPresented: $quotaHistoryOpen) { NativeQuotaArchive(runtime: store.runtime) }
         .onChange(of: selection.section) { selectedDate = "" }
         .alert("Snapshot could not be opened", isPresented: $archiveError) {
             Button("OK", role: .cancel) {}
