@@ -2,7 +2,8 @@ import SwiftUI
 
 struct ObservatoryPanel: View {
     @ObservedObject var store: ObservatoryStore
-    @State private var host = "Mac"
+    @State private var host = "All"
+    @State private var period = "all"
     let open: (String) -> Void
     let settings: () -> Void
     var panelWidth: CGFloat = 370
@@ -44,28 +45,31 @@ struct ObservatoryPanel: View {
                 }
                 Picker("Source host", selection: $host) {
                     ForEach(["All", "Mac", "Windows", "Ubuntu"], id: \.self) { Text($0).tag($0) }
-                }.pickerStyle(.segmented)
+                }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Source host")
+                Picker("Period", selection: $period) {
+                    Text("Today").tag("day")
+                    Text("Week").tag("week")
+                    Text("All time").tag("all")
+                }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Period")
 
                 VStack(spacing: 0) {
-                    let activity = snapshot.latest("activity", host: host)
+                    let activity = summary(snapshot, kind: "activity")
                     stat("Active time", icon: "waveform.path", value: minutes(number(activity?["seconds"])),
-                         date: text(activity?["date"], fallback: "No retained records") + (host == "All" ? " · Mac + Windows" : ""), target: "activity")
+                         date: rangeDescription(activity), target: "activity")
                     Divider().opacity(0.35).padding(.leading, 39)
-                    let tokens = snapshot.latest("tokens", host: host)
+                    let tokens = summary(snapshot, kind: "tokens")
                     stat("Tokens", icon: "square.stack.3d.up", value: formatted(number(tokens?["totalTokens"]), compact: true),
-                         date: text(tokens?["date"], fallback: host == "All" ? "Combined total unavailable" : "No retained records"), target: "tokens")
-                    if !compact {
+                         date: rangeDescription(tokens), target: "tokens")
                     Divider().opacity(0.35).padding(.leading, 39)
-                    let wispr = snapshot.latest("dictation", host: host, source: "Wispr Flow")
-                    let covered = number(wispr?["audioRecords"]) ?? 0
-                    let partial = covered < (number(wispr?["transcriptions"]) ?? 0)
+                    let voiceDays = selectedDays(snapshot.days("dictation", host: host, source: "Wispr Flow"))
+                    let covered = recordedSum(voiceDays, field: "audioRecords") ?? 0
+                    let partial = covered < (recordedSum(voiceDays, field: "transcriptions") ?? 0)
                     if host == "All" {
-                        stat("Wispr audio", icon: "waveform", value: "By device",
+                        stat("Voice", icon: "waveform", value: "By device",
                              date: "Synced records can overlap", target: "dictation")
                     } else {
-                        stat("Wispr audio", icon: "waveform", value: covered > 0 ? minutes(number(wispr?["audioSeconds"])) : "Unknown",
-                             date: text(wispr?["date"], fallback: "No retained records") + (partial ? " · partial" : ""), target: "dictation")
-                    }
+                        stat("Voice", icon: "waveform", value: covered > 0 ? minutes(recordedSum(voiceDays, field: "audioSeconds")) : "Unknown",
+                             date: "Wispr Flow" + (partial ? " · partial coverage" : " · saved audio"), target: "dictation")
                     }
                 }
                 if host == "All" {
@@ -94,13 +98,30 @@ struct ObservatoryPanel: View {
                         .font(.system(size: 13, weight: .medium)).padding(.horizontal, 13).padding(.vertical, 11)
                         .foregroundStyle(accent)
                         .modifier(ObservatoryGlassControl())
-                }.buttonStyle(.plain)
+                }.buttonStyle(ObservatoryPopupButtonStyle())
                 Button(action: settings) { Image(systemName: "gearshape").frame(width: 34, height: 36) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Observatory settings")
             }
         }
         .padding(14).frame(width: panelWidth)
         .preferredColorScheme(.dark)
+    }
+
+    private func selectedDays(_ days: [JSONObject]) -> [JSONObject] {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return nativePeriodDays(days, period: period, anchor: formatter.string(from: Date()))
+    }
+
+    private func summary(_ snapshot: Snapshot, kind: String) -> JSONObject? {
+        nativePeriodSummary(selectedDays(snapshot.recordedDays(kind, host: host)), kind: kind)
+    }
+
+    private func rangeDescription(_ record: JSONObject?) -> String {
+        guard record != nil else { return "No retained records in this range" }
+        return period == "all" ? "All retained history" : period == "week" ? "Last 7 calendar days" : "Today"
     }
 
     private func minutes(_ seconds: Double?) -> String {
@@ -140,5 +161,27 @@ struct ObservatoryPanel: View {
             Text(remaining.map { "\(formatted($0))%" } ?? "Unknown").font(.system(size: 17, weight: .medium, design: .rounded))
         }
         .help(parseDate(window["resetsAt"]).map { "Resets \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Reset time unknown")
+    }
+}
+
+struct ObservatoryPopupButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Feedback(label: configuration.label, pressed: configuration.isPressed)
+    }
+
+    private struct Feedback<Label: View>: View {
+        let label: Label
+        let pressed: Bool
+        @State private var hovered = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        var body: some View {
+            label
+                .brightness(pressed ? -0.08 : hovered ? 0.07 : 0)
+                .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
+                .shadow(color: .black.opacity(pressed ? 0.04 : 0.18), radius: pressed ? 2 : 6, y: pressed ? 1 : 3)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: pressed)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovered)
+                .onHover { hovered = $0 }
+        }
     }
 }

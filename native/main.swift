@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         ObservatoryTheme.registerFont()
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
         let runtime: URL
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
         let popupTest = CommandLine.arguments.contains("--test-popup") || CommandLine.arguments.contains("--preview-pace")
@@ -62,7 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             button.action = #selector(togglePanel)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        popover.behavior = .transient
+        // A regular app may bring its dashboard forward during activation.
+        // Keep the popup open across that same-app window transition.
+        popover.behavior = .semitransient
         // Keep visibility state synchronous with fallback and dashboard handoff.
         // An opening animation can otherwise outlive a close request.
         popover.animates = false
@@ -117,6 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         items.addItem(withTitle: "Disconnect paired device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
         items.addItem(withTitle: "Prepare pairing repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
         items.addItem(.separator())
+        items.addItem(withTitle: "Hide Observatory", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = items.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        items.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        items.addItem(.separator())
         items.addItem(withTitle: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         application.submenu = items
         menu.addItem(application)
@@ -153,9 +160,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func usageContent(size: NSSize) -> NSViewController {
-        let panel = ObservatoryPanel(store: store,
+        let panel = ScrollView(.vertical) { ObservatoryPanel(store: store,
                 open: { [weak self] tab in self?.openDashboard(tab) },
-                settings: { [weak self] in self?.showMenu() }, panelWidth: size.width, compact: size.height < 560)
+                settings: { [weak self] in self?.showMenu() }, panelWidth: size.width) }
         .frame(width: size.width, height: size.height, alignment: .top)
         .background(ObservatoryBackdrop())
         .preferredColorScheme(.dark)
@@ -200,7 +207,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return }
         guard let button = statusItem.button else { return }
         let visible = button.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let size = NSSize(width: min(370, max(240, visible.width - 32)), height: min(580, max(240, visible.height - 48)))
+        let width = min(370, max(240, visible.width - 32))
+        let measurement = NSHostingView(rootView: ObservatoryPanel(store: store, open: { _ in }, settings: {}, panelWidth: width))
+        let size = NSSize(width: width, height: min(ceil(measurement.fittingSize.height), max(240, visible.height - 48)))
         // A hidden or overflowed menu-bar item cannot anchor an NSPopover.
         // Keep the same usage view available to the explicit menu/keyboard action.
         if button.visibleRect.isEmpty || button.window?.isVisible != true {
@@ -215,10 +224,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         unreliableUsageAnchor = nil
-        if popover.contentViewController == nil || size != panelSize {
-            panelSize = size
-            popover.contentViewController = usageContent(size: size)
-        }
+        // Every opening starts at all sources and all retained history.
+        panelSize = size
+        popover.contentViewController = usageContent(size: size)
         popover.contentSize = size
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         if popover.isShown {
@@ -743,9 +751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return .terminateLater
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return true }
-        if popover.isShown { return true }
-        openDashboard("allowances")
+        openDashboard(nativeSelection.section)
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {

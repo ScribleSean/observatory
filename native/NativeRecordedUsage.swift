@@ -70,22 +70,22 @@ struct NativeDictation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Your voice usage over time, by tool and device.").foregroundStyle(.secondary)
-            Picker("Tool", selection: $provider) {
+            ObservatoryFilterRow(title: "Tool") { Picker("Tool", selection: $provider) {
                 ForEach(["All tools", "Wispr Flow", "ChatGPT"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented).onChange(of: provider) { anchor = "" }
-            Picker("Device", selection: $host) {
+            }.pickerStyle(.segmented).onChange(of: provider) { anchor = "" } }
+            ObservatoryFilterRow(title: "Device") { Picker("Device", selection: $host) {
                 ForEach(["All devices", "Mac", "Windows"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented).onChange(of: host) { anchor = "" }
-            Picker("Period", selection: $period) {
+            }.pickerStyle(.segmented).onChange(of: host) { anchor = "" } }
+            ObservatoryFilterRow(title: "Period") { Picker("Period", selection: $period) {
                 Text("Day").tag("day")
                 Text("Week").tag("week")
                 Text("All retained").tag("all")
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented) }
             if period != "all" && !dates.isEmpty {
-                Picker(period == "week" ? "Week ending" : "Recorded day",
+                ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") { Picker(period == "week" ? "Week ending" : "Recorded day",
                     selection: Binding(get: { end }, set: { anchor = $0 })) {
                     ForEach(dates, id: \.self) { Text($0).tag($0) }
-                }
+                } }
             }
             LabeledContent("All voice time", value: "Unknown")
             Text("Complete coverage is not established.").font(.callout).foregroundStyle(.secondary)

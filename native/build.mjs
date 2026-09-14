@@ -72,7 +72,7 @@ writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UT
 <key>CFBundleShortVersionString</key><string>${release.version}</string>
 <key>CFBundleVersion</key><string>${release.buildNumber}</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
-<key>LSUIElement</key><true/>
+<key>LSUIElement</key><false/>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>\n`);
 // Remove Finder metadata only from this generated bundle before local signing.

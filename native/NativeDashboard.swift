@@ -154,14 +154,21 @@ struct NativeDashboard: View {
         let selected = nativePeriodDays(days, period: period, anchor: anchor)
         let chosen = nativePeriodSummary(selected, kind: key)
         return VStack(alignment: .leading, spacing: 18) {
-            Picker("Device", selection: $host) {
+            ObservatoryFilterRow(title: "Device") { Picker("Device", selection: $host) {
                 ForEach(["All", "Mac", "Windows", "Ubuntu"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented)
-            Picker("Period", selection: $period) {
+            }.pickerStyle(.segmented) }
+            ObservatoryFilterRow(title: "Period") { Picker("Period", selection: $period) {
                 Text("Day").tag("day")
                 Text("Week").tag("week")
                 Text("All retained").tag("all")
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented) }
+            if period != "all", !days.isEmpty {
+                ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") {
+                    Picker("Recorded date", selection: Binding(get: { anchor }, set: { selectedDate = $0 })) {
+                        ForEach(Array(days.enumerated()), id: \.offset) { _, day in Text(text(day["date"])).tag(text(day["date"])) }
+                    }
+                }
+            }
             if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
                 Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
                     .font(.callout).foregroundStyle(.secondary)
@@ -184,9 +191,6 @@ struct NativeDashboard: View {
                     Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : "\(formatted(number(chosen?[field]).map { $0 / 60 })) min")
                         .font(.system(size: 38, weight: .semibold, design: .rounded)).monospacedDigit()
                     Spacer()
-                    Picker(period == "week" ? "Week ending" : "Recorded day", selection: Binding(get: { anchor }, set: { selectedDate = $0 })) {
-                        ForEach(Array(days.enumerated()), id: \.offset) { _, day in Text(text(day["date"])).tag(text(day["date"])) }
-                    }.frame(maxWidth: 210).disabled(period == "all")
                 }
                 Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])), \(selected.count) recorded dates. Missing dates are not filled with zeros.")
                     .font(.callout).foregroundStyle(.secondary)

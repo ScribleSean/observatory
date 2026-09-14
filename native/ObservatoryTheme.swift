@@ -1,6 +1,19 @@
 import SwiftUI
 import CoreText
 
+// One label column keeps native segmented controls aligned across dashboards.
+struct ObservatoryFilterRow<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title).frame(width: 108, alignment: .leading)
+            content.labelsHidden().accessibilityLabel(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxWidth: 680, alignment: .leading)
+    }
+}
+
 // Keep these values aligned with app/observatory.css and docs/BRAND.md.
 enum ObservatoryTheme {
     static func color(_ light: UInt32, _ dark: UInt32) -> Color {
