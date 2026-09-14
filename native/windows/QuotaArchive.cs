@@ -274,6 +274,53 @@ internal sealed class QuotaArchiveWindow : Form
         window.LoadPage(false).GetAwaiter().GetResult();
         if (calls.Count != 3 || window.load.Enabled) throw new Exception("Invalid archive dates performed a read.");
     }
+    internal static void DesktopTest(string output)
+    {
+        var mode = "ready"; var cancelled = false;
+        Task? pending = null; Exception? failure = null;
+        using var window = new QuotaArchiveWindow(async (request, token) =>
+        {
+            if (mode == "failed") throw new IOException("Synthetic read failure");
+            if (mode == "pending")
+            {
+                using var registration = token.Register(() => cancelled = true);
+                await Task.Delay(Timeout.Infinite, token);
+            }
+            return request["action"]!.GetValue<string>() == "accounts"
+                ? new JsonObject { ["version"] = 1, ["accounts"] = new JsonArray(new JsonObject { ["scope"] = new string('a', 64), ["current"] = true }) }
+                : new JsonObject { ["version"] = 1, ["records"] = new JsonArray(new JsonObject { ["checkedAt"] = "2026-09-14T12:00:00Z",
+                    ["windows"] = new JsonArray(new JsonObject { ["bucket"] = "codex", ["window"] = "weekly", ["remainingPercent"] = 42 }) }) };
+        });
+        window.Shown += async (_, _) =>
+        {
+            try
+            {
+                await window.LoadPage(false);
+                if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
+                foreach (var size in new[] { new Size(820, 560), new Size(700, 460) })
+                {
+                    window.ClientSize = size; window.PerformLayout();
+                    using var bitmap = new Bitmap(window.Width, window.Height);
+                    window.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+                    bitmap.Save(Path.Combine(output, $"archive-{size.Width}.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+                mode = "failed"; await window.LoadPage(false);
+                if (!window.load.Enabled || !window.status.Text.Contains("No history was deleted")) throw new Exception("Archive error recovery failed.");
+                mode = "pending"; pending = window.LoadPage(false);
+                if (window.load.Enabled || window.account.Enabled) throw new Exception("Pending archive controls remained active.");
+                window.Close();
+                if (!cancelled) throw new Exception("Closing archive did not cancel the read.");
+            }
+            catch (Exception error) { failure = error; }
+            finally { window.Close(); }
+        };
+        Application.Run(window);
+        var watch = Stopwatch.StartNew();
+        while (pending is { IsCompleted: false } && watch.Elapsed < TimeSpan.FromSeconds(2)) { Application.DoEvents(); Thread.Sleep(10); }
+        if (failure is not null) throw failure;
+        if (pending is null || !pending.IsCompletedSuccessfully) throw new Exception("Closed archive read did not drain.");
+        File.WriteAllText(Path.Combine(output, "archive-result.txt"), "Synthetic archive layout, error recovery, pending controls and close cancellation passed.");
+    }
     protected override void Dispose(bool disposing)
     {
         var release = disposing && !released;

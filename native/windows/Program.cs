@@ -83,6 +83,15 @@ internal static class Program
             return;
         }
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && args[0] == "--test-archive-window")
+        {
+            if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
+                File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint) || Directory.EnumerateFileSystemEntries(args[1]).Any())
+            { Environment.ExitCode = 1; return; }
+            try { QuotaArchiveWindow.DesktopTest(args[1]); }
+            catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 2 && args[0] == "--test-native-dashboard")
         {
             if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
