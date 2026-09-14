@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace WorkspaceObservatory;
 
@@ -69,6 +71,46 @@ internal static class QuotaArchive
             (value["accounts"] is JsonArray accounts && accounts.Count > 100) ||
             (value["records"] is JsonArray records && records.Count > 200))
             throw new InvalidOperationException("Invalid archive response.");
+        static bool Integer(JsonNode? node, long maximum = 9007199254740991) =>
+            node is JsonValue item && item.TryGetValue<long>(out var number) && number >= 0 && number <= maximum;
+        static bool Scope(JsonNode? node) => node is JsonValue item && item.TryGetValue<string>(out var scope) && Regex.IsMatch(scope, "^[a-f0-9]{64}$");
+        static bool Stamp(JsonNode? node) => node is JsonValue item && item.TryGetValue<string>(out var stamp) &&
+            DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) && date >= DateTimeOffset.UnixEpoch;
+        static void Require(bool condition) { if (!condition) throw new InvalidOperationException("Invalid archive response."); }
+        if (value["accounts"] is JsonArray catalogue)
+        {
+            Require(Integer(value["storageBytes"]) && value["storageLimitBytes"]?.GetValue<long>() == 8589934592L);
+            var scopes = new HashSet<string>();
+            foreach (var item in catalogue)
+            {
+                Require(item is JsonObject && Scope(item["scope"]) && Integer(item["records"]) && item["records"]!.GetValue<long>() > 0 &&
+                    Integer(item["firstAt"], 8640000000000000) && Integer(item["lastAt"], 8640000000000000) &&
+                    item["lastAt"]!.GetValue<long>() >= item["firstAt"]!.GetValue<long>() &&
+                    item["current"] is JsonValue current && current.TryGetValue<bool>(out _) && scopes.Add(item["scope"]!.GetValue<string>()));
+            }
+            Require(value["next"] is null || (Scope(value["next"]) && catalogue.Count > 0 && JsonNode.DeepEquals(value["next"], catalogue[^1]?["scope"])));
+        }
+        if (value["records"] is JsonArray readings)
+        {
+            foreach (var item in readings)
+            {
+                Require(item is JsonObject && Stamp(item["checkedAt"]));
+                if (item!["windows"] is JsonArray windows)
+                {
+                    Require(windows.Count is > 0 and <= 32 && item["tokens"] is null && item["status"] is null);
+                    foreach (var window in windows)
+                        Require(window is JsonObject && Regex.IsMatch(Snapshot.Text(window["bucket"], ""), "^[a-zA-Z0-9_-]{1,80}$") &&
+                            Snapshot.Text(window["window"]) is "primary" or "secondary" &&
+                            Snapshot.Number(window["remainingPercent"]) is double percent && double.IsFinite(percent) && percent >= 0 && percent <= 100);
+                }
+                else if (item["tokens"] is not null)
+                    Require(Integer(item["tokens"]) && item["status"] is null && DateOnly.TryParseExact(Snapshot.Text(item["startDate"]),
+                        "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _));
+                else Require(Snapshot.Text(item["status"]) is "ok" or "unavailable" or "needs-auth" or "unsupported" or "rate-limited");
+            }
+            if (value["next"] is JsonNode cursor)
+                Require(cursor is JsonObject page && page.Count == 2 && Integer(page["at"], 8640000000000000) && Integer(page["id"]) && page["id"]!.GetValue<long>() > 0 && readings.Count > 0);
+        }
         return value;
     }
 
@@ -124,13 +166,19 @@ internal static class QuotaArchive
 
     internal static void SelfTest()
     {
-        Parse("{\"version\":1,\"accounts\":[],\"next\":null}");
+        Parse("{\"version\":1,\"accounts\":[],\"next\":null,\"storageBytes\":0,\"storageLimitBytes\":8589934592}");
         Parse("{\"version\":1,\"records\":[],\"next\":null}");
         if (QuotaArchiveWindow.ReadingText(JsonNode.Parse("{\"windows\":[{\"bucket\":\"codex\",\"window\":\"weekly\",\"remainingPercent\":42}]}")) != "codex weekly: 42% remaining")
             throw new Exception("Archive percentage formatting failed.");
         if (QuotaArchiveWindow.ReadingText(JsonNode.Parse("{\"tokens\":123,\"startDate\":\"2026-09-14\"}")) != "2026-09-14: 123 reported tokens")
             throw new Exception("Archive token formatting failed.");
-        foreach (var invalid in new[] { "{}", "{\"version\":2,\"records\":[]}", "{\"version\":1,\"accounts\":[],\"records\":[]}" })
+        foreach (var invalid in new[] { "{}", "{\"version\":2,\"records\":[]}", "{\"version\":1,\"accounts\":[],\"records\":[]}",
+            "{\"version\":1,\"records\":[null]}",
+            "{\"version\":1,\"records\":[{\"checkedAt\":\"bad\",\"status\":\"ok\"}]}",
+            "{\"version\":1,\"records\":[],\"next\":{\"at\":0,\"id\":0}}",
+            "{\"version\":1,\"accounts\":[],\"next\":\"not-a-scope\",\"storageBytes\":0,\"storageLimitBytes\":8589934592}",
+            "{\"version\":1,\"records\":[{\"checkedAt\":\"2026-09-14T00:00:00Z\",\"tokens\":-1,\"startDate\":\"2026-09-14\"}]}",
+            "{\"version\":1,\"records\":[{\"checkedAt\":\"2026-09-14T00:00:00Z\",\"windows\":[{\"bucket\":\"codex\",\"window\":\"primary\",\"remainingPercent\":101}]}]}" })
         {
             var rejected = false;
             try { Parse(invalid); } catch { rejected = true; }
