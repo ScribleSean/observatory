@@ -21,6 +21,6 @@ The full build passed native self-tests, the bundled archive process test, sync-
 
 Packaging verified the full file manifest and nested signatures. ZIP extraction repeated bundled application checks, including the archive process test. DMG integrity and read-only mounted-content verification passed, and the test mount was detached. Independent artifact hashes were checked again against the retained receipts.
 
-The archive sheet's visual and interactive verification is still pending. Build tests do not establish keyboard behavior, layout quality, clean-machine installation, actual login or sleep/wake. Neither development installation was replaced by this candidate.
+Selected archive-sheet interactions and the dark layout were subsequently checked using synthetic records. See [UI verification](UI-VERIFICATION.md) for results and unresolved SwiftUI warnings. Full keyboard/accessibility behavior, clean-machine installation, actual login and sleep/wake remain unverified. Neither development installation was replaced by this candidate.
 
 Windows has no 0.3.10 installer candidate yet. Its [0.3.9 installer evidence](RELEASE-0.3.9.md#windows-039-candidate) is separate from source synchronization. See the [release checklist](RELEASE-CHECKLIST.md) for the remaining gates.

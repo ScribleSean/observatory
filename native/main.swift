@@ -759,7 +759,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
-if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-style" {
+if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--preview-quota-archive" {
+    MainActor.assumeIsolated {
+        let application = NSApplication.shared
+        let delegate = QuotaArchivePreview()
+        application.delegate = delegate
+        withExtendedLifetime(delegate) { application.run() }
+    }
+} else if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-style" {
     MainActor.assumeIsolated {
         NSApplication.shared.setActivationPolicy(.prohibited)
         ObservatoryTheme.registerFont()

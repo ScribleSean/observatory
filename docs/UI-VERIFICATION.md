@@ -2,6 +2,20 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Mac saved allowance history, September 14
+
+The build 19 history view was exercised in a separate synthetic preview using its real local archive process. The fixture held 105 allowance observations for one account group and three for another, with separate daily reports and collection checks. It did not contain real account history.
+
+- The first account returned 100 readings, then five on the final page. Next page disabled at the end.
+- Changing account or record kind cleared old rows and required a fresh load. The second account showed only its three daily reports.
+- A date range without observations displayed an explicit missing-data message, not zero usage. Reversed dates disabled Load history. A same-day range returned the three expected collection checks.
+- First accounts reset selection and rows. Done dismissed the sheet. The preview process exited and removed its synthetic runtime.
+- The dark sheet fit the tested 760-point-wide viewport, with scrolling confined to the record list and the controls and explanatory footer visible.
+
+SwiftUI emitted AttributeGraph cycle warnings during the interaction session. The observed controls still completed their actions, but the cause remains unresolved. Light mode, larger text, full keyboard/screen-reader behavior and additional window sizes have not been verified.
+
+The UI inspection tool reopened the temporary app without preview arguments after its exit. That exact temporary process was gracefully stopped, and the installed process was independently confirmed still running. No installed bundle was replaced. Do not treat this session as proof that no live collection occurred during the brief unintended normal launch.
+
 ## Mac allowance accessibility follow-up, September 13
 
 The installed 0.3.8 dashboard exposed the saved pace estimate and reset comparison through its accessibility tree. However, combining the entire allowance card into one accessibility element merged the remaining-allowance progress value with the separate time-coverage label. These percentages measure different things.

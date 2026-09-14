@@ -135,7 +135,9 @@ readings, daily reports, collection checks and rejection of a delete request.
 Native runtime paths and script entry points resolve macOS path aliases without
 relaxing private-store path checks. This test is required by build and ZIP checks.
 First-account navigation and saved date ranges help identify account groups.
-Interactive and visual checks remain pending, and this UI is not installed yet.
+Selected synthetic interactions and the dark layout now pass, with explicit
+limits and unresolved SwiftUI warnings in [UI verification](UI-VERIFICATION.md).
+This UI is not installed yet.
 
 Deletion is logical removal from this device. It does not promise secure erasure
 of free database pages, filesystem snapshots, backups or data already shared to
