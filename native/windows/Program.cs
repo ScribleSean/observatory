@@ -48,6 +48,7 @@ internal static class Program
                 Collector.ShutdownSelfTest();
                 PowerResumeWindow.SelfTest();
                 TailscaleReadiness.SelfTest();
+                QuotaArchive.SelfTest();
                 DeviceIdentity.SelfTest();
                 TlsSetupReply.SelfTest();
                 if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
@@ -317,7 +318,8 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
         if (dashboard is NativeDashboard existing) { existing.ShowSourceSettings(); return; }
         using var settings = new NativeDashboard(Data, collector.Refresh,
-            new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions());
+            new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
+            (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation));
         settings.ShowSourceSettings();
         settings.ShowDialog();
     }
@@ -364,7 +366,8 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (dashboard is null || dashboard.IsDisposed)
         {
             dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
-                new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions()) : new Dashboard(runtime);
+                new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
+                (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation)) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         dashboard.Show();

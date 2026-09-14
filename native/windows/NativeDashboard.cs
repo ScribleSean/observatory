@@ -14,10 +14,13 @@ internal sealed partial class NativeDashboard : Form
     private string host = "Windows", period = "Day", anchor = "";
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
+    private readonly Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive;
 
-    internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null)
+    internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null,
+        Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive = null)
     {
         this.read = read; this.refresh = refresh;
+        this.readArchive = readArchive;
         this.sourceSettings = sourceSettings;
         this.deviceSettings = deviceSettings;
         Text = "Observatory"; AccessibleName = Text;
@@ -146,6 +149,12 @@ internal sealed partial class NativeDashboard : Form
     }
     private void Allowances(JsonObject? snapshot)
     {
+        if (readArchive is not null)
+        {
+            var history = new Button { Text = "Browse saved allowance history", AutoSize = true };
+            history.Click += (_, _) => { using var window = new QuotaArchiveWindow(readArchive); window.ShowDialog(this); };
+            body.Controls.Add(history);
+        }
         Label("Observed on this device");
         AccountAllowance(snapshot?["quota"] as JsonObject);
         if (snapshot?["peerQuota"] is JsonObject peer && Snapshot.Text(peer["host"]) is "Mac" or "Windows")
