@@ -168,4 +168,6 @@ Development source now queues a full refresh after Windows reports [automatic re
 
 Native compilation and synthetic notification, disposal, pending-work and shutdown checks passed on Windows for source `44ebf5c`. This change is not in the installed 0.3.8 build 14. No real suspend or logout was performed during verification.
 
+Development source adds **Browse saved allowance history** to Allowances. The owner-local window selects a saved account, date range and record type, then reads pages of observations, daily token reports or collection results. It reuses the shared archive reader, does not start collection or sharing, and does not expose history through web or peer routes. Filters invalidate the previous page, invalid date ranges cannot load, and closing the window cancels its bounded helper. This source change still needs packaged bridge and installed-window verification. It does not provide cross-device archive exchange or a Windows installer update.
+
 Remaining work includes native accessibility and feature-parity review, provider account management, unified account history, final public-release checks, clean-environment checks, login and sleep/wake testing, CPU and memory measurements, and completion of the consumer pairing flow. Do not publish local snapshots or build caches as release artifacts.
