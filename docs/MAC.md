@@ -10,6 +10,8 @@ Normal launch opens the native dashboard after setup. Closing the window leaves 
 
 The main window includes activity and token day/week/all-retained views, allowance graphs, dictation, agent and tool records, source health and Settings. Provider account additions and unified allowance history remain unfinished. The explicit `--legacy-dashboard` executable argument selects the older WebKit dashboard as a fallback.
 
+The native View menu provides Command-1 through Command-6 for Allowances, Activity, Tokens, Dictation, Sources and Settings, in sidebar order. A checkmark identifies the visible section. These commands reuse the main window or reopen it when closed. They do not enable sources or change collection settings.
+
 ### Legacy dashboard enlargement
 
 With the legacy dashboard open, use **View > Zoom In**, **Zoom Out**, **Actual Size**, or **200%**. The keyboard shortcuts are Command-equals (or Command-plus), Command-minus, and Command-zero. Zoom is bounded from 75% to 200%. The menu disables further changes at either limit. These web-only controls are disabled for the native dashboard.

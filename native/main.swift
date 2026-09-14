@@ -152,6 +152,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         viewMenu.addItem(withTitle: "Show Usage Popup", action: #selector(showUsage), keyEquivalent: "u").target = self
         viewMenu.addItem(withTitle: "Refresh Sources", action: #selector(refresh), keyEquivalent: "r").target = self
         viewMenu.addItem(.separator())
+        if usesNativeDashboard {
+            for (index, section) in NativeDashboardSelection.sections.enumerated() {
+                let item = viewMenu.addItem(withTitle: section.1, action: #selector(navigateSection(_:)), keyEquivalent: String(index + 1))
+                item.target = self
+                item.representedObject = section.0
+            }
+            viewMenu.addItem(.separator())
+        }
         viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "=").target = self
         viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-").target = self
         viewMenu.addItem(withTitle: "Actual Size", action: #selector(actualSize), keyEquivalent: "0").target = self
@@ -530,6 +538,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func openDefault() { openDashboard("allowances") }
 
+    @objc private func navigateSection(_ sender: NSMenuItem) {
+        guard !store.shuttingDown, usesNativeDashboard,
+              let section = sender.representedObject as? String,
+              NativeDashboardSelection.sections.contains(where: { $0.0 == section }) else { return }
+        openDashboard(section)
+    }
+
     @objc private func zoomIn() {
         guard let webView else { return }
         webView.pageZoom = CGFloat(DashboardZoom.step(from: Double(webView.pageZoom), increasing: true))
@@ -545,6 +560,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if store.shuttingDown { return false }
         let zoom = webView?.pageZoom
         switch item.action {
+        case #selector(navigateSection(_:)):
+            guard usesNativeDashboard, let section = item.representedObject as? String,
+                  NativeDashboardSelection.sections.contains(where: { $0.0 == section }) else { return false }
+            item.state = detail?.isVisible == true && nativeSelection.section == section ? .on : .off
+            return true
         case #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
              #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil
         case #selector(zoomIn): return zoom.map { $0 < 2 } ?? false
@@ -647,6 +667,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         if usesNativeDashboard {
             let activityWindow = detail
+            let sectionItems = menus[3].items.filter { $0.action == #selector(navigateSection(_:)) }
+            precondition(sectionItems.map(\.title) == NativeDashboardSelection.sections.map(\.1))
+            precondition(sectionItems.map(\.keyEquivalent) == ["1", "2", "3", "4", "5", "6"])
+            for item in sectionItems {
+                precondition(item.keyEquivalentModifierMask == .command && validateMenuItem(item))
+                precondition(NSApp.sendAction(item.action!, to: item.target, from: item))
+                precondition(detail === activityWindow && nativeSelection.section == item.representedObject as? String)
+                precondition(validateMenuItem(item) && item.state == .on)
+                for other in sectionItems where other !== item {
+                    precondition(validateMenuItem(other) && other.state == .off)
+                }
+            }
+            let invalid = NSMenuItem(title: "Invalid", action: #selector(navigateSection(_:)), keyEquivalent: "")
+            invalid.representedObject = "unrecognized"
+            precondition(!validateMenuItem(invalid))
+            navigateSection(invalid)
+            precondition(nativeSelection.section == "settings")
             sourceSettings()
             precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
             openDashboard("tokens")

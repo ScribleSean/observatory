@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class NativeDashboardSelection: ObservableObject {
+    static let sections = [("allowances", "Allowances", "gauge.with.dots.needle.50percent"),
+                           ("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
+                           ("dictation", "Dictation", "mic"),
+                           ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
     @Published var section = "allowances"
 }
 
@@ -21,10 +25,7 @@ struct NativeDashboard: View {
     @State private var quotaHistoryOpen = false
     @AppStorage("observatoryAppearance") private var appearance = "dark"
     private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
-    private let sections = [("allowances", "Allowances", "gauge.with.dots.needle.50percent"),
-                            ("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
-                            ("dictation", "Dictation", "mic"),
-                            ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
+    private let sections = NativeDashboardSelection.sections
 
     var body: some View {
         HStack(spacing: 0) {
