@@ -163,14 +163,27 @@ internal sealed class QuotaArchiveWindow : Form
     {
         this.read = read;
         Text = "Saved allowance history"; AccessibleName = Text;
+        foreach (var selector in new[] { account, kind })
+        {
+            selector.DrawMode = DrawMode.OwnerDrawFixed;
+            selector.DrawItem += (_, args) =>
+            {
+                args.DrawBackground();
+                if (args.Index >= 0)
+                    TextRenderer.DrawText(args.Graphics, selector.Items[args.Index]?.ToString(), args.Font ?? selector.Font,
+                        args.Bounds, selector.Enabled ? args.ForeColor : SystemColors.GrayText,
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                args.DrawFocusRectangle();
+            };
+        }
         ClientSize = new Size(820, 560); MinimumSize = new Size(700, 460); StartPosition = FormStartPosition.CenterParent;
         from.MinDate = through.MinDate = new DateTime(1970, 1, 2);
         from.MaxDate = through.MaxDate = new DateTime(9998, 12, 31);
         var filters = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(12), WrapContents = true };
         kind.Items.AddRange(["Observations", "Daily tokens", "Collection results"]); kind.SelectedIndex = 0;
         var done = new Button { Text = "Done", AutoSize = true, DialogResult = DialogResult.Cancel };
-        filters.Controls.AddRange([account, more, new Label { Text = "From", AutoSize = true }, from,
-            new Label { Text = "Through", AutoSize = true }, through, kind, load, next, done]);
+        filters.Controls.AddRange([new Label { Text = "Account", AutoSize = true }, account, more, new Label { Text = "From", AutoSize = true }, from,
+            new Label { Text = "Through", AutoSize = true }, through, new Label { Text = "Record type", AutoSize = true }, kind, load, next, done]);
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(12) };
         footer.Controls.Add(status);
         Controls.Add(rows); Controls.Add(filters); Controls.Add(footer);
