@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <Version>0.3.12</Version>
-    <ObservatoryBuildNumber>21</ObservatoryBuildNumber>
+    <ObservatoryBuildNumber>22</ObservatoryBuildNumber>
     <FileVersion>$(Version).$(ObservatoryBuildNumber)</FileVersion>
   </PropertyGroup>
 </Project>

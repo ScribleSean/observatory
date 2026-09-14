@@ -110,14 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func makeMenu() {
         let menu = NSMenu()
         let application = NSMenuItem()
-        let items = NSMenu()
-        items.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "o").target = self
-        items.addItem(withTitle: "Show usage popup", action: #selector(showUsage), keyEquivalent: "u").target = self
-        items.addItem(withTitle: "Refresh sources", action: #selector(refresh), keyEquivalent: "r").target = self
-        items.addItem(withTitle: "Local source settings…", action: #selector(sourceSettings), keyEquivalent: ",").target = self
-        items.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
-        items.addItem(withTitle: "Disconnect paired device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
-        items.addItem(withTitle: "Prepare pairing repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
+        let items = NSMenu(title: "Observatory")
+        items.addItem(withTitle: "About Observatory", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        items.addItem(.separator())
+        items.addItem(withTitle: "Settings…", action: #selector(sourceSettings), keyEquivalent: ",").target = self
         items.addItem(.separator())
         items.addItem(withTitle: "Hide Observatory", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = items.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -127,8 +123,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         items.addItem(withTitle: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         application.submenu = items
         menu.addItem(application)
+        let file = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "o").target = self
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
+        fileMenu.addItem(withTitle: "Disconnect Paired Device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
+        fileMenu.addItem(withTitle: "Prepare Pairing Repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
+        file.submenu = fileMenu
+        menu.addItem(file)
+        let edit = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        // Nil targets use the focused responder, including native text fields
+        // and WebKit. AppKit disables commands that cannot act on the selection.
+        editMenu.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.submenu = editMenu
+        menu.addItem(edit)
         let view = NSMenuItem()
         let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Show Usage Popup", action: #selector(showUsage), keyEquivalent: "u").target = self
+        viewMenu.addItem(withTitle: "Refresh Sources", action: #selector(refresh), keyEquivalent: "r").target = self
+        viewMenu.addItem(.separator())
         viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "=").target = self
         viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-").target = self
         viewMenu.addItem(withTitle: "Actual Size", action: #selector(actualSize), keyEquivalent: "0").target = self
@@ -139,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let window = NSMenuItem()
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
         window.submenu = windowMenu
         menu.addItem(window)
         NSApp.mainMenu = menu
@@ -603,6 +626,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func checkDashboardLifecycle(remaining: Int) {
+        let menus = NSApp.mainMenu?.items.compactMap(\.submenu) ?? []
+        precondition(menus.map(\.title) == ["Observatory", "File", "Edit", "View", "Window"])
+        // macOS may add its own writing tools, dictation and emoji commands.
+        let expectedEdits = ["Undo", "Redo", "Cut", "Copy", "Paste", "Select All"]
+        let editItems = menus[2].items.filter { expectedEdits.contains($0.title) }
+        precondition(editItems.map(\.title) == expectedEdits)
+        precondition(editItems.allSatisfy { $0.target == nil })
+        precondition(menus[1].items.contains { $0.keyEquivalent == "w" && $0.action == #selector(NSWindow.performClose(_:)) })
         guard remaining > 0 else {
             print("Dashboard lifecycle passed: three open/close cycles released their content views, menu-bar app remained running")
             NSApp.terminate(nil)
