@@ -14,6 +14,8 @@ The build 19 history view was exercised in a separate synthetic preview using it
 
 SwiftUI emitted AttributeGraph cycle warnings during the interaction session. The observed controls still completed their actions, but the cause remains unresolved. Light mode, larger text, full keyboard/screen-reader behavior and additional window sizes have not been verified.
 
+The warnings were subsequently reproduced specifically by loading after a date editor gained focus. Disabling the entire sheet during the read also disabled that focused editor. The correction leaves filter controls enabled and invalidates pending replies when filters change or the sheet closes. Native self-tests cover request invalidation and supersession. The previously failing date-edit/load sequence, populated same-day reads and final-page navigation were repeated without warnings. The synthetic process exited cleanly, with only the installed process remaining. This is a focused regression result, not a full SwiftUI or accessibility audit. The fix targets 0.3.11 build 20 and is not in the earlier 0.3.10 artifacts.
+
 The UI inspection tool reopened the temporary app without preview arguments after its exit. That exact temporary process was gracefully stopped, and the installed process was independently confirmed still running. No installed bundle was replaced. Do not treat this session as proof that no live collection occurred during the brief unintended normal launch.
 
 ## Mac allowance accessibility follow-up, September 13

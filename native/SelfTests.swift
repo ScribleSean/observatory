@@ -1,6 +1,15 @@
 import Foundation
 
 func runSelfTests() {
+    var archiveFence = ArchiveRequestFence()
+    let firstArchiveRequest = archiveFence.begin()
+    precondition(archiveFence.accepts(firstArchiveRequest))
+    archiveFence.invalidate()
+    precondition(!archiveFence.accepts(firstArchiveRequest))
+    let nextArchiveRequest = archiveFence.begin()
+    precondition(archiveFence.accepts(nextArchiveRequest) && !archiveFence.accepts(firstArchiveRequest))
+    _ = archiveFence.begin()
+    precondition(!archiveFence.accepts(nextArchiveRequest))
     let emptyArchive = Data(#"{"version":1,"accounts":[],"next":null,"storageBytes":0,"storageLimitBytes":8589934592}"#.utf8)
     precondition((try? ArchiveReply.parse(emptyArchive))?.accounts?.count == 0)
     precondition((try? ArchiveReply.parse(Data(#"{"version":1,"records":[],"next":null}"#.utf8)))?.records?.count == 0)

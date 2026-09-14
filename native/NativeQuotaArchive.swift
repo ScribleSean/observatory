@@ -100,6 +100,13 @@ enum QuotaArchiveProcess {
     }
 }
 
+struct ArchiveRequestFence {
+    private var generation = UUID()
+    mutating func begin() -> UUID { generation = UUID(); return generation }
+    mutating func invalidate() { generation = UUID() }
+    func accepts(_ request: UUID) -> Bool { generation == request }
+}
+
 struct NativeQuotaArchive: View {
     let runtime: URL
     @Environment(\.dismiss) private var dismiss
@@ -112,6 +119,7 @@ struct NativeQuotaArchive: View {
     @State private var readings: [ArchiveReading] = []
     @State private var next: ArchiveCursor?
     @State private var busy = false
+    @State private var requests = ArchiveRequestFence()
     @State private var message = "Choose a saved account and date range, then load history."
     @State private var storage = ""
     private var invalidDates: Bool { Calendar.current.startOfDay(for: from) > Calendar.current.startOfDay(for: to) }
@@ -177,23 +185,32 @@ struct NativeQuotaArchive: View {
             .task { loadAccounts(after: nil) }
             .onChange(of: scope) { clearPage() }.onChange(of: kind) { clearPage() }
             .onChange(of: from) { clearPage() }.onChange(of: to) { clearPage() }
-            .disabled(busy)
+            .onDisappear { requests.invalidate() }
     }
-    private func clearPage() { readings = []; next = nil; message = "Load history for the selected filters." }
+    private func clearPage() {
+        requests.invalidate()
+        readings = []; next = nil
+        message = invalidDates ? "Choose a From date on or before Through." : "Load history for the selected filters."
+    }
     private func loadAccounts(after: String?) {
         guard !busy else { return }; busy = true
+        let generation = requests.begin()
         Task { @MainActor in
             defer { busy = false }
             do {
                 var request: [String: Any] = ["action": "accounts"]
                 if let after { request["after"] = after }
                 let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
+                guard requests.accepts(generation) else { return }
                 accounts = reply.accounts ?? []
                 scope = ""
                 if case .account(let value) = reply.next { accountNext = value } else { accountNext = nil }
                 storage = ByteCountFormatter.string(fromByteCount: Int64(reply.storageBytes ?? 0), countStyle: .file) + " local database (8 GiB limit)"
                 if accounts.isEmpty { message = "No saved allowance history on this Mac." }
-            } catch { message = "History could not be read. Saved data was not deleted." }
+            } catch {
+                guard requests.accepts(generation) else { return }
+                message = "History could not be read. Saved data was not deleted."
+            }
         }
     }
     private func loadPage(after: ArchiveCursor?) {
@@ -205,14 +222,19 @@ struct NativeQuotaArchive: View {
             "from": max(0, Int64(start.timeIntervalSince1970 * 1000)), "to": Int64(end.timeIntervalSince1970 * 1000) - 1]
         if let after { request["after"] = ["at": after.at, "id": after.id] }
         busy = true
+        let generation = requests.begin()
         Task { @MainActor in
             defer { busy = false }
             do {
                 let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
+                guard requests.accepts(generation) else { return }
                 readings = reply.records ?? []
                 if case .page(let value) = reply.next { next = value } else { next = nil }
                 message = readings.isEmpty ? "No records in this range. Missing data is not zero usage." : "\(readings.count) records on this page, oldest first.\(next == nil ? " End of range." : " More records available.")"
-            } catch { readings = []; next = nil; message = "History could not be read. Saved data was not deleted." }
+            } catch {
+                guard requests.accepts(generation) else { return }
+                readings = []; next = nil; message = "History could not be read. Saved data was not deleted."
+            }
         }
     }
 }
