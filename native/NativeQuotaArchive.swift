@@ -107,6 +107,14 @@ struct ArchiveRequestFence {
     func accepts(_ request: UUID) -> Bool { generation == request }
 }
 
+private struct ArchiveButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        ObservatoryButtonStyle().makeBody(configuration: configuration)
+            .opacity(enabled ? 1 : 0.45)
+    }
+}
+
 struct NativeQuotaArchive: View {
     let runtime: URL
     @Environment(\.dismiss) private var dismiss
@@ -127,7 +135,7 @@ struct NativeQuotaArchive: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Text("Saved allowance history").font(ObservatoryTheme.font(22, weight: .semibold)).tracking(-0.7)
-                Spacer(); Button("Done") { dismiss() }
+                Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             Text("This Mac only. Historical records are not live readings or combined-device totals.").foregroundStyle(ObservatoryTheme.muted)
             HStack {
@@ -155,8 +163,14 @@ struct NativeQuotaArchive: View {
                 }
             }
             HStack {
-                Button("Load history") { loadPage(after: nil) }.disabled(scope.isEmpty || busy || invalidDates)
-                Button("Next page") { loadPage(after: next) }.disabled(next == nil || busy)
+                Button("Load history") { loadPage(after: nil) }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .help("Load history (Command-Return)")
+                    .disabled(scope.isEmpty || busy || invalidDates)
+                Button("Next page") { loadPage(after: next) }
+                    .keyboardShortcut(.rightArrow, modifiers: .command)
+                    .help("Next page (Command-Right Arrow)")
+                    .disabled(next == nil || busy)
                 if busy { ProgressView().controlSize(.small) }
                 Text(storage).font(.caption).foregroundStyle(ObservatoryTheme.muted)
             }
@@ -181,7 +195,7 @@ struct NativeQuotaArchive: View {
                 .font(.caption).foregroundStyle(ObservatoryTheme.muted)
         }.padding(24).frame(minWidth: 760, minHeight: 540)
             .font(ObservatoryTheme.font()).foregroundStyle(ObservatoryTheme.text)
-            .background(ObservatoryTheme.background).buttonStyle(ObservatoryButtonStyle())
+            .background(ObservatoryTheme.background).buttonStyle(ArchiveButtonStyle())
             .task { loadAccounts(after: nil) }
             .onChange(of: scope) { clearPage() }.onChange(of: kind) { clearPage() }
             .onChange(of: from) { clearPage() }.onChange(of: to) { clearPage() }

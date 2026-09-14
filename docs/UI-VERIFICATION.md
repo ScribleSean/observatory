@@ -8,6 +8,8 @@ A later preview-only `--preview-light` option allows testing without changing th
 
 A keyboard spot check on build 20 found that Tab cycled through the date editor components without reaching action buttons under the current Mac keyboard settings. Opening the account menu by mouse and using Down/Return selected an account correctly. No global keyboard preference was changed. Full keyboard-only navigation remains unverified.
 
+The subsequent history-sheet change adds Command-Return to load, Command-Right Arrow for the next page, and Escape to dismiss. An isolated native build passed self-tests and verified the load shortcut returning 100 synthetic readings, next-page returning the final five, and a repeated next-page shortcut doing nothing at the end. With no account selected, the disabled load action did not read history. Escape first closed an active date-editor popup and then dismissed the sheet on the next press. The process exited without captured warnings. Disabled history buttons are now dimmed, visually checked in light mode. These shortcuts improve action access but do not establish a complete keyboard-only account/filter workflow or screen-reader coverage. This change is not in the retained build 20 artifacts.
+
 The build 19 history view was exercised in a separate synthetic preview using its real local archive process. The fixture held 105 allowance observations for one account group and three for another, with separate daily reports and collection checks. It did not contain real account history.
 
 - The first account returned 100 readings, then five on the final page. Next page disabled at the end.
