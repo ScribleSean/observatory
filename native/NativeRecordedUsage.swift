@@ -85,22 +85,22 @@ struct NativeDictation: View {
                     values: ["day", "week", "all"], selection: $period)
             }
             if period != "all" && !dates.isEmpty {
-                ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") { Picker(period == "week" ? "Week ending" : "Recorded day",
-                    selection: Binding(get: { end }, set: { anchor = $0 })) {
-                    ForEach(dates, id: \.self) { Text($0).tag($0) }
-                } }
+                ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") {
+                    ObservatoryPopup(title: period == "week" ? "Week ending" : "Recorded day", labels: dates, values: dates,
+                        selection: Binding(get: { end }, set: { anchor = $0 }))
+                }
             }
             LabeledContent("All voice time", value: "Unknown")
-            Text("Complete coverage is not established.").font(.callout).foregroundStyle(.secondary)
-            Text("By tool and device").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Complete coverage is not established.").observatoryFont(.callout).foregroundStyle(.secondary)
+            Text("By tool and device").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             ForEach(sources) { source in
                 sourceSection(source)
             }
-            Text("More local speech detection coming soon.").font(.headline)
+            Text("More local speech detection coming soon.").observatoryFont(.headline)
             Text("ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage.")
             Text("Wispr recording metadata can include silence and unfinished records. Synced or imported histories can overlap, so device totals are not added together.")
             Text("America/New_York dates. Missing dates are gaps, not zeros. Transcripts, recordings and credentials are excluded.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
         }
     }
 
@@ -119,13 +119,13 @@ struct NativeDictation: View {
                     DisclosureGroup("Voice over time") {
                         ForEach(Array(days.suffix(60).reversed().enumerated()), id: \.offset) { _, day in
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(text(day["date"])).font(.headline)
+                                Text(text(day["date"])).observatoryFont(.headline)
                                 LabeledContent("Records", value: formatted(number(day["transcriptions"])))
                                 LabeledContent("Words", value: dictationValue([day], field: "words", wispr: true))
                                 LabeledContent("Audio minutes", value: dictationValue([day], field: "audioSeconds", wispr: true))
                             }.padding(.vertical, 6)
                         }
-                        Text("Latest 60 recorded dates shown. Totals cover the selected period.").font(.caption)
+                        Text("Latest 60 recorded dates shown. Totals cover the selected period.").observatoryFont(.caption)
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(6)
@@ -139,7 +139,7 @@ struct NativeAgentUsage: View {
         VStack(alignment: .leading, spacing: 18) {
             let receipts = rows(snapshot?.object["agents"])
             let status = text((snapshot?.object["agentSource"] as? JSONObject)?["status"])
-            Text("Saved handoff receipts").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Saved handoff receipts").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             if receipts.isEmpty { Text("No handoff receipts available. Missing receipts are not zero usage.") }
             if status != "ok" { Text("Receipt source status: \(status). Coverage may be incomplete.").foregroundStyle(.secondary) }
             ForEach(Array(receipts.enumerated()), id: \.offset) { _, receipt in
@@ -154,7 +154,7 @@ struct NativeAgentUsage: View {
                 }
             }
             Text("Only saved top-level receipts are covered, not every agent or provider. One newest snapshot per conversation avoids summing cumulative counters. Duration describes the latest call. A returned response is not a review pass, and the requested model is not proof of the serving model.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
             localRuns
             toolCalls
         }
@@ -162,7 +162,7 @@ struct NativeAgentUsage: View {
 
     private var localRuns: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Local model runs").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Local model runs").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             let local = snapshot?.object["localModel"] as? JSONObject
             let runs = rows(local?["records"])
             if text(local?["status"]) != "ok" { Text("Local receipts unavailable.") }
@@ -183,13 +183,13 @@ struct NativeAgentUsage: View {
                 }
             }
             Text("Saved benchmarks, separate from cloud tokens and screen time. GPU memory is total device use, not model-only memory. These records do not prove a model is running now.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
         }
     }
 
     private var toolCalls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Recorded tool calls").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Recorded tool calls").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             let sources = rows(snapshot?.object["settings"])
             if sources.isEmpty { Text("No saved tool-call sources.") }
             ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
@@ -200,8 +200,8 @@ struct NativeAgentUsage: View {
                         if calls.isEmpty { Text("No recorded tool requests.") }
                         ForEach(Array(calls.enumerated()), id: \.offset) { _, call in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(text(call["tool"], fallback: "Unknown tool")).font(.headline).textSelection(.enabled)
-                                Text("Namespace: \(text(call["namespace"])) · \(text(call["category"]))").font(.caption)
+                                Text(text(call["tool"], fallback: "Unknown tool")).observatoryFont(.headline).textSelection(.enabled)
+                                Text("Namespace: \(text(call["namespace"])) · \(text(call["category"]))").observatoryFont(.caption)
                                 LabeledContent(text(call["date"]), value: formatted(number(call["count"])) + " requests")
                             }.padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -209,7 +209,7 @@ struct NativeAgentUsage: View {
                 }
             }
             Text("Saved Codex request counts are not proof of successful execution or time worked. Hosts are not summed. General SSH commands and unlogged tools are absent. Nested calls are not inferred from wrapper arguments.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
         }
     }
 }

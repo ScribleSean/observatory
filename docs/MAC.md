@@ -12,9 +12,15 @@ The main window includes activity and token day/week/all-retained views, allowan
 
 The native View menu provides Command-1 through Command-6 for Allowances, Activity, Tokens, Dictation, Sources and Settings, in sidebar order. A checkmark identifies the visible section. These commands reuse the main window or reopen it when closed. They do not enable sources or change collection settings.
 
+### Dashboard text size
+
+Current native source builds support **View > Zoom In**, **Zoom Out**, **Actual Size**, and **200%**, with Command-equals, Command-minus and Command-zero shortcuts. The range is 75% to 200%. Native text, chart labels and popup choices enlarge without magnifying the entire window. Above 125%, navigation moves above the dashboard, filter options wrap into equal-width buttons, and label/value rows stack. Settings actions and saved-history controls remain vertically scrollable.
+
+Native sizing lasts for the app session, including closing and reopening the main window. It does not change collection settings, system fonts or the compact menu-bar popup. Standalone pairing and setup dialogs do not yet use this dashboard text-size setting. Synthetic minimum-window previews and control tests cover enlargement, but a complete keyboard and VoiceOver review remains a release gate.
+
 ### Legacy dashboard enlargement
 
-With the legacy dashboard open, use **View > Zoom In**, **Zoom Out**, **Actual Size**, or **200%**. The keyboard shortcuts are Command-equals (or Command-plus), Command-minus, and Command-zero. Zoom is bounded from 75% to 200%. The menu disables further changes at either limit. These web-only controls are disabled for the native dashboard.
+With the legacy dashboard open, the same View commands scale the web page. The keyboard shortcuts are Command-equals (or Command-plus), Command-minus, and Command-zero. Zoom is bounded from 75% to 200%. The menu disables further changes at either limit.
 
 This scales the web page's text and controls, not macOS system fonts or the menu-bar panel. Zoom applies to the open dashboard and resets to 100% after it is closed and reopened. It does not change collection settings. See [native UI verification](UI-VERIFICATION.md) for the tested layouts and remaining limits.
 

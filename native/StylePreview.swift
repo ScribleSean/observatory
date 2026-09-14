@@ -28,7 +28,12 @@ func renderStylePreview(output: URL) throws {
     defer { defaults.removePersistentDomain(forName: suite) }
     for mode in ["light", "dark"] {
         defaults.set(mode, forKey: "observatoryAppearance")
-        for size in [NSSize(width: 760, height: 560), NSSize(width: 1100, height: 820), NSSize(width: 1600, height: 1000)] {
+        for scale in [1.0, 2.0] {
+        selection.textScale = scale
+        for section in scale == 1 ? ["allowances"] : NativeDashboardSelection.sections.map(\.0) {
+        selection.section = section
+        let sizes = scale == 1 ? [NSSize(width: 760, height: 560), NSSize(width: 1100, height: 820), NSSize(width: 1600, height: 1000)] : [NSSize(width: 760, height: 560)]
+        for size in sizes {
         let view = NativeDashboard(store: store, selection: selection, settingsActions: actions)
             .defaultAppStorage(defaults).frame(width: size.width, height: size.height)
         let hosting = NSHostingView(rootView: view)
@@ -39,9 +44,11 @@ func renderStylePreview(output: URL) throws {
         guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { throw CocoaError(.fileWriteUnknown) }
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
-        let suffix = size.width == 1100 ? "" : "-\(Int(size.width))"
+        let suffix = scale == 2 ? "-200-\(section)" : size.width == 1100 ? "" : "-\(Int(size.width))"
         try data.write(to: output.appendingPathComponent("observatory-\(mode)\(suffix).png"), options: .withoutOverwriting)
         window.contentView = nil
+        }
+        }
         }
     }
     print("Synthetic native light and dark previews rendered. Collection stayed disabled.")

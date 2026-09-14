@@ -1,7 +1,146 @@
 import SwiftUI
 import CoreText
 
-struct ObservatorySegments: NSViewRepresentable {
+private struct ObservatoryTextScaleKey: EnvironmentKey {
+    static let defaultValue: Double = 1
+}
+
+extension EnvironmentValues {
+    var observatoryTextScale: Double {
+        get { self[ObservatoryTextScaleKey.self] }
+        set { self[ObservatoryTextScaleKey.self] = newValue.isFinite ? min(2, max(0.75, newValue)) : 1 }
+    }
+}
+
+private struct ObservatoryFont: ViewModifier {
+    @Environment(\.observatoryTextScale) private var scale
+    let size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design?
+    func body(content: Content) -> some View {
+        content.font(design.map { Font.system(size: size * scale, weight: weight, design: $0) }
+            ?? ObservatoryTheme.font(size * scale, weight: weight))
+    }
+}
+
+extension View {
+    func observatoryFont(_ size: CGFloat = 14.5, weight: Font.Weight = .regular, design: Font.Design? = nil) -> some View {
+        modifier(ObservatoryFont(size: size, weight: weight, design: design))
+    }
+    func observatoryFont(_ style: Font.TextStyle) -> some View {
+        observatoryFont(style == .caption ? 11 : style == .callout ? 12 : 14.5,
+            weight: style == .headline ? .semibold : .regular)
+    }
+}
+
+struct ObservatoryAdaptiveRow<Content: View>: View {
+    @Environment(\.observatoryTextScale) private var scale
+    @ViewBuilder let content: Content
+    var body: some View {
+        let layout = scale > 1.25 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10)) : AnyLayout(HStackLayout(spacing: 8))
+        layout { content }
+    }
+}
+
+struct ObservatoryLabeledContentStyle: LabeledContentStyle {
+    @Environment(\.observatoryTextScale) private var scale
+    func makeBody(configuration: Configuration) -> some View {
+        if scale > 1.25 {
+            VStack(alignment: .leading, spacing: 4) {
+                configuration.label.foregroundStyle(ObservatoryTheme.muted)
+                configuration.content
+            }.fixedSize(horizontal: false, vertical: true)
+        } else {
+            HStack {
+                configuration.label
+                Spacer()
+                configuration.content.foregroundStyle(ObservatoryTheme.muted)
+            }
+        }
+    }
+}
+
+struct ObservatoryEmptyState: View {
+    let title: String
+    let systemImage: String
+    let message: String
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage).observatoryFont(32).accessibilityHidden(true)
+            Text(title).observatoryFont(22, weight: .semibold).accessibilityAddTraits(.isHeader)
+            Text(message).foregroundStyle(ObservatoryTheme.muted)
+        }.multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity).padding(20)
+    }
+}
+
+struct ObservatoryPopup: NSViewRepresentable {
+    @Environment(\.observatoryTextScale) private var scale
+    @Environment(\.colorScheme) private var scheme
+    let title: String
+    let labels: [String]
+    let values: [String]
+    @Binding var selection: String
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection, values: values) }
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let control = NSPopUpButton(frame: .zero, pullsDown: false)
+        control.target = context.coordinator
+        control.action = #selector(Coordinator.choose(_:))
+        control.setAccessibilityLabel(title)
+        return control
+    }
+    func updateNSView(_ control: NSPopUpButton, context: Context) {
+        if control.itemTitles != labels { control.removeAllItems(); control.addItems(withTitles: labels) }
+        context.coordinator.selection = $selection
+        context.coordinator.values = values
+        control.font = .systemFont(ofSize: 13 * scale)
+        control.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        control.menu?.font = control.font!
+        control.selectItem(at: values.firstIndex(of: selection) ?? -1)
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSPopUpButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: max(28, nsView.intrinsicContentSize.height))
+    }
+    final class Coordinator: NSObject {
+        var selection: Binding<String>
+        var values: [String]
+        init(selection: Binding<String>, values: [String]) { self.selection = selection; self.values = values }
+        @objc func choose(_ sender: NSPopUpButton) {
+            guard values.indices.contains(sender.indexOfSelectedItem) else { return }
+            selection.wrappedValue = values[sender.indexOfSelectedItem]
+        }
+    }
+}
+
+struct ObservatorySegments: View {
+    @Environment(\.observatoryTextScale) private var scale
+    let title: String
+    let labels: [String]
+    let values: [String]
+    @Binding var selection: String
+    var body: some View {
+        if scale > 1.25 {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
+                ForEach(values.indices, id: \.self) { index in
+                    Button { selection = values[index] } label: {
+                        Text(labels[index]).observatoryFont()
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .padding(6)
+                            .background(selection == values[index] ? ObservatoryTheme.sage.opacity(0.3) : ObservatoryTheme.surface,
+                                in: RoundedRectangle(cornerRadius: 10))
+                    }.buttonStyle(.plain)
+                        .accessibilityAddTraits(selection == values[index] ? .isSelected : [])
+                }
+            }.accessibilityElement(children: .contain).accessibilityLabel(title)
+        } else {
+            ObservatorySegmentControl(title: title, labels: labels, values: values, selection: $selection)
+        }
+    }
+}
+
+private struct ObservatorySegmentControl: NSViewRepresentable {
+    @Environment(\.observatoryTextScale) private var scale
     let title: String
     let labels: [String]
     let values: [String]
@@ -16,12 +155,13 @@ struct ObservatorySegments: NSViewRepresentable {
         return control
     }
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        control.font = .systemFont(ofSize: 13 * scale)
         context.coordinator.selection = $selection
         context.coordinator.values = values
         control.selectedSegment = values.firstIndex(of: selection) ?? -1
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSSegmentedControl, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: 28)
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: max(28, 28 * scale))
     }
     final class Coordinator: NSObject {
         var selection: Binding<String>
@@ -36,11 +176,13 @@ struct ObservatorySegments: NSViewRepresentable {
 
 // One label column keeps native segmented controls aligned across dashboards.
 struct ObservatoryFilterRow<Content: View>: View {
+    @Environment(\.observatoryTextScale) private var scale
     let title: String
     @ViewBuilder let content: Content
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(title).frame(width: 108, alignment: .leading)
+        let layout = scale > 1 ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))
+        layout {
+            Text(title).frame(width: scale > 1 ? nil : 108, alignment: .leading)
             content.labelsHidden().accessibilityLabel(title)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }.frame(maxWidth: 680, alignment: .leading)
@@ -85,7 +227,7 @@ struct ObservatoryCard: ViewModifier {
 struct ObservatoryGroupBoxStyle: GroupBoxStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            configuration.label.font(ObservatoryTheme.font(19, weight: .semibold)).tracking(0.6)
+            configuration.label.observatoryFont(19, weight: .semibold).tracking(0.6)
             configuration.content
         }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
     }
@@ -93,7 +235,7 @@ struct ObservatoryGroupBoxStyle: GroupBoxStyle {
 
 struct ObservatoryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(ObservatoryTheme.font()).padding(.horizontal, 14)
+        configuration.label.observatoryFont().fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14)
             .frame(minHeight: 40).foregroundStyle(ObservatoryTheme.text)
             .background(ObservatoryTheme.surface.gradient, in: Capsule())
             .shadow(color: .white.opacity(0.06), radius: 6, x: 0, y: -2)

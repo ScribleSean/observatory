@@ -132,13 +132,14 @@ struct NativeQuotaArchive: View {
     @State private var storage = ""
     private var invalidDates: Bool { Calendar.current.startOfDay(for: from) > Calendar.current.startOfDay(for: to) }
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("Saved allowance history").font(ObservatoryTheme.font(22, weight: .semibold)).tracking(-0.7)
+            ObservatoryAdaptiveRow {
+                Text("Saved allowance history").observatoryFont(22, weight: .semibold).tracking(-0.7)
                 Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             Text("This Mac only. Historical records are not live readings or combined-device totals.").foregroundStyle(ObservatoryTheme.muted)
-            HStack {
+            ObservatoryAdaptiveRow {
                 Picker("Account", selection: $scope) {
                     Text("Select account").tag("")
                     ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
@@ -150,10 +151,10 @@ struct NativeQuotaArchive: View {
             }
             if let account = accounts.first(where: { $0.scope == scope }) {
                 Text("\(account.records.formatted()) saved records · \(Date(timeIntervalSince1970: account.firstAt / 1000).formatted(date: .abbreviated, time: .omitted)) to \(Date(timeIntervalSince1970: account.lastAt / 1000).formatted(date: .abbreviated, time: .omitted))")
-                    .font(.caption).foregroundStyle(ObservatoryTheme.muted)
+                    .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             }
-            Text("Account names are not stored. Groups remain separate even after monitoring is disabled.").font(.caption).foregroundStyle(ObservatoryTheme.muted)
-            HStack {
+            Text("Account names are not stored. Groups remain separate even after monitoring is disabled.").observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+            ObservatoryAdaptiveRow {
                 DatePicker("From", selection: $from, displayedComponents: .date)
                 DatePicker("Through", selection: $to, displayedComponents: .date)
                 Picker("Records", selection: $kind) {
@@ -162,7 +163,7 @@ struct NativeQuotaArchive: View {
                     Text("Collection checks").tag("poll")
                 }
             }
-            HStack {
+            ObservatoryAdaptiveRow {
                 Button("Load history") { loadPage(after: nil) }
                     .keyboardShortcut(.return, modifiers: .command)
                     .help("Load history (Command-Return)")
@@ -172,14 +173,14 @@ struct NativeQuotaArchive: View {
                     .help("Next page (Command-Right Arrow)")
                     .disabled(next == nil || busy)
                 if busy { ProgressView().controlSize(.small) }
-                Text(storage).font(.caption).foregroundStyle(ObservatoryTheme.muted)
+                Text(storage).observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             }
-            Text(message).font(.callout).accessibilityLabel(message)
-            ScrollView {
+            Text(message).observatoryFont(.callout).accessibilityLabel(message)
+            Group {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(readings.enumerated()), id: \.offset) { _, row in
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(row.checkedAt).font(.caption).foregroundStyle(ObservatoryTheme.muted)
+                            Text(row.checkedAt).observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
                             if let windows = row.windows {
                                 ForEach(Array(windows.enumerated()), id: \.offset) { _, window in
                                     Text("\(window.bucket) · \(window.window): \(window.remainingPercent, specifier: "%.1f")% remaining")
@@ -192,9 +193,10 @@ struct NativeQuotaArchive: View {
                 }
             }
             Text("Times are recorded in UTC. Filters use local calendar days. Missing readings are not zero. Revised daily reports are separate evidence and must not be added together.")
-                .font(.caption).foregroundStyle(ObservatoryTheme.muted)
-        }.padding(24).frame(minWidth: 760, minHeight: 540)
-            .font(ObservatoryTheme.font()).foregroundStyle(ObservatoryTheme.text)
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+        }.padding(24)
+        }.frame(width: 720, height: 500)
+            .observatoryFont().foregroundStyle(ObservatoryTheme.text)
             .background(ObservatoryTheme.background).buttonStyle(ArchiveButtonStyle())
             .task { loadAccounts(after: nil) }
             .onChange(of: scope) { clearPage() }.onChange(of: kind) { clearPage() }

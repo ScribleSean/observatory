@@ -546,19 +546,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     @objc private func zoomIn() {
+        if usesNativeDashboard { nativeSelection.textScale = DashboardZoom.step(from: nativeSelection.textScale, increasing: true); return }
         guard let webView else { return }
         webView.pageZoom = CGFloat(DashboardZoom.step(from: Double(webView.pageZoom), increasing: true))
     }
     @objc private func zoomOut() {
+        if usesNativeDashboard { nativeSelection.textScale = DashboardZoom.step(from: nativeSelection.textScale, increasing: false); return }
         guard let webView else { return }
         webView.pageZoom = CGFloat(DashboardZoom.step(from: Double(webView.pageZoom), increasing: false))
     }
-    @objc private func actualSize() { webView?.pageZoom = 1 }
-    @objc private func doubleSize() { webView?.pageZoom = 2 }
+    @objc private func actualSize() {
+        if usesNativeDashboard { nativeSelection.textScale = 1 } else { webView?.pageZoom = 1 }
+    }
+    @objc private func doubleSize() {
+        if usesNativeDashboard { nativeSelection.textScale = 2 } else { webView?.pageZoom = 2 }
+    }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if store.shuttingDown { return false }
-        let zoom = webView?.pageZoom
+        let zoom: Double? = usesNativeDashboard ? (detail?.isVisible == true ? nativeSelection.textScale : nil) : webView.map { Double($0.pageZoom) }
         switch item.action {
         case #selector(navigateSection(_:)):
             guard usesNativeDashboard, let section = item.representedObject as? String,
@@ -667,6 +673,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         if usesNativeDashboard {
             let activityWindow = detail
+            if remaining == 3 { checkTypographyControls() }
+            actualSize()
+            let increase = NSMenuItem(title: "Zoom In", action: #selector(zoomIn), keyEquivalent: "=")
+            let decrease = NSMenuItem(title: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-")
+            let double = NSMenuItem(title: "200%", action: #selector(doubleSize), keyEquivalent: "")
+            for level in DashboardZoom.levels.dropFirst(2) {
+                precondition(validateMenuItem(increase))
+                zoomIn()
+                precondition(nativeSelection.textScale == level && detail === activityWindow)
+            }
+            precondition(!validateMenuItem(increase) && validateMenuItem(double) && double.state == .on)
+            zoomIn()
+            precondition(nativeSelection.textScale == 2)
+            for level in DashboardZoom.levels.dropLast().reversed() {
+                precondition(validateMenuItem(decrease))
+                zoomOut()
+                precondition(nativeSelection.textScale == level)
+            }
+            precondition(!validateMenuItem(decrease))
+            zoomOut()
+            precondition(nativeSelection.textScale == 0.75)
+            doubleSize()
+            precondition(nativeSelection.textScale == 2)
+            actualSize()
+            precondition(nativeSelection.textScale == 1)
             let sectionItems = menus[3].items.filter { $0.action == #selector(navigateSection(_:)) }
             precondition(sectionItems.map(\.title) == NativeDashboardSelection.sections.map(\.1))
             precondition(sectionItems.map(\.keyEquivalent) == ["1", "2", "3", "4", "5", "6"])

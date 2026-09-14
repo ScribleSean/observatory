@@ -9,6 +9,7 @@ final class NativeDashboardSelection: ObservableObject {
                            ("dictation", "Dictation", "mic"),
                            ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
     @Published var section = "allowances"
+    @Published var textScale: Double = 1
 }
 
 // Native dashboard. It consumes the existing sanitized
@@ -28,10 +29,19 @@ struct NativeDashboard: View {
     private let sections = NativeDashboardSelection.sections
 
     var body: some View {
-        HStack(spacing: 0) {
+        let layout = selection.textScale > 1.25 ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+        layout {
+            if selection.textScale > 1.25 {
+                HStack {
+                ObservatoryPopup(title: "Dashboard section", labels: sections.map(\.1), values: sections.map(\.0), selection: $selection.section)
+                Button { appearance = appearance == "dark" ? "light" : "dark" } label: {
+                    Image(systemName: appearance == "dark" ? "sun.max" : "moon")
+                }.accessibilityLabel(appearance == "dark" ? "Light mode" : "Dark mode")
+                }.padding(16)
+            } else {
             VStack(alignment: .leading, spacing: 10) {
                 Label { Text("Observatory") } icon: { Image(nsImage: telescopeImage(template: true)).resizable().scaledToFit().frame(width: 24, height: 24) }
-                    .font(ObservatoryTheme.font(19, weight: .semibold)).padding(.bottom, 24)
+                    .observatoryFont(19, weight: .semibold).padding(.bottom, 24)
                 ForEach(sections, id: \.0) { item in
                     Button { selection.section = item.0 } label: {
                         Label(item.1, systemImage: item.2)
@@ -44,28 +54,31 @@ struct NativeDashboard: View {
                 Button { appearance = appearance == "dark" ? "light" : "dark" } label: {
                     Label(appearance == "dark" ? "Light mode" : "Dark mode", systemImage: appearance == "dark" ? "sun.max" : "moon")
                 }
-            }.padding(20).frame(width: 200)
+            }.padding(20).frame(width: 200 * selection.textScale)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    HStack {
+                    ObservatoryAdaptiveRow {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(sections.first(where: { $0.0 == selection.section })?.1 ?? "Activity")
-                                .font(ObservatoryTheme.font(22, weight: .semibold)).tracking(-0.7)
+                                .observatoryFont(22, weight: .semibold).tracking(-0.7)
                             Text(archivedSnapshot == nil ? store.freshness : "Saved snapshot. Not live data.")
                                 .foregroundStyle(archivedSnapshot != nil || store.stale ? .orange : .secondary)
                         }
                         Spacer()
+                        HStack {
                         Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
                             .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
                         Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                             .disabled(store.refreshing || archivedSnapshot != nil)
+                        }
                     }
                     if archivedSnapshot != nil {
                         Button("Return to live data") { archivedSnapshot = nil; selectedDate = "" }
                     }
                     if let archive = archivedSnapshot {
                         Text("Recorded: \(text(archive.object["collectedAt"])). Read-only. Live collection continues separately. This snapshot is not added to current totals.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
                     if selection.section == "settings" {
                         if archivedSnapshot == nil {
@@ -78,7 +91,7 @@ struct NativeDashboard: View {
                             Button("Browse saved allowance history") { quotaHistoryOpen = true }
                                 .disabled(store.shuttingDown || store.pairingMaintenance)
                         }
-                        Text("Observed on this Mac").font(ObservatoryTheme.font(19, weight: .semibold)).tracking(0.6)
+                        Text("Observed on this Mac").observatoryFont(19, weight: .semibold).tracking(0.6)
                         if let quota = displayedSnapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
                             let windows = visibleQuotaWindows(quota["windows"])
                             let columns = windows.count == 1 ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 420), spacing: 18)]
@@ -92,18 +105,18 @@ struct NativeDashboard: View {
                                 }
                             }
                         } else {
-                            ContentUnavailableView("No account connected", systemImage: "gauge.with.dots.needle.50percent",
-                                description: Text("Enable an available account source in local source settings. Saved token records are separate from account limits."))
+                            ObservatoryEmptyState(title: "No account connected", systemImage: "gauge.with.dots.needle.50percent",
+                                message: "Enable an available account source in local source settings. Saved token records are separate from account limits.")
                         }
                         if let peer = displayedSnapshot?.object["peerQuota"] as? JSONObject,
                            ["Mac", "Windows"].contains(text(peer["host"])) {
-                            Text("Shared from \(text(peer["host"]))").font(.headline)
+                            Text("Shared from \(text(peer["host"]))").observatoryFont(.headline)
                             Text("Received: \(text(peer["receivedAt"])). Separate account observation, never added to this Mac's totals.")
-                                .font(.callout).foregroundStyle(.secondary)
+                                .observatoryFont(.callout).foregroundStyle(.secondary)
                             GroupBox { QuotaPanel(quota: peer, dashboard: true).padding(12) }
                         } else {
                             Text("No shared account history. Enable allowance sharing on both paired devices to receive it.")
-                                .font(.callout).foregroundStyle(.secondary)
+                                .observatoryFont(.callout).foregroundStyle(.secondary)
                         }
                     } else if selection.section == "sources" {
                         sourceList
@@ -113,16 +126,20 @@ struct NativeDashboard: View {
                         dailyHistory
                     }
                     Text("Provider account management and unified account-history sync are still being developed.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .observatoryFont(.caption).foregroundStyle(.secondary)
                 }.padding(28).frame(maxWidth: 1100, alignment: .leading).frame(maxWidth: .infinity)
             }
         }
-        .font(ObservatoryTheme.font()).foregroundStyle(ObservatoryTheme.text)
+        .observatoryFont().foregroundStyle(ObservatoryTheme.text)
         .tint(ObservatoryTheme.sage).background(ObservatoryTheme.background)
         .groupBoxStyle(ObservatoryGroupBoxStyle()).buttonStyle(ObservatoryButtonStyle())
+        .labeledContentStyle(ObservatoryLabeledContentStyle())
+        .environment(\.observatoryTextScale, selection.textScale)
         .preferredColorScheme(appearance == "dark" ? .dark : .light)
         .onChange(of: host) { selectedDate = "" }
-        .sheet(isPresented: $quotaHistoryOpen) { NativeQuotaArchive(runtime: store.runtime) }
+        .sheet(isPresented: $quotaHistoryOpen) {
+            NativeQuotaArchive(runtime: store.runtime).environment(\.observatoryTextScale, selection.textScale)
+        }
         .onChange(of: selection.section) { selectedDate = "" }
         .alert("Snapshot could not be opened", isPresented: $archiveError) {
             Button("OK", role: .cancel) {}
@@ -165,37 +182,36 @@ struct NativeDashboard: View {
             }
             if period != "all", !days.isEmpty {
                 ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") {
-                    Picker("Recorded date", selection: Binding(get: { anchor }, set: { selectedDate = $0 })) {
-                        ForEach(Array(days.enumerated()), id: \.offset) { _, day in Text(text(day["date"])).tag(text(day["date"])) }
-                    }
+                    ObservatoryPopup(title: "Recorded date", labels: days.map { text($0["date"]) }, values: days.map { text($0["date"]) },
+                        selection: Binding(get: { anchor }, set: { selectedDate = $0 }))
                 }
             }
             if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
                 Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .observatoryFont(.callout).foregroundStyle(.secondary)
                 Text(text(archive["trackingMessage"], fallback: "Tracking freshness is unknown for this saved snapshot."))
-                    .font(.callout).foregroundStyle(text(archive["trackingStatus"]) == "stale" ? Color.orange : ObservatoryTheme.muted)
+                    .observatoryFont(.callout).foregroundStyle(text(archive["trackingStatus"]) == "stale" ? Color.orange : ObservatoryTheme.muted)
                 if let through = parseDate(archive["trackingThrough"]) {
                     Text("Last tracking coverage: \(through.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .observatoryFont(.caption).foregroundStyle(.secondary)
                 }
                 if let at = parseDate(archive["asOf"]) {
                     Text("Last successful collection: \(at.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .observatoryFont(.caption).foregroundStyle(.secondary)
                 }
             }
             if days.isEmpty {
-                ContentUnavailableView("No verified records", systemImage: "chart.bar",
-                    description: Text("This source is unavailable or has no saved records. Missing data is unknown, not zero."))
+                ObservatoryEmptyState(title: "No verified records", systemImage: "chart.bar",
+                    message: "This source is unavailable or has no saved records. Missing data is unknown, not zero.")
             } else {
                 HStack {
                     Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : "\(formatted(number(chosen?[field]).map { $0 / 60 })) min")
-                        .font(.system(size: 38, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .observatoryFont(38, weight: .semibold, design: .rounded).monospacedDigit()
                     Spacer()
                 }
                 Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])), \(selected.count) recorded dates. Missing dates are not filled with zeros.")
-                    .font(.callout).foregroundStyle(.secondary)
-                Text("Selected recorded days (up to 30 shown)").font(.headline)
+                    .observatoryFont(.callout).foregroundStyle(.secondary)
+                Text("Selected recorded days (up to 30 shown)").observatoryFont(.headline)
                 Chart {
                     ForEach(Array(selected.suffix(30).enumerated()), id: \.offset) { _, day in
                         if let value = number(day[field]) {
@@ -203,10 +219,16 @@ struct NativeDashboard: View {
                         }
                     }
                 }.foregroundStyle(key == "tokens" ? ObservatoryTheme.purple : ObservatoryTheme.sage)
-                    .frame(height: 220).modifier(ObservatoryCard()).accessibilityLabel("Up to 30 recorded days. Missing dates are not zero.")
+                    .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
+                        AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * selection.textScale))
+                    } }
+                    .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) {
+                        AxisGridLine(); AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * selection.textScale))
+                    } }
+                    .frame(height: 220 * selection.textScale).modifier(ObservatoryCard()).accessibilityLabel("Up to 30 recorded days. Missing dates are not zero.")
                 Text(key == "tokens" ? "Saved log tokens, not subscription charges. Combined totals require verified deduplication."
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .observatoryFont(.callout).foregroundStyle(.secondary)
                 if key == "tokens", let chosen {
                     NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: displayedSnapshot, host: host)
                 } else if let chosen {
@@ -220,14 +242,14 @@ struct NativeDashboard: View {
         VStack(alignment: .leading, spacing: 14) {
             let receipts = rows(displayedSnapshot?.object["agents"])
             let latest = receipts.compactMap { parseDate($0["recordedAt"]) }.max()
-            Text("Saved execution records").font(.headline)
+            Text("Saved execution records").observatoryFont(.headline)
             Text("\(receipts.count) handoff receipts · \(receipts.filter { text($0["status"]) == "failed" }.count) saved failures. Not a live agent monitor.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
             Text("Newest receipt: \(latest.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown"). Source: \(text((displayedSnapshot?.object["agentSource"] as? JSONObject)?["status"])).")
-                .font(.caption).foregroundStyle(.secondary)
+                .observatoryFont(.caption).foregroundStyle(.secondary)
             if let help = receiptSourceHelp(displayedSnapshot?.object["agentSource"] as? JSONObject) {
                 Label(help, systemImage: "exclamationmark.circle")
-                    .font(.callout).foregroundStyle(ObservatoryTheme.muted)
+                    .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             DisclosureGroup("Execution details: receipts, benchmarks and tool requests") {

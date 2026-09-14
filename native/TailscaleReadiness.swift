@@ -66,8 +66,8 @@ struct TailscaleReadinessView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(message).font(.callout)
-            HStack {
+            Text(message).observatoryFont(.callout)
+            ObservatoryAdaptiveRow {
                 Button(checking ? "Checking Tailscale…" : "Check Tailscale") {
                     checking = true
                     Task { @MainActor in
@@ -82,7 +82,7 @@ struct TailscaleReadinessView: View {
                     .disabled(!enabled)
             }
             Text("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Local-network code pairing is still being developed.")
-                .font(.caption).foregroundStyle(.secondary)
+                .observatoryFont(.caption).foregroundStyle(.secondary)
         }
     }
 }

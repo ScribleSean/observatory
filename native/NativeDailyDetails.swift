@@ -37,29 +37,35 @@ func nativeSettingsCoverage(model: JSONObject, profiles: [JSONObject]) -> Native
 }
 
 struct NativeActivityDetails: View {
+    @Environment(\.observatoryTextScale) private var textScale
     let day: JSONObject
     var showHours = true
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if showHours {
-            Text("Recorded activity by hour").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Recorded activity by hour").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             let hours = day["hours"] as? [Any] ?? []
             if hours.count == 24 && hours.allSatisfy({ number($0) != nil }) {
                 Chart(Array(hours.enumerated()), id: \.offset) { hour, raw in
                     BarMark(x: .value("Hour", hour), y: .value("Recorded minutes", (number(raw) ?? 0) / 60))
                 }
                 .chartXScale(domain: -0.5...23.5)
-                .chartXAxis { AxisMarks(values: [0, 6, 12, 18, 23]) }
-                .frame(height: 150)
+                .chartXAxis { AxisMarks(values: [0, 6, 12, 18, 23]) {
+                    AxisGridLine(); AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * textScale))
+                } }
+                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) {
+                    AxisGridLine(); AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * textScale))
+                } }
+                .frame(height: 150 * textScale)
                 .accessibilityLabel("Recorded active minutes by New York clock hour. Empty hours can mean idle time or missing tracking.")
             } else { Text("Hourly breakdown unavailable.").foregroundStyle(.secondary) }
             Text("New York time. Repeated daylight-saving clock hours share a chart cell. Gaps may be idle time or missing records.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
             }
             if let tracked = number(day["trackedSeconds"]), tracked == 0, number(day["seconds"]) == 0 {
                 Text("No tracking records for this date. Zero recorded activity does not establish inactivity.").foregroundStyle(.secondary)
             }
-            Text("Categories and recorded apps").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Categories and recorded apps").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             let categories = nativeCounters(day["categories"]).filter { $0.value > 0 }
             if categories.isEmpty { Text("No category breakdown available.").foregroundStyle(.secondary) }
             ForEach(categories) { category in
@@ -68,10 +74,10 @@ struct NativeActivityDetails: View {
                                    value: formatted(category.value / 60) + " min")
                     if category.name == "Mixed activity" {
                         Text("Different categories were active on devices at once. Counted once without guessing attention.")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .observatoryFont(.caption).foregroundStyle(.secondary)
                     } else {
                         if category.name == "AI apps" {
-                            Text("Foreground app time, not model execution time.").font(.caption).foregroundStyle(.secondary)
+                            Text("Foreground app time, not model execution time.").observatoryFont(.caption).foregroundStyle(.secondary)
                         }
                         let apps = nativeCounters((day["apps"] as? JSONObject)?[category.name])
                         if !apps.isEmpty {
@@ -80,7 +86,7 @@ struct NativeActivityDetails: View {
                                     ForEach(apps) { app in LabeledContent(app.name, value: formatted(app.value / 60) + " min") }
                                     if apps.contains(where: { $0.name == "ChatGPT / Codex" }) {
                                         Text("ChatGPT and Codex share a desktop process label and cannot be separated from these foreground records.")
-                                            .font(.caption).foregroundStyle(.secondary)
+                                            .observatoryFont(.caption).foregroundStyle(.secondary)
                                     }
                                 }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
                             }
@@ -89,7 +95,7 @@ struct NativeActivityDetails: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
             Text("ActivityWatch foreground intervals intersect non-idle intervals. Recognized app labels only. Window titles stay on the device. Foreground time does not prove attention or distinguish automation from human input.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
         }
     }
 }
@@ -112,9 +118,9 @@ struct NativeTokenDetails: View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(fields, id: \.0) { field, label in LabeledContent(label, value: formatted(number(day[field]))) }
             Text("Reasoning is included in output. Tokens are not remaining allowance or subscription charges.")
-                .font(.callout).foregroundStyle(.secondary)
+                .observatoryFont(.callout).foregroundStyle(.secondary)
             estimate(day["apiEstimate"] as? JSONObject)
-            Text("By model").font(.headline).accessibilityAddTraits(.isHeader)
+            Text("By model").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             let models = rows(day["models"])
             if models.isEmpty { Text("No model breakdown in this report.").foregroundStyle(.secondary) }
             ForEach(Array(models.enumerated()), id: \.offset) { _, model in
@@ -123,7 +129,7 @@ struct NativeTokenDetails: View {
                         if model["inferred"] as? Bool == true { Text("Inferred model label").foregroundStyle(.secondary) }
                         ForEach(fields, id: \.0) { field, label in LabeledContent(label, value: formatted(number(model[field]))) }
                         estimate(model["apiEstimate"] as? JSONObject)
-                        Text("Recorded reasoning and speed").font(.headline)
+                        Text("Recorded reasoning and speed").observatoryFont(.headline)
                         let candidates = nativePeriodProfiles(model: model, days: recordedDays, settings: settings)
                         let coverage = nativeSettingsCoverage(model: model, profiles: candidates)
                         if text(settings?["status"]) != "ok" || settings?["snapshotStable"] as? Bool == false {
@@ -140,7 +146,7 @@ struct NativeTokenDetails: View {
                                 Text("\(formatted(total - coverage.knownTokens)) tokens have no reconciled settings in this scan.").foregroundStyle(.secondary)
                             }
                         }
-                        Text("Recorded settings, not measured reasoning time. No missing settings are inferred.").font(.caption).foregroundStyle(.secondary)
+                        Text("Recorded settings, not measured reasoning time. No missing settings are inferred.").observatoryFont(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
                 }
             }
@@ -150,7 +156,7 @@ struct NativeTokenDetails: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Saved API comparison: " + (number(saved?["usd"]).map { "$" + String(format: "%.2f", $0) } ?? "Unknown"))
             Text("Hypothetical standard short-context pricing, not your bill. Covered tokens: \(formatted(number(saved?["coveredTokens"]))). Rate check: \(text(saved?["checked"])). Unsupported and inferred models may be excluded. This view does not refresh prices.")
-                .font(.caption).foregroundStyle(.secondary)
+                .observatoryFont(.caption).foregroundStyle(.secondary)
         }
     }
 }

@@ -32,7 +32,7 @@ struct NativeSettings: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") (build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"))")
                     Text(actions.preview ? "Isolated preview. This is not the installed app." : "This identifies the running app. Building or downloading an update does not change this version.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .observatoryFont(.callout).foregroundStyle(.secondary)
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             settingsSection("Collection on this Mac") {
@@ -44,7 +44,7 @@ struct NativeSettings: View {
                             Toggle(title, isOn: binding(key)).disabled(!loaded || busy)
                         }
                         Text("Reads usage metadata. Prompts, window titles, transcripts and audio are not included in dashboard snapshots. ActivityWatch must be running separately.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -55,10 +55,10 @@ struct NativeSettings: View {
                     if store.localCollection {
                         Toggle("Monitor Codex account limits online", isOn: binding("quota")).disabled(!loaded || busy)
                         Text("Turning monitoring off clears retained allowance history, but does not sign out of Codex or remove saved token logs.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
                     Text("Adding other providers and signing in directly from Observatory are not available yet.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .observatoryFont(.callout).foregroundStyle(.secondary)
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             if store.localCollection {
@@ -67,17 +67,17 @@ struct NativeSettings: View {
                         Toggle("Read configured agent receipts", isOn: binding("receipts")).disabled(!loaded || busy)
                         Toggle("Read configured Ubuntu benchmarks", isOn: binding("benchmarks")).disabled(!loaded || busy)
                         Text("Uses only paths and the SSH connection already configured in a legacy installation. Without that configuration, the source stays disconnected. Benchmark reads may connect to Ubuntu. These records stay local to this dashboard and are not shared through device pairing.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .observatoryFont(.callout).foregroundStyle(.secondary)
                         Text("Turning a workflow source off stops its reads and removes it from the current view. Original receipt files are not deleted.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .observatoryFont(.callout).foregroundStyle(.secondary)
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                 }
-                HStack {
+                ObservatoryAdaptiveRow {
                     Button("Save collection settings", action: save).disabled(!loaded || busy || draft == original)
                     Button("Reload saved settings", action: load).disabled(busy)
                 }
             }
-            if !message.isEmpty { Text(message).font(.callout).accessibilityLabel(message) }
+            if !message.isEmpty { Text(message).observatoryFont(.callout).accessibilityLabel(message) }
             settingsSection("Device connection") {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Device pairing is separate from provider sign-in. Pairing shares supported sanitized usage records, not provider credentials.")
@@ -85,32 +85,32 @@ struct NativeSettings: View {
                     if let directPair = actions.directPair {
                         Button("Direct device pairing…", action: directPair).disabled(busy || actions.preview)
                     }
-                    HStack {
+                    ObservatoryAdaptiveRow {
                         Button("Pair with Windows…", action: actions.pair)
                         Button("Disconnect…", action: actions.disconnect)
                         Button("Repair…", action: actions.repair)
                     }.disabled(busy || actions.preview)
-                    if actions.preview { Text("Device changes are disabled in this preview.").font(.caption).foregroundStyle(.secondary) }
+                    if actions.preview { Text("Device changes are disabled in this preview.").observatoryFont(.caption).foregroundStyle(.secondary) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             settingsSection("Allowance history sharing") {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals. Credentials stay on their own device. Different devices' account totals are never added together.")
-                    Text(sharingMessage).font(.callout).accessibilityLabel(sharingMessage)
-                    HStack {
+                    Text(sharingMessage).observatoryFont(.callout).accessibilityLabel(sharingMessage)
+                    ObservatoryAdaptiveRow {
                         Button("Check sharing status") { changeSharing("status") }
                             .disabled(busy || actions.preview)
                         Button(sharing?.enabled == true ? "Disable allowance sharing" : "Enable allowance sharing") {
                             if sharing?.enabled == true { changeSharing("disable") } else { confirmSharing = true }
                         }.disabled(busy || actions.preview || !(sharing?.enabled == true || sharing?.canEnable == true))
                     }
-                    if actions.preview { Text("Sharing changes are disabled in this isolated preview.").font(.caption) }
+                    if actions.preview { Text("Sharing changes are disabled in this isolated preview.").observatoryFont(.caption) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             settingsSection("Startup") {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(actions.preview ? "Login changes are disabled in this isolated preview." : "Launch at login uses macOS Login Items. System approval may be required.")
-                    HStack {
+                    ObservatoryAdaptiveRow {
                         Button(SMAppService.mainApp.status == .enabled ? "Turn off launch at login" : "Turn on launch at login", action: actions.toggleLogin)
                         Button("Open Login Items", action: actions.loginSettings)
                     }.disabled(actions.preview)
@@ -148,7 +148,7 @@ struct NativeSettings: View {
 
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+            Text(title).observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             content()
         }
         .padding(12)
