@@ -115,6 +115,16 @@ New provider reports may include cumulative totals or older reported dates.
 Users who also want to stop receiving those reports must disable collection.
 
 These are internal APIs, not an installed Delete button or a public endpoint.
+The owner-local `quota-archive-control.mjs` process now provides paginated account
+catalogues, allocated storage bytes and explicitly bounded date-range pages for
+the native history browser. Catalogue pages contain at most 100 opaque account
+scopes, with no account names, credentials or private salts. Record pages retain
+the existing 200-record and 512 KB bounds. Requests use stdin, are limited to
+2 KB and accept only catalogue or page actions. No network route or delete
+action is exposed. Opening a never-enabled source does not initialize storage.
+Existing legacy databases still use the backup-aware migration path when read.
+The native history controls remain to be connected and verified.
+
 Deletion is logical removal from this device. It does not promise secure erasure
 of free database pages, filesystem snapshots, backups or data already shared to
 another device. Allocated database size may not shrink after deletion. Native

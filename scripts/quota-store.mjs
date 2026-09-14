@@ -152,6 +152,19 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
 
 export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
 
+// Owner-local account discovery. Scope keys are opaque identifiers, not account
+// names or credentials. Page the catalogue too, rather than loading all history.
+export const listQuotaArchives=(runtime,{after=null,limit=50}={},now=Date.now())=>withDatabase(runtime,db=>{
+  if((after!==null && !hex(after)) || !Number.isSafeInteger(limit) || limit<1 || limit>100 || !timestamp(now))
+    throw Error('Invalid archive catalogue query');
+  const state=read(db,now);
+  const rows=db.prepare('SELECT scope,COUNT(*) AS records,MIN(observed_at) AS firstAt,MAX(observed_at) AS lastAt FROM quota_archive WHERE scope>? GROUP BY scope ORDER BY scope LIMIT ?')
+    .all(after??'',limit+1);
+  const accounts=rows.slice(0,limit).map(row=>({...row,current:row.scope===state.history?.scope}));
+  return {accounts,next:rows.length>limit?accounts.at(-1).scope:null,
+    storageBytes:db.prepare('PRAGMA page_count').get().page_count*4096,storageLimitBytes:8*1024*1024*1024};
+});
+
 const archiveDeletionToken=(state,scope)=>createHash('sha256')
   .update(JSON.stringify(['observatory-quota-archive-delete-v1',state.salt,state.revision,scope])).digest('hex');
 
