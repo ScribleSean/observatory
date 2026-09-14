@@ -66,11 +66,15 @@ enum QuotaArchiveProcess {
         let inputData = try JSONSerialization.data(withJSONObject: request)
         guard inputData.count <= 2048, let resources = Bundle.main.resourceURL else { throw CocoaError(.fileReadCorruptFile) }
         return try await Task.detached(priority: .userInitiated) {
+            let values = try runtime.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true,
+                  let canonical = realpath(runtime.path, nil) else { throw CocoaError(.fileReadNoSuchFile) }
+            defer { free(canonical) }
             let node = resources.appendingPathComponent("Runtime/node/bin/node")
             let script = resources.appendingPathComponent("Collector/scripts/quota-archive-control.mjs")
             let process = Process(), input = Pipe(), output = Pipe()
             process.executableURL = node
-            process.arguments = [script.path, "--runtime", runtime.path]
+            process.arguments = [script.path, "--runtime", String(cString: canonical)]
             process.standardInput = input; process.standardOutput = output; process.standardError = FileHandle.nullDevice
             try process.run()
             let timeout = DispatchWorkItem { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
@@ -126,6 +130,11 @@ struct NativeQuotaArchive: View {
                     }
                 }
                 Button("More accounts") { loadAccounts(after: accountNext) }.disabled(accountNext == nil || busy)
+                Button("First accounts") { loadAccounts(after: nil) }.disabled(busy)
+            }
+            if let account = accounts.first(where: { $0.scope == scope }) {
+                Text("\(account.records.formatted()) saved records · \(Date(timeIntervalSince1970: account.firstAt / 1000).formatted(date: .abbreviated, time: .omitted)) to \(Date(timeIntervalSince1970: account.lastAt / 1000).formatted(date: .abbreviated, time: .omitted))")
+                    .font(.caption).foregroundStyle(ObservatoryTheme.muted)
             }
             Text("Account names are not stored. Groups remain separate even after monitoring is disabled.").font(.caption).foregroundStyle(ObservatoryTheme.muted)
             HStack {

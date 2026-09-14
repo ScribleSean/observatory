@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readdir} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readdir,symlink,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -37,6 +37,14 @@ test('native process protocol returns bounded JSON and generic failures without 
     assert.equal(bad.stderr.includes('private'),false);
   }
   assert.deepEqual(await readdir(root),[]);
+});
+test('native CLI works through a script directory alias without relaxing runtime privacy', {skip:process.platform==='win32'}, async t=>{
+  const root=await fixture(t),alias=path.join(root,'scripts-alias'),runtime=path.join(root,'runtime');
+  await mkdir(runtime,{mode:0o700});await symlink(path.dirname(cli),alias,'dir');
+  const result=spawnSync(process.execPath,[path.join(alias,path.basename(cli)),'--runtime',runtime],
+    {input:JSON.stringify({action:'accounts'}),encoding:'utf8',timeout:20000});
+  assert.equal(result.status,0);assert.deepEqual(JSON.parse(result.stdout).accounts,[]);
+  assert.deepEqual(await readdir(runtime),[]);
 });
 test('account catalogue pages retained scopes without merging accounts or exposing state',async t=>{
   const root=await fixture(t),first='a'.repeat(64),second='b'.repeat(64);

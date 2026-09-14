@@ -1,4 +1,5 @@
 import {lstat} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {listQuotaArchives,readQuotaArchive} from './quota-store.mjs';
@@ -48,6 +49,6 @@ async function main() {
     process.stdout.write(JSON.stringify(await quotaArchiveControl(args[1],request))+'\n');
   } finally {clearTimeout(timer);}
 }
-if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url))main().catch(()=>{
+if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))main().catch(()=>{
   process.stderr.write('Saved allowance history could not be read. No history was deleted.\n');process.exitCode=1;
 });

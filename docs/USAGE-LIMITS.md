@@ -129,8 +129,13 @@ reported daily tokens, collection checks and bounded next-page navigation.
 It displays allocated database bytes and the storage ceiling. Account names are
 not retained, so groups use numbered labels with an explicit current marker.
 The sheet is unavailable for saved snapshots and isolated dashboard previews.
-Native compilation and reply-parser self-tests pass. Packaged interaction and
-visual checks remain pending, and this UI is not installed yet.
+Native compilation and reply-parser self-tests pass. The bundled native-to-Node
+archive test also passes empty-store handling, separate account groups, paged
+readings, daily reports, collection checks and rejection of a delete request.
+Native runtime paths and script entry points resolve macOS path aliases without
+relaxing private-store path checks. This test is required by build and ZIP checks.
+First-account navigation and saved date ranges help identify account groups.
+Interactive and visual checks remain pending, and this UI is not installed yet.
 
 Deletion is logical removal from this device. It does not promise secure erasure
 of free database pages, filesystem snapshots, backups or data already shared to

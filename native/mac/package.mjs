@@ -19,7 +19,7 @@ const manifest=inspectMacPackage(bundle,{revision:source.revision,buildRoots});
 const binary=app=>path.join(app,'Contents/MacOS/WorkspaceObservatory');
 const check=app=>{
   execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'inherit',timeout:30000});
-  for(const flag of ['--self-test','--test-collector','--test-web','--test-lifecycle'])
+  for(const flag of ['--self-test','--test-quota-archive','--test-collector','--test-web','--test-lifecycle'])
     execFileSync(binary(app),[flag],{stdio:'inherit',timeout:40000});
 };
 check(bundle);

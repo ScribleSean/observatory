@@ -780,6 +780,12 @@ if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-sty
         await testDirectPairingModel(); print("Native pairing model consent, confirmation, cancellation and cleanup passed"); exit(0)
     }
     NSApplication.shared.run()
+} else if CommandLine.arguments.contains("--test-quota-archive") {
+    Task { @MainActor in
+        do { try await testQuotaArchiveBridge(); exit(0) }
+        catch { print("Packaged allowance archive test failed: \((error as NSError).domain) \((error as NSError).code)"); exit(1) }
+    }
+    NSApplication.shared.run()
 } else if CommandLine.arguments.contains("--test-shutdown") {
     Task { @MainActor in
         do { try await testShutdownDrain(); print("Mac shutdown drain, timeout resume and refresh exclusion passed"); exit(0) }
