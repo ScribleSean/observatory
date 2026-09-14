@@ -70,17 +70,20 @@ struct NativeDictation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Your voice usage over time, by tool and device.").foregroundStyle(.secondary)
-            ObservatoryFilterRow(title: "Tool") { Picker("Tool", selection: $provider) {
-                ForEach(["All tools", "Wispr Flow", "ChatGPT"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented).onChange(of: provider) { anchor = "" } }
-            ObservatoryFilterRow(title: "Device") { Picker("Device", selection: $host) {
-                ForEach(["All devices", "Mac", "Windows"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented).onChange(of: host) { anchor = "" } }
-            ObservatoryFilterRow(title: "Period") { Picker("Period", selection: $period) {
-                Text("Day").tag("day")
-                Text("Week").tag("week")
-                Text("All retained").tag("all")
-            }.pickerStyle(.segmented) }
+            ObservatoryFilterRow(title: "Tool") {
+                ObservatorySegments(title: "Tool", labels: ["All tools", "Wispr Flow", "ChatGPT"],
+                    values: ["All tools", "Wispr Flow", "ChatGPT"], selection: $provider)
+                    .onChange(of: provider) { anchor = "" }
+            }
+            ObservatoryFilterRow(title: "Device") {
+                ObservatorySegments(title: "Device", labels: ["All devices", "Mac", "Windows"],
+                    values: ["All devices", "Mac", "Windows"], selection: $host)
+                    .onChange(of: host) { anchor = "" }
+            }
+            ObservatoryFilterRow(title: "Period") {
+                ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"],
+                    values: ["day", "week", "all"], selection: $period)
+            }
             if period != "all" && !dates.isEmpty {
                 ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") { Picker(period == "week" ? "Week ending" : "Recorded day",
                     selection: Binding(get: { end }, set: { anchor = $0 })) {

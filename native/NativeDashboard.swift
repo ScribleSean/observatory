@@ -154,14 +154,14 @@ struct NativeDashboard: View {
         let selected = nativePeriodDays(days, period: period, anchor: anchor)
         let chosen = nativePeriodSummary(selected, kind: key)
         return VStack(alignment: .leading, spacing: 18) {
-            ObservatoryFilterRow(title: "Device") { Picker("Device", selection: $host) {
-                ForEach(["All", "Mac", "Windows", "Ubuntu"], id: \.self) { Text($0).tag($0) }
-            }.pickerStyle(.segmented) }
-            ObservatoryFilterRow(title: "Period") { Picker("Period", selection: $period) {
-                Text("Day").tag("day")
-                Text("Week").tag("week")
-                Text("All retained").tag("all")
-            }.pickerStyle(.segmented) }
+            ObservatoryFilterRow(title: "Device") {
+                ObservatorySegments(title: "Device", labels: ["All", "Mac", "Windows", "Ubuntu"],
+                    values: ["All", "Mac", "Windows", "Ubuntu"], selection: $host)
+            }
+            ObservatoryFilterRow(title: "Period") {
+                ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"],
+                    values: ["day", "week", "all"], selection: $period)
+            }
             if period != "all", !days.isEmpty {
                 ObservatoryFilterRow(title: period == "week" ? "Week ending" : "Recorded day") {
                     Picker("Recorded date", selection: Binding(get: { anchor }, set: { selectedDate = $0 })) {

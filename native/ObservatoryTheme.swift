@@ -1,6 +1,39 @@
 import SwiftUI
 import CoreText
 
+struct ObservatorySegments: NSViewRepresentable {
+    let title: String
+    let labels: [String]
+    let values: [String]
+    @Binding var selection: String
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection, values: values) }
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(labels: labels, trackingMode: .selectOne,
+            target: context.coordinator, action: #selector(Coordinator.choose(_:)))
+        control.segmentDistribution = .fillEqually
+        control.selectedSegmentBezelColor = NSColor(ObservatoryTheme.sage)
+        control.setAccessibilityLabel(title)
+        return control
+    }
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        context.coordinator.values = values
+        control.selectedSegment = values.firstIndex(of: selection) ?? -1
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSSegmentedControl, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? nsView.intrinsicContentSize.width, height: 28)
+    }
+    final class Coordinator: NSObject {
+        var selection: Binding<String>
+        var values: [String]
+        init(selection: Binding<String>, values: [String]) { self.selection = selection; self.values = values }
+        @objc func choose(_ sender: NSSegmentedControl) {
+            guard values.indices.contains(sender.selectedSegment) else { return }
+            selection.wrappedValue = values[sender.selectedSegment]
+        }
+    }
+}
+
 // One label column keeps native segmented controls aligned across dashboards.
 struct ObservatoryFilterRow<Content: View>: View {
     let title: String

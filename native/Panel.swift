@@ -43,14 +43,10 @@ struct ObservatoryPanel: View {
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-                Picker("Source host", selection: $host) {
-                    ForEach(["All", "Mac", "Windows", "Ubuntu"], id: \.self) { Text($0).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Source host")
-                Picker("Period", selection: $period) {
-                    Text("Today").tag("day")
-                    Text("Week").tag("week")
-                    Text("All time").tag("all")
-                }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Period")
+                ObservatorySegments(title: "Source host", labels: ["All", "Mac", "Windows", "Ubuntu"],
+                    values: ["All", "Mac", "Windows", "Ubuntu"], selection: $host)
+                ObservatorySegments(title: "Period", labels: ["Today", "Week", "All time"],
+                    values: ["day", "week", "all"], selection: $period)
 
                 VStack(spacing: 0) {
                     let activity = summary(snapshot, kind: "activity")

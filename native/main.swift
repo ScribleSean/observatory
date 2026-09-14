@@ -690,7 +690,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 print("Native usage popup failed: shown=\(popover.isShown) visible=\(window?.isVisible ?? false) active=\(NSApp.isActive) anchorVisible=\(button?.window?.isVisible ?? false) anchorHidden=\(button?.isHiddenOrHasHiddenAncestor ?? true) screenCount=\(NSScreen.screens.count) window=\(String(describing: window?.frame)) view=\(String(describing: view?.bounds)) screens=\(NSScreen.screens.map(\.visibleFrame))")
                 exit(1)
             }
-            print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen with synthetic quota and token charts")
+            func segments(in node: NSView) -> [NSSegmentedControl] {
+                (node as? NSSegmentedControl).map { [$0] } ?? node.subviews.flatMap { segments(in: $0) }
+            }
+            let filters = segments(in: view)
+            precondition(NSApp.activationPolicy() == .regular)
+            precondition(filters.count == 2)
+            let sourceFilter = filters.first { $0.segmentCount == 4 }!
+            let periodFilter = filters.first { $0.segmentCount == 3 }!
+            precondition(sourceFilter.selectedSegment == 0 && periodFilter.selectedSegment == 2)
+            precondition(abs(sourceFilter.frame.width - periodFilter.frame.width) < 1)
+            print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen; aligned filters default to all sources and all time; regular app activation")
             if CommandLine.arguments.contains("--preview-pace") { return }
             openDefault()
             if usesNativeDashboard { precondition(nativeSelection.section == "allowances") }
