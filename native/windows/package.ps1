@@ -74,7 +74,7 @@ try {
     if (Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Name -in @('usage.json', 'collector.json', 'collector.config.json', 'local.config.json', '.env') }) {
         throw 'Private runtime configuration or snapshots detected.'
     }
-    foreach ($testArgument in @('--self-test', '--test-sharing-bridge', '--test-trusted-sync-owner')) {
+    foreach ($testArgument in @('--self-test', '--test-sharing-bridge', '--test-archive-bridge', '--test-trusted-sync-owner')) {
     $nativeTest = New-Object System.Diagnostics.Process
     $nativeTest.StartInfo.FileName = Join-Path $app 'WorkspaceObservatory.exe'
     $nativeTest.StartInfo.Arguments = $testArgument

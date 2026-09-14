@@ -7,6 +7,60 @@ namespace WorkspaceObservatory;
 // Owner-local history only. Never expose this bridge to web or peer requests.
 internal static class QuotaArchive
 {
+    internal static async Task BridgeSelfTest()
+    {
+        var runtime = Path.Combine(Path.GetTempPath(), "observatory-archive-bridge-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(runtime);
+        try
+        {
+            var empty = await Run(runtime, new JsonObject { ["action"] = "accounts" }, CancellationToken.None);
+            if (empty["accounts"]!.AsArray().Count != 0 || Directory.EnumerateFileSystemEntries(runtime).Any())
+                throw new Exception("Opening history created storage.");
+            var rejected = false;
+            try { await Run(runtime, new JsonObject { ["action"] = "delete" }, CancellationToken.None); }
+            catch (InvalidOperationException) { rejected = true; }
+            if (!rejected) throw new Exception("Unsupported history action accepted.");
+
+            // Write fictional observations only inside this newly created test runtime.
+            const string fixture = """
+                import {pathToFileURL} from 'node:url';
+                const {readQuotaState,updateQuotaState}=await import(pathToFileURL(process.argv[1]).href);
+                const root=process.argv[2],start=Date.parse('2025-01-01T12:00:00Z');
+                for(let i=0;i<2;i++) {
+                  const before=await readQuotaState(root,start+i);
+                  await updateQuotaState(root,{revision:before.revision,scope:'a'.repeat(64),enabled:true,
+                    observation:{status:'ok',checkedAt:new Date(start+i).toISOString(),
+                      windows:[{bucket:'codex',window:'primary',remainingPercent:70-i*10}]}},start+i);
+                }
+                """;
+            using var seed = new Process { StartInfo = new(Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe"))
+                { UseShellExecute = false, CreateNoWindow = true } };
+            foreach (var arg in new[] { "--input-type=module", "--eval", fixture,
+                Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "quota-store.mjs"), runtime }) seed.StartInfo.ArgumentList.Add(arg);
+            seed.Start();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            try { await seed.WaitForExitAsync(timeout.Token); }
+            catch { if (!seed.HasExited) seed.Kill(true); await seed.WaitForExitAsync(); throw; }
+            if (seed.ExitCode != 0) throw new Exception("Synthetic archive setup failed.");
+            var accounts = await Run(runtime, new JsonObject { ["action"] = "accounts" }, CancellationToken.None);
+            if (accounts["accounts"]!.AsArray().Count != 1) throw new Exception("Saved account bridge failed.");
+            var query = new JsonObject { ["action"] = "page", ["scope"] = new string('a', 64), ["kind"] = "observation",
+                ["from"] = 1735732800000L, ["to"] = 1735732800001L, ["limit"] = 1 };
+            var first = await Run(runtime, query, CancellationToken.None);
+            if (first["records"]!.AsArray().Count != 1 || first["next"] is null) throw new Exception("Archive bridge first page failed.");
+            query["after"] = first["next"]!.DeepClone();
+            var second = await Run(runtime, query, CancellationToken.None);
+            if (second["records"]!.AsArray().Count != 1 || second["next"] is not null ||
+                first["records"]![0]!["checkedAt"]!.ToJsonString() == second["records"]![0]!["checkedAt"]!.ToJsonString())
+                throw new Exception("Archive bridge pagination failed.");
+            using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+            rejected = false;
+            try { await Run(runtime, query, cancelled.Token); } catch (OperationCanceledException) { rejected = true; }
+            if (!rejected) throw new Exception("Cancelled archive read proceeded.");
+            Console.WriteLine("Packaged allowance archive bridge passed with isolated fictional records.");
+        }
+        finally { Directory.Delete(runtime, recursive: true); }
+    }
     internal static JsonObject Parse(string text)
     {
         if (text.Length > 600000 || JsonNode.Parse(text) is not JsonObject value ||
@@ -20,6 +74,7 @@ internal static class QuotaArchive
 
     internal static async Task<JsonObject> Run(string runtime, JsonObject request, CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (!Path.IsPathFullyQualified(runtime) || !Directory.Exists(runtime) ||
             File.GetAttributes(runtime).HasFlag(FileAttributes.ReparsePoint))
             throw new InvalidOperationException("Invalid archive runtime.");

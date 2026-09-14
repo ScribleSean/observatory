@@ -8,6 +8,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--test-archive-bridge")
+        {
+            try { QuotaArchive.BridgeSelfTest().GetAwaiter().GetResult(); }
+            catch { Console.Error.WriteLine("Native archive bridge failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 2 && args[0] is "--test-tls-setup-bridge" or "--test-tls-identity-bridge")
         {
             try { TlsSetupProcess.BridgeSelfTest(args[1], args[0] == "--test-tls-identity-bridge").GetAwaiter().GetResult(); }
