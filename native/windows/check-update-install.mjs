@@ -8,7 +8,6 @@ import {stageUpdateHelper} from './stage-update-helper.mjs';
 import {installationReceiptSigningBytes} from './signed-receipt.mjs';
 import {verifyInstallation} from './verify-installation.mjs';
 import {prepareUpdatePayload} from './prepare-update-payload.mjs';
-import {stageUpdatePayload} from './stage-update-payload.mjs';
 
 if(process.platform!=='win32' || process.env.GITHUB_ACTIONS!=='true' || process.env.RUNNER_ENVIRONMENT!=='github-hosted')
   throw Error('Disposable hosted Windows runner required');
@@ -37,10 +36,27 @@ assert.equal(extracted.status,0,extracted.stderr || String(extracted.error));
 const entries=readdirSync(expanded);
 assert.equal(entries.length,1);
 assert.match(entries[0],/^\.observatory-stage-[a-f0-9]{32}$/);
-const ready=stageUpdatePayload(path.join(expanded,entries[0]),installed,previous,publicKey);
+const stage=key=>spawnSync(path.join(installed,'WorkspaceObservatory.exe'),
+  ['--test-update-staging',path.join(expanded,entries[0]),installed,receiptPath,key,String(previous.buildNumber)],
+  {encoding:'utf8',timeout:300000,maxBuffer:16384,windowsHide:true});
+const before=readdirSync(path.dirname(installed)).sort();
+const wrongKey=generateKeyPairSync('ed25519').publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
+const refused=stage(wrongKey);
+assert.equal(refused.status,1,refused.stderr || String(refused.error));
+assert.equal(refused.stdout,'');
+assert.deepEqual(readdirSync(path.dirname(installed)).sort(),before);
+verifyInstallation(installed,previous);
+const stagedResult=stage(publicKey);
+assert.equal(stagedResult.status,0,stagedResult.stderr || String(stagedResult.error));
+const ready=JSON.parse(stagedResult.stdout);
+assert.equal(ready.schema,1);
+assert.equal(ready.status,'payload-staged');
+assert.equal(ready.buildNumber,candidate.buildNumber);
+verifyInstallation(installed,previous);
+verifyInstallation(ready.staged,candidate);
 assert.equal(ready.sourceRevision,candidate.sourceRevision);
 assert.deepEqual(readFileSync(ready.envelopePath),readFileSync(envelope));
-console.log(`PASS: complete signed update wrapper ZIP and native extraction verified; ${statSync(archive).size} archive bytes. Synthetic receipt signer only.`);
+console.log(`PASS: complete signed update wrapper ZIP, native extraction and native staging verified; ${statSync(archive).size} archive bytes. Wrong signer refused, installed payload unchanged. Synthetic receipt signer only.`);
 const helper=stageUpdateHelper(installed,previous,output);
 const result=spawnSync(path.join(helper.helper,'WorkspaceObservatory.exe'),
   ['--test-update-install',installed,ready.staged,receiptPath,ready.envelopePath,publicKey,String(previous.buildNumber)],

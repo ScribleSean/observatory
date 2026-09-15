@@ -68,6 +68,23 @@ internal static class Program
             finally { testHive.DeleteSubKeyTree(testRegistration, throwOnMissingSubKey: false); }
             return;
         }
+        if (args.Contains("--test-update-staging"))
+        {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
+                Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" ||
+                args.Length != 6 || args[0] != "--test-update-staging" ||
+                !long.TryParse(args[5], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var result = UpdateStaging.Stage(args[1], args[2], args[3], args[4], previousBuild).GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schema = 1, status = "payload-staged",
+                    staged = result.Staged, envelopePath = result.EnvelopePath,
+                    sourceRevision = result.SourceRevision, buildNumber = result.BuildNumber }));
+            }
+            catch { Console.Error.WriteLine("Synthetic update staging failed. No update was activated."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-candidate"))
         {
             if (args.Length != 5 || args[0] != "--test-update-candidate" ||

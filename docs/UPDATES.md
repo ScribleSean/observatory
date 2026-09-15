@@ -91,6 +91,15 @@ activate it. This bridge does not request app shutdown. Activation still perform
 its own verification and graceful shutdown under `UpdateSession`. The user-facing
 download callback must still be wired to these operations.
 
+The disposable Windows installation harness now exercises the packaged native
+staging command after ZIP extraction, rather than importing the staging function
+directly. It first supplies an unrelated synthetic signing key and requires failure
+without creating a candidate or changing installed files. With the correct key it
+checks the returned identity and independently verifies both the unchanged installed
+payload and staged candidate before running the existing replacement test. The
+test entry point is restricted to a disposable hosted Windows runner. Passing
+compilation or parser self-tests alone does not establish this integration result.
+
 `create-update-archive.ps1 -Directory <prepared-directory> -Archive <new-zip>`
 compresses the prepared directory without overwriting an existing archive or
 following linked inputs. It writes forward-slash ZIP entry names explicitly for
