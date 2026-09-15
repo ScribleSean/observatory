@@ -2,9 +2,33 @@ using Microsoft.Win32;
 
 namespace WorkspaceObservatory;
 
+internal sealed record DashboardAppearancePreferences(Func<bool> Read, Action<bool> Write);
+
 internal static class DashboardWindowPreferences
 {
     private const string Key = @"Software\Observatory\Dashboard";
+
+    internal static DashboardAppearancePreferences Appearance => new(ReadLightMode, WriteLightMode);
+
+    private static bool ReadLightMode()
+    {
+        try
+        {
+            using var saved = Registry.CurrentUser.OpenSubKey(Key);
+            return saved?.GetValue("LightMode") is int value && value == 1;
+        }
+        catch { return false; }
+    }
+
+    private static void WriteLightMode(bool light)
+    {
+        try
+        {
+            using var saved = Registry.CurrentUser.CreateSubKey(Key);
+            saved.SetValue("LightMode", light ? 1 : 0, RegistryValueKind.DWord);
+        }
+        catch { /* Preference storage must not interrupt the dashboard or collection. */ }
+    }
 
     // Called only for the installed app, never by the synthetic dashboard harness.
     internal static void Attach(Form form, Size available)

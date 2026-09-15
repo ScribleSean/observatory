@@ -379,6 +379,27 @@ internal static class NativeDashboardTests
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").PerformClick();
                 Check(refreshes == 1, "Refresh callback");
                 for (var i = 0; i < 20; i++) form.Reload();
+                var savedAppearance = false;
+                var appearanceWrites = 0;
+                var appearanceStore = new DashboardAppearancePreferences(() => savedAppearance, value => { savedAppearance = value; appearanceWrites++; });
+                using (var first = new NativeDashboard(() => data, () => Task.CompletedTask, appearancePreferences: appearanceStore))
+                {
+                    first.Show();
+                    Check(appearanceWrites == 0, "Opening a dashboard does not rewrite appearance preferences");
+                    Children(first).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance").PerformClick();
+                    Check(savedAppearance && appearanceWrites == 1, "Appearance selection is persisted immediately");
+                    first.Close();
+                }
+                using (var reopened = new NativeDashboard(() => data, () => Task.CompletedTask, appearancePreferences: appearanceStore))
+                {
+                    reopened.Show();
+                    Check(reopened.BackColor == DashboardPalette.Background(true), "Reopened dashboard restores light appearance");
+                    var appearanceButton = Children(reopened).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance");
+                    Check(appearanceButton.Text == "Dark mode", "Restored appearance action names the destination theme");
+                    appearanceButton.PerformClick();
+                    Check(!savedAppearance && appearanceWrites == 2, "Dark appearance can also be persisted");
+                    reopened.Close();
+                }
                 File.WriteAllText(Path.Combine(output, "native-result.txt"), "native-dashboard: passed");
             }
             catch (Exception error)

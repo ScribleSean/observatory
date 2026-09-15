@@ -25,12 +25,15 @@ internal sealed partial class NativeDashboard : Form
     private readonly Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive;
 
     internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null,
-        Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive = null, bool rememberLayout = false)
+        Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive = null, bool rememberLayout = false,
+        DashboardAppearancePreferences? appearancePreferences = null)
     {
         this.read = read; this.refresh = refresh;
         this.readArchive = readArchive;
         this.sourceSettings = sourceSettings;
         this.deviceSettings = deviceSettings;
+        var appearanceStore = appearancePreferences ?? (rememberLayout ? DashboardWindowPreferences.Appearance : null);
+        lightMode = appearanceStore?.Read() ?? false;
         Text = "Observatory"; AccessibleName = Text;
         Font = regular; BackColor = Color.FromArgb(28, 29, 27); ForeColor = Color.WhiteSmoke;
         var available = Screen.PrimaryScreen?.WorkingArea.Size ?? new Size(1280, 900);
@@ -91,10 +94,11 @@ internal sealed partial class NativeDashboard : Form
         var brandLabel = new Label { Text = "Observatory", Font = brand, Dock = DockStyle.Top, Height = 80, Padding = new Padding(20, 20, 0, 0) };
         sections.Dock = DockStyle.Fill;
         rail.Controls.Add(sections); rail.Controls.Add(brandLabel);
-        var appearance = new DashboardButton { Text = "Light mode", AccessibleName = "Toggle appearance", Dock = DockStyle.Bottom, Height = 44 };
+        var appearance = new DashboardButton { Text = lightMode ? "Dark mode" : "Light mode", AccessibleName = "Toggle appearance", Dock = DockStyle.Bottom, Height = 44 };
         appearance.Click += (_, _) =>
         {
             lightMode = !lightMode;
+            appearanceStore?.Write(lightMode);
             appearance.Text = lightMode ? "Dark mode" : "Light mode";
             DashboardPalette.Apply(this, lightMode);
             UpdateFreshness(read());
