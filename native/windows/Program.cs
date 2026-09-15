@@ -15,12 +15,27 @@ internal static class Program
                 args.Length != 7 || args[0] != "--test-update-activation" ||
                 !long.TryParse(args[6], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
             { Environment.ExitCode = 64; return; }
+            var testRegistration = @"Software\ObservatoryUpdateActivationTest-" + Guid.NewGuid().ToString("N");
+            using var testHive = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.CurrentUser, Microsoft.Win32.RegistryView.Registry64);
             try
             {
-                var result = UpdateActivation.Apply(args[1], args[2], args[3], args[4], args[5], previousBuild).GetAwaiter().GetResult();
+                using (var key = testHive.CreateSubKey(testRegistration))
+                {
+                    key.SetValue("InstallLocation", args[1]);
+                    key.SetValue("UninstallString", '"' + Path.Combine(args[1], "Uninstall.exe") + '"');
+                    key.SetValue("DisplayVersion", "0.0.0");
+                    key.SetValue("Unrelated", 47, Microsoft.Win32.RegistryValueKind.DWord);
+                }
+                var result = UpdateActivation.Apply(args[1], args[2], args[3], args[4], args[5], previousBuild, testRegistration).GetAwaiter().GetResult();
+                using var check = testHive.OpenSubKey(testRegistration)!;
+                var version = System.Diagnostics.FileVersionInfo.GetVersionInfo(Path.Combine(args[1], "WorkspaceObservatory.exe"));
+                if ((string?)check.GetValue("DisplayVersion") != $"{version.FileMajorPart}.{version.FileMinorPart}.{version.FileBuildPart}" ||
+                    (int)check.GetValue("Unrelated")! != 47 || check.ValueCount != 4)
+                    throw new IOException("Activation registration preservation failed.");
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "payload-replaced", sourceRevision = result.SourceRevision }));
             }
             catch { Console.Error.WriteLine("Update activation failed. Recovery inspection may be required."); Environment.ExitCode = 1; }
+            finally { testHive.DeleteSubKeyTree(testRegistration, throwOnMissingSubKey: false); }
             return;
         }
         if (args.Contains("--test-update-candidate"))
@@ -102,6 +117,7 @@ internal static class Program
                 UpdateQuit.SelfTest();
                 UpdateSession.SelfTest();
                 UpdateCandidate.SelfTest();
+                UpdateRegistration.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();

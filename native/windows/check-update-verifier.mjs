@@ -12,7 +12,8 @@ const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-native-updat
 try {
   const staged=path.join(root,'synthetic candidate');mkdirSync(staged);
   const revision='a'.repeat(40),hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-  const payload=Buffer.from('Fictional payload. Never execute.');
+  // Public build bytes provide real version resources. This copied payload is never launched.
+  const payload=readFileSync(executable);
   const manifest=Buffer.from(JSON.stringify({schema:1,platform:'win-x64',sourceRevision:revision,sourceDirty:false,
     totalBytes:payload.length,files:[{path:'WorkspaceObservatory.exe',bytes:payload.length,sha256:hash(payload)}]}));
   const owner=Buffer.from(`[Owner]\nProduct=WorkspaceObservatorySetup\nRevision=${revision}\n`);

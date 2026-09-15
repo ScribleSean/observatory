@@ -116,8 +116,13 @@ the writer exits and validates the returned revision and recovery paths. Once
 replacement begins it does not offer cancellation or forcibly stop the writer.
 The disposable hosted Windows package test exercises this path using synthetic
 payloads. Local package builds skip that activation test so they cannot quit a
-running personal app. Registration updates, trusted configuration provisioning,
-relaunch and user-facing update controls remain separate work.
+running personal app. Activation captures the owned 64-bit per-user uninstall
+registration and changes only `DisplayVersion` after verified replacement. The
+version comes from the verified executable's version resource. Changed ownership
+or a stale registration snapshot causes refusal. Registration failure after
+replacement requires inspection and does not trigger relaunch. Tests use unique
+temporary registry keys and check preservation of unrelated values. Trusted
+configuration provisioning, relaunch and user-facing update controls remain.
 
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
