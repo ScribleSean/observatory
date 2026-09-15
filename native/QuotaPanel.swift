@@ -232,7 +232,8 @@ struct QuotaPanel: View {
                     }
                 }
                 let checkedAt = parseDate(quota["checkedAt"]) ?? retained.last?.at ?? Date()
-                let range = quotaPeriodRange(retained, period: dashboard ? historyPeriod : "Day", anchor: anchor, checkedAt: checkedAt)
+                let range = dashboard ? quotaPeriodRange(retained, period: historyPeriod, anchor: anchor, checkedAt: checkedAt)
+                    : checkedAt.addingTimeInterval(-86400)...checkedAt
                 let start = range.lowerBound
                 let end = range.upperBound
                 let points = retained.filter { $0.at >= start && $0.at <= checkedAt && (historyPeriod == "All retained" ? $0.at <= end : $0.at < end) }

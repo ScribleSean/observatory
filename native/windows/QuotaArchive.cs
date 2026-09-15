@@ -202,6 +202,7 @@ internal sealed class QuotaArchiveWindow : Form
     private readonly Button allDates = new DashboardButton { Text = "All saved dates", AutoSize = true };
     private readonly FlowLayoutPanel charts = new() { Dock = DockStyle.Top, Height = 280, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Visible = false };
     private readonly JsonArray chartReadings = new();
+    private readonly Dictionary<string, string> chartPeriods = new(), chartDates = new();
     private readonly Label status = new() { AutoSize = true, MaximumSize = new Size(760, 0) };
     private readonly DataGridView rows = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
         AllowUserToDeleteRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false,
@@ -266,7 +267,7 @@ internal sealed class QuotaArchiveWindow : Form
 
     private void InvalidatePage()
     {
-        pageNext = null; rows.Rows.Clear(); chartReadings.Clear(); RenderCharts(); UpdateButtons();
+        pageNext = null; rows.Rows.Clear(); chartReadings.Clear(); chartPeriods.Clear(); chartDates.Clear(); RenderCharts(); UpdateButtons();
         status.Text = "This PC only. Choose filters and load saved history. These are not live readings or device totals.";
     }
     private void UpdateButtons()
@@ -345,10 +346,32 @@ internal sealed class QuotaArchiveWindow : Form
             .GroupBy(window => Snapshot.Text(window["bucket"]) + ":" + Snapshot.Text(window["window"])).Select(group => group.Last());
         foreach (var window in windows)
         {
+            var key = Snapshot.Text(window["bucket"]) + ":" + Snapshot.Text(window["window"]);
+            var period = chartPeriods.GetValueOrDefault(key, "All retained");
             var width = Math.Max(240, charts.ClientSize.Width - 32);
             var graph = new QuotaGraph(quota, window, fitHistory: true) { Width = width, Height = 180, BackColor = DashboardCard.Surface };
+            graph.SelectPeriod(period);
+            var dates = QuotaGraph.RecordedDates(quota);
+            var selectedDate = chartDates.GetValueOrDefault(key, dates.LastOrDefault() ?? "");
+            if (!dates.Contains(selectedDate)) selectedDate = dates.LastOrDefault() ?? "";
+            graph.SelectDate(selectedDate);
+            var dateRow = new FlowLayoutPanel { Width = width, Height = 42, WrapContents = false, Visible = period != "All retained" };
+            var dateLabel = new Label { AutoSize = true, Text = period == "Week" ? "Week ending" : "Recorded day", Padding = new Padding(0, 7, 8, 0) };
+            var dateChoice = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 190, AccessibleName = "Recorded allowance date",
+                BackColor = Color.White, ForeColor = Color.Black };
+            dateChoice.Items.AddRange(dates); dateChoice.SelectedItem = selectedDate;
+            dateChoice.SelectedIndexChanged += (_, _) => {
+                var date = dateChoice.SelectedItem?.ToString() ?? "";
+                chartDates[key] = date; graph.SelectDate(date);
+            };
+            dateRow.Controls.Add(dateLabel); dateRow.Controls.Add(dateChoice);
             charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used" });
-            charts.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], "All retained", graph.SelectPeriod) { Width = width });
+            charts.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], period, value => {
+                chartPeriods[key] = value; graph.SelectPeriod(value);
+                dateLabel.Text = value == "Week" ? "Week ending" : "Recorded day";
+                dateRow.Visible = value != "All retained";
+            }) { Width = width });
+            charts.Controls.Add(dateRow);
             charts.Controls.Add(graph);
         }
     }
@@ -408,6 +431,16 @@ internal sealed class QuotaArchiveWindow : Form
                 await window.LoadPage(false);
                 if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
                 if (!window.charts.Controls.OfType<QuotaGraph>().Any()) throw new Exception("Saved allowance graph missing.");
+                var periodFilters = window.charts.Controls.OfType<DashboardFilters>().Single();
+                var weekButton = periodFilters.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(button => button.Text == "Week");
+                weekButton.PerformClick();
+                var dateChoice = window.charts.Controls.OfType<FlowLayoutPanel>().SelectMany(row => row.Controls.OfType<ComboBox>()).Single();
+                if (!dateChoice.Visible || dateChoice.Items.Count != 1 || window.chartPeriods["codex:weekly"] != "Week")
+                    throw new Exception("Archive recorded week selector missing.");
+                window.RenderCharts();
+                if (window.charts.Controls.OfType<DashboardFilters>().Single().Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>()
+                    .Single(button => button.Text == "Week").AccessibleDescription != "Selected")
+                    throw new Exception("Archive chart period lost on render.");
                 foreach (var size in new[] { new Size(820, 560), new Size(700, 460) })
                 {
                     window.ClientSize = size; window.PerformLayout();
