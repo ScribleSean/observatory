@@ -13,7 +13,7 @@ test('Windows updater runtime has an explicit self-contained package dependency 
   const group=project.match(/<Content Include="([^"]+)">\s*<Link>Updater\/%\(Filename\)%\(Extension\)<\/Link>/);
   assert.ok(group,'Explicit updater content group is required');
   const files=group[1].split(';');
-  assert.deepEqual(files.sort(),['package-content.mjs','replace-payload.mjs','signed-receipt.mjs','stage-update-helper.mjs','verify-candidate.mjs','verify-installation.mjs','verify-manifest.mjs']);
+  assert.deepEqual(files.sort(),['apply-update.mjs','package-content.mjs','replace-payload.mjs','signed-receipt.mjs','stage-update-helper.mjs','verify-candidate.mjs','verify-installation.mjs','verify-manifest.mjs']);
   const root=mkdtempSync(path.join(tmpdir(),'observatory-updater-runtime-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   for(const file of files)copyFileSync(new URL(file,source),path.join(root,file));

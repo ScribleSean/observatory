@@ -224,3 +224,22 @@ test('helper staging refuses untrusted payloads and a destination inside the ins
   assert.throws(()=>stageUpdateHelper(f.old.folder,f.old.receipt,f.root));
   assert.equal(readFileSync(path.join(f.old.folder,'usage.json'),'utf8'),'Synthetic private data');
 });
+
+test('external replacement command authenticates again and retains recovery evidence',t=>{
+  const f=fixture(t),release=signer();
+  const previous=path.join(f.root,'previous.json'),candidate=path.join(f.root,'candidate.json');
+  writeFileSync(previous,JSON.stringify(f.old.receipt));
+  writeFileSync(candidate,release.envelope(f.next.receipt));
+  const entry=fileURLToPath(new URL('../native/windows/apply-update.mjs',import.meta.url));
+  const run=key=>spawnSync(process.execPath,[entry,f.old.folder,f.next.folder,previous,candidate,key],
+    {encoding:'utf8',timeout:10000});
+  assert.equal(run(signer().publicKey).status,1);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  const result=run(release.publicKey);
+  assert.equal(result.status,0,result.stderr);
+  const response=JSON.parse(result.stdout);
+  assert.equal(response.status,'payload-replaced');
+  assert.equal(verifyInstallation(response.installed,f.next.receipt).buildNumber,8);
+  assert.equal(verifyInstallation(response.previous,f.old.receipt).buildNumber,7);
+  assert.deepEqual(readFileSync(path.join(response.recovery,'candidate-envelope.json')),readFileSync(candidate));
+});

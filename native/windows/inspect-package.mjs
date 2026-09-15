@@ -17,7 +17,7 @@ const required=['Fonts/InterTight.ttf','Fonts/OFL.txt','WorkspaceObservatory.exe
   'Licenses/Microsoft.WindowsDesktop.App.Runtime.win-x64-LICENSE','Licenses/Microsoft.Web.WebView2-LICENSE.txt','Licenses/Microsoft.Web.WebView2-NOTICE.txt',
   'Licenses/tzdata/LICENSE','Licenses/tzdata/licenses/LICENSE_APACHE',
   'Updater/verify-installation.mjs','Updater/verify-manifest.mjs','Updater/package-content.mjs',
-  'Updater/replace-payload.mjs','Updater/signed-receipt.mjs','Updater/verify-candidate.mjs','Updater/stage-update-helper.mjs'];
+  'Updater/replace-payload.mjs','Updater/signed-receipt.mjs','Updater/verify-candidate.mjs','Updater/stage-update-helper.mjs','Updater/apply-update.mjs'];
 for(const file of required)if(!existsSync(path.join(root,file)))throw Error(`Missing package component: ${file}`);
 // Only inspect this generated package. Do not scan the source logs or user profile.
 const roots=[process.env.USERPROFILE,project];

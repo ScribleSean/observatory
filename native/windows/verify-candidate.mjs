@@ -6,7 +6,7 @@ import {verifyInstallation} from './verify-installation.mjs';
 
 // This command comes from the trusted installed runtime, never the candidate.
 // Public key and previous build are trusted caller configuration, not feed fields.
-export function verifyCandidate(staged,envelopePath,trustedPublicKey,previousBuild) {
+export function readReceiptFile(envelopePath) {
   if(typeof envelopePath!=='string' || !path.isAbsolute(envelopePath) ||
     path.resolve(envelopePath)!==realpathSync(envelopePath))throw Error('Canonical receipt path required');
   for(let current=envelopePath;;current=path.dirname(current)) {
@@ -25,7 +25,11 @@ export function verifyCandidate(staged,envelopePath,trustedPublicKey,previousBui
     if(length>8192)throw Error('Receipt grew beyond size bound');
     envelope=bytes.subarray(0,length);
   } finally { closeSync(handle); }
-  const receipt=authenticateInstallationReceipt(envelope,trustedPublicKey,previousBuild);
+  return envelope;
+}
+
+export function verifyCandidate(staged,envelopePath,trustedPublicKey,previousBuild) {
+  const receipt=authenticateInstallationReceipt(readReceiptFile(envelopePath),trustedPublicKey,previousBuild);
   const identity=verifyInstallation(staged,receipt);
   return Object.freeze({schema:1,status:'verified',...identity,manifestSha256:receipt.manifestSha256});
 }

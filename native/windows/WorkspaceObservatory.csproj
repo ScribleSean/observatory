@@ -23,7 +23,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="*.cs" />
-    <Content Include="stage-update-helper.mjs;verify-candidate.mjs;verify-installation.mjs;verify-manifest.mjs;package-content.mjs;replace-payload.mjs;signed-receipt.mjs">
+    <Content Include="apply-update.mjs;stage-update-helper.mjs;verify-candidate.mjs;verify-installation.mjs;verify-manifest.mjs;package-content.mjs;replace-payload.mjs;signed-receipt.mjs">
       <Link>Updater/%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

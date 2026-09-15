@@ -87,7 +87,7 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
-Windows build output includes an explicit seven-file `Updater` runtime for
+Windows build output includes an explicit eight-file `Updater` runtime for
 installation verification, signed receipts and retained-payload replacement.
 The package inspector requires every file. The runtime imports without the
 source checkout and contains no release signer or private key. This packaging
@@ -100,6 +100,15 @@ for inspection. The caller must exclude concurrent writers and supply a trusted
 receipt before staging. Tests cover independent copied bytes, repeated staging,
 refusal of an internal destination, wrong receipts and unexpected private files.
 This prepares an external helper but does not implement activation or relaunch.
+
+`apply-update.mjs` is the internal replacement subprocess entry point. It
+requires its runtime and Node executable outside both payloads, reads bounded
+receipt files and repeats signed installation verification before replacement.
+It retains the previous payload and recovery evidence. Its native caller must
+hold the setup and collection exclusion for the subprocess lifetime. The command
+does not acquire those locks, preserve registration or relaunch an application
+by itself. It is not a standalone user update command. Synthetic subprocess
+tests cover wrong-key refusal and verified replacement with retained receipts.
 
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
