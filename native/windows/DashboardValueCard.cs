@@ -3,9 +3,11 @@ namespace WorkspaceObservatory;
 internal sealed class DashboardValueCard : Panel
 {
     private readonly Font titleFont = DashboardTypography.AtPixels(19, FontStyle.Bold);
-    internal DashboardValueCard(string title, (string label, string value)[] rows)
+    internal string Title { get; }
+    internal DashboardValueCard(string title, (string label, string value)[] rows, bool showHeading = true)
     {
-        Height = 40 + rows.Length * 30;
+        Title = title;
+        Height = (showHeading ? 40 : 0) + rows.Length * 30;
         BackColor = DashboardCard.Surface;
         AccessibleName = title;
         var heading = new Label { Text = title, Font = titleFont, Dock = DockStyle.Top, Height = 40 };
@@ -19,7 +21,8 @@ internal sealed class DashboardValueCard : Panel
             values.Controls.Add(new Label { Text = rows[index].value, AccessibleName = rows[index].label + " value", Dock = DockStyle.Fill,
                 ForeColor = Color.FromArgb(183, 186, 177), TextAlign = ContentAlignment.MiddleRight }, 1, index);
         }
-        Controls.Add(values); Controls.Add(heading);
+        Controls.Add(values);
+        if (showHeading) Controls.Add(heading); else heading.Dispose();
     }
     protected override void Dispose(bool disposing) { base.Dispose(disposing); if (disposing) titleFont.Dispose(); }
 }

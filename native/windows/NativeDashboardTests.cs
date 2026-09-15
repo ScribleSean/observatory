@@ -270,6 +270,16 @@ internal static class NativeDashboardTests
                 Check(!Children(form).OfType<ComboBox>().Any(combo => combo.AccessibleName == "Record type"), "All agent record categories share one page");
                 Check(Texts(form).Contains("Failure: Synthetic failure"), "Receipt failure detail");
                 Capture(form, output, "native-agents");
+                var receiptDetails = Children(form).OfType<DashboardValueCard>().Single(card => card.AccessibleName == "Handoff receipt");
+                var disclosure = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Handoff receipt details");
+                var collapsedHeight = receiptDetails.Parent!.Height;
+                Check(!receiptDetails.Visible && disclosure.AccessibleDescription!.StartsWith("Collapsed"), "Agent details start collapsed");
+                disclosure.PerformClick();
+                Check(receiptDetails.Visible && receiptDetails.Parent.Height > collapsedHeight && disclosure.AccessibleDescription!.StartsWith("Expanded"), "Agent details expand accessibly");
+                Check(AgentValue("Handoff receipt", "Reported tokens") == "Unknown", "Expanded failed receipt remains Unknown");
+                Capture(form, output, "native-agent-expanded");
+                disclosure.PerformClick();
+                Check(!receiptDetails.Visible && receiptDetails.Parent.Height == collapsedHeight, "Agent details collapse without leaving empty space");
                 data["agents"]![0]!["status"] = "ok";
                 form.Reload();
                 Check(AgentValue("Handoff receipt", "Reported tokens") == "99", "Successful reported counter");
