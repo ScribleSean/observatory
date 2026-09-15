@@ -72,3 +72,37 @@ test('history interface requires explicit bounds, retains pagination and rejects
   for(const override of [{from:undefined},{to:start-1},{scope:'email'},{limit:201},{after:{at:start,id:1,extra:true}},{url:'https://example.com'}])
     await assert.rejects(quotaArchiveControl(root,{...query,...override}));
 });
+
+test('chart timeline pages observations and failed checks without duplicate successful polls',async t=>{
+  const root=await fixture(t),scope='a'.repeat(64);
+  await save(root,scope,start);
+  const before=await readQuotaState(root,start+60000);
+  await updateQuotaState(root,{revision:before.revision,scope,enabled:true,
+    observation:{status:'unavailable',checkedAt:new Date(start+60000).toISOString()}},start+60000);
+  await save(root,scope,start+300000);
+  await save(root,'b'.repeat(64),start+300001);
+  const query={action:'page',scope,kind:'timeline',from:0,to:start+400000,limit:1};
+  const records=[];let after=null;
+  do {
+    const page=await quotaArchiveControl(root,{...query,after});
+    records.push(...page.records);after=page.next;
+  } while(after);
+  assert.equal(records.length,3);
+  assert.ok(records[0].windows);
+  assert.equal(records[1].status,'unavailable');
+  assert.ok(records[2].windows);
+  assert.equal(records[2].checkedAt,new Date(start+300000).toISOString());
+  assert.ok(records.every(row=>row.status!=='ok'));
+});
+
+test('timeline retains a successful check without a usable percentage observation',async t=>{
+  const root=await fixture(t),scope='a'.repeat(64);
+  await save(root,scope,start);
+  const before=await readQuotaState(root,start+60000);
+  await updateQuotaState(root,{revision:before.revision,scope,enabled:true,
+    observation:{status:'ok',checkedAt:new Date(start+60000).toISOString(),windows:[]}},start+60000);
+  const page=await quotaArchiveControl(root,{action:'page',scope,kind:'timeline',from:start,to:start+60000});
+  assert.equal(page.records.length,2);
+  assert.equal(page.records[1].status,'ok');
+  assert.equal(page.records[1].windows,undefined);
+});

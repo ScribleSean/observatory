@@ -50,11 +50,18 @@ export function archiveQuotaPoll(db,{scope,observation,enabled},now) {
 
 // Owner-local only. Never project archive scope keys or records wholesale to peers.
 export function readQuotaArchivePage(db,{scope,kind,from=0,to=8640000000000000,after=null,limit=100}={}) {
-  if(!scopeKey(scope) || !['observation','daily','poll'].includes(kind) ||
+  if(!scopeKey(scope) || !['observation','daily','poll','timeline'].includes(kind) ||
     !validTime(from) || !validTime(to) || from>to || !Number.isSafeInteger(limit) || limit<1 || limit>200 ||
     (after!==null && (!validTime(after.at) || !Number.isSafeInteger(after.id) || after.id<1)))throw Error('Invalid archive query');
-  const found=db.prepare('SELECT id,observed_at,record FROM quota_archive WHERE scope=? AND kind=? AND observed_at>=? AND observed_at<=? AND (observed_at,id)>(?,?) ORDER BY observed_at,id LIMIT ?')
-    .all(scope,kind,from,to,after?.at??-1,after?.id??0,limit+1);
+  // Failed checks are evidence of unknown coverage, including failures shorter
+  // than the normal gap threshold. Omit a successful poll only when a matching
+  // observation exists. An empty successful response still has unknown coverage.
+  const predicate=kind==='timeline'?`(kind='observation' OR (kind='poll' AND
+    (json_extract(record,'$.status')!='ok' OR NOT EXISTS
+      (SELECT 1 FROM quota_archive AS observation WHERE observation.scope=quota_archive.scope
+       AND observation.kind='observation' AND observation.observed_at=quota_archive.observed_at))))`:'kind=?';
+  const found=db.prepare(`SELECT id,observed_at,record FROM quota_archive WHERE scope=? AND ${predicate} AND observed_at>=? AND observed_at<=? AND (observed_at,id)>(?,?) ORDER BY observed_at,id LIMIT ?`)
+    .all(scope,...(kind==='timeline'?[]:[kind]),from,to,after?.at??-1,after?.id??0,limit+1);
   const records=[];let bytes=0,last=null;
   for(const row of found.slice(0,limit)) {
     bytes+=Buffer.byteLength(row.record);

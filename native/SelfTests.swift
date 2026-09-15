@@ -29,6 +29,8 @@ func runSelfTests() {
     let emptyArchive = Data(#"{"version":1,"accounts":[],"next":null,"storageBytes":0,"storageLimitBytes":8589934592}"#.utf8)
     precondition((try? ArchiveReply.parse(emptyArchive))?.accounts?.count == 0)
     precondition((try? ArchiveReply.parse(Data(#"{"version":1,"records":[],"next":null}"#.utf8)))?.records?.count == 0)
+    let resetArchive = try? ArchiveReply.parse(Data(#"{"version":1,"records":[{"checkedAt":"2026-09-15T12:00:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70,"resetsAt":"2026-09-15T16:00:00Z"}]}],"next":null}"#.utf8))
+    precondition(resetArchive?.records?.first?.windows?.first?.resetsAt == "2026-09-15T16:00:00Z")
     for invalid in [#"{"version":2,"records":[]}"#, #"{"version":1,"records":[],"accounts":[]}"#,
                     #"{"version":1,"records":[],"next":"raw-account"}"#,
                     #"{"version":1,"records":[{"checkedAt":"not-a-date"}]}"#] {

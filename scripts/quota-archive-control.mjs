@@ -18,7 +18,7 @@ export async function quotaArchiveControl(runtime,request) {
       (request.limit!==undefined && (!Number.isSafeInteger(request.limit) || request.limit<1 || request.limit>100)))throw Error('Invalid account request');
   } else if(request.action==='page') {
     if(keys.some(key=>!['action','scope','kind','from','to','after','limit'].includes(key)) || !hex(request.scope) ||
-      !['observation','daily','poll'].includes(request.kind) || !time(request.from) || !time(request.to) || request.from>request.to ||
+      !['observation','daily','poll','timeline'].includes(request.kind) || !time(request.from) || !time(request.to) || request.from>request.to ||
       (request.limit!==undefined && (!Number.isSafeInteger(request.limit) || request.limit<1 || request.limit>200)) ||
       (request.after!==undefined && request.after!==null && (typeof request.after!=='object' ||
         Object.keys(request.after).sort().join(',')!=='at,id' || !time(request.after.at) || !Number.isSafeInteger(request.after.id) || request.after.id<1)))throw Error('Invalid page request');

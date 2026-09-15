@@ -14,6 +14,7 @@ struct ArchiveWindow: Decodable {
     let bucket: String
     let window: String
     let remainingPercent: Double
+    let resetsAt: String?
 }
 struct ArchiveReading: Decodable {
     let checkedAt: String
