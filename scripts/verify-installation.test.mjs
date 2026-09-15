@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,realpathSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,realpathSync,rmSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -145,6 +145,38 @@ test('update wrapper rejects wrong signer, extra files and altered payload befor
   writeFileSync(path.join(output,'payload','WorkspaceObservatory.exe'),'Changed');
   assert.throws(()=>stageUpdatePayload(output,f.old.folder,f.old.receipt,release.publicKey));
   assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+});
+test('signed update directory survives ZIP, real native bounded extraction and sibling staging',{
+  skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR
+    ?'Requires Windows and an explicitly supplied trusted native extractor':false,
+},t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  const extractor=process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR;
+  assert.ok(path.isAbsolute(extractor));
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  const prepared=path.join(f.root,'prepared'),expanded=path.join(f.root,'expanded');
+  prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,prepared);
+  mkdirSync(expanded);
+  const script=path.join(f.root,'roundtrip.ps1');
+  writeFileSync(script,`param([string]$Source,[string]$Archive,[string]$Extractor,[string]$Destination)
+$ErrorActionPreference='Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[IO.Compression.ZipFile]::CreateFromDirectory($Source,$Archive)
+$arguments='--test-update-extraction "'+$Archive+'" "'+$Destination+'"'
+$process=Start-Process -FilePath $Extractor -ArgumentList $arguments -Wait -PassThru
+exit $process.ExitCode
+`);
+  const result=spawnSync(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoProfile','-NonInteractive','-File',script,'-Source',prepared,'-Archive',path.join(f.root,'update.zip'),
+      '-Extractor',extractor,'-Destination',expanded],{encoding:'utf8',timeout:30000});
+  assert.equal(result.status,0,result.stderr || String(result.error));
+  const children=readdirSync(expanded);
+  assert.equal(children.length,1);
+  assert.match(children[0],/^\.observatory-stage-[a-f0-9]{32}$/);
+  const staged=stageUpdatePayload(path.join(expanded,children[0]),f.old.folder,f.old.receipt,release.publicKey);
+  assert.equal(verifyInstallation(staged.staged,f.next.receipt).buildNumber,8);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  assert.deepEqual(readFileSync(staged.envelopePath),readFileSync(envelope));
 });
 test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
   const f=fixture(t),release=signer();
