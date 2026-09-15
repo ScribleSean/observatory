@@ -7,6 +7,21 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        foreach (var fraction in new[] { 0.0, 1.0 })
+        {
+            using var meter = new DashboardMeter(fraction, "Synthetic boundary") { Size = new Size(120, 10) };
+            using var bitmap = new Bitmap(120, 10);
+            meter.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var expectedColor = fraction == 0 ? DashboardMeter.TrackColor : DashboardMeter.FillColor;
+            Check(bitmap.GetPixel(60, 5).ToArgb() == expectedColor.ToArgb(), "Meter zero and full boundaries render accurately");
+        }
+        foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, -0.1, 1.1 })
+        {
+            var rejected = false;
+            try { using var meter = new DashboardMeter(invalid, "Invalid synthetic fraction"); }
+            catch (ArgumentOutOfRangeException) { rejected = true; }
+            Check(rejected, "Meter rejects invalid fractions instead of inventing a zero");
+        }
         var paceQuota = JsonNode.Parse("""{"status":"ok","checkedAt":"2026-09-09T12:00:00Z","pace":[{"bucket":"codex","window":"primary","asOf":"2026-09-09T12:00:00Z","summary":"Synthetic pace"}]}""")!.AsObject();
         var paceWindow = new JsonObject { ["bucket"] = "codex", ["window"] = "primary" };
         if (NativeDashboard.AllowancePaceText(paceQuota, paceWindow, DateTimeOffset.Parse("2026-09-09T12:01:00Z")) != "Synthetic pace" ||
@@ -152,7 +167,7 @@ internal static class NativeDashboardTests
                 Check(Children(form).OfType<QuotaGraph>().Count() == 1, "Retired allowance hidden");
                 var accountCard = Children(form).OfType<DashboardCard>().Single(card => card.AccessibleName == "Account usage card");
                 Check(Children(accountCard).OfType<QuotaGraph>().Count() == 1, "Allowance history grouped with account reading");
-                Check(Children(accountCard).OfType<ProgressBar>().Single(bar => bar.AccessibleName == "Allowance remaining").Value == 650, "Saved remaining reading preserved");
+                Check(Children(accountCard).OfType<DashboardMeter>().Single(bar => bar.AccessibleName == "Allowance remaining").Fraction == 0.65, "Saved remaining reading preserved");
                 var savedQuota = data["quota"]!.DeepClone();
                 var freshAt = DateTimeOffset.UtcNow.ToString("O");
                 data["quota"]!["status"] = "ok";
@@ -162,14 +177,21 @@ internal static class NativeDashboardTests
                 data["quota"]!["pace"] = new JsonArray(new JsonObject { ["bucket"] = "codex", ["window"] = "primary", ["asOf"] = freshAt, ["summary"] = paceSummary, ["status"] = "projected", ["coverageFraction"] = 0.625 });
                 form.Reload();
                 Check(Texts(form).Contains(paceSummary), "Fresh pace rendered in allowance page");
-                var coverageBar = Children(form).OfType<ProgressBar>().Single(bar => bar.AccessibleName == "Estimated time coverage until reset, at last check");
-                Check(coverageBar.Value == 625 && coverageBar.Visible && coverageBar.Width > 0, "Reset coverage bar rendered at expected ratio");
+                var coverageBar = Children(form).OfType<DashboardMeter>().Single(bar => bar.AccessibleName == "Estimated time coverage until reset, at last check");
+                Check(coverageBar.Fraction == 0.625 && coverageBar.Visible && coverageBar.Width > 0, "Reset coverage bar rendered at expected ratio");
+                Check(coverageBar.AccessibilityObject.Role == AccessibleRole.ProgressBar && coverageBar.AccessibilityObject.Value == "62.5%", "Meter exposes its observed fraction accessibly");
+                using (var meterImage = new Bitmap(coverageBar.Width, coverageBar.Height))
+                {
+                    coverageBar.DrawToBitmap(meterImage, new Rectangle(Point.Empty, meterImage.Size));
+                    Check(meterImage.GetPixel(coverageBar.Width / 4, coverageBar.Height / 2).ToArgb() == DashboardMeter.FillColor.ToArgb(), "Sage meter fill is painted");
+                    Check(meterImage.GetPixel(coverageBar.Width * 3 / 4, coverageBar.Height / 2).ToArgb() == DashboardMeter.TrackColor.ToArgb(), "Unfilled meter track is painted");
+                }
                 Check(Texts(form).Contains("Reset (at last check)"), "Reset endpoint labelled");
                 Capture(form, output, "native-allowance-pace");
                 data["quota"]!["checkedAt"] = DateTimeOffset.UtcNow.AddMinutes(-11).ToString("O");
                 form.Reload();
                 Check(!Texts(form).Contains(paceSummary) && Texts(form).Contains("Estimate unavailable until a fresh reading."), "Stale rendered pace withheld");
-                Check(!Children(form).OfType<ProgressBar>().Any(bar => bar.AccessibleName == "Estimated time coverage until reset, at last check"), "Stale reset coverage bar withheld");
+                Check(!Children(form).OfType<DashboardMeter>().Any(bar => bar.AccessibleName == "Estimated time coverage until reset, at last check"), "Stale reset coverage bar withheld");
                 data["quota"] = savedQuota;
                 form.Reload();
                 Capture(form, output, "native-allowances");

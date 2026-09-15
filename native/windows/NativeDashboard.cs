@@ -300,13 +300,12 @@ internal sealed partial class NativeDashboard : Form
             var windowTitle = Label(Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + ": " + Snapshot.Format(remaining) + "% remaining");
             windowTitle.Font = heading;
             if (remaining is double percent && double.IsFinite(percent) && percent >= 0 && percent <= 100)
-                body.Controls.Add(new ProgressBar { Width = ContentWidth, Height = 10, Minimum = 0, Maximum = 1000,
-                    Value = (int)Math.Round(percent * 10), AccessibleName = "Allowance remaining", AccessibleDescription = $"{percent}% remaining" });
+                body.Controls.Add(new DashboardMeter(percent / 100, "Allowance remaining") { Width = ContentWidth,
+                    AccessibleDescription = $"{percent}% remaining" });
             Label(AllowancePaceText(quota, window, DateTimeOffset.UtcNow));
             if (AllowancePaceCoverage(quota, window, DateTimeOffset.UtcNow) is double coverage)
             {
-                body.Controls.Add(new ProgressBar { Width = ContentWidth, Height = 12, Minimum = 0, Maximum = 1000,
-                    Value = (int)Math.Round(coverage * 1000), AccessibleName = "Estimated time coverage until reset, at last check",
+                body.Controls.Add(new DashboardMeter(coverage, "Estimated time coverage until reset, at last check") { Width = ContentWidth, Height = 12,
                     AccessibleDescription = $"{Math.Round(coverage * 100)} percent. Filled portion ends at estimated exhaustion or reset, whichever comes first." });
                 var endpoints = new TableLayoutPanel { Width = ContentWidth, Height = 24, ColumnCount = 2 };
                 endpoints.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
