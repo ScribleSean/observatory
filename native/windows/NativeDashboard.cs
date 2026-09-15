@@ -100,16 +100,27 @@ internal sealed partial class NativeDashboard : Form
     {
         var table = new DataGridView { Width = ContentWidth, Height = 235, ReadOnly = true,
             AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, BackgroundColor = BackColor,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, BackgroundColor = DashboardCard.Surface,
             BorderStyle = BorderStyle.None, AccessibleName = name, EnableHeadersVisualStyles = false,
+            CellBorderStyle = DataGridViewCellBorderStyle.None, ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect };
-        table.DefaultCellStyle.BackColor = BackColor; table.DefaultCellStyle.ForeColor = ForeColor;
-        table.DefaultCellStyle.SelectionBackColor = Color.FromArgb(50, 80, 120);
-        table.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(45, 45, 48); table.ColumnHeadersDefaultCellStyle.ForeColor = ForeColor;
+        table.RowTemplate.Height = 32;
+        table.DefaultCellStyle.Padding = new Padding(6, 3, 6, 3);
+        table.DefaultCellStyle.BackColor = DashboardCard.Surface; table.DefaultCellStyle.ForeColor = ForeColor;
+        table.DefaultCellStyle.SelectionBackColor = Color.FromArgb(66, 79, 62);
+        table.ColumnHeadersDefaultCellStyle.BackColor = DashboardCard.Surface; table.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(190, 196, 185);
         foreach (var column in columns) table.Columns.Add(column, column);
         foreach (var row in values) table.Rows.Add(row.Cast<object>().ToArray());
         table.Height = Math.Min(235, table.ColumnHeadersHeight + Math.Max(1, table.Rows.Count) * table.RowTemplate.Height + 4);
-        body.Controls.Add(table); return table;
+        AddCard(table, name);
+        return table;
+    }
+    private void AddCard(Control content, string name)
+    {
+        var card = new DashboardCard { Width = ContentWidth, Height = content.Height + 32, AccessibleName = name + " card" };
+        content.Dock = DockStyle.Fill;
+        card.Controls.Add(content);
+        body.Controls.Add(card);
     }
     internal void Reload()
     {
@@ -254,9 +265,9 @@ internal sealed partial class NativeDashboard : Form
                 endpoints.Controls.Add(new Label { Text = "Reset (at last check)", Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopRight }, 1, 0);
                 body.Controls.Add(endpoints);
             }
-            body.Controls.Add(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth });
+            AddCard(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface }, "Allowance history");
         }
-        body.Controls.Add(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth });
+        AddCard(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface }, "Daily token history");
         Label("Account-wide observations, not a device sum. Gaps and resets are separate segments. Daily token totals may lag.");
     }
     internal static string AllowancePaceText(JsonObject quota, JsonObject window, DateTimeOffset now)

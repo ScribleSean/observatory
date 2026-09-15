@@ -101,6 +101,7 @@ internal static class NativeDashboardTests
                 Check(Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Settings page").SelectedItem?.ToString() == "Sources", "Agents opens collection controls after Devices");
                 Check(ReferenceEquals(persistentRefresh, Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources")), "Refresh survives navigation");
                 sections.SelectedItem = "Activity";
+                Check(Children(form).OfType<DataGridView>().All(grid => grid.Parent is DashboardCard), "Data tables use shared cards");
                 Check(Texts(form).Contains("30 min"), "Day total");
                 await Select(form, "Period", "Week");
                 Check(Texts(form).Contains("50 min"), "Calendar week total");

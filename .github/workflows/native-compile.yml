@@ -50,6 +50,13 @@ jobs:
           if ((Get-Content (Join-Path $output 'native-result.txt') -Raw).Trim() -ne 'native-dashboard: passed') {
             throw 'Synthetic dashboard result missing or failed.'
           }
+      - name: Retain fictional dashboard screenshots for visual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-windows-dashboard
+          path: ${{ runner.temp }}/observatory-dashboard-fixture/*.png
+          retention-days: 1
+          if-no-files-found: error
   macos:
     runs-on: macos-14
     timeout-minutes: 10

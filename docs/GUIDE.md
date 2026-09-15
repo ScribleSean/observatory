@@ -28,7 +28,7 @@ Observatory opens Allowances, the usage-limit overview. Activity is a separate s
 | --- | --- |
 | Activity | Time spent in app categories and recognized apps on Mac and Windows, excluding away time |
 | Tokens | Daily Codex token counts from Mac, Ubuntu and configured native Windows logs, including cached input |
-| Sources: execution details | Available agent receipts, saved local-model benchmarks and partial Codex tool-call counts |
+| Agents (native), Sources: execution details (web) | Available agent receipts, saved local-model benchmarks and partial Codex tool-call counts |
 | Dictation | Voice usage by tool and device, with Wispr recording metadata and explicit coverage |
 | Sources | Which sources were read and which measurements are still missing |
 
