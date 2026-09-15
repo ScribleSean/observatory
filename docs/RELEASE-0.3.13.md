@@ -81,6 +81,19 @@ the candidate artifacts listed above and retains the same synthetic-key and
 same-payload limitations. It does not verify the newer native staging bridge or
 change the candidate artifact hashes.
 
+The [packaged native staging run](https://github.com/ScribleSean/observatory/actions/runs/35031326234)
+then passed at source `07296b00401a4dbd32274aad83188e92377482a8` in 21 minutes
+35 seconds. The clean package contained 3,064 verified files. The focused archive
+suite passed all 25 tests without skips. The full fixture used a 100,271,201-byte
+signed wrapper and called the packaged native staging bridge. It rejected an
+unrelated signer without creating a candidate or changing installed files, then
+verified the valid candidate and completed replacement, recovery retention,
+dashboard readiness and graceful shutdown. The disposable installation was
+removed. Signing remained synthetic, and the advancing receipt still reused the
+same payload. Later callback-guard and WinSparkle-library work is not covered by
+this run. Downloads, production trust configuration and the Update button remain
+unverified.
+
 ## Gates remaining
 
 - Upgrade verification against installed Mac build 22 and Windows build 23,
