@@ -283,6 +283,48 @@ test('native installed update state requires signed matching inventory and the r
   assert.equal(changed.stdout,'');
 });
 
+test('native receipt store publishes verified installed state and retains the previous envelope',{
+  skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR
+    ?'Requires Windows and an explicitly supplied trusted native updater runtime':false,
+},t=>{
+  const f=fixture(t),release=signer(),runtime=path.join(f.root,'runtime'),envelope=path.join(f.root,'candidate-envelope.json');
+  mkdirSync(runtime);
+  const destination=path.join(runtime,'updates','installed-envelope.json');
+  const first=release.envelope(f.next.receipt).toString('utf8');
+  writeFileSync(envelope,first);
+  const run=(key=release.publicKey,build='7',revision=f.next.receipt.sourceRevision)=>spawnSync(process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR,
+    ['--test-update-receipt-store',f.next.folder,envelope,key,build,revision,runtime],{encoding:'utf8',timeout:30000});
+  const refused=run(signer().publicKey);
+  assert.equal(refused.status,1,refused.stderr || String(refused.error));
+  assert.throws(()=>readFileSync(destination),/ENOENT/);
+  const result=run();
+  assert.equal(result.status,0,result.stderr || String(result.error));
+  assert.equal(JSON.parse(result.stdout).envelopePath,destination);
+  assert.equal(readFileSync(destination,'utf8'),first);
+  const second=release.envelope({...f.next.receipt,buildNumber:9}).toString('utf8');
+  writeFileSync(envelope,second);
+  for(const invalid of [run(release.publicKey,'9'),run(release.publicKey,'8','c'.repeat(40))]) {
+    assert.equal(invalid.status,1,invalid.stderr || String(invalid.error));
+    assert.equal(readFileSync(destination,'utf8'),first);
+  }
+  const next=run(release.publicKey,'8');
+  assert.equal(next.status,0,next.stderr || String(next.error));
+  assert.equal(readFileSync(destination,'utf8'),second);
+  const previous=readdirSync(path.dirname(destination)).filter(name=>name.startsWith('.receipt-'))
+    .map(name=>path.join(path.dirname(destination),name,'previous-installed-envelope.json'))
+    .flatMap(file=>{try{return [readFileSync(file,'utf8')];}catch(error){if(error.code==='ENOENT')return [];throw error;}});
+  assert.deepEqual(previous,[first]);
+  rmSync(envelope);
+  const reload=spawnSync(process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR,
+    ['--test-installed-update-state',f.next.folder,destination,release.publicKey,'9'],{encoding:'utf8',timeout:30000});
+  assert.equal(reload.status,0,reload.stderr || String(reload.error));
+  assert.equal(JSON.parse(reload.stdout).BuildNumber,9);
+  writeFileSync(envelope,second);
+  writeFileSync(path.join(f.next.folder,'WorkspaceObservatory.exe'),'tampered');
+  assert.equal(run(release.publicKey,'8').status,1);
+  assert.equal(readFileSync(destination,'utf8'),second);
+});
+
 test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
   const f=fixture(t),release=signer();
   const receipt=prepareInstallationReceipt(f.next.folder,buildFor(f.next.receipt));

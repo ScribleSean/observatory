@@ -8,6 +8,19 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-receipt-store"))
+        {
+            if (args.Length != 7 || args[0] != "--test-update-receipt-store" ||
+                !long.TryParse(args[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var result = UpdateReceiptStore.Persist(args[1], args[2], args[3], previousBuild, args[5], args[6]).GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { envelopePath = result }));
+            }
+            catch { Console.Error.WriteLine("Installed receipt was not published."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-installed-update-state"))
         {
             if (args.Length != 5 || args[0] != "--test-installed-update-state" ||

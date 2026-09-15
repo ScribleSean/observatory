@@ -9,9 +9,12 @@ internal static class UpdateInstall
     internal static Task<Result> ApplyAndRelaunch(string installed, string staged, string previousReceipt,
         string candidateEnvelope, string pinnedKey, long previousBuild) => Run(
             () => UpdateActivation.Apply(installed, staged, previousReceipt, candidateEnvelope, pinnedKey, previousBuild),
+            activated => UpdateReceiptStore.Persist(installed, candidateEnvelope, pinnedKey, previousBuild, activated.SourceRevision,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Workspace Observatory")),
             activated => UpdateRelaunch.Start(installed, candidateEnvelope, pinnedKey, previousBuild, activated.SourceRevision));
 
     private static async Task<Result> Run(Func<Task<UpdateActivation.Result>> activate,
+        Func<UpdateActivation.Result, Task> persistReceipt,
         Func<UpdateActivation.Result, Task<UpdateRelaunch.Result>> relaunch)
     {
         // Apply returns only after the writer exits, registration is updated and
@@ -19,13 +22,15 @@ internal static class UpdateInstall
         var installed = await activate();
         try
         {
+            await persistReceipt(installed);
             var launched = await relaunch(installed);
             return new(installed.SourceRevision, installed.Recovery, launched.ProcessId, launched.EventLoopConfirmed);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or
             System.ComponentModel.Win32Exception or InvalidOperationException or System.Text.Json.JsonException or OperationCanceledException)
         {
-            // Replacement succeeded. Do not report an unchanged installation or
+            // Replacement succeeded, even if receipt publication failed. Do not
+            // report an unchanged installation or
             // roll back after a process may have opened or migrated saved data.
             return new(installed.SourceRevision, installed.Recovery, null, false);
         }
@@ -39,11 +44,15 @@ internal static class UpdateInstall
             var sequence = new List<string>();
             var result = Run(() => { sequence.Add("activate"); return Task.FromResult(activated); }, value =>
             {
+                if (value != activated) throw new Exception("Receipt publication lost activation identity.");
+                sequence.Add("receipt"); return Task.CompletedTask;
+            }, value =>
+            {
                 if (value != activated) throw new Exception("Activation identity was lost.");
                 sequence.Add("relaunch");
                 return Task.FromResult(new UpdateRelaunch.Result(42, confirmed));
             }).GetAwaiter().GetResult();
-            if (!sequence.SequenceEqual(new[] { "activate", "relaunch" }) || result.LaunchConfirmed != confirmed ||
+            if (!sequence.SequenceEqual(new[] { "activate", "receipt", "relaunch" }) || result.LaunchConfirmed != confirmed ||
                 result.ProcessId != 42 || result.Recovery != activated.Recovery || result.SourceRevision != activated.SourceRevision)
                 throw new Exception("Incorrect update completion state.");
         }
@@ -51,7 +60,8 @@ internal static class UpdateInstall
         var rejected = false;
         try
         {
-            Run(() => Task.FromException<UpdateActivation.Result>(new IOException("Synthetic replacement failure")), _ =>
+            Run(() => Task.FromException<UpdateActivation.Result>(new IOException("Synthetic replacement failure")),
+                _ => throw new Exception("Failed activation reached receipt publication."), _ =>
             {
                 launchAttempted = true;
                 return Task.FromResult(new UpdateRelaunch.Result(42, true));
@@ -62,11 +72,16 @@ internal static class UpdateInstall
         foreach (var failure in new Exception[] { new IOException("Synthetic launch failure"),
             new OperationCanceledException("Synthetic verification timeout") })
         {
-            var unconfirmed = Run(() => Task.FromResult(activated), _ =>
+            var unconfirmed = Run(() => Task.FromResult(activated), _ => Task.CompletedTask, _ =>
                 Task.FromException<UpdateRelaunch.Result>(failure)).GetAwaiter().GetResult();
             if (unconfirmed.LaunchConfirmed || unconfirmed.ProcessId is not null || unconfirmed.Recovery != activated.Recovery)
                 throw new Exception("Launch failure lost installed recovery state.");
         }
+        var receiptFailed = Run(() => Task.FromResult(activated),
+            _ => Task.FromException(new IOException("Synthetic receipt publication failure")),
+            _ => throw new Exception("Failed receipt publication reached relaunch.")).GetAwaiter().GetResult();
+        if (receiptFailed.LaunchConfirmed || receiptFailed.ProcessId is not null || receiptFailed.Recovery != activated.Recovery)
+            throw new Exception("Receipt publication failure lost recovery state.");
         Console.WriteLine("Update orchestration preserves replacement identity, stops on activation failure and reports unconfirmed launches without rollback.");
     }
 }

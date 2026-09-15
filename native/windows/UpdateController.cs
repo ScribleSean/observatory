@@ -17,7 +17,7 @@ internal sealed class UpdateController : IDisposable
 
     internal UpdateController(string runtime, Func<bool> ready, Action requestShutdown)
     {
-        signedReceipt = Path.Combine(runtime, "updates", "installed-envelope.json");
+        signedReceipt = UpdateReceiptStore.EnvelopePath(runtime);
         this.ready = ready;
         this.requestShutdown = requestShutdown;
     }

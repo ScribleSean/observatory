@@ -68,10 +68,36 @@ The synthetic dashboard test verifies a single Settings action while checking an
 button restoration after completion. Its Settings screenshot was inspected.
 Windows build and Mac cross-compilation passed with zero warnings or errors.
 
-Production key embedding, DLL packaging, initial signed-envelope provisioning and
-updating that envelope after successful replacement remain open. No ordinary
+Production key embedding, DLL packaging and initial signed-envelope provisioning
+remain open. No ordinary
 installation received these source changes. Native callback delivery and complete
 download-to-relaunch verification are still required before release.
+
+### Receipt persistence after replacement
+
+`UpdateInstall` now publishes the candidate's signed envelope after successful
+replacement and before relaunch. `UpdateReceiptStore` reacquires installation
+exclusion, retains and re-verifies the signed bytes against the current installed
+inventory and activation revision, then publishes
+`updates/installed-envelope.json` under the application data directory. An
+existing regular receipt is replaced with `File.Replace`, retaining its previous
+bytes in the operation's unique receipt directory. First publication uses an
+exclusive move. Linked paths and non-file destinations are refused. Directory
+entry durability after power loss is not established by these checks.
+
+If publication fails, the result preserves the completed replacement's identity
+and recovery path and reports an unconfirmed launch. It does not relaunch or
+automatically roll back. Native orchestration tests cover the order of replacement,
+receipt publication and relaunch, including publication failure.
+
+The Windows receipt regression verifies first publication, replacement with the
+old envelope retained, wrong signer, replay, revision mismatch and changed bytes.
+After removing the input envelope, it successfully loads the published receipt
+through the real installed-state verifier for the next update. All 29 focused
+tests passed with no skips on Windows. Native self-tests and both platform builds
+passed. This uses synthetic payloads and signing keys, not a production upgrade
+or a new full-package activation test. Initial installer provisioning still needs
+integration with reviewed signed release output.
 
 ### Integration compatibility check, September 15
 
