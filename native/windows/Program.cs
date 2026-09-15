@@ -63,6 +63,7 @@ internal static class Program
                 NativeDashboard.FreshnessSelfTest();
                 InstallationGate.SelfTest();
                 UpdateQuit.SelfTest();
+                UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();
                 PowerResumeWindow.SelfTest();

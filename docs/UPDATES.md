@@ -87,6 +87,21 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
+The Windows update staging helper validates ZIP entries before writing payload
+files. It rejects unsafe Windows paths, case-insensitive duplicates, parent-file
+conflicts, links and special entries. Default limits are 512 MiB compressed,
+768 MiB expanded, 192 MiB per file and 8,000 entries. Extraction uses new files
+in a newly named staging directory and checks actual copied lengths. Cancellation
+is checked before writes and between copied blocks. If extraction fails after
+staging starts, the partial directory is retained for inspection, not promoted.
+The caller must exclude concurrent writers to the staging parent.
+
+This helper is not yet called by an Update button. Safe extraction does not
+authenticate a release. The download's signature and the extracted installation
+receipt and inventory still need verification before any extracted file runs.
+Synthetic native tests cover preserved bytes, zero-length files, path and link
+rejection, size bounds and cancellation before staging.
+
 Development source accepts `WorkspaceObservatory.exe --quit-for-update` in the
 same Windows session as the app. It signals the existing application's normal
 quit path and waits up to 270 seconds for its singleton to be released. It does
