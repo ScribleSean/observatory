@@ -87,6 +87,14 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
+Windows replacement retains the previous and candidate receipts in its recovery
+directory before moving either payload. The signed entry point also retains the
+exact candidate signature envelope. Files are created exclusively and flushed.
+Receipt persistence failure prevents promotion. A retained unsigned receipt is
+evidence, not independent authority. Recovery must authenticate the candidate
+envelope with the installed trusted key and obtain independent trust for the
+previous receipt before using either to authorize restoration.
+
 `UpdateSession` joins the setup gate and graceful shutdown request. It acquires
 the gate before requesting quit and retains it until its caller disposes the
 session. Busy setup or command-line collection refuses entry. Unsupported or

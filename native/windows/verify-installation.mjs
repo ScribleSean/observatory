@@ -1,4 +1,4 @@
-import {readFileSync,lstatSync,realpathSync} from 'node:fs';
+import {readFileSync,lstatSync,realpathSync,openSync,writeFileSync,fsyncSync,closeSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {verifyManifest} from './verify-manifest.mjs';
@@ -46,8 +46,22 @@ export function verifyInstallation(root,receipt) {
 // Caller still owns shutdown, both locks, authenticated receipt selection,
 // registration preservation and relaunch. No installer subprocess is executed.
 export function replaceVerifiedInstallation({installed,staged,previousReceipt,candidateReceipt}) {
+  return replaceWithEvidence({installed,staged,previousReceipt,candidateReceipt});
+}
+
+function replaceWithEvidence({installed,staged,previousReceipt,candidateReceipt,candidateEnvelope}) {
+  const evidence=[['previous-receipt.json',JSON.stringify(previousReceipt)+'\n'],
+    ['candidate-receipt.json',JSON.stringify(candidateReceipt)+'\n']];
+  if(candidateEnvelope)evidence.push(['candidate-envelope.json',candidateEnvelope]);
   return replacePayload({installed,staged,verify:(root,kind)=>
-    verifyInstallation(root,kind==='previous'?previousReceipt:candidateReceipt)});
+    verifyInstallation(root,kind==='previous'?previousReceipt:candidateReceipt),
+    prepareRecovery:recovery=>{
+      for(const [name,bytes] of evidence) {
+        const descriptor=openSync(path.join(recovery,name),'wx',0o600);
+        try { writeFileSync(descriptor,bytes); fsyncSync(descriptor); }
+        finally { closeSync(descriptor); }
+      }
+    }});
 }
 
 // The installed receipt and public key must already be trusted locally.
@@ -55,5 +69,5 @@ export function replaceVerifiedInstallation({installed,staged,previousReceipt,ca
 export function replaceSignedInstallation({installed,staged,previousReceipt,candidateEnvelope,trustedPublicKey}) {
   const previous=verifyInstallation(installed,previousReceipt);
   const candidateReceipt=authenticateInstallationReceipt(candidateEnvelope,trustedPublicKey,previous.buildNumber);
-  return replaceVerifiedInstallation({installed,staged,previousReceipt,candidateReceipt});
+  return replaceWithEvidence({installed,staged,previousReceipt,candidateReceipt,candidateEnvelope});
 }

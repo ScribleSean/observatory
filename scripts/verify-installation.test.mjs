@@ -39,6 +39,8 @@ test('actual manifest and ownership verifier is used before and after replacemen
     previousReceipt:f.old.receipt,candidateReceipt:f.next.receipt});
   assert.equal(verifyInstallation(f.old.folder,f.next.receipt).buildNumber,8);
   assert.equal(verifyInstallation(result.previous,f.old.receipt).buildNumber,7);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(result.recovery,'previous-receipt.json'))),f.old.receipt);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(result.recovery,'candidate-receipt.json'))),f.next.receipt);
 });
 test('changed uninstaller, owner and manifest fail before replacement',t=>{
   const f=fixture(t);
@@ -125,10 +127,17 @@ test('release receipt command emits unsigned output and rejects repeated invocat
 });
 test('signed receipt gates the real replacement and preserves a verified rollback payload',t=>{
   const f=fixture(t),release=signer();
+  const envelope=release.envelope(f.next.receipt);
   const result=replaceSignedInstallation({installed:f.old.folder,staged:f.next.folder,
-    previousReceipt:f.old.receipt,candidateEnvelope:release.envelope(f.next.receipt),trustedPublicKey:release.publicKey});
+    previousReceipt:f.old.receipt,candidateEnvelope:envelope,trustedPublicKey:release.publicKey});
   assert.equal(verifyInstallation(f.old.folder,f.next.receipt).buildNumber,8);
   assert.equal(verifyInstallation(result.previous,f.old.receipt).buildNumber,7);
+  const retained=readFileSync(path.join(result.recovery,'candidate-envelope.json'));
+  assert.deepEqual(retained,envelope);
+  const authenticated=authenticateInstallationReceipt(retained,release.publicKey,7);
+  assert.equal(verifyInstallation(f.old.folder,authenticated).buildNumber,8);
+  const previous=JSON.parse(readFileSync(path.join(result.recovery,'previous-receipt.json')));
+  assert.equal(verifyInstallation(result.previous,previous).buildNumber,7);
 });
 test('wrong signer, altered hashes, replay and malformed envelopes leave both payloads intact',t=>{
   const f=fixture(t),release=signer(),attacker=signer();
