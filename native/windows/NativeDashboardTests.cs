@@ -213,6 +213,7 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("All-time usage history"), "Full-history entry is visible on Allowances");
                 var historyButton = Children(form).OfType<Button>().Single(button => button.Text == "Browse saved history");
                 Check(historyButton.Bottom <= historyButton.Parent!.ClientSize.Height, "Full-history action fits its card");
+                Capture(form, output, "native-history-narrow", new Size(800, 560));
                 var clock = DateTimeOffset.Parse("2026-01-01T12:00:00Z");
                 Check(NativeDashboard.Freshness("2026-01-01T11:56:00Z", clock) == "Updated 4m ago", "Relative freshness");
                 Check(NativeDashboard.Freshness("missing", clock) == "Updated: Unknown", "Unknown freshness");
@@ -590,11 +591,11 @@ internal static class NativeDashboardTests
         await Task.Delay(100);
     }
     private static void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); }
-    private static void Capture(Form form, string output, string name)
+    private static void Capture(Form form, string output, string name, Size? size = null)
     {
         // Render the actual dashboard controls without hosted-desktop window limits.
         // Mac captures are also content-only. Normal app window behavior is unchanged.
-        var viewport = new Size(1280, 800);
+        var viewport = size ?? new Size(1280, 800);
         using var surface = new Panel { Size = viewport, Font = form.Font, BackColor = form.BackColor, ForeColor = form.ForeColor };
         var controls = form.Controls.Cast<Control>().ToArray();
         try
@@ -602,11 +603,18 @@ internal static class NativeDashboardTests
             surface.Controls.AddRange(controls);
             surface.CreateControl();
             surface.PerformLayout();
+            if (size is not null)
+            {
+                var historyAction = Children(surface).OfType<Button>().Single(button => button.Text == "Browse saved history");
+                Check(historyAction.Bottom <= historyAction.Parent!.ClientSize.Height, "Narrow history action fits its card");
+                foreach (var label in historyAction.Parent.Controls.OfType<Label>())
+                    Check(label.Right <= historyAction.Parent.ClientSize.Width, "Narrow history text fits its card");
+            }
             using var bitmap = new Bitmap(viewport.Width, viewport.Height);
             surface.DrawToBitmap(bitmap, new Rectangle(Point.Empty, viewport));
             bitmap.Save(Path.Combine(output, name + ".png"), ImageFormat.Png);
             using var saved = Image.FromFile(Path.Combine(output, name + ".png"));
-            Check(saved.Size == viewport, "Saved screenshot is exactly 1280 by 800");
+            Check(saved.Size == viewport, "Saved screenshot matches requested viewport");
         }
         finally
         {
