@@ -22,14 +22,34 @@ Mac synthetic popup checks verify accessible filter defaults and explicit
 dashboard/Settings handoff. These checks do not establish every accessibility,
 integration or clean-install requirement.
 
-Earlier 0.3.12 candidate ZIP/DMG verification does not validate these artifacts.
-Record build-24 artifact hashes and package results after verification. Do not
-publish older build-23 artifacts under this version.
+## Candidate package evidence
+
+Build 24 packages use clean source `acdf876864d8c96d76ef1bfa26d9540f40886f67`.
+The Mac build, ZIP extraction, native checks and read-only mounted DMG verification
+passed. The Windows self-contained payload manifest, runtime and native bridge
+checks passed. Its packaged synthetic dashboard test wrote a passing receipt.
+The separate test-identity installer passed install/uninstall/reinstall, shortcut
+and registration checks, linked-directory rejection, existing-install refusal,
+and preservation of saved data and unrelated files/registry values. Test-owned
+installation files and registrations were removed. The ordinary app was untouched.
+The packaged native collector also completed against a fresh runtime with every
+source disabled, retained the consent configuration and reported partial coverage.
+This verifies the packaged collector path, not live provider reads.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| macOS arm64 ZIP | 64,238,790 | `79b4058dc3992431fba1e9dfe240fc34ae5875e3641cdae5fbc10ef37c504ae6` |
+| macOS arm64 DMG | 71,397,416 | `8e8e709271bbdcc38d018865dc7d2539e0e08c346d750bbe75644a5d11472191` |
+| Windows x64 setup EXE | 97,448,151 | `e6f4974ead5b958dd93b5efea1080358c2e250788bafdfddebe5f5e747983896` |
+
+The Mac app is ad-hoc signed, not notarized. The Windows installer is unsigned.
+Windows update activation and normal update-startup checks explicitly skipped
+because they require a disposable hosted runner. Passing package checks does not
+establish these skipped cases or installed update behavior.
 
 ## Gates remaining
 
-- Fresh Mac and Windows candidate builds, payload manifests and runtime checks.
-- ZIP/DMG extraction and mounted-image checks; Windows installer staging checks.
+- Disposable-runner update activation and normal update-startup checks.
 - Upgrade verification against installed Mac build 22 and Windows build 23,
   preserving private data and a recoverable previous application.
 - Installed interface and collection checks, signing/distribution limitations,
