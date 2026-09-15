@@ -1,4 +1,5 @@
 import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
+import {durationText} from './display-format.mjs';
 const minute = 60000;
 const timestamp = value => typeof value === 'string' ? Date.parse(value) : NaN;
 const percent = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
@@ -56,7 +57,7 @@ export function quotaPace(quota, now = Date.now()) {
     const coverageFraction = !comparable ? null : result.status === 'resets-first' ? 1 :
       Math.max(0,Math.min(1,(timestamp(result.estimatedExhaustionAt)-now)/(reset-now)));
     const comparisonSummary = comparable ?
-      `Reset in ${Math.floor(timeUntilResetMinutes/60)}h ${timeUntilResetMinutes%60}m. Estimated allowance covers ${Math.round(coverageFraction*100)}% of the time until reset (at last check).` : null;
+      `Reset in ${durationText(timeUntilResetMinutes*60)}. Estimated allowance covers ${Math.round(coverageFraction*100)}% of the time until reset (at last check).` : null;
     return {...result,timeUntilResetMinutes,coverageFraction,comparisonSummary,
       summary:quotaPaceSummary(result) + (comparisonSummary ? ' ' + comparisonSummary : '')};
   });
@@ -78,7 +79,7 @@ export function quotaPaceSummary(result) {
   };
   if (result.status === 'projected') {
     const minutes = result.remainingMinutes;
-    return prefix + `Approximately ${Math.floor(minutes/60)}h ${minutes%60}m left at this pace (at last check).`;
+    return prefix + `Approximately ${durationText(minutes*60)} left at this pace (at last check).`;
   }
   return prefix + (messages[result.status] ?? messages['insufficient-history']);
 }

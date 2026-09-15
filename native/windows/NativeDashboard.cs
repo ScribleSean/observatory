@@ -260,7 +260,7 @@ internal sealed partial class NativeDashboard : Form
         var selected = NativeHistory.Select(days, period, anchor);
         var field = kind == "activity" ? "seconds" : "totalTokens";
         var total = NativeHistory.Sum(selected, field);
-        Label(kind == "activity" ? (total is double seconds ? (seconds / 60).ToString("0.#") + " min" : "Unknown") : Snapshot.Format(total) + " tokens", true);
+        Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " tokens", true);
         Label($"{selected.Length} recorded dates. Missing dates are not filled with zeros.");
         Label("Selected recorded days (up to 30 shown)");
         AddCard(new DashboardHistoryChart(selected, kind == "tokens"), "Recorded history");

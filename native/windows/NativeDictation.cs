@@ -14,7 +14,7 @@ internal sealed partial class NativeDashboard
         var total = NativeHistory.Sum(days, field);
         if (total is null) return "Unknown";
         var partial = wispr && coverage != NativeHistory.Sum(days, "transcriptions");
-        return (field == "audioSeconds" ? (total.Value / 60).ToString("N1", CultureInfo.CurrentCulture) : Snapshot.Format(total))
+        return (field == "audioSeconds" ? Snapshot.Duration(total) : DashboardHistoryChart.AxisLabel(total.Value))
             + (partial ? " (partial)" : "");
     }
 
@@ -45,9 +45,9 @@ internal sealed partial class NativeDashboard
         var selected = sources.Select(source => (source, days: NativeHistory.Select(source.days, dictationPeriod, dictationAnchor))).ToArray();
         Label("Recorded voice time");
         var known = selected.Where(row => DictationValue(row.days, "audioSeconds", true) != "Unknown").ToArray();
-        if (known.Length == 0) Label("Recorded audio minutes: Unknown");
+        if (known.Length == 0) Label("Recorded audio time: Unknown");
         foreach (var row in known)
-            Label(row.source.product + " · " + row.source.device + ": " + DictationValue(row.days, "audioSeconds", true) + " min");
+            Label(row.source.product + " · " + row.source.device + ": " + DictationValue(row.days, "audioSeconds", true));
         Label("Known recordings in the selected period. Coverage is incomplete. Device histories may overlap and are not added together.");
         Label("By tool and device");
         foreach (var row in selected)
@@ -56,7 +56,7 @@ internal sealed partial class NativeDashboard
                 ("Last checked", Snapshot.Text(row.source.source?["checkedAt"])),
                 ("Records", Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions"))),
                 ("Words", DictationValue(row.days, "words", true)),
-                ("Recorded audio minutes", DictationValue(row.days, "audioSeconds", true))
+                ("Recorded audio time", DictationValue(row.days, "audioSeconds", true))
             ]), "Voice tool and device");
         var daily = selected.SelectMany(row => row.days.Select(day => new[] {
             Snapshot.Text(day["date"]), row.source.product, row.source.device,
@@ -64,7 +64,7 @@ internal sealed partial class NativeDashboard
             DictationValue([day], "audioSeconds", true)
         })).OrderByDescending(row => row[0], StringComparer.Ordinal).ToArray();
         if (daily.Length == 0) Label("No recorded voice statistics in this scope. Missing data is not zero usage.");
-        else Table("Voice over time", ["Date", "Tool", "Device", "Records", "Words", "Audio minutes"], daily.Take(60));
+        else Table("Voice over time", ["Date", "Tool", "Device", "Records", "Words", "Audio time"], daily.Take(60));
         Label("Latest 60 tool/device rows shown. Totals cover the selected period. America/New_York dates. Missing dates are gaps, not zeros.");
         Label("More local speech detection coming soon.");
         Label("ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage.");

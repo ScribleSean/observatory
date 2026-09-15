@@ -176,7 +176,7 @@ func runSelfTests() {
     precondition(dictationDays(["status": "unavailable", "days": dictationRows], latestWeek: false).isEmpty)
     precondition(dictationValue([dictationRows[1]], field: "words", wispr: true) == "Unknown")
     precondition(dictationValue([dictationRows[2]], field: "words", wispr: true) == "8 (partial)")
-    precondition(dictationValue([dictationRows[2]], field: "audioSeconds", wispr: true) == "0.5 (partial)")
+    precondition(dictationValue([dictationRows[2]], field: "audioSeconds", wispr: true) == "0.5 min (partial)")
     precondition(dictationValue([dictationRows[1]], field: "audioSeconds", wispr: true) == "Unknown")
     precondition(dictationValue([dictationRows[1]], field: "words", wispr: false) == "0")
     let voiceFixture: JSONObject = ["host": "Mac", "source": "Wispr Flow", "status": "ok", "days": dictationRows]

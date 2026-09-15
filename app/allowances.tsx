@@ -1,12 +1,13 @@
 'use client';
 import {useEffect, useState} from 'react';
 import {quotaPace} from '../scripts/quota-pace.mjs';
+import {durationText} from '../scripts/display-format.mjs';
 
 type Window = {bucket:string; window:string; remainingPercent:number; durationMinutes:number|null; resetsAt:string|null};
 export type Quota = {status:string; checkedAt?:string; windows?:Window[]; history?:{checkedAt:string; windows:Window[]}[]};
 const duration = (milliseconds:number) => {
   const minutes = Math.max(0, Math.ceil(milliseconds / 60000));
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return durationText(minutes * 60);
 };
 export default function Allowances({quota, demo = false}:{quota?:Quota; demo?:boolean}) {
   const [now, setNow] = useState(0);

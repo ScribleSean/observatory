@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { settingsCoverage } from '../scripts/settings-coverage.mjs';
 import { estimate } from '../scripts/api-estimate.mjs';
 import { freshness } from '../scripts/freshness.mjs';
+import {durationText, compactCount as compact} from '../scripts/display-format.mjs';
 import { needsWindowsSetup } from '../scripts/setup-state.mjs';
 import WeekTimeline from './week-timeline';
 import ToolDetail from './tool-detail';
@@ -103,14 +104,9 @@ type Report = {
 type Collector = {state:'running'|'ok'|'partial'|'failed';startedAt:string;finishedAt?:string|null;intervalSeconds:number;maxRunSeconds:number};
 const fmt = (n: number | null | undefined) =>
   n == null ? 'Unknown' : new Intl.NumberFormat('en-US').format(n);
-const compact = (n: number) =>
-  new Intl.NumberFormat('en-US', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(n);
 const time = (seconds: number) => {
   const minutes = Math.round(seconds / 60);
-  return { hours: Math.floor(minutes / 60), minutes: minutes % 60 };
+  return { days: Math.floor(minutes / 1440), hours: Math.floor(minutes % 1440 / 60), minutes: minutes % 60 };
 };
 const shiftDate = (date: string, days: number) => {
   const d = new Date(date + 'T12:00:00Z');
@@ -433,7 +429,7 @@ export default function Home() {
                 {period==='all' && <p className="quiet-note">All retained daily summaries, up to {current?.maxDates||3650} dates per view. Collection began with the available seven-day window, not the complete ActivityWatch archive. Gaps do not mean idle time.</p>}
                 {current?.latestReadStatus && current.latestReadStatus!=='ok' && <p className="quiet-note">The latest source read failed. Showing retained history as of {current.asOf?new Date(current.asOf).toLocaleString():'an unknown time'}.</p>}
                 {current?.status==='ok' && current.latestReadStatus && current.latestReadStatus!=='ok' && <p className="quiet-note"><ActivityWatchGuidance/></p>}
-                {period==='all' && !!current?.days?.length && <details className="receipt-panel"><summary>Browse retained dates</summary><div className="history-dates">{[...current.days].reverse().map(day=><Button key={day.date} variant="ghost" onClick={()=>{setSelectedDate(day.date);setPeriod('day');}}>{day.date} · {day.trackedSeconds===0&&day.seconds===0?'No tracking records':`${time(day.seconds).hours}h ${time(day.seconds).minutes}m`}</Button>)}</div></details>}
+                {period==='all' && !!current?.days?.length && <details className="receipt-panel"><summary>Browse retained dates</summary><div className="history-dates">{[...current.days].reverse().map(day=><Button key={day.date} variant="ghost" onClick={()=>{setSelectedDate(day.date);setPeriod('day');}}>{day.date} · {day.trackedSeconds===0&&day.seconds===0?'No tracking records':durationText(day.seconds)}</Button>)}</div></details>}
                 {period === 'week' && <WeekTimeline key={host} days={weekDays} onOpenDay={date=>{setSelectedDate(date);setPeriod('day');window.scrollTo(0,0);}}/>}
                 {period === 'day' && dailyActivity && <section className="daily-timeline" aria-label="Recorded activity by hour">
                   <div className="hour-track">{dailyActivity.hours.map((n, hour) => <span key={hour}
@@ -450,7 +446,7 @@ export default function Home() {
                         <span>{current.host === 'Combined' ? 'Across both devices' : `Active on ${current.host}`}</span>
                       </div>
                       <div className="big-time">
-                        {clock.hours}
+                        {clock.days > 0 && <>{clock.days}<span>d</span> </>}{clock.hours}
                         <span>h</span> {clock.minutes}
                         <span>m</span>
                       </div>
@@ -501,12 +497,12 @@ export default function Home() {
                                 {k === 'Mixed activity' && <p className="category-explanation">Different categories were active at once. Counted once, without guessing your attention.</p>}
                                 {shownApps[k] && k !== 'Mixed activity' && <details className="app-breakdown" open={k === 'AI apps'}>
                                   <summary>By app</summary>
-                                  {Object.entries(shownApps[k]).sort((a,b)=>b[1]-a[1]).map(([app,n])=><div key={app} className="app-breakdown-row"><span>{app}</span><span>{n<60?'<1m':`${time(n).hours?time(n).hours+'h ':''}${time(n).minutes}m`}</span><i aria-hidden="true"><i style={{width:`${Math.min(100,n/v*100)}%`}}/></i></div>)}
+                                  {Object.entries(shownApps[k]).sort((a,b)=>b[1]-a[1]).map(([app,n])=><div key={app} className="app-breakdown-row"><span>{app}</span><span>{durationText(n)}</span><i aria-hidden="true"><i style={{width:`${Math.min(100,n/v*100)}%`}}/></i></div>)}
                                   {Object.keys(shownApps[k]).includes('ChatGPT / Codex') && <small>The desktop app shares one process label, so these modes cannot be separated from foreground records.</small>}
                                 </details>}
                               </div>
                               <span className="category-value">
-                                {v < 60 ? '<1m' : <>{time(v).hours}<small>h</small> {time(v).minutes}<small>m</small></>}
+                                {durationText(v)}
                               </span>
                             </div>
                           );

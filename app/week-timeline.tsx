@@ -2,10 +2,10 @@
 import {useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {threeHourBands,trackingState} from '../scripts/activity-timeline.mjs';
+import {durationText as duration} from '../scripts/display-format.mjs';
 
 type Day={date:string;seconds:number;hours:number[];trackedSeconds?:number;trackedHours?:number[]};
 const hour=(n:number)=>n===0||n===24?'12 AM':n===12?'Noon':`${n%12 || 12} ${n<12?'AM':'PM'}`;
-const duration=(n:number)=>n===0?'0m':n<60?'<1m':`${Math.floor(n/3600)?Math.floor(n/3600)+'h ':''}${Math.floor(n/60)%60}m`;
 const dateLabel=(date:string)=>new Date(date+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
 
 export default function WeekTimeline({days,onOpenDay}:{days:{date:string;record?:Day}[];onOpenDay:(date:string)=>void}) {

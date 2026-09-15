@@ -26,7 +26,7 @@ func dictationValue(_ values: [JSONObject], field: String, wispr: Bool) -> Strin
     }
     guard let total = recordedSum(values, field: field) else { return "Unknown" }
     let partial = wispr && recordedSum(values, field: coverage) != recordedSum(values, field: "transcriptions")
-    let display = (field == "audioSeconds" ? total / 60 : total).formatted(.number.precision(.fractionLength(0...1)))
+    let display = field == "audioSeconds" ? formattedDuration(total) : formatted(total, compact: true)
     return display + (partial ? " (partial)" : "")
 }
 
@@ -95,11 +95,11 @@ struct NativeDictation: View {
             }
             Text("Recorded voice time").observatoryFont(.headline)
             if known.isEmpty {
-                ObservatoryValueRow("Recorded audio minutes", value: "Unknown")
+                ObservatoryValueRow("Recorded audio time", value: "Unknown")
             } else {
                 ForEach(known) { source in
                     ObservatoryValueRow(source.tool + " · " + source.host,
-                        value: dictationValue(nativePeriodDays(source.days, period: period, anchor: end), field: "audioSeconds", wispr: true) + " min")
+                        value: dictationValue(nativePeriodDays(source.days, period: period, anchor: end), field: "audioSeconds", wispr: true))
                 }
             }
             Text("Known recordings in the selected period. Coverage is incomplete. Device histories may overlap and are not added together.")
@@ -124,7 +124,7 @@ struct NativeDictation: View {
                 ObservatoryValueRow("Last checked", value: source.checkedAt)
                 ObservatoryValueRow("Records", value: formatted(recordedSum(days, field: "transcriptions")))
                 ObservatoryValueRow("Words", value: dictationValue(days, field: "words", wispr: true))
-                ObservatoryValueRow("Recorded audio minutes", value: dictationValue(days, field: "audioSeconds", wispr: true))
+                ObservatoryValueRow("Recorded audio time", value: dictationValue(days, field: "audioSeconds", wispr: true))
                 if days.isEmpty {
                     Text("No recorded voice statistics in this scope. Missing data is not zero usage.").foregroundStyle(.secondary)
                 } else {
@@ -134,7 +134,7 @@ struct NativeDictation: View {
                                 Text(text(day["date"])).observatoryFont(.headline)
                                 ObservatoryValueRow("Records", value: formatted(number(day["transcriptions"])))
                                 ObservatoryValueRow("Words", value: dictationValue([day], field: "words", wispr: true))
-                                ObservatoryValueRow("Audio minutes", value: dictationValue([day], field: "audioSeconds", wispr: true))
+                                ObservatoryValueRow("Audio time", value: dictationValue([day], field: "audioSeconds", wispr: true))
                             }.padding(.vertical, 6)
                         }
                         Text("Latest 60 recorded dates shown. Totals cover the selected period.").observatoryFont(.caption)

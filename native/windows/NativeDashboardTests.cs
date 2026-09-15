@@ -233,7 +233,7 @@ internal static class NativeDashboardTests
                 await Select(form, "Period", "Week");
                 Check(Texts(form).Contains("50 min"), "Calendar week total");
                 await Select(form, "Period", "All retained");
-                Check(Texts(form).Contains("60 min"), "Retained total");
+                Check(Texts(form).Contains("1h 0m"), "Retained total uses scaled duration units");
                 Check(Children(form).OfType<DashboardHistoryChart>().Single().RecordedCount == 3, "Missing dates not fabricated");
                 Check(Children(form).OfType<ActivityHourGraph>().Single().AccessibleDescription?.Contains("12:00: 30 recorded minutes") == true, "Hourly accessible values");
                 var appTable = Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded apps");
@@ -360,7 +360,7 @@ internal static class NativeDashboardTests
                     if (table == "By tool and device")
                     {
                         var card = Children(form).OfType<DashboardValueCard>().ElementAt(row);
-                        var field = new[] { "", "", "Records", "Words", "Recorded audio minutes", "Status", "Last checked" }[column];
+                        var field = new[] { "", "", "Records", "Words", "Recorded audio time", "Status", "Last checked" }[column];
                         return Children(card).OfType<Label>().Single(label => label.AccessibleName == field + " value").Text;
                     }
                     return Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == table).Rows[row].Cells[column].Value?.ToString() ?? "";
