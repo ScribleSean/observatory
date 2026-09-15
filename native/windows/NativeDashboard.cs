@@ -339,7 +339,7 @@ internal sealed partial class NativeDashboard : Form
                 body.Controls.Add(endpoints);
             }
             Label("Allowance used").Font = heading;
-            body.Controls.Add(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
+            body.Controls.Add(new QuotaGraph(quota, window, fitHistory: true) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
             var hourly = QuotaHourlyChart.Read(quota, window);
             if (hourly.Length > 0)
             {

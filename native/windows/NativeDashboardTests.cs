@@ -8,11 +8,18 @@ internal static class NativeDashboardTests
     internal static void Run(string output)
     {
         var paceWindowFixture = new JsonObject { ["bucket"] = "codex", ["window"] = "primary" };
+        var rangeEnd = DateTimeOffset.Parse("2026-09-12T12:00:00Z");
+        var emptyRange = QuotaGraph.HistoryRange(new JsonObject(), paceWindowFixture, rangeEnd);
+        Check(emptyRange.Start == rangeEnd.AddHours(-1) && emptyRange.End == rangeEnd, "Empty dashboard range is stable and nonzero");
         JsonObject PaceSample(string at, double? remaining, string reset = "same") => new() {
             ["checkedAt"] = at, ["windows"] = new JsonArray(new JsonObject {
                 ["bucket"] = "codex", ["window"] = "primary", ["remainingPercent"] = remaining, ["resetsAt"] = reset }) };
         QuotaHour[] PaceRows(params JsonObject[] samples) => QuotaHourlyChart.Read(
             new JsonObject { ["history"] = new JsonArray(samples.Cast<JsonNode>().ToArray()) }, paceWindowFixture, TimeZoneInfo.Utc);
+        var fullRange = QuotaGraph.HistoryRange(new JsonObject { ["history"] = new JsonArray(
+            PaceSample("2026-09-10T12:00:00Z", 90), PaceSample("2026-09-12T11:55:00Z", 80),
+            PaceSample("2026-09-13T12:00:00Z", 70)) }, paceWindowFixture, rangeEnd);
+        Check(fullRange.Start == rangeEnd.AddDays(-2) && fullRange.End == rangeEnd.AddMinutes(-5), "Dashboard fits retained observations without future points");
         var paceRows = PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:05:00Z", 79));
         Check(paceRows.Length == 1 && paceRows[0].Rate == 12 && paceRows[0].ObservedMinutes == 5, "Hourly rate uses only observed minutes");
         Check(PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:11:00Z", 79)).Length == 0, "Hourly pace excludes long gaps");

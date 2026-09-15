@@ -190,14 +190,30 @@ internal sealed class QuotaGraph : Control
 {
     private readonly JsonObject quota;
     private JsonObject window;
-    internal QuotaGraph(JsonObject quota, JsonObject window)
+    private readonly bool fitHistory;
+    internal QuotaGraph(JsonObject quota, JsonObject window, bool fitHistory = false)
     {
-        this.quota = quota; this.window = window;
+        this.quota = quota; this.window = window; this.fitHistory = fitHistory;
         DoubleBuffered = true; ForeColor = Color.WhiteSmoke; BackColor = Color.FromArgb(24, 25, 27);
         AccessibleName = "Allowance history. Gaps and resets are separate segments.";
         AccessibleRole = AccessibleRole.Graphic;
     }
     internal void SelectWindow(JsonObject next) { window = next; Invalidate(); }
+    internal static (DateTimeOffset Start, DateTimeOffset End) HistoryRange(JsonObject quota, JsonObject window, DateTimeOffset checkedAt)
+    {
+        var dates = new List<DateTimeOffset>();
+        foreach (var sample in NativeHistory.Rows(quota["history"]))
+        {
+            var row = NativeHistory.Rows(sample["windows"]).FirstOrDefault(item =>
+                Snapshot.Text(item["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(item["window"]) == Snapshot.Text(window["window"]));
+            if (DateTimeOffset.TryParse(Snapshot.Text(sample["checkedAt"]), out var at) && at <= checkedAt &&
+                Snapshot.Number(row?["remainingPercent"]) is double value && double.IsFinite(value) && value >= 0 && value <= 100)
+                dates.Add(at);
+        }
+        if (dates.Count == 0) return (checkedAt.AddHours(-1), checkedAt);
+        var end = dates.Max();
+        return (dates.Min() < end.AddHours(-1) ? dates.Min() : end.AddHours(-1), end);
+    }
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
@@ -220,8 +236,12 @@ internal sealed class QuotaGraph : Control
             return;
         }
         var start = end.AddDays(-1);
-        g.DrawString(start.ToLocalTime().ToString("HH:mm"), Font, brush, box.Left, box.Bottom + 6);
-        g.DrawString(end.ToLocalTime().ToString("HH:mm"), Font, brush, box.Right - 38, box.Bottom + 6);
+        if (fitHistory) (start, end) = HistoryRange(quota, window, end);
+        var duration = Math.Max(1, (end - start).TotalSeconds);
+        var format = fitHistory ? "MMM d HH:mm" : "HH:mm";
+        g.DrawString(start.ToLocalTime().ToString(format), Font, brush, box.Left, box.Bottom + 6);
+        var endLabel = end.ToLocalTime().ToString(format);
+        g.DrawString(endLabel, Font, brush, box.Right - g.MeasureString(endLabel, Font).Width, box.Bottom + 6);
         PointF? previous = null; DateTimeOffset? previousAt = null; double? previousUsed = null; string? previousReset = null;
         var count = 0;
         double? firstUsed = null, lastUsed = null, minimumUsed = null, maximumUsed = null;
@@ -230,10 +250,10 @@ internal sealed class QuotaGraph : Control
             var row = (sample["windows"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(item =>
                 Snapshot.Text(item["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(item["window"]) == Snapshot.Text(window["window"]));
             if (!DateTimeOffset.TryParse(Snapshot.Text(sample["checkedAt"]), out var at) || at < start || at > end ||
-                Snapshot.Number(row?["remainingPercent"]) is not double remaining || remaining > 100)
+                Snapshot.Number(row?["remainingPercent"]) is not double remaining || !double.IsFinite(remaining) || remaining < 0 || remaining > 100)
             { previous = null; previousAt = null; continue; }
             var used = 100 - remaining; var reset = Snapshot.Text(row?["resetsAt"]);
-            var point = new PointF(box.Left + box.Width * (float)((at - start).TotalSeconds / 86400), box.Bottom - box.Height * (float)(used / 100));
+            var point = new PointF(box.Left + box.Width * (float)((at - start).TotalSeconds / duration), box.Bottom - box.Height * (float)(used / 100));
             var sameReset = reset == previousReset || (DateTimeOffset.TryParse(reset, out var resetTime) && DateTimeOffset.TryParse(previousReset, out var previousResetTime) && Math.Abs((resetTime - previousResetTime).TotalSeconds) <= 2);
             if (previous is PointF prior && previousAt is DateTimeOffset time && at > time && (at - time).TotalSeconds <= 630 && used >= previousUsed && sameReset)
                 g.DrawLine(line, prior, point);
@@ -243,10 +263,11 @@ internal sealed class QuotaGraph : Control
             previous = point; previousAt = at; previousUsed = used; previousReset = reset; count++;
         }
         var selection = Snapshot.Text(window["bucket"]) + " " + Snapshot.Text(window["window"]);
-        AccessibleDescription = count == 0 ? $"{selection}: no observations in this 24-hour period."
+        var period = fitHistory ? "retained history" : "24-hour period";
+        AccessibleDescription = count == 0 ? $"{selection}: no observations in this {period}."
             : $"{selection}: {count} observations. Allowance used starts at {firstUsed:0.#}%, ends at {lastUsed:0.#}%, and ranges from {minimumUsed:0.#}% to {maximumUsed:0.#}%. Gaps and resets are not joined.";
         if (count == 0)
-            TextRenderer.DrawText(g, "No saved observations in this 24-hour period.", Font, Rectangle.Round(box), ForeColor,
+            TextRenderer.DrawText(g, $"No saved observations in this {period}.", Font, Rectangle.Round(box), ForeColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
     }
 }
