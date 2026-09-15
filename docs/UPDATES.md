@@ -45,6 +45,28 @@ the framework. Signing-tool interoperability alone does not test these paths.
 Neither native updater is connected yet. No production key was created by this
 compatibility review, and the verified build-24 candidates remain unchanged.
 
+### Runtime integration safeguards
+
+The pinned [WinSparkle downloader](https://github.com/vslavik/winsparkle/blob/v0.9.4/src/updatedownloader.cpp)
+retains a compatibility path that accepts unsigned updates when no signing key is
+configured. Observatory must refuse to initialize it unless the installed public
+key is present and `win_sparkle_set_eddsa_public_key` returns success. Missing
+configuration must display unavailable, never up to date. Explicit button checks
+should not silently enable startup checks.
+
+The downloader also records a temporary directory that it cleans on a later
+startup. Retain the verified payload, signed envelope and trusted external helper
+outside that directory before handing off. Do not leave recovery dependent on the
+download cache. Test restart and cache cleanup with synthetic files.
+
+The [installer callback flow](https://github.com/vslavik/winsparkle/blob/v0.9.4/src/ui.cpp)
+runs the custom handler before requesting host shutdown. Return handled only after
+the verified external helper has accepted the handoff. Return an error for any
+preparation or launch failure, never zero, which invokes default shell execution.
+The helper must still wait for confirmed graceful shutdown before replacement.
+Do not wait synchronously for replacement inside the callback while the host is
+still running. These are integration requirements, not verified runtime behavior.
+
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
 
