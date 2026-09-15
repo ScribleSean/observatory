@@ -1,0 +1,20 @@
+name: Windows peer contracts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-peer-contracts-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - name: Verify synthetic pairing and allowance exchange in isolation
+        run: node --test --test-concurrency=1 scripts/peer-directory.test.mjs scripts/peer-tls-client.test.mjs scripts/quota-tls.test.mjs
+      # Temporary synthetic identities only. No real pairing or installation.

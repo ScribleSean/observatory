@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate,createHash} from 'node:crypto';
-import {mkdtempSync,readFileSync,rmSync,existsSync,realpathSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,existsSync} from 'node:fs';
+import {realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -98,7 +99,7 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
   };
   await t.test('host controller persists its offer and actual TLS acknowledgement',
     {skip:!['darwin','win32'].includes(process.platform)},async()=>{
-      const runtime=realpathSync(mkdtempSync(path.join(root,'hosting-')));
+      const runtime=await realpath(mkdtempSync(path.join(root,'hosting-')));
       await initializeDeviceIdentity(runtime,{version:1,...serverIdentity});
       const listener=await startHostTLSSetup(runtime,{address:'10.0.0.2'},{createServer});
       try {
@@ -118,7 +119,7 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
     });
   await t.test('joining controller commits before acknowledgement and resumes a lost acknowledgement',
     {skip:!['darwin','win32'].includes(process.platform)},async()=>{
-      const runtime=realpathSync(mkdtempSync(path.join(root,'joining-')));
+      const runtime=await realpath(mkdtempSync(path.join(root,'joining-')));
       await initializeDeviceIdentity(runtime,{version:1,...clientIdentity});
       const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
       try {
