@@ -75,6 +75,14 @@ operation may return false for a retryable failure only if no helper was launche
 Native self-tests cover these states with synthetic delegates, not real downloads
 or a loaded WinSparkle library. The binding is not enabled yet.
 
+The pinned WinSparkle archive's x64 runtime inventory is recorded in
+`native/windows/updater-tool.json`. The selected DLL is 2,886,144 bytes with
+SHA-256 `9b43b1c16ee39fb9a91b5bd75138767898779510e0836be2919250607cdbe8ab`.
+Its bytes and x64 PE machine type were checked without executing the library.
+Future packaging must retain `COPYING` and `COPYING.expat` from the same verified
+archive and exclude debug symbols, import libraries and other architectures.
+The DLL is not bundled or initialized yet.
+
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
 
