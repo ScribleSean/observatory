@@ -385,8 +385,19 @@ internal static class NativeDashboardTests
     private static void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); }
     private static void Capture(Form form, string output, string name)
     {
+        // Hosted desktops can resize the form after the initial Shown event.
+        // Verify each actual capture, not only the initial requested viewport.
+        var viewport = new Size(1280, 800);
+        var chrome = form.Size - form.ClientSize;
+        form.MinimumSize = viewport + chrome;
+        form.ClientSize = viewport;
+        form.PerformLayout();
+        Check(form.ClientSize == viewport, "Every screenshot has a 1280 by 800 client viewport");
         using var bitmap = new Bitmap(form.Width, form.Height);
         form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
         bitmap.Save(Path.Combine(output, name + ".png"), ImageFormat.Png);
+        using var saved = Image.FromFile(Path.Combine(output, name + ".png"));
+        Check(saved.Width == viewport.Width + chrome.Width && saved.Height == viewport.Height + chrome.Height,
+            "Saved screenshot dimensions match the verified viewport and window chrome");
     }
 }
