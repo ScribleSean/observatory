@@ -90,7 +90,7 @@ struct NativeDictation: View {
                         selection: Binding(get: { end }, set: { anchor = $0 }))
                 }
             }
-            LabeledContent("All voice time", value: "Unknown")
+            ObservatoryValueRow("All voice time", value: "Unknown")
             Text("Complete coverage is not established.").observatoryFont(.callout).foregroundStyle(.secondary)
             Text("By tool and device").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             ForEach(sources) { source in
@@ -108,11 +108,11 @@ struct NativeDictation: View {
         let days = nativePeriodDays(source.days, period: period, anchor: end)
         return GroupBox(source.tool + " · " + source.host) {
             VStack(alignment: .leading, spacing: 10) {
-                LabeledContent("Status", value: source.status == "ok" ? "Recorded history" : source.status)
-                LabeledContent("Last checked", value: source.checkedAt)
-                LabeledContent("Records", value: formatted(recordedSum(days, field: "transcriptions")))
-                LabeledContent("Words", value: dictationValue(days, field: "words", wispr: true))
-                LabeledContent("Recorded audio minutes", value: dictationValue(days, field: "audioSeconds", wispr: true))
+                ObservatoryValueRow("Status", value: source.status == "ok" ? "Recorded history" : source.status)
+                ObservatoryValueRow("Last checked", value: source.checkedAt)
+                ObservatoryValueRow("Records", value: formatted(recordedSum(days, field: "transcriptions")))
+                ObservatoryValueRow("Words", value: dictationValue(days, field: "words", wispr: true))
+                ObservatoryValueRow("Recorded audio minutes", value: dictationValue(days, field: "audioSeconds", wispr: true))
                 if days.isEmpty {
                     Text("No recorded voice statistics in this scope. Missing data is not zero usage.").foregroundStyle(.secondary)
                 } else {
@@ -120,9 +120,9 @@ struct NativeDictation: View {
                         ForEach(Array(days.suffix(60).reversed().enumerated()), id: \.offset) { _, day in
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(text(day["date"])).observatoryFont(.headline)
-                                LabeledContent("Records", value: formatted(number(day["transcriptions"])))
-                                LabeledContent("Words", value: dictationValue([day], field: "words", wispr: true))
-                                LabeledContent("Audio minutes", value: dictationValue([day], field: "audioSeconds", wispr: true))
+                                ObservatoryValueRow("Records", value: formatted(number(day["transcriptions"])))
+                                ObservatoryValueRow("Words", value: dictationValue([day], field: "words", wispr: true))
+                                ObservatoryValueRow("Audio minutes", value: dictationValue([day], field: "audioSeconds", wispr: true))
                             }.padding(.vertical, 6)
                         }
                         Text("Latest 60 recorded dates shown. Totals cover the selected period.").observatoryFont(.caption)
@@ -145,10 +145,10 @@ struct NativeAgentUsage: View {
             ForEach(Array(receipts.enumerated()), id: \.offset) { _, receipt in
                 DisclosureGroup(text(receipt["model"]) + " · " + text(receipt["status"])) {
                     VStack(alignment: .leading, spacing: 8) {
-                        LabeledContent("Role", value: text(receipt["role"]))
-                        LabeledContent("Recorded at", value: text(receipt["recordedAt"]))
-                        LabeledContent("Latest call seconds", value: formatted(number(receipt["seconds"])))
-                        LabeledContent("Reported tokens", value: text(receipt["status"]) == "failed" ? "Unknown" : formatted(number(receipt["total"])))
+                        ObservatoryValueRow("Role", value: text(receipt["role"]))
+                        ObservatoryValueRow("Recorded at", value: text(receipt["recordedAt"]))
+                        ObservatoryValueRow("Latest call seconds", value: formatted(number(receipt["seconds"])))
+                        ObservatoryValueRow("Reported tokens", value: text(receipt["status"]) == "failed" ? "Unknown" : formatted(number(receipt["total"])))
                         if let failure = receipt["failure"] as? String { Text(failure) }
                     }.padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -171,13 +171,13 @@ struct NativeAgentUsage: View {
                 ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
                     DisclosureGroup(text(run["model"]) + " · " + text(run["status"])) {
                         VStack(alignment: .leading, spacing: 8) {
-                            LabeledContent("Recorded at", value: text(run["recordedAt"]))
-                            LabeledContent("Reply seconds", value: formatted(number(run["seconds"])))
-                            LabeledContent("Input tokens", value: formatted(number(run["input"])))
-                            LabeledContent("Cached tokens", value: formatted(number(run["cached"])))
-                            LabeledContent("Output tokens", value: formatted(number(run["output"])))
-                            LabeledContent("Time to first token seconds", value: formatted(number(run["ttft"])))
-                            LabeledContent("Peak total GPU memory MiB", value: formatted(number(run["peakGpuMiB"])))
+                            ObservatoryValueRow("Recorded at", value: text(run["recordedAt"]))
+                            ObservatoryValueRow("Reply seconds", value: formatted(number(run["seconds"])))
+                            ObservatoryValueRow("Input tokens", value: formatted(number(run["input"])))
+                            ObservatoryValueRow("Cached tokens", value: formatted(number(run["cached"])))
+                            ObservatoryValueRow("Output tokens", value: formatted(number(run["output"])))
+                            ObservatoryValueRow("Time to first token seconds", value: formatted(number(run["ttft"])))
+                            ObservatoryValueRow("Peak total GPU memory MiB", value: formatted(number(run["peakGpuMiB"])))
                         }.padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -202,7 +202,7 @@ struct NativeAgentUsage: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(text(call["tool"], fallback: "Unknown tool")).observatoryFont(.headline).textSelection(.enabled)
                                 Text("Namespace: \(text(call["namespace"])) · \(text(call["category"]))").observatoryFont(.caption)
-                                LabeledContent(text(call["date"]), value: formatted(number(call["count"])) + " requests")
+                                ObservatoryValueRow(text(call["date"]), value: formatted(number(call["count"])) + " requests")
                             }.padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }

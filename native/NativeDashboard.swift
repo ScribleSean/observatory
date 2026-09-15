@@ -133,7 +133,6 @@ struct NativeDashboard: View {
         .observatoryFont().foregroundStyle(ObservatoryTheme.text)
         .tint(ObservatoryTheme.sage).background(ObservatoryTheme.background)
         .groupBoxStyle(ObservatoryGroupBoxStyle()).buttonStyle(ObservatoryButtonStyle())
-        .labeledContentStyle(ObservatoryLabeledContentStyle())
         .environment(\.observatoryTextScale, selection.textScale)
         .preferredColorScheme(appearance == "dark" ? .dark : .light)
         .onChange(of: host) { selectedDate = "" }
@@ -261,7 +260,7 @@ struct NativeDashboard: View {
                         let sources = rows(displayedSnapshot?.object[key])
                         if sources.isEmpty { Text("No source records").foregroundStyle(.secondary) }
                         ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-                            LabeledContent(text(source["host"]) + " · " + text(source["source"], fallback: key), value: text(source["status"]))
+                            ObservatoryValueRow(text(source["host"]) + " · " + text(source["source"], fallback: key), value: text(source["status"]))
                         }
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                 }

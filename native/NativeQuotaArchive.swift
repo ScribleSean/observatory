@@ -107,14 +107,6 @@ struct ArchiveRequestFence {
     func accepts(_ request: UUID) -> Bool { generation == request }
 }
 
-private struct ArchiveButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var enabled
-    func makeBody(configuration: Configuration) -> some View {
-        ObservatoryButtonStyle().makeBody(configuration: configuration)
-            .opacity(enabled ? 1 : 0.45)
-    }
-}
-
 struct NativeQuotaArchive: View {
     let runtime: URL
     @Environment(\.dismiss) private var dismiss
@@ -197,7 +189,7 @@ struct NativeQuotaArchive: View {
         }.padding(24)
         }.frame(width: 720, height: 500)
             .observatoryFont().foregroundStyle(ObservatoryTheme.text)
-            .background(ObservatoryTheme.background).buttonStyle(ArchiveButtonStyle())
+            .background(ObservatoryTheme.background).buttonStyle(ObservatoryButtonStyle())
             .task { loadAccounts(after: nil) }
             .onChange(of: scope) { clearPage() }.onChange(of: kind) { clearPage() }
             .onChange(of: from) { clearPage() }.onChange(of: to) { clearPage() }

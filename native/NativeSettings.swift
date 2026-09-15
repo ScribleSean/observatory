@@ -50,7 +50,7 @@ struct NativeSettings: View {
             }
             settingsSection("Accounts") {
                 VStack(alignment: .leading, spacing: 12) {
-                    LabeledContent("Codex", value: text((store.snapshot?.object["quota"] as? JSONObject)?["status"], fallback: "Not checked"))
+                    ObservatoryValueRow("Codex", value: text((store.snapshot?.object["quota"] as? JSONObject)?["status"], fallback: "Not checked"))
                     Text("Uses the existing sign-in in the installed Codex app. Sign in or switch accounts there. Observatory does not copy that login to another device.")
                     if store.localCollection {
                         Toggle("Monitor Codex account limits online", isOn: binding("quota")).disabled(!loaded || busy)

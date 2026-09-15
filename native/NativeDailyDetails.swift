@@ -70,7 +70,7 @@ struct NativeActivityDetails: View {
             if categories.isEmpty { Text("No category breakdown available.").foregroundStyle(.secondary) }
             ForEach(categories) { category in
                 VStack(alignment: .leading, spacing: 8) {
-                    LabeledContent(category.name == "Mixed activity" ? "Device overlap" : category.name,
+                    ObservatoryValueRow(category.name == "Mixed activity" ? "Device overlap" : category.name,
                                    value: formatted(category.value / 60) + " min")
                     if category.name == "Mixed activity" {
                         Text("Different categories were active on devices at once. Counted once without guessing attention.")
@@ -83,7 +83,7 @@ struct NativeActivityDetails: View {
                         if !apps.isEmpty {
                             DisclosureGroup("Recorded apps") {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(apps) { app in LabeledContent(app.name, value: formatted(app.value / 60) + " min") }
+                                    ForEach(apps) { app in ObservatoryValueRow(app.name, value: formatted(app.value / 60) + " min") }
                                     if apps.contains(where: { $0.name == "ChatGPT / Codex" }) {
                                         Text("ChatGPT and Codex share a desktop process label and cannot be separated from these foreground records.")
                                             .observatoryFont(.caption).foregroundStyle(.secondary)
@@ -116,7 +116,7 @@ struct NativeTokenDetails: View {
                           ("cacheCreationTokens", "Cache writes"), ("outputTokens", "Output")]
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ForEach(fields, id: \.0) { field, label in LabeledContent(label, value: formatted(number(day[field]))) }
+            ForEach(fields, id: \.0) { field, label in ObservatoryValueRow(label, value: formatted(number(day[field]))) }
             Text("Reasoning is included in output. Tokens are not remaining allowance or subscription charges.")
                 .observatoryFont(.callout).foregroundStyle(.secondary)
             estimate(day["apiEstimate"] as? JSONObject)
@@ -127,7 +127,7 @@ struct NativeTokenDetails: View {
                 DisclosureGroup(text(model["model"]) + " · " + formatted(number(model["totalTokens"]), compact: true) + " tokens") {
                     VStack(alignment: .leading, spacing: 10) {
                         if model["inferred"] as? Bool == true { Text("Inferred model label").foregroundStyle(.secondary) }
-                        ForEach(fields, id: \.0) { field, label in LabeledContent(label, value: formatted(number(model[field]))) }
+                        ForEach(fields, id: \.0) { field, label in ObservatoryValueRow(label, value: formatted(number(model[field]))) }
                         estimate(model["apiEstimate"] as? JSONObject)
                         Text("Recorded reasoning and speed").observatoryFont(.headline)
                         let candidates = nativePeriodProfiles(model: model, days: recordedDays, settings: settings)
@@ -139,7 +139,7 @@ struct NativeTokenDetails: View {
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(Array(coverage.profiles.enumerated()), id: \.offset) { _, profile in
-                                LabeledContent(text(profile["date"]) + " · " + text(profile["effort"]) + " · " + text(profile["speed"]),
+                                ObservatoryValueRow(text(profile["date"]) + " · " + text(profile["effort"]) + " · " + text(profile["speed"]),
                                                value: formatted(number(profile["totalTokens"])) + " tokens")
                             }
                             if coverage.status == "partial", let total = number(model["totalTokens"]) {

@@ -60,6 +60,15 @@ struct ObservatoryLabeledContentStyle: LabeledContentStyle {
     }
 }
 
+struct ObservatoryValueRow: View {
+    let title: String
+    let value: String
+    init(_ title: String, value: String) { self.title = title; self.value = value }
+    var body: some View {
+        LabeledContent(title, value: value).labeledContentStyle(ObservatoryLabeledContentStyle())
+    }
+}
+
 struct ObservatoryEmptyState: View {
     let title: String
     let systemImage: String
@@ -234,13 +243,14 @@ struct ObservatoryGroupBoxStyle: GroupBoxStyle {
 }
 
 struct ObservatoryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.observatoryFont().fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14)
             .frame(minHeight: 40).foregroundStyle(ObservatoryTheme.text)
             .background(ObservatoryTheme.surface.gradient, in: Capsule())
             .shadow(color: .white.opacity(0.06), radius: 6, x: 0, y: -2)
             .shadow(color: .black.opacity(configuration.isPressed ? 0.03 : 0.12), radius: 6, x: 0, y: 3)
-            .opacity(configuration.isPressed ? 0.75 : 1)
+            .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.45)
     }
 }
 
