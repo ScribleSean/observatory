@@ -142,6 +142,14 @@ and launches the normal dashboard with the readiness argument. It requires an
 event-loop acknowledgement, graceful update quit and no generated data files.
 This checks the startup hook, not the signed replacement-to-relaunch orchestration.
 
+`UpdateInstall.ApplyAndRelaunch` sequences the native activation and relaunch
+components for the external helper. Activation must return before relaunch,
+which releases its setup gate first. Failed activation never launches the app.
+A failed or unconfirmed launch retains the installed revision and recovery
+location without automatic rollback. Synthetic orchestration tests cover these
+decisions. Download, trusted initial receipt provisioning and the Update button
+are not connected to this entry point yet.
+
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
 receipt reads, authenticates the signature, rejects stale builds and checks the

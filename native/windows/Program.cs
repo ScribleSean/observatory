@@ -131,6 +131,7 @@ internal static class Program
                 UpdateCandidate.SelfTest();
                 UpdateRegistration.SelfTest();
                 UpdateReady.SelfTest();
+                UpdateInstall.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();
