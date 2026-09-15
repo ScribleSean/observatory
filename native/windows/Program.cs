@@ -179,6 +179,7 @@ internal static class Program
                 UpdateStaging.SelfTest();
                 UpdateTrust.SelfTest();
                 UpdateInstallerCallback.SelfTest();
+                WinSparkleCallbacks.SelfTest();
                 UpdateRegistration.SelfTest();
                 UpdateReady.SelfTest();
                 UpdateInstall.SelfTest();

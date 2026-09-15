@@ -113,6 +113,16 @@ The feed URL is a reserved integration target, not a published working feed.
 `ConfigureTrust` requires the native key setter to succeed before setting that URL.
 No production key or update configuration was created by this change.
 
+The pinned-library probe now registers and unregisters the managed installer,
+readiness and shutdown delegates. `WinSparkleLibrary` retains their owning object
+until registration is cleared before unloading. Managed callbacks contain exceptions
+and request shutdown at most once, only after a confirmed handoff. An uncertain
+launch never authorizes that shutdown callback. Readiness functions must be
+thread-safe, and shutdown handlers must post a request without waiting on the UI
+or reentering WinSparkle. Native self-tests cover the managed state transitions and
+delegate-pointer roundtrip. Library registration does not prove callback delivery
+during a real download, and updater initialization remains unimplemented.
+
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
 

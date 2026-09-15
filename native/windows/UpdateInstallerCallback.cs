@@ -5,8 +5,9 @@ namespace WorkspaceObservatory;
 internal sealed class UpdateInstallerCallback
 {
     private readonly Func<string, bool> prepareAndLaunch;
-    // 0 idle, 1 preparing, 2 completed or uncertain handoff, no retry.
+    // 0 idle, 1 preparing, 2 accepted, 3 uncertain. Neither terminal state retries.
     private int state;
+    internal bool Accepted => Volatile.Read(ref state) == 2;
 
     internal UpdateInstallerCallback(Func<string, bool> prepareAndLaunch)
     {
@@ -33,7 +34,7 @@ internal sealed class UpdateInstallerCallback
         {
             // Managed exceptions must not escape through the native callback.
             // No fallback installer is safe after an uncertain handoff.
-            Interlocked.Exchange(ref state, 2);
+            Interlocked.Exchange(ref state, 3);
             return -1;
         }
         finally { Interlocked.CompareExchange(ref state, 0, 1); }

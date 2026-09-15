@@ -10,11 +10,25 @@ internal sealed class WinSparkleLibrary : IDisposable
     private const string ExpectedSha256 = "9b43b1c16ee39fb9a91b5bd75138767898779510e0836be2919250607cdbe8ab";
     private nint handle;
     private readonly FileStream file;
+    private WinSparkleCallbacks? callbacks;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int SetPublicKey([MarshalAs(UnmanagedType.LPUTF8Str)] string key);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void SetUtf8([MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void SetCallback(nint callback);
+
+    internal void AttachCallbacks(WinSparkleCallbacks value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (callbacks is not null) throw new InvalidOperationException("Updater callbacks are already attached.");
+        // Retain all delegates even if a later registration fails.
+        callbacks = value;
+        Export<SetCallback>("win_sparkle_set_user_run_installer_callback")(Marshal.GetFunctionPointerForDelegate(value.Install));
+        Export<SetCallback>("win_sparkle_set_can_shutdown_callback")(Marshal.GetFunctionPointerForDelegate(value.CanShutdown));
+        Export<SetCallback>("win_sparkle_set_shutdown_request_callback")(Marshal.GetFunctionPointerForDelegate(value.RequestShutdown));
+    }
 
     internal void ConfigureTrust(UpdateTrust trust)
     {
@@ -68,12 +82,22 @@ internal sealed class WinSparkleLibrary : IDisposable
         var config = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new {
             schema = 1, platform = "windows-x64", feedUrl = UpdateTrust.Feed, publicKey = synthetic });
         ConfigureTrust(UpdateTrust.Parse(config));
+        AttachCallbacks(new WinSparkleCallbacks(new UpdateInstallerCallback(_ => false), () => false, () => { }));
     }
 
     public void Dispose()
     {
         // No initialized updater may use this probe-only wrapper yet.
-        if (handle != 0) { NativeLibrary.Free(handle); handle = 0; }
+        if (handle != 0)
+        {
+            if (callbacks is not null)
+            {
+                foreach (var name in new[] { "win_sparkle_set_user_run_installer_callback", "win_sparkle_set_can_shutdown_callback",
+                    "win_sparkle_set_shutdown_request_callback" }) Export<SetCallback>(name)(0);
+            }
+            NativeLibrary.Free(handle); handle = 0;
+            GC.KeepAlive(callbacks); callbacks = null;
+        }
         file.Dispose();
     }
 }
