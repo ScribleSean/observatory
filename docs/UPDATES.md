@@ -126,7 +126,21 @@ unfinished. The production integration must retain the DLL and callback delegate
 until process exit once initialized. Cleanup alone is not proof that unloading or
 releasing callbacks is safe. Initialization also cleans previous download leftovers,
 so an initialization test needs isolation beyond a unique settings registry key.
-This wrapper remains uninitialized and cannot request a feed or download.
+The wrapper now implements explicit initialization and a manual-check entry point.
+Initialization requires validated trust, fully attached callbacks, a canonical
+release version and a positive numeric build. Automatic checks are disabled and
+the saved setting is verified before initialization. After initialization, disposal
+calls native cleanup once but retains the library, file lease and callbacks until
+process exit. Configuration and manual checks are rejected after shutdown.
+The production app does not invoke these entry points yet.
+
+The Windows synthetic lifecycle test uses a new random registry path, a public
+test-vector key and isolated child-process temporary storage. It initializes and
+cleans up without requesting a feed, verifies manual-only settings, rejects
+untrusted or repeated initialization and confirms retained ownership after shutdown.
+The test removes only its own registry path. Native self-tests and both updater
+runtime tests passed on Windows. This does not verify a live feed, download,
+native installer callback delivery or production shutdown during an active download.
 
 The pinned-library probe now registers and unregisters the managed installer,
 readiness and shutdown delegates. `WinSparkleLibrary` retains their owning object
@@ -136,7 +150,8 @@ launch never authorizes that shutdown callback. Readiness functions must be
 thread-safe, and shutdown handlers must post a request without waiting on the UI
 or reentering WinSparkle. Native self-tests cover the managed state transitions and
 delegate-pointer roundtrip. Library registration does not prove callback delivery
-during a real download, and updater initialization remains unimplemented.
+during a real download. The original binding probe remains uninitialized, while
+the separate lifecycle probe exercises manual-only startup and cleanup.
 
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:

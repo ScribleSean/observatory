@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,readdirSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,readdirSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -38,7 +38,7 @@ test('selective updater preparation verifies real archive and preserves existing
   assert.notEqual(run(archive,'relative-output').status,0);
 });
 
-test('native updater binding accepts the pinned DLL and refuses altered bytes without initialization',{
+test('native updater verifies bindings, isolated lifecycle and altered-byte rejection',{
   skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_WINSPARKLE_ARCHIVE || !process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR
     ?'Requires Windows, the pinned archive and an explicitly supplied trusted native test executable':false,
 },t=>{
@@ -56,6 +56,13 @@ test('native updater binding accepts the pinned DLL and refuses altered bytes wi
   const valid=run();
   assert.equal(valid.status,0,valid.stderr || String(valid.error));
   assert.match(valid.stdout,/Updater not initialized/);
+  const isolatedTemp=path.join(root,'isolated-temp');mkdirSync(isolatedTemp);
+  const lifecycle=spawnSync(process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR,['--test-updater-lifecycle',dll],
+    {encoding:'utf8',timeout:30000,maxBuffer:8192,windowsHide:true,
+      env:{...process.env,TEMP:isolatedTemp,TMP:isolatedTemp}});
+  assert.equal(lifecycle.status,0,lifecycle.stderr || String(lifecycle.error));
+  assert.match(lifecycle.stdout,/retained shutdown passed. No update check requested/);
+  assert.deepEqual(readdirSync(isolatedTemp),[]);
   const changed=readFileSync(dll);changed[0]^=1;writeFileSync(dll,changed);
   assert.equal(run().status,1);
 });

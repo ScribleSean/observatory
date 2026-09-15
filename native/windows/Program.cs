@@ -8,6 +8,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-updater-lifecycle"))
+        {
+            if (args.Length != 2 || args[0] != "--test-updater-lifecycle") { Environment.ExitCode = 64; return; }
+            try
+            {
+                using var library = new WinSparkleLibrary(args[1]);
+                library.CheckIsolatedLifecycle();
+                Console.WriteLine("Synthetic manual-only updater initialization and retained shutdown passed. No update check requested.");
+            }
+            catch { Console.Error.WriteLine("Updater lifecycle test failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-updater-library"))
         {
             if (args.Length != 2 || args[0] != "--test-updater-library") { Environment.ExitCode = 64; return; }
