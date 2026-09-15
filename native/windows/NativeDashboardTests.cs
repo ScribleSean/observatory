@@ -92,9 +92,13 @@ internal static class NativeDashboardTests
                 Check(NativeDashboard.Freshness("missing", clock) == "Updated: Unknown", "Unknown freshness");
                 Check(NativeDashboard.Freshness("2026-01-02T12:00:00Z", clock).Contains("ahead"), "Future clock is not fresh");
                 var persistentRefresh = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources");
+                Children(form).OfType<Button>().Single(button => button.AccessibleName == "Device connection settings").PerformClick();
+                Check(sections.SelectedItem?.ToString() == "Settings", "Devices opens Settings");
+                Check(Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Settings page").SelectedItem?.ToString() == "This device", "Devices opens connection controls");
                 sections.SelectedItem = "Agents";
                 Children(form).OfType<Button>().Single(button => button.Text == "Review collection settings").PerformClick();
                 Check(sections.SelectedItem?.ToString() == "Settings", "Agents collection settings route");
+                Check(Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Settings page").SelectedItem?.ToString() == "Sources", "Agents opens collection controls after Devices");
                 Check(ReferenceEquals(persistentRefresh, Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources")), "Refresh survives navigation");
                 sections.SelectedItem = "Activity";
                 Check(Texts(form).Contains("30 min"), "Day total");

@@ -57,6 +57,7 @@ struct NativeDashboard: View {
                 }
             }.padding(20).frame(width: 200 * selection.textScale)
             }
+            ScrollViewReader { scroll in
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     ObservatoryAdaptiveRow {
@@ -68,6 +69,8 @@ struct NativeDashboard: View {
                         }
                         Spacer()
                         HStack {
+                        Button { selection.section = "settings"; scroll.scrollTo("dashboard-top", anchor: .top) } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
+                            .help("Review device pairing in Settings")
                         Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
                             .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
                         Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
@@ -145,7 +148,9 @@ struct NativeDashboard: View {
                     }
                     Text("Provider account management and unified account-history sync are still being developed.")
                         .observatoryFont(.caption).foregroundStyle(.secondary)
-                }.padding(28).frame(maxWidth: 1100, alignment: .leading).frame(maxWidth: .infinity)
+                }.padding(28).frame(maxWidth: 1100, alignment: .leading).frame(maxWidth: .infinity).id("dashboard-top")
+            }
+            .onChange(of: selection.section) { scroll.scrollTo("dashboard-top", anchor: .top) }
             }
         }
         .observatoryFont().foregroundStyle(ObservatoryTheme.text)

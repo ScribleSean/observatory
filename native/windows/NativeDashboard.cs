@@ -63,6 +63,10 @@ internal sealed partial class NativeDashboard : Form
             finally { busy = false; if (!IsDisposed) Reload(); }
         };
         header.Controls.Add(freshness); header.Controls.Add(pageTitle); header.Controls.Add(refreshButton);
+        var devices = new Button { Text = "Devices", AccessibleName = "Device connection settings", Dock = DockStyle.Right, Width = 100, FlatStyle = FlatStyle.Flat };
+        devices.FlatAppearance.BorderSize = 0;
+        devices.Click += (_, _) => { settingsPage = "This device"; sections.SelectedItem = "Settings"; Reload(); body.AutoScrollPosition = Point.Empty; };
+        header.Controls.Add(devices);
         content.Controls.Add(body); content.Controls.Add(header);
         Controls.Add(content); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
@@ -125,7 +129,7 @@ internal sealed partial class NativeDashboard : Form
             {
                 Label("Saved execution records, not a live agent monitor. Missing records are not zero usage.");
                 var configure = new Button { Text = "Review collection settings", AutoSize = true, Height = 38 };
-                configure.Click += (_, _) => sections.SelectedItem = "Settings";
+                configure.Click += (_, _) => { settingsPage = "Sources"; sections.SelectedItem = "Settings"; };
                 body.Controls.Add(configure);
                 Agents(snapshot);
             }

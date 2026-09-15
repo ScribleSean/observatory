@@ -90,8 +90,20 @@ struct NativeDictation: View {
                         selection: Binding(get: { end }, set: { anchor = $0 }))
                 }
             }
-            ObservatoryValueRow("All voice time", value: "Unknown")
-            Text("Complete coverage is not established.").observatoryFont(.callout).foregroundStyle(.secondary)
+            let known = sources.filter {
+                dictationValue(nativePeriodDays($0.days, period: period, anchor: end), field: "audioSeconds", wispr: true) != "Unknown"
+            }
+            Text("Recorded voice time").observatoryFont(.headline)
+            if known.isEmpty {
+                ObservatoryValueRow("Recorded audio minutes", value: "Unknown")
+            } else {
+                ForEach(known) { source in
+                    ObservatoryValueRow(source.tool + " · " + source.host,
+                        value: dictationValue(nativePeriodDays(source.days, period: period, anchor: end), field: "audioSeconds", wispr: true) + " min")
+                }
+            }
+            Text("Known recordings in the selected period. Coverage is incomplete. Device histories may overlap and are not added together.")
+                .observatoryFont(.callout).foregroundStyle(.secondary)
             Text("By tool and device").observatoryFont(.headline).accessibilityAddTraits(.isHeader)
             ForEach(sources) { source in
                 sourceSection(source)

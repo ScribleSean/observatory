@@ -36,6 +36,20 @@ jobs:
             throw 'Native self-test timed out.'
           }
           if ($test.ExitCode -ne 0) { throw 'Native self-test failed.' }
+      - name: Verify synthetic Windows dashboard navigation
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'observatory-dashboard-fixture'
+          New-Item -ItemType Directory -Path $output -ErrorAction Stop | Out-Null
+          $test = Start-Process -FilePath ./native-test/WorkspaceObservatory.exe -ArgumentList @('--test-native-dashboard', $output) -PassThru -NoNewWindow
+          if (-not $test.WaitForExit(60000)) {
+            $test.Kill()
+            throw 'Synthetic dashboard test timed out.'
+          }
+          if ($test.ExitCode -ne 0) { throw 'Synthetic dashboard test failed.' }
+          if ((Get-Content (Join-Path $output 'native-result.txt') -Raw).Trim() -ne 'native-dashboard: passed') {
+            throw 'Synthetic dashboard result missing or failed.'
+          }
   macos:
     runs-on: macos-14
     timeout-minutes: 10
@@ -61,4 +75,4 @@ jobs:
             native/*.swift -o native-test/ObservatoryPreview
       - name: Reject unsafe preview launches
         run: node native/verify-preview-guard.mjs native-test/ObservatoryPreview
-      # No app installation, live sources, UI automation or release artifacts.
+      # No app installation, live sources or release artifacts. Windows UI uses fictional fixtures only.

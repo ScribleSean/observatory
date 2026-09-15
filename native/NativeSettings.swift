@@ -28,6 +28,17 @@ struct NativeSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
+            settingsSection("Device connection") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Pair over an existing trusted SSH connection. Provider credentials stay on their owning device.")
+                    ObservatoryAdaptiveRow {
+                        Button("Pair with Windows…", action: actions.pair)
+                        Button("Disconnect…", action: actions.disconnect)
+                        Button("Repair…", action: actions.repair)
+                    }.disabled(store.shuttingDown || store.refreshing || store.pairingMaintenance || sharingBusy || actions.preview)
+                    if actions.preview { Text("Device changes are disabled in this preview.").observatoryFont(.caption).foregroundStyle(.secondary) }
+                }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
             settingsSection("About Observatory") {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") (build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"))")
@@ -79,18 +90,13 @@ struct NativeSettings: View {
                 }
             }
             if !message.isEmpty { Text(message).observatoryFont(.callout).accessibilityLabel(message) }
-            settingsSection("Device connection") {
+            settingsSection("Connection diagnostics and previews") {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Device pairing is separate from provider sign-in. Pairing shares supported sanitized usage records, not provider credentials.")
                     TailscaleReadinessView(enabled: !busy && !actions.preview)
                     if let directPair = actions.directPair {
                         Button("Direct device pairing…", action: directPair).disabled(busy || actions.preview)
                     }
-                    ObservatoryAdaptiveRow {
-                        Button("Pair with Windows…", action: actions.pair)
-                        Button("Disconnect…", action: actions.disconnect)
-                        Button("Repair…", action: actions.repair)
-                    }.disabled(store.shuttingDown || store.refreshing || store.pairingMaintenance || sharingBusy || actions.preview)
                     if actions.preview { Text("Device changes are disabled in this preview.").observatoryFont(.caption).foregroundStyle(.secondary) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }

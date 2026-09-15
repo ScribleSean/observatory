@@ -42,8 +42,13 @@ internal sealed partial class NativeDashboard
         if (!dates.Contains(dictationAnchor)) dictationAnchor = dates.LastOrDefault() ?? "";
         if (dictationPeriod != "All retained" && dates.Length > 0)
             Choice(dictationPeriod == "Week" ? "Week ending" : "Recorded day", dates, dictationAnchor, value => dictationAnchor = value);
-        Label("All voice time: Unknown. Complete coverage is not established.");
         var selected = sources.Select(source => (source, days: NativeHistory.Select(source.days, dictationPeriod, dictationAnchor))).ToArray();
+        Label("Recorded voice time");
+        var known = selected.Where(row => DictationValue(row.days, "audioSeconds", true) != "Unknown").ToArray();
+        if (known.Length == 0) Label("Recorded audio minutes: Unknown");
+        foreach (var row in known)
+            Label(row.source.product + " · " + row.source.device + ": " + DictationValue(row.days, "audioSeconds", true) + " min");
+        Label("Known recordings in the selected period. Coverage is incomplete. Device histories may overlap and are not added together.");
         Table("By tool and device", ["Tool", "Device", "Records", "Words", "Audio minutes", "Status", "Checked"], selected.Select(row => new[] {
             row.source.product, row.source.device, Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions")),
             DictationValue(row.days, "words", true), DictationValue(row.days, "audioSeconds", true),
