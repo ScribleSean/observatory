@@ -3,8 +3,8 @@ using System.Security.Cryptography;
 
 namespace WorkspaceObservatory;
 
-// A pinned library load is separate from updater initialization. This boundary
-// never configures a feed, starts background checks or reads signing secrets.
+// Loading and configuring the pinned library is separate from initialization.
+// This boundary never starts background checks or reads signing secrets.
 internal sealed class WinSparkleLibrary : IDisposable
 {
     private const string ExpectedSha256 = "9b43b1c16ee39fb9a91b5bd75138767898779510e0836be2919250607cdbe8ab";
@@ -13,6 +13,16 @@ internal sealed class WinSparkleLibrary : IDisposable
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int SetPublicKey([MarshalAs(UnmanagedType.LPUTF8Str)] string key);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void SetUtf8([MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+
+    internal void ConfigureTrust(UpdateTrust trust)
+    {
+        ArgumentNullException.ThrowIfNull(trust);
+        if (Export<SetPublicKey>("win_sparkle_set_eddsa_public_key")(trust.PublicKey) != 1)
+            throw new IOException("Updater did not accept the installed public key.");
+        Export<SetUtf8>("win_sparkle_set_appcast_url")(UpdateTrust.Feed);
+    }
 
     internal WinSparkleLibrary(string libraryPath)
     {
@@ -55,6 +65,9 @@ internal sealed class WinSparkleLibrary : IDisposable
         // Public RFC 8032 test-vector key, never a production release key.
         var synthetic = Convert.ToBase64String(Convert.FromHexString("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"));
         if (setKey(synthetic) != 1) throw new IOException("Updater rejected a valid synthetic public key.");
+        var config = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new {
+            schema = 1, platform = "windows-x64", feedUrl = UpdateTrust.Feed, publicKey = synthetic });
+        ConfigureTrust(UpdateTrust.Parse(config));
     }
 
     public void Dispose()

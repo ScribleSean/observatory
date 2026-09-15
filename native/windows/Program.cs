@@ -177,6 +177,7 @@ internal static class Program
                 UpdateSession.SelfTest();
                 UpdateCandidate.SelfTest();
                 UpdateStaging.SelfTest();
+                UpdateTrust.SelfTest();
                 UpdateInstallerCallback.SelfTest();
                 UpdateRegistration.SelfTest();
                 UpdateReady.SelfTest();

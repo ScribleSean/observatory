@@ -96,11 +96,22 @@ The native `--test-updater-library` check passed on Windows against that prepare
 DLL. `WinSparkleLibrary` checks its pinned size and hash through a retained read-only
 handle before loading the absolute path with system-only dependency lookup. The
 check resolves the required exports, confirms invalid-key rejection and accepts a
-public RFC 8032 test-vector key. It never calls updater initialization or sets a
-feed. The regression also confirms altered DLL bytes are rejected. Set
+public RFC 8032 test-vector key. It now also passes validated trust configuration
+to the key and feed setters without initializing the updater or making a request.
+The regression also confirms altered DLL bytes are rejected. Set
 `OBSERVATORY_TEST_UPDATE_EXTRACTOR` to the trusted test executable to enable this
 second test. This verifies loading and key marshalling, not downloads, callbacks
 or production update installation.
+
+`UpdateTrust` accepts only a bounded four-field release configuration with schema
+1, platform `windows-x64`, the intended HTTPS feed
+`https://scriblesean.github.io/observatory/updates/windows-x64.xml`, and a canonical
+32-byte public key. Duplicate fields, foreign URLs and empty keys are rejected.
+Only the installed assembly's `WorkspaceObservatory.UpdateTrust.json` resource is
+eligible. No resource is currently embedded, so reading it returns unavailable.
+The feed URL is a reserved integration target, not a published working feed.
+`ConfigureTrust` requires the native key setter to succeed before setting that URL.
+No production key or update configuration was created by this change.
 
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
