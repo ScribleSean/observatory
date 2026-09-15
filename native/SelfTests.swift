@@ -36,6 +36,16 @@ func runSelfTests() {
     let archivedPoints = quotaHistoryPoints(rows(archiveQuota["history"]), bucket: "codex", window: "primary")
     precondition(archivedPoints.count == 2 && quotaIsGap(archivedPoints[0], archivedPoints[1]))
     precondition(rows(archiveQuota["history"]).count == 3 && text(archiveQuota["status"]) == "stale")
+    let maskChart: JSONObject = ["version": 1, "width": 2, "height": 2, "from": 0, "to": 1000,
+        "encoding": "ink-mask-u8", "pixels": Data([0, 3, 0, 0]).base64EncodedString(), "scanned": 1, "observations": 1,
+        "gaps": 0, "segments": 1, "firstAt": 500, "lastAt": 500, "minUsed": 50, "maxUsed": 50]
+    let rasterReply = try? ArchiveReply.parse(JSONSerialization.data(withJSONObject: ["version": 1, "chart": maskChart]))
+    precondition(rasterReply?.chart?.observations == 1 && rasterReply?.chart?.image() != nil)
+    for changes: JSONObject in [["width": 1025], ["pixels": "AA=="], ["pixels": Data([0, 4, 0, 0]).base64EncodedString()],
+                               ["observations": 0], ["firstAt": 2000], ["maxUsed": 101]] {
+        let bad = maskChart.merging(changes) { _, new in new }
+        precondition((try? ArchiveReply.parse(JSONSerialization.data(withJSONObject: ["version": 1, "chart": bad]))) == nil)
+    }
     for invalid in [#"{"version":2,"records":[]}"#, #"{"version":1,"records":[],"accounts":[]}"#,
                     #"{"version":1,"records":[],"next":"raw-account"}"#,
                     #"{"version":1,"records":[{"checkedAt":"not-a-date"}]}"#] {

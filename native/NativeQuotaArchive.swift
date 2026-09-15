@@ -42,6 +42,7 @@ struct ArchiveReply: Decodable {
     let version: Int
     let accounts: [ArchiveAccount]?
     let records: [ArchiveReading]?
+    let chart: ArchiveChart?
     let storageBytes: Int?
     let storageLimitBytes: Int?
     // Catalogue and reading cursors have different shapes.
@@ -57,7 +58,7 @@ struct ArchiveReply: Decodable {
     static func parse(_ data: Data) throws -> ArchiveReply {
         guard data.count <= 600_000 else { throw CocoaError(.fileReadTooLarge) }
         let value = try JSONDecoder().decode(Self.self, from: data)
-        guard value.version == 1, (value.accounts != nil) != (value.records != nil),
+        guard value.version == 1, [value.accounts != nil, value.records != nil, value.chart != nil].filter({ $0 }).count == 1,
               (value.accounts?.count ?? 0) <= 100, (value.records?.count ?? 0) <= 200 else { throw CocoaError(.fileReadCorruptFile) }
         let hex: (String) -> Bool = { $0.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil }
         if let accounts = value.accounts {
@@ -73,6 +74,10 @@ struct ArchiveReply: Decodable {
             if let next = value.next {
                 guard case .page(let cursor) = next, cursor.id > 0, cursor.at >= 0, cursor.at.isFinite else { throw CocoaError(.fileReadCorruptFile) }
             }
+        }
+        if let chart = value.chart {
+            guard value.next == nil else { throw CocoaError(.fileReadCorruptFile) }
+            _ = try chart.validatedMask()
         }
         return value
     }
@@ -134,6 +139,8 @@ struct NativeQuotaArchive: View {
     @State private var to = Date()
     @State private var readings: [ArchiveReading] = []
     @State private var chartReadings: [ArchiveReading] = []
+    @State private var fullChart: ArchiveChart?
+    @State private var fullChartWindow = ""
     @State private var next: ArchiveCursor?
     @State private var busy = false
     @State private var requests = ArchiveRequestFence()
@@ -191,11 +198,18 @@ struct NativeQuotaArchive: View {
                 Text(storage).observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             }
             Text(message).observatoryFont(.callout).accessibilityLabel(message)
+            if let fullChart { ArchiveChartView(chart: fullChart, windowLabel: fullChartWindow) }
             if kind == "observation" && !chartReadings.isEmpty {
+                ForEach(Array(rows(archiveChartQuota(chartReadings)["windows"]).enumerated()), id: \.offset) { _, window in
+                    Button("Full-range graph · \(text(window["bucket"])) \(text(window["window"]))") { loadFullChart(window: window) }
+                        .disabled(busy || invalidDates)
+                }
+              if fullChart == nil {
                 Text(next == nil ? "Loaded history for the selected dates" : chartReadings.count >= 10000 ? "Partial history. Preview limit reached. Choose a narrower date range to inspect more detail." : "Partial history. Load the next page to extend coverage.")
                     .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 QuotaPanel(quota: archiveChartQuota(chartReadings), dashboard: true, historyOnly: true)
                     .modifier(ObservatoryCard())
+              }
             }
             Group {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -226,7 +240,7 @@ struct NativeQuotaArchive: View {
     }
     private func clearPage() {
         requests.invalidate()
-        readings = []; chartReadings = []; next = nil
+        readings = []; chartReadings = []; fullChart = nil; next = nil
         message = invalidDates ? "Choose a From date on or before Through." : "Load history for the selected filters."
     }
     private func loadAccounts(after: String?) {
@@ -247,6 +261,29 @@ struct NativeQuotaArchive: View {
             } catch {
                 guard requests.accepts(generation) else { return }
                 message = "History could not be read. Saved data was not deleted."
+            }
+        }
+    }
+    private func loadFullChart(window: JSONObject) {
+        guard !busy, !scope.isEmpty, !invalidDates else { return }
+        let start = Calendar.current.startOfDay(for: from)
+        guard let end = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: to)) else { return }
+        let request: JSONObject = ["action": "chart", "scope": scope, "bucket": text(window["bucket"]), "window": text(window["window"]),
+            "from": max(0, Int64(start.timeIntervalSince1970 * 1000)), "to": Int64(end.timeIntervalSince1970 * 1000) - 1]
+        busy = true; fullChart = nil
+        let generation = requests.begin()
+        message = "Rendering the full selected range. Raw record pages remain separate."
+        Task { @MainActor in
+            defer { busy = false }
+            do {
+                let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
+                guard requests.accepts(generation), let chart = reply.chart else { return }
+                fullChart = chart
+                fullChartWindow = text(window["bucket"]) + " · " + text(window["window"])
+                message = "Full selected range rendered. No observation-count preview limit."
+            } catch {
+                guard requests.accepts(generation) else { return }
+                message = "Full-range graph could not be rendered. Saved history was not changed."
             }
         }
     }

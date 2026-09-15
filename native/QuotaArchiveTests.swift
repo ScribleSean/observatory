@@ -48,6 +48,10 @@ func testQuotaArchiveBridge() async throws {
     let second = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
     precondition(second.records?.count == 1 && second.next == nil)
     precondition(first.records?.first?.checkedAt != second.records?.first?.checkedAt)
+    let chart = try await QuotaArchiveProcess.run(runtime: runtime, request: ["action": "chart", "scope": scope,
+        "from": 0, "to": 2_000_000_000_000, "bucket": "codex", "window": "primary"])
+    precondition(chart.chart?.observations == 2 && chart.chart?.gaps == 0)
+    precondition(chart.chart?.image() != nil)
     request.removeValue(forKey: "after")
     request["kind"] = "daily"
     let daily = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
