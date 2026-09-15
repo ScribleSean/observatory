@@ -36,8 +36,15 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
     & $Dotnet native/windows/bin/Release/net10.0-windows/WorkspaceObservatory.dll --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Windows self-tests failed.' }
-    & $node --test scripts/*.test.mjs
+    # Keep the ACL-heavy TLS exchange out of the parallel suite. Its absolute
+    # timeout stays unchanged, and every test file still runs.
+    $contractTests = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File |
+        Where-Object { $_.Name -ne 'quota-tls.test.mjs' } | Sort-Object Name |
+        ForEach-Object { $_.FullName })
+    & $node --test @contractTests
     if ($LASTEXITCODE -ne 0) { throw 'Windows JavaScript and reader contract tests failed.' }
+    & $node --test scripts/quota-tls.test.mjs
+    if ($LASTEXITCODE -ne 0) { throw 'Windows isolated allowance TLS contract tests failed.' }
     Write-Output 'Windows development build passed. This is not a self-contained release or installer.'
 } finally {
     Pop-Location
