@@ -55,6 +55,11 @@ internal static class QuotaArchive
             if (second["records"]!.AsArray().Count != 1 || second["next"] is not null ||
                 first["records"]![0]!["checkedAt"]!.ToJsonString() == second["records"]![0]!["checkedAt"]!.ToJsonString())
                 throw new Exception("Archive bridge pagination failed.");
+            var chartReply = await Run(runtime, new JsonObject { ["action"] = "chart", ["scope"] = new string('a', 64),
+                ["from"] = 1735732800000L, ["to"] = 1735732801000L, ["bucket"] = "codex", ["window"] = "primary" }, CancellationToken.None);
+            var chart = ArchiveChart.Parse(chartReply["chart"]!.AsObject());
+            if (chart.Observations != 2 || chart.Gaps != 0 || chart.Pixels.Length != 1024 * 160)
+                throw new Exception("Archive full-range chart bridge failed.");
             using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
             rejected = false;
             try { await Run(runtime, query, cancelled.Token); } catch (OperationCanceledException) { rejected = true; }

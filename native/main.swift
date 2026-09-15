@@ -929,6 +929,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 // Preview-only builds must never fall through to the installed data runtime.
 let previewArguments = Array(CommandLine.arguments.dropFirst())
 let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
+    ["--test-quota-archive"],
     ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
     ["--test-lifecycle", "--capture-dashboard"]]
 guard allowedPreviewArguments.contains(previewArguments) else {
