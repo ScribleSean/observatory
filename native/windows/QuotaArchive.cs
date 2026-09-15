@@ -219,10 +219,12 @@ internal sealed class QuotaArchiveWindow : Form
     private JsonArray accounts = new();
     private JsonNode? accountNext, pageNext;
     private bool busy, released;
+    private bool lightMode;
 
-    internal QuotaArchiveWindow(Func<JsonObject, CancellationToken, Task<JsonObject>> read)
+    internal QuotaArchiveWindow(Func<JsonObject, CancellationToken, Task<JsonObject>> read, bool lightMode = false)
     {
         this.read = read;
+        this.lightMode = lightMode;
         Font = DashboardTypography.AtPixels(14.5f);
         BackColor = Color.FromArgb(28, 29, 27); ForeColor = Color.WhiteSmoke;
         account.ForeColor = kind.ForeColor = Color.Black;
@@ -239,13 +241,22 @@ internal sealed class QuotaArchiveWindow : Form
         rows.GridColor = Color.FromArgb(55, 57, 52);
         Text = "Saved allowance history"; AccessibleName = Text;
         ClientSize = new Size(1080, 780); MinimumSize = new Size(800, 560); StartPosition = FormStartPosition.CenterParent;
+        charts.Height = Math.Clamp(ClientSize.Height / 2, 240, 400);
+        Resize += (_, _) => charts.Height = Math.Clamp(ClientSize.Height / 2, 240, 400);
         from.MinDate = through.MinDate = new DateTime(1970, 1, 2);
         from.MaxDate = through.MaxDate = new DateTime(9998, 12, 31);
         var filters = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(12), WrapContents = true };
         kind.Items.AddRange(["Observations", "Daily tokens", "Collection results"]); kind.SelectedIndex = 0;
         var done = new DashboardButton { Text = "Done", AutoSize = true, DialogResult = DialogResult.Cancel };
-        filters.Controls.AddRange([new Label { Text = "Account", AutoSize = true }, account, more, new Label { Text = "From", AutoSize = true }, from,
-            new Label { Text = "Through", AutoSize = true }, through, new Label { Text = "Record type", AutoSize = true }, kind, allDates, load, next, done]);
+        static Control Field(string label, Control input) {
+            var group = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false,
+                Margin = new Padding(0, 0, 8, 8), AccessibleName = label + " field" };
+            group.Controls.Add(new Label { Text = label, AutoSize = true, Padding = new Padding(0, 5, 6, 0) });
+            group.Controls.Add(input);
+            return group;
+        }
+        filters.Controls.AddRange([Field("Account", account), more, Field("From", from), Field("Through", through),
+            Field("Record type", kind), allDates, load, next, done]);
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(12) };
         footer.Controls.Add(status);
         Controls.Add(rows); Controls.Add(charts); Controls.Add(filters); Controls.Add(footer);
@@ -272,6 +283,14 @@ internal sealed class QuotaArchiveWindow : Form
         from.ValueChanged += (_, _) => InvalidatePage(); through.ValueChanged += (_, _) => InvalidatePage();
         Shown += async (_, _) => await LoadAccounts(null);
         FormClosed += (_, _) => lifetime.Cancel();
+        ApplyAppearance();
+    }
+
+    private void ApplyAppearance()
+    {
+        DashboardPalette.Apply(this, lightMode);
+        DashboardPalette.Apply(charts, lightMode, inCard: true);
+        rows.GridColor = DashboardPalette.Grid(rows);
     }
 
     private void InvalidatePage()
@@ -395,6 +414,7 @@ internal sealed class QuotaArchiveWindow : Form
             charts.Controls.Add(dateRow);
             charts.Controls.Add(graph);
         }
+        ApplyAppearance();
     }
     private Task LoadFullChart(JsonObject window)
     {
@@ -435,6 +455,7 @@ internal sealed class QuotaArchiveWindow : Form
             }) { Width = Math.Max(240, charts.ClientSize.Width - 32) });
             charts.Controls.Add(new Label { AutoSize = true, Text = "Day and Week end on the Through date. All retained uses the selected archive range." });
             charts.Controls.Add(new ArchiveChartControl(chart) { Width = Math.Max(240, charts.ClientSize.Width - 32), BackColor = DashboardCard.Surface, ForeColor = Color.WhiteSmoke });
+            ApplyAppearance();
             status.Text = $"{chart.Observations:N0} observations processed. Dashed spans mean unknown coverage. Raw records remain paginated.";
     }
     internal static string ReadingText(JsonNode? item) => item?["windows"] is JsonArray windows
@@ -490,8 +511,13 @@ internal sealed class QuotaArchiveWindow : Form
                     "scanned":1,"observations":1,"gaps":0,"segments":1,"firstAt":500,"lastAt":500,"minUsed":58,"maxUsed":58}
                     """)!.AsObject();
                 chart["from"] = request["from"]!.DeepClone(); chart["to"] = request["to"]!.DeepClone();
-                var middle = request["from"]!.GetValue<long>() + (request["to"]!.GetValue<long>() - request["from"]!.GetValue<long>()) / 2;
-                chart["firstAt"] = middle; chart["lastAt"] = middle;
+                var first = request["from"]!.GetValue<long>(); var span = request["to"]!.GetValue<long>() - first;
+                chart["firstAt"] = first + span / 6; chart["lastAt"] = first + span * 5 / 6;
+                var mask = new byte[121 * 101];
+                for (var x = 20; x <= 100; x++) mask[42 * 121 + x] = (byte)(x <= 40 || x >= 80 ? 1 : x % 7 < 3 ? 2 : 0);
+                foreach (var x in new[] { 20, 40, 80, 100 }) mask[42 * 121 + x] = 3;
+                chart["width"] = 121L; chart["height"] = 101L; chart["scanned"] = 5L; chart["observations"] = 4L; chart["gaps"] = 1L;
+                chart["pixels"] = Convert.ToBase64String(mask);
                 return new JsonObject { ["version"] = 1, ["chart"] = chart };
             }
             return request["action"]!.GetValue<string>() == "accounts"
@@ -507,6 +533,16 @@ internal sealed class QuotaArchiveWindow : Form
                 if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
                 if (!window.charts.Controls.OfType<ArchiveChartControl>().Any()) throw new Exception("Full-range graph did not load with history.");
                 if (!window.charts.Controls.OfType<DashboardFilters>().Any()) throw new Exception("Full-range graph lost its period controls.");
+                foreach (var light in new[] { false, true }) {
+                    window.lightMode = light; window.ApplyAppearance(); window.PerformLayout();
+                    if (window.BackColor != DashboardPalette.Background(light) || window.rows.DefaultCellStyle.ForeColor != DashboardPalette.Text(light) ||
+                        window.charts.Controls.OfType<ArchiveChartControl>().Single().BackColor != DashboardPalette.Surface(light))
+                        throw new Exception("Archive theme did not reach all surfaces.");
+                    using var themeImage = new Bitmap(window.Width, window.Height);
+                    window.DrawToBitmap(themeImage, new Rectangle(Point.Empty, themeImage.Size));
+                    themeImage.Save(Path.Combine(output, light ? "archive-full-light.png" : "archive-full-dark.png"), System.Drawing.Imaging.ImageFormat.Png);
+                }
+                window.lightMode = false; window.ApplyAppearance();
                 var fixtureWindows = window.chartReadings[0]!["windows"]!.AsArray();
                 fixtureWindows.Add(new JsonObject { ["bucket"] = "codex", ["window"] = "secondary", ["remainingPercent"] = 70 });
                 await window.LoadFullChart(new JsonObject { ["bucket"] = "codex", ["window"] = "weekly" });

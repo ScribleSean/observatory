@@ -290,7 +290,7 @@ internal sealed partial class NativeDashboard : Form
         if (readArchive is not null)
         {
             var history = new DashboardButton { Text = "Browse saved allowance history", AutoSize = true };
-            history.Click += (_, _) => { using var window = new QuotaArchiveWindow(readArchive); window.ShowDialog(this); };
+            history.Click += (_, _) => { using var window = new QuotaArchiveWindow(readArchive, lightMode: lightMode); window.ShowDialog(this); };
             body.Controls.Add(history);
         }
         Label("Observed on this device");
