@@ -25,13 +25,15 @@ internal sealed partial class NativeDashboard : Form
     private readonly ToolTip timestampHint = new();
     private readonly Button refreshButton = new DashboardButton { Text = "Refresh", AccessibleName = "Refresh sources", Dock = DockStyle.Right, Width = 110 };
     private readonly Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive;
+    private readonly Func<Task>? checkUpdates;
 
     internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null,
         Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive = null, bool rememberLayout = false,
-        DashboardAppearancePreferences? appearancePreferences = null)
+        DashboardAppearancePreferences? appearancePreferences = null, Func<Task>? checkUpdates = null)
     {
         this.read = read; this.refresh = refresh;
         this.readArchive = readArchive;
+        this.checkUpdates = checkUpdates;
         this.sourceSettings = sourceSettings;
         this.deviceSettings = deviceSettings;
         var appearanceStore = appearancePreferences ?? (rememberLayout ? DashboardWindowPreferences.Appearance : null);

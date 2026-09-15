@@ -8,6 +8,19 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-installed-update-state"))
+        {
+            if (args.Length != 5 || args[0] != "--test-installed-update-state" ||
+                !long.TryParse(args[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var expectedBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var result = UpdateInstalledState.Verify(args[1], args[2], args[3], expectedBuild).GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
+            }
+            catch { Console.Error.WriteLine("Installed update state was not verified."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-download-preparation"))
         {
             if (args.Length != 7 || args[0] != "--test-update-download-preparation" ||
@@ -241,6 +254,7 @@ internal static class Program
                 UpdateStaging.SelfTest();
                 UpdateHelper.SelfTest();
                 UpdateDownload.SelfTest();
+                UpdateController.SelfTest();
                 UpdateTrust.SelfTest();
                 UpdateInstallerCallback.SelfTest();
                 WinSparkleCallbacks.SelfTest();
@@ -379,12 +393,16 @@ internal sealed class ObservatoryContext : ApplicationContext
     private UsagePopup? usagePopup;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool quitting;
+    private readonly UpdateController updater;
+    private int updateShutdownRequested;
 
     internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null)
     {
         this.nativeDashboard = nativeDashboard;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
+        updater = new UpdateController(runtime, () => !collector.Busy && !Volatile.Read(ref quitting),
+            () => Interlocked.Exchange(ref updateShutdownRequested, 1));
         powerNotifications = new PowerResumeWindow(collector.RequestResumeRefresh);
         var setupPending = true;
         try { setupPending = FirstRunSetup.Prepare(runtime); }
@@ -393,6 +411,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
         menu.Items.Add("Refresh sources", null, async (_, _) => await collector.Refresh());
+        menu.Items.Add("Check for updates…", null, async (_, _) => await CheckForUpdates());
         menu.Items.Add("Configure local collection", null, (_, _) => Configure());
         menu.Items.Add("Pairing details for Mac…", null, (_, _) => ShowPairingDetails());
         menu.Items.Add("Disconnect paired device…", null, async (_, _) => await DisconnectPairing());
@@ -432,7 +451,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (collector.Configured && !setupPending) collector.Start();
         activationTimer.Tick += async (_, _) =>
         {
-            if (updateQuit?.WaitOne(0) == true) await RequestQuit();
+            if (Interlocked.Exchange(ref updateShutdownRequested, 0) == 1 || updateQuit?.WaitOne(0) == true) await RequestQuit();
             else if (!quitting && activation.WaitOne(0)) Open();
         };
         activationTimer.Start();
@@ -546,7 +565,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (dashboard is NativeDashboard existing) { existing.ShowSourceSettings(); return; }
         using var settings = new NativeDashboard(Data, collector.Refresh,
             new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
-            (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true);
+            (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates);
         settings.ShowSourceSettings();
         settings.ShowDialog();
     }
@@ -594,12 +613,22 @@ internal sealed class ObservatoryContext : ApplicationContext
         {
             dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
                 new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
-                (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true) : new Dashboard(runtime);
+                (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
         dashboard.Activate();
+    }
+
+    private async Task CheckForUpdates()
+    {
+        if (quitting) return;
+        try { await updater.Check(); }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (IOException error) { MessageBox.Show(error.Message, "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+        catch { MessageBox.Show("The update check could not start. This installation was not changed.", "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     private async Task RequestQuit()
@@ -622,6 +651,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        updater.Dispose();
         powerNotifications.Dispose();
         activationTimer.Stop(); activationTimer.Dispose();
         timer.Stop(); timer.Dispose(); collector.Dispose(); dashboard?.Close(); usagePopup?.Close(); tray.Visible = false; tray.Dispose();

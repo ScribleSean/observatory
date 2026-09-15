@@ -28,6 +28,16 @@ internal sealed partial class NativeDashboard
             ? $"Version {version.Major}.{version.Minor}.{version.Build} (build {version.Revision})" : "Version Unknown";
         Label($"Observatory · {versionLabel}");
         Label("This identifies the running app. Building or downloading an update does not change this version.").ForeColor = Color.Silver;
+        var update = new DashboardButton { Text = "Check for updates…", AccessibleName = "Check for updates", Width = 190, Height = 40,
+            Enabled = checkUpdates is not null };
+        update.Click += async (_, _) =>
+        {
+            if (checkUpdates is null) return;
+            update.Enabled = false;
+            try { await checkUpdates(); }
+            finally { if (!update.IsDisposed) update.Enabled = true; }
+        };
+        body.Controls.Add(update);
         if (sourceSettings is null) { Label("Source settings are unavailable in this preview session."); return; }
         try { sourceOriginal ??= sourceSettings.Read().DeepClone().AsObject(); }
         catch { Label("Source settings could not be read. Existing configuration is preserved."); return; }

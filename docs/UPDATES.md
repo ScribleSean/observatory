@@ -27,8 +27,9 @@ returns after process creation, without waiting for replacement. That return
 acknowledges launch only. The helper requires its own embedded release trust,
 then uses the existing verification, graceful shutdown, replacement and relaunch
 path. Neither this factory nor the helper can activate production updates without
-the embedded key. The application has not yet attached this factory to its
-WinSparkle instance or exposed a working check-for-updates control.
+the embedded key. The application controller now attaches this factory during a
+verified manual check, as described below. Production update checks remain
+unavailable until the release prerequisites are provisioned.
 
 The real Windows preparation regression uses synthetic installed and candidate
 inventories. It rejects the wrong signer, then verifies successful extraction and
@@ -40,6 +41,37 @@ invocation confirmed that the production helper refuses activation without an
 embedded key. These checks do not establish native WinSparkle callback delivery,
 external helper startup from that callback, full-package activation of this
 revision, or production update availability.
+
+### Application controller and installed receipt
+
+The Windows tray menu and Settings now call `UpdateController.Check`. Opening
+the app does not initialize WinSparkle or contact the feed. A manual check first
+requires embedded release trust, the pinned DLL at `Updater/WinSparkle.dll` and
+a signed installed envelope at `updates/installed-envelope.json` beneath the
+application data directory. The controller authenticates that envelope with the
+embedded key, verifies the installed inventory and checks its build against the
+running assembly before configuring WinSparkle. Missing prerequisites produce an
+unavailable message without native initialization.
+
+`UpdateInstalledState.Verify` retains the signed bytes while holding a read lease,
+then writes the authenticated receipt separately for the download handler. It
+does not infer trust from an unsigned local receipt. The controller binds the
+verified download handler, thread-safe collection readiness and a shutdown request
+consumed by the normal UI quit loop. It retains the existing manual-only settings
+and native process-lifetime ownership rules.
+
+Real Windows regression checks cover an unrelated signer, a mismatched running
+build, changed installed bytes and retained receipt usability after deleting the
+original envelope. All 28 focused tests passed without skips. Controller native
+tests confirm missing prerequisites, thread ownership and disposed-state refusal.
+The synthetic dashboard test verifies a single Settings action while checking and
+button restoration after completion. Its Settings screenshot was inspected.
+Windows build and Mac cross-compilation passed with zero warnings or errors.
+
+Production key embedding, DLL packaging, initial signed-envelope provisioning and
+updating that envelope after successful replacement remain open. No ordinary
+installation received these source changes. Native callback delivery and complete
+download-to-relaunch verification are still required before release.
 
 ### Integration compatibility check, September 15
 

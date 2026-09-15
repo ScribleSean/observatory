@@ -253,6 +253,36 @@ test('native download preparation retains verified candidate and old helper outs
   assert.deepEqual(readFileSync(ready.CandidateEnvelope),readFileSync(envelope));
 });
 
+test('native installed update state requires signed matching inventory and the running build',{
+  skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR
+    ?'Requires Windows and an explicitly supplied trusted native updater runtime':false,
+},t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'installed-envelope.json');
+  writeFileSync(envelope,release.envelope(f.old.receipt));
+  const run=(key=release.publicKey,build='7')=>spawnSync(process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR,
+    ['--test-installed-update-state',f.old.folder,envelope,key,build],{encoding:'utf8',timeout:30000});
+  for(const result of [run(signer().publicKey),run(release.publicKey,'8')]) {
+    assert.equal(result.status,1,result.stderr || String(result.error));
+    assert.equal(result.stdout,'');
+  }
+  const result=run();
+  assert.equal(result.status,0,result.stderr || String(result.error));
+  const state=JSON.parse(result.stdout);
+  assert.equal(state.SourceRevision,f.old.receipt.sourceRevision);
+  assert.equal(state.BuildNumber,7);
+  assert.equal(path.dirname(path.dirname(state.ReceiptPath)),f.root);
+  assert.match(path.basename(path.dirname(state.ReceiptPath)),/^\.observatory-trust-[a-f0-9]{32}$/);
+  rmSync(envelope);
+  assert.deepEqual(JSON.parse(readFileSync(state.ReceiptPath)),
+    {schema:1,product:'WorkspaceObservatorySetup',platform:'windows-x64',...f.old.receipt});
+  assert.equal(verifyInstallation(f.old.folder,JSON.parse(readFileSync(state.ReceiptPath))).buildNumber,7);
+  writeFileSync(envelope,release.envelope(f.old.receipt));
+  writeFileSync(path.join(f.old.folder,'WorkspaceObservatory.exe'),'tampered installed bytes');
+  const changed=run();
+  assert.equal(changed.status,1,changed.stderr || String(changed.error));
+  assert.equal(changed.stdout,'');
+});
+
 test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
   const f=fixture(t),release=signer();
   const receipt=prepareInstallationReceipt(f.next.folder,buildFor(f.next.receipt));

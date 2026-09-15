@@ -178,6 +178,8 @@ internal static class NativeDashboardTests
         var startupRegistered = false;
         var pairingDetails = 0; var disconnects = 0; var repairs = 0;
         var networkChecks = 0;
+        var updateChecks = 0;
+        var updatePending = new TaskCompletionSource();
         var devicePending = new TaskCompletionSource();
         var confirmSettings = false;
         var confirmations = new List<string>();
@@ -200,7 +202,8 @@ internal static class NativeDashboardTests
                     }
                     return Task.FromResult(new QuotaSharingStatus(sharingEnabled, true, "ready", sharingToken));
                 }, () => sharingConfirmed, () => { networkChecks++; return Task.FromResult("Synthetic Tailscale status. Peer not checked."); }),
-            readArchive: (_, _) => throw new InvalidOperationException("Dashboard rendering must not read private history."));
+            readArchive: (_, _) => throw new InvalidOperationException("Dashboard rendering must not read private history."),
+            checkUpdates: () => { updateChecks++; return updatePending.Task; });
         form.Shown += async (_, _) =>
         {
             try
@@ -415,6 +418,13 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("Tool records unavailable."), "Unavailable tool host");
                 sections.SelectedItem = "Settings";
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Settings loaded existing disabled source");
+                var updateButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Check for updates");
+                updateButton.PerformClick();
+                updateButton.PerformClick();
+                Check(updateChecks == 1 && !updateButton.Enabled, "Update action forwards once while checking");
+                updatePending.SetResult();
+                await Task.Delay(30);
+                Check(updateButton.Enabled, "Completed update check restores button");
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Existing settings default Wispr off");
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
