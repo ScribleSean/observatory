@@ -667,16 +667,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
-                for section in NativeDashboardSelection.sections {
+                for appearance in ["dark", "light"] {
+                  nativeSelection.previewAppearance = appearance
+                  for section in NativeDashboardSelection.sections {
                     openDashboard(section.0)
-                    detail?.setContentSize(NSSize(width: 1280, height: 800))
+                    detail?.setContentSize(NSSize(width: 1280, height: 860))
                     try await Task.sleep(nanoseconds: 400_000_000)
                     guard let view = detail?.contentView else { throw CocoaError(.fileWriteUnknown) }
                     view.layoutSubtreeIfNeeded()
                     guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
-                    try png.write(to: output.appendingPathComponent(section.0 + ".png"), options: .withoutOverwriting)
+                    try png.write(to: output.appendingPathComponent(appearance + "-" + section.0 + ".png"), options: .withoutOverwriting)
+                  }
                 }
                 print("Synthetic dashboard screenshots: \(output.path)")
             } catch { print("Synthetic dashboard screenshots failed"); exit(1) }

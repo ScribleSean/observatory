@@ -12,6 +12,7 @@ final class NativeDashboardSelection: ObservableObject {
     @Published var section = "allowances"
     @Published var navigationRequest = 0
     @Published var textScale: Double = 1
+    @Published var previewAppearance: String?
 }
 
 // Native dashboard. It consumes the existing sanitized
@@ -28,6 +29,11 @@ struct NativeDashboard: View {
     @State private var archiveError = false
     @State private var quotaHistoryOpen = false
     @AppStorage("observatoryAppearance") private var appearance = "dark"
+    private var displayedAppearance: String { settingsActions.preview ? (selection.previewAppearance ?? appearance) : appearance }
+    private func toggleAppearance() {
+        let next = displayedAppearance == "dark" ? "light" : "dark"
+        if settingsActions.preview { selection.previewAppearance = next } else { appearance = next }
+    }
     private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
     private let sections = NativeDashboardSelection.sections
 
@@ -37,9 +43,9 @@ struct NativeDashboard: View {
             if selection.textScale > 1.25 {
                 HStack {
                 ObservatoryPopup(title: "Dashboard section", labels: sections.map(\.1), values: sections.map(\.0), selection: $selection.section)
-                Button { appearance = appearance == "dark" ? "light" : "dark" } label: {
-                    Image(systemName: appearance == "dark" ? "sun.max" : "moon")
-                }.accessibilityLabel(appearance == "dark" ? "Light mode" : "Dark mode")
+                Button { toggleAppearance() } label: {
+                    Image(systemName: displayedAppearance == "dark" ? "sun.max" : "moon")
+                }.accessibilityLabel(displayedAppearance == "dark" ? "Light mode" : "Dark mode")
                 }.padding(16)
             } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -54,8 +60,8 @@ struct NativeDashboard: View {
                     }.buttonStyle(.plain).accessibilityAddTraits(selection.section == item.0 ? .isSelected : [])
                 }
                 Spacer()
-                Button { appearance = appearance == "dark" ? "light" : "dark" } label: {
-                    Label(appearance == "dark" ? "Light mode" : "Dark mode", systemImage: appearance == "dark" ? "sun.max" : "moon")
+                Button { toggleAppearance() } label: {
+                    Label(displayedAppearance == "dark" ? "Light mode" : "Dark mode", systemImage: displayedAppearance == "dark" ? "sun.max" : "moon")
                 }
             }.padding(20).frame(width: 200 * selection.textScale)
             }
@@ -146,7 +152,7 @@ struct NativeDashboard: View {
         .tint(ObservatoryTheme.sage).background(ObservatoryTheme.background)
         .groupBoxStyle(ObservatoryGroupBoxStyle()).buttonStyle(ObservatoryButtonStyle())
         .environment(\.observatoryTextScale, selection.textScale)
-        .preferredColorScheme(appearance == "dark" ? .dark : .light)
+        .preferredColorScheme(displayedAppearance == "dark" ? .dark : .light)
         .onChange(of: host) { selectedDate = "" }
         .sheet(isPresented: $quotaHistoryOpen) {
             NativeQuotaArchive(runtime: store.runtime).environment(\.observatoryTextScale, selection.textScale)

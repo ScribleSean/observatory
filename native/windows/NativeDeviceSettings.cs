@@ -76,7 +76,7 @@ internal sealed partial class NativeDashboard
             catch { startupStatus.Text = "Startup could not be updated. Check Windows permissions or another installation's registration."; }
         };
         body.Controls.Add(startup);
-        Label("Registration is not proof of a successful login launch. Windows or organizational policy may disable startup.");
+        Label("Registration is not proof of a successful login launch. Windows or organizational policy may disable startup.").ForeColor = Color.Silver;
         GroupAccountRows(groupStart, "Start at login");
         groupStart = body.Controls.Count;
         Label("Direct device pairing").Font = brand;
@@ -106,9 +106,9 @@ internal sealed partial class NativeDashboard
                 catch { if (!networkStatus.IsDisposed) networkStatus.Text = "The setup guide could not be opened. Visit tailscale.com/docs/install in your browser."; }
             };
             body.Controls.Add(guide);
-            Label("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Use Direct device pairing to exchange an invitation.");
+            Label("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Use Direct device pairing to exchange an invitation.").ForeColor = Color.Silver;
         }
-        Label("Disconnect and repair retain their confirmation steps. They act on this PC only. Review the result before changing the other device. Saved usage data is retained.");
+        Label("Disconnect and repair retain their confirmation steps. They act on this PC only. Review the result before changing the other device. Saved usage data is retained.").ForeColor = Color.Silver;
         GroupAccountRows(groupStart, "Direct device pairing");
         SharingSettings();
     }
@@ -118,7 +118,7 @@ internal sealed partial class NativeDashboard
         if (deviceSettings?.Sharing is null) return;
         var groupStart = body.Controls.Count;
         Label("Allowance history sharing").Font = brand;
-        Label("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals, not sign-in credentials. Accounts on different devices are not assumed to be the same.");
+        Label("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals, not sign-in credentials. Accounts on different devices are not assumed to be the same.").ForeColor = Color.Silver;
         var status = Label("Check sharing status to review this device's consent.");
         var check = new DashboardButton { Text = "Check sharing status", AccessibleName = "Check sharing status", Height = 40 };
         var toggle = new DashboardButton { Text = "Sharing unavailable", AccessibleName = "Change allowance sharing", Height = 40, Enabled = false };

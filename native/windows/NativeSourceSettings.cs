@@ -27,14 +27,14 @@ internal sealed partial class NativeDashboard
         var versionLabel = Version.TryParse(fileVersion, out var version) && version.Build >= 0 && version.Revision >= 0
             ? $"Version {version.Major}.{version.Minor}.{version.Build} (build {version.Revision})" : "Version Unknown";
         Label($"Observatory · {versionLabel}");
-        Label("This identifies the running app. Building or downloading an update does not change this version.");
+        Label("This identifies the running app. Building or downloading an update does not change this version.").ForeColor = Color.Silver;
         if (sourceSettings is null) { Label("Source settings are unavailable in this preview session."); return; }
         try { sourceOriginal ??= sourceSettings.Read().DeepClone().AsObject(); }
         catch { Label("Source settings could not be read. Existing configuration is preserved."); return; }
         sourceDraft ??= sourceOriginal.DeepClone().AsObject();
         var original = sourceOriginal;
         var draft = sourceDraft;
-        Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.");
+        Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.").ForeColor = Color.Silver;
         Label("Collection on this PC").Font = brand;
         var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 200, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
         collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
@@ -60,8 +60,8 @@ internal sealed partial class NativeDashboard
             choice.SelectedIndexChanged += (_, _) => draft[key] = choice.SelectedItem?.ToString() == "Windows" ? null : choice.SelectedItem?.ToString();
             row.Controls.Add(choice); body.Controls.Add(row);
         }
-        Label("Ubuntu options may start WSL. Log-device selection only applies while saved Codex collection is on. Account-client selection is independent. No credentials are copied and no alternate account is used automatically.");
-        Label("Turning account monitoring off clears Observatory's retained account readings on the next collection. Saved log-token history remains. This does not sign Codex out.");
+        Label("Ubuntu options may start WSL. Log-device selection only applies while saved Codex collection is on. Account-client selection is independent. No credentials are copied and no alternate account is used automatically.").ForeColor = Color.Silver;
+        Label("Turning account monitoring off clears Observatory's retained account readings on the next collection. Saved log-token history remains. This does not sign Codex out.").ForeColor = Color.Silver;
         var status = Label("");
         var actions = new FlowLayoutPanel { Height = 48, WrapContents = true };
         var save = new DashboardButton { Text = "Save source settings", AccessibleName = "Save source settings", Width = 190 };
