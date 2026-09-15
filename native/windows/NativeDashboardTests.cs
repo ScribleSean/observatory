@@ -10,12 +10,12 @@ internal static class NativeDashboardTests
         Check(DashboardHistoryChart.AxisLabel(0) == "0" && DashboardHistoryChart.AxisLabel(1000) == "1K" &&
             DashboardHistoryChart.AxisLabel(1_000_000) == "1M" && DashboardHistoryChart.AxisLabel(1_000_000_000) == "1B",
             "History axis uses compact magnitudes without changing zero");
-        using (var history = new DashboardHistoryChart(new[] { new JsonObject { ["date"] = "2026-09-12", ["totalTokens"] = 343_700_000 } }, true)
+        using (var history = new DashboardHistoryChart(new[] { new JsonObject { ["date"] = "2026-09-12", ["totalTokens"] = 343_700_000 } }, true, animate: false)
             { Size = new Size(900, 220) })
         using (var bitmap = new Bitmap(history.Width, history.Height))
         {
             history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-            var ink = Color.FromArgb(171, 151, 192).ToArgb();
+            var ink = DashboardPalette.Accent(false).ToArgb();
             var painted = Enumerable.Range(0, bitmap.Width).Where(x => bitmap.GetPixel(x, 100).ToArgb() == ink).ToArray();
             Check(painted.Length is >= 39 and <= 41 && Math.Abs(painted.Average() - 417) < 2,
                 "One recorded day paints a bounded centered bar, not a full-width block");
@@ -24,11 +24,11 @@ internal static class NativeDashboardTests
         }
         using (var history = new DashboardHistoryChart(new[] {
             new JsonObject { ["date"] = "2026-09-11", ["totalTokens"] = 0 },
-            new JsonObject { ["date"] = "2026-09-12" } }, true) { Size = new Size(900, 220) })
+            new JsonObject { ["date"] = "2026-09-12" } }, true, animate: false) { Size = new Size(900, 220) })
         using (var bitmap = new Bitmap(history.Width, history.Height))
         {
             history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-            var ink = Color.FromArgb(171, 151, 192).ToArgb();
+            var ink = DashboardPalette.Accent(false).ToArgb();
             Check(bitmap.GetPixel(214, 190).ToArgb() == ink && bitmap.GetPixel(619, 190).ToArgb() != ink,
                 "Recorded zero has a baseline marker while unknown has no invented bar");
             Check(history.AccessibleDescription!.Contains("2026-09-12: Unknown"), "Unknown stays explicit in chart accessibility");
@@ -387,6 +387,20 @@ internal static class NativeDashboardTests
                     catch (IOException) { }
                 }
                 Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName == "Settings page"), "Settings is one continuous page");
+                foreach (var name in new[] { "Start at login card", "Direct device pairing card", "Allowance history sharing card" })
+                    Check(Children(form).OfType<DashboardCard>().Any(card => card.AccessibleName == name), "Settings has grouped surface: " + name);
+                foreach (var name in new[] { "Toggle login startup", "Check Tailscale", "Check sharing status", "Change allowance sharing" })
+                {
+                    Check(Children(form).OfType<Button>().Single(button => button.AccessibleName == name) is DashboardButton,
+                        "Settings action uses shared pill styling: " + name);
+                    var button = Children(form).OfType<Button>().Single(button => button.AccessibleName == name);
+                    var card = (DashboardCard)button.Parent!.Parent!;
+                    var originalWidth = card.Width;
+                    for (var pass = 0; pass < 5; pass++) { card.Width = originalWidth - 32; card.Width = originalWidth; }
+                    Check(button.Width == Math.Min(card.ClientSize.Width - card.Padding.Horizontal - 8,
+                        Math.Max(140, TextRenderer.MeasureText(button.Text, button.Font).Width + 32)),
+                        "Settings pill width stays content-sized after repeated layout: " + name);
+                }
                 void ClickDevice(string name) => Children(form).OfType<Button>().Single(button => button.AccessibleName == name).PerformClick();
                 Check(networkChecks == 0, "Network readiness is not read automatically");
                 ClickDevice("Check Tailscale");
@@ -417,7 +431,14 @@ internal static class NativeDashboardTests
                 Check(!sharingEnabled && sharingChanges == 2, "Sharing disable applied");
                 Capture(form, output, "native-device-settings");
                 var sharingButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Change allowance sharing");
-                ((ScrollableControl)sharingButton.Parent!).ScrollControlIntoView(sharingButton);
+                for (Control target = sharingButton; target.Parent is not null; target = target.Parent)
+                {
+                    if (target.Parent is ScrollableControl scroll && scroll.AutoScroll)
+                    {
+                        scroll.ScrollControlIntoView(target);
+                        break;
+                    }
+                }
                 await Task.Delay(50);
                 Capture(form, output, "native-sharing-settings");
                 sections.SelectedItem = "Sources";

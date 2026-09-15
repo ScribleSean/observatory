@@ -17,6 +17,7 @@ final class NativeDashboardSelection: ObservableObject {
 // Native dashboard. It consumes the existing sanitized
 // snapshot and never sums overlapping device records or reads raw source files.
 struct NativeDashboard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var store: ObservatoryStore
     @ObservedObject var selection: NativeDashboardSelection
     let settingsActions: NativeSettingsActions
@@ -247,15 +248,24 @@ struct NativeDashboard: View {
                 Chart {
                     ForEach(Array(selected.suffix(30).enumerated()), id: \.offset) { _, day in
                         if let value = number(day[field]) {
-                            BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60))
+                            BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60), width: .fixed(40))
+                                .cornerRadius(4)
                         }
                     }
-                }.foregroundStyle(key == "tokens" ? ObservatoryTheme.purple : ObservatoryTheme.sage)
+                }.foregroundStyle(ObservatoryTheme.sage)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: period)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: host)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selectedDate)
                     .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
                         AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * selection.textScale))
                     } }
-                    .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) {
-                        AxisGridLine(); AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * selection.textScale))
+                    .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { axis in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let value = axis.as(Double.self) {
+                                Text(formatted(value, compact: true)).font(ObservatoryTheme.font(11 * selection.textScale))
+                            }
+                        }
                     } }
                     .frame(height: 220 * selection.textScale).modifier(ObservatoryCard()).accessibilityLabel("Up to 30 recorded days. Missing dates are not zero.")
                 Text(key == "tokens" ? "Saved log tokens, not subscription charges. Combined totals require verified deduplication."

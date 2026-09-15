@@ -14,10 +14,10 @@ internal sealed class DashboardFilters : Panel
         foreach (var value in values)
         {
             var button = new DashboardButton {
-                CornerRadius = 10,
+                CornerRadius = 20,
                 Text = value, AccessibleName = value, Tag = value,
                 Width = Math.Max(82, TextRenderer.MeasureText(value, Font).Width + 28), Height = 38,
-                FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 6, 6),
+                FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 8, 8),
                 BackColor = value == selected ? Color.FromArgb(177, 195, 161) : DashboardCard.Surface,
                 ForeColor = value == selected ? Color.FromArgb(28, 29, 27) : Color.WhiteSmoke,
                 AccessibleDescription = value == selected ? "Selected" : "Not selected"
@@ -38,7 +38,7 @@ internal sealed class DashboardFilters : Panel
         var width = Math.Max(100, Math.Min(680, Width) - left);
         foreach (Button button in chips.Controls)
             button.Width = Math.Max(TextRenderer.MeasureText(button.Text, button.Font).Width + 28,
-                width / Math.Max(1, chips.Controls.Count) - 6);
+                width / Math.Max(1, chips.Controls.Count) - 8);
         var height = chips.GetPreferredSize(new Size(width, 0)).Height;
         chips.SetBounds(left, top, width, Math.Max(44, height));
         Height = top + chips.Height;

@@ -2,10 +2,14 @@ namespace WorkspaceObservatory;
 
 internal static class DashboardPalette
 {
+    internal const int CardRadius = 16;
+    internal const int CardPadding = 16;
+    internal static readonly int[] Spacing = [4, 8, 12, 16, 24];
+    internal static Color Accent(bool light) => light ? Color.FromArgb(88, 111, 80) : Color.FromArgb(173, 194, 157);
     internal static Color Background(bool light) => light ? Color.FromArgb(237, 234, 229) : Color.FromArgb(28, 29, 27);
     internal static Color Surface(bool light) => light ? Color.FromArgb(244, 241, 236) : DashboardCard.Surface;
-    internal static Color Text(bool light) => light ? Color.FromArgb(38, 41, 35) : Color.WhiteSmoke;
-    internal static Color Muted(bool light) => light ? Color.FromArgb(100, 105, 95) : Color.FromArgb(183, 186, 177);
+    internal static Color Text(bool light) => light ? Color.FromArgb(41, 45, 40) : Color.FromArgb(240, 238, 232);
+    internal static Color Muted(bool light) => light ? Color.FromArgb(100, 105, 95) : Color.FromArgb(179, 183, 172);
     internal static bool IsLight(Control control) => control.BackColor.GetBrightness() > .5f;
     internal static Color Grid(Control control) => IsLight(control) ? Color.FromArgb(209, 210, 201) : Color.FromArgb(60, 64, 58);
 

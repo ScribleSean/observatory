@@ -54,9 +54,10 @@ internal sealed partial class NativeDashboard
     private void DeviceSettings()
     {
         if (deviceSettings is null) { Label("Device settings are unavailable in this preview session."); return; }
-        Label("Start at login");
+        var groupStart = body.Controls.Count;
+        Label("Start at login").Font = brand;
         var startupStatus = Label("");
-        var startup = new Button { Height = 36, FlatStyle = FlatStyle.Flat, AccessibleName = "Toggle login startup" };
+        var startup = new DashboardButton { Height = 40, AccessibleName = "Toggle login startup" };
         void ReadStartup()
         {
             try
@@ -76,17 +77,19 @@ internal sealed partial class NativeDashboard
         };
         body.Controls.Add(startup);
         Label("Registration is not proof of a successful login launch. Windows or organizational policy may disable startup.");
-        Label("Direct device pairing");
+        GroupAccountRows(groupStart, "Start at login");
+        groupStart = body.Controls.Count;
+        Label("Direct device pairing").Font = brand;
         if (deviceSettings.DirectPair is not null)
         {
-            var pair = new Button { Text = "Direct device pairing…", AccessibleName = "Direct device pairing", Height = 36, FlatStyle = FlatStyle.Flat };
+            var pair = new DashboardButton { Text = "Direct device pairing…", AccessibleName = "Direct device pairing", Height = 40 };
             pair.Click += (_, _) => deviceSettings.DirectPair();
             body.Controls.Add(pair);
         }
         if (deviceSettings.ReadNetwork is not null)
         {
             var networkStatus = Label("Optional VPN connection. Tailscale has not been checked.");
-            var networkCheck = new Button { Text = "Check Tailscale", AccessibleName = "Check Tailscale", Height = 36, FlatStyle = FlatStyle.Flat };
+            var networkCheck = new DashboardButton { Text = "Check Tailscale", AccessibleName = "Check Tailscale", Height = 40 };
             networkCheck.Click += async (_, _) =>
             {
                 networkCheck.Enabled = false;
@@ -106,17 +109,19 @@ internal sealed partial class NativeDashboard
             Label("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Use Direct device pairing to exchange an invitation.");
         }
         Label("Disconnect and repair retain their confirmation steps. They act on this PC only. Review the result before changing the other device. Saved usage data is retained.");
+        GroupAccountRows(groupStart, "Direct device pairing");
         SharingSettings();
     }
 
     private void SharingSettings()
     {
         if (deviceSettings?.Sharing is null) return;
-        Label("Allowance history sharing");
+        var groupStart = body.Controls.Count;
+        Label("Allowance history sharing").Font = brand;
         Label("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals, not sign-in credentials. Accounts on different devices are not assumed to be the same.");
         var status = Label("Check sharing status to review this device's consent.");
-        var check = new Button { Text = "Check sharing status", AccessibleName = "Check sharing status", Height = 36, FlatStyle = FlatStyle.Flat };
-        var toggle = new Button { Text = "Sharing unavailable", AccessibleName = "Change allowance sharing", Height = 36, FlatStyle = FlatStyle.Flat, Enabled = false };
+        var check = new DashboardButton { Text = "Check sharing status", AccessibleName = "Check sharing status", Height = 40 };
+        var toggle = new DashboardButton { Text = "Sharing unavailable", AccessibleName = "Change allowance sharing", Height = 40, Enabled = false };
         QuotaSharingStatus? current = null;
         void Show(QuotaSharingStatus next)
         {
@@ -154,5 +159,6 @@ internal sealed partial class NativeDashboard
             await Run(current.Enabled ? "disable" : "enable", current.Enabled ? null : current.Token);
         };
         body.Controls.Add(check); body.Controls.Add(toggle);
+        GroupAccountRows(groupStart, "Allowance history sharing");
     }
 }

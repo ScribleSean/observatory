@@ -128,23 +128,30 @@ struct ObservatorySegments: View {
     let values: [String]
     @Binding var selection: String
     var body: some View {
-        if scale > 1.25 {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                ForEach(values.indices, id: \.self) { index in
+                    segment(index).fixedSize(horizontal: true, vertical: true)
+                }
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 8)], spacing: 8) {
                 ForEach(values.indices, id: \.self) { index in
-                    Button { selection = values[index] } label: {
-                        Text(labels[index]).observatoryFont()
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .padding(6)
-                            .background(selection == values[index] ? ObservatoryTheme.sage.opacity(0.3) : ObservatoryTheme.surface,
-                                in: RoundedRectangle(cornerRadius: 10))
-                    }.buttonStyle(.plain)
-                        .accessibilityAddTraits(selection == values[index] ? .isSelected : [])
+                    segment(index)
                 }
-            }.accessibilityElement(children: .contain).accessibilityLabel(title)
-        } else {
-            ObservatorySegmentControl(title: title, labels: labels, values: values, selection: $selection)
-        }
+            }
+        }.accessibilityElement(children: .contain).accessibilityLabel(title)
+    }
+    private func segment(_ index: Int) -> some View {
+        Button { selection = values[index] } label: {
+            Text(labels[index]).observatoryFont(13)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .foregroundStyle(selection == values[index] ? ObservatoryTheme.background : ObservatoryTheme.text)
+                .background(selection == values[index] ? ObservatoryTheme.sage : ObservatoryTheme.surface, in: Capsule())
+                .shadow(color: .black.opacity(0.08), radius: 3, y: 2)
+        }.buttonStyle(.plain)
+            .accessibilityAddTraits(selection == values[index] ? .isSelected : [])
     }
 }
 
@@ -200,6 +207,9 @@ struct ObservatoryFilterRow<Content: View>: View {
 
 // Keep these values aligned with app/observatory.css and docs/BRAND.md.
 enum ObservatoryTheme {
+    static let cardRadius: CGFloat = 16
+    static let cardPadding: CGFloat = 16
+    static let spacing: [CGFloat] = [4, 8, 12, 16, 24]
     static func color(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let value = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
@@ -227,7 +237,7 @@ enum ObservatoryTheme {
 struct ObservatoryCard: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     func body(content: Content) -> some View {
-        content.padding(18).background(ObservatoryTheme.surface, in: RoundedRectangle(cornerRadius: 18))
+        content.padding(ObservatoryTheme.cardPadding).background(ObservatoryTheme.surface, in: RoundedRectangle(cornerRadius: ObservatoryTheme.cardRadius))
             .shadow(color: .black.opacity(scheme == .dark ? 0.22 : 0.07), radius: 12, x: 0, y: 6)
             .shadow(color: .white.opacity(scheme == .dark ? 0.025 : 0.6), radius: 1, x: 0, y: -1)
     }
@@ -235,8 +245,8 @@ struct ObservatoryCard: ViewModifier {
 
 struct ObservatoryGroupBoxStyle: GroupBoxStyle {
     func makeBody(configuration: Configuration) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            configuration.label.observatoryFont(19, weight: .semibold).tracking(0.6)
+        VStack(alignment: .leading, spacing: 16) {
+            configuration.label.observatoryFont(19, weight: .semibold).tracking(-0.5)
             configuration.content
         }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
     }

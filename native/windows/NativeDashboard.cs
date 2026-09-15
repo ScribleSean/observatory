@@ -339,12 +339,12 @@ internal sealed partial class NativeDashboard : Form
         Label("Account-wide observations, not a device sum. Gaps and resets are separate segments. Daily token totals may lag.");
         GroupAccountRows(start);
     }
-    private void GroupAccountRows(int start)
+    private void GroupAccountRows(int start, string name = "Account usage")
     {
         var rows = body.Controls.Cast<Control>().Skip(start).ToArray();
         var content = new Panel { Dock = DockStyle.Fill, BackColor = DashboardCard.Surface };
         var card = new DashboardCard { Width = ContentWidth,
-            AccessibleName = "Account usage card" };
+            AccessibleName = name + " card" };
         var arranging = false;
         void Arrange()
         {
@@ -354,20 +354,24 @@ internal sealed partial class NativeDashboard : Form
             foreach (Control row in content.Controls)
             {
                 var width = Math.Max(100, card.ClientSize.Width - card.Padding.Horizontal - 8);
-                row.Width = width;
+                row.Width = row is Button ? Math.Min(width, Math.Max(140, TextRenderer.MeasureText(row.Text, row.Font).Width + 32)) : width;
                 if (row is Label label)
                 {
                     label.MaximumSize = new Size(width, 0);
                     label.Height = label.GetPreferredSize(new Size(width, 0)).Height;
                 }
                 row.Location = new Point(0, y);
-                y += row.Height + Math.Max(10, row.Margin.Bottom);
+                y += row.Height + 16;
             }
             card.Height = y + card.Padding.Vertical;
             arranging = false;
         }
         card.SizeChanged += (_, _) => Arrange();
-        foreach (var row in rows) content.Controls.Add(row);
+        foreach (var row in rows)
+        {
+            content.Controls.Add(row);
+            row.SizeChanged += (_, _) => Arrange();
+        }
         card.Controls.Add(content);
         body.Controls.Add(card);
         Arrange();

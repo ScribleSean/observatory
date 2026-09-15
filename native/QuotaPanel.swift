@@ -167,7 +167,7 @@ struct QuotaPanel: View {
                         }
                         if let fraction = quotaPaceCoverage(quota, window: row, now: context.date) {
                             VStack(spacing: 3) {
-                                ProgressView(value: fraction, total: 1).progressViewStyle(ObservatoryProgressStyle(color: ObservatoryTheme.purple))
+                                ProgressView(value: fraction, total: 1).progressViewStyle(ObservatoryProgressStyle(color: ObservatoryTheme.sage))
                                 ObservatoryAdaptiveRow {
                                     Text("Now")
                                     Spacer()
@@ -225,7 +225,7 @@ struct QuotaPanel: View {
                         Chart(hourly) { hour in
                             BarMark(x: .value("Hour", hour.hour, unit: .hour),
                                     y: .value("Percentage points per hour", hour.percentagePointsPerHour))
-                                .foregroundStyle(ObservatoryTheme.purple)
+                                .foregroundStyle(ObservatoryTheme.sage).cornerRadius(4)
                                 .accessibilityLabel(hour.hour.formatted(date: .abbreviated, time: .shortened))
                                 .accessibilityValue("\(formatted(hour.percentagePointsPerHour)) percentage points per hour, based on \(formatted(hour.observedMinutes)) observed minutes")
                         }
@@ -254,14 +254,19 @@ struct QuotaPanel: View {
                 Text("Account tokens · recent daily totals").observatoryFont(11).foregroundStyle(.secondary)
                 Chart(Array(daily.enumerated()), id: \.offset) { _, day in
                     if let date = parseDate(text(day["startDate"]) + "T00:00:00Z"), let tokens = number(day["tokens"]) {
-                        BarMark(x: .value("Day", date, unit: .day), y: .value("Tokens", tokens)).foregroundStyle(ObservatoryTheme.purple)
+                        BarMark(x: .value("Day", date, unit: .day), y: .value("Tokens", tokens)).foregroundStyle(ObservatoryTheme.sage).cornerRadius(4)
                     }
                 }
                 .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
                     AxisGridLine(); AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * textScale))
                 } }
-                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
-                    AxisGridLine(); AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * textScale))
+                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 3)) { axis in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let value = axis.as(Double.self) {
+                            Text(formatted(value, compact: true)).font(ObservatoryTheme.font(11 * textScale))
+                        }
+                    }
                 } }
                 .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
                 .frame(height: 75 * textScale)
