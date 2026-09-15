@@ -28,7 +28,7 @@ export function buildUpdateAppcasts(release,artifacts,publicKeys,previousBuild) 
   const result={};
   for(const platform of platforms) {
     const artifact=artifacts.find(a=>a.platform===platform);
-    const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-setup.exe';
+    const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-update.zip';
     const filename=`Workspace-Observatory-${version}-${suffix}`;
     const url=`${repository}/releases/download/${tag}/${filename}`;
     if(artifact.sourceRevision!==release.sourceRevision || artifact.version!==version ||

@@ -14,11 +14,14 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 ### Integration compatibility check, September 15
 
-The current feed renderer points Windows at the first-install setup EXE. This is
-not yet a working update route: Observatory's installer intentionally refuses an
-existing installation. Do not remove that ownership check to make updater UI
-appear functional. The verified retained-payload transaction is the intended
-replacement path.
+The feed renderer now requires the dedicated Windows artifact
+`Workspace-Observatory-<version>-windows-x64-update.zip`, not the first-install
+setup EXE. Its wrapper contains `installation-envelope.json` and the complete
+`payload/` directory. Observatory's first-install installer intentionally refuses
+an existing installation. Keep that ownership check. The verified retained-payload
+transaction is the intended replacement path. Do not publish or enable this feed
+until the native download handler and trusted key configuration are connected and
+verified. Feed validation checks identity and signatures, not ZIP contents.
 
 The pinned [WinSparkle 0.9.4 public API](https://raw.githubusercontent.com/vslavik/winsparkle/v0.9.4/include/winsparkle.h)
 provides `win_sparkle_set_user_run_installer_callback` to handle downloaded

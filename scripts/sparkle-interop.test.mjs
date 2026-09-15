@@ -41,7 +41,7 @@ test('official Sparkle signing agrees with Node and rejects altered synthetic ar
     const release={version:'0.3.2',buildNumber:8,sourceRevision:'a'.repeat(40),publishedAt:'2026-09-13T00:00:00.000Z'};
     const artifacts=['macos-arm64','windows-x64'].map(platform=>({...release,platform,data:bytes,
       sha256:createHash('sha256').update(bytes).digest('hex'),edSignature:signed.stdout.trim(),
-      url:`https://github.com/ScribleSean/observatory/releases/download/v0.3.2-build.8/Workspace-Observatory-0.3.2-${platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-setup.exe'}`}));
+      url:`https://github.com/ScribleSean/observatory/releases/download/v0.3.2-build.8/Workspace-Observatory-0.3.2-${platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-update.zip'}`}));
     const publicRaw=publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
     assert.equal(Object.keys(buildUpdateAppcasts(release,artifacts,{
       'macos-arm64':publicRaw,'windows-x64':publicRaw,

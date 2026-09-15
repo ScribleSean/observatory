@@ -10,7 +10,7 @@ function fixture() {
     const {publicKey,privateKey}=generateKeyPairSync('ed25519');
     publicKeys[platform]=publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
     const data=Buffer.from(`Synthetic ${platform} package. Not an installer.`);
-    const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-setup.exe';
+    const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-update.zip';
     return {...release,platform,data,sha256:createHash('sha256').update(data).digest('hex'),
       edSignature:sign(null,data,privateKey).toString('base64'),
       url:`https://github.com/ScribleSean/observatory/releases/download/v0.3.2-build.8/Workspace-Observatory-0.3.2-${suffix}`};
@@ -29,6 +29,14 @@ test('both appcasts use one increasing build and distinct signed platform artifa
   }
   assert.match(feeds['macos-arm64'],/sparkle:os="macos"/);
   assert.match(feeds['windows-x64'],/sparkle:os="windows-x64"/);
+  assert.match(feeds['windows-x64'],/windows-x64-update\.zip/);
+  assert.doesNotMatch(feeds['windows-x64'],/setup\.exe/);
+});
+test('a correctly signed first-install EXE is not an update target',()=>{
+  const f=fixture();
+  // The digest and signature remain valid for these bytes. Only the route changes.
+  f.artifacts[1].url=f.artifacts[1].url.replace('windows-x64-update.zip','windows-x64-setup.exe');
+  assert.throws(()=>render(f),/identity or digest mismatch/);
 });
 test('modified bytes, forged signatures, wrong keys and missing signatures fail closed',()=>{
   for(const mutate of [
