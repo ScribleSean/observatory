@@ -52,13 +52,25 @@ or application security boundary.
 | Windows x64 setup EXE | 97,448,151 | `e6f4974ead5b958dd93b5efea1080358c2e250788bafdfddebe5f5e747983896` |
 
 The Mac app is ad-hoc signed, not notarized. The Windows installer is unsigned.
-Windows update activation and normal update-startup checks explicitly skipped
-because they require a disposable hosted runner. Passing package checks does not
-establish these skipped cases or installed update behavior.
+The personal-machine package run skipped update activation and normal startup
+checks because they require a disposable hosted runner. The subsequent
+[clean Windows run](https://github.com/ScribleSean/observatory/actions/runs/35026365962)
+completed those checks successfully against the same source revision. Its log
+records signed-inventory validation, wrong-key/stale-build/changed-byte rejection,
+native activation with retained previous files, normal dashboard readiness and
+graceful shutdown. It also passed actual installer receipt preparation, bounded
+archive extraction, complete installation replacement through an external helper,
+relaunch acknowledgement, recovery retention and removal of the disposable app.
+
+That run passed 503 JavaScript tests with 39 platform/tool-specific skips and no
+failures, plus the native and installer checks. Update signing used ephemeral
+synthetic keys. The full replacement test reused one build's payload with an
+advancing synthetic receipt. It does not establish migration between different
+releases, production signing, a working download feed or the user-facing Update
+button. No release was signed or published by the workflow.
 
 ## Gates remaining
 
-- Disposable-runner update activation and normal update-startup checks.
 - Upgrade verification against installed Mac build 22 and Windows build 23,
   preserving private data and a recoverable previous application.
 - Installed interface and collection checks, signing/distribution limitations,
