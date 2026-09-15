@@ -151,6 +151,8 @@ struct ObservatorySegments: View {
                 .background(selection == values[index] ? ObservatoryTheme.sage : ObservatoryTheme.surface, in: Capsule())
                 .shadow(color: .black.opacity(0.08), radius: 3, y: 2)
         }.buttonStyle(.plain)
+            .accessibilityIdentifier("observatory-filter-\(title)-\(values[index])")
+            .accessibilityValue(selection == values[index] ? "Selected" : "Not selected")
             .accessibilityAddTraits(selection == values[index] ? .isSelected : [])
     }
 }

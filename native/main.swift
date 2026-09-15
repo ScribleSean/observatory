@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 import ServiceManagement
 import WebKit
@@ -825,7 +826,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             recoverOffscreenUsage(size: panelSize, visible: visible)
             precondition(usageWindow?.isVisible == true && !popover.isShown)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
+        Task { @MainActor [self] in
+            // Materialize SwiftUI's AX tree through a client request while the
+            // main thread remains available to service AppKit.
+            let accessibilityResult = await Task.detached {
+                let app = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+                AXUIElementSetMessagingTimeout(app, 3)
+                var windows: CFTypeRef?
+                return AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windows)
+            }.value
+            guard accessibilityResult == .success else {
+                print("Native usage popup failed: accessibility client request returned \(accessibilityResult.rawValue)")
+                exit(1)
+            }
             let view = usageWindow?.contentViewController?.view ?? popover.contentViewController?.view
             guard popover.isShown || usageWindow?.isVisible == true, let view,
                   let window = view.window, window.isVisible,
@@ -836,17 +849,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 print("Native usage popup failed: shown=\(popover.isShown) visible=\(window?.isVisible ?? false) active=\(NSApp.isActive) anchorVisible=\(button?.window?.isVisible ?? false) anchorHidden=\(button?.isHiddenOrHasHiddenAncestor ?? true) screenCount=\(NSScreen.screens.count) window=\(String(describing: window?.frame)) view=\(String(describing: view?.bounds)) screens=\(NSScreen.screens.map(\.visibleFrame))")
                 exit(1)
             }
-            func segments(in node: NSView) -> [NSSegmentedControl] {
-                (node as? NSSegmentedControl).map { [$0] } ?? node.subviews.flatMap { segments(in: $0) }
+            var visited = Set<ObjectIdentifier>()
+            @MainActor func attribute(_ object: NSObject, _ selector: Selector) -> Any? {
+                object.responds(to: selector) ? object.perform(selector)?.takeUnretainedValue() : nil
             }
-            let filters = segments(in: view)
-            precondition(NSApp.activationPolicy() == .regular)
-            precondition(filters.count == 2)
-            let sourceFilter = filters.first { $0.segmentCount == 4 }!
-            let periodFilter = filters.first { $0.segmentCount == 3 }!
-            precondition(sourceFilter.selectedSegment == 0 && periodFilter.selectedSegment == 2)
-            precondition(abs(sourceFilter.frame.width - periodFilter.frame.width) < 1)
-            print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen; aligned filters default to all sources and all time; regular app activation")
+            @MainActor func identifier(_ object: NSObject) -> String? { attribute(object, #selector(NSAccessibilityProtocol.accessibilityIdentifier)) as? String }
+            @MainActor func elements(in node: Any, depth: Int = 0) -> [NSObject] {
+                guard depth < 30, let object = node as? NSObject,
+                      visited.insert(ObjectIdentifier(object)).inserted else { return [] }
+                let children = (attribute(object, #selector(NSAccessibilityProtocol.accessibilityChildren)) as? [Any] ?? []) + ((object as? NSView)?.subviews ?? [])
+                return [object] + children.flatMap { elements(in: $0, depth: depth + 1) }
+            }
+            let tree = elements(in: view)
+            let filters = tree.filter { identifier($0)?.hasPrefix("observatory-filter-") == true }
+            let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Source host-Ubuntu", "Period-day", "Period-week", "Period-all"]
+            guard NSApp.activationPolicy() == .regular, expected.allSatisfy({ suffix in
+                let matches = filters.filter { identifier($0) == "observatory-filter-" + suffix }
+                let selected = suffix == "Source host-All" || suffix == "Period-all"
+                return matches.count == 1 && attribute(matches[0], #selector(NSAccessibilityProtocol.accessibilityValue)) as? String == (selected ? "Selected" : "Not selected")
+            }) else {
+                print("Native usage popup failed: accessible filter inventory or default selection differs (found \(filters.count) controls)")
+                let labels = tree.prefix(30).map { [String(describing: type(of: $0)), identifier($0) ?? "none", attribute($0, #selector(NSAccessibilityProtocol.accessibilityLabel)) as? String ?? "none"] }
+                print("Synthetic accessibility tree: \(labels)")
+                exit(1)
+            }
+            print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen; accessible filters default to all sources and all time; regular app activation")
             if CommandLine.arguments.contains("--preview-pace") { return }
             openDefault()
             if usesNativeDashboard { precondition(nativeSelection.section == "allowances") }
@@ -929,6 +956,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 // Preview-only builds must never fall through to the installed data runtime.
 let previewArguments = Array(CommandLine.arguments.dropFirst())
 let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
+    ["--test-popup"], ["--test-popup", "--force-offscreen-popup"], ["--test-popup", "--legacy-dashboard"],
     ["--test-quota-archive"],
     ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
     ["--test-lifecycle", "--capture-dashboard"]]
