@@ -37,3 +37,25 @@ test('selective updater preparation verifies real archive and preserves existing
   assert.equal(existsSync(refused),false);
   assert.notEqual(run(archive,'relative-output').status,0);
 });
+
+test('native updater binding accepts the pinned DLL and refuses altered bytes without initialization',{
+  skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_WINSPARKLE_ARCHIVE || !process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR
+    ?'Requires Windows, the pinned archive and an explicitly supplied trusted native test executable':false,
+},t=>{
+  const root=mkdtempSync(path.join(tmpdir(),'observatory-updater-binding-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const script=fileURLToPath(new URL('../native/windows/prepare-updater-runtime.ps1',import.meta.url));
+  const output=path.join(root,'runtime');
+  const prepared=spawnSync(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoProfile','-NonInteractive','-File',script,'-Archive',process.env.OBSERVATORY_TEST_WINSPARKLE_ARCHIVE,'-Destination',output],
+    {encoding:'utf8',timeout:30000,maxBuffer:8192,windowsHide:true});
+  assert.equal(prepared.status,0,prepared.stderr || String(prepared.error));
+  const dll=path.join(output,'WinSparkle.dll');
+  const run=()=>spawnSync(process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR,['--test-updater-library',dll],
+    {encoding:'utf8',timeout:30000,maxBuffer:8192,windowsHide:true});
+  const valid=run();
+  assert.equal(valid.status,0,valid.stderr || String(valid.error));
+  assert.match(valid.stdout,/Updater not initialized/);
+  const changed=readFileSync(dll);changed[0]^=1;writeFileSync(dll,changed);
+  assert.equal(run().status,1);
+});

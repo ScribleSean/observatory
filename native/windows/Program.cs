@@ -8,6 +8,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-updater-library"))
+        {
+            if (args.Length != 2 || args[0] != "--test-updater-library") { Environment.ExitCode = 64; return; }
+            try
+            {
+                using var library = new WinSparkleLibrary(args[1]);
+                library.CheckBindings();
+                Console.WriteLine("Pinned updater library exports and synthetic public-key binding passed. Updater not initialized.");
+            }
+            catch { Console.Error.WriteLine("Updater library binding test failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-install"))
         {
             if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||

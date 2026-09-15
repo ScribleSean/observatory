@@ -92,6 +92,16 @@ passed against the pinned archive, including corrupt-input and overwrite refusal
 Run `scripts/updater-runtime.test.mjs` with `OBSERVATORY_TEST_WINSPARKLE_ARCHIVE`
 set to the archive path. Without Windows and that explicit input it reports a skip.
 
+The native `--test-updater-library` check passed on Windows against that prepared
+DLL. `WinSparkleLibrary` checks its pinned size and hash through a retained read-only
+handle before loading the absolute path with system-only dependency lookup. The
+check resolves the required exports, confirms invalid-key rejection and accepts a
+public RFC 8032 test-vector key. It never calls updater initialization or sets a
+feed. The regression also confirms altered DLL bytes are rejected. Set
+`OBSERVATORY_TEST_UPDATE_EXTRACTOR` to the trusted test executable to enable this
+second test. This verifies loading and key marshalling, not downloads, callbacks
+or production update installation.
+
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
 
