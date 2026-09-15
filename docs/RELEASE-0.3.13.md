@@ -36,6 +36,15 @@ The packaged native collector also completed against a fresh runtime with every
 source disabled, retained the consent configuration and reported partial coverage.
 This verifies the packaged collector path, not live provider reads.
 
+On September 15, read-only npm advisory queries for production dependencies and
+the complete lockfile reported zero known vulnerabilities. The Windows NuGet
+query included transitive dependencies, used the existing restore without
+restoring packages, and returned no vulnerable entries from nuget.org. Lockfile
+SHA-256 values were `caa344b6249b32dfb35f7ed21ec1b035b6eae662e97f239476cdf313bdfa0095`
+for npm and `da81446ea7bfe69b9216e393c5dea8e305bc66b43cae4a6afa88d44936ed615f`
+for NuGet. These checks do not clear every bundled native library, system webview
+or application security boundary.
+
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
 | macOS arm64 ZIP | 64,238,790 | `79b4058dc3992431fba1e9dfe240fc34ae5875e3641cdae5fbc10ef37c504ae6` |
