@@ -10,6 +10,38 @@ internal sealed partial class NativeDashboard
     private readonly DeviceSettingsActions? deviceSettings;
     private bool deviceOperation;
 
+    private void DeviceConnectionCard()
+    {
+        var content = new Panel { Height = 140, BackColor = DashboardCard.Surface };
+        var title = new Label { Text = "Device connection", Dock = DockStyle.Top, Height = 28 };
+        var explanation = new Label { Text = "Review pairing details, then pair from the Mac over an existing trusted SSH connection. Credentials stay on their owning device.", Dock = DockStyle.Top, Height = 40 };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = true };
+        var status = new Label { Dock = DockStyle.Fill };
+        if (deviceSettings is not null)
+        {
+            foreach (var (label, name, action) in new (string, string, Func<Task>)[] {
+                ("Pairing details", "Pairing details for Mac", () => { deviceSettings.PairingDetails(); return Task.CompletedTask; }),
+                ("Disconnect…", "Disconnect paired device", deviceSettings.Disconnect),
+                ("Repair…", "Prepare pairing repair", deviceSettings.Repair) })
+            {
+                var button = new Button { Text = label, AccessibleName = name, Width = 130, Height = 38, FlatStyle = FlatStyle.Flat, Enabled = !deviceOperation };
+                button.FlatAppearance.BorderSize = 0;
+                button.Click += async (_, _) =>
+                {
+                    if (deviceOperation) return;
+                    deviceOperation = true; button.Enabled = false;
+                    try { await action(); }
+                    catch { if (!status.IsDisposed) status.Text = "Operation not verified. Saved records were not deleted by this view."; }
+                    finally { deviceOperation = false; if (!button.IsDisposed) button.Enabled = true; }
+                };
+                actions.Controls.Add(button);
+            }
+        }
+        else status.Text = "Device controls are unavailable in this preview.";
+        content.Controls.Add(status); content.Controls.Add(actions); content.Controls.Add(explanation); content.Controls.Add(title);
+        AddCard(content, "Device connection");
+    }
+
     private void DeviceSettings()
     {
         if (deviceSettings is null) { Label("Device settings are unavailable in this preview session."); return; }
@@ -63,24 +95,6 @@ internal sealed partial class NativeDashboard
             };
             body.Controls.Add(guide);
             Label("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Use Direct device pairing to exchange an invitation.");
-        }
-        Label("Review Windows pairing details, then pair from the Mac using an existing trusted SSH connection. These controls do not enable SSH or automatically discover devices.");
-        var operationStatus = Label("");
-        foreach (var (name, action) in new (string, Func<Task>)[] {
-            ("Pairing details for Mac", () => { deviceSettings.PairingDetails(); return Task.CompletedTask; }),
-            ("Disconnect paired device", deviceSettings.Disconnect),
-            ("Prepare pairing repair", deviceSettings.Repair) })
-        {
-            var button = new Button { Text = name, AccessibleName = name, Height = 36, FlatStyle = FlatStyle.Flat, Enabled = !deviceOperation };
-            button.Click += async (_, _) =>
-            {
-                if (deviceOperation) return;
-                deviceOperation = true; button.Enabled = false;
-                try { await action(); }
-                catch { if (!operationStatus.IsDisposed) operationStatus.Text = "The operation could not be verified. Saved records were not deleted by this view."; }
-                finally { deviceOperation = false; if (!button.IsDisposed) button.Enabled = true; }
-            };
-            body.Controls.Add(button);
         }
         Label("Disconnect and repair retain their confirmation steps. They act on this PC only. Review the result before changing the other device. Saved usage data is retained.");
         SharingSettings();

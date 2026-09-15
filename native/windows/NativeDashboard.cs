@@ -7,8 +7,10 @@ internal sealed partial class NativeDashboard : Form
 {
     private readonly Func<JsonObject?> read;
     private readonly Func<Task> refresh;
-    private readonly Font regular = new("Segoe UI", 10);
-    private readonly Font heading = new("Segoe UI", 22, FontStyle.Bold);
+    private readonly Font regular = DashboardTypography.AtPixels(14.5f);
+    private readonly Font heading = DashboardTypography.AtPixels(22, FontStyle.Bold);
+    private readonly Font metric = DashboardTypography.AtPixels(38, FontStyle.Bold);
+    private readonly Font brand = DashboardTypography.AtPixels(19, FontStyle.Bold);
     private readonly ListBox sections = new() { Dock = DockStyle.Left, Width = 170, BorderStyle = BorderStyle.None, ItemHeight = 38 };
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private string host = "Windows", period = "Day", anchor = "";
@@ -29,23 +31,31 @@ internal sealed partial class NativeDashboard : Form
         this.sourceSettings = sourceSettings;
         this.deviceSettings = deviceSettings;
         Text = "Observatory"; AccessibleName = Text;
-        Font = regular; BackColor = Color.FromArgb(30, 30, 32); ForeColor = Color.WhiteSmoke;
+        Font = regular; BackColor = Color.FromArgb(28, 29, 27); ForeColor = Color.WhiteSmoke;
         var available = Screen.PrimaryScreen?.WorkingArea.Size ?? new Size(1280, 900);
         ClientSize = new Size(Math.Min(1100, available.Width - 48), Math.Min(780, available.Height - 80));
         MinimumSize = new Size(Math.Min(800, available.Width - 48), Math.Min(560, available.Height - 80));
         StartPosition = FormStartPosition.CenterScreen;
         if (rememberLayout) DashboardWindowPreferences.Attach(this, available);
-        sections.BackColor = Color.FromArgb(39, 39, 41); sections.ForeColor = ForeColor;
+        sections.BackColor = BackColor; sections.ForeColor = ForeColor;
+        sections.ItemHeight = 54;
         sections.DrawMode = DrawMode.OwnerDrawFixed;
         sections.DrawItem += (_, args) =>
         {
             if (args.Index < 0) return;
             var selected = (args.State & DrawItemState.Selected) != 0;
-            using var background = new SolidBrush(selected ? Color.FromArgb(58, 61, 68) : sections.BackColor);
+            using var background = new SolidBrush(sections.BackColor);
             args.Graphics.FillRectangle(background, args.Bounds);
+            if (selected)
+            {
+                args.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using var shape = DashboardCard.Rounded(new RectangleF(args.Bounds.X + 8, args.Bounds.Y + 4, args.Bounds.Width - 16, args.Bounds.Height - 8), 12);
+                using var fill = new SolidBrush(DashboardCard.Surface);
+                args.Graphics.FillPath(fill, shape);
+            }
             TextRenderer.DrawText(args.Graphics, sections.Items[args.Index].ToString(), regular,
-                new Rectangle(args.Bounds.X + 14, args.Bounds.Y, args.Bounds.Width - 20, args.Bounds.Height),
-                ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+                new Rectangle(args.Bounds.X + 20, args.Bounds.Y, args.Bounds.Width - 28, args.Bounds.Height),
+                selected ? ForeColor : Color.FromArgb(183, 186, 177), TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
@@ -72,7 +82,11 @@ internal sealed partial class NativeDashboard : Form
         actions.Controls.Add(refreshButton); actions.Controls.Add(devices);
         header.Controls.Add(freshness); header.Controls.Add(pageTitle); header.Controls.Add(actions);
         content.Controls.Add(body); content.Controls.Add(header);
-        Controls.Add(content); Controls.Add(sections);
+        var rail = new Panel { Dock = DockStyle.Left, Width = 200 };
+        var brandLabel = new Label { Text = "Observatory", Font = brand, Dock = DockStyle.Top, Height = 80, Padding = new Padding(20, 20, 0, 0) };
+        sections.Dock = DockStyle.Fill;
+        rail.Controls.Add(sections); rail.Controls.Add(brandLabel);
+        Controls.Add(content); Controls.Add(rail);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;
         body.ClientSizeChanged += (_, _) => ResizeRows();
@@ -88,7 +102,7 @@ internal sealed partial class NativeDashboard : Form
     private Label Label(string value, bool title = false)
     {
         var label = new Label { Text = value, AccessibleName = value, AutoSize = true,
-            MaximumSize = new Size(ContentWidth, 0), Margin = new Padding(0, 0, 0, 14), Font = title ? heading : regular };
+            MaximumSize = new Size(ContentWidth, 0), Margin = new Padding(0, 0, 0, 14), Font = title ? metric : regular };
         body.Controls.Add(label); return label;
     }
     private void Choice(string name, string[] values, string selected, Action<string> changed)
@@ -164,6 +178,8 @@ internal sealed partial class NativeDashboard : Form
     {
         var timestamp = Snapshot.Text(snapshot?["collectedAt"]);
         freshness.Text = Freshness(timestamp, DateTimeOffset.UtcNow);
+        freshness.ForeColor = !DateTimeOffset.TryParse(timestamp, out var date) || date > DateTimeOffset.UtcNow || DateTimeOffset.UtcNow - date > TimeSpan.FromMinutes(15)
+            ? Color.DarkOrange : Color.Silver;
         freshness.AccessibleDescription = "Snapshot collected at " + timestamp;
         timestampHint.SetToolTip(freshness, freshness.AccessibleDescription);
     }
@@ -182,8 +198,7 @@ internal sealed partial class NativeDashboard : Form
         if (age < TimeSpan.Zero) return "Update time is ahead of this device's clock";
         if (age.TotalMinutes < 1) return "Updated just now";
         if (age.TotalHours < 1) return $"Updated {(int)age.TotalMinutes}m ago";
-        if (age.TotalDays < 1) return $"Updated {(int)age.TotalHours}h ago";
-        return $"Updated {(int)age.TotalDays}d ago";
+        return $"Updated {(int)age.TotalHours}h ago";
     }
     private void ActivityWatchHelp()
     {
@@ -216,7 +231,8 @@ internal sealed partial class NativeDashboard : Form
         if (period != "All retained") Choice(period == "Week" ? "Week ending" : "Recorded day", dates, anchor, value => anchor = value);
         var selected = NativeHistory.Select(days, period, anchor);
         var field = kind == "activity" ? "seconds" : "totalTokens";
-        Label(kind == "activity" ? Snapshot.Duration(NativeHistory.Sum(selected, field)) : Snapshot.Format(NativeHistory.Sum(selected, field)) + " tokens", true);
+        var total = NativeHistory.Sum(selected, field);
+        Label(kind == "activity" ? (total is double seconds ? (seconds / 60).ToString("0.#") + " min" : "Unknown") : Snapshot.Format(total) + " tokens", true);
         Label($"{selected.Length} recorded dates. Missing dates are not filled with zeros.");
         Label("Selected recorded days (up to 30 shown)");
         AddCard(new DashboardHistoryChart(selected, kind == "tokens"), "Recorded history");
@@ -329,6 +345,6 @@ internal sealed partial class NativeDashboard : Form
     {
         if (disposing) { timer.Stop(); timer.Dispose(); timestampHint.Dispose(); }
         base.Dispose(disposing);
-        if (disposing) { regular.Dispose(); heading.Dispose(); }
+        if (disposing) { regular.Dispose(); heading.Dispose(); metric.Dispose(); brand.Dispose(); }
     }
 }

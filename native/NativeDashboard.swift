@@ -10,6 +10,7 @@ final class NativeDashboardSelection: ObservableObject {
                            ("agents", "Agents", "rectangle.stack.person.crop"),
                            ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
     @Published var section = "allowances"
+    @Published var navigationRequest = 0
     @Published var textScale: Double = 1
 }
 
@@ -136,6 +137,7 @@ struct NativeDashboard: View {
                 }.padding(28).frame(maxWidth: 1100, alignment: .leading).frame(maxWidth: .infinity).id("dashboard-top")
             }
             .onChange(of: selection.section) { scroll.scrollTo("dashboard-top", anchor: .top) }
+            .onChange(of: selection.navigationRequest) { scroll.scrollTo("dashboard-top", anchor: .top) }
             }
             }
         }
@@ -166,7 +168,7 @@ struct NativeDashboard: View {
             }
             Spacer()
             HStack {
-                Button { selection.section = "settings" } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
+                Button { selection.section = "settings"; selection.navigationRequest += 1 } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
                     .help("Review device pairing in Settings")
                 Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
                     .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")

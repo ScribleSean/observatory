@@ -32,7 +32,7 @@ internal sealed class DashboardCard : Panel
         e.Graphics.FillPath(surface, shape);
     }
 
-    private static GraphicsPath Rounded(RectangleF rect, float radius)
+    internal static GraphicsPath Rounded(RectangleF rect, float radius)
     {
         var path = new GraphicsPath();
         var diameter = radius * 2;

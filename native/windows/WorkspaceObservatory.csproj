@@ -23,6 +23,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="*.cs" />
+    <Content Include="../../public/fonts/InterTight.ttf;../../public/fonts/OFL.txt">
+      <Link>Fonts/%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <Content Include="../../scripts/*.mjs;../../scripts/*.py;../../scripts/*.ps1" Exclude="../../scripts/*.test.mjs;../../scripts/test-python.mjs">
       <Link>Collector/scripts/%(Filename)%(Extension)</Link>

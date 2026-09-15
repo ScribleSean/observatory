@@ -75,7 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         termination.resume()
         terminationSignal = termination
         // Lifecycle tests use empty private settings and never start collection.
-        if lifecycleTest { checkDashboardLifecycle(remaining: 3); return }
+        if lifecycleTest {
+            if CommandLine.arguments.contains("--capture-dashboard") { captureDashboardScreenshots(); return }
+            checkDashboardLifecycle(remaining: 3); return
+        }
         if popupTest { DispatchQueue.main.async { [self] in checkUsagePopup() }; return }
         store.start()
         if store.setupRequired { DispatchQueue.main.async { [self] in showSetup() }; return }
@@ -587,6 +590,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
         if usesNativeDashboard {
             nativeSelection.section = NativeDashboardSelection.sections.contains(where: { $0.0 == tab }) ? tab : "allowances"
+            nativeSelection.navigationRequest += 1
             if detail == nil {
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -646,6 +650,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         detail?.contentView = nil
         webView = nil
         detail = nil
+    }
+
+    private func captureDashboardScreenshots() {
+        guard previewRuntime != nil else { NSApp.terminate(nil); return }
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-synthetic-screenshots-\(UUID().uuidString)")
+        let dates = ["2026-09-01", "2026-09-06", "2026-09-12"]
+        let days: [JSONObject] = dates.enumerated().map { index, date in ["date": date, "seconds": (index + 1) * 600] }
+        store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": "2026-09-12T12:00:00Z",
+            "activityHistory": [["host": "Mac", "status": "ok", "latestReadStatus": "ok", "days": days]],
+            "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-12", "totalTokens": 1200]]]],
+            "dictation": [["host": "Mac", "source": "Wispr Flow", "status": "ok", "days": [["date": "2026-09-12", "transcriptions": 4, "audioRecords": 4, "audioSeconds": 120, "wordRecords": 4, "words": 100]]]],
+            "agentSource": ["status": "not-connected"], "agents": [], "settings": [],
+            "quota": ["status": "stale", "checkedAt": "2026-09-12T12:00:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 65]], "history": []]])
+        Task { @MainActor in
+            do {
+                try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+                for section in NativeDashboardSelection.sections {
+                    openDashboard(section.0)
+                    detail?.setContentSize(NSSize(width: 1280, height: 800))
+                    try await Task.sleep(nanoseconds: 400_000_000)
+                    guard let view = detail?.contentView,
+                          let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
+                    view.layoutSubtreeIfNeeded()
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+                    try png.write(to: output.appendingPathComponent(section.0 + ".png"), options: .withoutOverwriting)
+                }
+                print("Synthetic dashboard screenshots: \(output.path)")
+            } catch { print("Synthetic dashboard screenshots failed"); exit(1) }
+            NSApp.terminate(nil)
+        }
     }
 
     private func checkDashboardLifecycle(remaining: Int) {

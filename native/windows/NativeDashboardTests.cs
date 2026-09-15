@@ -84,6 +84,8 @@ internal static class NativeDashboardTests
             try
             {
                 await Task.Delay(200);
+                form.ClientSize = new Size(1280, 800);
+                Check(form.Font.Name.StartsWith("Inter", StringComparison.Ordinal), "Bundled dashboard typography");
                 var sections = Children(form).OfType<ListBox>().Single();
                 Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
                 Check(sections.SelectedItem?.ToString() == "Allowances", "Allowances is the landing view");
@@ -106,7 +108,7 @@ internal static class NativeDashboardTests
                 await Select(form, "Period", "Week");
                 Check(Texts(form).Contains("50 min"), "Calendar week total");
                 await Select(form, "Period", "All retained");
-                Check(Texts(form).Contains("1h 0m"), "Retained total");
+                Check(Texts(form).Contains("60 min"), "Retained total");
                 Check(Children(form).OfType<DashboardHistoryChart>().Single().RecordedCount == 3, "Missing dates not fabricated");
                 Check(Children(form).OfType<ActivityHourGraph>().Single().AccessibleDescription?.Contains("12:00: 30 recorded minutes") == true, "Hourly accessible values");
                 var appTable = Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded apps");

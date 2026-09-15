@@ -54,7 +54,8 @@ final class ObservatoryStore: ObservableObject {
     }
 
     var freshness: String {
-        guard let date = snapshot?.collectedAt else { return "Waiting for first snapshot" }
+        guard let date = snapshot?.collectedAt else { return "Updated: Unknown" }
+        if date > now { return "Update time is ahead of this device's clock" }
         let minutes = max(0, Int(now.timeIntervalSince(date) / 60))
         if minutes < 1 { return "Updated just now" }
         if minutes < 60 { return "Updated \(minutes)m ago" }

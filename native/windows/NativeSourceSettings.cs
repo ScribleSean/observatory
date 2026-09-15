@@ -21,6 +21,7 @@ internal sealed partial class NativeDashboard
 
     private void SourceSettings()
     {
+        DeviceConnectionCard();
         var fileVersion = System.Reflection.Assembly.GetExecutingAssembly()
             .GetCustomAttributes(typeof(System.Reflection.AssemblyFileVersionAttribute), false)
             .OfType<System.Reflection.AssemblyFileVersionAttribute>().FirstOrDefault()?.Version;
