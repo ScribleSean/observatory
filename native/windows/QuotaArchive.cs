@@ -417,6 +417,17 @@ internal sealed class QuotaArchiveWindow : Form
                 throw new InvalidOperationException("Chart date range did not match request.");
             foreach (Control control in charts.Controls.Cast<Control>().ToArray()) { charts.Controls.Remove(control); control.Dispose(); }
             charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used, full selected range" });
+            var choices = NativeHistory.Rows(chartReadings).SelectMany(row => NativeHistory.Rows(row["windows"]))
+                .Where(row => Snapshot.Text(row["bucket"]) is not ("spark" or "codex_spark" or "codex_bengalfox"))
+                .GroupBy(row => Snapshot.Text(row["bucket"]) + " · " + Snapshot.Text(row["window"]))
+                .ToDictionary(group => group.Key, group => group.Last());
+            if (choices.Count > 1) {
+                var selected = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]);
+                charts.Controls.Add(new DashboardFilters("Limit window", choices.Keys.Order().ToArray(), selected, async value => {
+                    if (busy) return;
+                    await LoadFullChart(choices[value]);
+                }) { Width = Math.Max(240, charts.ClientSize.Width - 32) });
+            }
             charts.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], period, async value => {
                 if (busy) return;
                 chartPeriods[key] = value;
@@ -496,6 +507,14 @@ internal sealed class QuotaArchiveWindow : Form
                 if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
                 if (!window.charts.Controls.OfType<ArchiveChartControl>().Any()) throw new Exception("Full-range graph did not load with history.");
                 if (!window.charts.Controls.OfType<DashboardFilters>().Any()) throw new Exception("Full-range graph lost its period controls.");
+                var fixtureWindows = window.chartReadings[0]!["windows"]!.AsArray();
+                fixtureWindows.Add(new JsonObject { ["bucket"] = "codex", ["window"] = "secondary", ["remainingPercent"] = 70 });
+                await window.LoadFullChart(new JsonObject { ["bucket"] = "codex", ["window"] = "weekly" });
+                var windowFilters = window.charts.Controls.OfType<DashboardFilters>().Single(filter => filter.AccessibleName == "Limit window");
+                windowFilters.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(button => button.Text.Contains("secondary")).PerformClick();
+                if (lastChartRequest?["window"]?.GetValue<string>() != "secondary")
+                    throw new Exception("Full-range window selector did not query the selected allowance.");
+                fixtureWindows.RemoveAt(fixtureWindows.Count - 1);
                 window.chartPeriods["codex:weekly"] = "Week";
                 await window.LoadFullChart(new JsonObject { ["bucket"] = "codex", ["window"] = "weekly" });
                 if (lastChartRequest?["from"]?.GetValue<long>() != new DateTimeOffset(window.through.Value.Date.AddDays(-6)).ToUnixTimeMilliseconds())
