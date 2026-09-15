@@ -1,6 +1,6 @@
 # Mac development candidate
 
-The Apple Silicon source build uses a SwiftUI main window and menu-bar panel. The 0.3.3 development candidate bundles Node and Python and can run the local collector without a checkout or separately installed runtimes. It is not yet a published, clean-install-verified release. Earlier installed previews can retain their legacy cross-device configuration and external runtimes.
+The Apple Silicon source build uses a SwiftUI main window and menu-bar panel. Development candidates bundle Node and Python and can run the local collector without a checkout or separately installed runtimes. This is not yet a published, clean-install-verified release. Earlier installed previews can retain their legacy cross-device configuration and external runtimes.
 
 Fresh installations keep all sources off until the first-run wizard is completed. The wizard covers privacy, source choices and optional device pairing. Settings can later change the local sources and optional Codex account-limit monitoring. Changes apply to the next collection. Existing cross-device configuration is preserved, but migration to the native source controls remains unfinished.
 
@@ -25,6 +25,8 @@ With the legacy dashboard open, the same View commands scale the web page. The k
 This scales the web page's text and controls, not macOS system fonts or the menu-bar panel. Zoom applies to the open dashboard and resets to 100% after it is closed and reopened. It does not change collection settings. See [native UI verification](UI-VERIFICATION.md) for the tested layouts and remaining limits.
 
 ## Building the candidate
+
+The [September 15 clean build for 2bdddc7](https://github.com/ScribleSean/observatory/actions/runs/34965810055) passed complete application and extracted ZIP verification. The source suite reported 515 passes, seven skips and zero failures. The 0.3.12 ZIP was 64,912,222 bytes, with 184,465,141 unpacked bytes. Its SHA-256 was `15316398a0a798184f0ed6f01452f0d7aba6877dd204fd65d61918ed7bfa333f`. Original and extracted bundles passed isolated checks and local signature verification. The workflow did not retain a downloadable artifact, install the app, produce a DMG or notarize the build. This is packaging evidence, not public release or interactive acceptance.
 
 `native/mac/runtime-assets.json` pins official Node and Astral Python archive URLs and SHA-256 checksums. Download those archives into a build cache, then prepare a runtime-only payload:
 
