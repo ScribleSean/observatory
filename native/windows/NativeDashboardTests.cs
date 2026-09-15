@@ -322,6 +322,18 @@ internal static class NativeDashboardTests
                     sections.SelectedItem = destination;
                     if (destination is "Activity" or "Tokens") await Select(form, "Device", "Windows");
                     Check(form.BackColor == DashboardPalette.Background(true), "Light appearance survives navigation");
+                    foreach (var table in Children(form).OfType<DataGridView>())
+                    {
+                        Check(!table.EnableHeadersVisualStyles &&
+                            table.ColumnHeadersDefaultCellStyle.SelectionBackColor == DashboardPalette.Surface(true) &&
+                            table.ColumnHeadersDefaultCellStyle.SelectionForeColor == DashboardPalette.Muted(true),
+                            "Selected detail headers retain the light dashboard palette");
+                        DashboardPalette.Apply(table, false);
+                        Check(table.ColumnHeadersDefaultCellStyle.SelectionBackColor == DashboardPalette.Surface(false) &&
+                            table.ColumnHeadersDefaultCellStyle.SelectionForeColor == DashboardPalette.Muted(false),
+                            "Selected detail headers retain the dark dashboard palette");
+                        DashboardPalette.Apply(table, true);
+                    }
                     Capture(form, output, "native-light-" + destination.ToLowerInvariant());
                 }
                 sections.SelectedItem = "Settings";

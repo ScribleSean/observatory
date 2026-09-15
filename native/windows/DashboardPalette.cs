@@ -27,6 +27,10 @@ internal static class DashboardPalette
             table.DefaultCellStyle.SelectionForeColor = Text(light);
             table.ColumnHeadersDefaultCellStyle.BackColor = Surface(light);
             table.ColumnHeadersDefaultCellStyle.ForeColor = Muted(light);
+            // Read-only column labels should not acquire the operating system selection color.
+            table.EnableHeadersVisualStyles = false;
+            table.ColumnHeadersDefaultCellStyle.SelectionBackColor = Surface(light);
+            table.ColumnHeadersDefaultCellStyle.SelectionForeColor = Muted(light);
         }
         foreach (var child in control.Controls.Cast<Control>().ToArray()) Apply(child, light, inCard || control is DashboardCard);
         control.Invalidate();
