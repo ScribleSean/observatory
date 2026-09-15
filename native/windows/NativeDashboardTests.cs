@@ -85,7 +85,9 @@ internal static class NativeDashboardTests
             {
                 await Task.Delay(200);
                 form.MaximumSize = new Size(1600, 1100);
+                form.MinimumSize = new Size(1296, 839);
                 form.ClientSize = new Size(1280, 800);
+                Check(form.ClientSize.Width >= 1280, "Comparable screenshot viewport");
                 Check(form.Font.Name.StartsWith("Inter", StringComparison.Ordinal), "Bundled dashboard typography");
                 var sections = Children(form).OfType<ListBox>().Single();
                 Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
@@ -97,11 +99,11 @@ internal static class NativeDashboardTests
                 var persistentRefresh = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "Device connection settings").PerformClick();
                 Check(sections.SelectedItem?.ToString() == "Settings", "Devices opens Settings");
-                Check(Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Settings page").SelectedItem?.ToString() == "This device", "Devices opens connection controls");
+                Check(Children(form).OfType<Button>().Any(button => button.AccessibleName == "Pairing details for Mac"), "Devices opens connection controls");
                 sections.SelectedItem = "Agents";
                 Children(form).OfType<Button>().Single(button => button.Text == "Review collection settings").PerformClick();
                 Check(sections.SelectedItem?.ToString() == "Settings", "Agents collection settings route");
-                Check(Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Settings page").SelectedItem?.ToString() == "Sources", "Agents opens collection controls after Devices");
+                Check(Children(form).OfType<CheckBox>().Any(check => check.AccessibleName == "activity"), "Agents opens collection controls after Devices");
                 Check(ReferenceEquals(persistentRefresh, Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources")), "Refresh survives navigation");
                 sections.SelectedItem = "Activity";
                 Check(Children(form).OfType<DataGridView>().All(grid => grid.Parent is DashboardCard), "Data tables use shared cards");
@@ -245,8 +247,8 @@ internal static class NativeDashboardTests
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
-                await Select(form, "Settings page", "This device");
-                await Select(form, "Settings page", "Sources");
+                sections.SelectedItem = "Sources";
+                sections.SelectedItem = "Settings";
                 form.Reload();
                 Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Draft survives navigation and reload");
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
@@ -275,7 +277,7 @@ internal static class NativeDashboardTests
                     try { settingsCollector.UpdateConfiguration(current, initialSettings); throw new Exception("Collection lock ignored"); }
                     catch (IOException) { }
                 }
-                await Select(form, "Settings page", "This device");
+                Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName == "Settings page"), "Settings is one continuous page");
                 void ClickDevice(string name) => Children(form).OfType<Button>().Single(button => button.AccessibleName == name).PerformClick();
                 Check(networkChecks == 0, "Network readiness is not read automatically");
                 ClickDevice("Check Tailscale");
@@ -310,7 +312,7 @@ internal static class NativeDashboardTests
                 await Task.Delay(50);
                 Capture(form, output, "native-sharing-settings");
                 sections.SelectedItem = "Sources";
-                Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 7, "Source rows");
+                Check(Children(form).OfType<DashboardValueCard>().Count() == 7, "Source health cards");
                 Capture(form, output, "native-sources");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").PerformClick();
                 Check(refreshes == 1, "Refresh callback");

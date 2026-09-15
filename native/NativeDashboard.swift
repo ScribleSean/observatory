@@ -285,13 +285,14 @@ struct NativeDashboard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button("View Agents") { selection.section = "agents" }
-            ForEach(["activity", "tokens", "settings", "dictation"], id: \.self) { key in
-                GroupBox(key.capitalized) {
+            ForEach(["activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource"], id: \.self) { key in
+                GroupBox(["quota": "Allowances", "localModel": "Local benchmarks", "agentSource": "Agent receipts", "settings": "Tool activity"][key] ?? key.capitalized) {
                     VStack(alignment: .leading, spacing: 10) {
-                        let sources = rows(displayedSnapshot?.object[key])
+                        let sources = (displayedSnapshot?.object[key] as? JSONObject).map { [$0] } ?? rows(displayedSnapshot?.object[key])
                         if sources.isEmpty { Text("No source records").foregroundStyle(.secondary) }
                         ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
                             ObservatoryValueRow(text(source["host"]) + " · " + text(source["source"], fallback: key), value: text(source["status"]))
+                            ObservatoryValueRow("Last checked", value: parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")
                         }
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                 }

@@ -35,7 +35,10 @@ internal sealed class DashboardFilters : Panel
         caption.SetBounds(0, 0, stacked ? Width : 108, 38);
         var left = stacked ? 0 : 120;
         var top = stacked ? 38 : 0;
-        var width = Math.Max(100, Width - left);
+        var width = Math.Max(100, Math.Min(680, Width) - left);
+        foreach (Button button in chips.Controls)
+            button.Width = Math.Max(TextRenderer.MeasureText(button.Text, button.Font).Width + 28,
+                width / Math.Max(1, chips.Controls.Count) - 6);
         var height = chips.GetPreferredSize(new Size(width, 0)).Height;
         chips.SetBounds(left, top, width, Math.Max(44, height));
         Height = top + chips.Height;

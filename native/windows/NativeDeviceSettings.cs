@@ -14,7 +14,8 @@ internal sealed partial class NativeDashboard
     {
         var content = new Panel { Height = 140, BackColor = DashboardCard.Surface };
         var title = new Label { Text = "Device connection", Dock = DockStyle.Top, Height = 28 };
-        var explanation = new Label { Text = "Review pairing details, then pair from the Mac over an existing trusted SSH connection. Credentials stay on their owning device.", Dock = DockStyle.Top, Height = 40 };
+        var explanation = new Label { Text = "Review pairing details, then pair from the Mac over an existing trusted SSH connection. Credentials stay on their owning device.",
+            AutoSize = true, MaximumSize = new Size(Math.Max(100, ContentWidth - 32), 0), Dock = DockStyle.Top };
         var actions = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = true };
         var status = new Label { Dock = DockStyle.Fill };
         if (deviceSettings is not null)
@@ -41,6 +42,7 @@ internal sealed partial class NativeDashboard
         content.Controls.Add(status); content.Controls.Add(actions); content.Controls.Add(explanation); content.Controls.Add(title);
         content.ClientSizeChanged += (_, _) =>
         {
+            explanation.MaximumSize = new Size(Math.Max(100, content.ClientSize.Width), 0);
             var textHeight = TextRenderer.MeasureText(explanation.Text, explanation.Font,
                 new Size(Math.Max(100, content.ClientSize.Width), int.MaxValue), TextFormatFlags.WordBreak).Height + 8;
             explanation.Height = Math.Max(40, textHeight);

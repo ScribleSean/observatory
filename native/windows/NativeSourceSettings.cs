@@ -7,7 +7,6 @@ internal sealed record SourceSettingsActions(Func<JsonObject> Read, Action<JsonO
 internal sealed partial class NativeDashboard
 {
     private readonly SourceSettingsActions? sourceSettings;
-    private string settingsPage = "Sources";
     private JsonObject? sourceOriginal, sourceDraft;
 
     private bool ConfirmSettings(string operation) => sourceSettings?.Confirm?.Invoke(operation) ??
@@ -17,7 +16,7 @@ internal sealed partial class NativeDashboard
             operation == "quota-removal" ? "Account history" : "Reload source settings",
             MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
-    internal void ShowSourceSettings() { settingsPage = "Sources"; sections.SelectedItem = "Settings"; Reload(); Activate(); }
+    internal void ShowSourceSettings() { sections.SelectedItem = "Settings"; Reload(); Activate(); }
 
     private void SourceSettings()
     {
@@ -29,8 +28,6 @@ internal sealed partial class NativeDashboard
             ? $"Version {version.Major}.{version.Minor}.{version.Build} (build {version.Revision})" : "Version Unknown";
         Label($"Observatory · {versionLabel}");
         Label("This identifies the running app. Building or downloading an update does not change this version.");
-        Choice("Settings page", ["Sources", "This device"], settingsPage, value => settingsPage = value);
-        if (settingsPage == "This device") { DeviceSettings(); return; }
         if (sourceSettings is null) { Label("Source settings are unavailable in this preview session."); return; }
         try { sourceOriginal ??= sourceSettings.Read().DeepClone().AsObject(); }
         catch { Label("Source settings could not be read. Existing configuration is preserved."); return; }
@@ -38,6 +35,7 @@ internal sealed partial class NativeDashboard
         var original = sourceOriginal;
         var draft = sourceDraft;
         Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.");
+        Label("Collection on this PC").Font = brand;
         var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 200, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
         collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
@@ -89,5 +87,6 @@ internal sealed partial class NativeDashboard
         };
         actions.Controls.Add(reload);
         body.Controls.Add(actions);
+        DeviceSettings();
     }
 }

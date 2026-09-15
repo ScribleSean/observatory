@@ -592,10 +592,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             nativeSelection.section = NativeDashboardSelection.sections.contains(where: { $0.0 == tab }) ? tab : "allowances"
             nativeSelection.navigationRequest += 1
             if detail == nil {
-                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
+                let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: min(1280, visible.width - 48), height: min(800, visible.height - 80)),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
                 window.title = previewRuntime == nil ? "Observatory" : "Observatory native preview"
-                window.minSize = NSSize(width: 760, height: 560)
+                window.minSize = NSSize(width: 800, height: 560)
                 window.contentView = NSHostingView(rootView: NativeDashboard(store: store, selection: nativeSelection,
                     settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
                         disconnect: { [weak self] in self?.disconnectPairing() }, repair: { [weak self] in self?.preparePairingRepair() },
@@ -916,7 +917,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 // Preview-only builds must never fall through to the installed data runtime.
 let previewArguments = Array(CommandLine.arguments.dropFirst())
 let allowedPreviewArguments = [["--preview"], ["--preview", "--preview-setup"],
-    ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"]]
+    ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
+    ["--test-lifecycle", "--capture-dashboard"]]
 guard allowedPreviewArguments.contains(previewArguments) else {
     print("Preview-only build requires an explicit isolated preview mode")
     exit(64)

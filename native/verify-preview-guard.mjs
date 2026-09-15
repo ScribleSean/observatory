@@ -7,7 +7,8 @@ import path from 'node:path';
 assert.equal(process.argv.length,3,'Expected the preview-only executable path');
 const executable=path.resolve(process.argv[2]);
 const rejected=[[],['--show'],['--enable-login'],['--preview','--enable-login'],
-  ['--preview-quota-archive','unexpected'],['--preview-light']];
+  ['--preview-quota-archive','unexpected'],['--preview-light'],['--test-lifecycle'],
+  ['--capture-dashboard'],['--test-lifecycle','--capture-dashboard','unexpected']];
 for(const args of rejected) {
   const result=spawnSync(executable,args,{encoding:'utf8',timeout:5000,killSignal:'SIGKILL',maxBuffer:4096});
   assert.ifError(result.error);

@@ -33,7 +33,7 @@ internal sealed partial class NativeDashboard : Form
         Text = "Observatory"; AccessibleName = Text;
         Font = regular; BackColor = Color.FromArgb(28, 29, 27); ForeColor = Color.WhiteSmoke;
         var available = Screen.PrimaryScreen?.WorkingArea.Size ?? new Size(1280, 900);
-        ClientSize = new Size(Math.Min(1100, available.Width - 48), Math.Min(780, available.Height - 80));
+        ClientSize = new Size(Math.Min(1280, available.Width - 48), Math.Min(800, available.Height - 80));
         MinimumSize = new Size(Math.Min(800, available.Width - 48), Math.Min(560, available.Height - 80));
         StartPosition = FormStartPosition.CenterScreen;
         if (rememberLayout) DashboardWindowPreferences.Attach(this, available);
@@ -64,7 +64,7 @@ internal sealed partial class NativeDashboard : Form
         var header = new Panel { Dock = DockStyle.Top, Height = 104, Padding = new Padding(24, 16, 24, 8) };
         pageTitle.Font = heading;
         freshness.ForeColor = Color.Silver;
-        refreshButton.BackColor = Color.FromArgb(64, 73, 61);
+        refreshButton.BackColor = DashboardCard.Surface;
         refreshButton.FlatAppearance.BorderSize = 0;
         refreshButton.Click += async (_, _) =>
         {
@@ -78,7 +78,7 @@ internal sealed partial class NativeDashboard : Form
         refreshButton.Dock = DockStyle.None; refreshButton.Size = new Size(100, 40);
         var devices = new DashboardButton { Text = "Devices", AccessibleName = "Device connection settings", Width = 100, Height = 40 };
         devices.FlatAppearance.BorderSize = 0;
-        devices.Click += (_, _) => { settingsPage = "This device"; sections.SelectedItem = "Settings"; Reload(); body.AutoScrollPosition = Point.Empty; };
+        devices.Click += (_, _) => { sections.SelectedItem = "Settings"; Reload(); body.AutoScrollPosition = Point.Empty; };
         actions.Controls.Add(refreshButton); actions.Controls.Add(devices);
         header.Controls.Add(freshness); header.Controls.Add(pageTitle); header.Controls.Add(actions);
         content.Controls.Add(body); content.Controls.Add(header);
@@ -170,7 +170,7 @@ internal sealed partial class NativeDashboard : Form
             {
                 Label("Saved execution records, not a live agent monitor. Missing records are not zero usage.");
                 var configure = new DashboardButton { Text = "Review collection settings", AutoSize = true, Height = 40 };
-                configure.Click += (_, _) => { settingsPage = "Sources"; sections.SelectedItem = "Settings"; };
+                configure.Click += (_, _) => sections.SelectedItem = "Settings";
                 body.Controls.Add(configure);
                 Agents(snapshot);
             }
@@ -339,13 +339,23 @@ internal sealed partial class NativeDashboard : Form
             foreach (var source in NativeHistory.Rows(snapshot?[kind])) rows.Add([kind, Snapshot.Text(source["host"]), Snapshot.Text(source["source"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         foreach (var kind in new[] { "quota", "localModel", "agentSource" })
             if (snapshot?[kind] is JsonObject source) rows.Add([kind, Snapshot.Text(source["host"], ""), Snapshot.Text(source["provider"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
-        Table("Source health", ["Kind", "Device", "Source", "Status", "Last check"], rows);
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
         Label($"{receipts.Length} handoff receipts · {receipts.Count(row => Snapshot.Text(row["status"]) == "failed")} saved failures. Not a live agent monitor.");
         Label("Newest receipt: " + (receipts.Select(row => Snapshot.Text(row["recordedAt"])).Order().LastOrDefault() ?? "Unknown"));
         var details = new DashboardButton { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 40 };
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
+        foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
+        {
+            var entries = rows.Where(row => row[0] == kind).ToArray();
+            var values = entries.SelectMany(row => new[] {
+                (row[1] + " · " + row[2], row[3]),
+                ("Last checked", Freshness(row[4], DateTimeOffset.UtcNow))
+            }).ToArray();
+            if (values.Length == 0) values = [("Status", "No source records")];
+            var title = kind switch { "quota" => "Allowances", "localModel" => "Local benchmarks", "agentSource" => "Agent receipts", "settings" => "Tool activity", _ => char.ToUpperInvariant(kind[0]) + kind[1..] };
+            AddCard(new DashboardValueCard(title, values), "Source health");
+        }
         Label("Provider sign-ins remain on their owning devices. Saved execution records do not show which agents are running now.");
     }
     protected override void Dispose(bool disposing)
