@@ -24,7 +24,7 @@ internal sealed partial class NativeDashboard
                 ("Disconnect…", "Disconnect paired device", deviceSettings.Disconnect),
                 ("Repair…", "Prepare pairing repair", deviceSettings.Repair) })
             {
-                var button = new Button { Text = label, AccessibleName = name, Width = 130, Height = 38, FlatStyle = FlatStyle.Flat, Enabled = !deviceOperation };
+                var button = new DashboardButton { Text = label, AccessibleName = name, Width = 130, Height = 40, Enabled = !deviceOperation };
                 button.FlatAppearance.BorderSize = 0;
                 button.Click += async (_, _) =>
                 {
@@ -39,6 +39,13 @@ internal sealed partial class NativeDashboard
         }
         else status.Text = "Device controls are unavailable in this preview.";
         content.Controls.Add(status); content.Controls.Add(actions); content.Controls.Add(explanation); content.Controls.Add(title);
+        content.ClientSizeChanged += (_, _) =>
+        {
+            var textHeight = TextRenderer.MeasureText(explanation.Text, explanation.Font,
+                new Size(Math.Max(100, content.ClientSize.Width), int.MaxValue), TextFormatFlags.WordBreak).Height + 8;
+            explanation.Height = Math.Max(40, textHeight);
+            if (content.Parent is DashboardCard card) card.Height = 32 + title.Height + explanation.Height + actions.Height + 30;
+        };
         AddCard(content, "Device connection");
     }
 

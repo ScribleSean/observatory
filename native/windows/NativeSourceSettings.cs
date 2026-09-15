@@ -38,7 +38,6 @@ internal sealed partial class NativeDashboard
         var original = sourceOriginal;
         var draft = sourceDraft;
         Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.");
-        ActivityWatchHelp();
         var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 200, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
         collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
@@ -51,6 +50,7 @@ internal sealed partial class NativeDashboard
             collection.Controls.Add(check);
         }
         AddCard(collection, "Collection on this PC");
+        ActivityWatchHelp();
         foreach (var (key, title) in new[] { ("wslDistribution", "Additional Codex log device"), ("quotaWslDistribution", "Account client") })
         {
             var existing = Snapshot.Text(draft[key], "Windows");
@@ -65,7 +65,8 @@ internal sealed partial class NativeDashboard
         Label("Ubuntu options may start WSL. Log-device selection only applies while saved Codex collection is on. Account-client selection is independent. No credentials are copied and no alternate account is used automatically.");
         Label("Turning account monitoring off clears Observatory's retained account readings on the next collection. Saved log-token history remains. This does not sign Codex out.");
         var status = Label("");
-        var save = new Button { Text = "Save source settings", AccessibleName = "Save source settings", Height = 36, FlatStyle = FlatStyle.Flat };
+        var actions = new FlowLayoutPanel { Height = 48, WrapContents = true };
+        var save = new DashboardButton { Text = "Save source settings", AccessibleName = "Save source settings", Width = 190 };
         save.Click += (_, _) =>
         {
             if (original["quota"]?.ToJsonString() == "true" && draft["quota"]?.ToJsonString() == "false" && !ConfirmSettings("quota-removal")) return;
@@ -79,13 +80,14 @@ internal sealed partial class NativeDashboard
             catch (InvalidOperationException error) { status.Text = error.Message; }
             catch { status.Text = "Settings could not be saved. Reload and check source configuration before retrying."; }
         };
-        body.Controls.Add(save);
-        var reload = new Button { Text = "Reload saved settings", AccessibleName = "Reload saved settings", Height = 36, FlatStyle = FlatStyle.Flat };
+        actions.Controls.Add(save);
+        var reload = new DashboardButton { Text = "Reload saved settings", AccessibleName = "Reload saved settings", Width = 190 };
         reload.Click += (_, _) =>
         {
             if (!JsonNode.DeepEquals(sourceOriginal, sourceDraft) && !ConfirmSettings("discard")) return;
             sourceOriginal = null; sourceDraft = null; Reload();
         };
-        body.Controls.Add(reload);
+        actions.Controls.Add(reload);
+        body.Controls.Add(actions);
     }
 }

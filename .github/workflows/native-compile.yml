@@ -46,6 +46,8 @@ jobs:
             $test.Kill()
             throw 'Synthetic dashboard test timed out.'
           }
+          $result = Join-Path $output 'native-result.txt'
+          if (Test-Path $result) { Get-Content $result }
           if ($test.ExitCode -ne 0) { throw 'Synthetic dashboard test failed.' }
           if ((Get-Content (Join-Path $output 'native-result.txt') -Raw).Trim() -ne 'native-dashboard: passed') {
             throw 'Synthetic dashboard result missing or failed.'

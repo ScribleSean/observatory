@@ -670,9 +670,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     openDashboard(section.0)
                     detail?.setContentSize(NSSize(width: 1280, height: 800))
                     try await Task.sleep(nanoseconds: 400_000_000)
-                    guard let view = detail?.contentView,
-                          let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
+                    guard let view = detail?.contentView else { throw CocoaError(.fileWriteUnknown) }
                     view.layoutSubtreeIfNeeded()
+                    guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
                     view.cacheDisplay(in: view.bounds, to: bitmap)
                     guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
                     try png.write(to: output.appendingPathComponent(section.0 + ".png"), options: .withoutOverwriting)

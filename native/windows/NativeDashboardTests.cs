@@ -84,6 +84,7 @@ internal static class NativeDashboardTests
             try
             {
                 await Task.Delay(200);
+                form.MaximumSize = new Size(1600, 1100);
                 form.ClientSize = new Size(1280, 800);
                 Check(form.Font.Name.StartsWith("Inter", StringComparison.Ordinal), "Bundled dashboard typography");
                 var sections = Children(form).OfType<ListBox>().Single();
@@ -192,7 +193,16 @@ internal static class NativeDashboardTests
                 Check(Children(form).OfType<QuotaGraph>().Count() == 0, "Revoked peer graph removed");
                 data["quota"] = localQuota;
                 sections.SelectedItem = "Dictation";
-                string Cell(string table, int row, int column) => Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == table).Rows[row].Cells[column].Value?.ToString() ?? "";
+                string Cell(string table, int row, int column)
+                {
+                    if (table == "By tool and device")
+                    {
+                        var card = Children(form).OfType<DashboardValueCard>().ElementAt(row);
+                        var field = new[] { "", "", "Records", "Words", "Recorded audio minutes", "Status", "Last checked" }[column];
+                        return Children(card).OfType<Label>().Single(label => label.AccessibleName == field + " value").Text;
+                    }
+                    return Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == table).Rows[row].Cells[column].Value?.ToString() ?? "";
+                }
                 Check(Cell("By tool and device", 2, 2) == "4", "Dictation week excludes older records");
                 Check(Cell("By tool and device", 2, 3) == "20 (partial)", "Partial word coverage");
                 Check(Cell("By tool and device", 2, 4) == "Unknown", "No audio coverage is unknown");

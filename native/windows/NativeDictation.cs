@@ -49,11 +49,15 @@ internal sealed partial class NativeDashboard
         foreach (var row in known)
             Label(row.source.product + " · " + row.source.device + ": " + DictationValue(row.days, "audioSeconds", true) + " min");
         Label("Known recordings in the selected period. Coverage is incomplete. Device histories may overlap and are not added together.");
-        Table("By tool and device", ["Tool", "Device", "Records", "Words", "Audio minutes", "Status", "Checked"], selected.Select(row => new[] {
-            row.source.product, row.source.device, Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions")),
-            DictationValue(row.days, "words", true), DictationValue(row.days, "audioSeconds", true),
-            row.source.status == "ok" ? "Recorded history" : row.source.status, Snapshot.Text(row.source.source?["checkedAt"])
-        }));
+        Label("By tool and device");
+        foreach (var row in selected)
+            AddCard(new DashboardValueCard(row.source.product + " · " + row.source.device, [
+                ("Status", row.source.status == "ok" ? "Recorded history" : row.source.status),
+                ("Last checked", Snapshot.Text(row.source.source?["checkedAt"])),
+                ("Records", Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions"))),
+                ("Words", DictationValue(row.days, "words", true)),
+                ("Recorded audio minutes", DictationValue(row.days, "audioSeconds", true))
+            ]), "Voice tool and device");
         var daily = selected.SelectMany(row => row.days.Select(day => new[] {
             Snapshot.Text(day["date"]), row.source.product, row.source.device,
             Snapshot.Format(Snapshot.Number(day["transcriptions"])), DictationValue([day], "words", true),

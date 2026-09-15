@@ -13,7 +13,8 @@ internal sealed class DashboardFilters : Panel
         Controls.Add(caption); Controls.Add(chips);
         foreach (var value in values)
         {
-            var button = new Button {
+            var button = new DashboardButton {
+                CornerRadius = 10,
                 Text = value, AccessibleName = value, Tag = value,
                 Width = Math.Max(82, TextRenderer.MeasureText(value, Font).Width + 28), Height = 38,
                 FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 6, 6),

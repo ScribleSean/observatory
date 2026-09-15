@@ -20,7 +20,7 @@ internal sealed partial class NativeDashboard : Form
     private readonly Label pageTitle = new() { Dock = DockStyle.Top, Height = 42 };
     private readonly Label freshness = new() { Dock = DockStyle.Fill };
     private readonly ToolTip timestampHint = new();
-    private readonly Button refreshButton = new() { Text = "Refresh", AccessibleName = "Refresh sources", Dock = DockStyle.Right, Width = 110, FlatStyle = FlatStyle.Flat };
+    private readonly Button refreshButton = new DashboardButton { Text = "Refresh", AccessibleName = "Refresh sources", Dock = DockStyle.Right, Width = 110 };
     private readonly Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive;
 
     internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null,
@@ -76,7 +76,7 @@ internal sealed partial class NativeDashboard : Form
         };
         var actions = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 218, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 6, 0, 0) };
         refreshButton.Dock = DockStyle.None; refreshButton.Size = new Size(100, 40);
-        var devices = new Button { Text = "Devices", AccessibleName = "Device connection settings", Width = 100, Height = 40, FlatStyle = FlatStyle.Flat };
+        var devices = new DashboardButton { Text = "Devices", AccessibleName = "Device connection settings", Width = 100, Height = 40 };
         devices.FlatAppearance.BorderSize = 0;
         devices.Click += (_, _) => { settingsPage = "This device"; sections.SelectedItem = "Settings"; Reload(); body.AutoScrollPosition = Point.Empty; };
         actions.Controls.Add(refreshButton); actions.Controls.Add(devices);
@@ -98,7 +98,14 @@ internal sealed partial class NativeDashboard : Form
         timer.Start();
     }
     private int ContentWidth => Math.Max(400, body.ClientSize.Width - 66);
-    private void ResizeRows() { foreach (Control row in body.Controls) { row.Width = ContentWidth; if (row is Label label) label.MaximumSize = new Size(ContentWidth, 0); } }
+    private void ResizeRows()
+    {
+        foreach (Control row in body.Controls)
+        {
+            row.Width = row is Button ? Math.Min(ContentWidth, Math.Max(140, row.GetPreferredSize(Size.Empty).Width + 24)) : ContentWidth;
+            if (row is Label label) label.MaximumSize = new Size(ContentWidth, 0);
+        }
+    }
     private Label Label(string value, bool title = false)
     {
         var label = new Label { Text = value, AccessibleName = value, AutoSize = true,
@@ -162,7 +169,7 @@ internal sealed partial class NativeDashboard : Form
             else if (section == "Agents")
             {
                 Label("Saved execution records, not a live agent monitor. Missing records are not zero usage.");
-                var configure = new Button { Text = "Review collection settings", AutoSize = true, Height = 38 };
+                var configure = new DashboardButton { Text = "Review collection settings", AutoSize = true, Height = 40 };
                 configure.Click += (_, _) => { settingsPage = "Sources"; sections.SelectedItem = "Settings"; };
                 body.Controls.Add(configure);
                 Agents(snapshot);
@@ -236,7 +243,7 @@ internal sealed partial class NativeDashboard : Form
         Label($"{selected.Length} recorded dates. Missing dates are not filled with zeros.");
         Label("Selected recorded days (up to 30 shown)");
         AddCard(new DashboardHistoryChart(selected, kind == "tokens"), "Recorded history");
-        var details = new Button { Text = showRecordedHistory ? "Hide recorded values" : "Show recorded values", AutoSize = true, Height = 38 };
+        var details = new DashboardButton { Text = showRecordedHistory ? "Hide recorded values" : "Show recorded values", AutoSize = true, Height = 40 };
         details.Click += (_, _) => { showRecordedHistory = !showRecordedHistory; Reload(); };
         body.Controls.Add(details);
         if (showRecordedHistory)
@@ -262,7 +269,7 @@ internal sealed partial class NativeDashboard : Form
     {
         if (readArchive is not null)
         {
-            var history = new Button { Text = "Browse saved allowance history", AutoSize = true };
+            var history = new DashboardButton { Text = "Browse saved allowance history", AutoSize = true };
             history.Click += (_, _) => { using var window = new QuotaArchiveWindow(readArchive); window.ShowDialog(this); };
             body.Controls.Add(history);
         }
@@ -336,7 +343,7 @@ internal sealed partial class NativeDashboard : Form
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
         Label($"{receipts.Length} handoff receipts · {receipts.Count(row => Snapshot.Text(row["status"]) == "failed")} saved failures. Not a live agent monitor.");
         Label("Newest receipt: " + (receipts.Select(row => Snapshot.Text(row["recordedAt"])).Order().LastOrDefault() ?? "Unknown"));
-        var details = new Button { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 38 };
+        var details = new DashboardButton { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 40 };
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
         Label("Provider sign-ins remain on their owning devices. Saved execution records do not show which agents are running now.");

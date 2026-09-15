@@ -59,7 +59,7 @@ struct NativeDashboard: View {
             }.padding(20).frame(width: 200 * selection.textScale)
             }
             VStack(spacing: 0) {
-            dashboardHeader.padding(24)
+            dashboardHeader.padding(24).fixedSize(horizontal: false, vertical: true)
             ScrollViewReader { scroll in
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
