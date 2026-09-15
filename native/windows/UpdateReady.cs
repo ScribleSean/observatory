@@ -26,7 +26,7 @@ internal static class UpdateReady
         var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
         // Framework-dependent checks run as dotnet <assembly>. Packaged checks
         // run through the app host and must not receive an extra assembly argument.
-        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
             start.ArgumentList.Add(typeof(UpdateReady).Assembly.Location);
         start.ArgumentList.Add("--test-update-ready");
         start.ArgumentList.Add(name);
