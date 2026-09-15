@@ -16,6 +16,7 @@ $nodeArchive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
 $pythonArchive = Get-ObservatoryArchive -Name python -CacheRoot $CacheRoot
 $pythonFullArchive = Get-ObservatoryArchive -Name pythonFull -CacheRoot $CacheRoot
 $timezoneArchive = Get-ObservatoryArchive -Name tzdata -CacheRoot $CacheRoot
+$updaterArchive = Get-ObservatoryArchive -Name updater -CacheRoot $CacheRoot
 $candidateName = 'candidate-' + [guid]::NewGuid().ToString('N')
 $candidate = Join-Path $PSScriptRoot "release\$candidateName"
 $app = Join-Path $candidate 'Workspace Observatory'
@@ -28,6 +29,13 @@ try {
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
     & $Dotnet publish native/windows/WorkspaceObservatory.csproj -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true -o $app
     if ($LASTEXITCODE -ne 0) { throw 'Self-contained Windows publish failed.' }
+    $updaterStage = Join-Path $candidate 'updater-runtime'
+    & (Join-Path $PSScriptRoot 'prepare-updater-runtime.ps1') -Archive $updaterArchive -Destination $updaterStage
+    foreach ($name in @('WinSparkle.dll', 'COPYING', 'COPYING.expat')) {
+        $destination = Join-Path $app "Updater\$name"
+        if (Test-Path -LiteralPath $destination) { throw 'Updater package destination already exists.' }
+        Copy-Item -LiteralPath (Join-Path $updaterStage $name) -Destination $destination -ErrorAction Stop
+    }
     $runtime = Join-Path $app 'Runtime'
     $notices = Join-Path $app 'Licenses'
     New-Item -ItemType Directory -Path $runtime, $notices -Force | Out-Null

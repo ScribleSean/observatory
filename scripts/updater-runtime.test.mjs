@@ -1,11 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,readdirSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,readdirSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+
+test('package archive resolver reuses pinned updater cache and rejects changed bytes',{
+  skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_WINSPARKLE_ARCHIVE
+    ?'Requires Windows and the explicitly supplied pinned WinSparkle archive':false,
+},t=>{
+  const root=mkdtempSync(path.join(tmpdir(),'observatory-updater-cache-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const pin=JSON.parse(readFileSync(new URL('../native/windows/updater-tool.json',import.meta.url)));
+  const archive=path.join(root,pin.filename);
+  copyFileSync(process.env.OBSERVATORY_TEST_WINSPARKLE_ARCHIVE,archive);
+  const script=path.join(root,'resolve.ps1');
+  writeFileSync(script,`param([string]$Resolver,[string]$Cache)
+$ErrorActionPreference='Stop'
+. $Resolver
+Get-ObservatoryArchive -Name updater -CacheRoot $Cache
+`);
+  const run=()=>spawnSync(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoProfile','-NonInteractive','-File',script,'-Resolver',fileURLToPath(new URL('../native/windows/runtime-assets.ps1',import.meta.url)),
+      '-Cache',root],{encoding:'utf8',timeout:30000,maxBuffer:8192,windowsHide:true});
+  const good=run();
+  assert.equal(good.status,0,good.stderr || String(good.error));
+  assert.equal(good.stdout.trim(),archive);
+  writeFileSync(archive,'Synthetic altered cache');
+  const bad=run();
+  assert.notEqual(bad.status,0);
+  assert.match(bad.stderr,/checksum mismatch/);
+  assert.equal(readFileSync(archive,'utf8'),'Synthetic altered cache');
+});
 
 test('selective updater preparation verifies real archive and preserves existing output',{
   skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_WINSPARKLE_ARCHIVE

@@ -1,12 +1,17 @@
 function Get-ObservatoryArchive {
     param([string]$Name, [string]$CacheRoot)
-    $asset = (Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json).$Name
+    $asset = if ($Name -eq 'updater') {
+        Get-Content (Join-Path $PSScriptRoot 'updater-tool.json') -Raw | ConvertFrom-Json
+    } else {
+        (Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json).$Name
+    }
     if (-not $asset -or $asset.filename -notmatch '^[A-Za-z0-9._+-]+$' -or $asset.sha256 -notmatch '^[a-f0-9]{64}$') {
         throw 'Invalid pinned runtime asset.'
     }
     $uri = [uri]$asset.url
     $astral = $uri.Host -eq 'github.com' -and $uri.AbsolutePath.StartsWith('/astral-sh/python-build-standalone/releases/download/')
-    if ($uri.Scheme -ne 'https' -or (-not $astral -and $uri.Host -notin @('nodejs.org', 'www.python.org', 'files.pythonhosted.org')) -or $uri.UserInfo) {
+    $updater = $Name -eq 'updater' -and $uri.Host -eq 'github.com' -and $uri.AbsolutePath.StartsWith('/vslavik/winsparkle/releases/download/')
+    if ($uri.Scheme -ne 'https' -or (-not $astral -and -not $updater -and $uri.Host -notin @('nodejs.org', 'www.python.org', 'files.pythonhosted.org')) -or $uri.UserInfo) {
         throw 'Unexpected runtime download origin.'
     }
     if (-not [IO.Path]::IsPathRooted($CacheRoot)) { throw 'CacheRoot must be absolute.' }

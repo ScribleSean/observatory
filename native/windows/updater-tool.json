@@ -1,9 +1,10 @@
 {
   "version": "0.9.4",
+  "filename": "WinSparkle-0.9.4.zip",
   "url": "https://github.com/vslavik/winsparkle/releases/download/v0.9.4/WinSparkle-0.9.4.zip",
   "sha256": "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976",
   "tool": "WinSparkle-0.9.4/bin/winsparkle-tool.exe",
-  "scope": "Verified signing interoperability tool and x64 runtime inventory. Not yet bundled into Observatory.",
+  "scope": "Pinned signing interoperability tool and selectively packaged x64 updater runtime.",
   "runtime": {
     "platform": "windows-x64",
     "dll": "WinSparkle-0.9.4/x64/Release/WinSparkle.dll",

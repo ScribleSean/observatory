@@ -16,6 +16,11 @@ The native dashboard build generates `assets/third-party-licenses.txt` from Java
 
 Windows package candidates include private copies of Node, Python with timezone data, and the .NET desktop runtime. Their versions and download checksums are pinned in `native/windows/runtime-assets.json` and the Windows project file. These copies do not replace system installations.
 
+The Windows package recipe also includes the pinned WinSparkle x64 updater DLL.
+Its distribution and runtime checksums are recorded in
+`native/windows/updater-tool.json`. The original WinSparkle and Expat notices
+are included beside the DLL as `Updater/COPYING` and `Updater/COPYING.expat`.
+
 The package's `Licenses` directory contains the Node and Python distribution notices, timezone-data license files, .NET notices, WebView2 SDK license and notice, and generated dashboard notices. Original notices inside the Python distribution are also retained. The installed Microsoft Edge WebView2 Runtime is a separate system prerequisite and is not bundled by this packaging script.
 
 Python uses the official [embeddable distribution](https://docs.python.org/3/using/windows.html#the-embeddable-package), with timezone data vendored alongside it. No pip installation or package download occurs when the application collects records.

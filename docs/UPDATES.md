@@ -68,7 +68,7 @@ The synthetic dashboard test verifies a single Settings action while checking an
 button restoration after completion. Its Settings screenshot was inspected.
 Windows build and Mac cross-compilation passed with zero warnings or errors.
 
-Production key embedding, DLL packaging and initial signed-envelope provisioning
+Production key embedding, clean package verification and initial signed-envelope provisioning
 remain open. No ordinary
 installation received these source changes. Native callback delivery and complete
 download-to-relaunch verification are still required before release.
@@ -98,6 +98,23 @@ tests passed with no skips on Windows. Native self-tests and both platform build
 passed. This uses synthetic payloads and signing keys, not a production upgrade
 or a new full-package activation test. Initial installer provisioning still needs
 integration with reviewed signed release output.
+
+### Pinned updater packaging
+
+The Windows package recipe now resolves the pinned WinSparkle archive through the
+existing verified cache, reuses the selective extractor, and copies only
+`WinSparkle.dll`, `COPYING` and `COPYING.expat` into the package's `Updater`
+directory. It does not include the archive's other architectures, symbols or
+signing tools. Package inspection requires these files and checks the DLL against
+the pinned 2,886,144-byte size and SHA-256 digest before writing the manifest.
+
+Eight Windows package and updater tests passed without skips, including cached
+archive tamper rejection, selective extraction, native binding and isolated
+manual-only lifecycle checks. A disposable copy of the earlier complete package
+with the current updater scripts and DLL/notices passed content inspection.
+Changing the DLL caused inspection to fail. That fixture was removed. This is
+component integration evidence, not a clean build or release of the new source.
+The full package and installer gates remain required.
 
 ### Integration compatibility check, September 15
 
