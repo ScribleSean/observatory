@@ -2,7 +2,8 @@ import {lstat} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {listQuotaArchives,readQuotaArchive} from './quota-store.mjs';
+import {listQuotaArchives,readQuotaArchive,readQuotaChart} from './quota-store.mjs';
+import {rasterQuotaTimeline} from './quota-chart-raster.mjs';
 
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const time=value=>Number.isSafeInteger(value) && value>=0 && value<=8640000000000000;
@@ -16,6 +17,12 @@ export async function quotaArchiveControl(runtime,request) {
     if(keys.some(key=>!['action','after','limit'].includes(key)) ||
       (request.after!==undefined && request.after!==null && !hex(request.after)) ||
       (request.limit!==undefined && (!Number.isSafeInteger(request.limit) || request.limit<1 || request.limit>100)))throw Error('Invalid account request');
+  } else if(request.action==='chart') {
+    if(keys.some(key=>!['action','scope','from','to','bucket','window','width','height'].includes(key)) || !hex(request.scope) ||
+      !time(request.from)||!time(request.to)||request.from>=request.to||
+      typeof request.bucket!=='string'||!/^[a-zA-Z0-9_-]{1,80}$/.test(request.bucket)||!['primary','secondary'].includes(request.window)||
+      (request.width!==undefined&&(!Number.isInteger(request.width)||request.width<2||request.width>1024))||
+      (request.height!==undefined&&(!Number.isInteger(request.height)||request.height<2||request.height>160)))throw Error('Invalid chart request');
   } else if(request.action==='page') {
     if(keys.some(key=>!['action','scope','kind','from','to','after','limit'].includes(key)) || !hex(request.scope) ||
       !['observation','daily','poll','timeline'].includes(request.kind) || !time(request.from) || !time(request.to) || request.from>request.to ||
@@ -29,11 +36,12 @@ export async function quotaArchiveControl(runtime,request) {
   try {await lstat(path.join(runtime,'private-quota','state.sqlite'));}
   catch(error) {
     if(error.code!=='ENOENT')throw error;
+    if(request.action==='chart')return {version:1,chart:rasterQuotaTimeline([],request)};
     return request.action==='accounts'?{version:1,accounts:[],next:null,storageBytes:0,storageLimitBytes:8*1024*1024*1024}:
       {version:1,records:[],next:null};
   }
   const {action,...query}=request;
-  return {version:1,...await (action==='accounts'?listQuotaArchives(runtime,query):readQuotaArchive(runtime,query))};
+  return {version:1,...await (action==='accounts'?listQuotaArchives(runtime,query):action==='chart'?readQuotaChart(runtime,query):readQuotaArchive(runtime,query))};
 }
 
 async function main() {

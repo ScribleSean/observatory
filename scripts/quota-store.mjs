@@ -6,7 +6,7 @@ import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {retainQuotaHistory} from './quota-history.mjs';
 import {parseQuotaRecord,selectQuotaRecord} from './quota-record.mjs';
-import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage} from './quota-archive.mjs';
+import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage,readQuotaArchiveChart} from './quota-archive.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
@@ -151,6 +151,7 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
 });
 
 export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
+export const readQuotaChart=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchiveChart(db,query));
 
 // Owner-local account discovery. Scope keys are opaque identifiers, not account
 // names or credentials. Page the catalogue too, rather than loading all history.

@@ -106,3 +106,23 @@ test('timeline retains a successful check without a usable percentage observatio
   assert.equal(page.records[1].status,'ok');
   assert.equal(page.records[1].windows,undefined);
 });
+
+test('bounded full-range chart reads archived observations from one selected account',async t=>{
+  const root=await fixture(t),scope='a'.repeat(64);
+  const query={action:'chart',scope,from:start,to:start+900000,bucket:'codex',window:'primary',width:121,height:101};
+  const empty=await quotaArchiveControl(root,query);
+  assert.equal(empty.chart.observations,0);assert.deepEqual(await readdir(root),[]);
+  await save(root,scope,start);
+  const before=await readQuotaState(root,start+60000);
+  await updateQuotaState(root,{revision:before.revision,scope,enabled:true,
+    observation:{status:'unavailable',checkedAt:new Date(start+60000).toISOString()}},start+60000);
+  await save(root,scope,start+300000);
+  await save(root,'b'.repeat(64),start+600000);
+  const reply=await quotaArchiveControl(root,query);
+  assert.equal(reply.chart.observations,2);assert.equal(reply.chart.gaps,1);
+  assert.equal(reply.chart.lastAt,start+300000);
+  assert.equal(Buffer.from(reply.chart.pixels,'base64').length,121*101);
+  assert.ok(!JSON.stringify(reply).includes(scope));
+  for(const override of [{width:1025},{height:161},{scope:'account name'},{from:start+900000},{url:'https://example.com'}])
+    await assert.rejects(quotaArchiveControl(root,{...query,...override}));
+});

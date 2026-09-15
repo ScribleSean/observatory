@@ -1,4 +1,10 @@
 import {cleanQuotaObservation} from './quota-history.mjs';
+import {rasterQuotaTimeline} from './quota-chart-raster.mjs';
+
+const timelinePredicate=`(kind='observation' OR (kind='poll' AND
+    (json_extract(record,'$.status')!='ok' OR NOT EXISTS
+      (SELECT 1 FROM quota_archive AS observation WHERE observation.scope=quota_archive.scope
+       AND observation.kind='observation' AND observation.observed_at=quota_archive.observed_at))))`;
 
 export const archiveSchema="CREATE TABLE quota_archive (id INTEGER PRIMARY KEY, scope TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('observation','daily','poll')), observed_at INTEGER NOT NULL, record TEXT NOT NULL CHECK (length(record) <= 16384), UNIQUE(scope,kind,observed_at,record))";
 export const archiveIndex='CREATE INDEX quota_archive_lookup ON quota_archive(scope,kind,observed_at,id)';
@@ -56,10 +62,7 @@ export function readQuotaArchivePage(db,{scope,kind,from=0,to=8640000000000000,a
   // Failed checks are evidence of unknown coverage, including failures shorter
   // than the normal gap threshold. Omit a successful poll only when a matching
   // observation exists. An empty successful response still has unknown coverage.
-  const predicate=kind==='timeline'?`(kind='observation' OR (kind='poll' AND
-    (json_extract(record,'$.status')!='ok' OR NOT EXISTS
-      (SELECT 1 FROM quota_archive AS observation WHERE observation.scope=quota_archive.scope
-       AND observation.kind='observation' AND observation.observed_at=quota_archive.observed_at))))`:'kind=?';
+  const predicate=kind==='timeline'?timelinePredicate:'kind=?';
   const found=db.prepare(`SELECT id,observed_at,record FROM quota_archive WHERE scope=? AND ${predicate} AND observed_at>=? AND observed_at<=? AND (observed_at,id)>(?,?) ORDER BY observed_at,id LIMIT ?`)
     .all(scope,...(kind==='timeline'?[]:[kind]),from,to,after?.at??-1,after?.id??0,limit+1);
   const records=[];let bytes=0,last=null;
@@ -69,4 +72,14 @@ export function readQuotaArchivePage(db,{scope,kind,from=0,to=8640000000000000,a
     records.push(JSON.parse(row.record));last={at:row.observed_at,id:row.id};
   }
   return {records,next:found.length>records.length?last:null};
+}
+
+export function readQuotaArchiveChart(db,{scope,...options}) {
+  if(!scopeKey(scope))throw Error('Invalid archive scope');
+  function* records() {
+    const query=db.prepare(`SELECT record FROM quota_archive WHERE scope=? AND ${timelinePredicate}
+      AND observed_at>=? AND observed_at<=? ORDER BY observed_at,id`);
+    for(const row of query.iterate(scope,options.from,options.to))yield JSON.parse(row.record);
+  }
+  return {chart:rasterQuotaTimeline(records(),options)};
 }
