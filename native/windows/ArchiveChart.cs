@@ -4,6 +4,7 @@ namespace WorkspaceObservatory;
 
 internal sealed record ArchiveChart(int Width, int Height, byte[] Pixels, long From, long To, long Observations, long Gaps)
 {
+    internal bool MatchesRange(long from, long to) => From == from && To == to;
     internal static ArchiveChart Parse(JsonObject value)
     {
         long Integer(string name, long maximum = 9007199254740991) {
@@ -42,11 +43,10 @@ internal sealed class ArchiveChartControl : Control
     {
         this.chart = chart; DoubleBuffered = true; Height = 200;
         bitmap = new Bitmap(chart.Width, chart.Height);
-        var ink = DashboardPalette.Accent(false);
         for (var y = 0; y < chart.Height; y++)
             for (var x = 0; x < chart.Width; x++) {
                 var pixel = chart.Pixels[y * chart.Width + x];
-                bitmap.SetPixel(x, y, Color.FromArgb(pixel == 0 ? 0 : pixel == 2 ? 110 : 255, ink));
+                bitmap.SetPixel(x, y, Color.FromArgb(pixel == 0 ? 0 : pixel == 2 ? 210 : 255, Color.White));
             }
         AccessibleRole = AccessibleRole.Graphic;
         AccessibleName = "Allowance used, full selected range";
@@ -55,7 +55,8 @@ internal sealed class ArchiveChartControl : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        using var brush = new SolidBrush(DashboardPalette.Muted(false));
+        var light = DashboardPalette.IsLight(this);
+        using var brush = new SolidBrush(DashboardPalette.Muted(light));
         var box = new Rectangle(42, 8, Math.Max(1, Width - 54), Math.Max(1, Height - 40));
         foreach (var percent in new[] { 0, 50, 100 })
             e.Graphics.DrawString(percent + "%", Font, brush, 0, box.Bottom - box.Height * percent / 100 - 7);
@@ -63,7 +64,12 @@ internal sealed class ArchiveChartControl : Control
         else {
             e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-            e.Graphics.DrawImage(bitmap, box);
+            var ink = DashboardPalette.Accent(light);
+            using var tint = new System.Drawing.Imaging.ImageAttributes();
+            tint.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(new float[][] {
+                [ink.R / 255f, 0, 0, 0, 0], [0, ink.G / 255f, 0, 0, 0], [0, 0, ink.B / 255f, 0, 0],
+                [0, 0, 0, 1, 0], [0, 0, 0, 0, 1] }));
+            e.Graphics.DrawImage(bitmap, box, 0, 0, chart.Width, chart.Height, GraphicsUnit.Pixel, tint);
         }
         string DateLabel(long stamp) => DateTimeOffset.FromUnixTimeMilliseconds(stamp).ToLocalTime().ToString("yyyy-MM-dd");
         e.Graphics.DrawString(DateLabel(chart.From), Font, brush, box.Left, box.Bottom + 7);

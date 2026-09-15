@@ -277,7 +277,11 @@ struct NativeQuotaArchive: View {
             defer { busy = false }
             do {
                 let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: request)
-                guard requests.accepts(generation), let chart = reply.chart else { return }
+                guard requests.accepts(generation) else { return }
+                guard let chart = reply.chart,
+                      chart.matchesRange(from: Double(max(0, Int64(start.timeIntervalSince1970 * 1000))), to: Double(Int64(end.timeIntervalSince1970 * 1000) - 1)) else {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
                 fullChart = chart
                 fullChartWindow = text(window["bucket"]) + " · " + text(window["window"])
                 message = "Full selected range rendered. No observation-count preview limit."

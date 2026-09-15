@@ -250,7 +250,7 @@ struct QuotaPanel: View {
                         if quotaIsGap(points[index], point) {
                             ForEach([points[index], point]) { endpoint in
                                 LineMark(x: .value("Time", endpoint.at), y: .value("Used percent", endpoint.used), series: .value("Unknown coverage", "gap-\(index)"))
-                                    .foregroundStyle(ObservatoryTheme.sage.opacity(0.5))
+                                    .foregroundStyle(ObservatoryTheme.sage.opacity(0.82))
                                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
                                     .accessibilityLabel("Coverage unknown. No observation between these readings.")
                             }

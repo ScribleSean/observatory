@@ -16,6 +16,7 @@ struct ArchiveChart: Decodable {
     let lastAt: Double?
     let minUsed: Double?
     let maxUsed: Double?
+    func matchesRange(from: Double, to: Double) -> Bool { self.from == from && self.to == to }
 
     func validatedMask() throws -> Data {
         guard version == 1, (2...1024).contains(width), (2...160).contains(height),
@@ -39,7 +40,7 @@ struct ArchiveChart: Decodable {
         guard let mask = try? validatedMask() else { return nil }
         var rgba = Data(capacity: mask.count * 4)
         for ink in mask {
-            let alpha: UInt8 = ink == 0 ? 0 : ink == 2 ? 110 : 255
+            let alpha: UInt8 = ink == 0 ? 0 : ink == 2 ? 210 : 255
             rgba.append(contentsOf: [255, 255, 255, alpha])
         }
         guard let provider = CGDataProvider(data: rgba as CFData) else { return nil }

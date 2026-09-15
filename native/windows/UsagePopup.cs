@@ -238,7 +238,7 @@ internal sealed class QuotaGraph : Control
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
         using var grid = new Pen(DashboardPalette.Grid(this));
         using var line = new Pen(DashboardPalette.Accent(DashboardPalette.IsLight(this)), 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var gap = new Pen(Color.FromArgb(140, line.Color), 1) { DashStyle = DashStyle.Dash };
+        using var gap = new Pen(Color.FromArgb(210, line.Color), 1) { DashStyle = DashStyle.Dash };
         using var ink = new SolidBrush(line.Color);
         using var brush = new SolidBrush(DashboardPalette.Muted(DashboardPalette.IsLight(this)));
         var box = new RectangleF(34, 12, Math.Max(1, Width - 44), Math.Max(1, Height - 42));

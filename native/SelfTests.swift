@@ -41,6 +41,8 @@ func runSelfTests() {
         "gaps": 0, "segments": 1, "firstAt": 500, "lastAt": 500, "minUsed": 50, "maxUsed": 50]
     let rasterReply = try? ArchiveReply.parse(JSONSerialization.data(withJSONObject: ["version": 1, "chart": maskChart]))
     precondition(rasterReply?.chart?.observations == 1 && rasterReply?.chart?.image() != nil)
+    precondition(rasterReply?.chart?.matchesRange(from: 0, to: 1000) == true)
+    precondition(rasterReply?.chart?.matchesRange(from: 1, to: 1000) == false)
     for changes: JSONObject in [["width": 1025], ["pixels": "AA=="], ["pixels": Data([0, 4, 0, 0]).base64EncodedString()],
                                ["observations": 0], ["firstAt": 2000], ["maxUsed": 101]] {
         let bad = maskChart.merging(changes) { _, new in new }

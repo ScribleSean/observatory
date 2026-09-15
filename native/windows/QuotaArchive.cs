@@ -398,6 +398,8 @@ internal sealed class QuotaArchiveWindow : Form
             var reply = await read(request, lifetime.Token);
             if (IsDisposed) return;
             var chart = ArchiveChart.Parse(reply["chart"] as JsonObject ?? throw new InvalidOperationException("Chart unavailable."));
+            if (!chart.MatchesRange(request["from"]!.GetValue<long>(), request["to"]!.GetValue<long>()))
+                throw new InvalidOperationException("Chart date range did not match request.");
             foreach (Control control in charts.Controls.Cast<Control>().ToArray()) { charts.Controls.Remove(control); control.Dispose(); }
             charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used, full selected range" });
             charts.Controls.Add(new ArchiveChartControl(chart) { Width = Math.Max(240, charts.ClientSize.Width - 32), BackColor = DashboardCard.Surface, ForeColor = Color.WhiteSmoke });

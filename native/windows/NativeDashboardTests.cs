@@ -13,6 +13,19 @@ internal static class NativeDashboardTests
             """;
         var raster = ArchiveChart.Parse(JsonNode.Parse(rasterJson)!.AsObject());
         Check(raster.Observations == 1 && raster.Pixels.Length == 4, "Full archive mask has bounded decoded data");
+        Check(raster.MatchesRange(0, 1000) && !raster.MatchesRange(1, 1000), "Chart response stays bound to requested dates");
+        var gapMask = new byte[121 * 101];
+        for (var x = 20; x <= 100; x++)
+            gapMask[50 * 121 + x] = (byte)(x <= 40 || x >= 80 ? 1 : x % 7 < 3 ? 2 : 0);
+        foreach (var x in new[] { 20, 40, 80, 100 }) gapMask[50 * 121 + x] = 3;
+        foreach (var light in new[] { false, true }) {
+            using var view = new ArchiveChartControl(new ArchiveChart(121, 101, gapMask, 1735689600000, 1735776000000, 4, 1)) {
+                Size = new Size(660, 220), BackColor = light ? Color.FromArgb(244, 241, 236) : Color.FromArgb(39, 40, 37),
+                ForeColor = light ? Color.Black : Color.WhiteSmoke };
+            using var picture = new Bitmap(view.Width, view.Height);
+            view.DrawToBitmap(picture, new Rectangle(Point.Empty, picture.Size));
+            picture.Save(Path.Combine(output, light ? "archive-mask-light.png" : "archive-mask-dark.png"), ImageFormat.Png);
+        }
         foreach (var replacement in new[] { ("\"width\":2", "\"width\":1025"), ("AAMAAA==", "AAQAAA=="),
             ("AAMAAA==", "AA=="), ("\"observations\":1", "\"observations\":0"), ("\"firstAt\":500", "\"firstAt\":2000") }) {
             var rejected = false;
