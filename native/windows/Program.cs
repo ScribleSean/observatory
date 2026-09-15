@@ -8,6 +8,38 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-download-preparation"))
+        {
+            if (args.Length != 7 || args[0] != "--test-update-download-preparation" ||
+                !long.TryParse(args[5], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                // Preparation only. No helper, candidate or installed app runs.
+                var result = UpdateDownload.Prepare(args[1], args[2], args[3], args[4], previousBuild, args[6])
+                    .GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
+            }
+            catch { Console.Error.WriteLine("Synthetic download preparation failed. No helper was launched."); Environment.ExitCode = 1; }
+            return;
+        }
+        if (args.Contains("--apply-update"))
+        {
+            if (args.Length != 6 || args[0] != "--apply-update" ||
+                !long.TryParse(args[5], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild) ||
+                previousBuild < 1 || previousBuild > 9007199254740991L)
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var trust = UpdateTrust.ReadEmbedded()
+                    ?? throw new IOException("Release update trust is not configured.");
+                var result = UpdateInstall.ApplyAndRelaunch(args[1], args[2], args[3], args[4], trust.PublicKey, previousBuild)
+                    .GetAwaiter().GetResult();
+                if (!result.LaunchConfirmed) Environment.ExitCode = 1;
+            }
+            catch { Console.Error.WriteLine("Update did not complete. Inspect retained recovery before retrying."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-updater-lifecycle"))
         {
             if (args.Length != 2 || args[0] != "--test-updater-lifecycle") { Environment.ExitCode = 64; return; }
@@ -208,6 +240,7 @@ internal static class Program
                 UpdateCandidate.SelfTest();
                 UpdateStaging.SelfTest();
                 UpdateHelper.SelfTest();
+                UpdateDownload.SelfTest();
                 UpdateTrust.SelfTest();
                 UpdateInstallerCallback.SelfTest();
                 WinSparkleCallbacks.SelfTest();

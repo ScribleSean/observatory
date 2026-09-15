@@ -212,6 +212,47 @@ exit $process.ExitCode
   assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
   assert.deepEqual(readFileSync(staged.envelopePath),readFileSync(envelope));
 });
+test('native download preparation retains verified candidate and old helper outside download cleanup',{
+  skip:process.platform!=='win32' || !process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR
+    ?'Requires Windows and an explicitly supplied trusted native updater runtime':false,
+},t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  const previous=path.join(f.root,'previous.json'),downloads=path.join(f.root,'downloads');
+  mkdirSync(downloads);
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  writeFileSync(previous,JSON.stringify(f.old.receipt));
+  const prepared=path.join(downloads,'prepared'),archive=path.join(downloads,'update.zip');
+  prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,prepared);
+  const compressed=spawnSync(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoProfile','-NonInteractive','-File',fileURLToPath(new URL('../native/windows/create-update-archive.ps1',import.meta.url)),
+      '-Directory',prepared,'-Archive',archive],{encoding:'utf8',timeout:30000});
+  assert.equal(compressed.status,0,compressed.stderr || String(compressed.error));
+  const run=(key=release.publicKey)=>spawnSync(process.env.OBSERVATORY_TEST_UPDATE_EXTRACTOR,
+    ['--test-update-download-preparation',archive,f.old.folder,previous,f.old.receipt.sourceRevision,'7',key],
+    {encoding:'utf8',timeout:30000});
+  const refused=run(signer().publicKey);
+  assert.equal(refused.status,1,refused.stderr || String(refused.error));
+  assert.equal(refused.stdout,'');
+  assert.equal(readdirSync(f.root).filter(name=>name.startsWith('.observatory-candidate-')).length,0);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  const result=run();
+  assert.equal(result.status,0,result.stderr || String(result.error));
+  const ready=JSON.parse(result.stdout);
+  assert.equal(ready.Installed,f.old.folder);
+  assert.equal(ready.PreviousBuild,7);
+  assert.equal(path.dirname(ready.Staged),f.root);
+  assert.equal(path.dirname(ready.Helper),path.dirname(ready.PreviousReceipt));
+  assert.match(path.basename(path.dirname(ready.Helper)),/^\.observatory-download-[a-f0-9]{32}$/);
+  assert.deepEqual(readFileSync(ready.PreviousReceipt),readFileSync(previous));
+  assert.deepEqual(readFileSync(ready.CandidateEnvelope),readFileSync(envelope));
+  rmSync(downloads,{recursive:true});
+  rmSync(previous);
+  assert.equal(verifyInstallation(ready.Staged,f.next.receipt).buildNumber,8);
+  assert.equal(verifyInstallation(ready.Helper,JSON.parse(readFileSync(ready.PreviousReceipt))).buildNumber,7);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  assert.deepEqual(readFileSync(ready.CandidateEnvelope),readFileSync(envelope));
+});
+
 test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
   const f=fixture(t),release=signer();
   const receipt=prepareInstallationReceipt(f.next.folder,buildFor(f.next.receipt));

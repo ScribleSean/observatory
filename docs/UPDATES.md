@@ -12,6 +12,35 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 ## Update integration
 
+### Download handler preparation, September 15
+
+`UpdateDownload.Prepare` now connects bounded native ZIP extraction, candidate
+authentication, sibling payload staging and verified old-helper staging. It
+retains an independent previous receipt and the extracted envelope beneath a
+unique directory beside the installation, outside WinSparkle's download folder.
+Partial preparation remains available for inspection. It does not replace the
+installation or request shutdown.
+
+`UpdateDownload.CreateCallback` supplies the installer callback with this
+preparation flow and starts the old external helper with `--apply-update`. It
+returns after process creation, without waiting for replacement. That return
+acknowledges launch only. The helper requires its own embedded release trust,
+then uses the existing verification, graceful shutdown, replacement and relaunch
+path. Neither this factory nor the helper can activate production updates without
+the embedded key. The application has not yet attached this factory to its
+WinSparkle instance or exposed a working check-for-updates control.
+
+The real Windows preparation regression uses synthetic installed and candidate
+inventories. It rejects the wrong signer, then verifies successful extraction and
+both staged payloads. It removes the original download directory and original
+receipt and verifies that the retained candidate, old helper and receipts remain
+usable. All 27 focused tests passed on Windows without skips. Native self-tests
+and both Windows compilation and Mac cross-compilation passed. A separate native
+invocation confirmed that the production helper refuses activation without an
+embedded key. These checks do not establish native WinSparkle callback delivery,
+external helper startup from that callback, full-package activation of this
+revision, or production update availability.
+
 ### Integration compatibility check, September 15
 
 The feed renderer now requires the dedicated Windows artifact
