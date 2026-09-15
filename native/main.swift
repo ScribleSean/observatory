@@ -889,8 +889,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     print("Native usage popup failed: dashboard handoff did not close the usage view")
                     exit(1)
                 }
+                // Let the explicit dashboard-open activation finish before
+                // simulating a later status-item click on a hidden dashboard.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                detail?.orderOut(nil)
                 showUsage()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+                    guard detail?.isVisible == false else {
+                        print("Native usage popup failed: reopening usage raised the hidden dashboard")
+                        exit(1)
+                    }
                     guard popover.isShown || usageWindow?.isVisible == true else {
                         print("Native usage popup failed: usage view did not reopen beside the dashboard, active=\(NSApp.isActive) anchoredShown=\(popover.isShown) fallbackRetained=\(usageWindow != nil) fallbackVisible=\(usageWindow?.isVisible ?? false) anchor=\(String(describing: statusItem.button?.window?.frame)) failedAnchor=\(String(describing: unreliableUsageAnchor))")
                         exit(1)
@@ -911,6 +919,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                         detail?.performClose(nil)
                         NSApp.terminate(nil)
                     }
+                }
                 }
             }
         }
