@@ -73,6 +73,7 @@ jobs:
           if (-not $receipt.testIdentity) { throw 'Only the isolated test identity is permitted.' }
           $installer = Join-Path (Split-Path $receipts[0]) $receipt.installerName
           ./native/windows/test-installer.ps1 -InstallerPath $installer
+          ./native/windows/verify-update-staging.ps1 -PackageDirectory $app
       - name: Diagnose private-directory failure with a disposable fixture
         if: failure() && !inputs.verify_compiler_only
         shell: pwsh
@@ -82,5 +83,6 @@ jobs:
           $directory = Join-Path $fixture 'private-sync'
           & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -File scripts/private-sync-acl.ps1 -Directory $directory -Initialize -Diagnostic
           exit $LASTEXITCODE
-      # No live sources, signing secrets, ordinary installation or publication.
+      # A temporary ordinary installation is verified and removed on this clean runner.
+      # No live sources, signing secrets or publication.
       # A packaged build is not a clean first-launch or desktop usability test.
