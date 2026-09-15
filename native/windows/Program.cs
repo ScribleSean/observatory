@@ -8,6 +8,20 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-candidate"))
+        {
+            if (args.Length != 5 || args[0] != "--test-update-candidate" ||
+                !long.TryParse(args[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var identity = UpdateCandidate.Verify(args[1], args[2], args[3], previousBuild).GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "verified",
+                    sourceRevision = identity.SourceRevision, buildNumber = identity.BuildNumber }));
+            }
+            catch { Console.Error.WriteLine("Candidate verification failed."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-extraction"))
         {
             if (args.Length != 3 || args[0] != "--test-update-extraction")

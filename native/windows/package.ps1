@@ -74,6 +74,8 @@ try {
     if (Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Name -in @('usage.json', 'collector.json', 'collector.config.json', 'local.config.json', '.env') }) {
         throw 'Private runtime configuration or snapshots detected.'
     }
+    & (Join-Path $runtime 'node.exe') (Join-Path $PSScriptRoot 'check-update-verifier.mjs') (Join-Path $app 'WorkspaceObservatory.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged native update verifier failed.' }
     foreach ($testArgument in @('--self-test', '--test-sharing-bridge', '--test-archive-bridge', '--test-trusted-sync-owner')) {
     $nativeTest = New-Object System.Diagnostics.Process
     $nativeTest.StartInfo.FileName = Join-Path $app 'WorkspaceObservatory.exe'

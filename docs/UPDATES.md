@@ -103,8 +103,12 @@ The native `UpdateCandidate` caller uses the installed Node runtime and verifier
 removes Node loader overrides, limits each output stream to 4,096 characters and
 sets a two-minute deadline. It validates the returned identity and can terminate
 only its read-only child on cancellation or failure. Native self-tests cover
-response validation. The packaged subprocess roundtrip, trusted configuration
-provisioning and Update button integration remain required.
+response validation. Package verification now invokes the real executable's
+isolated candidate-check mode using synthetic signed files, spaced paths and an
+inherited Node loader override. It requires successful inventory verification
+and rejection of wrong keys, stale builds and changed payload bytes. This check
+does not generate production keys or launch the synthetic payload. Trusted
+configuration provisioning and Update button integration remain required.
 
 Windows replacement retains the previous and candidate receipts in its recovery
 directory before moving either payload. The signed entry point also retains the
