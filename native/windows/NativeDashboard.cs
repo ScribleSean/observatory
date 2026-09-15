@@ -53,9 +53,13 @@ internal sealed partial class NativeDashboard : Form
                 using var fill = new SolidBrush(DashboardCard.Surface);
                 args.Graphics.FillPath(fill, shape);
             }
-            TextRenderer.DrawText(args.Graphics, sections.Items[args.Index].ToString(), regular,
-                new Rectangle(args.Bounds.X + 20, args.Bounds.Y, args.Bounds.Width - 28, args.Bounds.Height),
-                selected ? ForeColor : Color.FromArgb(183, 186, 177), TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+            var ink = selected ? ForeColor : Color.FromArgb(183, 186, 177);
+            var section = sections.Items[args.Index].ToString() ?? "";
+            DashboardNavigationIcons.Draw(args.Graphics, section,
+                new RectangleF(args.Bounds.X + 20, args.Bounds.Y + (args.Bounds.Height - 22) / 2f, 22, 22), ink);
+            TextRenderer.DrawText(args.Graphics, section, regular,
+                new Rectangle(args.Bounds.X + 54, args.Bounds.Y, args.Bounds.Width - 62, args.Bounds.Height),
+                ink, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";

@@ -7,6 +7,23 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        foreach (var section in new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" })
+        foreach (var size in new[] { 22, 44 })
+        {
+            using var bitmap = new Bitmap(size + 8, size + 8);
+            using var graphics = Graphics.FromImage(bitmap);
+            graphics.Clear(Color.Black);
+            Check(DashboardNavigationIcons.Draw(graphics, section, new RectangleF(4, 4, size, size), Color.White), "Every sidebar destination has an icon");
+            var painted = 0;
+            for (var y = 0; y < bitmap.Height; y++)
+            for (var x = 0; x < bitmap.Width; x++)
+                if (bitmap.GetPixel(x, y).R > 0)
+                {
+                    painted++;
+                    Check(x >= 4 && y >= 4 && x < size + 4 && y < size + 4, "Sidebar icon stays within its allocated bounds");
+                }
+            Check(painted > 20, "Sidebar icon paints at normal and double scale");
+        }
         foreach (var fraction in new[] { 0.0, 1.0 })
         {
             using var meter = new DashboardMeter(fraction, "Synthetic boundary") { Size = new Size(120, 10) };
