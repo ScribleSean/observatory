@@ -179,3 +179,24 @@ test('receipt verification rejects invalid trust configuration and freezes authe
   assert.ok(Object.isFrozen(receipt));
   assert.equal(receipt.buildNumber,8);
 });
+
+test('candidate CLI authenticates and checks extracted inventory without replacement',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'receipt.json');
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  const entry=fileURLToPath(new URL('../native/windows/verify-candidate.mjs',import.meta.url));
+  const run=(key=release.publicKey,build='7')=>spawnSync(process.execPath,
+    [entry,f.next.folder,envelope,key,build],{encoding:'utf8',timeout:10000});
+  const good=run();
+  assert.equal(good.status,0,good.stderr);
+  assert.deepEqual(JSON.parse(good.stdout),{schema:1,status:'verified',sourceRevision:f.next.receipt.sourceRevision,
+    buildNumber:8,manifestSha256:f.next.receipt.manifestSha256});
+  for(const result of [run(signer().publicKey),run(release.publicKey,'8'),run(release.publicKey,'7.0')]) {
+    assert.notEqual(result.status,0);
+    assert.equal(result.stdout,'');
+  }
+  writeFileSync(path.join(f.next.folder,'WorkspaceObservatory.exe'),'tampered');
+  assert.notEqual(run().status,0);
+  writeFileSync(envelope,Buffer.alloc(8193));
+  assert.notEqual(run().status,0);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+});

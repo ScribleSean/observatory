@@ -87,11 +87,19 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
-Windows build output includes an explicit five-file `Updater` runtime for
+Windows build output includes an explicit six-file `Updater` runtime for
 installation verification, signed receipts and retained-payload replacement.
 The package inspector requires every file. The runtime imports without the
 source checkout and contains no release signer or private key. This packaging
 step does not enable updates or make a downloaded helper trusted.
+
+The packaged `verify-candidate.mjs` command accepts an extracted directory,
+receipt-envelope path, pinned public key and previous build number. It bounds
+receipt reads, authenticates the signature, rejects stale builds and checks the
+full installation inventory. It returns a compact verified identity or fails
+without moving files or launching the candidate. Run it only through a trusted
+installed runtime, with the key and build supplied by trusted app configuration.
+The Update button and native subprocess integration are still required.
 
 Windows replacement retains the previous and candidate receipts in its recovery
 directory before moving either payload. The signed entry point also retains the
