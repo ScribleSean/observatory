@@ -23,7 +23,7 @@ internal static class UpdateInstall
             return new(installed.SourceRevision, installed.Recovery, launched.ProcessId, launched.EventLoopConfirmed);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or
-            System.ComponentModel.Win32Exception or InvalidOperationException or System.Text.Json.JsonException)
+            System.ComponentModel.Win32Exception or InvalidOperationException or System.Text.Json.JsonException or OperationCanceledException)
         {
             // Replacement succeeded. Do not report an unchanged installation or
             // roll back after a process may have opened or migrated saved data.
@@ -59,10 +59,14 @@ internal static class UpdateInstall
         }
         catch (IOException) { rejected = true; }
         if (!rejected || launchAttempted) throw new Exception("Failed replacement reached relaunch.");
-        var unconfirmed = Run(() => Task.FromResult(activated), _ =>
-            Task.FromException<UpdateRelaunch.Result>(new IOException("Synthetic launch failure"))).GetAwaiter().GetResult();
-        if (unconfirmed.LaunchConfirmed || unconfirmed.ProcessId is not null || unconfirmed.Recovery != activated.Recovery)
-            throw new Exception("Launch failure lost installed recovery state.");
+        foreach (var failure in new Exception[] { new IOException("Synthetic launch failure"),
+            new OperationCanceledException("Synthetic verification timeout") })
+        {
+            var unconfirmed = Run(() => Task.FromResult(activated), _ =>
+                Task.FromException<UpdateRelaunch.Result>(failure)).GetAwaiter().GetResult();
+            if (unconfirmed.LaunchConfirmed || unconfirmed.ProcessId is not null || unconfirmed.Recovery != activated.Recovery)
+                throw new Exception("Launch failure lost installed recovery state.");
+        }
         Console.WriteLine("Update orchestration preserves replacement identity, stops on activation failure and reports unconfirmed launches without rollback.");
     }
 }
