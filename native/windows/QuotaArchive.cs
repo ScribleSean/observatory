@@ -338,6 +338,14 @@ internal sealed class QuotaArchiveWindow : Form
             pageNext = reply["next"]?.DeepClone();
             RenderCharts();
             status.Text = $"{records.Count} saved readings on this page. " + (pageNext is null ? "End of results." : "More readings available.");
+            if (!advance && kind.SelectedIndex == 0) {
+                var window = NativeHistory.Rows(records).SelectMany(row => NativeHistory.Rows(row["windows"]))
+                    .FirstOrDefault(row => Snapshot.Text(row["bucket"]) is not ("spark" or "codex_spark" or "codex_bengalfox"));
+                if (window is not null) {
+                    try { await ReadFullChart(window); }
+                    catch { if (!IsDisposed) status.Text = "Records loaded. Full-range graph could not be rendered. Try its graph button again."; }
+                }
+            }
         });
     }
     private void RenderCharts()
@@ -390,11 +398,14 @@ internal sealed class QuotaArchiveWindow : Form
     private Task LoadFullChart(JsonObject window)
     {
         if (busy || account.SelectedIndex < 0 || from.Value.Date > through.Value.Date) return Task.CompletedTask;
+        return Execute(() => ReadFullChart(window));
+    }
+    private async Task ReadFullChart(JsonObject window)
+    {
         var request = new JsonObject { ["action"] = "chart", ["scope"] = accounts[account.SelectedIndex]?["scope"]?.DeepClone(),
             ["bucket"] = window["bucket"]?.DeepClone(), ["window"] = window["window"]?.DeepClone(),
             ["from"] = new DateTimeOffset(from.Value.Date).ToUnixTimeMilliseconds(),
             ["to"] = new DateTimeOffset(through.Value.Date.AddDays(1)).ToUnixTimeMilliseconds() - 1 };
-        return Execute(async () => {
             var reply = await read(request, lifetime.Token);
             if (IsDisposed) return;
             var chart = ArchiveChart.Parse(reply["chart"] as JsonObject ?? throw new InvalidOperationException("Chart unavailable."));
@@ -404,7 +415,6 @@ internal sealed class QuotaArchiveWindow : Form
             charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used, full selected range" });
             charts.Controls.Add(new ArchiveChartControl(chart) { Width = Math.Max(240, charts.ClientSize.Width - 32), BackColor = DashboardCard.Surface, ForeColor = Color.WhiteSmoke });
             status.Text = $"{chart.Observations:N0} observations processed. Dashed spans mean unknown coverage. Raw records remain paginated.";
-        });
     }
     internal static string ReadingText(JsonNode? item) => item?["windows"] is JsonArray windows
         ? string.Join(" · ", windows.Where(w => Snapshot.Text(w?["bucket"]) is not ("spark" or "codex_spark" or "codex_bengalfox"))
@@ -450,6 +460,17 @@ internal sealed class QuotaArchiveWindow : Form
                 using var registration = token.Register(() => cancelled = true);
                 await Task.Delay(Timeout.Infinite, token);
             }
+            if (Snapshot.Text(request["action"]) == "chart") {
+                if (mode == "chart-failed") throw new IOException("Synthetic chart failure");
+                var chart = JsonNode.Parse("""
+                    {"version":1,"width":2,"height":2,"from":0,"to":1000,"encoding":"ink-mask-u8","pixels":"AAMAAA==",
+                    "scanned":1,"observations":1,"gaps":0,"segments":1,"firstAt":500,"lastAt":500,"minUsed":58,"maxUsed":58}
+                    """)!.AsObject();
+                chart["from"] = request["from"]!.DeepClone(); chart["to"] = request["to"]!.DeepClone();
+                var middle = request["from"]!.GetValue<long>() + (request["to"]!.GetValue<long>() - request["from"]!.GetValue<long>()) / 2;
+                chart["firstAt"] = middle; chart["lastAt"] = middle;
+                return new JsonObject { ["version"] = 1, ["chart"] = chart };
+            }
             return request["action"]!.GetValue<string>() == "accounts"
                 ? new JsonObject { ["version"] = 1, ["accounts"] = new JsonArray(new JsonObject { ["scope"] = new string('a', 64), ["current"] = true }) }
                 : new JsonObject { ["version"] = 1, ["records"] = new JsonArray(new JsonObject { ["checkedAt"] = "2026-09-14T12:00:00Z",
@@ -461,7 +482,8 @@ internal sealed class QuotaArchiveWindow : Form
             {
                 await window.LoadPage(false);
                 if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
-                if (!window.charts.Controls.OfType<QuotaGraph>().Any()) throw new Exception("Saved allowance graph missing.");
+                if (!window.charts.Controls.OfType<ArchiveChartControl>().Any()) throw new Exception("Full-range graph did not load with history.");
+                window.RenderCharts();
                 var periodFilters = window.charts.Controls.OfType<DashboardFilters>().Single();
                 var weekButton = periodFilters.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(button => button.Text == "Week");
                 weekButton.PerformClick();
@@ -479,6 +501,9 @@ internal sealed class QuotaArchiveWindow : Form
                     window.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
                     bitmap.Save(Path.Combine(output, $"archive-{size.Width}.png"), System.Drawing.Imaging.ImageFormat.Png);
                 }
+                mode = "chart-failed"; await window.LoadPage(false);
+                if (window.rows.Rows.Count != 1 || !window.status.Text.Contains("Records loaded"))
+                    throw new Exception("Chart failure discarded readable archive records.");
                 mode = "failed"; await window.LoadPage(false);
                 if (!window.load.Enabled || !window.status.Text.Contains("No history was deleted")) throw new Exception("Archive error recovery failed.");
                 mode = "pending"; pending = window.LoadPage(false);

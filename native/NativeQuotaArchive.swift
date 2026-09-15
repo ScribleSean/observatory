@@ -308,10 +308,31 @@ struct NativeQuotaArchive: View {
                 let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: pageRequest)
                 guard requests.accepts(generation) else { return }
                 readings = reply.records ?? []
-                if after == nil { chartReadings = [] }
+                if after == nil { chartReadings = []; fullChart = nil }
                 if kind == "observation" { chartReadings.append(contentsOf: readings) }
                 if case .page(let value) = reply.next { next = value } else { next = nil }
                 message = readings.isEmpty ? "No records in this range. Missing data is not zero usage." : "\(readings.count) records on this page, oldest first.\(next == nil ? " End of range." : " More records available.")"
+                if kind == "observation", fullChart == nil,
+                   let window = rows(archiveChartQuota(chartReadings)["windows"]).first {
+                    message = "Records loaded. Rendering the full selected range…"
+                    do {
+                        let chartRequest: JSONObject = ["action": "chart", "scope": pageRequest["scope"]!,
+                            "from": pageRequest["from"]!, "to": pageRequest["to"]!,
+                            "bucket": text(window["bucket"]), "window": text(window["window"])]
+                        let chartReply = try await QuotaArchiveProcess.run(runtime: runtime, request: chartRequest)
+                        guard requests.accepts(generation) else { return }
+                        guard let chart = chartReply.chart,
+                              chart.matchesRange(from: Double(max(0, Int64(start.timeIntervalSince1970 * 1000))), to: Double(Int64(end.timeIntervalSince1970 * 1000) - 1)) else {
+                            throw CocoaError(.fileReadCorruptFile)
+                        }
+                        fullChart = chart
+                        fullChartWindow = text(window["bucket"]) + " · " + text(window["window"])
+                        message = "Full selected range rendered. Raw records remain paginated."
+                    } catch {
+                        guard requests.accepts(generation) else { return }
+                        message = "Records loaded. Full-range graph could not be rendered. Try its graph button again."
+                    }
+                }
             } catch {
                 guard requests.accepts(generation) else { return }
                 readings = []; chartReadings = []; next = nil; message = "History could not be read. Saved data was not deleted."
