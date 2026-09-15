@@ -1,4 +1,4 @@
-Workspace Observatory for Apple Silicon Macs
+Observatory for Apple Silicon Macs
 
 Requires macOS 14 or later. ActivityWatch must already be running for screen time.
 
@@ -30,4 +30,4 @@ broader integrations remain under development. Provider sign-ins stay on their o
 devices. Account-limit history is not synchronized yet. Missing sources are not zero usage.
 
 Source and detailed instructions:
-https://github.com/ScribleSean/workspace-observatory
+https://github.com/ScribleSean/observatory
