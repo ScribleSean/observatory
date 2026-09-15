@@ -41,7 +41,9 @@ func parseDate(_ value: Any?) -> Date? {
 }
 
 func formatted(_ value: Double?, compact: Bool = false) -> String {
-    guard let value else { return "Unknown" }
+    guard let value, value.isFinite else { return "Unknown" }
+    if compact && value >= 1_000_000_000_000 { return (value / 1_000_000_000_000).formatted(.number.precision(.fractionLength(0...1))) + "T" }
+    if compact && value >= 1_000_000_000 { return (value / 1_000_000_000).formatted(.number.precision(.fractionLength(0...1))) + "B" }
     if compact && value >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
     if compact && value >= 1_000 { return String(format: "%.1fK", value / 1_000) }
     return value.formatted(.number.precision(.fractionLength(0...1)))

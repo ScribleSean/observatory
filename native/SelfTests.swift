@@ -382,6 +382,9 @@ func runSelfTests() {
     precondition(number(Double.infinity) == nil)
     precondition(number(0) == 0)
     precondition(formatted(nil) == "Unknown")
+    precondition(formatted(4_000_000_000, compact: true) == "4B")
+    precondition(formatted(2_000_000_000_000, compact: true) == "2T")
+    precondition(formatted(.infinity, compact: true) == "Unknown")
     precondition(parseDate("2026-09-08T20:00:00.123Z") != nil)
     precondition(parseDate("2026-09-08T20:00:00Z") != nil)
     let source: JSONObject = ["host": "Mac", "status": "ok", "source": "Wispr Flow", "days": [

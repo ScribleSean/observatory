@@ -658,12 +658,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-synthetic-screenshots-\(UUID().uuidString)")
         let dates = ["2026-09-01", "2026-09-06", "2026-09-12"]
         let days: [JSONObject] = dates.enumerated().map { index, date in ["date": date, "seconds": (index + 1) * 600] }
+        let sampleStart = Date().addingTimeInterval(-3 * 3600)
+        let formatter = ISO8601DateFormatter()
+        let reset = formatter.string(from: Date().addingTimeInterval(2 * 3600))
+        let history: [JSONObject] = (0...36).map { index in
+            ["checkedAt": formatter.string(from: sampleStart.addingTimeInterval(Double(index) * 300)),
+             "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 95 - Double(index) * 0.8, "resetsAt": reset]]]
+        }
         store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": "2026-09-12T12:00:00Z",
             "activityHistory": [["host": "Mac", "status": "ok", "latestReadStatus": "ok", "days": days]],
             "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-12", "totalTokens": 1200]]]],
             "dictation": [["host": "Mac", "source": "Wispr Flow", "status": "ok", "days": [["date": "2026-09-12", "transcriptions": 4, "audioRecords": 4, "audioSeconds": 120, "wordRecords": 4, "words": 100]]]],
             "agentSource": ["status": "not-connected"], "agents": [], "settings": [],
-            "quota": ["status": "stale", "checkedAt": "2026-09-12T12:00:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 65]], "history": []]])
+            "quota": ["status": "ok", "checkedAt": formatter.string(from: Date()),
+                "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 66.2, "resetsAt": reset]],
+                "history": history, "dailyUsageBuckets": [["startDate": "2026-09-12", "tokens": 3_300_000_000]]]])
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
@@ -919,7 +928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 // UI tools may relaunch a closed app without preserving its launch arguments.
 // Preview-only builds must never fall through to the installed data runtime.
 let previewArguments = Array(CommandLine.arguments.dropFirst())
-let allowedPreviewArguments = [["--preview"], ["--preview", "--preview-setup"],
+let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
     ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
     ["--test-lifecycle", "--capture-dashboard"]]
 guard allowedPreviewArguments.contains(previewArguments) else {

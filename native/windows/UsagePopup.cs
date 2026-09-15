@@ -202,7 +202,9 @@ internal sealed class QuotaGraph : Control
     {
         base.OnPaint(e);
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var grid = new Pen(DashboardPalette.Grid(this)); using var line = new Pen(ForeColor, 1.5f);
+        using var grid = new Pen(DashboardPalette.Grid(this));
+        using var line = new Pen(DashboardPalette.Accent(DashboardPalette.IsLight(this)), 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var ink = new SolidBrush(line.Color);
         using var brush = new SolidBrush(DashboardPalette.Muted(DashboardPalette.IsLight(this)));
         var box = new RectangleF(34, 12, Math.Max(1, Width - 44), Math.Max(1, Height - 42));
         foreach (var percent in new[] { 0, 50, 100 })
@@ -235,7 +237,7 @@ internal sealed class QuotaGraph : Control
             var sameReset = reset == previousReset || (DateTimeOffset.TryParse(reset, out var resetTime) && DateTimeOffset.TryParse(previousReset, out var previousResetTime) && Math.Abs((resetTime - previousResetTime).TotalSeconds) <= 2);
             if (previous is PointF prior && previousAt is DateTimeOffset time && at > time && (at - time).TotalSeconds <= 630 && used >= previousUsed && sameReset)
                 g.DrawLine(line, prior, point);
-            g.FillEllipse(brush, point.X - 2, point.Y - 2, 4, 4);
+            g.FillEllipse(ink, point.X - 2, point.Y - 2, 4, 4);
             firstUsed ??= used; lastUsed = used;
             minimumUsed = Math.Min(minimumUsed ?? used, used); maximumUsed = Math.Max(maximumUsed ?? used, used);
             previous = point; previousAt = at; previousUsed = used; previousReset = reset; count++;
@@ -276,12 +278,21 @@ internal sealed class DailyTokenGraph : Control
         var box = new RectangleF(44, 12, Math.Max(1, Width - 54), Math.Max(1, Height - 42));
         using var brush = new SolidBrush(DashboardPalette.Muted(DashboardPalette.IsLight(this))); using var grid = new Pen(DashboardPalette.Grid(this));
         e.Graphics.DrawLine(grid, box.Left, box.Bottom, box.Right, box.Bottom);
-        e.Graphics.DrawString(Snapshot.Format(maximum), Font, brush, 0, box.Top);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var ink = new SolidBrush(DashboardPalette.Accent(DashboardPalette.IsLight(this)));
+        e.Graphics.DrawString(DashboardHistoryChart.AxisLabel(maximum), Font, brush, 0, box.Top);
         foreach (var row in values)
         {
             var slot = box.Width / (end - start + 1); var height = (float)(row.tokens!.Value / maximum) * box.Height;
             var x = box.Left + slot * (row.date!.Value.DayNumber - start);
-            e.Graphics.FillRectangle(brush, x + slot * 0.15f, box.Bottom - height, Math.Max(1, slot * 0.7f), height);
+            var width = Math.Min(40, Math.Max(1, slot * .7f));
+            var center = x + slot / 2;
+            if (row.tokens == 0) e.Graphics.FillEllipse(ink, center - 2, box.Bottom - 2, 4, 4);
+            else
+            {
+                using var bar = DashboardCard.Rounded(new RectangleF(center - width / 2, box.Bottom - height, width, height), Math.Min(4, Math.Min(width, height) / 2));
+                e.Graphics.FillPath(ink, bar);
+            }
         }
         e.Graphics.DrawString(DateOnly.FromDayNumber(start).ToString("MM-dd"), Font, brush, box.Left, box.Bottom + 6);
         e.Graphics.DrawString(DateOnly.FromDayNumber(end).ToString("MM-dd"), Font, brush, box.Right - 38, box.Bottom + 6);
