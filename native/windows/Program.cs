@@ -8,6 +8,17 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--quit-for-update"))
+        {
+            if (args.Length != 1) { Environment.ExitCode = 64; return; }
+            try
+            {
+                var result = UpdateQuit.Request("Local\\WorkspaceObservatory", UpdateQuit.RequestName, TimeSpan.FromSeconds(270));
+                Environment.ExitCode = result == UpdateQuit.Result.Stopped ? 0 : result == UpdateQuit.Result.Unsupported ? 2 : 3;
+            }
+            catch { Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 1 && args[0] == "--test-archive-bridge")
         {
             try { QuotaArchive.BridgeSelfTest().GetAwaiter().GetResult(); }
@@ -51,6 +62,7 @@ internal static class Program
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 InstallationGate.SelfTest();
+                UpdateQuit.SelfTest();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();
                 PowerResumeWindow.SelfTest();
@@ -147,7 +159,8 @@ internal static class Program
             if (!args.Contains("--background")) activation.Set();
             return;
         }
-        Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args)));
+        using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, UpdateQuit.RequestName);
+        Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit));
     }
 
     private static InstallationGate? TryEnterInstallation()
@@ -173,7 +186,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool quitting;
 
-    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true)
+    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null)
     {
         this.nativeDashboard = nativeDashboard;
         Directory.CreateDirectory(runtime);
@@ -223,7 +236,11 @@ internal sealed class ObservatoryContext : ApplicationContext
         RefreshStatus();
         collector.Changed += RefreshStatus;
         if (collector.Configured && !setupPending) collector.Start();
-        activationTimer.Tick += (_, _) => { if (activation.WaitOne(0)) Open(); };
+        activationTimer.Tick += async (_, _) =>
+        {
+            if (updateQuit?.WaitOne(0) == true) await RequestQuit();
+            else if (!quitting && activation.WaitOne(0)) Open();
+        };
         activationTimer.Start();
         if (show || setupPending) Open();
     }

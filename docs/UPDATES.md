@@ -68,6 +68,22 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
+Development source accepts `WorkspaceObservatory.exe --quit-for-update` in the
+same Windows session as the app. It signals the existing application's normal
+quit path and waits up to 270 seconds for its singleton to be released. It does
+not start an absent app, force termination or read collection data. Exit code 0
+means the app is stopped or was already absent, 2 means the running app lacks
+this command's receiver, 3 means the wait timed out, and 1 means the request
+failed. Extra arguments are rejected with code 64. Older installed builds still
+require quitting from the tray menu.
+
+This command is shutdown preparation, not an upgrade authorization or lock. The
+updater must still authenticate the candidate, acquire the installation and
+collector locks, recheck that no app has restarted and handle recovery before
+replacing anything. It does not prove that a stopped app completed its last
+write successfully. Synthetic tests use separate temporary named objects for
+absent, unsupported, busy and completed application states.
+
 Windows startup now briefly shares the NSIS setup mutex until the application singleton exists, closing the installer/startup race. Command-line collection holds that setup gate for its complete run. Normal tray-menu quit stops new collector work and waits for active collection or pairing work to finish before disposing application resources. If draining exceeds 260 seconds, the app remains open and resumes scheduling. Native self-tests cover operation exclusion, draining and resume. This does not establish safe forced OS termination, an external process kill or the future updater callback integration.
 
 The current NSIS installer intentionally rejects an existing installation and a running application. WinSparkle's default flow launches the installer before invoking its shutdown-request callback. Connecting that flow directly to this installer would fail. See the upstream [shutdown callback contract](https://winsparkle.org/c-api/callbacks/). Before integration, implement and verify an explicit upgrade transaction or compatible bootstrapper that waits for graceful shutdown, serializes with collection and installation, preserves recovery material, replaces only owned application files, and restores login registration and shortcuts. Do not remove the installer ownership or linked-path protections to bypass this gate.
