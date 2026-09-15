@@ -6,7 +6,9 @@ const css = readFileSync(new URL('../app/observatory.css', import.meta.url), 'ut
 test('native allowance charts use the Observatory palette, not the system accent', () => {
   const panel = readFileSync(new URL('../native/QuotaPanel.swift', import.meta.url), 'utf8');
   assert.ok(!panel.includes('Color.accentColor'));
-  assert.match(panel, /y: \.value\("Tokens", tokens\)\)\.foregroundStyle\(ObservatoryTheme\.purple\)/);
+  assert.match(panel, /y: \.value\("Tokens", tokens\), width: \.fixed\(40\)\)\.foregroundStyle\(ObservatoryTheme\.sage\)/);
+  assert.ok(!panel.includes('.foregroundStyle(ObservatoryTheme.purple)'), 'Allowance charts keep one hue family');
+  assert.match(panel, /dash: \[3, 4\]/, 'Unknown coverage has distinct dashed ink');
 });
 function luminance(hex) {
   let digits = hex.slice(1);
