@@ -2,11 +2,23 @@
 
 # Observatory guide
 
-A lightweight Mac menu-bar app and local dashboard for workspace activity, AI usage and dictation. It reads existing records from ActivityWatch, Codex, Wispr Flow and configured agent receipts across Mac, Windows and WSL.
+A native Mac and Windows dashboard for workspace activity, AI usage and dictation, with a Mac menu-bar panel and Windows system-tray panel. Supported sources and platform gaps are listed in [source coverage](SOURCE-COVERAGE.md).
 
 [Try the interactive demo](https://scriblesean.github.io/observatory/). It uses the same interface with 14 days of fictional records. No personal activity, account data or connected devices are included.
 
 The app runs on your computer. It does not send usage records to a hosted service or make model requests.
+
+## Native app setup
+
+The native apps are the intended everyday entry point. Public installers are not yet available. For development builds, follow the [Mac build guide](MAC.md#building-the-candidate) or [Windows build guide](WINDOWS.md#build-on-windows). These require developer tools. To explore without building or connecting sources, use the hosted demo above.
+
+1. Launch the native app and complete the first-run wizard. Fresh installations keep sources off until you choose them and complete setup.
+2. For screen time, install and run [ActivityWatch](https://activitywatch.net/) separately on each device you want to track, then enable its source in Observatory. Missing readings remain Unknown. You can use Tokens and Allowances independently.
+3. Review source choices in Settings. Enable only the records you want to read. Provider sign-ins remain in their owning applications, not an Observatory account manager.
+4. Use **Refresh sources** to collect, then inspect Sources for availability and timestamps. Browser **Reload snapshot** only rereads saved data and does not collect.
+5. Optionally pair devices from the Mac over an existing trusted SSH connection. Follow [pairing maintenance](PAIRING-MAINTENANCE.md) for prerequisites and supported records. Direct TLS is a separate preview, not a verified replacement for that path.
+
+Each native app can collect its own enabled local sources without the legacy SSH hub. Closing the dashboard leaves the menu-bar or tray app running. Use Quit to stop it. See [Startup](STARTUP.md) for native login behavior and the separate legacy jobs.
 
 ## What you can see
 
@@ -24,7 +36,7 @@ This is an early prototype tested on one Mac, Windows and WSL setup. Optional ad
 
 ## Try the demo
 
-Activity opens in Day view with previous/next controls. Week shows seven dated rows ending on the selected date, with three-hour bands and daily totals. Hover or select a band for details. Select a date to open that day. Missing tracking records are muted, distinct from recorded idle time. All time totals retained daily summaries and lets you open a retained date. Retention starts with the available rolling window and keeps up to 3,650 dates per view, not the complete ActivityWatch archive. Broader reads replace partial days without adding duplicate totals. Failed source reads preserve prior summaries and show their last successful timestamp. Combined history is retained independently, never reconstructed by adding device totals.
+Select Activity to explore recorded screen time. Day has previous/next controls. Week shows seven dated rows ending on the selected date, with three-hour bands and daily totals. Hover or select a band for details. Select a date to open that day. Missing tracking records are muted, distinct from recorded idle time. All time totals retained daily summaries and lets you open a retained date. Retention starts with the available rolling window and keeps up to 3,650 dates per view, not the complete ActivityWatch archive. Broader reads replace partial days without adding duplicate totals. Failed source reads preserve prior summaries and show their last successful timestamp. Combined history is retained independently, never reconstructed by adding device totals.
 
 Tokens shows model-level counts and shares. Expand a model for its token categories and supported API-equivalent estimate. The recorded-day selector lets you review older days. [Research notes](USAGE-TRACKING-REFERENCES.md) describe the open-source patterns behind the accounting.
 
@@ -41,7 +53,9 @@ npm run serve:local
 
 Open [localhost:5601](http://127.0.0.1:5601). The demo uses made-up records and labels them as sample data. It refuses to overwrite an existing snapshot. You do not need an AI account, ActivityWatch or an SSH connection to try it.
 
-## Connect your own records
+## Legacy developer appendix: SSH hub and browser dashboard
+
+This section describes the older Mac-coordinated collector and browser viewer. It is not required for native local collection or the native first-run wizard. Preserve existing private configuration when migrating. Do not create an SSH hub merely to enable a native local source.
 
 The default appearance is black and neutral. The top-bar sun and moon button switches between dark and light themes and saves that choice in this browser. [Brand guidance](BRAND.md) defines the shared telescope mark and visual language.
 
@@ -57,7 +71,7 @@ ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCount
 
 Open `http://127.0.0.1:5601` on the viewing computer. The host, local server and SSH tunnel must remain running. This is not automatic startup. Stop the tunnel with Ctrl+C. Keep the remote listener restricted to loopback and verify your SSH server permits this forwarding. Do not expose this unauthenticated dashboard to a public or shared network.
 
-The current collector runs on macOS. It expects ActivityWatch on the Mac and Windows PC, ccusage on the Mac and Ubuntu, and working SSH aliases for Windows and Ubuntu.
+The legacy hub collector runs on macOS. It expects ActivityWatch on the Mac and Windows PC, ccusage on the Mac and Ubuntu, and working SSH aliases for Windows and Ubuntu.
 
 For native Windows tokens, optionally set `windowsCodexHome` to the Windows Codex directory as seen from WSL, such as `/mnt/c/Users/YOUR_USER/.codex`. The installed Ubuntu reader processes those logs separately from Ubuntu logs. Only aggregate reports return to the dashboard. This uses ccusage's documented [Codex data directory override](https://github.com/ccusage/ccusage/blob/main/docs/guide/codex/index.md). Host reports stay individually available. All requires a successful cross-host overlap check.
 
@@ -111,11 +125,11 @@ Wispr counts retained history rows, including unfinished or failed entries when 
 
 ### Native Mac application
 
-The optional native app requires an Apple Silicon Mac running macOS 14 or later. Build it with `npm run build:native`. It uses SwiftUI for the menu-bar panel and the system WebKit renderer for the existing detail views. No web server or bundled browser engine is required. The build runs synthetic tests for numeric parsing, source separation, asset boundaries and the data bridge.
+The native app requires an Apple Silicon Mac running macOS 14 or later. It uses a SwiftUI main window and menu-bar panel. WebKit is an explicit legacy fallback, not the default detail view. Follow the [Mac build guide](MAC.md#building-the-candidate) for runtime preparation, build commands and verification limits.
 
 With an existing ignored `local.config.json`, `node native/install.mjs --install` installs into the current user's Applications folder and enables launch at login. It copies collectors and private configuration into `Library/Application Support/Workspace Observatory`, outside the source checkout. It backs up the old collector login job before disabling it. Existing web-server and tunnel jobs are left unchanged for compatibility.
 
-Click the telescope menu-bar icon for a compact summary. Open Observatory shows the full detail window. Closing that window releases its renderer but leaves the menu-bar app running. The app refreshes every five minutes while the Mac is awake and logged in, retries after wake, and preserves the preceding snapshot if a collection fails. Individual unavailable sources are labeled rather than filled with zeros. Windows sources still require the configured SSH hosts and their installed tools.
+Click the telescope menu-bar icon for a compact summary. Open Observatory shows the full detail window. Closing that window leaves the menu-bar app running. The app refreshes every five minutes while the Mac is awake and logged in, retries after wake, and preserves the preceding snapshot if a collection fails. Individual unavailable sources are labeled rather than filled with zeros. Remote reads in an existing legacy hub still require its configured SSH hosts and tools.
 
 The panel's All option uses the collector's overlap-aware Mac and Windows active time and verified Mac, Windows and Ubuntu token totals. WSL activity is part of Windows screen time, not an extra desktop to add. Dictation remains per device because synced history may overlap. Missing or unverified combined totals stay unavailable.
 

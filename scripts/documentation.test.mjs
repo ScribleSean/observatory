@@ -27,4 +27,9 @@ test('public documentation links resolve and release status stays explicit',asyn
   assert.match(readme,/The download-and-install path is not available yet/);
   assert.doesNotMatch(readme,/>Get started<\/a>/);
   assert.match(readme,/\[desktop updates\]\(docs\/UPDATES\.md\)/);
+  const guide=await readFile(path.join(root,'docs/GUIDE.md'),'utf8');
+  assert.ok(guide.indexOf('## Native app setup') < guide.indexOf('## Legacy developer appendix: SSH hub'));
+  assert.match(guide,/Browser \*\*Reload snapshot\*\* only rereads saved data and does not collect/);
+  assert.match(guide,/WebKit is an explicit legacy fallback/);
+  assert.doesNotMatch(guide,/The current collector runs on macOS/);
 });
