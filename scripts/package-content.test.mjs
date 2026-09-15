@@ -1,6 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {forbiddenPackageName,containsBuildPath} from '../native/windows/package-content.mjs';
+
+test('real package inspector requires the dashboard font and its license',t=>{
+  const root=mkdtempSync(path.join(tmpdir(),'observatory-font-package-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const inspector=fileURLToPath(new URL('../native/windows/inspect-package.mjs',import.meta.url));
+  function missing(name) {
+    const result=spawnSync(process.execPath,[inspector,root],{encoding:'utf8'});
+    assert.notEqual(result.status,0);
+    assert.ok(result.stderr.includes('Missing package component: '+name));
+  }
+  missing('Fonts/InterTight.ttf');
+  mkdirSync(path.join(root,'Fonts'));
+  writeFileSync(path.join(root,'Fonts','InterTight.ttf'),'Synthetic presence fixture, not a font');
+  missing('Fonts/OFL.txt');
+  writeFileSync(path.join(root,'Fonts','OFL.txt'),'Synthetic license presence fixture');
+  missing('WorkspaceObservatory.exe');
+});
 
 test('package guard rejects private data, cache and debug names without depending on case',()=>{
   for(const name of ['usage.json','Usage.JSON','COLLECTOR.CONFIG.JSON','.env.local','capture.sqlite','session.JSONL','app.PDB','__pycache__','WebViewCache'])assert.equal(forbiddenPackageName(name),true,name);
