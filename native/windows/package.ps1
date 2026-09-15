@@ -76,6 +76,7 @@ try {
     }
     & (Join-Path $runtime 'node.exe') (Join-Path $PSScriptRoot 'check-update-verifier.mjs') (Join-Path $app 'WorkspaceObservatory.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Packaged native update verifier failed.' }
+    & (Join-Path $PSScriptRoot 'check-update-startup.ps1') -Executable (Join-Path $app 'WorkspaceObservatory.exe')
     foreach ($testArgument in @('--self-test', '--test-sharing-bridge', '--test-archive-bridge', '--test-trusted-sync-owner')) {
     $nativeTest = New-Object System.Diagnostics.Process
     $nativeTest.StartInfo.FileName = Join-Path $app 'WorkspaceObservatory.exe'

@@ -135,6 +135,13 @@ Synthetic native tests exercise the separate-process event handshake without
 opening collection. Full normal-app relaunch and integration into the Update
 button still require verification.
 
+The package workflow also includes `check-update-startup.ps1`, restricted to
+disposable GitHub-hosted Windows runners. It refuses existing application data
+or a running instance, prepares completed setup without source configuration,
+and launches the normal dashboard with the readiness argument. It requires an
+event-loop acknowledgement, graceful update quit and no generated data files.
+This checks the startup hook, not the signed replacement-to-relaunch orchestration.
+
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
 receipt reads, authenticates the signature, rejects stale builds and checks the
