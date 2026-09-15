@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,realpathSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
 import {verifyInstallation,replaceVerifiedInstallation,replaceSignedInstallation} from '../native/windows/verify-installation.mjs';
 import {installationReceiptSigningBytes,authenticateInstallationReceipt} from '../native/windows/signed-receipt.mjs';
 import {verifyManifest} from '../native/windows/verify-manifest.mjs';
+import {prepareInstallationReceipt,writeInstallationSigningRequest} from '../native/windows/prepare-installation-receipt.mjs';
 const hash=data=>createHash('sha256').update(data).digest('hex');
 function fixture(t) {
   const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-installation-test-')));
@@ -72,6 +75,54 @@ function signer() {
     },
   };
 }
+function buildFor(receipt) {
+  return {schema:1,buildNumber:receipt.buildNumber,testIdentity:false,sourceDirty:false,
+    sourceRevision:receipt.sourceRevision,packageManifestSha256:receipt.manifestSha256,
+    installerSource:{dirty:false,revision:receipt.sourceRevision}};
+}
+test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
+  const f=fixture(t),release=signer();
+  const receipt=prepareInstallationReceipt(f.next.folder,buildFor(f.next.receipt));
+  assert.deepEqual(receipt,{schema:1,product:'WorkspaceObservatorySetup',platform:'windows-x64',...f.next.receipt});
+  assert.ok(Object.isFrozen(receipt));
+  assert.deepEqual(authenticateInstallationReceipt(release.envelope(receipt),release.publicKey,7),receipt);
+  assert.equal(verifyInstallation(f.next.folder,receipt).buildNumber,8);
+});
+test('receipt preparation rejects test builds, missing build identity and manifest provenance mismatch',t=>{
+  const f=fixture(t),good=buildFor(f.next.receipt);
+  for(const patch of [{testIdentity:true},{sourceDirty:true},{buildNumber:undefined},{buildNumber:0},
+    {buildNumber:1.5},{sourceRevision:'c'.repeat(40)},{packageManifestSha256:'c'.repeat(64)},
+    {installerSource:{dirty:true,revision:good.sourceRevision}}])
+    assert.throws(()=>prepareInstallationReceipt(f.next.folder,{...good,...patch}));
+  assert.equal(verifyInstallation(f.next.folder,f.next.receipt).buildNumber,8);
+});
+test('receipt preparation refuses modified payload and unrelated extras before signing',t=>{
+  const f=fixture(t),good=buildFor(f.next.receipt);
+  writeFileSync(path.join(f.next.folder,'unrelated.txt'),'Synthetic extra');
+  assert.throws(()=>prepareInstallationReceipt(f.next.folder,good),/inventory mismatch/);
+  writeFileSync(path.join(f.old.folder,'WorkspaceObservatory.exe'),'Tampered synthetic executable');
+  assert.throws(()=>prepareInstallationReceipt(f.old.folder,buildFor(f.old.receipt)));
+});
+test('signing request writes exact canonical bytes without overwriting existing output or changing staging',t=>{
+  const f=fixture(t),output=path.join(f.root,'signing-request');
+  const receipt=writeInstallationSigningRequest(f.next.folder,buildFor(f.next.receipt),output);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(output,'installation-receipt.json'))),receipt);
+  assert.deepEqual(readFileSync(path.join(output,'installation-receipt.signing-bytes')),installationReceiptSigningBytes(receipt));
+  assert.throws(()=>writeInstallationSigningRequest(f.next.folder,buildFor(f.next.receipt),output),/EEXIST/);
+  assert.throws(()=>writeInstallationSigningRequest(f.next.folder,buildFor(f.next.receipt),path.join(f.next.folder,'request')),/outside/);
+  assert.equal(verifyInstallation(f.next.folder,f.next.receipt).buildNumber,8);
+});
+test('release receipt command emits unsigned output and rejects repeated invocation',t=>{
+  const f=fixture(t),metadata=path.join(f.root,'installer-build.json'),output=path.join(f.root,'cli-output');
+  writeFileSync(metadata,JSON.stringify(buildFor(f.next.receipt)));
+  const args=[fileURLToPath(new URL('../native/windows/prepare-installation-receipt.mjs',import.meta.url)),f.next.folder,metadata,output];
+  const run=()=>spawnSync(process.execPath,args,{encoding:'utf8',timeout:10000});
+  const first=run();
+  assert.equal(first.status,0,first.stderr);
+  assert.equal(JSON.parse(first.stdout).prepared,'unsigned-installation-receipt');
+  assert.notEqual(run().status,0);
+  assert.equal(verifyInstallation(f.next.folder,f.next.receipt).buildNumber,8);
+});
 test('signed receipt gates the real replacement and preserves a verified rollback payload',t=>{
   const f=fixture(t),release=signer();
   const result=replaceSignedInstallation({installed:f.old.folder,staged:f.next.folder,

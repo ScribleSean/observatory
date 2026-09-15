@@ -14,6 +14,25 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 The Windows updater primitives remain unconnected. Native Settings now has a running-version label in source, using the Mac bundle metadata or Windows assembly file version. It does not check for downloads, identify the latest release or enable automatic updates. Installed apps and already-built candidates acquire source changes only after a new build and installation.
 
+Windows installer build metadata now includes the shared build number. After
+running the independently verified installer in a controlled release staging
+environment, prepare its unsigned receipt with:
+
+```sh
+node native/windows/prepare-installation-receipt.mjs <staged-installation> <trusted-installer-build.json> <new-output-directory>
+```
+
+Use absolute paths. The output directory must not exist and must be outside the
+staged installation. This verifies the build's manifest digest, complete file
+inventory and installer ownership before writing `installation-receipt.json`
+and `installation-receipt.signing-bytes`. An external release signer must review
+and sign the latter's exact bytes. No private key is read or generated. The
+unsigned output is not trusted update metadata and is not sent to an app.
+Do not derive the trusted build metadata from a downloaded payload. Creating
+a receipt does not validate the provenance of an installer that the caller
+has not independently verified. Initial trusted receipt provisioning, release
+signing and the app's download and activation flow remain required.
+
 `native/update-appcast.mjs` now provides the shared feed renderer. It requires both platform artifacts from one source revision and release version, an increasing build number, exact versioned GitHub download URLs, matching SHA-256 digests and Ed25519 signatures verified against separately supplied trusted public keys. It emits separate Mac and Windows feeds. It does not publish anything or enable update checks in installed applications.
 
 The caller supplies `release` with `version`, `buildNumber`, `sourceRevision` and canonical UTC `publishedAt`, two `artifacts` with those identity fields plus `platform`, `data` as a Buffer, `sha256`, `edSignature` and `url`, a trusted public-key map keyed by `macos-arm64` and `windows-x64`, and the previous published build number. Release tags use `v<version>-build.<buildNumber>`. A versioned URL is not inherently immutable: the publishing workflow must refuse replacement of existing tags and assets. Verify packaging receipts before invoking this renderer. A matching signature authenticates artifact bytes, not their safety or the accuracy of caller-supplied build identity.

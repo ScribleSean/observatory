@@ -40,7 +40,7 @@ export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
     throw Error('Release installer source must be clean and match the package revision');
   for(const required of ['WorkspaceObservatory.exe','Runtime/node.exe','LICENSE'])
     if(!manifest.files.some(file=>file.path===required))throw Error('Missing application component');
-  const {version}=desktopReleaseVersion();
+  const {version,buildNumber}=desktopReleaseVersion();
   const name=testIdentity?'Workspace Observatory Installer Test':'Workspace Observatory';
   const setupId=testIdentity?'WorkspaceObservatoryInstallerTest':'WorkspaceObservatorySetup';
   const installerName=`Workspace-Observatory-${version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
@@ -64,7 +64,7 @@ export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
     `DeleteRegValue HKCU "\${UNINSTALL_KEY}" "${key}"\nIfErrors uninstall_failed\nregistration_${index}:`).join('\n')+
     '\nClearErrors\nDeleteRegKey /ifempty HKCU "${UNINSTALL_KEY}"\nClearErrors\n';
   writeFileSync(path.join(output,'remove-registration.nsh'),remove);
-  writeFileSync(path.join(artifacts,'installer-build.json'),JSON.stringify({schema:1,version,testIdentity,installerName,installerSource,
+  writeFileSync(path.join(artifacts,'installer-build.json'),JSON.stringify({schema:1,version,buildNumber,testIdentity,installerName,installerSource,
     sourceRevision:manifest.sourceRevision,sourceDirty:manifest.sourceDirty,
     packageManifestSha256:createHash('sha256').update(readFileSync(path.join(packageRoot,'package-manifest.json'))).digest('hex')},null,2)+'\n');
   return {installerName,testIdentity,sourceRevision:manifest.sourceRevision};
