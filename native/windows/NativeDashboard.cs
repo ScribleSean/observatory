@@ -288,6 +288,7 @@ internal sealed partial class NativeDashboard : Form
         var start = body.Controls.Count;
         var accountTitle = Label("Account usage");
         accountTitle.Font = heading;
+        Label("Account source: " + Snapshot.Text(quota?["status"]));
         var observation = Label(Freshness(Snapshot.Text(quota?["checkedAt"]), DateTimeOffset.UtcNow));
         observation.AccessibleDescription = "Account source: " + Snapshot.Text(quota?["status"]) + ". Last observation: " + Snapshot.Text(quota?["checkedAt"]);
         var windows = NativeHistory.Rows(quota?["windows"]).Where(row => !new[] { "spark", "codex_spark", "codex_bengalfox" }
