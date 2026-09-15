@@ -83,6 +83,15 @@ Future packaging must retain `COPYING` and `COPYING.expat` from the same verifie
 archive and exclude debug symbols, import libraries and other architectures.
 The DLL is not bundled or initialized yet.
 
+`prepare-updater-runtime.ps1 -Archive <verified-zip> -Destination <new-directory>`
+implements selective build-time preparation on Windows. It verifies the entire
+archive through an open read-only handle, checks the selected DLL hash and x64 PE
+type, then creates only the DLL and two notices. It refuses linked paths, relative
+paths and existing output. It never loads the library. Its Windows regression
+passed against the pinned archive, including corrupt-input and overwrite refusal.
+Run `scripts/updater-runtime.test.mjs` with `OBSERVATORY_TEST_WINSPARKLE_ARCHIVE`
+set to the archive path. Without Windows and that explicit input it reports a skip.
+
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
 
