@@ -45,6 +45,7 @@ struct NativeSettings: View {
                         }
                         Text("Reads usage metadata. Prompts, window titles, transcripts and audio are not included in dashboard snapshots. ActivityWatch must be running separately.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)
+                        ActivityWatchHelp()
                     }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -89,7 +90,7 @@ struct NativeSettings: View {
                         Button("Pair with Windows…", action: actions.pair)
                         Button("Disconnect…", action: actions.disconnect)
                         Button("Repair…", action: actions.repair)
-                    }.disabled(busy || actions.preview)
+                    }.disabled(store.shuttingDown || store.refreshing || store.pairingMaintenance || sharingBusy || actions.preview)
                     if actions.preview { Text("Device changes are disabled in this preview.").observatoryFont(.caption).foregroundStyle(.secondary) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }

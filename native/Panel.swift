@@ -26,6 +26,12 @@ struct ObservatoryPanel: View {
                     .accessibilityLabel("Refresh sources")
             }
 
+            if let message = store.pairingPauseMessage {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(message).font(.system(size: 12)).foregroundStyle(.orange)
+                    Button("Review pairing in Settings", action: settings)
+                }
+            }
             if let snapshot = store.snapshot {
                 if let quota = snapshot.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
                     let windows = visibleQuotaWindows(quota["windows"])
@@ -74,8 +80,8 @@ struct ObservatoryPanel: View {
                 }
                 let counts = snapshot.sourceCounts
                 HStack(spacing: 6) {
-                    Circle().fill(counts.read == counts.total && !store.stale ? accent : .orange).frame(width: 5, height: 5)
-                    Text("\(counts.read) of \(counts.total) sources read").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Circle().fill(counts.read == counts.total && !store.stale && !store.collectionPausedForPairing ? accent : .orange).frame(width: 5, height: 5)
+                    Text(store.collectionPausedForPairing ? "Collection paused · saved source status" : "\(counts.read) of \(counts.total) sources read").font(.system(size: 12)).foregroundStyle(.secondary)
                     Spacer()
                     if store.lastAttempt == "failed" || store.lastAttempt == "runtime-unavailable" {
                         Text("Refresh failed").font(.system(size: 12)).foregroundStyle(.orange)

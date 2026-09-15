@@ -193,7 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private func usageContent(size: NSSize) -> NSViewController {
         let panel = ScrollView(.vertical) { ObservatoryPanel(store: store,
                 open: { [weak self] tab in self?.openDashboard(tab) },
-                settings: { [weak self] in self?.showMenu() }, panelWidth: size.width) }
+                settings: { [weak self] in self?.openPanelSettings() }, panelWidth: size.width) }
         .frame(width: size.width, height: size.height, alignment: .top)
         .background(ObservatoryBackdrop())
         .preferredColorScheme(.dark)
@@ -202,6 +202,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         controller.view.setFrameSize(size)
         return controller
     }
+
+    private func openPanelSettings() { openDashboard("settings") }
 
     private func showFloatingUsage(size: NSSize, visible: NSRect) {
         let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
@@ -719,6 +721,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
             openDashboard("tokens")
             precondition(detail === activityWindow && nativeSelection.section == "tokens" && expectedDashboardPresent)
+            openPanelSettings()
+            precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
             detail?.performClose(nil)
@@ -819,13 +823,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     if let unreliableUsageAnchor, statusItem.button?.window?.frame == unreliableUsageAnchor {
                         precondition(usageWindow?.isVisible == true && !popover.isShown)
                     }
-                    closeUsage()
+                    let previousDashboard = detail
+                    openPanelSettings()
+                    precondition(detail === previousDashboard)
+                    if usesNativeDashboard { precondition(nativeSelection.section == "settings") }
                     afterUsageClosed { [self] in
                         guard usageWindow == nil, !popover.isShown, detail?.isVisible == true, expectedDashboardPresent else {
                             print("Native usage popup failed after close: usageRetained=\(usageWindow != nil) anchoredShown=\(popover.isShown) dashboardPresent=\(detail != nil) dashboardVisible=\(detail?.isVisible ?? false) webRetained=\(webView != nil)")
                             exit(1)
                         }
-                        print("Native usage popup passed: dashboard handoff and usage reopen/close preserved the dashboard")
+                        print("Native usage popup passed: dashboard handoff and Settings gear reused the dashboard")
                         detail?.performClose(nil)
                         NSApp.terminate(nil)
                     }

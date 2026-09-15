@@ -13,8 +13,11 @@ final class ObservatoryStore: ObservableObject {
     let collectionAllowed: Bool
     private(set) var localCollection = false
     private(set) var setupRequired = false
-    var pairingMaintenance = false
-    var collectionPausedForPairing = false
+    @Published var pairingMaintenance = false
+    @Published var collectionPausedForPairing = false
+    var pairingPauseMessage: String? {
+        collectionPausedForPairing ? "Collection paused for this app session. Saved snapshot unchanged. Retry pairing, disconnect or repair in Settings, or quit and reopen Observatory." : nil
+    }
     private var process: Process?
     private var trustedSync: TrustedSyncProcess?
     private var pollTimer: Timer?
@@ -81,9 +84,10 @@ final class ObservatoryStore: ObservableObject {
 
     func refresh(quotaOnly: Bool = false) {
         guard !shuttingDown else { return }
+        guard !collectionPausedForPairing else { lastAttempt = "pairing-paused"; return }
         guard collectionAllowed else { lastAttempt = "preview-collection-disabled"; return }
         guard (try? FirstRunSetup.required(runtime: runtime)) == false else { lastAttempt = "setup-required"; return }
-        guard process == nil, !pairingMaintenance, !collectionPausedForPairing else { return }
+        guard process == nil, !pairingMaintenance else { return }
         ensureTrustedSync()
         guard let resources = Bundle.main.resourceURL,
               let local = try? CollectorConfiguration.prepare(runtime: runtime),

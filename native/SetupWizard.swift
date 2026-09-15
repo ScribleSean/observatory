@@ -15,18 +15,20 @@ struct SetupWizard: View {
             if step == 0 {
                 Text("Track screen time and AI usage across your devices. You choose which sources are enabled. Collection stays off until you finish setup.")
                 Text("Dashboard snapshots exclude prompts, window titles, transcripts, audio and credentials. Provider sign-ins stay on their owning device.")
-                Text("This release uses direct encrypted device pairing. There is no Observatory account or hosted sync service.")
+                Text("Optional device pairing is started from the Mac over an existing trusted SSH connection. There is no Observatory account, hosted sync service or automatic device discovery.")
             } else if step == 1 {
                 ForEach([("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
                          ("quota", "Codex account limits online"), ("wispr", "Wispr Flow statistics")], id: \.0) { key, title in
                     Toggle(title, isOn: Binding(get: { sources[key] == true }, set: { sources[key] = $0 }))
                 }
-                Text("ActivityWatch must already be running. Account monitoring uses the installed Codex sign-in and reads online limits without making model requests. Other sources need their applications and local records. Enabling a source does not prove it is available.")
+                Text("ActivityWatch is installed separately and must be running. Account monitoring uses the installed Codex sign-in and reads online limits without making model requests. Other sources need their applications and local records. Enabling a source does not prove it is available.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Link("Get ActivityWatch", destination: URL(string: "https://activitywatch.net/")!)
             } else {
                 Text("Pair with Windows to share supported sanitized usage records directly. Provider credentials are never transferred. Account-limit history is not synchronized yet.")
                 Text("The current connection requires an existing SSH alias, trusted host key and key-based sign-in. The pairing dialog shows the destination and scope before sending setup. Automatic discovery is not available yet.")
                 Text("You can finish on this Mac now and pair later. Canceling pairing does not mark a device connected.")
+                Text("Direct TLS pairing in Settings is a separate preview. Live two-device sync is not yet verified for that path.").font(.callout)
             }
             if !failure.isEmpty { Text(failure).foregroundStyle(.red) }
             Spacer()

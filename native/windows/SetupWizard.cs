@@ -37,7 +37,7 @@ internal sealed class SetupWizard : Form
         {
             Paragraph("Collection stays off until you finish setup. Choose the sources you want to read on this PC.");
             Paragraph("Dashboard snapshots exclude prompts, window titles, transcripts, audio and credentials. Provider sign-ins stay on their owning device.");
-            Paragraph("This release uses direct encrypted device pairing, without an Observatory account or hosted sync service.");
+            Paragraph("Optional device pairing is started from the Mac over an existing trusted SSH connection. There is no Observatory account, hosted sync service or automatic device discovery.");
         }
         else if (step == 1)
         {
@@ -70,6 +70,7 @@ internal sealed class SetupWizard : Form
             Paragraph("Pair from the Mac using this PC's pairing details, available in the system-tray menu after setup. Review the destination and shared-data scope before confirming.");
             Paragraph("The current connection requires an existing SSH alias, trusted host key and key-based sign-in. Automatic discovery is not available yet. Account-limit history is not synchronized.");
             Paragraph("Finish here to use this PC alone or pair later. Finishing setup does not claim a device is connected.");
+            Paragraph("Direct TLS pairing in Settings is a separate preview. Live two-device sync is not yet verified for that path.");
         }
     }
     private void Advance()

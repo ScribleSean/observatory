@@ -111,6 +111,18 @@ internal sealed partial class NativeDashboard : Form
         }
         finally { body.ResumeLayout(true); }
     }
+    private void ActivityWatchHelp()
+    {
+        Label("ActivityWatch is a separate application. Install and run it on the device you want to track, enable ActivityWatch in Observatory Settings, then refresh sources. If it is already running, check its local server on port 5600. Missing readings remain Unknown. Tokens and Allowances can be used independently.");
+        var link = new LinkLabel { Text = "ActivityWatch installation and help", AutoSize = true, LinkColor = Color.LightSkyBlue };
+        link.LinkClicked += (_, _) =>
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://activitywatch.net/") { UseShellExecute = true }); }
+            catch { Label("Open https://activitywatch.net/ in your browser for installation help."); }
+        };
+        body.Controls.Add(link);
+    }
+
     private void History(JsonObject? snapshot, string kind)
     {
         Choice("Device", ["All", "Mac", "Windows", "Ubuntu"], host, value => { host = value; anchor = ""; });
@@ -121,8 +133,9 @@ internal sealed partial class NativeDashboard : Form
             var archive = NativeHistory.Rows(snapshot?["activityHistory"]).FirstOrDefault(row => Snapshot.Text(row["host"]) == (host == "All" ? "Combined" : host));
             Label(Snapshot.Text(archive?["trackingMessage"], "Tracking freshness is unknown for this saved snapshot."));
             Label("Last tracking coverage: " + Snapshot.Text(archive?["trackingThrough"]));
+            if (days.Length > 0 && archive is not null && Snapshot.Text(archive["latestReadStatus"]) != "ok") ActivityWatchHelp();
         }
-        if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); return; }
+        if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity") ActivityWatchHelp(); return; }
         var dates = days.Select(day => Snapshot.Text(day["date"])).ToArray();
         if (!dates.Contains(anchor)) anchor = dates[^1];
         if (period != "All retained") Choice(period == "Week" ? "Week ending" : "Recorded day", dates, anchor, value => anchor = value);

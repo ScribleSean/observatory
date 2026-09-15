@@ -37,6 +37,7 @@ internal sealed partial class NativeDashboard
         var original = sourceOriginal;
         var draft = sourceDraft;
         Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.");
+        ActivityWatchHelp();
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
             ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits") })
         {

@@ -73,6 +73,13 @@ struct NativeDashboard: View {
                             .disabled(store.refreshing || archivedSnapshot != nil)
                         }
                     }
+                    if let message = store.pairingPauseMessage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Collection paused", systemImage: "pause.circle")
+                            Text(message).observatoryFont(.callout)
+                            Button("Review pairing in Settings") { selection.section = "settings" }
+                        }.foregroundStyle(.orange).accessibilityElement(children: .contain)
+                    }
                     if archivedSnapshot != nil {
                         Button("Return to live data") { archivedSnapshot = nil; selectedDate = "" }
                     }
@@ -188,6 +195,7 @@ struct NativeDashboard: View {
             if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
                 Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
                     .observatoryFont(.callout).foregroundStyle(.secondary)
+                if !days.isEmpty && text(archive["latestReadStatus"]) != "ok" { ActivityWatchHelp() }
                 Text(text(archive["trackingMessage"], fallback: "Tracking freshness is unknown for this saved snapshot."))
                     .observatoryFont(.callout).foregroundStyle(text(archive["trackingStatus"]) == "stale" ? Color.orange : ObservatoryTheme.muted)
                 if let through = parseDate(archive["trackingThrough"]) {
@@ -202,6 +210,7 @@ struct NativeDashboard: View {
             if days.isEmpty {
                 ObservatoryEmptyState(title: "No verified records", systemImage: "chart.bar",
                     message: "This source is unavailable or has no saved records. Missing data is unknown, not zero.")
+                if key == "activity" { ActivityWatchHelp() }
             } else {
                 HStack {
                     Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : "\(formatted(number(chosen?[field]).map { $0 / 60 })) min")

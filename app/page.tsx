@@ -145,6 +145,9 @@ function State({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+function ActivityWatchGuidance() {
+  return <span>ActivityWatch is a separate application. Install and run it on the device you want to track, enable it in native Observatory Settings, then refresh sources there. If it is already running, check its local server on port 5600. Missing readings remain Unknown. Tokens and Allowances can be used independently. <a href="https://activitywatch.net/" target="_blank" rel="noreferrer">ActivityWatch installation and help</a></span>;
+}
 export default function Home() {
   const [dark, setDark] = useState(true);
   useEffect(() => {
@@ -373,7 +376,7 @@ export default function Home() {
               <TabsContent value="settings" className="view-panel">
                 <div className="view-heading"><div><h1>Settings</h1><p>Appearance and device configuration</p></div></div>
                 <section className="usage-card"><h2>Appearance</h2><p>Use the same calm palette in light or dark mode.</p><Button className="reload" onClick={toggleTheme}>{dark?'Switch to light mode':'Switch to dark mode'}</Button></section>
-                <section className="usage-card" style={{marginTop:18}}><h2>Connections and collection</h2><p>{data.demo?'The demo uses fictional records. Provider sign-ins, device pairing and collection are managed in the installed Observatory application.':'Manage provider sources, device pairing, login startup and collection in the native Observatory settings.'}</p></section>
+                <section className="usage-card" style={{marginTop:18}}><h2>Connections and collection</h2><p>{data.demo?'The demo uses fictional records. Provider sign-ins, device pairing and collection are managed in the installed Observatory application.':'Manage provider sources, device pairing, login startup and collection in the native Observatory settings.'}</p><p><ActivityWatchGuidance/></p></section>
               </TabsContent>
               <TabsContent value="activity" className="view-panel">
                 <div className="view-heading">
@@ -429,6 +432,7 @@ export default function Home() {
                 <TabsContent value={host}>
                 {period==='all' && <p className="quiet-note">All retained daily summaries, up to {current?.maxDates||3650} dates per view. Collection began with the available seven-day window, not the complete ActivityWatch archive. Gaps do not mean idle time.</p>}
                 {current?.latestReadStatus && current.latestReadStatus!=='ok' && <p className="quiet-note">The latest source read failed. Showing retained history as of {current.asOf?new Date(current.asOf).toLocaleString():'an unknown time'}.</p>}
+                {current?.status==='ok' && current.latestReadStatus && current.latestReadStatus!=='ok' && <p className="quiet-note"><ActivityWatchGuidance/></p>}
                 {period==='all' && !!current?.days?.length && <details className="receipt-panel"><summary>Browse retained dates</summary><div className="history-dates">{[...current.days].reverse().map(day=><Button key={day.date} variant="ghost" onClick={()=>{setSelectedDate(day.date);setPeriod('day');}}>{day.date} · {day.trackedSeconds===0&&day.seconds===0?'No tracking records':`${time(day.seconds).hours}h ${time(day.seconds).minutes}m`}</Button>)}</div></details>}
                 {period === 'week' && <WeekTimeline key={host} days={weekDays} onOpenDay={date=>{setSelectedDate(date);setPeriod('day');window.scrollTo(0,0);}}/>}
                 {period === 'day' && dailyActivity && <section className="daily-timeline" aria-label="Recorded activity by hour">
@@ -511,7 +515,8 @@ export default function Home() {
                   </div>
                 ) : (
                   <State>
-                    This device’s activity source is unavailable. Its activity is unknown, not zero.
+                    This device’s activity source is unavailable. Its activity is Unknown, not zero.
+                    {' '}<ActivityWatchGuidance/>
                   </State>
                 )}
                 </TabsContent>

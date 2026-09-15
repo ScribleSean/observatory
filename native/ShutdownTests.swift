@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Combine
 
 @MainActor
 func testShutdownDrain() async throws {
@@ -7,6 +8,21 @@ func testShutdownDrain() async throws {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
     defer { try? FileManager.default.removeItem(at: root) }
     let store = ObservatoryStore(runtime: root, collectionAllowed: false)
+    var pauseChanges: [Bool] = []
+    let pauseSubscription = store.$collectionPausedForPairing.sink { pauseChanges.append($0) }
+    store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": "2026-09-15T00:00:00Z"])
+    precondition(store.pairingPauseMessage == nil)
+    store.collectionPausedForPairing = true
+    store.refresh()
+    precondition(store.lastAttempt == "pairing-paused" && !store.refreshing)
+    precondition(store.pairingPauseMessage?.contains("Saved snapshot unchanged") == true)
+    precondition(text(store.snapshot?.object["collectedAt"]) == "2026-09-15T00:00:00Z")
+    store.collectionPausedForPairing = false
+    precondition(store.pairingPauseMessage == nil)
+    precondition(pauseChanges == [false, true, false])
+    pauseSubscription.cancel()
+    let reopened = ObservatoryStore(runtime: root, collectionAllowed: false)
+    precondition(!reopened.collectionPausedForPairing && reopened.pairingPauseMessage == nil)
     store.pairingMaintenance = true
     let before = store.lastAttempt
     let wait = Task { @MainActor in await store.drainForQuit(timeout: 1) }
