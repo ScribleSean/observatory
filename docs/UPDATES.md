@@ -82,6 +82,15 @@ receipt path and pinned public key. It reads the previous receipt with the bound
 receipt reader and returns a structured staging result. It does not replace files
 or launch candidate code. The native archive/downloader callback is not connected.
 
+`UpdateStaging.Stage` is the native staging bridge. It holds installation exclusion,
+uses only the installed Node runtime and allowlisted updater command, validates the
+structured response and verifies the candidate again before returning. The result
+must identify a separate sibling candidate, the expected signed envelope and a
+newer build. Cancellation can leave a partial candidate for inspection but cannot
+activate it. This bridge does not request app shutdown. Activation still performs
+its own verification and graceful shutdown under `UpdateSession`. The user-facing
+download callback must still be wired to these operations.
+
 `create-update-archive.ps1 -Directory <prepared-directory> -Archive <new-zip>`
 compresses the prepared directory without overwriting an existing archive or
 following linked inputs. It writes forward-slash ZIP entry names explicitly for

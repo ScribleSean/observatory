@@ -37,15 +37,26 @@ internal static class UpdateCandidate
             previousBuild < 0 || previousBuild > 9007199254740991L ||
             !Regex.IsMatch(pinnedKey, "^[A-Za-z0-9+/]{43}=$"))
             throw new IOException("Invalid update verification request.");
+        var output = await RunTrustedCommand("verify-candidate.mjs", new[] { staged, envelope, pinnedKey,
+            previousBuild.ToString(CultureInfo.InvariantCulture) }, cancellation);
+        return Parse(output, previousBuild);
+    }
+
+    // Only installed updater entry points may use this bounded process runner.
+    internal static async Task<string> RunTrustedCommand(string command, string[] arguments,
+        CancellationToken cancellation = default)
+    {
+        if (command is not ("verify-candidate.mjs" or "stage-update-payload.mjs"))
+            throw new IOException("Unsupported updater command.");
         var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
-        var verifier = Path.Combine(AppContext.BaseDirectory, "Updater", "verify-candidate.mjs");
+        var verifier = Path.Combine(AppContext.BaseDirectory, "Updater", command);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(TimeSpan.FromMinutes(2));
         cancellation.ThrowIfCancellationRequested();
         using var process = new Process { StartInfo = new(node) {
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = AppContext.BaseDirectory,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true } };
-        foreach (var argument in new[] { verifier, staged, envelope, pinnedKey, previousBuild.ToString(CultureInfo.InvariantCulture) })
+        foreach (var argument in new[] { verifier }.Concat(arguments))
             process.StartInfo.ArgumentList.Add(argument);
         foreach (var variable in new[] { "NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS" })
             process.StartInfo.Environment.Remove(variable);
@@ -70,11 +81,12 @@ internal static class UpdateCandidate
             await process.WaitForExitAsync(deadline.Token);
             await Task.WhenAll(output, error);
             if (process.ExitCode != 0) throw new IOException("Candidate verification failed. No update was activated.");
-            return Parse(await output, previousBuild);
+            return await output;
         }
         finally
         {
-            // Only this read-only verifier is terminated, never the running app.
+            // Neither allowed command modifies the installed app. A cancelled
+            // staging copy can remain partial, but cannot become an activation.
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             await process.WaitForExitAsync(cleanup.Token);
