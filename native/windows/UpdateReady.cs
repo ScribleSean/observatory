@@ -23,9 +23,14 @@ internal static class UpdateReady
         var name = Prefix + Guid.NewGuid().ToString("N");
         using var ready = new EventWaitHandle(false, EventResetMode.ManualReset, name);
         if (Signal("Local\\Unrelated") || Signal(Prefix + "invalid")) throw new Exception("Unsafe readiness event accepted.");
-        using var child = Process.Start(new ProcessStartInfo(Environment.ProcessPath!) {
-            UseShellExecute = false, CreateNoWindow = true,
-            ArgumentList = { "--test-update-ready", name } }) ?? throw new Exception("Readiness fixture did not start.");
+        var start = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+        // Framework-dependent checks run as dotnet <assembly>. Packaged checks
+        // run through the app host and must not receive an extra assembly argument.
+        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            start.ArgumentList.Add(typeof(UpdateReady).Assembly.Location);
+        start.ArgumentList.Add("--test-update-ready");
+        start.ArgumentList.Add(name);
+        using var child = Process.Start(start) ?? throw new Exception("Readiness fixture did not start.");
         try
         {
             if (!ready.WaitOne(TimeSpan.FromSeconds(10)) || !child.WaitForExit(10000) || child.ExitCode != 0)

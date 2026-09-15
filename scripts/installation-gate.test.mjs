@@ -23,8 +23,10 @@ test('native startup uses the installer mutex until the singleton exists',()=>{
   const acquire=program.indexOf('using var installationGate = TryEnterInstallation();');
   const singleton=program.indexOf('using var singleton = new Mutex');
   const release=program.indexOf('installationGate.Dispose();');
-  const run=program.indexOf('Application.Run(new ObservatoryContext');
-  assert.ok(acquire>=0 && acquire<singleton && singleton<release && release<run);
+  const context=program.indexOf('var context = new ObservatoryContext');
+  const readiness=program.indexOf('Application.Idle += readyHandler;');
+  const run=program.indexOf('Application.Run(context)');
+  assert.ok(acquire>=0 && acquire<singleton && singleton<release && release<context && context<readiness && readiness<run);
   assert.match(program,/InstallationGate.SelfTest\(\)/);
   assert.match(program,/using var installation = TryEnterInstallation\(\);[\s\S]*?using var collector = new Collector/);
 });
