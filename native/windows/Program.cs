@@ -335,7 +335,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (dashboard is NativeDashboard existing) { existing.ShowSourceSettings(); return; }
         using var settings = new NativeDashboard(Data, collector.Refresh,
             new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
-            (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation));
+            (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true);
         settings.ShowSourceSettings();
         settings.ShowDialog();
     }
@@ -383,7 +383,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         {
             dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
                 new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
-                (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation)) : new Dashboard(runtime);
+                (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         dashboard.Show();

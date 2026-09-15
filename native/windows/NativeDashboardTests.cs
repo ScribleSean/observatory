@@ -107,7 +107,7 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("50 min"), "Calendar week total");
                 await Select(form, "Period", "All retained");
                 Check(Texts(form).Contains("1h 0m"), "Retained total");
-                Check(Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded history").Rows.Count == 3, "Missing dates not fabricated");
+                Check(Children(form).OfType<DashboardHistoryChart>().Single().RecordedCount == 3, "Missing dates not fabricated");
                 Check(Children(form).OfType<ActivityHourGraph>().Single().AccessibleDescription?.Contains("12:00: 30 recorded minutes") == true, "Hourly accessible values");
                 var appTable = Children(form).OfType<DataGridView>().Single(grid => grid.AccessibleName == "Recorded apps");
                 Check(appTable.Rows.Count == 1 && appTable.Rows[0].Cells[1].Value?.ToString() == "ChatGPT / Codex", "App labels and overlap exclusion");
@@ -321,7 +321,9 @@ internal static class NativeDashboardTests
     private static string[] Texts(Control parent) => Children(parent).OfType<Label>().Select(label => label.Text).ToArray();
     private static async Task Select(Control parent, string name, string value)
     {
-        Children(parent).OfType<ComboBox>().Single(choice => choice.AccessibleName == name).SelectedItem = value;
+        var chips = Children(parent).OfType<DashboardFilters>().SingleOrDefault(choice => choice.AccessibleName == name);
+        if (chips is not null) Children(chips).OfType<Button>().Single(button => button.Text == value).PerformClick();
+        else Children(parent).OfType<ComboBox>().Single(choice => choice.AccessibleName == name).SelectedItem = value;
         await Task.Delay(100);
     }
     private static void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); }

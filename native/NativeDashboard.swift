@@ -57,26 +57,11 @@ struct NativeDashboard: View {
                 }
             }.padding(20).frame(width: 200 * selection.textScale)
             }
+            VStack(spacing: 0) {
+            dashboardHeader.padding(24)
             ScrollViewReader { scroll in
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    ObservatoryAdaptiveRow {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(sections.first(where: { $0.0 == selection.section })?.1 ?? "Activity")
-                                .observatoryFont(22, weight: .semibold).tracking(-0.7)
-                            Text(archivedSnapshot == nil ? store.freshness : "Saved snapshot. Not live data.")
-                                .foregroundStyle(archivedSnapshot != nil || store.stale ? .orange : .secondary)
-                        }
-                        Spacer()
-                        HStack {
-                        Button { selection.section = "settings"; scroll.scrollTo("dashboard-top", anchor: .top) } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
-                            .help("Review device pairing in Settings")
-                        Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
-                            .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
-                        Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                            .disabled(store.refreshing || archivedSnapshot != nil)
-                        }
-                    }
                     if let message = store.pairingPauseMessage {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("Collection paused", systemImage: "pause.circle")
@@ -152,6 +137,7 @@ struct NativeDashboard: View {
             }
             .onChange(of: selection.section) { scroll.scrollTo("dashboard-top", anchor: .top) }
             }
+            }
         }
         .observatoryFont().foregroundStyle(ObservatoryTheme.text)
         .tint(ObservatoryTheme.sage).background(ObservatoryTheme.background)
@@ -167,6 +153,26 @@ struct NativeDashboard: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Choose a saved Observatory JSON snapshot, no larger than 16 MB. Links, invalid files and changing files are rejected. Your current view and saved data were not changed.")
+        }
+    }
+
+    private var dashboardHeader: some View {
+        ObservatoryAdaptiveRow {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(sections.first(where: { $0.0 == selection.section })?.1 ?? "Allowances")
+                    .observatoryFont(22, weight: .semibold).tracking(-0.7)
+                Text(archivedSnapshot == nil ? store.freshness : "Saved snapshot. Not live data.")
+                    .foregroundStyle(archivedSnapshot != nil || store.stale ? .orange : .secondary)
+            }
+            Spacer()
+            HStack {
+                Button { selection.section = "settings" } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
+                    .help("Review device pairing in Settings")
+                Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
+                    .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
+                Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    .disabled(store.refreshing || archivedSnapshot != nil)
+            }
         }
     }
 

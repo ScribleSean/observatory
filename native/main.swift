@@ -128,9 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         fileMenu.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "o").target = self
         fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileMenu.addItem(.separator())
-        fileMenu.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
-        fileMenu.addItem(withTitle: "Disconnect Paired Device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
-        fileMenu.addItem(withTitle: "Prepare Pairing Repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
+        fileMenu.addItem(withTitle: "Device Connection Settings…", action: #selector(sourceSettings), keyEquivalent: "").target = self
         file.submenu = fileMenu
         menu.addItem(file)
         let edit = NSMenuItem()
@@ -281,10 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Show usage popup", action: #selector(showUsage), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Refresh sources", action: #selector(refresh), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Local source settings…", action: #selector(sourceSettings), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Disconnect paired device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Prepare pairing repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Settings and device connection…", action: #selector(sourceSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self

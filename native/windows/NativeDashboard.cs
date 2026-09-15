@@ -14,6 +14,7 @@ internal sealed partial class NativeDashboard : Form
     private string host = "Windows", period = "Day", anchor = "";
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
+    private bool showRecordedHistory;
     private readonly Label pageTitle = new() { Dock = DockStyle.Top, Height = 42 };
     private readonly Label freshness = new() { Dock = DockStyle.Fill };
     private readonly ToolTip timestampHint = new();
@@ -21,7 +22,7 @@ internal sealed partial class NativeDashboard : Form
     private readonly Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive;
 
     internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null,
-        Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive = null)
+        Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive = null, bool rememberLayout = false)
     {
         this.read = read; this.refresh = refresh;
         this.readArchive = readArchive;
@@ -33,6 +34,7 @@ internal sealed partial class NativeDashboard : Form
         ClientSize = new Size(Math.Min(1100, available.Width - 48), Math.Min(780, available.Height - 80));
         MinimumSize = new Size(Math.Min(800, available.Width - 48), Math.Min(560, available.Height - 80));
         StartPosition = FormStartPosition.CenterScreen;
+        if (rememberLayout) DashboardWindowPreferences.Attach(this, available);
         sections.BackColor = Color.FromArgb(39, 39, 41); sections.ForeColor = ForeColor;
         sections.DrawMode = DrawMode.OwnerDrawFixed;
         sections.DrawItem += (_, args) =>
@@ -62,11 +64,13 @@ internal sealed partial class NativeDashboard : Form
             catch { if (!IsDisposed) MessageBox.Show(this, "Collection could not complete. Saved records remain available.", "Observatory"); }
             finally { busy = false; if (!IsDisposed) Reload(); }
         };
-        header.Controls.Add(freshness); header.Controls.Add(pageTitle); header.Controls.Add(refreshButton);
-        var devices = new Button { Text = "Devices", AccessibleName = "Device connection settings", Dock = DockStyle.Right, Width = 100, FlatStyle = FlatStyle.Flat };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, Width = 218, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 6, 0, 0) };
+        refreshButton.Dock = DockStyle.None; refreshButton.Size = new Size(100, 40);
+        var devices = new Button { Text = "Devices", AccessibleName = "Device connection settings", Width = 100, Height = 40, FlatStyle = FlatStyle.Flat };
         devices.FlatAppearance.BorderSize = 0;
         devices.Click += (_, _) => { settingsPage = "This device"; sections.SelectedItem = "Settings"; Reload(); body.AutoScrollPosition = Point.Empty; };
-        header.Controls.Add(devices);
+        actions.Controls.Add(refreshButton); actions.Controls.Add(devices);
+        header.Controls.Add(freshness); header.Controls.Add(pageTitle); header.Controls.Add(actions);
         content.Controls.Add(body); content.Controls.Add(header);
         Controls.Add(content); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
@@ -89,6 +93,11 @@ internal sealed partial class NativeDashboard : Form
     }
     private void Choice(string name, string[] values, string selected, Action<string> changed)
     {
+        if (name is "Device" or "Period" or "Tool")
+        {
+            body.Controls.Add(new DashboardFilters(name, values, selected, value => { changed(value); BeginInvoke(Reload); }) { Width = ContentWidth });
+            return;
+        }
         var row = new FlowLayoutPanel { Width = ContentWidth, Height = 42, WrapContents = false };
         row.Controls.Add(new Label { Text = name, AutoSize = true, Padding = new Padding(0, 7, 8, 0) });
         var choice = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 225, AccessibleName = name };
@@ -190,6 +199,7 @@ internal sealed partial class NativeDashboard : Form
 
     private void History(JsonObject? snapshot, string kind)
     {
+        var showActivityHelp = false;
         Choice("Device", ["All", "Mac", "Windows", "Ubuntu"], host, value => { host = value; anchor = ""; });
         Choice("Period", ["Day", "Week", "All retained"], period, value => period = value);
         var days = NativeHistory.Days(snapshot, kind, host);
@@ -198,7 +208,7 @@ internal sealed partial class NativeDashboard : Form
             var archive = NativeHistory.Rows(snapshot?["activityHistory"]).FirstOrDefault(row => Snapshot.Text(row["host"]) == (host == "All" ? "Combined" : host));
             Label(Snapshot.Text(archive?["trackingMessage"], "Tracking freshness is unknown for this saved snapshot."));
             Label("Last tracking coverage: " + Snapshot.Text(archive?["trackingThrough"]));
-            if (days.Length > 0 && archive is not null && Snapshot.Text(archive["latestReadStatus"]) != "ok") ActivityWatchHelp();
+            showActivityHelp = days.Length > 0 && archive is not null && Snapshot.Text(archive["latestReadStatus"]) != "ok";
         }
         if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity") ActivityWatchHelp(); return; }
         var dates = days.Select(day => Snapshot.Text(day["date"])).ToArray();
@@ -208,8 +218,14 @@ internal sealed partial class NativeDashboard : Form
         var field = kind == "activity" ? "seconds" : "totalTokens";
         Label(kind == "activity" ? Snapshot.Duration(NativeHistory.Sum(selected, field)) : Snapshot.Format(NativeHistory.Sum(selected, field)) + " tokens", true);
         Label($"{selected.Length} recorded dates. Missing dates are not filled with zeros.");
-        Table("Recorded history", ["Date", kind == "activity" ? "Active time" : "Tokens"], selected.Select(row => new[] {
-            Snapshot.Text(row["date"]), kind == "activity" ? Snapshot.Duration(Snapshot.Number(row[field])) : Snapshot.Format(Snapshot.Number(row[field])) }));
+        Label("Selected recorded days (up to 30 shown)");
+        AddCard(new DashboardHistoryChart(selected, kind == "tokens"), "Recorded history");
+        var details = new Button { Text = showRecordedHistory ? "Hide recorded values" : "Show recorded values", AutoSize = true, Height = 38 };
+        details.Click += (_, _) => { showRecordedHistory = !showRecordedHistory; Reload(); };
+        body.Controls.Add(details);
+        if (showRecordedHistory)
+            Table("Recorded history", ["Date", kind == "activity" ? "Active time" : "Tokens"], selected.Select(row => new[] {
+                Snapshot.Text(row["date"]), kind == "activity" ? Snapshot.Duration(Snapshot.Number(row[field])) : Snapshot.Format(Snapshot.Number(row[field])) }));
         if (kind == "tokens")
         {
             Table("Token classes", ["Metric", "Tokens"], new[] { "inputTokens", "cacheReadTokens", "cacheCreationTokens", "outputTokens", "reasoningOutputTokens" }
@@ -223,6 +239,7 @@ internal sealed partial class NativeDashboard : Form
         {
             Label("Foreground time does not measure attention. Combined activity counts device overlap once. WSL screen time belongs to Windows.");
             ActivityDetails(selected);
+            if (showActivityHelp) ActivityWatchHelp();
         }
     }
     private void Allowances(JsonObject? snapshot)

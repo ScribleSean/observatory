@@ -38,15 +38,18 @@ internal sealed partial class NativeDashboard
         var draft = sourceDraft;
         Label("Choose sources on this PC. Unsaved choices stay while navigating this window, but apply only when saved. Provider sign-ins stay in their owning applications.");
         ActivityWatchHelp();
+        var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 200, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
+        collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
             ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits") })
         {
-            var check = new CheckBox { Text = title, AccessibleName = key, AutoSize = true, Margin = new Padding(0, 0, 0, 12),
+            var check = new DashboardToggle { Text = title, AccessibleName = key, Width = collection.Width,
                 Checked = draft[key] is JsonValue value && value.TryGetValue<bool>(out var enabled) && enabled };
             draft[key] = check.Checked;
             check.CheckedChanged += (_, _) => draft[key] = check.Checked;
-            body.Controls.Add(check);
+            collection.Controls.Add(check);
         }
+        AddCard(collection, "Collection on this PC");
         foreach (var (key, title) in new[] { ("wslDistribution", "Additional Codex log device"), ("quotaWslDistribution", "Account client") })
         {
             var existing = Snapshot.Text(draft[key], "Windows");
