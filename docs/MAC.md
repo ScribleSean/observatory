@@ -59,6 +59,10 @@ This build accepts only `--preview`, `--preview --preview-setup`,
 Missing or different arguments exit before opening a runtime. This protects
 against inspection tools relaunching a closed test app without its arguments.
 Do not use a normal release executable as an unattended preview harness.
+The native compilation workflow builds this guarded variant separately and
+runs `node native/verify-preview-guard.mjs <preview-executable>` to verify that
+missing and unsafe arguments are refused. Accepted preview modes still need
+interactive checks on a development Mac.
 
 The build runs `--test-lifecycle` and `--test-popup` for both native and legacy modes. It verifies three open/close cycles release their content views, native Settings navigation reuses the main window, and popup handoff preserves the dashboard. The menu-bar app remains running after the window closes. These checks do not measure total helper memory, idle CPU, login startup or sleep/wake behavior.
 

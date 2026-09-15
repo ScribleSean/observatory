@@ -51,4 +51,14 @@ jobs:
             native/*.swift -o native-test/WorkspaceObservatory
       - name: Run isolated native contracts
         run: native-test/WorkspaceObservatory --self-test
+      - name: Compile fail-closed UI preview
+        shell: bash
+        run: |
+          xcrun swiftc -swift-version 5 -D OBSERVATORY_PREVIEW_ONLY \
+            -module-cache-path native-test/module-cache \
+            -target "$(uname -m)-apple-macosx14.0" \
+            -framework AppKit -framework SwiftUI -framework WebKit -framework ServiceManagement \
+            native/*.swift -o native-test/ObservatoryPreview
+      - name: Reject unsafe preview launches
+        run: node native/verify-preview-guard.mjs native-test/ObservatoryPreview
       # No app installation, live sources, UI automation or release artifacts.
