@@ -14,7 +14,7 @@ internal sealed class DashboardToggle : CheckBox
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        e.Graphics.Clear(DashboardCard.Surface);
+        e.Graphics.Clear(BackColor);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var track = new Rectangle(Width - 48, (Height - 24) / 2, 42, 24);
         using var path = new GraphicsPath();

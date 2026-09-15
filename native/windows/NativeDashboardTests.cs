@@ -300,9 +300,15 @@ internal static class NativeDashboardTests
                 Check(form.BackColor == DashboardPalette.Background(true) && form.ForeColor == DashboardPalette.Text(true), "Light palette applied to dashboard");
                 Check(ReferenceEquals(sourceSwitch, Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr")) && sourceSwitch.Checked,
                     "Appearance changes preserve existing settings controls and values");
+                using (var switchImage = new Bitmap(sourceSwitch.Width, sourceSwitch.Height))
+                {
+                    sourceSwitch.DrawToBitmap(switchImage, new Rectangle(Point.Empty, switchImage.Size));
+                    Check(switchImage.GetPixel(4, 4).ToArgb() == DashboardPalette.Surface(true).ToArgb(), "Light switches paint a light surface behind their labels");
+                }
                 foreach (var destination in sections.Items.Cast<string>().ToArray())
                 {
                     sections.SelectedItem = destination;
+                    if (destination is "Activity" or "Tokens") await Select(form, "Device", "Windows");
                     Check(form.BackColor == DashboardPalette.Background(true), "Light appearance survives navigation");
                     Capture(form, output, "native-light-" + destination.ToLowerInvariant());
                 }
