@@ -320,7 +320,13 @@ internal sealed partial class NativeDashboard : Form
             if (remaining is double percent && double.IsFinite(percent) && percent >= 0 && percent <= 100)
                 body.Controls.Add(new DashboardMeter(percent / 100, "Allowance remaining") { Width = ContentWidth,
                     AccessibleDescription = $"{percent}% remaining" });
-            Label(AllowancePaceText(quota, window, DateTimeOffset.UtcNow));
+            if (QuotaLivePace.Read(quota, window, DateTimeOffset.UtcNow) is { } live)
+            {
+                Label(live.Remaining, title: true).AccessibleName = "Estimated time remaining at this pace";
+                Label("Estimated at this pace · reset in " + live.Reset).ForeColor = Color.Silver;
+                Label($"{live.Rate:0.#} percentage points / hour");
+            }
+            else Label(AllowancePaceText(quota, window, DateTimeOffset.UtcNow)).ForeColor = Color.Silver;
             if (AllowancePaceCoverage(quota, window, DateTimeOffset.UtcNow) is double coverage)
             {
                 body.Controls.Add(new DashboardMeter(coverage, "Estimated time coverage until reset, at last check") { Width = ContentWidth, Height = 12,

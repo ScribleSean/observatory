@@ -228,6 +228,19 @@ internal static class NativeDashboardTests
                 data["quota"]!["windows"]![0]!["resetsAt"] = DateTimeOffset.UtcNow.AddHours(4).ToString("O");
                 const string paceSummary = "20.0% of allowance/hour over 60 min. Approximately 2h 30m left at this pace (at last check). Reset in 4h 0m. Estimated allowance covers 63% of the time until reset (at last check).";
                 data["quota"]!["pace"] = new JsonArray(new JsonObject { ["bucket"] = "codex", ["window"] = "primary", ["asOf"] = freshAt, ["summary"] = paceSummary, ["status"] = "projected", ["coverageFraction"] = 0.625 });
+                data["quota"]!["pace"]![0]!["percentagePointsPerHour"] = 26;
+                var liveQuota = data["quota"]!.AsObject();
+                var liveWindow = liveQuota["windows"]![0]!.AsObject();
+                var liveNow = DateTimeOffset.Parse(freshAt);
+                Check(QuotaLivePace.Read(liveQuota, liveWindow, liveNow)?.Remaining == "2h 30m", "Live pace derives time from current remaining and rate");
+                Check(QuotaLivePace.Read(liveQuota, liveWindow, liveNow.AddMinutes(1))?.Remaining == "2h 29m", "Live pace counts down from observation time");
+                Check(QuotaLivePace.Read(liveQuota, liveWindow, liveNow.AddMinutes(10)) is null, "Live pace expires at stale threshold");
+                Check(QuotaLivePace.Read(liveQuota, liveWindow, liveNow.AddSeconds(-1)) is null, "Future observation does not produce live pace");
+                liveQuota["pace"]![0]!["percentagePointsPerHour"] = 1;
+                Check(QuotaLivePace.Read(liveQuota, liveWindow, liveNow)?.Remaining == "Lasts until reset", "Reset-first estimate has no false exhaustion countdown");
+                liveQuota["pace"]![0]!["percentagePointsPerHour"] = 0;
+                Check(QuotaLivePace.Read(liveQuota, liveWindow, liveNow) is null, "Zero rate cannot produce an exhaustion estimate");
+                liveQuota["pace"]![0]!["percentagePointsPerHour"] = 26;
                 var observedAt = DateTimeOffset.Parse(freshAt);
                 data["quota"]!["history"] = new JsonArray(Enumerable.Range(0, 13).Select(index => (JsonNode)new JsonObject {
                     ["checkedAt"] = observedAt.AddMinutes(-60 + index * 5).ToString("O"),
@@ -237,7 +250,7 @@ internal static class NativeDashboardTests
                 }).ToArray());
                 data["quota"]!["dailyUsageBuckets"] = new JsonArray(new JsonObject { ["startDate"] = "2026-09-12", ["tokens"] = 3_300_000_000d });
                 form.Reload();
-                Check(Texts(form).Contains(paceSummary), "Fresh pace rendered in allowance page");
+                Check(Texts(form).Contains("2h 30m") && Texts(form).Any(text => text.StartsWith("Estimated at this pace · reset in")), "Fresh pace uses prominent time and reset comparison");
                 Check(Children(form).OfType<QuotaHourlyChart>().Count() == 1, "Populated allowance history has an hourly pace chart");
                 var hourlyChart = Children(form).OfType<QuotaHourlyChart>().Single();
                 using (var hourlyImage = new Bitmap(hourlyChart.Width, hourlyChart.Height))
