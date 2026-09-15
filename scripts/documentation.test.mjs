@@ -32,4 +32,7 @@ test('public documentation links resolve and release status stays explicit',asyn
   assert.match(guide,/Browser \*\*Reload snapshot\*\* only rereads saved data and does not collect/);
   assert.match(guide,/WebKit is an explicit legacy fallback/);
   assert.doesNotMatch(guide,/The current collector runs on macOS/);
+  const windows=await readFile(path.join(root,'docs/WINDOWS.md'),'utf8');
+  assert.match(windows,/\*\*Refresh sources\*\* to start collection using the saved source choices/);
+  assert.match(windows,/browser dashboard and explicit legacy fallback instead offer \*\*Reload snapshot\*\*/);
 });

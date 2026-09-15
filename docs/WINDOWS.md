@@ -48,7 +48,9 @@ Fresh installations show a native first-run wizard before collection. All source
 
 Later, right-click the Observatory system-tray icon and choose **Configure local collection**. Ubuntu collection starts the installed WSL distribution. Neither optional sources nor Mac pairing are required for Windows data.
 
-After collection finishes, choose **Reload snapshot** in the dashboard. Reload reads the saved snapshot. It does not enable or start collection. New source builds show setup instructions when Windows confirms that collection is unconfigured. Older previews can instead show a reload error with an empty dashboard. A configured installation with no readable snapshot still shows a load error rather than being labelled unconfigured.
+In the native dashboard, choose **Refresh sources** to start collection using the saved source choices. When the attempt finishes, the dashboard reloads the saved snapshot. Refresh does not enable sources or complete setup for you. If collection fails, the previous saved records remain available.
+
+The browser dashboard and explicit legacy fallback instead offer **Reload snapshot**. That action only rereads saved data and does not start collection. New fallback builds show setup instructions when Windows confirms that collection is unconfigured. Older previews can instead show a reload error with an empty dashboard. A configured installation with no readable snapshot still shows a load error rather than being labelled unconfigured.
 
 For renderer verification, `WorkspaceObservatory.exe --test-first-run C:\absolute\path\to\empty-test-runtime` checks the setup instructions. A separate synthetic runtime containing `collector.config.json` but no snapshot checks the load-error state. Both cases passed on the signed-in Windows desktop on September 9. The ordinary `--test-web` check still requires a valid snapshot. These checks do not enable collection or verify the configuration prompts.
 
