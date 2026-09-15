@@ -64,6 +64,17 @@ connected. Keep the envelope outside the installed payload, where it would be an
 unexpected inventory file. This preparation command is not a user update command
 and is not bundled into the app.
 
+`stage-update-payload.mjs` provides the subsequent authenticated staging step.
+It accepts only the two-entry extracted layout above, verifies the existing
+installation against its independently trusted receipt, authenticates the update
+receipt with the pinned key and requires a newer build. It verifies the payload
+before and after copying it into a unique sibling of the installed app. The
+envelope stays outside that candidate. No installed bytes change and no candidate
+code executes. The caller must hold installation exclusion and keep the extracted
+envelope available for activation's repeated verification. Synthetic tests cover
+sibling placement, repeated staging, wrong signers, extra files and tampering.
+This helper is not yet bundled or connected to the archive/downloader callback.
+
 The Windows updater primitives remain unconnected. Native Settings now has a running-version label in source, using the Mac bundle metadata or Windows assembly file version. It does not check for downloads, identify the latest release or enable automatic updates. Installed apps and already-built candidates acquire source changes only after a new build and installation.
 
 Windows installer build metadata now includes the shared build number. After

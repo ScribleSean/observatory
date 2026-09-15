@@ -12,6 +12,7 @@ import {verifyManifest} from '../native/windows/verify-manifest.mjs';
 import {prepareInstallationReceipt,writeInstallationSigningRequest} from '../native/windows/prepare-installation-receipt.mjs';
 import {stageUpdateHelper} from '../native/windows/stage-update-helper.mjs';
 import {prepareUpdatePayload} from '../native/windows/prepare-update-payload.mjs';
+import {stageUpdatePayload} from '../native/windows/stage-update-payload.mjs';
 const hash=data=>createHash('sha256').update(data).digest('hex');
 function fixture(t) {
   const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-installation-test-')));
@@ -119,6 +120,31 @@ test('update preparation command preserves payload and refuses extra arguments',
   assert.equal(result.status,0,result.stderr);
   assert.equal(JSON.parse(result.stdout).sourceRevision,f.next.receipt.sourceRevision);
   assert.equal(verifyInstallation(f.next.folder,f.next.receipt).buildNumber,8);
+});
+test('authenticated update wrapper stages a separate sibling without changing installed bytes',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  const output=path.join(f.root,'update');
+  prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,output);
+  const result=stageUpdatePayload(output,f.old.folder,f.old.receipt,release.publicKey);
+  assert.equal(path.dirname(result.staged),path.dirname(f.old.folder));
+  assert.equal(verifyInstallation(result.staged,f.next.receipt).buildNumber,8);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  assert.equal(result.envelopePath,path.join(output,'installation-envelope.json'));
+  assert.notEqual(stageUpdatePayload(output,f.old.folder,f.old.receipt,release.publicKey).staged,result.staged);
+});
+test('update wrapper rejects wrong signer, extra files and altered payload before staging',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  const output=path.join(f.root,'update');
+  prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,output);
+  assert.throws(()=>stageUpdatePayload(output,f.old.folder,f.old.receipt,signer().publicKey),/signature/);
+  writeFileSync(path.join(output,'unrelated.txt'),'Synthetic private extra');
+  assert.throws(()=>stageUpdatePayload(output,f.old.folder,f.old.receipt,release.publicKey),/entries/);
+  rmSync(path.join(output,'unrelated.txt'));
+  writeFileSync(path.join(output,'payload','WorkspaceObservatory.exe'),'Changed');
+  assert.throws(()=>stageUpdatePayload(output,f.old.folder,f.old.receipt,release.publicKey));
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
 });
 test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
   const f=fixture(t),release=signer();
