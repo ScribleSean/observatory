@@ -91,13 +91,13 @@ struct NativeDashboard: View {
                             Text("Return to live data to change settings. Archived settings cannot be applied from this view.")
                         }
                     } else if selection.section == "allowances" {
-                        if archivedSnapshot == nil && !settingsActions.preview {
+                        if archivedSnapshot == nil {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("All-time usage history").observatoryFont(19, weight: .semibold).tracking(-0.3)
                                 Text("Explore saved usage percentages by day, week or all retained dates. Accounts stay separate; missing observations stay unknown.")
                                     .observatoryFont().foregroundStyle(ObservatoryTheme.muted)
                                 Button("Browse saved history") { quotaHistoryOpen = true }
-                                    .disabled(store.shuttingDown || store.pairingMaintenance)
+                                    .disabled(settingsActions.preview || store.shuttingDown || store.pairingMaintenance)
                             }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
                         }
                         Text("Observed on this Mac").observatoryFont(19, weight: .semibold).tracking(0.6)
@@ -171,23 +171,37 @@ struct NativeDashboard: View {
     }
 
     private var dashboardHeader: some View {
-        ObservatoryAdaptiveRow {
-            VStack(alignment: .leading, spacing: 4) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                dashboardTitle.fixedSize(horizontal: true, vertical: false)
+                Spacer()
+                dashboardActions.fixedSize(horizontal: true, vertical: false)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                dashboardTitle
+                dashboardActions
+            }
+        }
+    }
+
+    private var dashboardTitle: some View {
+        VStack(alignment: .leading, spacing: 4) {
                 Text(sections.first(where: { $0.0 == selection.section })?.1 ?? "Allowances")
                     .observatoryFont(22, weight: .semibold).tracking(-0.7)
                 Text(archivedSnapshot == nil ? store.freshness : "Saved snapshot. Not live data.")
                     .foregroundStyle(archivedSnapshot != nil || store.stale ? .orange : .secondary)
-            }
-            Spacer()
-            HStack {
-                Button { selection.section = "settings"; selection.navigationRequest += 1 } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone") }
+        }
+    }
+
+    private var dashboardActions: some View {
+            ObservatoryAdaptiveRow {
+                Button { selection.section = "settings"; selection.navigationRequest += 1 } label: { Label("Devices", systemImage: "laptopcomputer.and.iphone").fixedSize() }
                     .help("Review device pairing in Settings")
                 Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
                     .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
-                Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise").fixedSize() }
                     .disabled(store.refreshing || archivedSnapshot != nil)
             }
-        }
     }
 
     private func openArchive() {

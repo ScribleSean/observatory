@@ -932,7 +932,7 @@ let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--
     ["--test-quota-archive"],
     ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
     ["--test-lifecycle", "--capture-dashboard"]]
-let archiveRenderArguments = previewArguments.count == 2 && previewArguments[0] == "--render-archive-style" && previewArguments[1].hasPrefix("/")
+let archiveRenderArguments = previewArguments.count == 2 && ["--render-archive-style", "--render-style"].contains(previewArguments[0]) && previewArguments[1].hasPrefix("/")
 guard allowedPreviewArguments.contains(previewArguments) || archiveRenderArguments else {
     print("Preview-only build requires an explicit isolated preview mode")
     exit(64)
