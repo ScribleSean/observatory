@@ -7,6 +7,32 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        Check(DashboardHistoryChart.AxisLabel(0) == "0" && DashboardHistoryChart.AxisLabel(1000) == "1K" &&
+            DashboardHistoryChart.AxisLabel(1_000_000) == "1M" && DashboardHistoryChart.AxisLabel(1_000_000_000) == "1B",
+            "History axis uses compact magnitudes without changing zero");
+        using (var history = new DashboardHistoryChart(new[] { new JsonObject { ["date"] = "2026-09-12", ["totalTokens"] = 343_700_000 } }, true)
+            { Size = new Size(900, 220) })
+        using (var bitmap = new Bitmap(history.Width, history.Height))
+        {
+            history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var ink = Color.FromArgb(171, 151, 192).ToArgb();
+            var painted = Enumerable.Range(0, bitmap.Width).Where(x => bitmap.GetPixel(x, 100).ToArgb() == ink).ToArray();
+            Check(painted.Length is >= 39 and <= 41 && Math.Abs(painted.Average() - 417) < 2,
+                "One recorded day paints a bounded centered bar, not a full-width block");
+            Check(history.AccessibleDescription == "2026-09-12: " + Snapshot.Format(343_700_000) + " tokens",
+                "Compact chart labels retain exact accessible recorded values");
+        }
+        using (var history = new DashboardHistoryChart(new[] {
+            new JsonObject { ["date"] = "2026-09-11", ["totalTokens"] = 0 },
+            new JsonObject { ["date"] = "2026-09-12" } }, true) { Size = new Size(900, 220) })
+        using (var bitmap = new Bitmap(history.Width, history.Height))
+        {
+            history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var ink = Color.FromArgb(171, 151, 192).ToArgb();
+            Check(bitmap.GetPixel(214, 190).ToArgb() == ink && bitmap.GetPixel(619, 190).ToArgb() != ink,
+                "Recorded zero has a baseline marker while unknown has no invented bar");
+            Check(history.AccessibleDescription!.Contains("2026-09-12: Unknown"), "Unknown stays explicit in chart accessibility");
+        }
         foreach (var section in new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" })
         foreach (var size in new[] { 22, 44 })
         {

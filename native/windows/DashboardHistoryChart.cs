@@ -9,6 +9,15 @@ internal sealed class DashboardHistoryChart : Control
     private readonly bool tokens;
     internal int RecordedCount => values.Length;
 
+    internal static string AxisLabel(double value)
+    {
+        var (divisor, suffix) = value >= 1_000_000_000_000 ? (1_000_000_000_000d, "T") :
+            value >= 1_000_000_000 ? (1_000_000_000d, "B") :
+            value >= 1_000_000 ? (1_000_000d, "M") :
+            value >= 1_000 ? (1_000d, "K") : (1d, "");
+        return (value / divisor).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + suffix;
+    }
+
     internal DashboardHistoryChart(JsonObject[] days, bool tokens)
     {
         this.tokens = tokens;
@@ -30,7 +39,7 @@ internal sealed class DashboardHistoryChart : Control
         if (Width < 100 || Height < 70) return;
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        var plot = new RectangleF(12, 22, Width - 60, Height - 52);
+        var plot = new RectangleF(12, 22, Width - 90, Height - 52);
         var maximum = Math.Max(1, values.Where(row => row.value is not null).Select(row => row.value!.Value).DefaultIfEmpty(0).Max());
         using var grid = new Pen(DashboardPalette.Grid(this));
         using var ink = new SolidBrush(tokens ? Color.FromArgb(171, 151, 192) : Color.FromArgb(177, 195, 161));
@@ -38,21 +47,23 @@ internal sealed class DashboardHistoryChart : Control
         {
             var y = plot.Bottom - plot.Height * line / 2;
             g.DrawLine(grid, plot.Left, y, plot.Right, y);
-            TextRenderer.DrawText(g, Snapshot.Format(maximum * line / 2), Font, new Rectangle(Width - 44, (int)y - 8, 42, 18), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Right);
+            TextRenderer.DrawText(g, AxisLabel(maximum * line / 2), Font, new Rectangle(Width - 72, (int)y - 8, 66, 18), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Right);
         }
         var slot = plot.Width / Math.Max(1, values.Length);
         for (var i = 0; i < values.Length; i++)
         {
             var x = plot.Left + i * slot;
+            var center = x + slot / 2;
             if (values[i].value is double value && value >= 0)
             {
                 var height = (float)(plot.Height * value / maximum);
-                if (value == 0) g.FillEllipse(ink, x + slot / 2 - 2, plot.Bottom - 2, 4, 4);
-                else g.FillRectangle(ink, x + slot * .15f, plot.Bottom - height, slot * .7f, height);
+                var barWidth = Math.Min(40, slot * .7f);
+                if (value == 0) g.FillEllipse(ink, center - 2, plot.Bottom - 2, 4, 4);
+                else g.FillRectangle(ink, center - barWidth / 2, plot.Bottom - height, barWidth, height);
             }
             if (i % Math.Max(1, (int)Math.Ceiling(values.Length / 5.0)) == 0)
                 TextRenderer.DrawText(g, values[i].date.Length >= 10 ? values[i].date[5..10] : values[i].date,
-                    Font, new Rectangle((int)x, (int)plot.Bottom + 6, Math.Max(48, (int)slot), 20), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Left);
+                    Font, new Rectangle((int)center - 30, (int)plot.Bottom + 6, 60, 20), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.HorizontalCenter);
         }
     }
 }
