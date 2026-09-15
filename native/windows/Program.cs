@@ -8,6 +8,24 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-install"))
+        {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
+                Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" ||
+                args.Length != 7 || args[0] != "--test-update-install" ||
+                !long.TryParse(args[6], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var result = UpdateInstall.ApplyAndRelaunch(args[1], args[2], args[3], args[4], args[5], previousBuild).GetAwaiter().GetResult();
+                if (!result.LaunchConfirmed) throw new IOException("Updated application launch was not confirmed.");
+                if (UpdateQuit.Request("Local\\WorkspaceObservatory", UpdateQuit.RequestName, TimeSpan.FromSeconds(30)) != UpdateQuit.Result.Stopped)
+                    throw new IOException("Updated application did not quit normally.");
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "installed-relaunched-and-stopped", result.SourceRevision, result.Recovery }));
+            }
+            catch { Console.Error.WriteLine("Update installation test failed. Retain the runner for inspection."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-ready"))
         {
             Environment.ExitCode = args.Length == 2 && args[0] == "--test-update-ready" && UpdateReady.Signal(args[1]) ? 0 : 1;

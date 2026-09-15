@@ -150,6 +150,13 @@ location without automatic rollback. Synthetic orchestration tests cover these
 decisions. Download, trusted initial receipt provisioning and the Update button
 are not connected to this entry point yet.
 
+The disposable installer-staging check now invokes this sequence through a
+verified external helper with the complete packaged application. It uses the
+same build bytes with a synthetic advancing receipt and an ephemeral signer,
+then requires normal dashboard readiness, graceful quit, retained recovery
+files and unchanged empty source configuration. This is a lifecycle test, not
+evidence of migration between different releases or production signing.
+
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
 receipt reads, authenticates the signature, rejects stale builds and checks the

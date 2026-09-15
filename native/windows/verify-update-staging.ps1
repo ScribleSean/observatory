@@ -69,6 +69,15 @@ try {
     }
     RunChecked (Join-Path $expanded 'WorkspaceObservatory.exe') '--self-test'
     if (Test-Path -LiteralPath $data) { throw 'Staging unexpectedly created live collection data.' }
+    # No source configuration exists. Exercise the full update and normal UI
+    # without allowing collection or touching any account or paired device.
+    New-Item -ItemType Directory -Path $data | Out-Null
+    [IO.File]::WriteAllText((Join-Path $data 'setup-state.json'), '{"version":1,"completed":true}')
+    & $node (Join-Path $PSScriptRoot 'check-update-install.mjs') $installed $expanded (Join-Path $request 'installation-receipt.json') $output
+    if ($LASTEXITCODE -ne 0) { throw 'Complete update and relaunch verification failed.' }
+    $dataFiles = @(Get-ChildItem -LiteralPath $data -Recurse -File)
+    if ($dataFiles.Count -ne 1 -or $dataFiles[0].Name -ne 'setup-state.json') { throw 'Update test wrote unexpected data.' }
+    Remove-Item -LiteralPath $data -Recurse -Force
     Write-Output ('PASS: actual installer receipt, bounded native archive roundtrip and expanded native contracts. Archive bytes: ' + (Get-Item -LiteralPath $archive).Length)
 } finally {
     $uninstaller = Join-Path $output 'cleanup-uninstaller.exe'
