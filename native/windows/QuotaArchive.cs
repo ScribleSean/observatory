@@ -67,7 +67,7 @@ internal static class QuotaArchive
     {
         if (text.Length > 600000 || JsonNode.Parse(text) is not JsonObject value ||
             value["version"]?.GetValue<int>() != 1 ||
-            (value["accounts"] is JsonArray) == (value["records"] is JsonArray) ||
+            new[] { value["accounts"] is JsonArray, value["records"] is JsonArray, value["chart"] is JsonObject }.Count(found => found) != 1 ||
             (value["accounts"] is JsonArray accounts && accounts.Count > 100) ||
             (value["records"] is JsonArray records && records.Count > 200))
             throw new InvalidOperationException("Invalid archive response.");
@@ -110,6 +110,10 @@ internal static class QuotaArchive
             }
             if (value["next"] is JsonNode cursor)
                 Require(cursor is JsonObject page && page.Count == 2 && Integer(page["at"], 8640000000000000) && Integer(page["id"]) && page["id"]!.GetValue<long>() > 0 && readings.Count > 0);
+        }
+        if (value["chart"] is JsonObject chart) {
+            Require(value["next"] is null);
+            _ = ArchiveChart.Parse(chart);
         }
         return value;
     }
@@ -242,7 +246,7 @@ internal sealed class QuotaArchiveWindow : Form
         Controls.Add(rows); Controls.Add(charts); Controls.Add(filters); Controls.Add(footer);
         charts.SizeChanged += (_, _) => {
             foreach (Control control in charts.Controls)
-                if (control is QuotaGraph or DashboardFilters) control.Width = Math.Max(240, charts.ClientSize.Width - 32);
+                if (control is QuotaGraph or DashboardFilters or ArchiveChartControl) control.Width = Math.Max(240, charts.ClientSize.Width - 32);
         };
         allDates.Click += (_, _) => {
             if (account.SelectedIndex < 0) return;
@@ -366,6 +370,9 @@ internal sealed class QuotaArchiveWindow : Form
             };
             dateRow.Controls.Add(dateLabel); dateRow.Controls.Add(dateChoice);
             charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used" });
+            var full = new DashboardButton { AutoSize = true, Text = "Full-range graph" };
+            full.Click += async (_, _) => await LoadFullChart(window);
+            charts.Controls.Add(full);
             charts.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], period, value => {
                 chartPeriods[key] = value; graph.SelectPeriod(value);
                 dateLabel.Text = value == "Week" ? "Week ending" : "Recorded day";
@@ -374,6 +381,23 @@ internal sealed class QuotaArchiveWindow : Form
             charts.Controls.Add(dateRow);
             charts.Controls.Add(graph);
         }
+    }
+    private Task LoadFullChart(JsonObject window)
+    {
+        if (busy || account.SelectedIndex < 0 || from.Value.Date > through.Value.Date) return Task.CompletedTask;
+        var request = new JsonObject { ["action"] = "chart", ["scope"] = accounts[account.SelectedIndex]?["scope"]?.DeepClone(),
+            ["bucket"] = window["bucket"]?.DeepClone(), ["window"] = window["window"]?.DeepClone(),
+            ["from"] = new DateTimeOffset(from.Value.Date).ToUnixTimeMilliseconds(),
+            ["to"] = new DateTimeOffset(through.Value.Date.AddDays(1)).ToUnixTimeMilliseconds() - 1 };
+        return Execute(async () => {
+            var reply = await read(request, lifetime.Token);
+            if (IsDisposed) return;
+            var chart = ArchiveChart.Parse(reply["chart"] as JsonObject ?? throw new InvalidOperationException("Chart unavailable."));
+            foreach (Control control in charts.Controls.Cast<Control>().ToArray()) { charts.Controls.Remove(control); control.Dispose(); }
+            charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used, full selected range" });
+            charts.Controls.Add(new ArchiveChartControl(chart) { Width = Math.Max(240, charts.ClientSize.Width - 32), BackColor = DashboardCard.Surface, ForeColor = Color.WhiteSmoke });
+            status.Text = $"{chart.Observations:N0} observations processed. Dashed spans mean unknown coverage. Raw records remain paginated.";
+        });
     }
     internal static string ReadingText(JsonNode? item) => item?["windows"] is JsonArray windows
         ? string.Join(" · ", windows.Where(w => Snapshot.Text(w?["bucket"]) is not ("spark" or "codex_spark" or "codex_bengalfox"))

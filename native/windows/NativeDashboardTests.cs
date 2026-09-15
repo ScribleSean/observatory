@@ -7,6 +7,24 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        const string rasterJson = """
+            {"version":1,"width":2,"height":2,"from":0,"to":1000,"encoding":"ink-mask-u8","pixels":"AAMAAA==",
+             "scanned":1,"observations":1,"gaps":0,"segments":1,"firstAt":500,"lastAt":500,"minUsed":50,"maxUsed":50}
+            """;
+        var raster = ArchiveChart.Parse(JsonNode.Parse(rasterJson)!.AsObject());
+        Check(raster.Observations == 1 && raster.Pixels.Length == 4, "Full archive mask has bounded decoded data");
+        foreach (var replacement in new[] { ("\"width\":2", "\"width\":1025"), ("AAMAAA==", "AAQAAA=="),
+            ("AAMAAA==", "AA=="), ("\"observations\":1", "\"observations\":0"), ("\"firstAt\":500", "\"firstAt\":2000") }) {
+            var rejected = false;
+            try { ArchiveChart.Parse(JsonNode.Parse(rasterJson.Replace(replacement.Item1, replacement.Item2))!.AsObject()); }
+            catch { rejected = true; }
+            Check(rejected, "Malformed full archive mask is rejected");
+        }
+        using (var chart = new ArchiveChartControl(raster) { Size = new Size(600, 220) })
+        using (var bitmap = new Bitmap(600, 220)) {
+            chart.DrawToBitmap(bitmap, new Rectangle(0, 0, 600, 220));
+            Check(chart.AccessibleDescription!.Contains("1 observations"), "Archive raster retains observation count accessibility");
+        }
         Check(QuotaGraph.ConnectionStyle(300, false, true, 20, 25) == System.Drawing.Drawing2D.DashStyle.Solid, "Contiguous observations use solid ink");
         Check(QuotaGraph.ConnectionStyle(900, false, true, 20, 25) == System.Drawing.Drawing2D.DashStyle.Dash, "Missing time uses a dashed bridge");
         Check(QuotaGraph.ConnectionStyle(300, true, true, 20, 25) == System.Drawing.Drawing2D.DashStyle.Dash, "Explicit unknown reading uses a dashed bridge");
