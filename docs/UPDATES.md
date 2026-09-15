@@ -75,6 +75,22 @@ envelope available for activation's repeated verification. Synthetic tests cover
 sibling placement, repeated staging, wrong signers, extra files and tampering.
 This helper is not yet bundled or connected to the archive/downloader callback.
 
+`create-update-archive.ps1 -Directory <prepared-directory> -Archive <new-zip>`
+compresses the prepared directory without overwriting an existing archive or
+following linked inputs. It writes forward-slash ZIP entry names explicitly for
+Windows PowerShell 5 compatibility. The native extractor continues to reject
+backslash paths; its policy was not relaxed. Compression does not authenticate
+inputs: run preparation first, exclude concurrent writers, then verify the
+extracted result and sign the final archive separately.
+
+The focused Windows test with `OBSERVATORY_TEST_UPDATE_EXTRACTOR` pointing at the
+verified build-24 executable passed preparation, ZIP creation, actual bounded
+native extraction, signed-inventory verification and sibling staging. All 24
+focused checks passed on Windows; the platform-specific round trip skips on Mac.
+These fixtures contain synthetic executables and ephemeral keys, not a complete
+release payload. Full-payload sizing, outer signing, feed and callback integration
+remain open.
+
 The Windows updater primitives remain unconnected. Native Settings now has a running-version label in source, using the Mac bundle metadata or Windows assembly file version. It does not check for downloads, identify the latest release or enable automatic updates. Installed apps and already-built candidates acquire source changes only after a new build and installation.
 
 Windows installer build metadata now includes the shared build number. After

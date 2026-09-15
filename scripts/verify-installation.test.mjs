@@ -158,18 +158,20 @@ test('signed update directory survives ZIP, real native bounded extraction and s
   prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,prepared);
   mkdirSync(expanded);
   const script=path.join(f.root,'roundtrip.ps1');
-  writeFileSync(script,`param([string]$Source,[string]$Archive,[string]$Extractor,[string]$Destination)
+  writeFileSync(script,`param([string]$Source,[string]$Archive,[string]$Extractor,[string]$Destination,[string]$ArchiveBuilder)
 $ErrorActionPreference='Stop'
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[IO.Compression.ZipFile]::CreateFromDirectory($Source,$Archive)
+& $ArchiveBuilder -Directory $Source -Archive $Archive
 $arguments='--test-update-extraction "'+$Archive+'" "'+$Destination+'"'
-$process=Start-Process -FilePath $Extractor -ArgumentList $arguments -Wait -PassThru
+$process=Start-Process -FilePath $Extractor -ArgumentList $arguments -Wait -PassThru -RedirectStandardError ($Archive+'.stderr') -RedirectStandardOutput ($Archive+'.stdout')
+Get-Content ($Archive+'.stderr') | Write-Error -ErrorAction Continue
+Get-Content ($Archive+'.stdout') | Write-Output
 exit $process.ExitCode
 `);
   const result=spawnSync(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),
     ['-NoProfile','-NonInteractive','-File',script,'-Source',prepared,'-Archive',path.join(f.root,'update.zip'),
-      '-Extractor',extractor,'-Destination',expanded],{encoding:'utf8',timeout:30000});
-  assert.equal(result.status,0,result.stderr || String(result.error));
+      '-Extractor',extractor,'-Destination',expanded,'-ArchiveBuilder',
+      fileURLToPath(new URL('../native/windows/create-update-archive.ps1',import.meta.url))],{encoding:'utf8',timeout:30000});
+  assert.equal(result.status,0,result.stderr || result.stdout || String(result.error));
   const children=readdirSync(expanded);
   assert.equal(children.length,1);
   assert.match(children[0],/^\.observatory-stage-[a-f0-9]{32}$/);
