@@ -28,7 +28,7 @@ internal static class DashboardPalette
             table.ColumnHeadersDefaultCellStyle.BackColor = Surface(light);
             table.ColumnHeadersDefaultCellStyle.ForeColor = Muted(light);
         }
-        foreach (Control child in control.Controls) Apply(child, light, inCard || control is DashboardCard);
+        foreach (var child in control.Controls.Cast<Control>().ToArray()) Apply(child, light, inCard || control is DashboardCard);
         control.Invalidate();
     }
 }

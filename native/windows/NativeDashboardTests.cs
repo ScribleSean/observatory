@@ -300,7 +300,7 @@ internal static class NativeDashboardTests
                 Check(form.BackColor == DashboardPalette.Background(true) && form.ForeColor == DashboardPalette.Text(true), "Light palette applied to dashboard");
                 Check(ReferenceEquals(sourceSwitch, Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr")) && sourceSwitch.Checked,
                     "Appearance changes preserve existing settings controls and values");
-                foreach (var destination in sections.Items.Cast<string>())
+                foreach (var destination in sections.Items.Cast<string>().ToArray())
                 {
                     sections.SelectedItem = destination;
                     Check(form.BackColor == DashboardPalette.Background(true), "Light appearance survives navigation");
