@@ -7,6 +7,20 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        var paceWindowFixture = new JsonObject { ["bucket"] = "codex", ["window"] = "primary" };
+        JsonObject PaceSample(string at, double? remaining, string reset = "same") => new() {
+            ["checkedAt"] = at, ["windows"] = new JsonArray(new JsonObject {
+                ["bucket"] = "codex", ["window"] = "primary", ["remainingPercent"] = remaining, ["resetsAt"] = reset }) };
+        QuotaHour[] PaceRows(params JsonObject[] samples) => QuotaHourlyChart.Read(
+            new JsonObject { ["history"] = new JsonArray(samples.Cast<JsonNode>().ToArray()) }, paceWindowFixture, TimeZoneInfo.Utc);
+        var paceRows = PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:05:00Z", 79));
+        Check(paceRows.Length == 1 && paceRows[0].Rate == 12 && paceRows[0].ObservedMinutes == 5, "Hourly rate uses only observed minutes");
+        Check(PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:11:00Z", 79)).Length == 0, "Hourly pace excludes long gaps");
+        Check(PaceRows(PaceSample("2026-09-12T12:58:00Z", 80), PaceSample("2026-09-12T13:03:00Z", 79)).Length == 0, "Hourly pace excludes cross-hour intervals");
+        Check(PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:05:00Z", 79, "changed")).Length == 0, "Hourly pace excludes reset changes");
+        Check(PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:05:00Z", 90)).Length == 0, "Hourly pace excludes counter resets");
+        Check(PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:03:00Z", null), PaceSample("2026-09-12T12:05:00Z", 79)).Length == 0, "Unknown readings break hourly intervals");
+        Check(PaceRows(PaceSample("2026-09-12T12:00:00Z", 80), PaceSample("2026-09-12T12:05:00Z", 80)).Single().Rate == 0, "Observed unchanged usage is a real zero rate");
         Check(DashboardHistoryChart.AxisLabel(0) == "0" && DashboardHistoryChart.AxisLabel(1000) == "1K" &&
             DashboardHistoryChart.AxisLabel(1_000_000) == "1M" && DashboardHistoryChart.AxisLabel(1_000_000_000) == "1B",
             "History axis uses compact magnitudes without changing zero");
@@ -214,8 +228,23 @@ internal static class NativeDashboardTests
                 data["quota"]!["windows"]![0]!["resetsAt"] = DateTimeOffset.UtcNow.AddHours(4).ToString("O");
                 const string paceSummary = "20.0% of allowance/hour over 60 min. Approximately 2h 30m left at this pace (at last check). Reset in 4h 0m. Estimated allowance covers 63% of the time until reset (at last check).";
                 data["quota"]!["pace"] = new JsonArray(new JsonObject { ["bucket"] = "codex", ["window"] = "primary", ["asOf"] = freshAt, ["summary"] = paceSummary, ["status"] = "projected", ["coverageFraction"] = 0.625 });
+                var observedAt = DateTimeOffset.Parse(freshAt);
+                data["quota"]!["history"] = new JsonArray(Enumerable.Range(0, 13).Select(index => (JsonNode)new JsonObject {
+                    ["checkedAt"] = observedAt.AddMinutes(-60 + index * 5).ToString("O"),
+                    ["windows"] = new JsonArray(new JsonObject { ["bucket"] = "codex", ["window"] = "primary",
+                        ["remainingPercent"] = 85 - index * (20d / 12),
+                        ["resetsAt"] = data["quota"]!["windows"]![0]!["resetsAt"]!.DeepClone() })
+                }).ToArray());
+                data["quota"]!["dailyUsageBuckets"] = new JsonArray(new JsonObject { ["startDate"] = "2026-09-12", ["tokens"] = 3_300_000_000d });
                 form.Reload();
                 Check(Texts(form).Contains(paceSummary), "Fresh pace rendered in allowance page");
+                Check(Children(form).OfType<QuotaHourlyChart>().Count() == 1, "Populated allowance history has an hourly pace chart");
+                var hourlyChart = Children(form).OfType<QuotaHourlyChart>().Single();
+                using (var hourlyImage = new Bitmap(hourlyChart.Width, hourlyChart.Height))
+                {
+                    hourlyChart.DrawToBitmap(hourlyImage, new Rectangle(Point.Empty, hourlyImage.Size));
+                    hourlyImage.Save(Path.Combine(output, "native-hourly-pace.png"), ImageFormat.Png);
+                }
                 var coverageBar = Children(form).OfType<DashboardMeter>().Single(bar => bar.AccessibleName == "Estimated time coverage until reset, at last check");
                 Check(coverageBar.Fraction == 0.625 && coverageBar.Visible && coverageBar.Width > 0, "Reset coverage bar rendered at expected ratio");
                 Check(coverageBar.AccessibilityObject.Role == AccessibleRole.ProgressBar && coverageBar.AccessibilityObject.Value == "62.5%", "Meter exposes its observed fraction accessibly");

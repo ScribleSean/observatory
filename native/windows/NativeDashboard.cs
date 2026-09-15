@@ -334,6 +334,13 @@ internal sealed partial class NativeDashboard : Form
             }
             Label("Allowance used").Font = heading;
             body.Controls.Add(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
+            var hourly = QuotaHourlyChart.Read(quota, window);
+            if (hourly.Length > 0)
+            {
+                Label("Usage pace by hour").Font = brand;
+                body.Controls.Add(new QuotaHourlyChart(hourly) { Width = ContentWidth });
+                Label("Rates use observed intervals within each hour. Missing polls, resets and intervals crossing an hour boundary are excluded.").ForeColor = Color.Silver;
+            }
         }
         body.Controls.Add(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
         Label("Account-wide observations, not a device sum. Gaps and resets are separate segments. Daily token totals may lag.");
