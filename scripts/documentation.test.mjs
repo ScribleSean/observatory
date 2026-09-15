@@ -23,5 +23,8 @@ test('public documentation links resolve and release status stays explicit',asyn
   assert.match(readme,/early preview/);
   assert.match(readme,/Public installers are being prepared, not yet available/);
   assert.match(readme,/Automatic app updates are not available yet/);
+  assert.match(readme,/Build from source<\/a>/);
+  assert.match(readme,/The download-and-install path is not available yet/);
+  assert.doesNotMatch(readme,/>Get started<\/a>/);
   assert.match(readme,/\[desktop updates\]\(docs\/UPDATES\.md\)/);
 });

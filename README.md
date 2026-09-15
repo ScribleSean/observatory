@@ -5,7 +5,7 @@
   <p>
     <a href="https://scriblesean.github.io/observatory/">Explore the demo</a>
     &nbsp; · &nbsp;
-    <a href="docs/GUIDE.md">Get started</a>
+    <a href="docs/GUIDE.md#development">Build from source</a>
     &nbsp; · &nbsp;
     <a href="docs/ROADMAP.md">Roadmap</a>
   </p>
@@ -38,9 +38,11 @@ The project is an early preview tested on one Mac, Windows and WSL setup. Verifi
 
 | Platform | Current status |
 | --- | --- |
-| macOS, Apple Silicon | [Native SwiftUI main window and menu-bar panel](docs/MAC.md), with bundled Node and Python. Public release pending. |
-| Windows x64 | [Native main window and system-tray panel](docs/WINDOWS.md). Installer tested and installed on the development machine. Public release pending. |
+| macOS, Apple Silicon | [Build the native app from source](docs/MAC.md). Development candidates bundle Node and Python. No public installer yet. |
+| Windows x64 | [Build the native app from source](docs/WINDOWS.md). Installer candidates have been tested on the development machine. No public installer yet. |
 | Ubuntu / WSL | Configured token and workflow sources. Standalone desktop app planned. |
+
+For now, choose the hosted demo or build from source using the platform guides above. Building requires developer tools. The download-and-install path is not available yet.
 
 Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Provider account management, unified allowance history and clean-machine release verification are still in progress. Read the [setup guide](docs/GUIDE.md) and [integration coverage](docs/SOURCE-COVERAGE.md) before connecting records.
 

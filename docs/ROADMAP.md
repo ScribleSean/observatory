@@ -6,6 +6,8 @@ These are planned milestones, not shipped capabilities or promised dates. See th
 
 ## 1. Reproducible desktop preview
 
+Status: in progress. Public entry points are the synthetic demo and building from source. Development installer candidates are not a public release. Versioned signed Mac and Windows installers, checksums and clean-machine verification remain release gates.
+
 - Preserve the native Mac experience and add a Windows tray app with the same dashboard purpose.
 - Package required runtimes and provide clear first-run source setup.
 - On Windows, optionally start a selected installed Ubuntu distribution and its collector without an open terminal. Windows collection must still work without WSL.
