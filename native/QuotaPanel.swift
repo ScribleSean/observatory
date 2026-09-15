@@ -6,6 +6,14 @@ struct QuotaHistoryPoint: Identifiable {
     let at: Date
     let used: Double
     let segment: Int
+    var reset: String = ""
+}
+
+func quotaIsGap(_ previous: QuotaHistoryPoint, _ current: QuotaHistoryPoint) -> Bool {
+    let sameReset = previous.reset == current.reset || (parseDate(previous.reset).flatMap { before in
+        parseDate(current.reset).map { abs($0.timeIntervalSince(before)) <= 2 }
+    } ?? false)
+    return current.at > previous.at && current.segment != previous.segment && current.used >= previous.used && sameReset
 }
 
 struct QuotaHourlyPace: Identifiable {
@@ -88,7 +96,7 @@ func quotaHistoryPoints(_ history: [JSONObject], bucket: String, window: String)
     for sample in history {
         guard let at = parseDate(sample["checkedAt"]),
               let row = rows(sample["windows"]).first(where: { text($0["bucket"]) == bucket && text($0["window"]) == window }),
-              let remaining = number(row["remainingPercent"]), remaining <= 100 else {
+              let remaining = number(row["remainingPercent"]), remaining.isFinite, remaining >= 0, remaining <= 100 else {
             previous = nil; segment += 1; continue
         }
         let used = 100 - remaining
@@ -97,7 +105,7 @@ func quotaHistoryPoints(_ history: [JSONObject], bucket: String, window: String)
             reset == prior.reset || (parseDate(reset).flatMap { current in parseDate(prior.reset).map { abs(current.timeIntervalSince($0)) <= 2 } } ?? false)
         } ?? true
         if let previous, at.timeIntervalSince(previous.at) > 630 || at <= previous.at || used < previous.used || !sameReset { segment += 1 }
-        result.append(QuotaHistoryPoint(id: result.count, at: at, used: used, segment: segment))
+        result.append(QuotaHistoryPoint(id: result.count, at: at, used: used, segment: segment, reset: reset))
         previous = (at, used, reset)
     }
     return result
@@ -108,6 +116,7 @@ struct QuotaPanel: View {
     let quota: JSONObject
     var dashboard = false
     @State private var selected = ""
+    @State private var historyPeriod = "All retained"
     private var windows: [JSONObject] { visibleQuotaWindows(quota["windows"]) }
     private var chosen: JSONObject? { windows.first(where: { key($0) == selected }) ?? windows.first }
     private func key(_ row: JSONObject) -> String { text(row["bucket"]) + ":" + text(row["window"]) }
@@ -187,17 +196,35 @@ struct QuotaPanel: View {
                         ForEach(Array(windows.enumerated()), id: \.offset) { _, row in Text(label(row)).tag(key(row)) }
                     }.labelsHidden().accessibilityLabel("Limit history window")
                 }
-                let points = quotaHistoryPoints(rows(quota["history"]), bucket: text(chosen["bucket"]), window: text(chosen["window"]))
+                let retained = quotaHistoryPoints(rows(quota["history"]), bucket: text(chosen["bucket"]), window: text(chosen["window"]))
+                if dashboard {
+                    ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"], values: ["Day", "Week", "All retained"], selection: $historyPeriod)
+                }
+                let end = parseDate(quota["checkedAt"]) ?? retained.last?.at ?? Date()
+                let start = historyPeriod == "Day" ? end.addingTimeInterval(-86400) : historyPeriod == "Week" ? end.addingTimeInterval(-604800) : min(retained.first?.at ?? end, end.addingTimeInterval(-3600))
+                let points = retained.filter { $0.at >= start && $0.at <= end }
                 Text("Allowance used").observatoryFont(dashboard ? 19 : 12, weight: .semibold).tracking(dashboard ? 0.6 : 0)
                 if !points.isEmpty {
-                    Chart(points) { point in
+                    Chart {
+                      ForEach(points) { point in
                         LineMark(x: .value("Time", point.at), y: .value("Used percent", point.used), series: .value("Reading segment", point.segment))
                             .foregroundStyle(ObservatoryTheme.sage)
                         PointMark(x: .value("Time", point.at), y: .value("Used percent", point.used)).symbolSize(8).foregroundStyle(ObservatoryTheme.sage)
                             .accessibilityHidden(true)
+                      }
+                      ForEach(Array(points.dropFirst().enumerated()), id: \.offset) { index, point in
+                        if quotaIsGap(points[index], point) {
+                            ForEach([points[index], point]) { endpoint in
+                                LineMark(x: .value("Time", endpoint.at), y: .value("Used percent", endpoint.used), series: .value("Unknown coverage", "gap-\(index)"))
+                                    .foregroundStyle(ObservatoryTheme.sage.opacity(0.5))
+                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                                    .accessibilityLabel("Coverage unknown. No observation between these readings.")
+                            }
+                        }
+                      }
                     }
                     .chartYScale(domain: 0...100)
-                    .chartXScale(domain: (dashboard ? min(points.first!.at, points.last!.at.addingTimeInterval(-3600)) : points.last!.at.addingTimeInterval(-86400))...points.last!.at)
+                    .chartXScale(domain: start...end)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .hour, count: dashboard ? 1 : 6)) {
                             AxisGridLine()
@@ -211,12 +238,16 @@ struct QuotaPanel: View {
                     } }
                     .chartXAxis(dashboard ? .hidden : .automatic)
                     .frame(height: 130 * textScale)
-                    .accessibilityLabel("Allowance history. Gaps and resets are separate segments.")
+                    .accessibilityLabel("Allowance used. Dashed spans mean coverage unknown, not estimated usage. Resets remain separate.")
+                    Text("Dashed spans: coverage unknown. No estimated readings.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
+                    if dashboard {
+                        Text("Live snapshot history retains up to 30 days. Older saved observations are in the account archive.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
+                    }
                     if dashboard {
                         ObservatoryAdaptiveRow {
-                            Text(points.first!.at, format: .dateTime.month(.abbreviated).day().hour().minute())
+                            Text(start, format: .dateTime.month(.abbreviated).day().hour().minute())
                             Spacer()
-                            Text(points.last!.at, format: .dateTime.month(.abbreviated).day().hour().minute())
+                            Text(end, format: .dateTime.month(.abbreviated).day().hour().minute())
                         }.observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
                     }
                     let hourly = quotaHourlyPace(points)
@@ -246,7 +277,7 @@ struct QuotaPanel: View {
                             .observatoryFont(10).foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("History begins with the first successful reading.").observatoryFont(11).foregroundStyle(.secondary)
+                    Text("No saved observations in this period.").observatoryFont(11).foregroundStyle(.secondary)
                 }
             }
             let daily = Array(rows(quota["dailyUsageBuckets"]).suffix(14))

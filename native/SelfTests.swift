@@ -322,6 +322,15 @@ func runSelfTests() {
     ]
     precondition(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary").map(\.segment) == [0, 0, 1])
     precondition(quotaHistoryPoints(quotaSamples, bucket: "spark", window: "primary").isEmpty)
+    let contiguous = quotaHistoryPoints(Array(quotaSamples.prefix(2)), bucket: "codex", window: "primary")
+    precondition(!quotaIsGap(contiguous[0], contiguous[1]))
+    let missingSample: JSONObject = ["checkedAt": "2026-09-09T12:03:00Z", "windows": []]
+    let midGap = quotaHistoryPoints([quotaSamples[0], missingSample, quotaSamples[1]], bucket: "codex", window: "primary")
+    precondition(midGap.count == 2 && quotaIsGap(midGap[0], midGap[1]))
+    let edges = quotaHistoryPoints([missingSample, quotaSamples[0], quotaSamples[1], missingSample], bucket: "codex", window: "primary")
+    precondition(edges.count == 2 && edges.first!.at == contiguous.first!.at && edges.last!.at == contiguous.last!.at)
+    let resetPoints = quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary")
+    precondition(!quotaIsGap(resetPoints[1], resetPoints[2]))
     let paceWindow: JSONObject = ["bucket": "codex", "window": "primary"]
     let dueNow = parseDate("2026-09-09T12:00:00Z")!
     precondition(allowanceRefreshDue(["nextAttemptAt": "2026-09-09T12:00:00Z"], now: dueNow))

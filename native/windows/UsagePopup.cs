@@ -6,11 +6,11 @@ namespace WorkspaceObservatory;
 
 internal sealed class UsagePopup : Form
 {
-    private readonly Font normalFont = new("Segoe UI", 10);
-    private readonly Font headingFont = new("Segoe UI", 10, FontStyle.Bold);
-    private readonly Font titleFont = new("Segoe UI", 13, FontStyle.Bold);
-    private readonly Font valueFont = new("Segoe UI", 14, FontStyle.Bold);
-    private readonly Font secondaryFont = new("Segoe UI", 9);
+    private readonly Font normalFont = DashboardTypography.AtPixels(14.5f);
+    private readonly Font headingFont = DashboardTypography.AtPixels(19, FontStyle.Bold);
+    private readonly Font titleFont = DashboardTypography.AtPixels(22, FontStyle.Bold);
+    private readonly Font valueFont = DashboardTypography.AtPixels(22, FontStyle.Bold);
+    private readonly Font secondaryFont = DashboardTypography.AtPixels(13);
     private readonly Func<JsonObject?> read;
     private readonly Func<Task> refresh;
     private readonly Action open;
@@ -23,7 +23,7 @@ internal sealed class UsagePopup : Form
         this.read = read; this.refresh = refresh; this.open = open;
         Text = "Observatory";
         AccessibleName = "Observatory usage overview";
-        BackColor = Color.FromArgb(39, 39, 41); ForeColor = Color.WhiteSmoke;
+        BackColor = DashboardPalette.Background(false); ForeColor = DashboardPalette.Text(false);
         Font = normalFont;
         ClientSize = new Size(388, 560);
         FormBorderStyle = FormBorderStyle.None;
@@ -41,8 +41,8 @@ internal sealed class UsagePopup : Form
 
     private Button ActionButton(string title, int width = BodyWidth)
     {
-        var button = new Button { Text = title, AccessibleName = title, Width = width, Height = 38,
-            FlatStyle = FlatStyle.Flat, BackColor = BackColor, ForeColor = ForeColor,
+        var button = new DashboardButton { Text = title, AccessibleName = title, Width = width, Height = 38,
+            FlatStyle = FlatStyle.Flat, BackColor = DashboardCard.Surface, ForeColor = ForeColor,
             TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0),
             Margin = new Padding(0, 2, 0, 2), UseVisualStyleBackColor = false };
         button.FlatAppearance.BorderSize = 0;
@@ -52,7 +52,7 @@ internal sealed class UsagePopup : Form
     }
 
     private void Separator() => content.Controls.Add(new Panel { Width = BodyWidth, Height = 1,
-        BackColor = Color.FromArgb(67, 67, 70), Margin = new Padding(0, 10, 0, 10) });
+        BackColor = DashboardPalette.Grid(this), Margin = new Padding(0, 8, 0, 8) });
 
     private void Stat(string title, string value, string date)
     {
@@ -60,7 +60,7 @@ internal sealed class UsagePopup : Form
         row.Controls.Add(new Label { Text = title, ForeColor = Color.Gainsboro, Bounds = new Rectangle(10, 8, 155, 24) });
         row.Controls.Add(new Label { Text = value, ForeColor = ForeColor, TextAlign = ContentAlignment.TopRight,
             Font = valueFont, Bounds = new Rectangle(165, 5, BodyWidth - 175, 29) });
-        row.Controls.Add(new Label { Text = date, ForeColor = Color.FromArgb(170, 170, 176),
+        row.Controls.Add(new Label { Text = date, ForeColor = DashboardPalette.Muted(false),
             Font = secondaryFont, Bounds = new Rectangle(10, 34, BodyWidth - 20, 22) });
         content.Controls.Add(row);
     }
@@ -68,7 +68,7 @@ internal sealed class UsagePopup : Form
     private Label Label(string text, bool heading = false)
     {
         var label = new Label { Text = text, AutoSize = true, MaximumSize = new Size(BodyWidth, 0),
-            Margin = new Padding(10, heading ? 8 : 3, 0, 4), ForeColor = heading ? Color.WhiteSmoke : Color.FromArgb(180, 180, 186) };
+            Margin = new Padding(8, heading ? 8 : 4, 0, 4), ForeColor = heading ? DashboardPalette.Text(false) : DashboardPalette.Muted(false) };
         if (heading) label.Font = headingFont;
         content.Controls.Add(label); return label;
     }
@@ -101,9 +101,10 @@ internal sealed class UsagePopup : Form
             foreach (var window in windows.Take(2))
             {
                 Label($"{WindowLabel(window)}    {Snapshot.Format(Snapshot.Number(window["remainingPercent"]))}% left");
-                content.Controls.Add(new AllowanceMeter { Width = BodyWidth, Height = 5,
-                    Value = (int)Math.Clamp((Snapshot.Number(window["remainingPercent"]) ?? 0) * 10, 0, 1000),
-                    AccessibleName = WindowLabel(window) + " remaining allowance", Margin = new Padding(0, 0, 0, 4) });
+                if (Snapshot.Number(window["remainingPercent"]) is double remaining && double.IsFinite(remaining) && remaining >= 0 && remaining <= 100)
+                    content.Controls.Add(new AllowanceMeter { Width = BodyWidth, Height = 5,
+                        Value = (int)(remaining * 10),
+                        AccessibleName = WindowLabel(window) + " remaining allowance", Margin = new Padding(0, 0, 0, 4) });
             }
             if (windows.Length > 2) Label($"{windows.Length - 2} more allowance windows in Observatory");
             Label("Account-wide limits, not a device sum.");
@@ -119,7 +120,8 @@ internal sealed class UsagePopup : Form
             choice.AccessibleDescription = host == name ? "Selected source host" : "Select source host";
             choice.Location = new Point(index * BodyWidth / 4, 0);
             choice.TextAlign = ContentAlignment.MiddleCenter; choice.Padding = Padding.Empty;
-            choice.BackColor = host == name ? Color.FromArgb(66, 66, 72) : BackColor;
+            choice.BackColor = host == name ? DashboardPalette.Accent(false) : DashboardCard.Surface;
+            choice.ForeColor = host == name ? DashboardPalette.Text(true) : ForeColor;
             choice.Click += (_, _) => { host = name; Reload(); };
             hosts.Controls.Add(choice);
         }
@@ -127,7 +129,7 @@ internal sealed class UsagePopup : Form
         var activity = Snapshot.Latest(data, "activity", host);
         var tokens = Snapshot.Latest(data, "tokens", host);
         Stat("Active time", Snapshot.Duration(Snapshot.Number(activity?["seconds"])), Snapshot.Text(activity?["date"], "No retained records"));
-        Stat("Tokens", Snapshot.Format(Snapshot.Number(tokens?["totalTokens"])), Snapshot.Text(tokens?["date"], "No retained records"));
+        Stat("Tokens", Snapshot.Number(tokens?["totalTokens"]) is double total ? DashboardHistoryChart.AxisLabel(total) : "Unknown", Snapshot.Text(tokens?["date"], "No retained records"));
         Separator();
         var refreshButton = ActionButton("Refresh sources");
         refreshButton.Click += async (_, _) => { refreshButton.Enabled = false; try { await refresh(); } finally { if (!IsDisposed) Reload(); } };
@@ -191,6 +193,10 @@ internal sealed class QuotaGraph : Control
     private readonly JsonObject quota;
     private JsonObject window;
     private readonly bool fitHistory;
+    private string period = "All retained";
+    internal void SelectPeriod(string value) { period = value; Invalidate(); }
+    internal static DashStyle? ConnectionStyle(double seconds, bool missing, bool sameReset, double priorUsed, double used)
+        => seconds <= 0 || !sameReset || used < priorUsed ? null : missing || seconds > 630 ? DashStyle.Dash : DashStyle.Solid;
     internal QuotaGraph(JsonObject quota, JsonObject window, bool fitHistory = false)
     {
         this.quota = quota; this.window = window; this.fitHistory = fitHistory;
@@ -220,6 +226,7 @@ internal sealed class QuotaGraph : Control
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
         using var grid = new Pen(DashboardPalette.Grid(this));
         using var line = new Pen(DashboardPalette.Accent(DashboardPalette.IsLight(this)), 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var gap = new Pen(Color.FromArgb(140, line.Color), 1) { DashStyle = DashStyle.Dash };
         using var ink = new SolidBrush(line.Color);
         using var brush = new SolidBrush(DashboardPalette.Muted(DashboardPalette.IsLight(this)));
         var box = new RectangleF(34, 12, Math.Max(1, Width - 44), Math.Max(1, Height - 42));
@@ -237,6 +244,12 @@ internal sealed class QuotaGraph : Control
         }
         var start = end.AddDays(-1);
         if (fitHistory) (start, end) = HistoryRange(quota, window, end);
+        if (fitHistory && DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var checkedAt))
+        {
+            end = checkedAt;
+            if (period == "Day") start = end.AddDays(-1);
+            if (period == "Week") start = end.AddDays(-7);
+        }
         var duration = Math.Max(1, (end - start).TotalSeconds);
         var format = fitHistory ? "MMM d HH:mm" : "HH:mm";
         g.DrawString(start.ToLocalTime().ToString(format), Font, brush, box.Left, box.Bottom + 6);
@@ -244,6 +257,7 @@ internal sealed class QuotaGraph : Control
         g.DrawString(endLabel, Font, brush, box.Right - g.MeasureString(endLabel, Font).Width, box.Bottom + 6);
         PointF? previous = null; DateTimeOffset? previousAt = null; double? previousUsed = null; string? previousReset = null;
         var count = 0;
+        var missing = false;
         double? firstUsed = null, lastUsed = null, minimumUsed = null, maximumUsed = null;
         foreach (var sample in (quota["history"] as JsonArray)?.OfType<JsonObject>() ?? [])
         {
@@ -251,23 +265,25 @@ internal sealed class QuotaGraph : Control
                 Snapshot.Text(item["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(item["window"]) == Snapshot.Text(window["window"]));
             if (!DateTimeOffset.TryParse(Snapshot.Text(sample["checkedAt"]), out var at) || at < start || at > end ||
                 Snapshot.Number(row?["remainingPercent"]) is not double remaining || !double.IsFinite(remaining) || remaining < 0 || remaining > 100)
-            { previous = null; previousAt = null; continue; }
+            { missing = true; continue; }
             var used = 100 - remaining; var reset = Snapshot.Text(row?["resetsAt"]);
             var point = new PointF(box.Left + box.Width * (float)((at - start).TotalSeconds / duration), box.Bottom - box.Height * (float)(used / 100));
             var sameReset = reset == previousReset || (DateTimeOffset.TryParse(reset, out var resetTime) && DateTimeOffset.TryParse(previousReset, out var previousResetTime) && Math.Abs((resetTime - previousResetTime).TotalSeconds) <= 2);
-            if (previous is PointF prior && previousAt is DateTimeOffset time && at > time && (at - time).TotalSeconds <= 630 && used >= previousUsed && sameReset)
-                g.DrawLine(line, prior, point);
+            if (previous is PointF prior && previousAt is DateTimeOffset time && previousUsed is double before &&
+                ConnectionStyle((at - time).TotalSeconds, missing, sameReset, before, used) is DashStyle stroke)
+                g.DrawLine(stroke == DashStyle.Dash ? gap : line, prior, point);
             g.FillEllipse(ink, point.X - 2, point.Y - 2, 4, 4);
             firstUsed ??= used; lastUsed = used;
             minimumUsed = Math.Min(minimumUsed ?? used, used); maximumUsed = Math.Max(maximumUsed ?? used, used);
             previous = point; previousAt = at; previousUsed = used; previousReset = reset; count++;
+            missing = false;
         }
         var selection = Snapshot.Text(window["bucket"]) + " " + Snapshot.Text(window["window"]);
-        var period = fitHistory ? "retained history" : "24-hour period";
-        AccessibleDescription = count == 0 ? $"{selection}: no observations in this {period}."
-            : $"{selection}: {count} observations. Allowance used starts at {firstUsed:0.#}%, ends at {lastUsed:0.#}%, and ranges from {minimumUsed:0.#}% to {maximumUsed:0.#}%. Gaps and resets are not joined.";
+        var rangeLabel = fitHistory ? period : "24-hour period";
+        AccessibleDescription = count == 0 ? $"{selection}: no observations in this {rangeLabel}."
+            : $"{selection}: {count} observations. Allowance used starts at {firstUsed:0.#}%, ends at {lastUsed:0.#}%, and ranges from {minimumUsed:0.#}% to {maximumUsed:0.#}%. Dashed spans mean coverage unknown, not estimated usage. Resets remain separate.";
         if (count == 0)
-            TextRenderer.DrawText(g, $"No saved observations in this {period}.", Font, Rectangle.Round(box), ForeColor,
+            TextRenderer.DrawText(g, $"No saved observations in this {rangeLabel}.", Font, Rectangle.Round(box), ForeColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
     }
 }

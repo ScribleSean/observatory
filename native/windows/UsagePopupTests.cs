@@ -31,10 +31,17 @@ internal static class UsagePopupTests
                 Check(popup.FormBorderStyle == FormBorderStyle.None, "Tray panel should not use a utility-window title bar.");
                 Check(!controls.OfType<ComboBox>().Any(), "Device navigation should not use a stock dropdown.");
                 Check(controls.OfType<Button>().All(button => button.FlatAppearance.BorderSize == 0), "Tray actions should not have outlined button frames.");
+                Check(controls.OfType<Button>().All(button => button is DashboardButton), "Tray actions use shared pill styling.");
                 Check(!controls.OfType<Label>().Any(label => label.Text.Contains("bengalfox")), "Retired allowance is visible.");
                 Check(!controls.OfType<FlowLayoutPanel>().Single().AutoScroll, "Popup must not scroll.");
                 Check(controls.All(control => control.Parent!.ClientRectangle.Contains(control.Bounds)), "A popup control is clipped.");
                 Capture(popup, output, "popup-latest");
+                var savedRemaining = data["quota"]!["windows"]![0]!["remainingPercent"]!.DeepClone();
+                data["quota"]!["windows"]![0]!["remainingPercent"] = null;
+                popup.Reload();
+                Check(Descendants(popup).OfType<AllowanceMeter>().Count() == 1, "Unknown allowance must not paint a zero meter.");
+                data["quota"]!["windows"]![0]!["remainingPercent"] = savedRemaining;
+                popup.Reload();
                 // Detailed charts are tested independently, not embedded in the compact tray popup.
                 var quota = (JsonObject)data["quota"]!;
                 var windows = ((JsonArray)quota["windows"]!).OfType<JsonObject>().Take(3).ToArray();

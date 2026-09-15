@@ -7,6 +7,11 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        Check(QuotaGraph.ConnectionStyle(300, false, true, 20, 25) == System.Drawing.Drawing2D.DashStyle.Solid, "Contiguous observations use solid ink");
+        Check(QuotaGraph.ConnectionStyle(900, false, true, 20, 25) == System.Drawing.Drawing2D.DashStyle.Dash, "Missing time uses a dashed bridge");
+        Check(QuotaGraph.ConnectionStyle(300, true, true, 20, 25) == System.Drawing.Drawing2D.DashStyle.Dash, "Explicit unknown reading uses a dashed bridge");
+        Check(QuotaGraph.ConnectionStyle(300, false, false, 20, 25) is null, "Reset boundary is not a coverage bridge");
+        Check(QuotaGraph.ConnectionStyle(300, false, true, 25, 5) is null, "Counter reset is not joined");
         var paceWindowFixture = new JsonObject { ["bucket"] = "codex", ["window"] = "primary" };
         var rangeEnd = DateTimeOffset.Parse("2026-09-12T12:00:00Z");
         var emptyRange = QuotaGraph.HistoryRange(new JsonObject(), paceWindowFixture, rangeEnd);

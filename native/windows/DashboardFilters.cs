@@ -23,7 +23,16 @@ internal sealed class DashboardFilters : Panel
                 AccessibleDescription = value == selected ? "Selected" : "Not selected"
             };
             button.FlatAppearance.BorderSize = 0;
-            button.Click += (_, _) => changed(value);
+            button.Click += (_, _) => {
+                foreach (Button chip in chips.Controls)
+                {
+                    var active = chip.Text == value;
+                    chip.BackColor = active ? Color.FromArgb(177, 195, 161) : DashboardCard.Surface;
+                    chip.ForeColor = active ? Color.FromArgb(28, 29, 27) : ForeColor;
+                    chip.AccessibleDescription = active ? "Selected" : "Not selected";
+                }
+                changed(value);
+            };
             chips.Controls.Add(button);
         }
     }

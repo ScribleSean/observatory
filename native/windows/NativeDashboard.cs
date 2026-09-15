@@ -14,6 +14,7 @@ internal sealed partial class NativeDashboard : Form
     private readonly ListBox sections = new() { Dock = DockStyle.Left, Width = 170, BorderStyle = BorderStyle.None, ItemHeight = 38 };
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private string host = "Windows", period = "Day", anchor = "";
+    private string allowancePeriod = "All retained";
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
     private bool lightMode;
@@ -339,7 +340,12 @@ internal sealed partial class NativeDashboard : Form
                 body.Controls.Add(endpoints);
             }
             Label("Allowance used").Font = heading;
-            body.Controls.Add(new QuotaGraph(quota, window, fitHistory: true) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
+            var historyGraph = new QuotaGraph(quota, window, fitHistory: true) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface };
+            historyGraph.SelectPeriod(allowancePeriod);
+            body.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], allowancePeriod, value => { allowancePeriod = value; BeginInvoke(Reload); }) { Width = ContentWidth });
+            body.Controls.Add(historyGraph);
+            Label("Dashed spans: coverage unknown. No estimated readings.").ForeColor = Color.Silver;
+            Label("Live snapshot history retains up to 30 days. Older saved observations are in the account archive.").ForeColor = Color.Silver;
             var hourly = QuotaHourlyChart.Read(quota, window);
             if (hourly.Length > 0)
             {
