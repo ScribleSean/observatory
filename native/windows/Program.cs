@@ -71,6 +71,7 @@ internal static class Program
                 NativeDashboard.FreshnessSelfTest();
                 InstallationGate.SelfTest();
                 UpdateQuit.SelfTest();
+                UpdateSession.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();

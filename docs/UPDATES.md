@@ -87,6 +87,15 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
+`UpdateSession` joins the setup gate and graceful shutdown request. It acquires
+the gate before requesting quit and retains it until its caller disposes the
+session. Busy setup or command-line collection refuses entry. Unsupported or
+timed-out shutdown releases the gate without replacing files. Synthetic tests
+cover exclusion during shutdown, retained exclusion after shutdown and release
+on timeout or disposal. This is not yet connected to a download or Update button.
+It only excludes processes that honor the current setup gate. Authentication,
+first-upgrade compatibility, replacement and relaunch remain required.
+
 The Windows update staging helper validates ZIP entries before writing payload
 files. It rejects unsafe Windows paths, case-insensitive duplicates, parent-file
 conflicts, links and special entries. Default limits are 512 MiB compressed,
