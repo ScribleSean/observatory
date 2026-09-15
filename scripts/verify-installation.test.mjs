@@ -10,6 +10,7 @@ import {verifyInstallation,replaceVerifiedInstallation,replaceSignedInstallation
 import {installationReceiptSigningBytes,authenticateInstallationReceipt} from '../native/windows/signed-receipt.mjs';
 import {verifyManifest} from '../native/windows/verify-manifest.mjs';
 import {prepareInstallationReceipt,writeInstallationSigningRequest} from '../native/windows/prepare-installation-receipt.mjs';
+import {stageUpdateHelper} from '../native/windows/stage-update-helper.mjs';
 const hash=data=>createHash('sha256').update(data).digest('hex');
 function fixture(t) {
   const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-installation-test-')));
@@ -199,4 +200,27 @@ test('candidate CLI authenticates and checks extracted inventory without replace
   writeFileSync(envelope,Buffer.alloc(8193));
   assert.notEqual(run().status,0);
   assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+});
+
+test('helper staging copies verified installed code outside the live payload',t=>{
+  const f=fixture(t);
+  const result=stageUpdateHelper(f.old.folder,f.old.receipt,f.root);
+  assert.notEqual(result.helper,f.old.folder);
+  assert.equal(path.dirname(result.helper),f.root);
+  assert.equal(verifyInstallation(result.helper,f.old.receipt).buildNumber,7);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  writeFileSync(path.join(result.helper,'WorkspaceObservatory.exe'),'Changed copied fixture');
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  const second=stageUpdateHelper(f.old.folder,f.old.receipt,f.root);
+  assert.notEqual(second.helper,result.helper);
+  assert.equal(readFileSync(path.join(result.helper,'WorkspaceObservatory.exe'),'utf8'),'Changed copied fixture');
+});
+
+test('helper staging refuses untrusted payloads and a destination inside the installation',t=>{
+  const f=fixture(t);
+  assert.throws(()=>stageUpdateHelper(f.old.folder,f.old.receipt,f.old.folder),/outside/);
+  assert.throws(()=>stageUpdateHelper(f.old.folder,f.next.receipt,f.root),/receipt mismatch/);
+  writeFileSync(path.join(f.old.folder,'usage.json'),'Synthetic private data');
+  assert.throws(()=>stageUpdateHelper(f.old.folder,f.old.receipt,f.root));
+  assert.equal(readFileSync(path.join(f.old.folder,'usage.json'),'utf8'),'Synthetic private data');
 });
