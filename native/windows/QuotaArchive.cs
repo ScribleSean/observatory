@@ -286,6 +286,7 @@ internal sealed class QuotaArchiveWindow : Form
         next.Enabled = load.Enabled && pageNext is not null && chartReadings.Count < 10000;
         allDates.Enabled = !busy && account.SelectedIndex >= 0;
         more.Enabled = !busy && accountNext is not null;
+        foreach (var filters in charts.Controls.OfType<DashboardFilters>()) filters.Enabled = !busy;
     }
     private async Task Execute(Func<Task> action)
     {
@@ -402,9 +403,12 @@ internal sealed class QuotaArchiveWindow : Form
     }
     private async Task ReadFullChart(JsonObject window)
     {
+        var key = Snapshot.Text(window["bucket"]) + ":" + Snapshot.Text(window["window"]);
+        var period = chartPeriods.GetValueOrDefault(key, "All retained");
+        var start = period == "Day" ? through.Value.Date : period == "Week" ? through.Value.Date.AddDays(-6) : from.Value.Date;
         var request = new JsonObject { ["action"] = "chart", ["scope"] = accounts[account.SelectedIndex]?["scope"]?.DeepClone(),
             ["bucket"] = window["bucket"]?.DeepClone(), ["window"] = window["window"]?.DeepClone(),
-            ["from"] = new DateTimeOffset(from.Value.Date).ToUnixTimeMilliseconds(),
+            ["from"] = Math.Max(0, new DateTimeOffset(start).ToUnixTimeMilliseconds()),
             ["to"] = new DateTimeOffset(through.Value.Date.AddDays(1)).ToUnixTimeMilliseconds() - 1 };
             var reply = await read(request, lifetime.Token);
             if (IsDisposed) return;
@@ -413,6 +417,12 @@ internal sealed class QuotaArchiveWindow : Form
                 throw new InvalidOperationException("Chart date range did not match request.");
             foreach (Control control in charts.Controls.Cast<Control>().ToArray()) { charts.Controls.Remove(control); control.Dispose(); }
             charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used, full selected range" });
+            charts.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], period, async value => {
+                if (busy) return;
+                chartPeriods[key] = value;
+                await LoadFullChart(window);
+            }) { Width = Math.Max(240, charts.ClientSize.Width - 32) });
+            charts.Controls.Add(new Label { AutoSize = true, Text = "Day and Week end on the Through date. All retained uses the selected archive range." });
             charts.Controls.Add(new ArchiveChartControl(chart) { Width = Math.Max(240, charts.ClientSize.Width - 32), BackColor = DashboardCard.Surface, ForeColor = Color.WhiteSmoke });
             status.Text = $"{chart.Observations:N0} observations processed. Dashed spans mean unknown coverage. Raw records remain paginated.";
     }
@@ -451,6 +461,7 @@ internal sealed class QuotaArchiveWindow : Form
     internal static void DesktopTest(string output)
     {
         var mode = "ready"; var cancelled = false;
+        JsonObject? lastChartRequest = null;
         Task? pending = null; Exception? failure = null;
         using var window = new QuotaArchiveWindow(async (request, token) =>
         {
@@ -461,6 +472,7 @@ internal sealed class QuotaArchiveWindow : Form
                 await Task.Delay(Timeout.Infinite, token);
             }
             if (Snapshot.Text(request["action"]) == "chart") {
+                lastChartRequest = (JsonObject)request.DeepClone();
                 if (mode == "chart-failed") throw new IOException("Synthetic chart failure");
                 var chart = JsonNode.Parse("""
                     {"version":1,"width":2,"height":2,"from":0,"to":1000,"encoding":"ink-mask-u8","pixels":"AAMAAA==",
@@ -483,6 +495,11 @@ internal sealed class QuotaArchiveWindow : Form
                 await window.LoadPage(false);
                 if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
                 if (!window.charts.Controls.OfType<ArchiveChartControl>().Any()) throw new Exception("Full-range graph did not load with history.");
+                if (!window.charts.Controls.OfType<DashboardFilters>().Any()) throw new Exception("Full-range graph lost its period controls.");
+                window.chartPeriods["codex:weekly"] = "Week";
+                await window.LoadFullChart(new JsonObject { ["bucket"] = "codex", ["window"] = "weekly" });
+                if (lastChartRequest?["from"]?.GetValue<long>() != new DateTimeOffset(window.through.Value.Date.AddDays(-6)).ToUnixTimeMilliseconds())
+                    throw new Exception("Full-range Week did not query seven calendar days.");
                 window.RenderCharts();
                 var periodFilters = window.charts.Controls.OfType<DashboardFilters>().Single();
                 var weekButton = periodFilters.Controls.OfType<FlowLayoutPanel>().Single().Controls.OfType<Button>().Single(button => button.Text == "Week");
