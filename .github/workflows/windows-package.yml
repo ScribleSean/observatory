@@ -62,6 +62,11 @@ jobs:
           $app = $packages[0]
           & (Join-Path $app 'Runtime/node.exe') native/windows/verify-manifest.mjs $app
           if ($LASTEXITCODE -ne 0) { throw 'Clean package verification failed.' }
+          $env:OBSERVATORY_TEST_UPDATE_EXTRACTOR = Join-Path $app 'WorkspaceObservatory.exe'
+          try {
+            & (Join-Path $app 'Runtime/node.exe') --test scripts/verify-installation.test.mjs
+            if ($LASTEXITCODE -ne 0) { throw 'Signed update archive regression failed.' }
+          } finally { Remove-Item Env:OBSERVATORY_TEST_UPDATE_EXTRACTOR }
           ./native/windows/installer.ps1 -PackageDirectory $app -TestIdentity
           ./native/windows/test-installer-download.ps1
           $receipts = @(Get-ChildItem -LiteralPath $release -Directory -Filter 'installer-*' | ForEach-Object {
