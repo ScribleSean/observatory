@@ -874,6 +874,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
+#if OBSERVATORY_PREVIEW_ONLY
+// UI tools may relaunch a closed app without preserving its launch arguments.
+// Preview-only builds must never fall through to the installed data runtime.
+let previewArguments = Array(CommandLine.arguments.dropFirst())
+let allowedPreviewArguments = [["--preview"], ["--preview", "--preview-setup"],
+    ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"]]
+guard allowedPreviewArguments.contains(previewArguments) else {
+    print("Preview-only build requires an explicit isolated preview mode")
+    exit(64)
+}
+#endif
+
 if Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive"] ||
    Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive", "--preview-light"] {
     MainActor.assumeIsolated {

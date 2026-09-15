@@ -52,6 +52,14 @@ The candidate passes configuration and first-run consent tests, an isolated bund
 
 For an isolated native UI check, launch the built executable with `--preview`. Add `--show` for the popup, `--preview-setup` for the wizard, or `--legacy-dashboard` for the fallback. Temporary settings have every source disabled. Preview source choices affect only that temporary folder, and real collection, pairing and login changes are disabled. Quit the preview when finished.
 
+For UI automation, compile a separate test executable with Swift's
+`-D OBSERVATORY_PREVIEW_ONLY` flag and use a distinct test bundle identifier.
+This build accepts only `--preview`, `--preview --preview-setup`,
+`--preview-quota-archive`, or `--preview-quota-archive --preview-light`.
+Missing or different arguments exit before opening a runtime. This protects
+against inspection tools relaunching a closed test app without its arguments.
+Do not use a normal release executable as an unattended preview harness.
+
 The build runs `--test-lifecycle` and `--test-popup` for both native and legacy modes. It verifies three open/close cycles release their content views, native Settings navigation reuses the main window, and popup handoff preserves the dashboard. The menu-bar app remains running after the window closes. These checks do not measure total helper memory, idle CPU, login startup or sleep/wake behavior.
 
 ## Distribution packaging
