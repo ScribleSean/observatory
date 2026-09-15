@@ -67,6 +67,14 @@ The helper must still wait for confirmed graceful shutdown before replacement.
 Do not wait synchronously for replacement inside the callback while the host is
 still running. These are integration requirements, not verified runtime behavior.
 
+`UpdateInstallerCallback` implements the managed no-fallback guard for the future
+WinSparkle binding. It accepts only absolute ZIP paths, permits one preparation at
+a time and never returns the default-execution value. Successful or uncertain
+handoffs prevent further attempts through that callback instance. A preparation
+operation may return false for a retryable failure only if no helper was launched.
+Native self-tests cover these states with synthetic delegates, not real downloads
+or a loaded WinSparkle library. The binding is not enabled yet.
+
 `native/windows/prepare-update-payload.mjs` now prepares the signed update
 directory from a controlled installation and a separately signed receipt:
 
