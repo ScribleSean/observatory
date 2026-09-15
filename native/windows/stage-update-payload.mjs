@@ -1,5 +1,6 @@
 import {readdirSync,lstatSync,realpathSync,mkdtempSync,cpSync} from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {authenticateInstallationReceipt} from './signed-receipt.mjs';
 import {readReceiptFile} from './verify-candidate.mjs';
 import {verifyInstallation} from './verify-installation.mjs';
@@ -32,5 +33,20 @@ export function stageUpdatePayload(extracted,installed,previousReceipt,publicKey
     return Object.freeze({staged,envelopePath,...identity});
   } catch(error) {
     throw Object.assign(new Error('Update staging failed. Candidate retained for inspection.',{cause:error}),{staged});
+  }
+}
+
+// Internal command for the installed runtime. The caller must hold installation
+// exclusion and obtain the previous receipt and key from trusted local state.
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  try {
+    const args=process.argv.slice(2);
+    if(args.length!==4)throw Error('Invalid staging arguments');
+    const previous=JSON.parse(readReceiptFile(args[2]).toString('utf8'));
+    const result=stageUpdatePayload(args[0],args[1],previous,args[3]);
+    console.log(JSON.stringify({schema:1,status:'payload-staged',...result}));
+  } catch {
+    console.error('Update staging failed. No update was activated.');
+    process.exitCode=1;
   }
 }

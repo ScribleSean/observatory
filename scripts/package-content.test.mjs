@@ -13,7 +13,7 @@ test('Windows updater runtime has an explicit self-contained package dependency 
   const group=project.match(/<Content Include="([^"]+)">\s*<Link>Updater\/%\(Filename\)%\(Extension\)<\/Link>/);
   assert.ok(group,'Explicit updater content group is required');
   const files=group[1].split(';');
-  assert.deepEqual(files.sort(),['apply-update.mjs','package-content.mjs','replace-payload.mjs','signed-receipt.mjs','stage-update-helper.mjs','verify-candidate.mjs','verify-installation.mjs','verify-manifest.mjs']);
+  assert.deepEqual(files.sort(),['apply-update.mjs','package-content.mjs','replace-payload.mjs','signed-receipt.mjs','stage-update-helper.mjs','stage-update-payload.mjs','verify-candidate.mjs','verify-installation.mjs','verify-manifest.mjs']);
   const root=mkdtempSync(path.join(tmpdir(),'observatory-updater-runtime-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   for(const file of files)copyFileSync(new URL(file,source),path.join(root,file));
@@ -22,6 +22,10 @@ test('Windows updater runtime has an explicit self-contained package dependency 
     'const m=await import(process.argv[1]); if(typeof m.replaceSignedInstallation!=="function")process.exit(1);',
     pathToFileURL(entry).href],{encoding:'utf8',timeout:10000});
   assert.equal(result.status,0,result.stderr);
+  const staged=spawnSync(process.execPath,['--input-type=module','-e',
+    'const m=await import(process.argv[1]); if(typeof m.stageUpdatePayload!=="function")process.exit(1);',
+    pathToFileURL(path.join(root,'stage-update-payload.mjs')).href],{encoding:'utf8',timeout:10000});
+  assert.equal(staged.status,0,staged.stderr);
   const inspector=readFileSync(new URL('inspect-package.mjs',source),'utf8');
   for(const file of files)assert.ok(inspector.includes("'Updater/"+file+"'"));
 });

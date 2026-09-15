@@ -76,7 +76,11 @@ envelope stays outside that candidate. No installed bytes change and no candidat
 code executes. The caller must hold installation exclusion and keep the extracted
 envelope available for activation's repeated verification. Synthetic tests cover
 sibling placement, repeated staging, wrong signers, extra files and tampering.
-This helper is not yet bundled or connected to the archive/downloader callback.
+The helper is now included in the Windows updater runtime. Its internal command
+takes the extracted directory, installed directory, independently trusted previous
+receipt path and pinned public key. It reads the previous receipt with the bounded
+receipt reader and returns a structured staging result. It does not replace files
+or launch candidate code. The native archive/downloader callback is not connected.
 
 `create-update-archive.ps1 -Directory <prepared-directory> -Archive <new-zip>`
 compresses the prepared directory without overwriting an existing archive or
@@ -169,7 +173,7 @@ The isolated `--test-shutdown` mode covers pending pairing state, refresh exclus
 
 ## Windows upgrade compatibility
 
-Windows build output includes an explicit eight-file `Updater` runtime for
+Windows build output includes an explicit nine-file `Updater` runtime for
 installation verification, signed receipts and retained-payload replacement.
 The package inspector requires every file. The runtime imports without the
 source checkout and contains no release signer or private key. This packaging

@@ -133,6 +133,38 @@ test('authenticated update wrapper stages a separate sibling without changing in
   assert.equal(result.envelopePath,path.join(output,'installation-envelope.json'));
   assert.notEqual(stageUpdatePayload(output,f.old.folder,f.old.receipt,release.publicKey).staged,result.staged);
 });
+test('staging command verifies trusted receipts and never activates the candidate',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  const previous=path.join(f.root,'previous.json'),output=path.join(f.root,'update');
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  writeFileSync(previous,JSON.stringify(f.old.receipt));
+  prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,output);
+  const entry=fileURLToPath(new URL('../native/windows/stage-update-payload.mjs',import.meta.url));
+  const args=[output,f.old.folder,previous,release.publicKey];
+  const run=a=>spawnSync(process.execPath,[entry,...a],{encoding:'utf8',timeout:10000});
+  const before=readdirSync(f.root).sort();
+  for(const rejected of [[],args.slice(0,3),[...args,'extra'],[...args.slice(0,3),signer().publicKey]]) {
+    const result=run(rejected);
+    assert.equal(result.status,1,result.stderr);
+    assert.equal(result.stdout,'');
+    assert.deepEqual(readdirSync(f.root).sort(),before);
+  }
+  for(const invalid of ['{', ' '.repeat(8193),JSON.stringify(f.next.receipt)]) {
+    writeFileSync(previous,invalid);
+    assert.equal(run(args).status,1);
+    assert.deepEqual(readdirSync(f.root).sort(),before);
+  }
+  writeFileSync(previous,JSON.stringify(f.old.receipt));
+  const result=run(args);
+  assert.equal(result.status,0,result.stderr);
+  const response=JSON.parse(result.stdout);
+  assert.equal(response.schema,1);
+  assert.equal(response.status,'payload-staged');
+  assert.equal(response.buildNumber,8);
+  assert.equal(verifyInstallation(response.staged,f.next.receipt).buildNumber,8);
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+  assert.deepEqual(readFileSync(response.envelopePath),readFileSync(envelope));
+});
 test('update wrapper rejects wrong signer, extra files and altered payload before staging',t=>{
   const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
   writeFileSync(envelope,release.envelope(f.next.receipt));
