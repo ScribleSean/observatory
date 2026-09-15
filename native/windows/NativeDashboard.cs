@@ -289,9 +289,15 @@ internal sealed partial class NativeDashboard : Form
     {
         if (readArchive is not null)
         {
-            var history = new DashboardButton { Text = "Browse saved allowance history", AutoSize = true };
+            var content = new FlowLayoutPanel { Font = regular, FlowDirection = FlowDirection.TopDown, WrapContents = false, Width = Math.Max(240, ContentWidth - 32) };
+            content.Controls.Add(new Label { Text = "All-time usage history", Font = brand, AutoSize = true });
+            content.Controls.Add(new Label { Text = "Explore saved usage percentages by day, week or all retained dates. Accounts stay separate; missing observations stay unknown.",
+                AutoSize = true, MaximumSize = new Size(Math.Max(240, ContentWidth - 56), 0), Margin = new Padding(3, 8, 3, 12) });
+            var history = new DashboardButton { Text = "Browse saved history", AutoSize = true };
             history.Click += (_, _) => { using var window = new QuotaArchiveWindow(readArchive, lightMode: lightMode); window.ShowDialog(this); };
-            body.Controls.Add(history);
+            content.Controls.Add(history);
+            content.Height = content.GetPreferredSize(new Size(content.Width, 0)).Height;
+            AddCard(content, "All-time usage history");
         }
         Label("Observed on this device");
         AccountAllowance(snapshot?["quota"] as JsonObject);

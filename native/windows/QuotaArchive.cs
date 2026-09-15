@@ -264,7 +264,7 @@ internal sealed class QuotaArchiveWindow : Form
             foreach (Control control in charts.Controls)
                 if (control is QuotaGraph or DashboardFilters or ArchiveChartControl) control.Width = Math.Max(240, charts.ClientSize.Width - 32);
         };
-        allDates.Click += (_, _) => {
+        void SelectAllDates() {
             if (account.SelectedIndex < 0) return;
             var selected = accounts[account.SelectedIndex];
             if (Snapshot.Number(selected?["firstAt"]) is double first && Snapshot.Number(selected?["lastAt"]) is double last)
@@ -272,13 +272,14 @@ internal sealed class QuotaArchiveWindow : Form
                 from.Value = DateTimeOffset.FromUnixTimeMilliseconds((long)first).LocalDateTime;
                 through.Value = DateTimeOffset.FromUnixTimeMilliseconds((long)last).LocalDateTime;
             }
-        };
+        }
+        allDates.Click += (_, _) => SelectAllDates();
         rows.Columns.Add("time", "Recorded at"); rows.Columns.Add("value", "Saved reading");
         CancelButton = done; AcceptButton = load;
         load.Click += async (_, _) => await LoadPage(false);
         next.Click += async (_, _) => await LoadPage(true);
         more.Click += async (_, _) => await LoadAccounts(accountNext);
-        account.SelectedIndexChanged += (_, _) => InvalidatePage();
+        account.SelectedIndexChanged += (_, _) => { SelectAllDates(); InvalidatePage(); };
         kind.SelectedIndexChanged += (_, _) => InvalidatePage();
         from.ValueChanged += (_, _) => InvalidatePage(); through.ValueChanged += (_, _) => InvalidatePage();
         Shown += async (_, _) => await LoadAccounts(null);
@@ -470,11 +471,15 @@ internal sealed class QuotaArchiveWindow : Form
         {
             calls.Add((JsonObject)request.DeepClone());
             return Task.FromResult(request["action"]!.GetValue<string>() == "accounts"
-                ? new JsonObject { ["version"] = 1, ["accounts"] = new JsonArray(new JsonObject { ["scope"] = new string('a', 64), ["current"] = true }) }
+                ? new JsonObject { ["version"] = 1, ["accounts"] = new JsonArray(new JsonObject { ["scope"] = new string('a', 64), ["current"] = true,
+                    ["firstAt"] = 1735689600000L, ["lastAt"] = 1789344000000L }) }
                 : new JsonObject { ["version"] = 1, ["records"] = new JsonArray(new JsonObject { ["checkedAt"] = "2026-09-14T00:00:00Z", ["status"] = "ok" }),
                     ["next"] = request["after"] is null ? new JsonObject { ["at"] = 1, ["id"] = 1 } : null });
         });
         window.LoadAccounts(null).GetAwaiter().GetResult();
+        if (window.from.Value.Date != DateTimeOffset.FromUnixTimeMilliseconds(1735689600000L).LocalDateTime.Date ||
+            window.through.Value.Date != DateTimeOffset.FromUnixTimeMilliseconds(1789344000000L).LocalDateTime.Date)
+            throw new Exception("Account selection did not default to all saved dates.");
         if (!window.load.Enabled || window.next.Enabled) throw new Exception("Archive initial controls failed.");
         window.LoadPage(false).GetAwaiter().GetResult();
         if (window.rows.Rows.Count != 1 || !window.next.Enabled) throw new Exception("Archive first page failed.");

@@ -199,7 +199,8 @@ internal static class NativeDashboardTests
                         sharingChanges++; sharingEnabled = action == "enable";
                     }
                     return Task.FromResult(new QuotaSharingStatus(sharingEnabled, true, "ready", sharingToken));
-                }, () => sharingConfirmed, () => { networkChecks++; return Task.FromResult("Synthetic Tailscale status. Peer not checked."); }));
+                }, () => sharingConfirmed, () => { networkChecks++; return Task.FromResult("Synthetic Tailscale status. Peer not checked."); }),
+            readArchive: (_, _) => throw new InvalidOperationException("Dashboard rendering must not read private history."));
         form.Shown += async (_, _) =>
         {
             try
@@ -209,6 +210,9 @@ internal static class NativeDashboardTests
                 var sections = Children(form).OfType<ListBox>().Single();
                 Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
                 Check(sections.SelectedItem?.ToString() == "Allowances", "Allowances is the landing view");
+                Check(Texts(form).Contains("All-time usage history"), "Full-history entry is visible on Allowances");
+                var historyButton = Children(form).OfType<Button>().Single(button => button.Text == "Browse saved history");
+                Check(historyButton.Bottom <= historyButton.Parent!.ClientSize.Height, "Full-history action fits its card");
                 var clock = DateTimeOffset.Parse("2026-01-01T12:00:00Z");
                 Check(NativeDashboard.Freshness("2026-01-01T11:56:00Z", clock) == "Updated 4m ago", "Relative freshness");
                 Check(NativeDashboard.Freshness("missing", clock) == "Updated: Unknown", "Unknown freshness");

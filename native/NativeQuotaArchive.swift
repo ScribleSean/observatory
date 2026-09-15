@@ -245,7 +245,13 @@ struct NativeQuotaArchive: View {
             .observatoryFont().foregroundStyle(ObservatoryTheme.text)
             .background(ObservatoryTheme.background).buttonStyle(ObservatoryButtonStyle())
             .task { loadAccounts(after: nil) }
-            .onChange(of: scope) { clearPage() }.onChange(of: kind) { clearPage() }
+            .onChange(of: scope) {
+                if let account = accounts.first(where: { $0.scope == scope }) {
+                    from = Date(timeIntervalSince1970: account.firstAt / 1000)
+                    to = Date(timeIntervalSince1970: account.lastAt / 1000)
+                }
+                clearPage()
+            }.onChange(of: kind) { clearPage() }
             .onChange(of: from) { clearPage() }.onChange(of: to) { clearPage() }
             .onDisappear { requests.invalidate() }
     }

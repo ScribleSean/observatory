@@ -140,8 +140,9 @@ limits and unresolved SwiftUI warnings in [UI verification](UI-VERIFICATION.md).
 This UI is not installed yet.
 
 Current source also includes allowance-used percentage charts for Day, Week and
-All retained within the selected account and date range. All saved dates selects
-the account's recorded range. The main dashboard snapshot still contains only
+All retained within the selected account and date range. Selecting an account
+defaults to its full saved date range; All saved dates restores that range after
+custom filtering. The main dashboard snapshot still contains only
 the latest 24 hours; its period controls cannot recover older observations.
 Use saved account history for the full retained range.
 

@@ -92,8 +92,13 @@ struct NativeDashboard: View {
                         }
                     } else if selection.section == "allowances" {
                         if archivedSnapshot == nil && !settingsActions.preview {
-                            Button("Browse saved allowance history") { quotaHistoryOpen = true }
-                                .disabled(store.shuttingDown || store.pairingMaintenance)
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("All-time usage history").observatoryFont(19, weight: .semibold).tracking(-0.3)
+                                Text("Explore saved usage percentages by day, week or all retained dates. Accounts stay separate; missing observations stay unknown.")
+                                    .observatoryFont().foregroundStyle(ObservatoryTheme.muted)
+                                Button("Browse saved history") { quotaHistoryOpen = true }
+                                    .disabled(store.shuttingDown || store.pairingMaintenance)
+                            }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
                         }
                         Text("Observed on this Mac").observatoryFont(19, weight: .semibold).tracking(0.6)
                         if let quota = displayedSnapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
