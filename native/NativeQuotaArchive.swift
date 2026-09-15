@@ -23,6 +23,21 @@ struct ArchiveReading: Decodable {
     let startDate: String?
     let tokens: Int?
 }
+
+func archiveChartQuota(_ readings: [ArchiveReading]) -> JSONObject {
+    var windows: [String: JSONObject] = [:]
+    let history: [JSONObject] = readings.map { reading in
+        let values: [JSONObject] = (reading.windows ?? []).map { window in
+            var value: JSONObject = ["bucket": window.bucket, "window": window.window, "remainingPercent": window.remainingPercent]
+            if let reset = window.resetsAt { value["resetsAt"] = reset }
+            windows[window.bucket + ":" + window.window] = value
+            return value
+        }
+        return ["checkedAt": reading.checkedAt, "windows": values]
+    }
+    return ["history": history, "windows": windows.keys.sorted().compactMap { windows[$0] },
+            "checkedAt": readings.last?.checkedAt ?? "", "status": "stale"]
+}
 struct ArchiveReply: Decodable {
     let version: Int
     let accounts: [ArchiveAccount]?
@@ -118,6 +133,7 @@ struct NativeQuotaArchive: View {
     @State private var from = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
     @State private var to = Date()
     @State private var readings: [ArchiveReading] = []
+    @State private var chartReadings: [ArchiveReading] = []
     @State private var next: ArchiveCursor?
     @State private var busy = false
     @State private var requests = ArchiveRequestFence()
@@ -148,6 +164,12 @@ struct NativeQuotaArchive: View {
             }
             Text("Account names are not stored. Groups remain separate even after monitoring is disabled.").observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             ObservatoryAdaptiveRow {
+                Button("All saved dates") {
+                    if let account = accounts.first(where: { $0.scope == scope }) {
+                        from = Date(timeIntervalSince1970: account.firstAt / 1000)
+                        to = Date(timeIntervalSince1970: account.lastAt / 1000)
+                    }
+                }.disabled(scope.isEmpty || busy)
                 DatePicker("From", selection: $from, displayedComponents: .date)
                 DatePicker("Through", selection: $to, displayedComponents: .date)
                 Picker("Records", selection: $kind) {
@@ -164,11 +186,17 @@ struct NativeQuotaArchive: View {
                 Button("Next page") { loadPage(after: next) }
                     .keyboardShortcut(.rightArrow, modifiers: .command)
                     .help("Next page (Command-Right Arrow)")
-                    .disabled(next == nil || busy)
+                    .disabled(next == nil || busy || chartReadings.count >= 10000)
                 if busy { ProgressView().controlSize(.small) }
                 Text(storage).observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             }
             Text(message).observatoryFont(.callout).accessibilityLabel(message)
+            if kind == "observation" && !chartReadings.isEmpty {
+                Text(next == nil ? "Loaded history for the selected dates" : chartReadings.count >= 10000 ? "Partial history. Preview limit reached. Choose a narrower date range to inspect more detail." : "Partial history. Load the next page to extend coverage.")
+                    .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                QuotaPanel(quota: archiveChartQuota(chartReadings), dashboard: true, historyOnly: true)
+                    .modifier(ObservatoryCard())
+            }
             Group {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(readings.enumerated()), id: \.offset) { _, row in
@@ -198,7 +226,7 @@ struct NativeQuotaArchive: View {
     }
     private func clearPage() {
         requests.invalidate()
-        readings = []; next = nil
+        readings = []; chartReadings = []; next = nil
         message = invalidDates ? "Choose a From date on or before Through." : "Load history for the selected filters."
     }
     private func loadAccounts(after: String?) {
@@ -227,7 +255,7 @@ struct NativeQuotaArchive: View {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: from)
         guard let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: to)) else { return }
-        var request: [String: Any] = ["action": "page", "scope": scope, "kind": kind,
+        var request: [String: Any] = ["action": "page", "scope": scope, "kind": kind == "observation" ? "timeline" : kind,
             "from": max(0, Int64(start.timeIntervalSince1970 * 1000)), "to": Int64(end.timeIntervalSince1970 * 1000) - 1]
         if let after { request["after"] = ["at": after.at, "id": after.id] }
         let pageRequest = request
@@ -239,11 +267,13 @@ struct NativeQuotaArchive: View {
                 let reply = try await QuotaArchiveProcess.run(runtime: runtime, request: pageRequest)
                 guard requests.accepts(generation) else { return }
                 readings = reply.records ?? []
+                if after == nil { chartReadings = [] }
+                if kind == "observation" { chartReadings.append(contentsOf: readings) }
                 if case .page(let value) = reply.next { next = value } else { next = nil }
                 message = readings.isEmpty ? "No records in this range. Missing data is not zero usage." : "\(readings.count) records on this page, oldest first.\(next == nil ? " End of range." : " More records available.")"
             } catch {
                 guard requests.accepts(generation) else { return }
-                readings = []; next = nil; message = "History could not be read. Saved data was not deleted."
+                readings = []; chartReadings = []; next = nil; message = "History could not be read. Saved data was not deleted."
             }
         }
     }

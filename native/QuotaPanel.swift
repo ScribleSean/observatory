@@ -134,6 +134,7 @@ struct QuotaPanel: View {
     @Environment(\.observatoryTextScale) private var textScale
     let quota: JSONObject
     var dashboard = false
+    var historyOnly = false
     @State private var selected = ""
     @State private var historyPeriod = "All retained"
     @State private var historyDate = ""
@@ -159,6 +160,7 @@ struct QuotaPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+          if !historyOnly {
             ObservatoryAdaptiveRow {
                 Text("Account usage").observatoryFont(14.5, weight: .semibold)
                 Spacer()
@@ -210,6 +212,7 @@ struct QuotaPanel: View {
                 }.accessibilityElement(children: .contain)
                     .accessibilityLabel(label(row))
             }
+          }
             if let chosen {
                 if windows.count > 1 {
                     Picker("Limit history", selection: Binding(get: { key(chosen) }, set: { selected = $0 })) {
@@ -270,7 +273,7 @@ struct QuotaPanel: View {
                     .frame(height: 130 * textScale)
                     .accessibilityLabel("Allowance used. Dashed spans mean coverage unknown, not estimated usage. Resets remain separate.")
                     Text("Dashed spans: coverage unknown. No estimated readings.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
-                    if dashboard {
+                    if dashboard && !historyOnly {
                         Text("Live snapshot history retains up to 30 days. Older saved observations are in the account archive.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
                     }
                     if dashboard {

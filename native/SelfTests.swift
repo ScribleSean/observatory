@@ -31,6 +31,11 @@ func runSelfTests() {
     precondition((try? ArchiveReply.parse(Data(#"{"version":1,"records":[],"next":null}"#.utf8)))?.records?.count == 0)
     let resetArchive = try? ArchiveReply.parse(Data(#"{"version":1,"records":[{"checkedAt":"2026-09-15T12:00:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70,"resetsAt":"2026-09-15T16:00:00Z"}]}],"next":null}"#.utf8))
     precondition(resetArchive?.records?.first?.windows?.first?.resetsAt == "2026-09-15T16:00:00Z")
+    let archiveTimeline = try? ArchiveReply.parse(Data(#"{"version":1,"records":[{"checkedAt":"2026-09-15T12:00:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70,"resetsAt":"2026-09-15T16:00:00Z"}]},{"checkedAt":"2026-09-15T12:02:00Z","status":"unavailable"},{"checkedAt":"2026-09-15T12:05:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":65,"resetsAt":"2026-09-15T16:00:00Z"}]}],"next":null}"#.utf8))
+    let archiveQuota = archiveChartQuota(archiveTimeline!.records!)
+    let archivedPoints = quotaHistoryPoints(rows(archiveQuota["history"]), bucket: "codex", window: "primary")
+    precondition(archivedPoints.count == 2 && quotaIsGap(archivedPoints[0], archivedPoints[1]))
+    precondition(rows(archiveQuota["history"]).count == 3 && text(archiveQuota["status"]) == "stale")
     for invalid in [#"{"version":2,"records":[]}"#, #"{"version":1,"records":[],"accounts":[]}"#,
                     #"{"version":1,"records":[],"next":"raw-account"}"#,
                     #"{"version":1,"records":[{"checkedAt":"not-a-date"}]}"#] {
