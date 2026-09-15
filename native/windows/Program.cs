@@ -8,6 +8,21 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-activation"))
+        {
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
+                Environment.GetEnvironmentVariable("RUNNER_ENVIRONMENT") != "github-hosted" ||
+                args.Length != 7 || args[0] != "--test-update-activation" ||
+                !long.TryParse(args[6], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var previousBuild))
+            { Environment.ExitCode = 64; return; }
+            try
+            {
+                var result = UpdateActivation.Apply(args[1], args[2], args[3], args[4], args[5], previousBuild).GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "payload-replaced", sourceRevision = result.SourceRevision }));
+            }
+            catch { Console.Error.WriteLine("Update activation failed. Recovery inspection may be required."); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-candidate"))
         {
             if (args.Length != 5 || args[0] != "--test-update-candidate" ||

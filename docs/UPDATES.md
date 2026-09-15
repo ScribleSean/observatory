@@ -110,6 +110,15 @@ does not acquire those locks, preserve registration or relaunch an application
 by itself. It is not a standalone user update command. Synthetic subprocess
 tests cover wrong-key refusal and verified replacement with retained receipts.
 
+`UpdateActivation` connects candidate verification, `UpdateSession` and the
+replacement subprocess from an external native helper. It retains the gate until
+the writer exits and validates the returned revision and recovery paths. Once
+replacement begins it does not offer cancellation or forcibly stop the writer.
+The disposable hosted Windows package test exercises this path using synthetic
+payloads. Local package builds skip that activation test so they cannot quit a
+running personal app. Registration updates, trusted configuration provisioning,
+relaunch and user-facing update controls remain separate work.
+
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
 receipt reads, authenticates the signature, rejects stale builds and checks the
