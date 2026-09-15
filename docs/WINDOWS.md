@@ -22,7 +22,7 @@ The compact overview does not embed full history charts or require scrolling on 
 
 ## Native main-window preview
 
-Current source builds open native Windows controls for Activity, Tokens, Allowances, Dictation, Agents, Sources and Settings by default. Use `--legacy-dashboard` for the previous embedded dashboard. The older `--native-dashboard` argument remains accepted but is no longer needed. Quit any running Observatory instance before changing modes. The single-instance activation mechanism opens the existing instance and does not change its display mode.
+Current source builds open Allowances in the native dashboard. The section order is Allowances, Activity, Tokens, Dictation, Sources and Settings. Saved execution details are under Sources, not a separate Agents tab. Use `--legacy-dashboard` for the previous embedded dashboard. The older `--native-dashboard` argument remains accepted but is no longer needed. Quit any running Observatory instance before changing modes. The single-instance activation mechanism opens the existing instance and does not change its display mode.
 
 Activity and Tokens offer Day, Week and All retained periods. A week ends on the selected recorded date. Missing dates are not filled with zeros, and all-device token totals require a collector-verified deduplication result. Allowances reuse the saved account-history charts and exclude retired Spark windows. Refresh sources invokes the existing collector without changing its configuration. The view reads sanitized snapshots, not raw logs.
 

@@ -22,11 +22,13 @@ Each native app can collect its own enabled local sources without the legacy SSH
 
 ## What you can see
 
+Current Mac, Windows and demo builds open Allowances. Their sections are Allowances, Activity, Tokens, Dictation, Sources and Settings. Saved agent receipts and benchmarks are currently under Sources: expand Execution details on Mac or web, or select Show execution details on Windows. This describes the current interface, not final navigation design.
+
 | View | Records |
 | --- | --- |
 | Activity | Time spent in app categories and recognized apps on Mac and Windows, excluding away time |
 | Tokens | Daily Codex token counts from Mac, Ubuntu and configured native Windows logs, including cached input |
-| Agents | Antigravity receipts, saved local-model benchmarks and partial Codex tool-call counts |
+| Sources: execution details | Available agent receipts, saved local-model benchmarks and partial Codex tool-call counts |
 | Dictation | Voice usage by tool and device, with Wispr recording metadata and explicit coverage |
 | Sources | Which sources were read and which measurements are still missing |
 
