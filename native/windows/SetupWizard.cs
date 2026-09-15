@@ -36,6 +36,7 @@ internal sealed class SetupWizard : Form
         if (step == 0)
         {
             Paragraph("Collection stays off until you finish setup. Choose the sources you want to read on this PC.");
+            Paragraph("The dashboard opens Allowances for usage limits. Activity and Tokens are separate views. Unavailable sources stay Unknown.");
             Paragraph("Dashboard snapshots exclude prompts, window titles, transcripts, audio and credentials. Provider sign-ins stay on their owning device.");
             Paragraph("Optional device pairing is started from the Mac over an existing trusted SSH connection. There is no Observatory account, hosted sync service or automatic device discovery.");
         }

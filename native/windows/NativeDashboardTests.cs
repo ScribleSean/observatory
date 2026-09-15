@@ -85,7 +85,17 @@ internal static class NativeDashboardTests
             {
                 await Task.Delay(200);
                 var sections = Children(form).OfType<ListBox>().Single();
-                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Sources", "Settings" }), "Dashboard navigation order");
+                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
+                Check(sections.SelectedItem?.ToString() == "Allowances", "Allowances is the landing view");
+                var clock = DateTimeOffset.Parse("2026-01-01T12:00:00Z");
+                Check(NativeDashboard.Freshness("2026-01-01T11:56:00Z", clock) == "Updated 4m ago", "Relative freshness");
+                Check(NativeDashboard.Freshness("missing", clock) == "Updated: Unknown", "Unknown freshness");
+                Check(NativeDashboard.Freshness("2026-01-02T12:00:00Z", clock).Contains("ahead"), "Future clock is not fresh");
+                var persistentRefresh = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources");
+                sections.SelectedItem = "Agents";
+                Children(form).OfType<Button>().Single(button => button.Text == "Review collection settings").PerformClick();
+                Check(sections.SelectedItem?.ToString() == "Settings", "Agents collection settings route");
+                Check(ReferenceEquals(persistentRefresh, Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources")), "Refresh survives navigation");
                 sections.SelectedItem = "Activity";
                 Check(Texts(form).Contains("30 min"), "Day total");
                 await Select(form, "Period", "Week");
@@ -192,9 +202,9 @@ internal static class NativeDashboardTests
                 Check(!Children(form).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Any(item => item.ToString() == "TypeWhisper"), "Retired source selector removed");
                 Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
                 sections.SelectedItem = "Sources";
-                Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Handoff receipt"), "Execution details initially collapsed");
+                Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Handoff receipt"), "Sources does not duplicate Agents");
                 Check(Texts(form).Any(value => value.Contains("1 saved failures")), "Saved failure summary visible when collapsed");
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "Show execution details").Checked = true;
+                Children(form).OfType<Button>().Single(button => button.AccessibleName == "View Agents").PerformClick();
                 await Task.Delay(50);
                 Application.DoEvents();
                 Check(Cell("Handoff receipt", 5, 1) == "Unknown", "Failed receipt tokens withheld");
@@ -285,7 +295,7 @@ internal static class NativeDashboardTests
                 sections.SelectedItem = "Sources";
                 Check(Children(form).OfType<DataGridView>().Single().Rows.Count == 7, "Source rows");
                 Capture(form, output, "native-sources");
-                Children(form).OfType<Button>().Single(button => button.Text == "Refresh sources").PerformClick();
+                Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").PerformClick();
                 Check(refreshes == 1, "Refresh callback");
                 for (var i = 0; i < 20; i++) form.Reload();
                 File.WriteAllText(Path.Combine(output, "native-result.txt"), "native-dashboard: passed");

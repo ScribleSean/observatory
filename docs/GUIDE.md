@@ -22,7 +22,7 @@ Each native app can collect its own enabled local sources without the legacy SSH
 
 ## What you can see
 
-Current Mac, Windows and demo builds open Allowances. Their sections are Allowances, Activity, Tokens, Dictation, Sources and Settings. Saved agent receipts and benchmarks are currently under Sources: expand Execution details on Mac or web, or select Show execution details on Windows. This describes the current interface, not final navigation design.
+Observatory opens Allowances, the usage-limit overview. Activity is a separate screen-time view and does not need to be configured before using Tokens or Allowances. Native Mac and Windows source builds have Allowances, Activity, Tokens, Dictation, Agents, Sources and Settings. Agents shows saved execution records and links to collection settings, not a live agent monitor. The web demo still exposes execution details under Sources. Previously installed builds may retain the older navigation until updated.
 
 | View | Records |
 | --- | --- |

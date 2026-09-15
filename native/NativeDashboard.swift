@@ -7,6 +7,7 @@ final class NativeDashboardSelection: ObservableObject {
     static let sections = [("allowances", "Allowances", "gauge.with.dots.needle.50percent"),
                            ("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
                            ("dictation", "Dictation", "mic"),
+                           ("agents", "Agents", "rectangle.stack.person.crop"),
                            ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
     @Published var section = "allowances"
     @Published var textScale: Double = 1
@@ -124,6 +125,16 @@ struct NativeDashboard: View {
                         } else {
                             Text("No shared account history. Enable allowance sharing on both paired devices to receive it.")
                                 .observatoryFont(.callout).foregroundStyle(.secondary)
+                        }
+                    } else if selection.section == "agents" {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Saved execution records, not a live agent monitor. Missing records are not zero usage.")
+                                .foregroundStyle(ObservatoryTheme.muted)
+                            if let help = receiptSourceHelp(displayedSnapshot?.object["agentSource"] as? JSONObject) {
+                                Text(help).foregroundStyle(ObservatoryTheme.muted)
+                            }
+                            Button("Review collection settings") { selection.section = "settings" }
+                            NativeAgentUsage(snapshot: displayedSnapshot)
                         }
                     } else if selection.section == "sources" {
                         sourceList
@@ -260,9 +271,7 @@ struct NativeDashboard: View {
                     .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            DisclosureGroup("Execution details: receipts, benchmarks and tool requests") {
-                NativeAgentUsage(snapshot: displayedSnapshot).padding(.top, 8)
-            }
+            Button("View Agents") { selection.section = "agents" }
             ForEach(["activity", "tokens", "settings", "dictation"], id: \.self) { key in
                 GroupBox(key.capitalized) {
                     VStack(alignment: .leading, spacing: 10) {

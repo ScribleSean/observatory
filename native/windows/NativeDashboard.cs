@@ -14,6 +14,10 @@ internal sealed partial class NativeDashboard : Form
     private string host = "Windows", period = "Day", anchor = "";
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
+    private readonly Label pageTitle = new() { Dock = DockStyle.Top, Height = 42 };
+    private readonly Label freshness = new() { Dock = DockStyle.Fill };
+    private readonly ToolTip timestampHint = new();
+    private readonly Button refreshButton = new() { Text = "Refresh", AccessibleName = "Refresh sources", Dock = DockStyle.Right, Width = 110, FlatStyle = FlatStyle.Flat };
     private readonly Func<JsonObject, CancellationToken, Task<JsonObject>>? readArchive;
 
     internal NativeDashboard(Func<JsonObject?> read, Func<Task> refresh, SourceSettingsActions? sourceSettings = null, DeviceSettingsActions? deviceSettings = null,
@@ -25,7 +29,10 @@ internal sealed partial class NativeDashboard : Form
         this.deviceSettings = deviceSettings;
         Text = "Observatory"; AccessibleName = Text;
         Font = regular; BackColor = Color.FromArgb(30, 30, 32); ForeColor = Color.WhiteSmoke;
-        ClientSize = new Size(1000, 720); MinimumSize = new Size(800, 560); StartPosition = FormStartPosition.CenterScreen;
+        var available = Screen.PrimaryScreen?.WorkingArea.Size ?? new Size(1280, 900);
+        ClientSize = new Size(Math.Min(1100, available.Width - 48), Math.Min(780, available.Height - 80));
+        MinimumSize = new Size(Math.Min(800, available.Width - 48), Math.Min(560, available.Height - 80));
+        StartPosition = FormStartPosition.CenterScreen;
         sections.BackColor = Color.FromArgb(39, 39, 41); sections.ForeColor = ForeColor;
         sections.DrawMode = DrawMode.OwnerDrawFixed;
         sections.DrawItem += (_, args) =>
@@ -40,12 +47,32 @@ internal sealed partial class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Sources", "Settings"]);
-        Controls.Add(body); Controls.Add(sections);
+        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings"]);
+        var content = new Panel { Dock = DockStyle.Fill };
+        var header = new Panel { Dock = DockStyle.Top, Height = 104, Padding = new Padding(24, 16, 24, 8) };
+        pageTitle.Font = heading;
+        freshness.ForeColor = Color.Silver;
+        refreshButton.BackColor = Color.FromArgb(64, 73, 61);
+        refreshButton.FlatAppearance.BorderSize = 0;
+        refreshButton.Click += async (_, _) =>
+        {
+            if (busy) return;
+            busy = true; refreshButton.Enabled = false;
+            try { await refresh(); }
+            catch { if (!IsDisposed) MessageBox.Show(this, "Collection could not complete. Saved records remain available.", "Observatory"); }
+            finally { busy = false; if (!IsDisposed) Reload(); }
+        };
+        header.Controls.Add(freshness); header.Controls.Add(pageTitle); header.Controls.Add(refreshButton);
+        content.Controls.Add(body); content.Controls.Add(header);
+        Controls.Add(content); Controls.Add(sections);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;
         body.ClientSizeChanged += (_, _) => ResizeRows();
-        timer.Tick += (_, _) => { if (sections.SelectedItem?.ToString() == "Allowances" || (!ContainsFocus && sections.SelectedItem?.ToString() != "Settings")) Reload(); };
+        timer.Tick += (_, _) =>
+        {
+            if (sections.SelectedItem?.ToString() == "Allowances" || (!ContainsFocus && sections.SelectedItem?.ToString() != "Settings")) Reload();
+            else UpdateFreshness(read());
+        };
         timer.Start();
     }
     private int ContentWidth => Math.Max(400, body.ClientSize.Width - 66);
@@ -87,29 +114,52 @@ internal sealed partial class NativeDashboard : Form
         try
         {
             foreach (var control in body.Controls.Cast<Control>().ToArray()) control.Dispose();
-            var snapshot = read(); var section = sections.SelectedItem?.ToString() ?? "Activity";
-            Label(section, true);
-            Label("Snapshot: " + Snapshot.Text(snapshot?["collectedAt"]));
-            var refreshButton = new Button { Text = "Refresh sources", AccessibleName = "Refresh sources", Height = 36, Width = ContentWidth, Enabled = !busy,
-                FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(48, 48, 52), ForeColor = ForeColor,
-                TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0) };
-            refreshButton.FlatAppearance.BorderSize = 0;
-            refreshButton.Click += async (_, _) =>
-            {
-                busy = true; refreshButton.Enabled = false;
-                try { await refresh(); } catch { if (!IsDisposed) MessageBox.Show(this, "Collection could not complete. Saved records remain available.", "Observatory"); }
-                finally { busy = false; if (!IsDisposed) Reload(); }
-            };
-            body.Controls.Add(refreshButton);
+            var snapshot = read(); var section = sections.SelectedItem?.ToString() ?? "Allowances";
+            pageTitle.Text = section;
+            UpdateFreshness(snapshot);
+            refreshButton.Enabled = !busy;
             if (section is "Activity" or "Tokens") History(snapshot, section == "Activity" ? "activity" : "tokens");
             else if (section == "Allowances") Allowances(snapshot);
             else if (section == "Dictation") Dictation(snapshot);
+            else if (section == "Agents")
+            {
+                Label("Saved execution records, not a live agent monitor. Missing records are not zero usage.");
+                var configure = new Button { Text = "Review collection settings", AutoSize = true, Height = 38 };
+                configure.Click += (_, _) => sections.SelectedItem = "Settings";
+                body.Controls.Add(configure);
+                Agents(snapshot);
+            }
             else if (section == "Settings") SourceSettings();
             else Sources(snapshot);
             Label("Native migration preview. Provider sign-ins remain in their owning applications.");
             ResizeRows();
         }
         finally { body.ResumeLayout(true); }
+    }
+    private void UpdateFreshness(JsonObject? snapshot)
+    {
+        var timestamp = Snapshot.Text(snapshot?["collectedAt"]);
+        freshness.Text = Freshness(timestamp, DateTimeOffset.UtcNow);
+        freshness.AccessibleDescription = "Snapshot collected at " + timestamp;
+        timestampHint.SetToolTip(freshness, freshness.AccessibleDescription);
+    }
+    internal static void FreshnessSelfTest()
+    {
+        var now = DateTimeOffset.Parse("2026-01-01T12:00:00Z");
+        if (Freshness("2026-01-01T11:56:00Z", now) != "Updated 4m ago" ||
+            Freshness("missing", now) != "Updated: Unknown" ||
+            !Freshness("2026-01-02T12:00:00Z", now).Contains("ahead"))
+            throw new InvalidOperationException("Dashboard freshness contract failed.");
+    }
+    internal static string Freshness(string timestamp, DateTimeOffset now)
+    {
+        if (!DateTimeOffset.TryParse(timestamp, out var recorded)) return "Updated: Unknown";
+        var age = now - recorded;
+        if (age < TimeSpan.Zero) return "Update time is ahead of this device's clock";
+        if (age.TotalMinutes < 1) return "Updated just now";
+        if (age.TotalHours < 1) return $"Updated {(int)age.TotalMinutes}m ago";
+        if (age.TotalDays < 1) return $"Updated {(int)age.TotalHours}h ago";
+        return $"Updated {(int)age.TotalDays}d ago";
     }
     private void ActivityWatchHelp()
     {
@@ -238,16 +288,14 @@ internal sealed partial class NativeDashboard : Form
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
         Label($"{receipts.Length} handoff receipts · {receipts.Count(row => Snapshot.Text(row["status"]) == "failed")} saved failures. Not a live agent monitor.");
         Label("Newest receipt: " + (receipts.Select(row => Snapshot.Text(row["recordedAt"])).Order().LastOrDefault() ?? "Unknown"));
-        var details = new CheckBox { Text = "Show execution details", AccessibleName = "Show execution details", Checked = showExecutionDetails,
-            AutoSize = true, ForeColor = ForeColor };
-        details.CheckedChanged += (_, _) => { showExecutionDetails = details.Checked; BeginInvoke(Reload); };
+        var details = new Button { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 38 };
+        details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
-        if (showExecutionDetails) Agents(snapshot);
         Label("Provider sign-ins remain on their owning devices. Saved execution records do not show which agents are running now.");
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { timer.Stop(); timer.Dispose(); }
+        if (disposing) { timer.Stop(); timer.Dispose(); timestampHint.Dispose(); }
         base.Dispose(disposing);
         if (disposing) { regular.Dispose(); heading.Dispose(); }
     }

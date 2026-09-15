@@ -49,6 +49,7 @@ internal static class Program
             try
             {
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
+                NativeDashboard.FreshnessSelfTest();
                 InstallationGate.SelfTest();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();

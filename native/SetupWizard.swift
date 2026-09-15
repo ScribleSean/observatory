@@ -14,6 +14,7 @@ struct SetupWizard: View {
             Text(titles[step]).font(.largeTitle.bold())
             if step == 0 {
                 Text("Track screen time and AI usage across your devices. You choose which sources are enabled. Collection stays off until you finish setup.")
+                Text("The dashboard opens Allowances for usage limits. Activity and Tokens are separate views. Unavailable sources stay Unknown.")
                 Text("Dashboard snapshots exclude prompts, window titles, transcripts, audio and credentials. Provider sign-ins stay on their owning device.")
                 Text("Optional device pairing is started from the Mac over an existing trusted SSH connection. There is no Observatory account, hosted sync service or automatic device discovery.")
             } else if step == 1 {

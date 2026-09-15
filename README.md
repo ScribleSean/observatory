@@ -15,6 +15,8 @@
 
 Observatory shows recorded app activity, Codex tokens, available account limits, tool activity and dictation statistics. A compact Mac menu-bar or Windows system-tray panel opens the full dashboard.
 
+The dashboard opens Allowances for usage limits. Select Activity for screen time, Tokens for compute usage, or Dictation for voice usage. Missing sources do not block the other views.
+
 | View | What it brings into focus |
 | --- | --- |
 | **Screen time** | Active app time, daily and weekly timelines, and overlap-aware Mac and Windows totals. |

@@ -591,7 +591,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         closeUsage()
         if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
         if usesNativeDashboard {
-            nativeSelection.section = tab == "agents" ? "sources" : (["activity", "tokens", "allowances", "dictation", "sources", "settings"].contains(tab) ? tab : "activity")
+            nativeSelection.section = NativeDashboardSelection.sections.contains(where: { $0.0 == tab }) ? tab : "allowances"
             if detail == nil {
                 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                                       styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -702,7 +702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             precondition(nativeSelection.textScale == 1)
             let sectionItems = menus[3].items.filter { $0.action == #selector(navigateSection(_:)) }
             precondition(sectionItems.map(\.title) == NativeDashboardSelection.sections.map(\.1))
-            precondition(sectionItems.map(\.keyEquivalent) == ["1", "2", "3", "4", "5", "6"])
+            precondition(sectionItems.map(\.keyEquivalent) == ["1", "2", "3", "4", "5", "6", "7"])
             for item in sectionItems {
                 precondition(item.keyEquivalentModifierMask == .command && validateMenuItem(item))
                 precondition(NSApp.sendAction(item.action!, to: item.target, from: item))
