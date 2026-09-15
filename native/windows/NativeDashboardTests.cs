@@ -14,6 +14,12 @@ internal static class NativeDashboardTests
         Check(QuotaGraph.ConnectionStyle(300, false, true, 25, 5) is null, "Counter reset is not joined");
         var paceWindowFixture = new JsonObject { ["bucket"] = "codex", ["window"] = "primary" };
         var rangeEnd = DateTimeOffset.Parse("2026-09-12T12:00:00Z");
+        var dayRange = QuotaGraph.PeriodRange("Day", "2026-09-10", rangeEnd);
+        Check(dayRange.Start.LocalDateTime.ToString("yyyy-MM-dd HH:mm") == "2026-09-10 00:00" &&
+            dayRange.End.LocalDateTime.ToString("yyyy-MM-dd HH:mm") == "2026-09-11 00:00", "Recorded day uses calendar boundaries");
+        var weekRange = QuotaGraph.PeriodRange("Week", "2026-09-10", rangeEnd);
+        Check(weekRange.Start.LocalDateTime.ToString("yyyy-MM-dd") == "2026-09-04" && weekRange.End == dayRange.End,
+            "Week ending includes selected day and previous six days");
         var emptyRange = QuotaGraph.HistoryRange(new JsonObject(), paceWindowFixture, rangeEnd);
         Check(emptyRange.Start == rangeEnd.AddHours(-1) && emptyRange.End == rangeEnd, "Empty dashboard range is stable and nonzero");
         JsonObject PaceSample(string at, double? remaining, string reset = "same") => new() {

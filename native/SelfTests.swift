@@ -331,6 +331,12 @@ func runSelfTests() {
     precondition(edges.count == 2 && edges.first!.at == contiguous.first!.at && edges.last!.at == contiguous.last!.at)
     let resetPoints = quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary")
     precondition(!quotaIsGap(resetPoints[1], resetPoints[2]))
+    let rangeAnchor = quotaRecordedDate(contiguous[0].at)
+    let dayRange = quotaPeriodRange(contiguous, period: "Day", anchor: rangeAnchor, checkedAt: contiguous[1].at)
+    precondition(dayRange.lowerBound == Calendar.current.startOfDay(for: contiguous[0].at))
+    precondition(dayRange.upperBound == Calendar.current.date(byAdding: .day, value: 1, to: dayRange.lowerBound)!)
+    let weekRange = quotaPeriodRange(contiguous, period: "Week", anchor: rangeAnchor, checkedAt: contiguous[1].at)
+    precondition(weekRange.upperBound == dayRange.upperBound && weekRange.lowerBound == Calendar.current.date(byAdding: .day, value: -6, to: dayRange.lowerBound)!)
     let paceWindow: JSONObject = ["bucket": "codex", "window": "primary"]
     let dueNow = parseDate("2026-09-09T12:00:00Z")!
     precondition(allowanceRefreshDue(["nextAttemptAt": "2026-09-09T12:00:00Z"], now: dueNow))

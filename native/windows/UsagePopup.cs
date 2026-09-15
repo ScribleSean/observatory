@@ -194,7 +194,19 @@ internal sealed class QuotaGraph : Control
     private JsonObject window;
     private readonly bool fitHistory;
     private string period = "All retained";
+    private string anchor = "";
     internal void SelectPeriod(string value) { period = value; Invalidate(); }
+    internal void SelectDate(string value) { anchor = value; Invalidate(); }
+    internal static string[] RecordedDates(JsonObject quota) => NativeHistory.Rows(quota["history"])
+        .Select(row => DateTimeOffset.TryParse(Snapshot.Text(row["checkedAt"]), out var at) ? at.LocalDateTime.ToString("yyyy-MM-dd") : null)
+        .Where(value => value is not null).Cast<string>().Distinct().Order().ToArray();
+    internal static (DateTimeOffset Start, DateTimeOffset End) PeriodRange(string period, string anchor, DateTimeOffset fallback)
+    {
+        var day = DateOnly.TryParseExact(anchor, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            ? parsed : DateOnly.FromDateTime(fallback.LocalDateTime);
+        DateTimeOffset Boundary(DateOnly value) => new(DateTime.SpecifyKind(value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local));
+        return (Boundary(period == "Week" ? day.AddDays(-6) : day), Boundary(day.AddDays(1)));
+    }
     internal static DashStyle? ConnectionStyle(double seconds, bool missing, bool sameReset, double priorUsed, double used)
         => seconds <= 0 || !sameReset || used < priorUsed ? null : missing || seconds > 630 ? DashStyle.Dash : DashStyle.Solid;
     internal QuotaGraph(JsonObject quota, JsonObject window, bool fitHistory = false)
@@ -247,8 +259,7 @@ internal sealed class QuotaGraph : Control
         if (fitHistory && DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var checkedAt))
         {
             end = checkedAt;
-            if (period == "Day") start = end.AddDays(-1);
-            if (period == "Week") start = end.AddDays(-7);
+            if (period != "All retained") (start, end) = PeriodRange(period, anchor, checkedAt);
         }
         var duration = Math.Max(1, (end - start).TotalSeconds);
         var format = fitHistory ? "MMM d HH:mm" : "HH:mm";
@@ -256,6 +267,7 @@ internal sealed class QuotaGraph : Control
         var endLabel = end.ToLocalTime().ToString(format);
         g.DrawString(endLabel, Font, brush, box.Right - g.MeasureString(endLabel, Font).Width, box.Bottom + 6);
         PointF? previous = null; DateTimeOffset? previousAt = null; double? previousUsed = null; string? previousReset = null;
+        var observationEnd = DateTimeOffset.Parse(Snapshot.Text(quota["checkedAt"]));
         var count = 0;
         var missing = false;
         double? firstUsed = null, lastUsed = null, minimumUsed = null, maximumUsed = null;
@@ -263,7 +275,8 @@ internal sealed class QuotaGraph : Control
         {
             var row = (sample["windows"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(item =>
                 Snapshot.Text(item["bucket"]) == Snapshot.Text(window["bucket"]) && Snapshot.Text(item["window"]) == Snapshot.Text(window["window"]));
-            if (!DateTimeOffset.TryParse(Snapshot.Text(sample["checkedAt"]), out var at) || at < start || at > end ||
+            if (!DateTimeOffset.TryParse(Snapshot.Text(sample["checkedAt"]), out var at) || at < start || at > end || at > observationEnd ||
+                (fitHistory && period != "All retained" && at == end) ||
                 Snapshot.Number(row?["remainingPercent"]) is not double remaining || !double.IsFinite(remaining) || remaining < 0 || remaining > 100)
             { missing = true; continue; }
             var used = 100 - remaining; var reset = Snapshot.Text(row?["resetsAt"]);

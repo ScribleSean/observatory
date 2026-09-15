@@ -15,6 +15,7 @@ internal sealed partial class NativeDashboard : Form
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private string host = "Windows", period = "Day", anchor = "";
     private string allowancePeriod = "All retained";
+    private string allowanceDate = "";
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
     private bool lightMode;
@@ -343,10 +344,20 @@ internal sealed partial class NativeDashboard : Form
             var historyGraph = new QuotaGraph(quota, window, fitHistory: true) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface };
             historyGraph.SelectPeriod(allowancePeriod);
             body.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], allowancePeriod, value => { allowancePeriod = value; BeginInvoke(Reload); }) { Width = ContentWidth });
+            var recordedDates = QuotaGraph.RecordedDates(quota);
+            var recordedDate = recordedDates.Contains(allowanceDate) ? allowanceDate : recordedDates.LastOrDefault() ?? "";
+            historyGraph.SelectDate(recordedDate);
+            if (allowancePeriod != "All retained" && recordedDates.Length > 0)
+                Choice(allowancePeriod == "Week" ? "Week ending" : "Recorded day", recordedDates, recordedDate, value => allowanceDate = value);
             body.Controls.Add(historyGraph);
             Label("Dashed spans: coverage unknown. No estimated readings.").ForeColor = Color.Silver;
             Label("Live snapshot history retains up to 30 days. Older saved observations are in the account archive.").ForeColor = Color.Silver;
             var hourly = QuotaHourlyChart.Read(quota, window);
+            if (allowancePeriod != "All retained" && DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var observedAt))
+            {
+                var range = QuotaGraph.PeriodRange(allowancePeriod, recordedDate, observedAt);
+                hourly = hourly.Where(hour => hour.Hour >= range.Start && hour.Hour < range.End).ToArray();
+            }
             if (hourly.Length > 0)
             {
                 Label("Usage pace by hour").Font = brand;

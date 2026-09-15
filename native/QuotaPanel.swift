@@ -16,6 +16,25 @@ func quotaIsGap(_ previous: QuotaHistoryPoint, _ current: QuotaHistoryPoint) -> 
     return current.at > previous.at && current.segment != previous.segment && current.used >= previous.used && sameReset
 }
 
+func quotaRecordedDate(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+}
+
+func quotaPeriodRange(_ points: [QuotaHistoryPoint], period: String, anchor: String, checkedAt: Date,
+                      calendar: Calendar = .current) -> ClosedRange<Date> {
+    guard period != "All retained" else {
+        return min(points.first?.at ?? checkedAt, checkedAt.addingTimeInterval(-3600))...checkedAt
+    }
+    let selected = points.last(where: { quotaRecordedDate($0.at) == anchor })?.at ?? points.last?.at ?? checkedAt
+    let day = calendar.startOfDay(for: selected)
+    let end = calendar.date(byAdding: .day, value: 1, to: day)!
+    let start = calendar.date(byAdding: .day, value: period == "Week" ? -6 : 0, to: day)!
+    return start...end
+}
+
 struct QuotaHourlyPace: Identifiable {
     var id: Date { hour }
     let hour: Date
@@ -117,6 +136,7 @@ struct QuotaPanel: View {
     var dashboard = false
     @State private var selected = ""
     @State private var historyPeriod = "All retained"
+    @State private var historyDate = ""
     private var windows: [JSONObject] { visibleQuotaWindows(quota["windows"]) }
     private var chosen: JSONObject? { windows.first(where: { key($0) == selected }) ?? windows.first }
     private func key(_ row: JSONObject) -> String { text(row["bucket"]) + ":" + text(row["window"]) }
@@ -200,9 +220,19 @@ struct QuotaPanel: View {
                 if dashboard {
                     ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"], values: ["Day", "Week", "All retained"], selection: $historyPeriod)
                 }
-                let end = parseDate(quota["checkedAt"]) ?? retained.last?.at ?? Date()
-                let start = historyPeriod == "Day" ? end.addingTimeInterval(-86400) : historyPeriod == "Week" ? end.addingTimeInterval(-604800) : min(retained.first?.at ?? end, end.addingTimeInterval(-3600))
-                let points = retained.filter { $0.at >= start && $0.at <= end }
+                let dates = Array(Set(retained.map { quotaRecordedDate($0.at) })).sorted()
+                let anchor = dates.contains(historyDate) ? historyDate : dates.last ?? ""
+                if dashboard && historyPeriod != "All retained" && !dates.isEmpty {
+                    ObservatoryFilterRow(title: historyPeriod == "Week" ? "Week ending" : "Recorded day") {
+                        ObservatoryPopup(title: "Recorded date", labels: dates, values: dates,
+                            selection: Binding(get: { anchor }, set: { historyDate = $0 }))
+                    }
+                }
+                let checkedAt = parseDate(quota["checkedAt"]) ?? retained.last?.at ?? Date()
+                let range = quotaPeriodRange(retained, period: dashboard ? historyPeriod : "Day", anchor: anchor, checkedAt: checkedAt)
+                let start = range.lowerBound
+                let end = range.upperBound
+                let points = retained.filter { $0.at >= start && $0.at <= checkedAt && (historyPeriod == "All retained" ? $0.at <= end : $0.at < end) }
                 Text("Allowance used").observatoryFont(dashboard ? 19 : 12, weight: .semibold).tracking(dashboard ? 0.6 : 0)
                 if !points.isEmpty {
                     Chart {
