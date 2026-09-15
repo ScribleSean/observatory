@@ -351,7 +351,7 @@ internal sealed partial class NativeDashboard : Form
                 Choice(allowancePeriod == "Week" ? "Week ending" : "Recorded day", recordedDates, recordedDate, value => allowanceDate = value);
             body.Controls.Add(historyGraph);
             Label("Dashed spans: coverage unknown. No estimated readings.").ForeColor = Color.Silver;
-            Label("Live snapshot history retains up to 30 days. Older saved observations are in the account archive.").ForeColor = Color.Silver;
+            Label("This snapshot includes the latest 24 hours of observations. Browse account history for older saved readings.").ForeColor = Color.Silver;
             var hourly = QuotaHourlyChart.Read(quota, window);
             if (allowancePeriod != "All retained" && DateTimeOffset.TryParse(Snapshot.Text(quota["checkedAt"]), out var observedAt))
             {

@@ -78,7 +78,7 @@ and consent remain unchanged.
 
 Storage has an 8 GiB safety ceiling and no automatic historical deletion. Disk
 exhaustion or the ceiling causes a failed transaction, not silent record pruning.
-Native archive browsing is being connected in Mac source. Deletion controls and
+Native archive browsing is connected in current Mac and Windows source. Deletion controls and
 historical sync are still unfinished. The Mac development installation now uses this archive.
 The installed Windows app has not yet received this migration.
 Migration is incompatible with older binaries' strict single-table validator.
@@ -120,10 +120,10 @@ catalogues, allocated storage bytes and explicitly bounded date-range pages for
 the native history browser. Catalogue pages contain at most 100 opaque account
 scopes, with no account names, credentials or private salts. Record pages retain
 the existing 200-record and 512 KB bounds. Requests use stdin, are limited to
-2 KB and accept only catalogue or page actions. No network route or delete
+2 KB and accept only catalogue, page or chart actions. No network route or delete
 action is exposed. Opening a never-enabled source does not initialize storage.
 Existing legacy databases still use the backup-aware migration path when read.
-Mac source now connects this process to a saved-history sheet in Allowances.
+Mac and Windows source connect this process to saved history in Allowances.
 It has separate account groups, local-calendar date filters, allowance readings,
 reported daily tokens, collection checks and bounded next-page navigation.
 It displays allocated database bytes and the storage ceiling. Account names are
@@ -138,6 +138,26 @@ First-account navigation and saved date ranges help identify account groups.
 Selected synthetic interactions and the dark layout now pass, with explicit
 limits and unresolved SwiftUI warnings in [UI verification](UI-VERIFICATION.md).
 This UI is not installed yet.
+
+Current source also includes allowance-used percentage charts for Day, Week and
+All retained within the selected account and date range. All saved dates selects
+the account's recorded range. The main dashboard snapshot still contains only
+the latest 24 hours; its period controls cannot recover older observations.
+Use saved account history for the full retained range.
+
+Full-range charts stream ordered archive records into a bounded drawing mask
+(at most 1024 by 160 pixels), rather than loading every reading into the UI.
+Solid strokes connect contiguous known samples. Dashed connectors mark unknown
+coverage between observations in the same reset window. Missing leading and
+trailing coverage remains blank, and resets are not joined. Drawing pixels are
+not interpolated observations or a source of estimated percentage values.
+Raw records remain separately paginated. Window choices come from loaded record
+pages, so another page may be needed to discover an older allowance window.
+
+Synthetic tests cover contiguous samples, middle gaps, unknown edges, reset
+boundaries, malformed chart replies and native archive controls. Both native
+builds and isolated light/dark archive captures were checked. This does not
+verify an updated installer, installed-app behavior or historical device sync.
 
 Deletion is logical removal from this device. It does not promise secure erasure
 of free database pages, filesystem snapshots, backups or data already shared to

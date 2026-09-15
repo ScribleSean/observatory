@@ -275,7 +275,7 @@ struct QuotaPanel: View {
                     .accessibilityLabel("Allowance used. Dashed spans mean coverage unknown, not estimated usage. Resets remain separate.")
                     Text("Dashed spans: coverage unknown. No estimated readings.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
                     if dashboard && !historyOnly {
-                        Text("Live snapshot history retains up to 30 days. Older saved observations are in the account archive.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
+                        Text("This snapshot includes the latest 24 hours of observations. Browse account history for older saved readings.").observatoryFont(12).foregroundStyle(ObservatoryTheme.muted)
                     }
                     if dashboard {
                         ObservatoryAdaptiveRow {
