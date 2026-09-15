@@ -1,6 +1,12 @@
 import Foundation
 
 func runSelfTests() {
+    precondition(formatted(1e9, compact: true) == "1B")
+    precondition(formatted(1e12, compact: true) == "1T")
+    precondition(formatted(999_999_999, compact: true) == "1B")
+    precondition(formattedDuration(86400) == "1d 0h 0m")
+    precondition(formattedDuration(90060) == "1d 1h 1m")
+    precondition(formattedDuration(nil) == "Unknown")
     precondition(receiptSourceHelp(nil) == nil)
     for status in ["ok", "not-connected"] {
         precondition(receiptSourceHelp(["status": status, "reason": "access-denied"]) == nil)

@@ -127,9 +127,7 @@ struct ObservatoryPanel: View {
     }
 
     private func minutes(_ seconds: Double?) -> String {
-        guard let seconds else { return "Unknown" }
-        if seconds >= 3600 { return "\(Int(seconds / 3600))h \(Int(seconds.truncatingRemainder(dividingBy: 3600) / 60))m" }
-        return "\(formatted(seconds / 60)) min"
+        formattedDuration(seconds)
     }
 
     private func stat(_ title: String, icon: String, value: String, date: String, target: String) -> some View {

@@ -209,7 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func showFloatingUsage(size: NSSize, visible: NSRect) {
         let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+            styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
         window.title = "Observatory usage"
         window.appearance = NSAppearance(named: .darkAqua)
         window.isFloatingPanel = true
@@ -237,7 +237,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func showUsage() {
         store.reload()
-        NSApp.activate(ignoringOtherApps: true)
+        // A status-item click opens only the usage surface. Activating the app
+        // here can bring its existing dashboard forward behind the popup.
         if popover.isShown { return }
         if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return }
         guard let button = statusItem.button else { return }
@@ -861,6 +862,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 return [object] + children.flatMap { elements(in: $0, depth: depth + 1) }
             }
             let tree = elements(in: view)
+            guard detail == nil else {
+                print("Native usage popup failed: opening the menu-bar popup opened the dashboard")
+                exit(1)
+            }
             let filters = tree.filter { identifier($0)?.hasPrefix("observatory-filter-") == true }
             let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Source host-Ubuntu", "Period-day", "Period-week", "Period-all"]
             guard NSApp.activationPolicy() == .regular, expected.allSatisfy({ suffix in
@@ -937,6 +942,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return .terminateLater
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if popover.isShown || usageWindow?.isVisible == true { return false }
         openDashboard(nativeSelection.section)
         return true
     }

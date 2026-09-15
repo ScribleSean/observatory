@@ -76,12 +76,17 @@ internal static class Snapshot
     }
 
     internal static string Format(double? value) => value?.ToString("N0") ?? "Unknown";
-    internal static string Duration(double? seconds) => seconds is null ? "Unknown" :
-        seconds >= 3600 ? $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60)}m" : $"{seconds / 60:0.#} min";
+    internal static string Duration(double? seconds) => seconds is null || !double.IsFinite(seconds.Value) || seconds < 0 ? "Unknown" :
+        seconds >= 86400 ? $"{Math.Floor(seconds.Value / 86400):0}d {Math.Floor(seconds.Value % 86400 / 3600):0}h {Math.Floor(seconds.Value % 3600 / 60):0}m" :
+        seconds >= 3600 ? $"{Math.Floor(seconds.Value / 3600):0}h {Math.Floor(seconds.Value % 3600 / 60):0}m" : $"{seconds / 60:0.#} min";
 
     internal static void SelfTest()
     {
         void Check(bool value) { if (!value) throw new InvalidOperationException("Snapshot contract failed"); }
+        Check(Duration(86400) == "1d 0h 0m" && Duration(90060) == "1d 1h 1m");
+        Check(Duration(double.NaN) == "Unknown");
+        Check(DashboardHistoryChart.AxisLabel(1e9) == "1B" && DashboardHistoryChart.AxisLabel(1e12) == "1T");
+        Check(DashboardHistoryChart.AxisLabel(999_999_999) == "1B");
         Check(Number(JsonValue.Create(true)) is null);
         Check(Number(JsonValue.Create(-1)) is null);
         Check(Number(JsonValue.Create("1")) is null);

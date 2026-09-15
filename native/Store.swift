@@ -59,6 +59,7 @@ final class ObservatoryStore: ObservableObject {
         let minutes = max(0, Int(now.timeIntervalSince(date) / 60))
         if minutes < 1 { return "Updated just now" }
         if minutes < 60 { return "Updated \(minutes)m ago" }
+        if minutes >= 1440 { return "Updated \(minutes / 1440)d ago" }
         return "Updated \(minutes / 60)h ago"
     }
     var stale: Bool { snapshot?.collectedAt.map { now.timeIntervalSince($0) > 900 } ?? true }

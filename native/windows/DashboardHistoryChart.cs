@@ -19,10 +19,11 @@ internal sealed class DashboardHistoryChart : Control
 
     internal static string AxisLabel(double value)
     {
-        var (divisor, suffix) = value >= 1_000_000_000_000 ? (1_000_000_000_000d, "T") :
-            value >= 1_000_000_000 ? (1_000_000_000d, "B") :
-            value >= 1_000_000 ? (1_000_000d, "M") :
-            value >= 1_000 ? (1_000d, "K") : (1d, "");
+        if (!double.IsFinite(value)) return "Unknown";
+        var (divisor, suffix) = value >= 999_950_000_000 ? (1_000_000_000_000d, "T") :
+            value >= 999_950_000 ? (1_000_000_000d, "B") :
+            value >= 999_950 ? (1_000_000d, "M") :
+            value >= 999.95 ? (1_000d, "K") : (1d, "");
         return (value / divisor).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + suffix;
     }
 

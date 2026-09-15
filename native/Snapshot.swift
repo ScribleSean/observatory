@@ -42,11 +42,23 @@ func parseDate(_ value: Any?) -> Date? {
 
 func formatted(_ value: Double?, compact: Bool = false) -> String {
     guard let value, value.isFinite else { return "Unknown" }
-    if compact && value >= 1_000_000_000_000 { return (value / 1_000_000_000_000).formatted(.number.precision(.fractionLength(0...1))) + "T" }
-    if compact && value >= 1_000_000_000 { return (value / 1_000_000_000).formatted(.number.precision(.fractionLength(0...1))) + "B" }
-    if compact && value >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
-    if compact && value >= 1_000 { return String(format: "%.1fK", value / 1_000) }
+    if compact {
+        for (divisor, suffix) in [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")] {
+            if abs(value) >= divisor - divisor / 20000 {
+                return (value / divisor).formatted(.number.precision(.fractionLength(0...1))) + suffix
+            }
+        }
+    }
     return value.formatted(.number.precision(.fractionLength(0...1)))
+}
+
+func formattedDuration(_ seconds: Double?) -> String {
+    guard let seconds, seconds.isFinite, seconds >= 0 else { return "Unknown" }
+    if seconds < 3600 { return "\(formatted(seconds / 60)) min" }
+    let minutes = floor(seconds / 60)
+    let days = floor(minutes / 1440), hours = floor(minutes.truncatingRemainder(dividingBy: 1440) / 60)
+    let remainder = minutes.truncatingRemainder(dividingBy: 60)
+    return (days > 0 ? "\(formatted(days))d " : "") + "\(formatted(hours))h \(formatted(remainder))m"
 }
 
 struct Snapshot {

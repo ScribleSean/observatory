@@ -83,8 +83,7 @@ internal sealed class UsagePopup : Form
         title.Font = titleFont;
         if (DateTimeOffset.TryParse(Snapshot.Text(data?["collectedAt"]), out var collected))
         {
-            var minutes = Math.Max(0, (int)(DateTimeOffset.UtcNow - collected).TotalMinutes);
-            Label(minutes == 0 ? "Updated just now" : $"Updated {minutes}m ago");
+            Label(NativeDashboard.Freshness(collected.ToString("O"), DateTimeOffset.UtcNow));
         }
         Separator();
         var quota = data?["quota"] as JsonObject;

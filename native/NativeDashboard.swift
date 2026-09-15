@@ -263,7 +263,7 @@ struct NativeDashboard: View {
                 if key == "activity" { ActivityWatchHelp() }
             } else {
                 HStack {
-                    Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : "\(formatted(number(chosen?[field]).map { $0 / 60 })) min")
+                    Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : formattedDuration(number(chosen?[field])))
                         .observatoryFont(38, weight: .semibold, design: .rounded).monospacedDigit()
                     Spacer()
                 }

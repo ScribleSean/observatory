@@ -100,8 +100,7 @@ func quotaLivePace(_ quota: JSONObject, window: JSONObject, now: Date) -> QuotaL
     let exhaustion = at.addingTimeInterval(remaining / rate * 3600)
     guard exhaustion > now else { return nil }
     func duration(_ seconds: Double) -> String {
-        let minutes = Int(ceil(seconds / 60))
-        return "\(minutes / 60)h \(minutes % 60)m"
+        return formattedDuration(ceil(seconds / 60) * 60)
     }
     return QuotaLivePace(remaining: exhaustion >= reset ? "Lasts until reset" : duration(exhaustion.timeIntervalSince(now)),
                          reset: duration(reset.timeIntervalSince(now)), rate: rate,

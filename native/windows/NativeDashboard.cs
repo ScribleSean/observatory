@@ -225,6 +225,7 @@ internal sealed partial class NativeDashboard : Form
         if (age < TimeSpan.Zero) return "Update time is ahead of this device's clock";
         if (age.TotalMinutes < 1) return "Updated just now";
         if (age.TotalHours < 1) return $"Updated {(int)age.TotalMinutes}m ago";
+        if (age.TotalDays >= 1) return $"Updated {(int)age.TotalDays}d ago";
         return $"Updated {(int)age.TotalHours}h ago";
     }
     private void ActivityWatchHelp()
