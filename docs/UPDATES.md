@@ -12,6 +12,36 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 ## Update integration
 
+### Integration compatibility check, September 15
+
+The current feed renderer points Windows at the first-install setup EXE. This is
+not yet a working update route: Observatory's installer intentionally refuses an
+existing installation. Do not remove that ownership check to make updater UI
+appear functional. The verified retained-payload transaction is the intended
+replacement path.
+
+The pinned [WinSparkle 0.9.4 public API](https://raw.githubusercontent.com/vslavik/winsparkle/v0.9.4/include/winsparkle.h)
+provides `win_sparkle_set_user_run_installer_callback` to handle downloaded
+payloads. Integration must use a separately verified update payload and external
+helper, not fall through to the ordinary installer. The handler must retain its
+input until processing finishes and report failure rather than launch a fallback.
+Callbacks are not generally on the UI thread. Preserve the existing application
+shutdown and installation exclusion instead of assuming an asynchronous quit
+request has completed. The next implementation slice must define and test the
+signed update archive plus receipt distribution, connect its handler to
+`UpdateInstall.ApplyAndRelaunch`, and then wire the user-facing control.
+
+For Mac, [Sparkle's programmatic setup](https://sparkle-project.org/documentation/programmatic-setup/)
+requires the embedded framework, runtime search path, trusted public key and feed
+configuration. Its [updater delegate](https://sparkle-project.org/documentation/api-reference/Protocols/SPUUpdaterDelegate.html)
+can postpone relaunch, but that callback is not guaranteed on every installation
+path. Keep the existing application termination drain as the unconditional guard
+and test busy collection, cancelled shutdown and no-relaunch cases before enabling
+the framework. Signing-tool interoperability alone does not test these paths.
+
+Neither native updater is connected yet. No production key was created by this
+compatibility review, and the verified build-24 candidates remain unchanged.
+
 The Windows updater primitives remain unconnected. Native Settings now has a running-version label in source, using the Mac bundle metadata or Windows assembly file version. It does not check for downloads, identify the latest release or enable automatic updates. Installed apps and already-built candidates acquire source changes only after a new build and installation.
 
 Windows installer build metadata now includes the shared build number. After
