@@ -72,6 +72,7 @@ internal static class Program
                 InstallationGate.SelfTest();
                 UpdateQuit.SelfTest();
                 UpdateSession.SelfTest();
+                UpdateCandidate.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();

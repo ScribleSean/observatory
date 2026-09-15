@@ -99,7 +99,12 @@ receipt reads, authenticates the signature, rejects stale builds and checks the
 full installation inventory. It returns a compact verified identity or fails
 without moving files or launching the candidate. Run it only through a trusted
 installed runtime, with the key and build supplied by trusted app configuration.
-The Update button and native subprocess integration are still required.
+The native `UpdateCandidate` caller uses the installed Node runtime and verifier,
+removes Node loader overrides, limits each output stream to 4,096 characters and
+sets a two-minute deadline. It validates the returned identity and can terminate
+only its read-only child on cancellation or failure. Native self-tests cover
+response validation. The packaged subprocess roundtrip, trusted configuration
+provisioning and Update button integration remain required.
 
 Windows replacement retains the previous and candidate receipts in its recovery
 directory before moving either payload. The signed entry point also retains the
