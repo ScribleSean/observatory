@@ -150,6 +150,9 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Any(value => value.StartsWith("No verified records")), "Unverified combined tokens");
                 sections.SelectedItem = "Allowances";
                 Check(Children(form).OfType<QuotaGraph>().Count() == 1, "Retired allowance hidden");
+                var accountCard = Children(form).OfType<DashboardCard>().Single(card => card.AccessibleName == "Account usage card");
+                Check(Children(accountCard).OfType<QuotaGraph>().Count() == 1, "Allowance history grouped with account reading");
+                Check(Children(accountCard).OfType<ProgressBar>().Single(bar => bar.AccessibleName == "Allowance remaining").Value == 650, "Saved remaining reading preserved");
                 var savedQuota = data["quota"]!.DeepClone();
                 var freshAt = DateTimeOffset.UtcNow.ToString("O");
                 data["quota"]!["status"] = "ok";

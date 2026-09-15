@@ -285,13 +285,22 @@ internal sealed partial class NativeDashboard : Form
     }
     private void AccountAllowance(JsonObject? quota)
     {
-        Label("Account source: " + Snapshot.Text(quota?["status"]) + ". Last observation: " + Snapshot.Text(quota?["checkedAt"]));
+        var start = body.Controls.Count;
+        var accountTitle = Label("Account usage");
+        accountTitle.Font = heading;
+        var observation = Label(Freshness(Snapshot.Text(quota?["checkedAt"]), DateTimeOffset.UtcNow));
+        observation.AccessibleDescription = "Account source: " + Snapshot.Text(quota?["status"]) + ". Last observation: " + Snapshot.Text(quota?["checkedAt"]);
         var windows = NativeHistory.Rows(quota?["windows"]).Where(row => !new[] { "spark", "codex_spark", "codex_bengalfox" }
             .Contains(Snapshot.Text(row["bucket"]), StringComparer.OrdinalIgnoreCase)).ToArray();
-        if (quota is null || windows.Length == 0 || Snapshot.Text(quota["status"]) is not ("ok" or "stale")) { Label("No available account limits. Saved token records are separate."); return; }
+        if (quota is null || windows.Length == 0 || Snapshot.Text(quota["status"]) is not ("ok" or "stale")) { Label("No available account limits. Saved token records are separate."); GroupAccountRows(start); return; }
         foreach (var window in windows)
         {
-            Label(Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + ": " + Snapshot.Format(Snapshot.Number(window["remainingPercent"])) + "% remaining");
+            var remaining = Snapshot.Number(window["remainingPercent"]);
+            var windowTitle = Label(Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + ": " + Snapshot.Format(remaining) + "% remaining");
+            windowTitle.Font = heading;
+            if (remaining is double percent && double.IsFinite(percent) && percent >= 0 && percent <= 100)
+                body.Controls.Add(new ProgressBar { Width = ContentWidth, Height = 10, Minimum = 0, Maximum = 1000,
+                    Value = (int)Math.Round(percent * 10), AccessibleName = "Allowance remaining", AccessibleDescription = $"{percent}% remaining" });
             Label(AllowancePaceText(quota, window, DateTimeOffset.UtcNow));
             if (AllowancePaceCoverage(quota, window, DateTimeOffset.UtcNow) is double coverage)
             {
@@ -305,10 +314,31 @@ internal sealed partial class NativeDashboard : Form
                 endpoints.Controls.Add(new Label { Text = "Reset (at last check)", Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopRight }, 1, 0);
                 body.Controls.Add(endpoints);
             }
-            AddCard(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface }, "Allowance history");
+            Label("Allowance used").Font = heading;
+            body.Controls.Add(new QuotaGraph(quota, window) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
         }
-        AddCard(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface }, "Daily token history");
+        body.Controls.Add(new DailyTokenGraph(quota) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface });
         Label("Account-wide observations, not a device sum. Gaps and resets are separate segments. Daily token totals may lag.");
+        GroupAccountRows(start);
+    }
+    private void GroupAccountRows(int start)
+    {
+        var rows = body.Controls.Cast<Control>().Skip(start).ToArray();
+        var content = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = DashboardCard.Surface };
+        var card = new DashboardCard { Width = ContentWidth, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            AccessibleName = "Account usage card" };
+        content.SizeChanged += (_, _) =>
+        {
+            foreach (Control row in content.Controls)
+            {
+                row.Width = Math.Max(100, content.ClientSize.Width - 8);
+                if (row is Label label) label.MaximumSize = new Size(row.Width, 0);
+            }
+        };
+        foreach (var row in rows) content.Controls.Add(row);
+        card.Controls.Add(content);
+        body.Controls.Add(card);
     }
     internal static string AllowancePaceText(JsonObject quota, JsonObject window, DateTimeOffset now)
     {
