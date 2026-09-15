@@ -124,6 +124,17 @@ replacement requires inspection and does not trigger relaunch. Tests use unique
 temporary registry keys and check preservation of unrelated values. Trusted
 configuration provisioning, relaunch and user-facing update controls remain.
 
+The Windows relaunch component re-verifies the installed candidate and expected
+revision, then starts its executable with a unique same-session readiness event.
+The application signals after its context is constructed and its event loop
+first becomes idle. The helper waits up to 20 seconds and distinguishes an
+acknowledged, still-running process from an unconfirmed launch. This does not
+prove source collection health or visual correctness. An unconfirmed launch is
+not killed or automatically rolled back because data migration may have started.
+Synthetic native tests exercise the separate-process event handshake without
+opening collection. Full normal-app relaunch and integration into the Update
+button still require verification.
+
 The packaged `verify-candidate.mjs` command accepts an extracted directory,
 receipt-envelope path, pinned public key and previous build number. It bounds
 receipt reads, authenticates the signature, rejects stale builds and checks the

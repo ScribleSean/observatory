@@ -8,6 +8,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-ready"))
+        {
+            Environment.ExitCode = args.Length == 2 && args[0] == "--test-update-ready" && UpdateReady.Signal(args[1]) ? 0 : 1;
+            return;
+        }
+        string? updateReady = null;
+        if (args.Contains("--update-ready"))
+        {
+            if (args.Length != 2 || args[0] != "--update-ready" || !UpdateReady.Valid(args[1]))
+            { Environment.ExitCode = 64; return; }
+            updateReady = args[1];
+        }
         if (args.Contains("--test-update-activation"))
         {
             if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true" ||
@@ -118,6 +130,7 @@ internal static class Program
                 UpdateSession.SelfTest();
                 UpdateCandidate.SelfTest();
                 UpdateRegistration.SelfTest();
+                UpdateReady.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();
@@ -216,7 +229,15 @@ internal static class Program
             return;
         }
         using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, UpdateQuit.RequestName);
-        Application.Run(new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit));
+        var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit);
+        EventHandler? readyHandler = null;
+        if (updateReady is not null)
+        {
+            readyHandler = (_, _) => { Application.Idle -= readyHandler; UpdateReady.Signal(updateReady); };
+            Application.Idle += readyHandler;
+        }
+        try { Application.Run(context); }
+        finally { if (readyHandler is not null) Application.Idle -= readyHandler; }
     }
 
     private static InstallationGate? TryEnterInstallation()
