@@ -23,7 +23,7 @@ internal static class Program
                     throw new IOException("Updated application did not quit normally.");
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "installed-relaunched-and-stopped", result.SourceRevision, result.Recovery }));
             }
-            catch { Console.Error.WriteLine("Update installation test failed. Retain the runner for inspection."); Environment.ExitCode = 1; }
+            catch (Exception error) { Console.Error.WriteLine("Synthetic update installation test failed: " + error.Message); Environment.ExitCode = 1; }
             return;
         }
         if (args.Contains("--test-update-ready"))
@@ -150,6 +150,7 @@ internal static class Program
                 UpdateRegistration.SelfTest();
                 UpdateReady.SelfTest();
                 UpdateInstall.SelfTest();
+                UpdateActivation.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
                 Collector.ShutdownSelfTest();

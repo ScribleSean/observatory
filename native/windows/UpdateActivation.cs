@@ -8,9 +8,26 @@ internal static class UpdateActivation
 {
     internal sealed record Result(string SourceRevision, string Recovery);
 
+    internal static void SelfTest()
+    {
+        var installed = Path.Combine(Path.GetTempPath(), "observatory-path-test", "installed");
+        foreach (var staged in new[] { installed, Path.Combine(installed, "nested"), Path.Combine(Path.GetTempPath(), "other", "candidate") })
+        {
+            var refused = false;
+            try { Apply(installed, staged, "", "", "", 0).GetAwaiter().GetResult(); }
+            catch (IOException error) when (error.Message == "Stage the update beside the installed application before activation.") { refused = true; }
+            if (!refused) throw new Exception("Invalid update staging reached verification or shutdown.");
+        }
+        Console.WriteLine("Update activation refuses non-sibling staging before verification or shutdown.");
+    }
+
     internal static async Task<Result> Apply(string installed, string staged, string previousReceipt,
         string candidateEnvelope, string pinnedKey, long previousBuild, string registrationPath = UpdateRegistration.KeyPath)
     {
+        if (!Path.IsPathFullyQualified(installed) || !Path.IsPathFullyQualified(staged) ||
+            !string.Equals(Path.GetDirectoryName(Path.GetFullPath(installed)), Path.GetDirectoryName(Path.GetFullPath(staged)), StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Path.GetFullPath(installed), Path.GetFullPath(staged), StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Stage the update beside the installed application before activation.");
         var helper = Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppContext.BaseDirectory));
         foreach (var folder in new[] { installed, staged })
         {

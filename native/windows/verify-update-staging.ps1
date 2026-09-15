@@ -50,11 +50,14 @@ try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = Join-Path $output 'windows-update.zip'
     [IO.Compression.ZipFile]::CreateFromDirectory($installed, $archive)
-    $stagingParent = Join-Path $output 'expanded'
-    New-Item -ItemType Directory -Path $stagingParent | Out-Null
+    # Atomic replacement requires a candidate beside the installation, not on
+    # the runner's potentially different temporary volume.
+    $stagingParent = Split-Path -Parent $installed
+    $existingStages = @(Get-ChildItem -LiteralPath $stagingParent -Force -Directory | ForEach-Object FullName)
     # Exercise the shipped extractor, not the framework's unrestricted extractor.
     RunChecked (Join-Path $installed 'WorkspaceObservatory.exe') ('--test-update-extraction "' + $archive + '" "' + $stagingParent + '"')
-    $staged = @(Get-ChildItem -LiteralPath $stagingParent -Force)
+    $staged = @(Get-ChildItem -LiteralPath $stagingParent -Force -Directory |
+        Where-Object { $_.FullName -notin $existingStages })
     if ($staged.Count -ne 1 -or -not $staged[0].PSIsContainer -or $staged[0].Name -notmatch '^\.observatory-stage-[a-f0-9]{32}$') {
         throw 'Expected exactly one native extractor staging directory.'
     }
