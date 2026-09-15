@@ -394,12 +394,17 @@ internal sealed partial class NativeDashboard : Form
     {
         var rows = new List<string[]>();
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation" })
-            foreach (var source in NativeHistory.Rows(snapshot?[kind])) rows.Add([kind, Snapshot.Text(source["host"]), Snapshot.Text(source["source"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
+            foreach (var source in NativeHistory.Rows(snapshot?[kind]).Where(source => kind != "dictation" ||
+                !string.Equals(Snapshot.Text(source["source"]), "TypeWhisper", StringComparison.OrdinalIgnoreCase)))
+                rows.Add([kind, Snapshot.Text(source["host"]), Snapshot.Text(source["source"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         foreach (var kind in new[] { "quota", "localModel", "agentSource" })
             if (snapshot?[kind] is JsonObject source) rows.Add([kind, Snapshot.Text(source["host"], ""), Snapshot.Text(source["provider"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
         Label($"{receipts.Length} handoff receipts · {receipts.Count(row => Snapshot.Text(row["status"]) == "failed")} saved failures. Not a live agent monitor.");
-        Label("Newest receipt: " + (receipts.Select(row => Snapshot.Text(row["recordedAt"])).Order().LastOrDefault() ?? "Unknown"));
+        var latest = receipts.Select(row => DateTimeOffset.TryParse(Snapshot.Text(row["recordedAt"]), out var date) ? (DateTimeOffset?)date : null)
+            .Where(date => date.HasValue).OrderBy(date => date).LastOrDefault();
+        var receiptLabel = Label("Newest receipt: " + (latest is DateTimeOffset recorded ? Freshness(recorded.ToString("O"), DateTimeOffset.UtcNow) : "Unknown"));
+        receiptLabel.AccessibleDescription = latest?.ToString("O") ?? "Unknown";
         var details = new DashboardButton { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 40 };
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);

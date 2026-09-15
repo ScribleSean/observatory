@@ -288,7 +288,7 @@ struct NativeDashboard: View {
             ForEach(["activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource"], id: \.self) { key in
                 GroupBox(["quota": "Allowances", "localModel": "Local benchmarks", "agentSource": "Agent receipts", "settings": "Tool activity"][key] ?? key.capitalized) {
                     VStack(alignment: .leading, spacing: 10) {
-                        let sources = (displayedSnapshot?.object[key] as? JSONObject).map { [$0] } ?? rows(displayedSnapshot?.object[key])
+                        let sources = nativeDashboardSources(displayedSnapshot?.object[key], key: key)
                         if sources.isEmpty { Text("No source records").foregroundStyle(.secondary) }
                         ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
                             ObservatoryValueRow(text(source["host"]) + " · " + text(source["source"], fallback: key), value: text(source["status"]))
@@ -299,4 +299,9 @@ struct NativeDashboard: View {
             }
         }
     }
+}
+
+func nativeDashboardSources(_ value: Any?, key: String) -> [JSONObject] {
+    let sources = (value as? JSONObject).map { [$0] } ?? rows(value)
+    return sources.filter { key != "dictation" || text($0["source"]).lowercased() != "typewhisper" }
 }

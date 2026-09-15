@@ -155,6 +155,10 @@ func runSelfTests() {
     precondition(dictationValue([dictationRows[1]], field: "audioSeconds", wispr: true) == "Unknown")
     precondition(dictationValue([dictationRows[1]], field: "words", wispr: false) == "0")
     let voiceFixture: JSONObject = ["host": "Mac", "source": "Wispr Flow", "status": "ok", "days": dictationRows]
+    let retiredVoice: JSONObject = ["host": "Mac", "source": "TypeWhisper", "status": "ok"]
+    precondition(nativeDashboardSources([voiceFixture, retiredVoice], key: "dictation").count == 1)
+    precondition(nativeDashboardSources(retiredVoice, key: "dictation").isEmpty)
+    precondition(nativeDashboardSources([retiredVoice], key: "settings").count == 1)
     let voiceSources = nativeVoiceSources([voiceFixture], host: "All devices", tool: "All tools")
     precondition(voiceSources.count == 4 && voiceSources[0].days.count == 3)
     precondition(voiceSources[1].status == "Tracking not yet verified" && voiceSources[1].days.isEmpty)

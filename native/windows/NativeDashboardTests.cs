@@ -372,6 +372,9 @@ internal static class NativeDashboardTests
                 Capture(form, output, "native-sharing-settings");
                 sections.SelectedItem = "Sources";
                 Check(Children(form).OfType<DashboardValueCard>().Count() == 7, "Source health cards");
+                Check(!Texts(form).Any(value => value.Contains("TypeWhisper", StringComparison.OrdinalIgnoreCase)), "Retired voice source is absent from Sources");
+                Check(Texts(form).Any(value => value.Contains("Wispr Flow")), "Supported voice source remains visible");
+                Check(Texts(form).Any(value => value.StartsWith("Newest receipt: Updated ")), "Newest receipt uses relative freshness");
                 Capture(form, output, "native-sources");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").PerformClick();
                 Check(refreshes == 1, "Refresh callback");
