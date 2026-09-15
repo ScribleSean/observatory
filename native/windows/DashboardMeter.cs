@@ -14,6 +14,7 @@ internal sealed class DashboardMeter : Control
         if (!double.IsFinite(fraction) || fraction < 0 || fraction > 1)
             throw new ArgumentOutOfRangeException(nameof(fraction));
         Fraction = fraction;
+        BackColor = DashboardCard.Surface;
         AccessibleName = name;
         AccessibleRole = AccessibleRole.ProgressBar;
         TabStop = false;
@@ -37,7 +38,7 @@ internal sealed class DashboardMeter : Control
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var bounds = new RectangleF(0, 0, Width - 1, Height - 1);
         using var track = DashboardCard.Rounded(bounds, Math.Min(bounds.Height, bounds.Width) / 2);
-        using var trackInk = new SolidBrush(TrackColor);
+        using var trackInk = new SolidBrush(DashboardPalette.IsLight(this) ? DashboardPalette.Grid(this) : TrackColor);
         e.Graphics.FillPath(trackInk, track);
         if (Fraction == 0) return;
         var state = e.Graphics.Save();

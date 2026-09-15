@@ -28,7 +28,7 @@ internal sealed class DashboardCard : Panel
             e.Graphics.FillPath(ink, shadow);
         }
         using var shape = Rounded(new RectangleF(2, 2, Width - 5, Height - 7), 16);
-        using var surface = new SolidBrush(Surface);
+        using var surface = new SolidBrush(DashboardPalette.Surface(DashboardPalette.IsLight(this)));
         e.Graphics.FillPath(surface, shape);
     }
 

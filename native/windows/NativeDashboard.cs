@@ -16,6 +16,7 @@ internal sealed partial class NativeDashboard : Form
     private string host = "Windows", period = "Day", anchor = "";
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool busy;
+    private bool lightMode;
     private bool showRecordedHistory;
     private readonly Label pageTitle = new() { Dock = DockStyle.Top, Height = 42 };
     private readonly Label freshness = new() { Dock = DockStyle.Fill };
@@ -50,10 +51,10 @@ internal sealed partial class NativeDashboard : Form
             {
                 args.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 using var shape = DashboardCard.Rounded(new RectangleF(args.Bounds.X + 8, args.Bounds.Y + 4, args.Bounds.Width - 16, args.Bounds.Height - 8), 12);
-                using var fill = new SolidBrush(DashboardCard.Surface);
+                using var fill = new SolidBrush(DashboardPalette.Surface(lightMode));
                 args.Graphics.FillPath(fill, shape);
             }
-            var ink = selected ? ForeColor : Color.FromArgb(183, 186, 177);
+            var ink = selected ? ForeColor : DashboardPalette.Muted(lightMode);
             var section = sections.Items[args.Index].ToString() ?? "";
             DashboardNavigationIcons.Draw(args.Graphics, section,
                 new RectangleF(args.Bounds.X + 20, args.Bounds.Y + (args.Bounds.Height - 22) / 2f, 22, 22), ink);
@@ -90,6 +91,15 @@ internal sealed partial class NativeDashboard : Form
         var brandLabel = new Label { Text = "Observatory", Font = brand, Dock = DockStyle.Top, Height = 80, Padding = new Padding(20, 20, 0, 0) };
         sections.Dock = DockStyle.Fill;
         rail.Controls.Add(sections); rail.Controls.Add(brandLabel);
+        var appearance = new DashboardButton { Text = "Light mode", AccessibleName = "Toggle appearance", Dock = DockStyle.Bottom, Height = 44 };
+        appearance.Click += (_, _) =>
+        {
+            lightMode = !lightMode;
+            appearance.Text = lightMode ? "Dark mode" : "Light mode";
+            DashboardPalette.Apply(this, lightMode);
+            UpdateFreshness(read());
+        };
+        rail.Controls.Add(appearance);
         Controls.Add(content); Controls.Add(rail);
         sections.SelectedIndexChanged += (_, _) => { anchor = ""; Reload(); body.AutoScrollPosition = Point.Empty; };
         sections.SelectedIndex = 0;
@@ -183,14 +193,14 @@ internal sealed partial class NativeDashboard : Form
             Label("Native migration preview. Provider sign-ins remain in their owning applications.");
             ResizeRows();
         }
-        finally { body.ResumeLayout(true); }
+        finally { DashboardPalette.Apply(this, lightMode); UpdateFreshness(read()); body.ResumeLayout(true); }
     }
     private void UpdateFreshness(JsonObject? snapshot)
     {
         var timestamp = Snapshot.Text(snapshot?["collectedAt"]);
         freshness.Text = Freshness(timestamp, DateTimeOffset.UtcNow);
         freshness.ForeColor = !DateTimeOffset.TryParse(timestamp, out var date) || date > DateTimeOffset.UtcNow || DateTimeOffset.UtcNow - date > TimeSpan.FromMinutes(15)
-            ? Color.DarkOrange : Color.Silver;
+            ? (lightMode ? Color.FromArgb(151, 77, 12) : Color.DarkOrange) : DashboardPalette.Muted(lightMode);
         freshness.AccessibleDescription = "Snapshot collected at " + timestamp;
         timestampHint.SetToolTip(freshness, freshness.AccessibleDescription);
     }

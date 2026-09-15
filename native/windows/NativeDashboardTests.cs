@@ -294,6 +294,21 @@ internal static class NativeDashboardTests
                 Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
                 Capture(form, output, "native-settings");
+                var appearance = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance");
+                var sourceSwitch = Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr");
+                appearance.PerformClick();
+                Check(form.BackColor == DashboardPalette.Background(true) && form.ForeColor == DashboardPalette.Text(true), "Light palette applied to dashboard");
+                Check(ReferenceEquals(sourceSwitch, Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr")) && sourceSwitch.Checked,
+                    "Appearance changes preserve existing settings controls and values");
+                foreach (var destination in sections.Items.Cast<string>())
+                {
+                    sections.SelectedItem = destination;
+                    Check(form.BackColor == DashboardPalette.Background(true), "Light appearance survives navigation");
+                    Capture(form, output, "native-light-" + destination.ToLowerInvariant());
+                }
+                sections.SelectedItem = "Settings";
+                appearance.PerformClick();
+                Check(form.BackColor == DashboardPalette.Background(false), "Dark appearance restored");
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "quota").Checked = false;
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["quota"]!.GetValue<bool>() && confirmations.Last() == "quota-removal", "Canceled quota removal preserves setting");

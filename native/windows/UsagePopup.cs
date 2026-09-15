@@ -202,8 +202,8 @@ internal sealed class QuotaGraph : Control
     {
         base.OnPaint(e);
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var grid = new Pen(Color.FromArgb(65, 66, 68)); using var line = new Pen(Color.WhiteSmoke, 1.5f);
-        using var brush = new SolidBrush(Color.LightGray);
+        using var grid = new Pen(DashboardPalette.Grid(this)); using var line = new Pen(ForeColor, 1.5f);
+        using var brush = new SolidBrush(DashboardPalette.Muted(DashboardPalette.IsLight(this)));
         var box = new RectangleF(34, 12, Math.Max(1, Width - 44), Math.Max(1, Height - 42));
         foreach (var percent in new[] { 0, 50, 100 })
         {
@@ -274,7 +274,7 @@ internal sealed class DailyTokenGraph : Control
         var start = values.Min(row => row.date!.Value.DayNumber); var end = values.Max(row => row.date!.Value.DayNumber);
         var maximum = Math.Max(1, values.Max(row => row.tokens!.Value));
         var box = new RectangleF(44, 12, Math.Max(1, Width - 54), Math.Max(1, Height - 42));
-        using var brush = new SolidBrush(Color.LightGray); using var grid = new Pen(Color.FromArgb(65, 66, 68));
+        using var brush = new SolidBrush(DashboardPalette.Muted(DashboardPalette.IsLight(this))); using var grid = new Pen(DashboardPalette.Grid(this));
         e.Graphics.DrawLine(grid, box.Left, box.Bottom, box.Right, box.Bottom);
         e.Graphics.DrawString(Snapshot.Format(maximum), Font, brush, 0, box.Top);
         foreach (var row in values)

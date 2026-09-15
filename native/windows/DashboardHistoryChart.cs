@@ -32,13 +32,13 @@ internal sealed class DashboardHistoryChart : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var plot = new RectangleF(12, 22, Width - 60, Height - 52);
         var maximum = Math.Max(1, values.Where(row => row.value is not null).Select(row => row.value!.Value).DefaultIfEmpty(0).Max());
-        using var grid = new Pen(Color.FromArgb(60, 64, 58));
+        using var grid = new Pen(DashboardPalette.Grid(this));
         using var ink = new SolidBrush(tokens ? Color.FromArgb(171, 151, 192) : Color.FromArgb(177, 195, 161));
         for (var line = 0; line <= 2; line++)
         {
             var y = plot.Bottom - plot.Height * line / 2;
             g.DrawLine(grid, plot.Left, y, plot.Right, y);
-            TextRenderer.DrawText(g, Snapshot.Format(maximum * line / 2), Font, new Rectangle(Width - 44, (int)y - 8, 42, 18), Color.Silver, TextFormatFlags.Right);
+            TextRenderer.DrawText(g, Snapshot.Format(maximum * line / 2), Font, new Rectangle(Width - 44, (int)y - 8, 42, 18), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Right);
         }
         var slot = plot.Width / Math.Max(1, values.Length);
         for (var i = 0; i < values.Length; i++)
@@ -52,7 +52,7 @@ internal sealed class DashboardHistoryChart : Control
             }
             if (i % Math.Max(1, (int)Math.Ceiling(values.Length / 5.0)) == 0)
                 TextRenderer.DrawText(g, values[i].date.Length >= 10 ? values[i].date[5..10] : values[i].date,
-                    Font, new Rectangle((int)x, (int)plot.Bottom + 6, Math.Max(48, (int)slot), 20), Color.Silver, TextFormatFlags.Left);
+                    Font, new Rectangle((int)x, (int)plot.Bottom + 6, Math.Max(48, (int)slot), 20), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Left);
         }
     }
 }
