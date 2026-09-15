@@ -46,7 +46,7 @@ internal static class UpdateCandidate
     internal static async Task<string> RunTrustedCommand(string command, string[] arguments,
         CancellationToken cancellation = default)
     {
-        if (command is not ("verify-candidate.mjs" or "stage-update-payload.mjs"))
+        if (command is not ("verify-candidate.mjs" or "stage-update-payload.mjs" or "stage-update-helper.mjs"))
             throw new IOException("Unsupported updater command.");
         var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
         var verifier = Path.Combine(AppContext.BaseDirectory, "Updater", command);
@@ -85,7 +85,7 @@ internal static class UpdateCandidate
         }
         finally
         {
-            // Neither allowed command modifies the installed app. A cancelled
+            // No allowed command modifies the installed app. A cancelled
             // staging copy can remain partial, but cannot become an activation.
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));

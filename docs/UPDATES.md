@@ -311,7 +311,19 @@ verifies the copy again. It never launches the copy. Failed copies are retained
 for inspection. The caller must exclude concurrent writers and supply a trusted
 receipt before staging. Tests cover independent copied bytes, repeated staging,
 refusal of an internal destination, wrong receipts and unexpected private files.
-This prepares an external helper but does not implement activation or relaunch.
+The installed runtime can now invoke `stage-update-helper.mjs` with exactly three
+arguments: installed directory, independently retained previous receipt path and
+external parent directory. It uses the bounded receipt reader and returns a
+structured result after verifying both source and copied inventories.
+`UpdateHelper.Stage` holds installation exclusion during that command and checks
+the returned external path against the expected previous revision and build.
+Synthetic command tests reject extra arguments, invalid receipts and internal
+destinations without creating a helper. Native response tests reject malformed
+results and mismatched identities. Mac cross-compilation and real Windows build
+and native self-tests passed. The focused receipt suite passed 25 tests on each
+host, with the native ZIP extractor test explicitly skipped because no extractor
+was supplied. This prepares an external helper but does not launch it from the
+download callback or establish end-to-end update delivery.
 
 `apply-update.mjs` is the internal replacement subprocess entry point. It
 requires its runtime and Node executable outside both payloads, reads bounded

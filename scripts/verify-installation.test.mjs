@@ -345,6 +345,38 @@ test('helper staging copies verified installed code outside the live payload',t=
   assert.equal(readFileSync(path.join(result.helper,'WorkspaceObservatory.exe'),'utf8'),'Changed copied fixture');
 });
 
+test('helper staging command validates retained receipt before copying trusted old code',t=>{
+  const f=fixture(t),previous=path.join(f.root,'previous.json');
+  const entry=fileURLToPath(new URL('../native/windows/stage-update-helper.mjs',import.meta.url));
+  const run=(args=[f.old.folder,previous,f.root])=>spawnSync(process.execPath,[entry,...args],
+    {encoding:'utf8',timeout:10000});
+  writeFileSync(previous,JSON.stringify(f.old.receipt));
+  const good=run();
+  assert.equal(good.status,0,good.stderr);
+  const result=JSON.parse(good.stdout);
+  assert.deepEqual(Object.keys(result).sort(),['buildNumber','helper','schema','sourceRevision','status']);
+  assert.equal(result.status,'helper-staged');
+  assert.equal(result.schema,1);
+  assert.equal(result.buildNumber,7);
+  assert.equal(result.sourceRevision,f.old.receipt.sourceRevision);
+  assert.equal(verifyInstallation(result.helper,f.old.receipt).buildNumber,7);
+  const before=readdirSync(f.root).sort();
+  for(const args of [[],[f.old.folder,previous,f.root,'extra'],[f.old.folder,previous,f.old.folder]]) {
+    const failed=run(args);
+    assert.equal(failed.status,1);
+    assert.equal(failed.stdout,'');
+    assert.deepEqual(readdirSync(f.root).sort(),before);
+  }
+  for(const receipt of [JSON.stringify(f.next.receipt),'null','{', 'x'.repeat(8193)]) {
+    writeFileSync(previous,receipt);
+    const failed=run();
+    assert.equal(failed.status,1);
+    assert.equal(failed.stdout,'');
+    assert.deepEqual(readdirSync(f.root).sort(),before);
+  }
+  assert.equal(verifyInstallation(f.old.folder,f.old.receipt).buildNumber,7);
+});
+
 test('helper staging refuses untrusted payloads and a destination inside the installation',t=>{
   const f=fixture(t);
   assert.throws(()=>stageUpdateHelper(f.old.folder,f.old.receipt,f.old.folder),/outside/);
