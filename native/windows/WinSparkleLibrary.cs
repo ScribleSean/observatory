@@ -8,6 +8,8 @@ namespace WorkspaceObservatory;
 internal sealed class WinSparkleLibrary : IDisposable
 {
     private const string ExpectedSha256 = "9b43b1c16ee39fb9a91b5bd75138767898779510e0836be2919250607cdbe8ab";
+    private static int owned;
+    private readonly int ownerThread = Environment.CurrentManagedThreadId;
     private nint handle;
     private readonly FileStream file;
     private WinSparkleCallbacks? callbacks;
@@ -21,6 +23,7 @@ internal sealed class WinSparkleLibrary : IDisposable
 
     internal void AttachCallbacks(WinSparkleCallbacks value)
     {
+        EnsureOwner();
         ArgumentNullException.ThrowIfNull(value);
         if (callbacks is not null) throw new InvalidOperationException("Updater callbacks are already attached.");
         // Retain all delegates even if a later registration fails.
@@ -32,6 +35,7 @@ internal sealed class WinSparkleLibrary : IDisposable
 
     internal void ConfigureTrust(UpdateTrust trust)
     {
+        EnsureOwner();
         ArgumentNullException.ThrowIfNull(trust);
         if (Export<SetPublicKey>("win_sparkle_set_eddsa_public_key")(trust.PublicKey) != 1)
             throw new IOException("Updater did not accept the installed public key.");
@@ -49,6 +53,11 @@ internal sealed class WinSparkleLibrary : IDisposable
         if (File.GetAttributes(libraryPath).HasFlag(FileAttributes.ReparsePoint))
             throw new IOException("Linked updater library refused.");
         file = new FileStream(libraryPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        if (Interlocked.CompareExchange(ref owned, 1, 0) != 0)
+        {
+            file.Dispose();
+            throw new InvalidOperationException("Only one updater library owner is allowed per process.");
+        }
         try
         {
             if (file.Length != 2886144 || Convert.ToHexString(SHA256.HashData(file)).ToLowerInvariant() != ExpectedSha256)
@@ -57,18 +66,25 @@ internal sealed class WinSparkleLibrary : IDisposable
             // the current directory, PATH or a downloaded candidate directory.
             handle = NativeLibrary.Load(libraryPath, typeof(WinSparkleLibrary).Assembly, DllImportSearchPath.System32);
         }
-        catch { file.Dispose(); throw; }
+        catch { file.Dispose(); Volatile.Write(ref owned, 0); throw; }
+    }
+
+    private void EnsureOwner()
+    {
+        if (Environment.CurrentManagedThreadId != ownerThread)
+            throw new InvalidOperationException("Updater configuration must remain on its owning thread.");
+        ObjectDisposedException.ThrowIf(handle == 0, this);
     }
 
     private T Export<T>(string name) where T : Delegate
     {
-        ObjectDisposedException.ThrowIf(handle == 0, this);
+        EnsureOwner();
         return Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(handle, name));
     }
 
     internal void CheckBindings()
     {
-        ObjectDisposedException.ThrowIf(handle == 0, this);
+        EnsureOwner();
         foreach (var export in new[] { "win_sparkle_init", "win_sparkle_cleanup", "win_sparkle_set_appcast_url",
             "win_sparkle_set_app_details", "win_sparkle_set_app_build_version", "win_sparkle_set_automatic_check_for_updates",
             "win_sparkle_set_user_run_installer_callback", "win_sparkle_set_can_shutdown_callback",
@@ -87,9 +103,11 @@ internal sealed class WinSparkleLibrary : IDisposable
 
     public void Dispose()
     {
-        // No initialized updater may use this probe-only wrapper yet.
+        // Probe-only: never unload this DLL after initialization. The pinned
+        // cleanup implementation does not join every native worker thread.
         if (handle != 0)
         {
+            EnsureOwner();
             if (callbacks is not null)
             {
                 foreach (var name in new[] { "win_sparkle_set_user_run_installer_callback", "win_sparkle_set_can_shutdown_callback",
@@ -97,7 +115,8 @@ internal sealed class WinSparkleLibrary : IDisposable
             }
             NativeLibrary.Free(handle); handle = 0;
             GC.KeepAlive(callbacks); callbacks = null;
+            file.Dispose();
+            Volatile.Write(ref owned, 0);
         }
-        file.Dispose();
     }
 }

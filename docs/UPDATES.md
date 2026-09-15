@@ -113,6 +113,21 @@ The feed URL is a reserved integration target, not a published working feed.
 `ConfigureTrust` requires the native key setter to succeed before setting that URL.
 No production key or update configuration was created by this change.
 
+The pinned-library wrapper permits one owner per process and confines configuration
+and disposal to its owning managed thread. WinSparkle stores configuration and
+callbacks globally, so a second wrapper must not overwrite the first owner's state.
+The probe checks duplicate-owner rejection, cross-thread rejection, use after
+disposal and creation of a fresh owner after disposal.
+
+Do not extend this probe's unload behavior to an initialized updater. In the pinned
+[0.9.4 implementation](https://github.com/vslavik/winsparkle/blob/v0.9.4/src/dll_api.cpp),
+`win_sparkle_cleanup` shuts down the UI but explicitly leaves worker-thread shutdown
+unfinished. The production integration must retain the DLL and callback delegates
+until process exit once initialized. Cleanup alone is not proof that unloading or
+releasing callbacks is safe. Initialization also cleans previous download leftovers,
+so an initialization test needs isolation beyond a unique settings registry key.
+This wrapper remains uninitialized and cannot request a feed or download.
+
 The pinned-library probe now registers and unregisters the managed installer,
 readiness and shutdown delegates. `WinSparkleLibrary` retains their owning object
 until registration is cleared before unloading. Managed callbacks contain exceptions

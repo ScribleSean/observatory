@@ -14,8 +14,26 @@ internal static class Program
             try
             {
                 using var library = new WinSparkleLibrary(args[1]);
+                try
+                {
+                    using var duplicate = new WinSparkleLibrary(args[1]);
+                    throw new IOException("Duplicate updater ownership was accepted.");
+                }
+                catch (InvalidOperationException) { }
+                Task.Run(() =>
+                {
+                    try { library.Dispose(); throw new IOException("Cross-thread updater disposal was accepted."); }
+                    catch (InvalidOperationException) { }
+                    try { library.CheckBindings(); throw new IOException("Cross-thread updater configuration was accepted."); }
+                    catch (InvalidOperationException) { }
+                }).GetAwaiter().GetResult();
                 library.CheckBindings();
-                Console.WriteLine("Pinned updater library exports and synthetic public-key binding passed. Updater not initialized.");
+                library.Dispose();
+                try { library.CheckBindings(); throw new IOException("Disposed updater accepted configuration."); }
+                catch (ObjectDisposedException) { }
+                using var replacement = new WinSparkleLibrary(args[1]);
+                replacement.CheckBindings();
+                Console.WriteLine("Pinned updater library ownership, exports and synthetic public-key binding passed. Updater not initialized.");
             }
             catch { Console.Error.WriteLine("Updater library binding test failed."); Environment.ExitCode = 1; }
             return;
