@@ -11,6 +11,7 @@ import {installationReceiptSigningBytes,authenticateInstallationReceipt} from '.
 import {verifyManifest} from '../native/windows/verify-manifest.mjs';
 import {prepareInstallationReceipt,writeInstallationSigningRequest} from '../native/windows/prepare-installation-receipt.mjs';
 import {stageUpdateHelper} from '../native/windows/stage-update-helper.mjs';
+import {prepareUpdatePayload} from '../native/windows/prepare-update-payload.mjs';
 const hash=data=>createHash('sha256').update(data).digest('hex');
 function fixture(t) {
   const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-installation-test-')));
@@ -83,6 +84,42 @@ function buildFor(receipt) {
     sourceRevision:receipt.sourceRevision,packageManifestSha256:receipt.manifestSha256,
     installerSource:{dirty:false,revision:receipt.sourceRevision}};
 }
+test('update directory contains independently verified payload and exact signed envelope',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  const bytes=release.envelope(f.next.receipt);writeFileSync(envelope,bytes);
+  const output=path.join(f.root,'update');
+  const result=prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,output);
+  assert.equal(result.prepared,'verified-update-directory');
+  assert.equal(result.buildNumber,8);
+  assert.deepEqual(readFileSync(path.join(output,'installation-envelope.json')),bytes);
+  assert.equal(verifyInstallation(path.join(output,'payload'),f.next.receipt).buildNumber,8);
+  assert.equal(verifyInstallation(f.next.folder,f.next.receipt).buildNumber,8);
+  assert.throws(()=>prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,output),/EEXIST/);
+});
+test('update preparation rejects untrusted, stale, tampered and nested payloads',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  const output=path.join(f.root,'update');
+  assert.throws(()=>prepareUpdatePayload(f.next.folder,envelope,signer().publicKey,7,output),/signature/);
+  assert.throws(()=>prepareUpdatePayload(f.next.folder,envelope,release.publicKey,8,output),/advance/);
+  assert.throws(()=>prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,path.join(f.next.folder,'update')),/outside/);
+  writeFileSync(path.join(f.next.folder,'WorkspaceObservatory.exe'),'Changed synthetic payload');
+  assert.throws(()=>prepareUpdatePayload(f.next.folder,envelope,release.publicKey,7,output));
+  assert.throws(()=>readFileSync(path.join(output,'installation-envelope.json')),/ENOENT/);
+});
+test('update preparation command preserves payload and refuses extra arguments',t=>{
+  const f=fixture(t),release=signer(),envelope=path.join(f.root,'signed.json');
+  writeFileSync(envelope,release.envelope(f.next.receipt));
+  const output=path.join(f.root,'update-cli');
+  const args=[fileURLToPath(new URL('../native/windows/prepare-update-payload.mjs',import.meta.url)),
+    f.next.folder,envelope,release.publicKey,'7',output];
+  const rejected=spawnSync(process.execPath,[...args,'unexpected'],{encoding:'utf8',timeout:10000});
+  assert.notEqual(rejected.status,0);
+  const result=spawnSync(process.execPath,args,{encoding:'utf8',timeout:10000});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(JSON.parse(result.stdout).sourceRevision,f.next.receipt.sourceRevision);
+  assert.equal(verifyInstallation(f.next.folder,f.next.receipt).buildNumber,8);
+});
 test('release preparation binds controlled installer output to clean build metadata and existing signer',t=>{
   const f=fixture(t),release=signer();
   const receipt=prepareInstallationReceipt(f.next.folder,buildFor(f.next.receipt));

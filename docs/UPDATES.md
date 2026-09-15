@@ -42,6 +42,28 @@ the framework. Signing-tool interoperability alone does not test these paths.
 Neither native updater is connected yet. No production key was created by this
 compatibility review, and the verified build-24 candidates remain unchanged.
 
+`native/windows/prepare-update-payload.mjs` now prepares the signed update
+directory from a controlled installation and a separately signed receipt:
+
+```sh
+node native/windows/prepare-update-payload.mjs <installation> <signed-envelope> <trusted-public-key> <previous-build> <new-output-directory>
+```
+
+Paths must be absolute. The output has exactly two top-level entries:
+`payload/` contains the receipt-verified installation, and
+`installation-envelope.json` contains the original signed envelope. Preparation
+authenticates the receipt, verifies the source inventory, copies without replacing
+existing output and verifies the copy. It never reads a private signing key or
+executes the payload. The caller must exclude concurrent writers. Failed output
+is retained for inspection. Synthetic tests cover copying, signer/build rejection,
+tampering, nested/existing output and the command interface.
+
+Compression, an outer archive signature, bounded extraction, moving the verified
+payload into a sibling installation stage and the native callback remain to be
+connected. Keep the envelope outside the installed payload, where it would be an
+unexpected inventory file. This preparation command is not a user update command
+and is not bundled into the app.
+
 The Windows updater primitives remain unconnected. Native Settings now has a running-version label in source, using the Mac bundle metadata or Windows assembly file version. It does not check for downloads, identify the latest release or enable automatic updates. Installed apps and already-built candidates acquire source changes only after a new build and installation.
 
 Windows installer build metadata now includes the shared build number. After
