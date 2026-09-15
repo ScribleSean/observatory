@@ -1,11 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,copyFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {forbiddenPackageName,containsBuildPath} from '../native/windows/package-content.mjs';
+
+test('Windows updater runtime has an explicit self-contained package dependency list',t=>{
+  const source=new URL('../native/windows/',import.meta.url);
+  const project=readFileSync(new URL('WorkspaceObservatory.csproj',source),'utf8');
+  const group=project.match(/<Content Include="([^"]+)">\s*<Link>Updater\/%\(Filename\)%\(Extension\)<\/Link>/);
+  assert.ok(group,'Explicit updater content group is required');
+  const files=group[1].split(';');
+  assert.deepEqual(files.sort(),['package-content.mjs','replace-payload.mjs','signed-receipt.mjs','verify-installation.mjs','verify-manifest.mjs']);
+  const root=mkdtempSync(path.join(tmpdir(),'observatory-updater-runtime-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  for(const file of files)copyFileSync(new URL(file,source),path.join(root,file));
+  const entry=path.join(root,'verify-installation.mjs');
+  const result=spawnSync(process.execPath,['--input-type=module','-e',
+    'const m=await import(process.argv[1]); if(typeof m.replaceSignedInstallation!=="function")process.exit(1);',
+    pathToFileURL(entry).href],{encoding:'utf8',timeout:10000});
+  assert.equal(result.status,0,result.stderr);
+  const inspector=readFileSync(new URL('inspect-package.mjs',source),'utf8');
+  for(const file of files)assert.ok(inspector.includes("'Updater/"+file+"'"));
+});
 
 test('real package inspector requires the dashboard font and its license',t=>{
   const root=mkdtempSync(path.join(tmpdir(),'observatory-font-package-'));
