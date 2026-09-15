@@ -325,21 +325,35 @@ internal sealed partial class NativeDashboard : Form
     private void GroupAccountRows(int start)
     {
         var rows = body.Controls.Cast<Control>().Skip(start).ToArray();
-        var content = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = DashboardCard.Surface };
-        var card = new DashboardCard { Width = ContentWidth, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        var content = new Panel { Dock = DockStyle.Fill, BackColor = DashboardCard.Surface };
+        var card = new DashboardCard { Width = ContentWidth,
             AccessibleName = "Account usage card" };
-        content.SizeChanged += (_, _) =>
+        var arranging = false;
+        void Arrange()
         {
+            if (arranging) return;
+            arranging = true;
+            var y = 0;
             foreach (Control row in content.Controls)
             {
-                row.Width = Math.Max(100, content.ClientSize.Width - 8);
-                if (row is Label label) label.MaximumSize = new Size(row.Width, 0);
+                var width = Math.Max(100, card.ClientSize.Width - card.Padding.Horizontal - 8);
+                row.Width = width;
+                if (row is Label label)
+                {
+                    label.MaximumSize = new Size(width, 0);
+                    label.Height = label.GetPreferredSize(new Size(width, 0)).Height;
+                }
+                row.Location = new Point(0, y);
+                y += row.Height + Math.Max(10, row.Margin.Bottom);
             }
-        };
+            card.Height = y + card.Padding.Vertical;
+            arranging = false;
+        }
+        card.SizeChanged += (_, _) => Arrange();
         foreach (var row in rows) content.Controls.Add(row);
         card.Controls.Add(content);
         body.Controls.Add(card);
+        Arrange();
     }
     internal static string AllowancePaceText(JsonObject quota, JsonObject window, DateTimeOffset now)
     {
