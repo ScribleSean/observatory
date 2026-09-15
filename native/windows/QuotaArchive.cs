@@ -196,9 +196,12 @@ internal sealed class QuotaArchiveWindow : Form
     private readonly ComboBox kind = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140, AccessibleName = "Record type" };
     private readonly DateTimePicker from = new() { Format = DateTimePickerFormat.Short, Width = 115, Value = DateTime.Today.AddDays(-30), AccessibleName = "From date" };
     private readonly DateTimePicker through = new() { Format = DateTimePickerFormat.Short, Width = 115, AccessibleName = "Through date" };
-    private readonly Button load = new() { Text = "Load history", AutoSize = true };
-    private readonly Button next = new() { Text = "Next page", AutoSize = true, Enabled = false };
-    private readonly Button more = new() { Text = "More accounts", AutoSize = true, Enabled = false };
+    private readonly Button load = new DashboardButton { Text = "Load history", AutoSize = true };
+    private readonly Button next = new DashboardButton { Text = "Next page", AutoSize = true, Enabled = false };
+    private readonly Button more = new DashboardButton { Text = "More accounts", AutoSize = true, Enabled = false };
+    private readonly Button allDates = new DashboardButton { Text = "All saved dates", AutoSize = true };
+    private readonly FlowLayoutPanel charts = new() { Dock = DockStyle.Top, Height = 280, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Visible = false };
+    private readonly JsonArray chartReadings = new();
     private readonly Label status = new() { AutoSize = true, MaximumSize = new Size(760, 0) };
     private readonly DataGridView rows = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
         AllowUserToDeleteRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, RowHeadersVisible = false,
@@ -210,18 +213,45 @@ internal sealed class QuotaArchiveWindow : Form
     internal QuotaArchiveWindow(Func<JsonObject, CancellationToken, Task<JsonObject>> read)
     {
         this.read = read;
+        Font = DashboardTypography.AtPixels(14.5f);
+        BackColor = Color.FromArgb(28, 29, 27); ForeColor = Color.WhiteSmoke;
+        account.ForeColor = kind.ForeColor = Color.Black;
+        account.BackColor = kind.BackColor = Color.White;
+        rows.BackgroundColor = DashboardCard.Surface;
+        rows.BorderStyle = BorderStyle.None;
+        rows.EnableHeadersVisualStyles = false;
+        rows.DefaultCellStyle.BackColor = DashboardCard.Surface;
+        rows.DefaultCellStyle.ForeColor = Color.WhiteSmoke;
+        rows.DefaultCellStyle.SelectionBackColor = Color.FromArgb(66, 79, 60);
+        rows.DefaultCellStyle.SelectionForeColor = Color.White;
+        rows.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(37, 39, 35);
+        rows.ColumnHeadersDefaultCellStyle.ForeColor = Color.WhiteSmoke;
+        rows.GridColor = Color.FromArgb(55, 57, 52);
         Text = "Saved allowance history"; AccessibleName = Text;
-        ClientSize = new Size(820, 560); MinimumSize = new Size(700, 460); StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(1080, 780); MinimumSize = new Size(800, 560); StartPosition = FormStartPosition.CenterParent;
         from.MinDate = through.MinDate = new DateTime(1970, 1, 2);
         from.MaxDate = through.MaxDate = new DateTime(9998, 12, 31);
         var filters = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(12), WrapContents = true };
         kind.Items.AddRange(["Observations", "Daily tokens", "Collection results"]); kind.SelectedIndex = 0;
-        var done = new Button { Text = "Done", AutoSize = true, DialogResult = DialogResult.Cancel };
+        var done = new DashboardButton { Text = "Done", AutoSize = true, DialogResult = DialogResult.Cancel };
         filters.Controls.AddRange([new Label { Text = "Account", AutoSize = true }, account, more, new Label { Text = "From", AutoSize = true }, from,
-            new Label { Text = "Through", AutoSize = true }, through, new Label { Text = "Record type", AutoSize = true }, kind, load, next, done]);
+            new Label { Text = "Through", AutoSize = true }, through, new Label { Text = "Record type", AutoSize = true }, kind, allDates, load, next, done]);
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(12) };
         footer.Controls.Add(status);
-        Controls.Add(rows); Controls.Add(filters); Controls.Add(footer);
+        Controls.Add(rows); Controls.Add(charts); Controls.Add(filters); Controls.Add(footer);
+        charts.SizeChanged += (_, _) => {
+            foreach (Control control in charts.Controls)
+                if (control is QuotaGraph or DashboardFilters) control.Width = Math.Max(240, charts.ClientSize.Width - 32);
+        };
+        allDates.Click += (_, _) => {
+            if (account.SelectedIndex < 0) return;
+            var selected = accounts[account.SelectedIndex];
+            if (Snapshot.Number(selected?["firstAt"]) is double first && Snapshot.Number(selected?["lastAt"]) is double last)
+            {
+                from.Value = DateTimeOffset.FromUnixTimeMilliseconds((long)first).LocalDateTime;
+                through.Value = DateTimeOffset.FromUnixTimeMilliseconds((long)last).LocalDateTime;
+            }
+        };
         rows.Columns.Add("time", "Recorded at"); rows.Columns.Add("value", "Saved reading");
         CancelButton = done; AcceptButton = load;
         load.Click += async (_, _) => await LoadPage(false);
@@ -236,14 +266,15 @@ internal sealed class QuotaArchiveWindow : Form
 
     private void InvalidatePage()
     {
-        pageNext = null; rows.Rows.Clear(); UpdateButtons();
+        pageNext = null; rows.Rows.Clear(); chartReadings.Clear(); RenderCharts(); UpdateButtons();
         status.Text = "This PC only. Choose filters and load saved history. These are not live readings or device totals.";
     }
     private void UpdateButtons()
     {
         account.Enabled = kind.Enabled = from.Enabled = through.Enabled = !busy;
         load.Enabled = !busy && account.SelectedIndex >= 0 && from.Value.Date <= through.Value.Date;
-        next.Enabled = load.Enabled && pageNext is not null;
+        next.Enabled = load.Enabled && pageNext is not null && chartReadings.Count < 10000;
+        allDates.Enabled = !busy && account.SelectedIndex >= 0;
         more.Enabled = !busy && accountNext is not null;
     }
     private async Task Execute(Func<Task> action)
@@ -251,7 +282,10 @@ internal sealed class QuotaArchiveWindow : Form
         if (busy) return;
         busy = true; UpdateButtons(); status.Text = "Reading saved history…";
         try { await action(); }
-        catch { if (!IsDisposed) status.Text = "Saved history could not be read. No history was deleted."; }
+        catch { if (!IsDisposed) {
+            pageNext = null; chartReadings.Clear(); rows.Rows.Clear(); RenderCharts();
+            status.Text = "Saved history could not be read. No history was deleted.";
+        } }
         finally { busy = false; if (!IsDisposed) UpdateButtons(); }
     }
     private Task LoadAccounts(JsonNode? after) => Execute(async () =>
@@ -272,9 +306,9 @@ internal sealed class QuotaArchiveWindow : Form
     });
     private Task LoadPage(bool advance)
     {
-        if (!load.Enabled || (advance && pageNext is null)) return Task.CompletedTask;
+        if (!load.Enabled || (advance && (pageNext is null || chartReadings.Count >= 10000))) return Task.CompletedTask;
         var request = new JsonObject { ["action"] = "page", ["scope"] = accounts[account.SelectedIndex]?["scope"]?.DeepClone(),
-            ["kind"] = new[] { "observation", "daily", "poll" }[kind.SelectedIndex],
+            ["kind"] = new[] { "timeline", "daily", "poll" }[kind.SelectedIndex],
             ["from"] = new DateTimeOffset(from.Value.Date).ToUnixTimeMilliseconds(),
             ["to"] = new DateTimeOffset(through.Value.Date.AddDays(1)).ToUnixTimeMilliseconds() - 1, ["limit"] = 100 };
         if (advance) request["after"] = pageNext!.DeepClone();
@@ -283,14 +317,40 @@ internal sealed class QuotaArchiveWindow : Form
             var reply = await read(request, lifetime.Token);
             if (IsDisposed) return;
             var records = reply["records"] as JsonArray ?? throw new InvalidOperationException();
+            if (!advance) chartReadings.Clear();
+            if (kind.SelectedIndex == 0)
+                foreach (var record in records) chartReadings.Add(record?.DeepClone());
             rows.Rows.Clear();
             foreach (var item in records)
             {
                 rows.Rows.Add(Snapshot.Text(item?["checkedAt"]), ReadingText(item));
             }
             pageNext = reply["next"]?.DeepClone();
+            RenderCharts();
             status.Text = $"{records.Count} saved readings on this page. " + (pageNext is null ? "End of results." : "More readings available.");
         });
+    }
+    private void RenderCharts()
+    {
+        foreach (Control control in charts.Controls.Cast<Control>().ToArray()) { charts.Controls.Remove(control); control.Dispose(); }
+        charts.Visible = chartReadings.Count > 0 && kind.SelectedIndex == 0;
+        if (!charts.Visible) return;
+        var quota = new JsonObject { ["history"] = chartReadings.DeepClone(), ["checkedAt"] = chartReadings.LastOrDefault()?["checkedAt"]?.DeepClone() };
+        charts.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(950, 0), Text = pageNext is null
+            ? "Loaded history for selected dates. Allowance used. Dashed spans mean unknown coverage."
+            : chartReadings.Count >= 10000 ? "Partial history. Preview limit reached. Choose a narrower date range."
+            : "Partial history. Load the next page to extend coverage. Dashed spans mean unknown coverage." });
+        var windows = NativeHistory.Rows(quota["history"]).SelectMany(row => NativeHistory.Rows(row["windows"]))
+            .Where(window => Snapshot.Text(window["bucket"]) is not ("spark" or "codex_spark" or "codex_bengalfox"))
+            .GroupBy(window => Snapshot.Text(window["bucket"]) + ":" + Snapshot.Text(window["window"])).Select(group => group.Last());
+        foreach (var window in windows)
+        {
+            var width = Math.Max(240, charts.ClientSize.Width - 32);
+            var graph = new QuotaGraph(quota, window, fitHistory: true) { Width = width, Height = 180, BackColor = DashboardCard.Surface };
+            charts.Controls.Add(new Label { AutoSize = true, Text = Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + " · Allowance used" });
+            charts.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], "All retained", graph.SelectPeriod) { Width = width });
+            charts.Controls.Add(graph);
+        }
     }
     internal static string ReadingText(JsonNode? item) => item?["windows"] is JsonArray windows
         ? string.Join(" · ", windows.Where(w => Snapshot.Text(w?["bucket"]) is not ("spark" or "codex_spark" or "codex_bengalfox"))
@@ -312,12 +372,14 @@ internal sealed class QuotaArchiveWindow : Form
         if (!window.load.Enabled || window.next.Enabled) throw new Exception("Archive initial controls failed.");
         window.LoadPage(false).GetAwaiter().GetResult();
         if (window.rows.Rows.Count != 1 || !window.next.Enabled) throw new Exception("Archive first page failed.");
+        if (calls[^1]["kind"]?.GetValue<string>() != "timeline" || window.chartReadings.Count != 1) throw new Exception("Archive chart omitted timeline coverage.");
         window.LoadPage(true).GetAwaiter().GetResult();
         if (window.next.Enabled || calls[^1]["after"]?["id"]?.GetValue<int>() != 1) throw new Exception("Archive cursor failed.");
+        if (window.chartReadings.Count != 2) throw new Exception("Archive chart discarded earlier pages.");
         window.LoadPage(true).GetAwaiter().GetResult();
         if (calls.Count != 3) throw new Exception("Disabled archive pagination performed a read.");
         window.kind.SelectedIndex = 1;
-        if (window.rows.Rows.Count != 0 || window.next.Enabled) throw new Exception("Changed archive filters retained old page.");
+        if (window.rows.Rows.Count != 0 || window.next.Enabled || window.chartReadings.Count != 0) throw new Exception("Changed archive filters retained old page.");
         window.from.Value = window.through.Value.AddDays(1);
         window.LoadPage(false).GetAwaiter().GetResult();
         if (calls.Count != 3 || window.load.Enabled) throw new Exception("Invalid archive dates performed a read.");
@@ -345,6 +407,7 @@ internal sealed class QuotaArchiveWindow : Form
             {
                 await window.LoadPage(false);
                 if (window.rows.Rows.Count != 1) throw new Exception("Visible archive page missing.");
+                if (!window.charts.Controls.OfType<QuotaGraph>().Any()) throw new Exception("Saved allowance graph missing.");
                 foreach (var size in new[] { new Size(820, 560), new Size(700, 460) })
                 {
                     window.ClientSize = size; window.PerformLayout();
