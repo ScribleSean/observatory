@@ -50,8 +50,15 @@ try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = Join-Path $output 'windows-update.zip'
     [IO.Compression.ZipFile]::CreateFromDirectory($installed, $archive)
-    $expanded = Join-Path $output 'expanded'
-    [IO.Compression.ZipFile]::ExtractToDirectory($archive, $expanded)
+    $stagingParent = Join-Path $output 'expanded'
+    New-Item -ItemType Directory -Path $stagingParent | Out-Null
+    # Exercise the shipped extractor, not the framework's unrestricted extractor.
+    RunChecked (Join-Path $installed 'WorkspaceObservatory.exe') ('--test-update-extraction "' + $archive + '" "' + $stagingParent + '"')
+    $staged = @(Get-ChildItem -LiteralPath $stagingParent -Force)
+    if ($staged.Count -ne 1 -or -not $staged[0].PSIsContainer -or $staged[0].Name -notmatch '^\.observatory-stage-[a-f0-9]{32}$') {
+        throw 'Expected exactly one native extractor staging directory.'
+    }
+    $expanded = $staged[0].FullName
     $roundtrip = Join-Path $output 'roundtrip-request'
     & $node (Join-Path $PSScriptRoot 'prepare-installation-receipt.mjs') $expanded $buildPath $roundtrip
     if ($LASTEXITCODE -ne 0) { throw 'Update archive roundtrip failed inventory verification.' }
@@ -62,7 +69,7 @@ try {
     }
     RunChecked (Join-Path $expanded 'WorkspaceObservatory.exe') '--self-test'
     if (Test-Path -LiteralPath $data) { throw 'Staging unexpectedly created live collection data.' }
-    Write-Output ('PASS: actual installer receipt, archive roundtrip and expanded native contracts. Archive bytes: ' + (Get-Item -LiteralPath $archive).Length)
+    Write-Output ('PASS: actual installer receipt, bounded native archive roundtrip and expanded native contracts. Archive bytes: ' + (Get-Item -LiteralPath $archive).Length)
 } finally {
     $uninstaller = Join-Path $output 'cleanup-uninstaller.exe'
     Copy-Item -LiteralPath (Join-Path $installed 'Uninstall.exe') -Destination $uninstaller

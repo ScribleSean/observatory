@@ -8,6 +8,14 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-extraction"))
+        {
+            if (args.Length != 3 || args[0] != "--test-update-extraction")
+            { Environment.ExitCode = 64; return; }
+            try { UpdateArchive.Extract(args[1], args[2]); }
+            catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--quit-for-update"))
         {
             if (args.Length != 1) { Environment.ExitCode = 64; return; }
