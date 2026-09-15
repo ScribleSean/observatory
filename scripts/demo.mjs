@@ -65,9 +65,18 @@ export function demoData() {
     localModel:{status:'ok',checkedAt:collectedAt,records:[{model:'example-local-model',status:'complete',recordedAt:collectedAt,seconds:31,input:120,cached:0,output:60,ttft:null,peakGpuMiB:6200}]},
   };
 }
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const dir = fileURLToPath(new URL('../public/local/', import.meta.url));
+export async function writeDemo(dir) {
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  await writeFile(path.join(dir, 'usage.json'), JSON.stringify(demoData()), {flag:'wx',mode:0o600});
-  console.log('Synthetic demo written. An existing snapshot is never overwritten.');
+  try {
+    await writeFile(path.join(dir, 'usage.json'), JSON.stringify(demoData()), {flag:'wx',mode:0o600});
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    return {code:1,message:'Snapshot already exists. Not overwritten. Use a separate checkout to create a demo.'};
+  }
+  return {code:0,message:'Synthetic demo written. An existing snapshot is never overwritten.'};
+}
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const result = await writeDemo(fileURLToPath(new URL('../public/local/', import.meta.url)));
+  console.log(result.message);
+  process.exitCode = result.code;
 }

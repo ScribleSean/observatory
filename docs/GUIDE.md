@@ -40,7 +40,7 @@ Select Activity to explore recorded screen time. Day has previous/next controls.
 
 Tokens shows model-level counts and shares. Expand a model for its token categories and supported API-equivalent estimate. The recorded-day selector lets you review older days. [Research notes](USAGE-TRACKING-REFERENCES.md) describe the open-source patterns behind the accounting.
 
-You need Node.js 22.13 or later.
+You need Node.js 22.13 or later. Check `node --version` before running `npm ci`. If Node is missing or older, install a supported version first using your operating system's installation method or your existing Node version manager. Node 20 is not supported.
 
 ```sh
 git clone https://github.com/ScribleSean/observatory.git
@@ -51,7 +51,7 @@ npm run build
 npm run serve:local
 ```
 
-Open [localhost:5601](http://127.0.0.1:5601). The demo uses made-up records and labels them as sample data. It refuses to overwrite an existing snapshot. You do not need an AI account, ActivityWatch or an SSH connection to try it.
+Open [localhost:5601](http://127.0.0.1:5601). The demo uses made-up records and labels them as sample data. It refuses to overwrite an existing snapshot with a one-line explanation and exit code 1. Use a separate checkout if this one already contains records you want to preserve. You do not need an AI account, ActivityWatch or an SSH connection to try it.
 
 ## Legacy developer appendix: SSH hub and browser dashboard
 
