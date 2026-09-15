@@ -4,7 +4,47 @@ import {mkdtemp,realpath,rm,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {collectQuota} from './collect-quota.mjs';
+import {readQuotaArchive,readQuotaState} from './quota-store.mjs';
 const now=Date.parse('2026-09-09T12:00:00Z');
+test('collector opt-out preserves the archive without polling or fabricating records',async()=>fixture(async runtime=>{
+  const scope='a'.repeat(64);
+  let calls=0;
+  const options={enabled:true,clock:()=>now,resolveExecutable:async()=>'/fake/codex',readSnapshot:async()=>{
+    calls++;
+    return {scope,status:'ok',checkedAt:new Date(now).toISOString(),
+      windows:[{bucket:'codex',window:'primary',remainingPercent:75}],
+      accountUsage:{status:'ok',checkedAt:new Date(now).toISOString(),
+        dailyUsageBuckets:[{startDate:'2026-09-09',tokens:123}]}};
+  }};
+  await collectQuota(runtime,options);
+  const kinds=['observation','daily','poll'];
+  const saved=await Promise.all(kinds.map(kind=>readQuotaArchive(runtime,{scope,kind})));
+  for(const page of saved)assert.equal(page.records.length,1);
+  for(const offset of [1,3600000]) {
+    const result=await collectQuota(runtime,{...options,enabled:false,clock:()=>now+offset});
+    assert.equal(result.status,'not-connected');assert.deepEqual(result.history,[]);
+    assert.equal(calls,1);
+    assert.deepEqual(await Promise.all(kinds.map(kind=>readQuotaArchive(runtime,{scope,kind}))),saved);
+  }
+  const state=await readQuotaState(runtime,now+3600000);
+  assert.equal(state.history.status,'not-connected');
+  assert.equal(state.nextAttemptAt,now+300000);
+}));
+
+test('opt-out during a poll discards its late result but preserves earlier archive records',async()=>fixture(async runtime=>{
+  const scope='a'.repeat(64);
+  const options={enabled:true,clock:()=>now,resolveExecutable:async()=>'/fake/codex',readSnapshot:async()=>({
+    scope,status:'ok',checkedAt:new Date(now).toISOString(),
+    windows:[{bucket:'codex',window:'primary',remainingPercent:75}]})};
+  await collectQuota(runtime,options);
+  const before=await readQuotaArchive(runtime,{scope,kind:'observation'});
+  const result=await collectQuota(runtime,{...options,clock:()=>now+300001,isEnabled:async()=>false,
+    readSnapshot:async()=>({scope,status:'ok',checkedAt:new Date(now+300001).toISOString(),
+      windows:[{bucket:'codex',window:'primary',remainingPercent:70}]})});
+  assert.equal(result.status,'not-connected');
+  assert.deepEqual(await readQuotaArchive(runtime,{scope,kind:'observation'}),before);
+  assert.equal((await readQuotaArchive(runtime,{scope,kind:'poll'})).records.length,1);
+}));
 test('collected pace uses retained observations and cannot survive an account switch',async()=>fixture(async runtime=>{
   let result;
   for(let i=0;i<=12;i++) {

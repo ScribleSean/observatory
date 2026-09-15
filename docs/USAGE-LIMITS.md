@@ -156,7 +156,11 @@ staleness, reset coverage and hourly segmentation. This iteration has compiled
 and passed native self-tests, but has not been visually reviewed, installed or
 ported to the Windows renderer.
 
-Turning off the source clears active history, but is not a forensic secure-erasure operation. The retry deadline remains so toggling the source cannot bypass backoff.
+Turning off the source stops new checks and clears the current allowance cache.
+Previously archived observations, daily account totals and check logs remain on
+this device and can still be read in saved history. Turning monitoring off is
+not an archive-deletion action. The retry deadline remains so toggling the
+source cannot bypass backoff. No observations are created for time spent off.
 
 ## Remaining verification
 

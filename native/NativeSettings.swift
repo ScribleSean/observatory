@@ -54,7 +54,7 @@ struct NativeSettings: View {
                     Text("Uses the existing sign-in in the installed Codex app. Sign in or switch accounts there. Observatory does not copy that login to another device.")
                     if store.localCollection {
                         Toggle("Monitor Codex account limits online", isOn: binding("quota")).disabled(!loaded || busy)
-                        Text("Turning monitoring off clears retained allowance history, but does not sign out of Codex or remove saved token logs.")
+                        Text("Turning monitoring off stops new checks and clears the current allowance view. Previously saved readings remain in the local archive. This does not sign out of Codex or remove saved token logs.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
                     Text("Adding other providers and signing in directly from Observatory are not available yet.")
