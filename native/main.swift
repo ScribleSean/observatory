@@ -932,13 +932,21 @@ let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--
     ["--test-quota-archive"],
     ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
     ["--test-lifecycle", "--capture-dashboard"]]
-guard allowedPreviewArguments.contains(previewArguments) else {
+let archiveRenderArguments = previewArguments.count == 2 && previewArguments[0] == "--render-archive-style" && previewArguments[1].hasPrefix("/")
+guard allowedPreviewArguments.contains(previewArguments) || archiveRenderArguments else {
     print("Preview-only build requires an explicit isolated preview mode")
     exit(64)
 }
 #endif
 
-if Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive"] ||
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-archive-style" {
+    MainActor.assumeIsolated {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        ObservatoryTheme.registerFont()
+        do { try renderArchiveChartPreview(output: URL(fileURLWithPath: CommandLine.arguments[2])) }
+        catch { print("Archive chart preview failed"); exit(1) }
+    }
+} else if Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive"] ||
    Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive", "--preview-light"] {
     MainActor.assumeIsolated {
         let application = NSApplication.shared

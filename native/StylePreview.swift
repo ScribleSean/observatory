@@ -1,6 +1,38 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+func renderArchiveChartPreview(output: URL) throws {
+    var pixels = Data(repeating: 0, count: 121 * 101)
+    for x in 20...100 { pixels[50 * 121 + x] = x <= 40 || x >= 80 ? 1 : x % 7 < 3 ? 2 : 0 }
+    for x in [20, 40, 80, 100] { pixels[50 * 121 + x] = 3 }
+    let chart = ArchiveChart(version: 1, width: 121, height: 101, from: 1735689600000, to: 1735776000000,
+        encoding: "ink-mask-u8", pixels: pixels.base64EncodedString(), scanned: 5, observations: 4, gaps: 1, segments: 1,
+        firstAt: 1735704000000, lastAt: 1735761600000, minUsed: 50, maxUsed: 50)
+    _ = try chart.validatedMask()
+    for mode in ["light", "dark"] {
+      for size in [NSSize(width: 720, height: 360), NSSize(width: 480, height: 420)] {
+        let view = ArchiveChartView(chart: chart, windowLabel: "Example allowance · primary")
+            .padding(24).frame(width: size.width, height: size.height)
+            .background(ObservatoryTheme.background)
+            .environment(\.colorScheme, mode == "light" ? .light : .dark)
+        let hosting = NSHostingView(rootView: view)
+        hosting.appearance = NSAppearance(named: mode == "light" ? .aqua : .darkAqua)
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = hosting
+        hosting.layoutSubtreeIfNeeded()
+        guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { throw CocoaError(.fileWriteUnknown) }
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+        let suffix = size.width == 720 ? "" : "-480"
+        try data.write(to: output.appendingPathComponent("archive-mask-\(mode)\(suffix).png"), options: .withoutOverwriting)
+        window.contentView = nil
+      }
+    }
+    print("Synthetic archive light/dark gap fixtures rendered. No sources opened.")
+}
+
 // Synthetic offscreen previews. Never opens a source or starts collection.
 @MainActor
 func renderStylePreview(output: URL) throws {
