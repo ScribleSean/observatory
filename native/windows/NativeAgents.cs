@@ -9,7 +9,7 @@ internal sealed partial class NativeDashboard
         var expanded = false;
         var detailsHeight = content.Height;
         var card = new DashboardCard { Width = ContentWidth, Height = 72, AccessibleName = name + " card" };
-        var toggle = new DashboardButton { Text = "▸ " + content.Title, AccessibleName = name + " details",
+        var toggle = new DashboardDisclosureButton { Text = "▸ " + content.Title, AccessibleName = name + " details",
             AccessibleDescription = "Collapsed. Activate to show saved values.", Dock = DockStyle.Top, Height = 40 };
         content.Dock = DockStyle.Top;
         content.Visible = false;
