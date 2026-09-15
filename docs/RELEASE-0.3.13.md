@@ -69,6 +69,18 @@ advancing synthetic receipt. It does not establish migration between different
 releases, production signing, a working download feed or the user-facing Update
 button. No release was signed or published by the workflow.
 
+A later [full Windows archive run](https://github.com/ScribleSean/observatory/actions/runs/35029917064)
+passed at source `4e91e39dae8876cb39d14e4da25b9771b0028f83` in 21 minutes 17 seconds.
+It verified a 100,266,406-byte signed update wrapper through bounded native
+extraction, complete installation replacement, retained recovery, normal dashboard
+readiness and graceful shutdown. Its focused archive suite passed all 24 tests
+without skips. The installer tests also confirmed running-app refusal, linked-path
+rejection and preservation of saved data and unrelated registry/startup entries.
+The disposable installation was removed afterward. This is separate evidence from
+the candidate artifacts listed above and retains the same synthetic-key and
+same-payload limitations. It does not verify the newer native staging bridge or
+change the candidate artifact hashes.
+
 ## Gates remaining
 
 - Upgrade verification against installed Mac build 22 and Windows build 23,
