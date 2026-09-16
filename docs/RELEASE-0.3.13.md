@@ -34,6 +34,23 @@ The regression work corrected Windows temporary-path normalization in the test
 fixture and required the installed receipt in the final data inventory. It did
 not relax the application's path, signature or inventory validation.
 
+### Clean Mac build with Sparkle
+
+The [clean Mac workflow](https://github.com/ScribleSean/observatory/actions/runs/35112006086)
+passed at source `c278c8f4b72f2f690762ab6df6f3e2488c31eb02` in 4 minutes 53 seconds.
+It fetched checksum-pinned runtimes and Sparkle 2.10.0, built the complete Apple
+Silicon app, and compiled the native updater smoke test against the framework
+inside that app. The smoke test verified delegate bindings and rejection of
+missing release trust before updater initialization.
+
+ZIP verification passed, including file and privacy checks, nested signatures,
+extraction, relocated collector and archive bridges, rendering and dashboard
+lifecycle checks. The runner produced a 66,056,303-byte ZIP and a 188,069,099-byte
+unpacked app. These temporary CI outputs were not retained as downloadable release
+artifacts and do not replace the candidates below. The app was ad-hoc signed.
+No production key, update feed, notarization or complete Sparkle update transaction
+was verified by this run.
+
 ## Current candidate evidence, September 15
 
 The latest prepared artifacts use clean source
