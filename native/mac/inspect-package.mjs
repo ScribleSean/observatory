@@ -40,6 +40,14 @@ export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedB
     'Contents/_CodeSignature/CodeResources']) {
     if(!names.has(required))throw Error(`Required package file missing: ${required}`);
   }
+  if(info.updaterVersion || files.some(file=>file.path.startsWith('Contents/Frameworks/Sparkle.framework/'))) {
+    for(const required of ['Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle',
+      'Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate',
+      'Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Info.plist',
+      'Contents/Resources/Sparkle-LICENSE.txt']) {
+      if(!names.has(required))throw Error(`Required Sparkle file missing: ${required}`);
+    }
+  }
   return {schema:1,platform:'macos-arm64',version:info.version,sourceRevision:info.sourceRevision,
     sourceDirty:false,signing:'ad-hoc, not notarized',fileCount:files.length,bytes,files,symlinks};
 }

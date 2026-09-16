@@ -112,3 +112,25 @@ test('independent ZIP receipts contain exact hashes, exclude DMG claims and refu
     assert.throws(()=>recordVerifiedZip(output,manifest,zip),/EEXIST/);
   });
 });
+
+test('Mac packages with Sparkle require its runtime and retained license',()=>{
+  fixture(({bundle,info})=>{
+    writeFileSync(info,JSON.stringify({...JSON.parse(readFileSync(info)),updaterVersion:'2.10.0'}));
+    assert.throws(()=>inspectMacPackage(bundle),/Required Sparkle file missing/);
+    const paths=['Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle',
+      'Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate',
+      'Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Info.plist',
+      'Contents/Resources/Sparkle-LICENSE.txt'];
+    for(const name of paths) {
+      mkdirSync(path.dirname(path.join(bundle,name)),{recursive:true});
+      writeFileSync(path.join(bundle,name),'synthetic Sparkle');
+    }
+    const manifest=inspectMacPackage(bundle);
+    assert.deepEqual(verifyMacPackage(bundle,manifest),manifest);
+    rmSync(path.join(bundle,paths[3]));
+    assert.throws(()=>inspectMacPackage(bundle),/Required Sparkle file missing/);
+    writeFileSync(path.join(bundle,paths[3]),'synthetic Sparkle');
+    rmSync(path.join(bundle,paths[1]));
+    assert.throws(()=>inspectMacPackage(bundle),/Required Sparkle file missing/);
+  });
+});

@@ -13,6 +13,9 @@ const release=desktopReleaseVersion();
 const runtimeIndex=process.argv.indexOf('--runtime-dir');
 const runtimeSource=runtimeIndex>=0?process.argv[runtimeIndex+1]:null;
 if(!runtimeSource || !path.isAbsolute(runtimeSource))throw Error('Pass --runtime-dir with an absolute verified Mac runtime payload directory');
+const updaterIndex=process.argv.indexOf('--updater-archive');
+const updaterArchive=updaterIndex>=0?process.argv[updaterIndex+1]:null;
+if(updaterIndex>=0 && (!updaterArchive || !path.isAbsolute(updaterArchive)))throw Error('Use an absolute pinned Sparkle archive path');
 const output=path.join(root,'.native-build');
 const webIndex=process.argv.indexOf('--web-dir');
 const webSource=webIndex>=0?process.argv[webIndex+1]:path.join(output,'web');
@@ -35,7 +38,8 @@ mkdirSync(resources,{recursive:true});
 cpSync(path.join(root,'public/fonts/InterTight.ttf'),path.join(resources,'InterTight.ttf'));
 cpSync(path.join(root,'public/fonts/OFL.txt'),path.join(resources,'InterTight-OFL.txt'));
 for(const name of ['LICENSE','THIRD-PARTY-NOTICES.md'])cpSync(path.join(root,name),path.join(resources,name));
-writeFileSync(path.join(resources,'build-info.json'),JSON.stringify({...release,sourceRevision:source.revision,sourceDirty:source.dirty}));
+writeFileSync(path.join(resources,'build-info.json'),JSON.stringify({...release,sourceRevision:source.revision,sourceDirty:source.dirty,
+  ...(updaterArchive?{updaterVersion:JSON.parse(readFileSync(path.join(root,'native/mac/updater-tool.json'),'utf8')).version}:{})}));
 const runtimeBinaries=bundleRuntime(runtimeSource,path.join(resources,'Runtime'),
   JSON.parse(readFileSync(path.join(root,'native/mac/runtime-assets.json'),'utf8')));
 const mark=path.join(root,'public/brand/telescope.svg');
@@ -56,10 +60,24 @@ for(const name of readdirSync(path.join(root,'scripts'))) {
   cpSync(path.join(root,'scripts',name),path.join(scripts,name));
 }
 const sources=readdirSync(path.join(root,'native')).filter(name=>name.endsWith('.swift')).map(name=>path.join(root,'native',name));
+const updaterLink=[];
+if(updaterArchive) {
+  const prepared=path.join(staging,'updater');
+  execFileSync('/usr/bin/python3',[path.join(root,'native/mac/prepare-updater.py'),
+    '--archive',updaterArchive,'--output',prepared],{stdio:'inherit',timeout:60000});
+  const frameworks=path.join(contents,'Frameworks');
+  mkdirSync(frameworks);
+  const framework=path.join(frameworks,'Sparkle.framework');
+  cpSync(path.join(prepared,'Sparkle.framework'),framework,{recursive:true,verbatimSymlinks:true});
+  execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',framework],{stdio:'inherit',timeout:30000});
+  cpSync(path.join(prepared,'LICENSE'),path.join(resources,'Sparkle-LICENSE.txt'));
+  updaterLink.push('-F',frameworks,'-framework','Sparkle','-Xlinker','-rpath',
+    '-Xlinker','@executable_path/../Frameworks');
+}
 const binary=path.join(contents,'MacOS','WorkspaceObservatory');
 execFileSync('/usr/bin/xcrun',['swiftc','-swift-version','5','-O','-module-cache-path',path.join(output,'module-cache'),
   '-target','arm64-apple-macosx14.0','-framework','AppKit','-framework','SwiftUI','-framework','WebKit',
-  '-framework','ServiceManagement',...sources,'-o',binary],{cwd:root,stdio:'inherit'});
+  '-framework','ServiceManagement',...updaterLink,...sources,'-o',binary],{cwd:root,stdio:'inherit'});
 writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>

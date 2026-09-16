@@ -12,6 +12,8 @@ Inter Tight is bundled from the Google Fonts repository under the SIL Open Font 
 
 Mac candidates include Node and the Astral python-build-standalone distribution of CPython. Versions and archive checksums are pinned in `native/mac/runtime-assets.json`. Their original notices, Python dependency notices, and the generated web notices live inside the app's Resources directory. See [Mac packaging](docs/MAC.md) for the documented system-zlib manifest exception. The app does not replace system runtimes.
 
+Mac builds made with `--updater-archive` include the pinned Sparkle framework. Its archive checksum is recorded in `native/mac/updater-tool.json`. The original combined license notice is included as `Contents/Resources/Sparkle-LICENSE.txt`.
+
 The native dashboard build generates `assets/third-party-licenses.txt` from JavaScript packages present in the emitted chunks and the explicitly imported CSS packages. A required package without a license file fails the build. Source checkout paths are not included in the generated notice.
 
 Windows package candidates include private copies of Node, Python with timezone data, and the .NET desktop runtime. Their versions and download checksums are pinned in `native/windows/runtime-assets.json` and the Windows project file. These copies do not replace system installations.

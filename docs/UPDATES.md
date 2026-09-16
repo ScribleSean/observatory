@@ -12,6 +12,28 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 ## Update integration
 
+### Mac framework packaging
+
+Pass `--updater-archive /absolute/path/Sparkle-2.10.0.tar.xz` to
+`native/build.mjs` to include the updater. `native/mac/prepare-updater.py` verifies
+the archive against `updater-tool.json` before creating a new output directory.
+It retains only the framework and original license, preserves internal relative
+symlinks and refuses unsupported entries or paths through symlinks. The build
+verifies the framework's nested signatures before linking it with a bundle-relative
+runtime search path. No installed app is modified by this build command.
+
+The archive checksum pins the exact upstream framework. The package manifest
+records its complete bytes and symlinks alongside the rest of the app. The normal
+package checks verify nested code signatures and reject missing runtime files or
+license. This option does not enable updates without trusted release configuration.
+
+An isolated development build with Sparkle passed the existing native build checks,
+including archive and sync fixtures, shutdown, disabled-source collection, renderer,
+dashboard lifecycle and popup checks. Nested signature verification passed, and
+`otool` confirmed the app links Sparkle 2.10.0 through `@rpath`. The build used a
+dirty development checkout, so it is not a distribution candidate. A clean-source
+package and complete signed update transaction remain unverified.
+
 ### Mac manual update entry point, September 15
 
 The development Mac source has Check for updates actions in Settings and both
@@ -23,8 +45,8 @@ exclude update checks; isolated previews cannot start them.
 
 With Sparkle linked, the controller lazily starts its standard user interface,
 allows only manual update checks, fixes the feed through its delegate and declines
-the permission prompt for automatic checks. The current build script does not
-link or bundle Sparkle or embed a production key/feed. These source actions therefore
+the permission prompt for automatic checks. The build script can optionally link and bundle Sparkle, but does not embed a
+production key/feed. These source actions therefore
 report that updates are unavailable. This is not a working release update path.
 
 The full native executable compiles and its self-tests exercise invalid trust
@@ -33,8 +55,7 @@ pinned Sparkle 2.10.0 framework: it verifies the three Objective-C delegate sele
 and missing-trust refusal before readiness runs. Compile it with
 `MacUpdateTrust.swift` and `MacUpdateController.swift`, the framework search path,
 `-framework AppKit -framework Sparkle`, and an rpath to the isolated framework.
-The test neither starts the updater nor contacts a feed. Framework packaging,
-production key embedding and an isolated download/install/relaunch test remain open.
+The test neither starts the updater nor contacts a feed. Production key embedding and an isolated download/install/relaunch test remain open.
 
 ### Download handler preparation, September 15
 
