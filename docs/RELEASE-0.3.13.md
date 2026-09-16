@@ -2,6 +2,38 @@
 
 Status: preparation only. Build 24 is not published or installed.
 
+## Hosted verification, September 16
+
+Source `b2515f63cfc0ac63d1c1f04114a05258c0d462d9` passed the
+[complete clean Windows workflow](https://github.com/ScribleSean/observatory/actions/runs/35109329651)
+in 17 minutes 20 seconds. This is newer source verification, not a replacement
+for the prepared candidate artifacts listed below.
+
+The run built the self-contained package and passed all 29 signed-archive
+regressions without skips. It verified normal startup, graceful quit, installer
+ownership and overwrite guards, linked-directory rejection, and preservation of
+saved data and unrelated registry and startup entries during uninstall.
+
+On the disposable runner, the ordinary installation then passed signed archive
+extraction and staging, wrong-signer rejection, replacement through the verified
+external helper, recovery retention, normal dashboard relaunch and graceful quit.
+The installed receipt matched the candidate envelope byte for byte and passed
+signature verification. Setup state remained unchanged, no unexpected data files
+were present, and the ordinary installation was removed after verification.
+
+The fixture used an ephemeral synthetic signer and the same application payload
+with an advancing receipt. It does not prove an upgrade between distinct release
+builds, production key or feed delivery, or the user-facing Check for updates
+flow. No production release was signed or published. The existing development
+installations and the candidate artifact hashes below were not changed by this run.
+
+The same source passed [Mac and Windows native checks](https://github.com/ScribleSean/observatory/actions/runs/35109300055),
+including Windows updater script integration, and [update safety and official
+signer interoperability](https://github.com/ScribleSean/observatory/actions/runs/35109300040).
+The regression work corrected Windows temporary-path normalization in the test
+fixture and required the installed receipt in the final data inventory. It did
+not relax the application's path, signature or inventory validation.
+
 ## Current candidate evidence, September 15
 
 The latest prepared artifacts use clean source

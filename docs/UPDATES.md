@@ -2,6 +2,18 @@
 
 Automatic production updates are requested but not yet implemented. Source changes, release artifacts and installed applications are distinct states. A successful source push is not proof of an installed update.
 
+## Latest hosted verification
+
+The [September 16 clean Windows run](RELEASE-0.3.13.md#hosted-verification-september-16)
+passed the complete installer and update lifecycle at source
+`b2515f63cfc0ac63d1c1f04114a05258c0d462d9`. It verified replacement through the
+external helper, recovery retention, normal dashboard relaunch, exact signed
+receipt persistence and disposable installation cleanup. The fixture used a
+synthetic signer and reused one payload with an advancing receipt. Production
+signing, feed delivery, upgrades between distinct builds and the user-facing
+update action still need verification. Existing candidate downloads retain their
+original source and hashes.
+
 ## Shared release version
 
 `native/Release.props` is the version source for the Mac bundle, Windows application and installer filename. `native/release-version.mjs` validates its numeric fields for JavaScript build tools. The Mac uses the shared display version and build number. Windows uses the same display version and a four-component file version. Advance the build number for each published release, even when its display version stays unchanged. Never reuse an existing release asset URL for different bytes.
@@ -63,8 +75,8 @@ An isolated development build with Sparkle passed the existing native build chec
 including archive and sync fixtures, shutdown, disabled-source collection, renderer,
 dashboard lifecycle and popup checks. Nested signature verification passed, and
 `otool` confirmed the app links Sparkle 2.10.0 through `@rpath`. The build used a
-dirty development checkout, so it is not a distribution candidate. A clean-source
-package and complete signed update transaction remain unverified.
+dirty development checkout, so it is not a distribution candidate. A later [clean Mac package](RELEASE-0.3.13.md#current-candidate-evidence-september-15)
+passed packaging checks. A complete signed Mac update transaction remains unverified.
 
 ### Mac manual update entry point, September 15
 
