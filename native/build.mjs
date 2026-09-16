@@ -74,6 +74,10 @@ writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UT
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><false/>
 <key>NSHighResolutionCapable</key><true/>
+<key>SUEnableAutomaticChecks</key><false/>
+<key>SUAutomaticallyUpdate</key><false/>
+<key>SUAllowsAutomaticUpdates</key><false/>
+<key>SUSendProfileInfo</key><false/>
 </dict></plist>\n`);
 // Remove Finder metadata only from this generated bundle before local signing.
 for (const attribute of ['com.apple.FinderInfo','com.apple.ResourceFork']) {

@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var previewRuntime: URL?
     private weak var lifecycleContent: NSView?
     private let nativeSelection = NativeDashboardSelection()
+    private lazy var updateController = MacUpdateController { [weak self] in
+        guard let self, let store = self.store else { return false }
+        return self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
+            !store.pairingMaintenance && !store.collectionPausedForPairing
+    }
     private var usesNativeDashboard: Bool { !CommandLine.arguments.contains("--legacy-dashboard") }
     private var expectedDashboardPresent: Bool {
         usesNativeDashboard ? detail?.contentView is NSHostingView<NativeDashboard> && webView == nil : webView != nil
@@ -118,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         items.addItem(withTitle: "About Observatory", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         items.addItem(.separator())
         items.addItem(withTitle: "Settings…", action: #selector(sourceSettings), keyEquivalent: ",").target = self
+        items.addItem(withTitle: "Check for updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
         items.addItem(.separator())
         items.addItem(withTitle: "Hide Observatory", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = items.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -284,6 +290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(withTitle: "Open Observatory", action: #selector(openDefault), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Show usage popup", action: #selector(showUsage), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Refresh sources", action: #selector(refresh), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Check for updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings and device connection…", action: #selector(sourceSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
@@ -603,7 +610,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
                         disconnect: { [weak self] in self?.disconnectPairing() }, repair: { [weak self] in self?.preparePairingRepair() },
                         toggleLogin: { [weak self] in self?.toggleLogin() }, loginSettings: { [weak self] in self?.loginSettings() },
-                        preview: previewRuntime != nil, directPair: { [weak self] in self?.setupDirectPairing() })))
+                        preview: previewRuntime != nil, directPair: { [weak self] in self?.setupDirectPairing() },
+                        checkUpdates: { [weak self] in self?.checkForUpdates() })))
                 window.delegate = self
                 window.isReleasedWhenClosed = false
                 window.center()
@@ -935,6 +943,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             afterUsageClosed(deadline: deadline, completion: completion)
         }
     }
+    @objc private func checkForUpdates() {
+        guard previewRuntime == nil else { return }
+        do { try updateController.check() }
+        catch {
+            let alert = NSAlert()
+            alert.messageText = "Observatory updates"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let store else { return .terminateNow }

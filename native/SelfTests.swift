@@ -1,6 +1,7 @@
 import Foundation
 
 func runSelfTests() {
+    MacUpdateTrust.selfTest()
     precondition(formatted(1e9, compact: true) == "1B")
     precondition(formatted(1e12, compact: true) == "1T")
     precondition(formatted(999_999_999, compact: true) == "1B")

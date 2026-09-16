@@ -9,6 +9,7 @@ struct NativeSettingsActions {
     var loginSettings: () -> Void
     var preview: Bool
     var directPair: (() -> Void)? = nil
+    var checkUpdates: (() -> Void)? = nil
 }
 
 struct NativeSettings: View {
@@ -44,6 +45,8 @@ struct NativeSettings: View {
                     Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown") (build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"))")
                     Text(actions.preview ? "Isolated preview. This is not the installed app." : "This identifies the running app. Building or downloading an update does not change this version.")
                         .observatoryFont(.callout).foregroundStyle(.secondary)
+                    Button("Check for updates…") { actions.checkUpdates?() }
+                        .disabled(actions.preview || busy || actions.checkUpdates == nil)
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
             settingsSection("Collection on this Mac") {

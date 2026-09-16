@@ -12,6 +12,30 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 ## Update integration
 
+### Mac manual update entry point, September 15
+
+The development Mac source has Check for updates actions in Settings and both
+menus. `MacUpdateController` first requires the fixed macOS feed, a canonical
+32-byte public key and explicit disabled automatic-check, automatic-install and
+profile-sharing flags in the application bundle. Missing trust fails before
+readiness checks or Sparkle initialization. Collection, pairing and shutdown
+exclude update checks; isolated previews cannot start them.
+
+With Sparkle linked, the controller lazily starts its standard user interface,
+allows only manual update checks, fixes the feed through its delegate and declines
+the permission prompt for automatic checks. The current build script does not
+link or bundle Sparkle or embed a production key/feed. These source actions therefore
+report that updates are unavailable. This is not a working release update path.
+
+The full native executable compiles and its self-tests exercise invalid trust
+configuration. `native/mac/UpdateSmoke.swift` is a separate executable test for the
+pinned Sparkle 2.10.0 framework: it verifies the three Objective-C delegate selectors
+and missing-trust refusal before readiness runs. Compile it with
+`MacUpdateTrust.swift` and `MacUpdateController.swift`, the framework search path,
+`-framework AppKit -framework Sparkle`, and an rpath to the isolated framework.
+The test neither starts the updater nor contacts a feed. Framework packaging,
+production key embedding and an isolated download/install/relaunch test remain open.
+
 ### Download handler preparation, September 15
 
 `UpdateDownload.Prepare` now connects bounded native ZIP extraction, candidate
