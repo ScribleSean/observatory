@@ -31,7 +31,7 @@ internal static class Program
                 var result = UpdateReceiptStore.Persist(args[1], args[2], args[3], previousBuild, args[5], args[6]).GetAwaiter().GetResult();
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { envelopePath = result }));
             }
-            catch { Console.Error.WriteLine("Installed receipt was not published."); Environment.ExitCode = 1; }
+            catch (Exception error) { Console.Error.WriteLine("Installed receipt was not published. " + error.Message); Environment.ExitCode = 1; }
             return;
         }
         if (args.Contains("--test-installed-update-state"))
@@ -44,7 +44,7 @@ internal static class Program
                 var result = UpdateInstalledState.Verify(args[1], args[2], args[3], expectedBuild).GetAwaiter().GetResult();
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
             }
-            catch { Console.Error.WriteLine("Installed update state was not verified."); Environment.ExitCode = 1; }
+            catch (Exception error) { Console.Error.WriteLine("Installed update state was not verified. " + error.Message); Environment.ExitCode = 1; }
             return;
         }
         if (args.Contains("--test-update-download-preparation"))
@@ -59,7 +59,7 @@ internal static class Program
                     .GetAwaiter().GetResult();
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
             }
-            catch { Console.Error.WriteLine("Synthetic download preparation failed. No helper was launched."); Environment.ExitCode = 1; }
+            catch (Exception error) { Console.Error.WriteLine("Synthetic download preparation failed. No helper was launched. " + error.Message); Environment.ExitCode = 1; }
             return;
         }
         if (args.Contains("--apply-update"))
