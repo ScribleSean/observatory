@@ -34,6 +34,21 @@ The regression work corrected Windows temporary-path normalization in the test
 fixture and required the installed receipt in the final data inventory. It did
 not relax the application's path, signature or inventory validation.
 
+### Disposable Mac signed replacement
+
+On September 16, Sparkle 2.10.0's upstream CLI was compiled against the pinned
+framework and used with a loopback feed and ephemeral Ed25519 key. Two disposable
+copies of the `9f9cec8` candidate used a unique test bundle identifier and synthetic
+bundle versions 24 and 25. A bad archive signature failed with Sparkle error 4005
+and left version 24 intact. The valid signature completed replacement with exit 0
+and version 25. All 1,879 installed file and symlink entries matched the candidate
+payload, and strict deep code-signature verification passed.
+
+This verifies feed parsing, signature enforcement, extraction and replacement via
+the external CLI. It does not verify Observatory's Update menu, app relaunch,
+distinct-build data migration or the production feed. The payload code was the
+same in both versions. No production key or normal installation was changed.
+
 ### Clean Mac build with Sparkle
 
 The [clean Mac workflow](https://github.com/ScribleSean/observatory/actions/runs/35112006086)

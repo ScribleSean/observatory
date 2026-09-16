@@ -76,7 +76,9 @@ including archive and sync fixtures, shutdown, disabled-source collection, rende
 dashboard lifecycle and popup checks. Nested signature verification passed, and
 `otool` confirmed the app links Sparkle 2.10.0 through `@rpath`. The build used a
 dirty development checkout, so it is not a distribution candidate. A later [clean Mac package](RELEASE-0.3.13.md#current-candidate-evidence-september-15)
-passed packaging checks. A complete signed Mac update transaction remains unverified.
+passed packaging checks. A disposable signed replacement through Sparkle's external CLI subsequently passed;
+see [the release evidence](RELEASE-0.3.13.md#disposable-mac-signed-replacement).
+The application Update menu, relaunch and production feed remain unverified.
 
 ### Mac manual update entry point, September 15
 
