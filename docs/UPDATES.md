@@ -27,6 +27,16 @@ records its complete bytes and symlinks alongside the rest of the app. The norma
 package checks verify nested code signatures and reject missing runtime files or
 license. This option does not enable updates without trusted release configuration.
 
+To configure a release, also pass `--update-public-key BASE64_PUBLIC_KEY`.
+The key must be the canonical base64 representation of the 32-byte Ed25519 public
+key controlled by the release signer. The build rejects this option without
+`--updater-archive`. It embeds the fixed macOS feed and supplied public key in
+Info.plist, with all four automatic-check, automatic-install and profile flags
+explicitly disabled. Supply only the public key. The signer's private key stays
+outside this build process, which creates no keys. Omit the option for an updater-disabled build. Never distribute a build containing a test
+key. Configure production trust only after the signing key and release process
+have been approved and verified.
+
 An isolated development build with Sparkle passed the existing native build checks,
 including archive and sync fixtures, shutdown, disabled-source collection, renderer,
 dashboard lifecycle and popup checks. Nested signature verification passed, and
@@ -45,9 +55,11 @@ exclude update checks; isolated previews cannot start them.
 
 With Sparkle linked, the controller lazily starts its standard user interface,
 allows only manual update checks, fixes the feed through its delegate and declines
-the permission prompt for automatic checks. The build script can optionally link and bundle Sparkle, but does not embed a
-production key/feed. These source actions therefore
-report that updates are unavailable. This is not a working release update path.
+the permission prompt for automatic checks. The build script can link and bundle
+Sparkle and explicitly embed the release public key and fixed feed. No production
+key has been configured or production feed verified. Builds without that explicit
+configuration report that updates are unavailable. This is not yet a verified
+release update path.
 
 The full native executable compiles and its self-tests exercise invalid trust
 configuration. `native/mac/UpdateSmoke.swift` is a separate executable test for the
@@ -55,7 +67,11 @@ pinned Sparkle 2.10.0 framework: it verifies the three Objective-C delegate sele
 and missing-trust refusal before readiness runs. Compile it with
 `MacUpdateTrust.swift` and `MacUpdateController.swift`, the framework search path,
 `-framework AppKit -framework Sparkle`, and an rpath to the isolated framework.
-The test neither starts the updater nor contacts a feed. Production key embedding and an isolated download/install/relaunch test remain open.
+The smoke test optionally accepts a generated plist path and expected public key
+to verify the JavaScript build configuration against the native Swift parser.
+This check passed using a public Ed25519 test vector. The test neither starts the
+updater nor contacts a feed. Production signing configuration and an isolated
+download/install/relaunch test remain open.
 
 ### Download handler preparation, September 15
 

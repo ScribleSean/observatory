@@ -6,6 +6,7 @@ import path from 'node:path';
 import {bundleRuntime} from './mac/runtime-bundle.mjs';
 import {sourceState} from './source-state.mjs';
 import {desktopReleaseVersion} from './release-version.mjs';
+import {macUpdateConfiguration} from './mac/update-configuration.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
 const source=sourceState(root);
@@ -16,6 +17,10 @@ if(!runtimeSource || !path.isAbsolute(runtimeSource))throw Error('Pass --runtime
 const updaterIndex=process.argv.indexOf('--updater-archive');
 const updaterArchive=updaterIndex>=0?process.argv[updaterIndex+1]:null;
 if(updaterIndex>=0 && (!updaterArchive || !path.isAbsolute(updaterArchive)))throw Error('Use an absolute pinned Sparkle archive path');
+const keyIndex=process.argv.indexOf('--update-public-key');
+if(keyIndex>=0 && !process.argv[keyIndex+1])throw Error('Pass a base64 Ed25519 public key');
+const updateConfiguration=macUpdateConfiguration(keyIndex>=0?process.argv[keyIndex+1]:undefined,
+  {hasFramework:!!updaterArchive});
 const output=path.join(root,'.native-build');
 const webIndex=process.argv.indexOf('--web-dir');
 const webSource=webIndex>=0?process.argv[webIndex+1]:path.join(output,'web');
@@ -92,10 +97,7 @@ writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UT
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><false/>
 <key>NSHighResolutionCapable</key><true/>
-<key>SUEnableAutomaticChecks</key><false/>
-<key>SUAutomaticallyUpdate</key><false/>
-<key>SUAllowsAutomaticUpdates</key><false/>
-<key>SUSendProfileInfo</key><false/>
+${updateConfiguration}
 </dict></plist>\n`);
 // Remove Finder metadata only from this generated bundle before local signing.
 for (const attribute of ['com.apple.FinderInfo','com.apple.ResourceFork']) {
