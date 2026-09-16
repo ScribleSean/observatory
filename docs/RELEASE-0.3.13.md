@@ -66,9 +66,25 @@ artifacts and do not replace the candidates below. The app was ad-hoc signed.
 No production key, update feed, notarization or complete Sparkle update transaction
 was verified by this run.
 
+## Retained Mac candidate, September 16
+
+A new Mac ZIP was built from clean source `73d1145` with the pinned runtime and
+Sparkle framework. It remains version 0.3.13, build 24, and is not an advancing
+update for an existing build 24. The ZIP is 65,244,958 bytes with SHA-256
+`94a3d38598f7c238b239a9500ca0c2030e124b3a6ece66764933893717e39b59`.
+The unpacked app contains 187,219,003 bytes.
+
+The retained ZIP has an independent file manifest, checksum and verification
+receipt. Native build checks and ZIP extraction checks passed, including nested
+signatures, archive access, disabled-source collection, rendering and dashboard
+lifecycle. The build also passed synthetic pairing, shutdown and popup checks.
+The app is ad-hoc signed, has no production update trust, and remains unpublished
+and uninstalled. No DMG was requested. The Windows candidate remains the September
+15 artifact below while the personal Windows host is offline.
+
 ## Current candidate evidence, September 15
 
-The latest prepared artifacts use clean source
+The paired September 15 artifacts use clean source
 `9f9cec8ec48230f4b4173319b2a55341d9a59d2f`. They remain unpublished build-24
 candidates. They are not advancing updates for an installed build 24. Source
 changes after this revision do not change these artifact identities.
