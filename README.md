@@ -36,7 +36,7 @@ Saved history can be displayed again after a UI repair, but observations that we
 
 **[Open the interactive demo](https://scriblesean.github.io/observatory/)** to explore fictional records without connecting any accounts or devices.
 
-The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.**
+The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.** See the [current candidate checks and limitations](docs/RELEASE-0.3.13.md#current-candidate-evidence-september-15).
 
 | Platform | Current status |
 | --- | --- |

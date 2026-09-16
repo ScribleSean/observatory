@@ -2,6 +2,34 @@
 
 Status: preparation only. Build 24 is not published or installed.
 
+## Current candidate evidence, September 15
+
+The latest prepared artifacts use clean source
+`9f9cec8ec48230f4b4173319b2a55341d9a59d2f`. They remain unpublished build-24
+candidates. They are not advancing updates for an installed build 24. Source
+changes after this revision do not change these artifact identities.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| macOS arm64 ZIP | 65,244,956 | `c8974b6da983cfaf21e05afdff778ae1a74d5a4937b4d517e4f8ebb343c8ee96` |
+| Windows x64 setup EXE | 98,710,668 | `5c0bb6f2637e4697a35d950d07d703785711a235000cc3c55f3511916788f170` |
+
+The Mac manifest covers 187,219,003 payload bytes. The Windows manifest covers
+262,294,538 bytes in 3,067 files. Compressed artifact sizes are 62.2 MiB and
+94.1 MiB respectively. These are disk sizes, not runtime memory measurements.
+
+| Area | Verified for this source | Remaining boundary |
+| --- | --- | --- |
+| Mac package | Full native build, synthetic archive/sync/shutdown/collector/UI checks, privacy and file inventory scan, nested signatures, ZIP extraction and relocated runtime/UI checks. | Ad-hoc signed, not notarized. No current-candidate DMG or clean-machine installation check. |
+| Windows package | Fresh web build, self-contained publish, pinned updater/runtime checks, native self-tests, isolated sharing/history/sync bridges, Python SQLite/timezones, manifest scan and packaged synthetic dashboard. | Normal update startup and activation were skipped on the personal machine because they require a disposable hosted runner. |
+| Windows installer | Compiled from the same clean package and source. Transferred installer checksum and package-manifest digest matched. A separate full-package TEST identity passed install/uninstall/reinstall, payload hashes, shortcuts, ownership guards and synthetic preservation checks. | Unsigned. The production-identity installer was not executed. TEST identity is not clean-machine production-install evidence. |
+| Update configuration | Sparkle 2.10.0 and pinned WinSparkle are packaged. Build-time public-key embedding and configuration rejection checks passed with test values. | No production release keys, signed installation envelope or working release feed are configured in these candidates. Automatic updates remain unavailable. |
+
+Both installed production applications were left unchanged during these candidate
+checks. See [desktop updates](UPDATES.md) for the signed update pipeline and its
+remaining verification. The older evidence below belongs to the revisions named
+there and must not be applied to these new artifacts.
+
 ## Changes
 
 - Shared native navigation and styling, clearer saved allowance history entry,
@@ -22,7 +50,7 @@ Mac synthetic popup checks verify accessible filter defaults and explicit
 dashboard/Settings handoff. These checks do not establish every accessibility,
 integration or clean-install requirement.
 
-## Candidate package evidence
+## Earlier candidate package evidence
 
 Build 24 packages use clean source `acdf876864d8c96d76ef1bfa26d9540f40886f67`.
 The Mac build, ZIP extraction, native checks and read-only mounted DMG verification
