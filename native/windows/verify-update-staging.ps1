@@ -79,7 +79,15 @@ try {
     & $node (Join-Path $PSScriptRoot 'check-update-install.mjs') $installed $expanded (Join-Path $request 'installation-receipt.json') $output
     if ($LASTEXITCODE -ne 0) { throw 'Complete update and relaunch verification failed.' }
     $dataFiles = @(Get-ChildItem -LiteralPath $data -Recurse -File)
-    if ($dataFiles.Count -ne 1 -or $dataFiles[0].Name -ne 'setup-state.json') { throw 'Update test wrote unexpected data.' }
+    # The update publishes its authenticated receipt before relaunch. The Node
+    # integration check verifies its exact bytes and signature above.
+    $expectedData = @((Join-Path $data 'setup-state.json'), (Join-Path $data 'updates\installed-envelope.json'))
+    if ($dataFiles.Count -ne $expectedData.Count -or @($dataFiles | Where-Object { $_.FullName -notin $expectedData }).Count -ne 0) {
+        throw 'Update test wrote unexpected data.'
+    }
+    if ((Get-Content -LiteralPath (Join-Path $data 'setup-state.json') -Raw) -cne '{"version":1,"completed":true}') {
+        throw 'Update test changed setup state.'
+    }
     Remove-Item -LiteralPath $data -Recurse -Force
     Write-Output ('PASS: actual installer receipt, bounded native archive roundtrip and expanded native contracts. Archive bytes: ' + (Get-Item -LiteralPath $archive).Length)
 } finally {

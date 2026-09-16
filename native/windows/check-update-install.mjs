@@ -5,7 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {generateKeyPairSync,sign} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {stageUpdateHelper} from './stage-update-helper.mjs';
-import {installationReceiptSigningBytes} from './signed-receipt.mjs';
+import {installationReceiptSigningBytes,authenticateInstallationReceipt} from './signed-receipt.mjs';
 import {verifyInstallation} from './verify-installation.mjs';
 import {prepareUpdatePayload} from './prepare-update-payload.mjs';
 
@@ -68,4 +68,8 @@ assert.equal(response.status,'installed-relaunched-and-stopped');
 assert.equal(response.SourceRevision,candidate.sourceRevision);
 assert.ok(existsSync(path.join(response.Recovery,'previous','WorkspaceObservatory.exe')));
 verifyInstallation(installed,candidate);
+const installedEnvelope=readFileSync(path.join(process.env.LOCALAPPDATA,'Workspace Observatory','updates','installed-envelope.json'));
+assert.deepEqual(installedEnvelope,readFileSync(envelope));
+assert.deepEqual(authenticateInstallationReceipt(installedEnvelope,publicKey,previous.buildNumber),candidate);
+console.log('PASS: installed receipt retains the exact authenticated candidate envelope.');
 console.log('PASS: verified external helper replaces a complete installation, preserves recovery, confirms normal dashboard readiness and quits gracefully. Synthetic signer only.');
