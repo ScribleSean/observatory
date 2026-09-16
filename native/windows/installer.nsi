@@ -128,6 +128,37 @@ Section "Install"
   IfErrors install_failed
   !include "install-files.nsh"
   IfErrors install_failed
+  !ifdef UPDATE_ENVELOPE
+    ; Generated from a signature-checked receipt matching this package. Runtime
+    ; verification still checks its embedded key, build and installed inventory.
+    Push "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates\installed-envelope.json"
+    Call NoLinkedPath
+    CreateDirectory "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates"
+    IfErrors install_failed
+    InitPluginsDir
+    SetOutPath "$PLUGINSDIR"
+    File "/oname=installed-envelope.json" "${UPDATE_ENVELOPE}"
+    IfErrors install_failed
+    GetTempFileName $0 "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates"
+    IfErrors install_failed
+    System::Call 'kernel32::CopyFileW(w "$PLUGINSDIR\installed-envelope.json", w r0, i 0) i.r2'
+    IntCmp $2 0 install_failed
+    System::Call 'kernel32::GetFileAttributesW(w "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates\installed-envelope.json") i.r2'
+    IntCmp $2 -1 first_receipt
+    IntOp $2 $2 & 0x410
+    IntCmp $2 0 replace_receipt install_failed install_failed
+    replace_receipt:
+      GetTempFileName $1 "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates"
+      IfErrors install_failed
+      Delete "$1"
+      IfErrors install_failed
+      System::Call 'kernel32::ReplaceFileW(w "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates\installed-envelope.json", w r0, w r1, i 0, p 0, p 0) i.r2'
+      IntCmp $2 0 install_failed receipt_done receipt_done
+    first_receipt:
+      System::Call 'kernel32::MoveFileExW(w r0, w "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates\installed-envelope.json", i 8) i.r2'
+      IntCmp $2 0 install_failed
+    receipt_done:
+  !endif
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\WorkspaceObservatory.exe"
   IfErrors install_failed

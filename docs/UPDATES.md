@@ -68,7 +68,7 @@ The synthetic dashboard test verifies a single Settings action while checking an
 button restoration after completion. Its Settings screenshot was inspected.
 Windows build and Mac cross-compilation passed with zero warnings or errors.
 
-Production key embedding, clean package verification and initial signed-envelope provisioning
+Production key embedding, clean package verification and full signed-installer verification
 remain open. No ordinary
 installation received these source changes. Native callback delivery and complete
 download-to-relaunch verification are still required before release.
@@ -96,8 +96,38 @@ After removing the input envelope, it successfully loads the published receipt
 through the real installed-state verifier for the next update. All 29 focused
 tests passed with no skips on Windows. Native self-tests and both platform builds
 passed. This uses synthetic payloads and signing keys, not a production upgrade
-or a new full-package activation test. Initial installer provisioning still needs
-integration with reviewed signed release output.
+or a new full-package activation test. Initial installer provisioning is described
+below and still requires reviewed signed release output.
+
+### First-install receipt provisioning
+
+`installer.ps1` accepts optional `-InstallationEnvelope` and `-UpdatePublicKey`
+arguments together. The generator authenticates the envelope and requires its
+manifest digest, source revision and build number to match the verified package
+and release metadata. It retains the exact envelope in the compiler work directory
+and records its hash in `installer-build.json`. The public key is a trusted release
+input and must match the application's embedded key. No signing key is accepted.
+
+When this input is supplied, NSIS provisions the envelope in the application's
+`updates` data directory after copying the payload. It rejects linked paths and
+non-file destinations. Replacing an existing receipt retains its old bytes through
+`ReplaceFileW`. A test-identity installer uses its separate data directory.
+Installers without this input retain the previous behavior and do not enable
+updates. The application independently checks the receipt and installed inventory
+before trusting it.
+
+The pinned NSIS 3.12 compiler produced identical synthetic uninstaller bytes when
+only the embedded receipt data changed. A second test compiled and executed the
+exact provisioning block with synthetic files, confirming first publication,
+replacement backup and non-file refusal. Its uninstaller was also unchanged by
+receipt contents. Five generator tests passed on both Mac and Windows.
+
+These experiments support a two-pass release build, but do not replace its final
+verification. Build a controlled installation, derive and sign its receipt, then
+compile with that envelope. The final controlled installation must match the
+signed receipt, including its exact uninstaller and owner-file digests, before
+distribution. Changing installer code or payloads can change those bytes. No full
+release installer with a production signed envelope has been verified yet.
 
 ### Pinned updater packaging
 

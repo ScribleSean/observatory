@@ -1,5 +1,7 @@
 param(
     [string]$PackageDirectory,
+    [string]$InstallationEnvelope,
+    [string]$UpdatePublicKey,
     [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache'),
     [switch]$TestIdentity,
     [switch]$VerifyCompilerOnly
@@ -39,6 +41,10 @@ $work = Join-Path $PSScriptRoot ('release\installer-' + [guid]::NewGuid().ToStri
 $node = Join-Path $PackageDirectory 'Runtime\node.exe'
 $generatorArgs = @((Join-Path $PSScriptRoot 'generate-installer.mjs'), $PackageDirectory, $work)
 if ($TestIdentity) { $generatorArgs += '--test-identity' }
+if ($InstallationEnvelope -or $UpdatePublicKey) {
+    if (-not $InstallationEnvelope -or -not $UpdatePublicKey) { throw 'Supply both the signed installation envelope and trusted public key.' }
+    $generatorArgs += @('--update-envelope', $InstallationEnvelope, $UpdatePublicKey)
+}
 & $node @generatorArgs
 if ($LASTEXITCODE -ne 0) { throw 'Installer package validation failed.' }
 Push-Location $work

@@ -5,6 +5,16 @@ import path from 'node:path';
 import {verifyManifest} from './verify-manifest.mjs';
 import {sourceState} from '../source-state.mjs';
 import {desktopReleaseVersion} from '../release-version.mjs';
+import {authenticateInstallationReceipt} from './signed-receipt.mjs';
+import {readReceiptFile} from './verify-candidate.mjs';
+
+export function validateInstallerEnvelope(bytes,publicKey,manifest,manifestBytes,buildNumber) {
+  const receipt=authenticateInstallationReceipt(bytes,publicKey,0);
+  if(receipt.sourceRevision!==manifest.sourceRevision || receipt.buildNumber!==buildNumber ||
+    receipt.manifestSha256!==createHash('sha256').update(manifestBytes).digest('hex'))
+    throw Error('Installer receipt does not match the verified package and release build');
+  return receipt;
+}
 
 export function nsisLiteral(value) {
   if(typeof value!=='string' || /[\r\n\0]/.test(value))throw Error('Invalid installer literal');
@@ -32,7 +42,7 @@ export function payloadLists(manifest,packageRoot) {
     directories:sorted.map(dir=>`RMDir "$INSTDIR\\${slash(dir)}"`).join('\n')};
 }
 
-export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
+export function generateInstaller(packageRoot,output,{testIdentity=false,installationEnvelope=null,updatePublicKey=null}={}) {
   if(!path.isAbsolute(output) || existsSync(output))throw Error('A new absolute installer work directory is required');
   const manifest=verifyManifest(packageRoot,{allowDirty:testIdentity});
   const installerSource=sourceState(fileURLToPath(new URL('../..',import.meta.url)));
@@ -41,6 +51,9 @@ export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
   for(const required of ['WorkspaceObservatory.exe','Runtime/node.exe','LICENSE'])
     if(!manifest.files.some(file=>file.path===required))throw Error('Missing application component');
   const {version,buildNumber}=desktopReleaseVersion();
+  if(Boolean(installationEnvelope)!==Boolean(updatePublicKey))throw Error('Receipt envelope and trusted public key must be supplied together');
+  const envelope=installationEnvelope?readReceiptFile(installationEnvelope):null;
+  if(envelope)validateInstallerEnvelope(envelope,updatePublicKey,manifest,readFileSync(path.join(packageRoot,'package-manifest.json')),buildNumber);
   const name=testIdentity?'Workspace Observatory Installer Test':'Workspace Observatory';
   const setupId=testIdentity?'WorkspaceObservatoryInstallerTest':'WorkspaceObservatorySetup';
   const installerName=`Workspace-Observatory-${version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
@@ -50,9 +63,14 @@ export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
     UNINSTALL_KEY:`Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${setupId}`,
     INSTALLER_OUTPUT:path.join(artifacts,installerName),APP_ICON:fileURLToPath(new URL('telescope.ico',import.meta.url)),
     APP_LICENSE:path.join(packageRoot,'LICENSE')};
+  if(envelope) {
+    values.UPDATE_ENVELOPE=path.join(output,'installer-update-envelope.json');
+    values.UPDATE_DATA_NAME=name;
+  }
   const lists=payloadLists(manifest,packageRoot);
   mkdirSync(output,{recursive:false});
   mkdirSync(artifacts);
+  if(envelope)writeFileSync(values.UPDATE_ENVELOPE,envelope,{flag:'wx'});
   copyFileSync(new URL('installer.nsi',import.meta.url),path.join(output,'installer.nsi'));
   writeFileSync(path.join(output,'metadata.nsh'),Object.entries(values).map(([key,value])=>`!define ${key} "${nsisLiteral(value)}"`).join('\n')+'\n');
   for(const [name,contents] of Object.entries({'install-files.nsh':lists.install,'uninstall-files.nsh':lists.uninstall,
@@ -66,9 +84,16 @@ export function generateInstaller(packageRoot,output,{testIdentity=false}={}) {
   writeFileSync(path.join(output,'remove-registration.nsh'),remove);
   writeFileSync(path.join(artifacts,'installer-build.json'),JSON.stringify({schema:1,version,buildNumber,testIdentity,installerName,installerSource,
     sourceRevision:manifest.sourceRevision,sourceDirty:manifest.sourceDirty,
-    packageManifestSha256:createHash('sha256').update(readFileSync(path.join(packageRoot,'package-manifest.json'))).digest('hex')},null,2)+'\n');
+    packageManifestSha256:createHash('sha256').update(readFileSync(path.join(packageRoot,'package-manifest.json'))).digest('hex'),
+    updateEnvelopeSha256:envelope?createHash('sha256').update(envelope).digest('hex'):null},null,2)+'\n');
   return {installerName,testIdentity,sourceRevision:manifest.sourceRevision};
 }
 
-if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url))
-  console.log(JSON.stringify(generateInstaller(process.argv[2],process.argv[3],{testIdentity:process.argv.includes('--test-identity')})));
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  const args=process.argv.slice(2),testIdentity=args[2]==='--test-identity';
+  const remaining=args.slice(testIdentity?3:2);
+  if(args.length<2 || (remaining.length!==0 && (remaining.length!==3 || remaining[0]!=='--update-envelope')))
+    throw Error('Invalid installer generation arguments');
+  console.log(JSON.stringify(generateInstaller(args[0],args[1],{testIdentity,
+    installationEnvelope:remaining[1]??null,updatePublicKey:remaining[2]??null})));
+}
