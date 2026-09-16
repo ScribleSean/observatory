@@ -2,6 +2,23 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Mac saved history follow-up, September 16
+
+A disposable copy of candidate source `73d1145` ran its synthetic archive preview
+with a separate bundle identifier. Opening the account menu by mouse and using
+Down/Return selected the first synthetic account. Command-Return loaded the
+full-range graph with 105 observations. Command-Right Arrow reached the final
+five raw records, with Next page disabled. Tab entered the date editor popup.
+Escape dismissed that popup, and a second Escape dismissed the history sheet.
+The remaining preview host window was closed separately, after which the process
+exited with status 0 and an empty captured log.
+
+The accessibility tree exposed the account and record selectors, date editors,
+load/pagination actions, graph observation count and end-of-range status. This is
+current-candidate interaction evidence, not a full keyboard-only, screen-reader,
+contrast or enlarged-layout review. Only fictional history was used. The normal
+installed app and saved settings were not changed.
+
 ## Mac saved allowance history, September 14
 
 A later preview-only `--preview-light` option allows testing without changing the system appearance. The empty and populated history sheet were inspected in light mode at the tested 760-point width. Controls, row text and the footer were visible, with scrolling confined to records. Loading the first synthetic account returned 100 readings. The isolated process exited without captured warnings. This is a light-mode spot check, not an enlarged-text or contrast-ratio audit, and the preview option is not included in the retained build 20 artifacts.
