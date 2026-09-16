@@ -15,7 +15,8 @@ import {prepareUpdatePayload} from '../native/windows/prepare-update-payload.mjs
 import {stageUpdatePayload} from '../native/windows/stage-update-payload.mjs';
 const hash=data=>createHash('sha256').update(data).digest('hex');
 function fixture(t) {
-  const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-installation-test-')));
+  // Resolve Windows short names before passing fixture paths to native canonical-path guards.
+  const root=realpathSync.native(mkdtempSync(path.join(tmpdir(),'observatory-installation-test-')));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const make=(name,revision,build)=>{
     const folder=path.join(root,name);mkdirSync(folder);
