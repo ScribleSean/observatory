@@ -8,6 +8,19 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--test-update-trust"))
+        {
+            if (args.Length != 2 || args[0] != "--test-update-trust") { Environment.ExitCode = 64; return; }
+            try
+            {
+                var trust = UpdateTrust.ReadEmbedded();
+                if (args[1] == "none" ? trust is not null : trust?.PublicKey != args[1])
+                    throw new IOException("Embedded update trust does not match the expected release configuration.");
+                Console.WriteLine("Embedded update trust matches the expected release configuration.");
+            }
+            catch { Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Contains("--test-update-receipt-store"))
         {
             if (args.Length != 7 || args[0] != "--test-update-receipt-store" ||

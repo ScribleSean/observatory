@@ -2,9 +2,18 @@ param(
     [string]$Dotnet = 'dotnet',
     [string]$BuildPython = (Join-Path $env:SystemRoot 'py.exe'),
     [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache'),
+    [string]$UpdatePublicKey,
     [switch]$SkipWebBuild
 )
 $ErrorActionPreference = 'Stop'
+$updateTrust = $null
+if ($PSBoundParameters.ContainsKey('UpdatePublicKey')) {
+    try { $keyBytes = [Convert]::FromBase64String($UpdatePublicKey) } catch { throw 'Invalid update public key.' }
+    if ($keyBytes.Length -ne 32 -or [Convert]::ToBase64String($keyBytes) -cne $UpdatePublicKey -or
+        -not ($keyBytes | Where-Object { $_ -ne 0 })) { throw 'Expected a canonical nonzero 32-byte public key.' }
+    $updateTrust = @{ schema=1; platform='windows-x64';
+        feedUrl='https://scriblesean.github.io/observatory/updates/windows-x64.xml'; publicKey=$UpdatePublicKey } | ConvertTo-Json -Compress
+}
 . (Join-Path $PSScriptRoot 'runtime-assets.ps1')
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $assets = Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json
@@ -27,8 +36,17 @@ Push-Location $sourceRoot
 try {
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-    & $Dotnet publish native/windows/WorkspaceObservatory.csproj -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true -o $app
+    $trustArguments = @()
+    if ($null -ne $updateTrust) {
+        $trustFile = Join-Path $candidate 'update-trust.json'
+        [IO.File]::WriteAllText($trustFile, $updateTrust, [Text.UTF8Encoding]::new($false))
+        $trustArguments = @("-p:ObservatoryUpdateTrustFile=$trustFile")
+    }
+    & $Dotnet publish native/windows/WorkspaceObservatory.csproj @trustArguments -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true -o $app
     if ($LASTEXITCODE -ne 0) { throw 'Self-contained Windows publish failed.' }
+    $expectedTrust = if ($null -ne $updateTrust) { $UpdatePublicKey } else { 'none' }
+    $trustCheck = Start-Process -FilePath (Join-Path $app 'WorkspaceObservatory.exe') -ArgumentList @('--test-update-trust', $expectedTrust) -Wait -PassThru -WindowStyle Hidden
+    if ($trustCheck.ExitCode -ne 0) { throw 'Published application update trust verification failed.' }
     $updaterStage = Join-Path $candidate 'updater-runtime'
     & (Join-Path $PSScriptRoot 'prepare-updater-runtime.ps1') -Archive $updaterArchive -Destination $updaterStage
     foreach ($name in @('WinSparkle.dll', 'COPYING', 'COPYING.expat')) {

@@ -12,6 +12,28 @@ The Mac replacement helper now retains the caller-supplied previous and candidat
 
 ## Update integration
 
+### Windows release trust embedding
+
+`native/windows/package.ps1 -UpdatePublicKey BASE64_PUBLIC_KEY` validates the
+canonical nonzero 32-byte public key before package preparation. It generates
+schema-1 Windows trust configuration beside the temporary candidate and passes
+its path as `ObservatoryUpdateTrustFile` to MSBuild. The application embeds it as
+`WorkspaceObservatory.UpdateTrust.json`. Only the public key belongs in this
+option. The signing key stays outside the build.
+
+Omitting the option leaves trust absent. The package command checks the published
+executable against the expected key, or verifies that trust is absent, before
+continuing. Direct builds can supply `-p:ObservatoryUpdateTrustFile=ABSOLUTE_JSON`,
+but must separately run `--test-update-trust EXPECTED_BASE64_KEY` on the resulting
+executable. The native parser rejects invalid schema, feed, platform or key.
+
+`native/windows/check-update-trust-build.mjs ABSOLUTE_DOTNET_EXE` verified resource
+embedding in actual Windows builds and a self-contained publish using a public
+test vector. Wrong keys and feeds were rejected, missing input failed the build,
+and an unconfigured rebuild removed the earlier trust resource. All outputs were
+temporary. These checks did not initialize WinSparkle, contact a feed or install
+an update. No production signing configuration has been created.
+
 ### Mac framework packaging
 
 Pass `--updater-archive /absolute/path/Sparkle-2.10.0.tar.xz` to
@@ -237,8 +259,8 @@ path. Keep the existing application termination drain as the unconditional guard
 and test busy collection, cancelled shutdown and no-relaunch cases before enabling
 the framework. Signing-tool interoperability alone does not test these paths.
 
-Neither native updater is connected yet. No production key was created by this
-compatibility review, and the verified build-24 candidates remain unchanged.
+This compatibility review preceded the manual controls and build integration
+described above. It created no production key and did not update installed apps.
 
 ### Runtime integration safeguards
 
@@ -303,7 +325,8 @@ or production update installation.
 `https://scriblesean.github.io/observatory/updates/windows-x64.xml`, and a canonical
 32-byte public key. Duplicate fields, foreign URLs and empty keys are rejected.
 Only the installed assembly's `WorkspaceObservatory.UpdateTrust.json` resource is
-eligible. No resource is currently embedded, so reading it returns unavailable.
+eligible. Default builds omit this resource and report updates unavailable.
+Explicit release builds can embed it through the configuration described above.
 The feed URL is a reserved integration target, not a published working feed.
 `ConfigureTrust` requires the native key setter to succeed before setting that URL.
 No production key or update configuration was created by this change.

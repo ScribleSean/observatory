@@ -41,6 +41,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+  <ItemGroup Condition="'$(ObservatoryUpdateTrustFile)' != ''">
+    <EmbeddedResource Include="$(ObservatoryUpdateTrustFile)" LogicalName="WorkspaceObservatory.UpdateTrust.json" />
+  </ItemGroup>
+  <Target Name="RequireUpdateTrustFile" BeforeTargets="PrepareForBuild" Condition="'$(ObservatoryUpdateTrustFile)' != ''">
+    <Error Condition="!Exists('$(ObservatoryUpdateTrustFile)')" Text="The explicit update trust file does not exist." />
+  </Target>
   <Target Name="ExcludeUnusedWpfReference" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>
       <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
