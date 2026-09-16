@@ -205,6 +205,18 @@ exact provisioning block with synthetic files, confirming first publication,
 replacement backup and non-file refusal. Its uninstaller was also unchanged by
 receipt contents. Five generator tests passed on both Mac and Windows.
 
+The complete generated TEST-identity installer also passed a two-pass check with
+`native/windows/check-installer-receipt-cycle.mjs ABSOLUTE_NSIS_ARCHIVE`. The test
+verifies the pinned compiler archive, installs an inert synthetic payload, records
+the generated owner and uninstaller bytes, uninstalls, signs a receipt with an
+in-memory test key, then compiles and installs again with receipt provisioning.
+All payload bytes, the owner file, the uninstaller and the provisioned envelope
+matched. Test installation, shortcuts and registration were removed. The fixture
+remained ineligible for production activation because its ownership identity was
+correctly rejected. Existing test state causes refusal before installation.
+
+This verifies the complete template rather than only the receipt block. It does
+not verify a full application release, production identity or update relaunch.
 These experiments support a two-pass release build, but do not replace its final
 verification. Build a controlled installation, derive and sign its receipt, then
 compile with that envelope. The final controlled installation must match the
