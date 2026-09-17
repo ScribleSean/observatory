@@ -35,6 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if MacUpdateGate.isBlocked(bundle: Bundle.main.bundleURL) {
             // The installer retains the previous app and removes its lock only
             // after verification. Do not start collection during replacement.
+            if !CommandLine.arguments.contains("--background") {
+                NSApp.setActivationPolicy(.regular)
+                let alert = NSAlert()
+                alert.alertStyle = .informational
+                alert.messageText = "Observatory cannot open during an update"
+                alert.informativeText = "An installation or recovery operation may still be in progress. Wait for it to finish, then open Observatory again. If this message persists, check the update recovery instructions."
+                alert.addButton(withTitle: "OK")
+                NSApp.activate(ignoringOtherApps: true)
+                alert.runModal()
+            }
             NSApp.terminate(nil)
             return
         }
