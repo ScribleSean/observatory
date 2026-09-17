@@ -18,6 +18,19 @@ final class ObservatoryStore: ObservableObject {
     var pairingPauseMessage: String? {
         collectionPausedForPairing ? "Collection paused for this app session. Saved snapshot unchanged. Retry pairing, disconnect or repair in Settings, or quit and reopen Observatory." : nil
     }
+    var collectionBlockReason: String? {
+        if setupRequired { return "Setup required" }
+        if !collectionAllowed { return "Collection disabled" }
+        if shuttingDown { return "Collection stopping" }
+        if pairingMaintenance || collectionPausedForPairing { return "Collection paused" }
+        return nil
+    }
+    var sourceHealthIsCurrent: Bool {
+        guard collectionBlockReason == nil, !stale, let snapshot, let collectedAt = snapshot.collectedAt,
+              collectedAt <= now else { return false }
+        let counts = snapshot.sourceCounts
+        return counts.total > 0 && counts.read == counts.total
+    }
     private var process: Process?
     private var trustedSync: TrustedSyncProcess?
     private var pollTimer: Timer?

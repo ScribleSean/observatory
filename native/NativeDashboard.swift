@@ -144,8 +144,10 @@ struct NativeDashboard: View {
                     } else {
                         dailyHistory
                     }
-                    Text("Provider account management and unified account-history sync are still being developed.")
-                        .observatoryFont(.caption).foregroundStyle(.secondary)
+                    if selection.section == "settings" {
+                        Text("Provider account management and unified account-history sync are still being developed.")
+                            .observatoryFont(.caption).foregroundStyle(.secondary)
+                    }
                 }.padding(28).frame(maxWidth: 1100, alignment: .leading).frame(maxWidth: .infinity).id("dashboard-top")
             }
             .onChange(of: selection.section) { scroll.scrollTo("dashboard-top", anchor: .top) }

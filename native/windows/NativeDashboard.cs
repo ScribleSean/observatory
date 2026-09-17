@@ -198,7 +198,7 @@ internal sealed partial class NativeDashboard : Form
             }
             else if (section == "Settings") SourceSettings();
             else Sources(snapshot);
-            Label("Native migration preview. Provider sign-ins remain in their owning applications.");
+            if (section == "Settings") Label("Native migration preview. Provider sign-ins remain in their owning applications.");
             ResizeRows();
         }
         finally { DashboardPalette.Apply(this, lightMode); UpdateFreshness(read()); body.ResumeLayout(true); }

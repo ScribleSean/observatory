@@ -80,8 +80,8 @@ struct ObservatoryPanel: View {
                 }
                 let counts = snapshot.sourceCounts
                 HStack(spacing: 6) {
-                    Circle().fill(counts.read == counts.total && !store.stale && !store.collectionPausedForPairing ? accent : .orange).frame(width: 5, height: 5)
-                    Text(store.collectionPausedForPairing ? "Collection paused · saved source status" : "\(counts.read) of \(counts.total) sources read").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Circle().fill(store.sourceHealthIsCurrent ? accent : .orange).frame(width: 5, height: 5)
+                    Text(store.collectionBlockReason.map { "\($0) · saved source status" } ?? "\(counts.read) of \(counts.total) sources read").font(.system(size: 12)).foregroundStyle(.secondary)
                     Spacer()
                     if store.lastAttempt == "failed" || store.lastAttempt == "runtime-unavailable" {
                         Text("Refresh failed").font(.system(size: 12)).foregroundStyle(.orange)

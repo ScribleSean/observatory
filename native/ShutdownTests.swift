@@ -41,6 +41,27 @@ func testShutdownDrain() async throws {
     other.pairingMaintenance = false
     let retry = await other.drainForQuit(timeout: 1)
     precondition(retry && other.shuttingDown)
+    let healthRoot = root.appendingPathComponent("health")
+    let pending = ObservatoryStore(runtime: healthRoot)
+    let current = Snapshot(object: ["schema": 2, "collectedAt": "2026-09-17T12:00:00Z",
+                                    "tokens": [["status": "ok"]]])
+    pending.now = parseDate("2026-09-17T12:00:01Z")!; pending.snapshot = current
+    precondition(pending.collectionBlockReason == "Setup required" && !pending.sourceHealthIsCurrent)
+    try FirstRunSetup.complete(sources: Dictionary(uniqueKeysWithValues: CollectorConfiguration.defaults.keys.map { ($0, false) }), runtime: healthRoot)
+    let health = ObservatoryStore(runtime: healthRoot)
+    health.now = pending.now; health.snapshot = current
+    precondition(health.sourceHealthIsCurrent)
+    health.collectionPausedForPairing = true; precondition(!health.sourceHealthIsCurrent)
+    health.collectionPausedForPairing = false; health.pairingMaintenance = true
+    precondition(!health.sourceHealthIsCurrent)
+    health.pairingMaintenance = false; health.now = health.now.addingTimeInterval(901)
+    precondition(!health.sourceHealthIsCurrent)
+    health.now = parseDate("2026-09-17T11:59:59Z")!; precondition(!health.sourceHealthIsCurrent)
+    health.now = pending.now; health.snapshot = Snapshot(object: ["schema": 2, "collectedAt": "2026-09-17T12:00:00Z"])
+    precondition(!health.sourceHealthIsCurrent)
+    let disabled = ObservatoryStore(runtime: healthRoot, collectionAllowed: false)
+    disabled.now = pending.now; disabled.snapshot = current
+    precondition(disabled.collectionBlockReason == "Collection disabled" && !disabled.sourceHealthIsCurrent)
     testModalChildDrain(root: root)
 }
 
