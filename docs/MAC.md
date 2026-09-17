@@ -10,7 +10,7 @@ Normal launch opens the native dashboard after setup. Closing the window leaves 
 
 The main window includes activity and token day/week/all-retained views, allowance graphs, dictation, agent and tool records, source health and Settings. Provider account additions and unified allowance history remain unfinished. The explicit `--legacy-dashboard` executable argument selects the older WebKit dashboard as a fallback.
 
-The native View menu provides Command-1 through Command-6 for Allowances, Activity, Tokens, Dictation, Sources and Settings, in sidebar order. A checkmark identifies the visible section. These commands reuse the main window or reopen it when closed. They do not enable sources or change collection settings.
+The native View menu provides Command-1 through Command-7 for Allowances, Activity, Tokens, Dictation, Agents, Source health and Settings, in sidebar order. A checkmark identifies the visible section. These commands reuse the main window or reopen it when closed. They do not enable sources or change collection settings.
 
 ### Dashboard text size
 

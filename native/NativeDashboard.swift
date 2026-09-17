@@ -8,7 +8,7 @@ final class NativeDashboardSelection: ObservableObject {
                            ("activity", "Activity", "waveform.path"), ("tokens", "Tokens", "square.stack.3d.up"),
                            ("dictation", "Dictation", "mic"),
                            ("agents", "Agents", "rectangle.stack.person.crop"),
-                           ("sources", "Sources", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
+                           ("sources", "Source health", "externaldrive.connected.to.line.below"), ("settings", "Settings", "gearshape")]
     @Published var section = "allowances"
     @Published var navigationRequest = 0
     @Published var textScale: Double = 1

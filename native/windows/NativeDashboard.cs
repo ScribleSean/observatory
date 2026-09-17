@@ -71,7 +71,7 @@ internal sealed partial class NativeDashboard : Form
             args.DrawFocusRectangle();
         };
         sections.AccessibleName = "Sections";
-        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings"]);
+        sections.Items.AddRange(["Allowances", "Activity", "Tokens", "Dictation", "Agents", "Source health", "Settings"]);
         var content = new Panel { Dock = DockStyle.Fill };
         var header = new Panel { Dock = DockStyle.Top, Height = 104, Padding = new Padding(24, 16, 24, 8) };
         pageTitle.Font = heading;

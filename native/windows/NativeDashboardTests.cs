@@ -96,7 +96,7 @@ internal static class NativeDashboardTests
                 "Recorded zero has a baseline marker while unknown has no invented bar");
             Check(history.AccessibleDescription!.Contains("2026-09-12: Unknown"), "Unknown stays explicit in chart accessibility");
         }
-        foreach (var section in new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" })
+        foreach (var section in new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Source health", "Settings" })
         foreach (var size in new[] { 22, 44 })
         {
             using var bitmap = new Bitmap(size + 8, size + 8);
@@ -211,7 +211,7 @@ internal static class NativeDashboardTests
                 await Task.Delay(200);
                 Check(form.Font.Name.StartsWith("Inter", StringComparison.Ordinal), "Bundled dashboard typography");
                 var sections = Children(form).OfType<ListBox>().Single();
-                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Sources", "Settings" }), "Dashboard navigation order");
+                Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Source health", "Settings" }), "Dashboard navigation order");
                 Check(sections.SelectedItem?.ToString() == "Allowances", "Allowances is the landing view");
                 Check(Texts(form).Contains("All-time usage history"), "Full-history entry is visible on Allowances");
                 var historyButton = Children(form).OfType<Button>().Single(button => button.Text == "Browse saved history");
@@ -383,7 +383,7 @@ internal static class NativeDashboardTests
                 Check(Texts(form).Contains("More local speech detection coming soon."), "Future local speech coverage copy");
                 Check(!Children(form).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Any(item => item.ToString() == "TypeWhisper"), "Retired source selector removed");
                 Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
-                sections.SelectedItem = "Sources";
+                sections.SelectedItem = "Source health";
                 Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Handoff receipt"), "Sources does not duplicate Agents");
                 Check(Texts(form).Any(value => value.Contains("1 saved failures")), "Saved failure summary visible when collapsed");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "View Agents").PerformClick();
@@ -429,7 +429,7 @@ internal static class NativeDashboardTests
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
-                sections.SelectedItem = "Sources";
+                sections.SelectedItem = "Source health";
                 sections.SelectedItem = "Settings";
                 form.Reload();
                 Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Draft survives navigation and reload");
@@ -547,7 +547,7 @@ internal static class NativeDashboardTests
                 }
                 await Task.Delay(50);
                 Capture(form, output, "native-sharing-settings");
-                sections.SelectedItem = "Sources";
+                sections.SelectedItem = "Source health";
                 Check(Children(form).OfType<DashboardValueCard>().Count() == 7, "Source health cards");
                 Check(!Texts(form).Any(value => value.Contains("TypeWhisper", StringComparison.OrdinalIgnoreCase)), "Retired voice source is absent from Sources");
                 Check(Texts(form).Any(value => value.Contains("Wispr Flow")), "Supported voice source remains visible");

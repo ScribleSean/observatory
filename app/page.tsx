@@ -131,7 +131,7 @@ const views = [
   { id: 'tokens', label: 'Tokens', icon: Layers3 },
   { id: 'dictation', label: 'Dictation', icon: Mic },
   { id: 'agents', label: 'Agents', icon: Workflow },
-  { id: 'sources', label: 'Sources', icon: Database },
+  { id: 'sources', label: 'Source health', icon: Database },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 function State({ children }: { children: React.ReactNode }) {
@@ -828,7 +828,7 @@ export default function Home() {
               <TabsContent value="sources" className="view-panel">
                 <div className="view-heading">
                   <div>
-                    <h1>Sources</h1>
+                    <h1>Source health</h1>
                     <p>Connection status, collection health and coverage.</p>
                   </div>
                   <span className="period-chip">{sourceCount}/{sourceTotal} read</span>

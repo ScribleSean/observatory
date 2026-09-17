@@ -83,7 +83,7 @@ internal sealed partial class NativeDashboard
                 sourceSettings.Save(original, draft);
                 original = draft.DeepClone().AsObject();
                 sourceOriginal = original;
-                status.Text = "Source settings saved. Availability is reported in Sources after collection.";
+                status.Text = "Source settings saved. Availability is reported in Source health after collection.";
             }
             catch (InvalidOperationException error) { status.Text = error.Message; }
             catch { status.Text = "Settings could not be saved. Reload and check source configuration before retrying."; }

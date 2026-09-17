@@ -8,7 +8,7 @@ internal static class DashboardNavigationIcons
 {
     internal static bool Draw(Graphics graphics, string section, RectangleF bounds, Color color)
     {
-        if (section is not ("Allowances" or "Activity" or "Tokens" or "Dictation" or "Agents" or "Sources" or "Settings")) return false;
+        if (section is not ("Allowances" or "Activity" or "Tokens" or "Dictation" or "Agents" or "Source health" or "Settings")) return false;
         if (bounds.Width <= 0 || bounds.Height <= 0) return false;
         var state = graphics.Save();
         try
@@ -48,7 +48,7 @@ internal static class DashboardNavigationIcons
                     graphics.DrawEllipse(pen, 9, 8, 6, 6);
                     graphics.DrawArc(pen, 7, 15, 10, 8, 180, 180);
                     break;
-                case "Sources":
+                case "Source health":
                     graphics.DrawPolygon(pen, [new(3, 16), new(7, 5), new(17, 5), new(21, 16)]);
                     graphics.DrawLine(pen, 6, 10, 18, 10);
                     graphics.DrawLine(pen, 3, 16, 5, 20);

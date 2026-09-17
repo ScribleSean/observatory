@@ -15,14 +15,14 @@ The native apps are the intended everyday entry point. Public installers are not
 1. Launch the native app and complete the first-run wizard. Fresh installations keep sources off until you choose them and complete setup.
 2. For screen time, install and run [ActivityWatch](https://activitywatch.net/) separately on each device you want to track, then enable its source in Observatory. Missing readings remain Unknown. You can use Tokens and Allowances independently.
 3. Review source choices in Settings. Enable only the records you want to read. Provider sign-ins remain in their owning applications, not an Observatory account manager.
-4. Use **Refresh sources** to collect, then inspect Sources for availability and timestamps. Browser **Reload snapshot** only rereads saved data and does not collect.
+4. Use **Refresh sources** to collect, then inspect Source health for availability and timestamps. Browser **Reload snapshot** only rereads saved data and does not collect.
 5. Optionally pair devices from the Mac over an existing trusted SSH connection. Follow [pairing maintenance](PAIRING-MAINTENANCE.md) for prerequisites and supported records. Direct TLS is a separate preview, not a verified replacement for that path.
 
 Each native app can collect its own enabled local sources without the legacy SSH hub. Closing the dashboard leaves the menu-bar or tray app running. Use Quit to stop it. See [Startup](STARTUP.md) for native login behavior and the separate legacy jobs.
 
 ## What you can see
 
-Observatory opens Allowances, the usage-limit overview. Activity is a separate screen-time view and does not need to be configured before using Tokens or Allowances. Native Mac, Windows and web source builds have Allowances, Activity, Tokens, Dictation, Agents, Sources and Settings. Agents shows saved execution records and links to collection settings, not a live agent monitor. Older installations or demo deployments may retain the previous navigation until updated.
+Observatory opens Allowances, the usage-limit overview. Activity is a separate screen-time view and does not need to be configured before using Tokens or Allowances. Native Mac, Windows and web source builds have Allowances, Activity, Tokens, Dictation, Agents, Source health and Settings. Agents shows saved execution records and links to collection settings, not a live agent monitor. Older installations or demo deployments may retain the previous navigation until updated.
 
 | View | Records |
 | --- | --- |
@@ -30,7 +30,7 @@ Observatory opens Allowances, the usage-limit overview. Activity is a separate s
 | Tokens | Daily Codex token counts from Mac, Ubuntu and configured native Windows logs, including cached input |
 | Agents | Available agent receipts, saved local-model benchmarks and partial Codex tool-call counts |
 | Dictation | Voice usage by tool and device, with Wispr recording metadata and explicit coverage |
-| Sources | Which sources were read and which measurements are still missing |
+| Source health | Which sources were read and which measurements are still missing |
 
 Activity offers daily and weekly timelines and a combined Mac and Windows total. Overlapping intervals count once. Simultaneous activity in different categories is labeled Device overlap, since foreground records cannot establish which device had your attention. Tokens offers All, Mac, Ubuntu and Windows sources with Day, Week and All time periods. The All-host total is available only after successful reads and a cross-host session overlap check.
 
