@@ -46,6 +46,23 @@ includes the retained-history reader introduced in build 25, but does not measur
 cold-cache scanning or prove complete historical capture. It is not a controlled
 comparison with build 24 or a long-running leak test.
 
+## Build 25 Windows observation, September 17
+
+The installed 0.3.13 build 25 was sampled 73 times at five-second intervals from
+23:34:03 to 23:40:03 UTC. The largest sampled process-tree working-set sum was
+217,649,152 bytes, about 208 MiB. Up to eight descendant processes were observed.
+The final sample contained one native process using 34,680,832 bytes, about 33 MiB.
+Its CPU counter increased by 0.94 seconds over the six-minute window, excluding
+collector helpers and independent source services.
+
+The window captured a scheduled collection from 23:38:38 to 23:38:41 UTC that
+completed with seven of seven configured source reads. The installed process did
+not restart, and no manual refresh, replacement, sleep or logout was requested.
+Source tests ran separately on the same development machine during part of this
+window. This is an uncontrolled observation with a warm retained-history cache,
+not a capacity limit, a cold-cache benchmark or a direct comparison with Mac RSS.
+The WSL VM and independent source services are outside the measured native tree.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
