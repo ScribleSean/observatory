@@ -29,6 +29,23 @@ Short-lived helpers may fall between samples, shared pages may be counted more
 than once, and this development-machine observation is not a controlled benchmark
 or evidence of leak freedom.
 
+## Build 25 Mac observation, September 17
+
+The installed 0.3.13 build 25 from clean source `53fa934` was sampled 73 times at
+five-second intervals from 23:22:28 to 23:28:28 UTC. The largest observed descendant
+tree had four processes and summed RSS of 304,807,936 bytes, about 291 MiB. The
+final sample contained one native process using 64,651,264 bytes RSS, about 62 MiB.
+Its CPU counter increased by 0.63 seconds over the six-minute window. That counter
+excludes collector helpers and independent source services.
+
+The first collection was already running when sampling began. It and the next
+scheduled collection completed successfully with 13 of 13 configured source reads.
+The app returned to one observed native process after collection. No manual
+refresh, application replacement, sleep or logout was used. This observation
+includes the retained-history reader introduced in build 25, but does not measure
+cold-cache scanning or prove complete historical capture. It is not a controlled
+comparison with build 24 or a long-running leak test.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
