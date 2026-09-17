@@ -907,14 +907,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     print("Native usage popup failed: dashboard handoff did not close the usage view")
                     exit(1)
                 }
-                // Let the explicit dashboard-open activation finish before
-                // simulating a later status-item click on a hidden dashboard.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                // Establish activation from AppKit state before simulating a
+                // later status-item click. A fixed delay races slow runners.
+                afterDashboardActivated { [self] in
                 detail?.orderOut(nil)
                 showUsage()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
                     guard detail?.isVisible == false else {
-                        print("Native usage popup failed: reopening usage raised the hidden dashboard")
+                        print("Native usage popup failed: reopening usage raised the hidden dashboard, active=\(NSApp.isActive) dashboardKey=\(detail?.isKeyWindow ?? false) anchoredShown=\(popover.isShown) fallbackVisible=\(usageWindow?.isVisible ?? false)")
                         exit(1)
                     }
                     guard popover.isShown || usageWindow?.isVisible == true else {
@@ -940,6 +940,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 }
                 }
             }
+        }
+    }
+
+    private func afterDashboardActivated(deadline: Date = Date().addingTimeInterval(2), completion: @escaping () -> Void) {
+        if NSApp.isActive, detail?.isKeyWindow == true, detail?.isVisible == true { completion(); return }
+        guard Date() < deadline else {
+            print("Native usage popup failed: dashboard activation deadline exceeded, active=\(NSApp.isActive) dashboardKey=\(detail?.isKeyWindow ?? false) dashboardVisible=\(detail?.isVisible ?? false)")
+            exit(1)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
+            afterDashboardActivated(deadline: deadline, completion: completion)
         }
     }
 
