@@ -77,6 +77,13 @@ after cancellation cannot start another operation. Window close stops the
 timer and child process. Pairing maintenance remains active until child exit
 is verified, with collection paused if exit cannot be verified.
 
+The Ubuntu option on Mac applies to a Windows peer when this Mac hosts setup.
+When this Mac joins an invitation, it requests its own Mac-only configuration.
+Ubuntu scope is selected on the Windows host. Both the client and join receiver
+reject Ubuntu scope for a joining Mac. The Mac view disables its host-only option
+while joining and explains this distinction. The fake-bridge regression covers a
+join after an earlier Ubuntu host selection without changing the protocol.
+
 The Mac `--test-direct-pairing-model` check uses a fake bridge to test consent,
 confirmation, cancellation and cleanup without keys or network access. Full
 native compilation and self-tests passed. Visual inspection was blocked by

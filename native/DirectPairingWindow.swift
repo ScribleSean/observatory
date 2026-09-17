@@ -162,6 +162,9 @@ private struct DirectPairingView: View {
                     HStack { TextField("This Mac's private IP", text: $model.address); TextField("Sync port", text: $model.port).frame(width: 90) }
                     HStack { TextField("Windows private IP", text: $model.peerAddress); TextField("Peer sync port", text: $model.peerPort).frame(width: 90) }
                     Toggle("Include Ubuntu Codex records on Windows", isOn: $model.includeUbuntu)
+                        .disabled(model.joining)
+                    Text("This option applies when hosting on this Mac. When this Mac joins an invitation, choose Ubuntu scope on the Windows host.")
+                        .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button("Create invitation", action: model.host).disabled(model.hosting || model.joining)
                         Button("Confirm this device", action: model.confirmHost).disabled(model.peerFingerprint == nil)

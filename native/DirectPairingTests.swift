@@ -2,15 +2,17 @@ import Foundation
 
 private final class PairingTestBridge: DirectPairingBridge {
     var commands: [String] = []
+    var requests: [[String: Any]] = []
     var holdIdentity = false
     var held: TLSSetupProcess.Completion?
     var prepared = 0
     var closed = 0
     func send(_ command: [String: Any], completion: @escaping TLSSetupProcess.Completion) {
-        let action = command["action"] as! String; commands.append(action)
+        let action = command["action"] as! String; commands.append(action); requests.append(command)
         if action == "identity-status" && holdIdentity { held = completion; return }
         let status = action == "identity-status" ? "identity-required" : action == "host-start" ? "hosting" :
-            action == "status" ? "confirming" : action == "host-confirm" ? "configuration-ready" : "cancelled"
+            action == "status" ? "confirming" : action == "host-confirm" ? "configuration-ready" :
+            action == "join-claim" ? "awaiting-confirmation" : action == "join-confirm" ? "acknowledged" : "cancelled"
         completion(.success(TLSSetupReply(id: 1, status: status,
             invitation: status == "hosting" ? "observatory-pair:v1:synthetic-preview" : nil,
             peerCertificateSha256: status == "confirming" ? String(repeating: "a", count: 64) : nil)))
@@ -36,6 +38,17 @@ func testDirectPairingModel() async {
     subject.poll(); await settle(); precondition(subject.peerFingerprint != nil)
     subject.confirmHost(); await settle(); precondition(subject.peerFingerprint == nil)
     subject.shutdown(); subject.shutdown(); precondition(bridge.closed == 1)
+    // A joining Mac requests its own Mac configuration. Ubuntu scope is selected
+    // by the Windows host, even if this model previously held a host choice.
+    let joinBridge = PairingTestBridge()
+    let joining = DirectPairingModel(bridge: joinBridge, polling: false)
+    joining.storageConsent = true; joining.includeUbuntu = true
+    joining.invitation = "observatory-pair:v1:synthetic-preview"
+    joining.join(); await settle(); precondition(joining.joining)
+    joining.finishJoining(); await settle()
+    precondition(joinBridge.requests.last?["action"] as? String == "join-confirm")
+    precondition(joinBridge.requests.last?["includeUbuntu"] as? Bool == false)
+    joining.shutdown()
     let late = PairingTestBridge(); late.holdIdentity = true
     let cancelled = DirectPairingModel(bridge: late, polling: false)
     cancelled.address = "10.0.0.2"; cancelled.host(); await settle(); cancelled.cancel(); await settle()
