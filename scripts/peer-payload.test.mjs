@@ -48,9 +48,19 @@ test('either app derives the same combined dashboard without leaking private evi
     assert.ok(!JSON.stringify(a).includes(secret));
   assert.equal(a.dictation.length,2);
 });
+test('peer token history round-trips and combines retained dates outside the recent scan',()=>{
+  const mac=raw('Mac'),windows=raw('Windows');
+  for(const value of [mac,windows]) value.codex[0].tokenProfiles=[{...value.codex[0].profiles[0],date:'2026-08-01',totalTokens:24,inputTokens:20,outputTokens:4,prompt:'PRIVATE'}];
+  const result=mergePeerPayloads(createPeerPayload(mac,config('Mac')),createPeerPayload(windows,config('Windows')),config('Mac'),config('Windows'),[],now);
+  assert.equal(result.tokens.find(source=>source.host==='Mac').scope,'All retained saved Codex logs only');
+  assert.equal(result.combinedTokens.days[0].date,'2026-08-01');
+  assert.equal(result.combinedTokens.days[0].totalTokens,48);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+});
 test('inbound extra fields, host spoofing, changed comparison ID and malformed counts fail closed',()=>{
   for(const mutate of [p=>{p.prompt='PRIVATE';},p=>{p.host='Windows';},p=>{p.comparisonId='b'.repeat(64);},
     p=>{p.codex[0].profiles[0].inputTokens=11;},p=>{p.codex[0].tools[0].arguments='PRIVATE';},
+    p=>{p.codex[0].tokenProfiles=[{...p.codex[0].profiles[0],date:'bad'}];},
     p=>{p.activity.intervals[0].title='PRIVATE';},p=>{p.collectedAt='2026-09-09T14:00:00.000Z';}]) {
     const payload=packet('Mac');mutate(payload);
     assert.throws(()=>parsePeerPayload(JSON.stringify(payload),config('Mac'),now));

@@ -197,3 +197,52 @@ with tempfile.TemporaryDirectory() as directory:
   const output=execPython(['-c',fixture],{input:JSON.stringify([settings('high','standard'),usage(100)])}).toString();
   assert.deepEqual(JSON.parse(output),{ok:true});
 });
+
+test('retained tokens include old archives, canonical copies and fork continuations with warm-cache parity',()=>{
+  const fixture=code.slice(0,code.indexOf('print(json.dumps'))+`
+import pathlib,tempfile,os
+exec(pathlib.Path('scripts/read-settings-cache.py').read_text(encoding='utf-8'),m.__dict__)
+events=json.load(sys.stdin)
+old=events[0]; old['timestamp']='2024-01-01T12:00:00Z'
+now=dt.datetime.now(dt.timezone.utc).isoformat()
+recent=events[1]; recent['timestamp']=now
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve(); logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True); (logs/'archived_sessions').mkdir()
+    cache=root/'cache'; cache.mkdir(mode=0o700)
+    def save(path,identity,rows,parent=None,turn='PRIVATE_SHARED_TURN'):
+        meta=dict(type='session_meta',payload=dict(id=identity,forked_from_id=parent,note='PRIVATE'))
+        context=dict(type='turn_context',payload=dict(turn_id=turn))
+        path.write_text('\\n'.join(json.dumps(row) for row in [meta,context]+rows)+'\\n',encoding='utf-8')
+        os.utime(path,(1,1))
+    save(logs/'sessions/parent.jsonl','parent',[old,recent])
+    save(logs/'archived_sessions/copy.jsonl','parent',[old])
+    child=dict(recent); child['timestamp']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(seconds=1)).isoformat()
+    save(logs/'archived_sessions/child.jsonl','child',[old,child], 'parent')
+    save(logs/'sessions/unrelated.jsonl','unrelated',[old])
+    save(logs/'archived_sessions/stale-copy.jsonl','unrelated',[], 'parent')
+    expected=m.collect(logs)
+    assert sum(r['totalTokens'] for r in expected['tokenProfiles'])==440
+    assert sum(r['totalTokens'] for r in expected['profiles'])==220
+    assert any(r['date']=='2024-01-01' for r in expected['tokenProfiles'])
+    assert all(r['date']!='2024-01-01' for r in expected['profiles'])
+    m.CACHE_DIRECTORY=str(cache)
+    assert m.collect(logs)==expected
+    # No raw scan budget is needed when all selected files are cached.
+    m.CACHE_SCAN_BUDGET=0
+    assert m.collect(logs)==expected
+    assert b'PRIVATE' not in (cache/'events.sqlite').read_bytes()
+    # A distinct turn with identical counters and timestamp is separate usage.
+    distinct=logs/'sessions/distinct.jsonl'
+    save(distinct,'distinct',[old], 'parent', 'PRIVATE_OTHER_TURN')
+    m.CACHE_SCAN_BUDGET=100000
+    assert sum(r['totalTokens'] for r in m.collect(logs)['tokenProfiles'])==550
+    distinct.unlink()
+    # A changed canonical archive must replace its previous contribution.
+    save(logs/'archived_sessions/child.jsonl','child',[old], 'parent')
+    m.CACHE_SCAN_BUDGET=100000
+    assert sum(r['totalTokens'] for r in m.collect(logs)['tokenProfiles'])==330
+    print(json.dumps(dict(ok=True)))
+`;
+  assert.deepEqual(JSON.parse(execPython(['-c',fixture],{input:JSON.stringify([usage(100),usage(200)])})),{ok:true});
+});

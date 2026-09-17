@@ -6,8 +6,9 @@ const fields=['inputTokens','cacheReadTokens','cacheCreationTokens','outputToken
 // Both token and settings views come from the same read of saved log events.
 export function tokensFromSettings(raw,host) {
   const settings=cleanSettings(raw,host);
+  const profiles=settings.tokenProfiles || settings.profiles;
   const days=new Map();
-  for(const profile of settings.profiles) {
+  for(const profile of profiles) {
     if(fields.some(key=>profile[key]===null) ||
       profile.inputTokens+profile.cacheReadTokens+profile.cacheCreationTokens+profile.outputTokens!==profile.totalTokens ||
       profile.reasoningOutputTokens>profile.outputTokens)throw Error('Inconsistent saved token counters');
@@ -16,7 +17,7 @@ export function tokensFromSettings(raw,host) {
     for(const key of fields) {day[key]+=profile[key];model[key]+=profile[key];}
     day.models.set(profile.model,model);days.set(profile.date,day);
   }
-  return {host,status:'ok',reader:'saved-log-events',scope:'Recent saved Codex logs only',
+  return {host,status:'ok',reader:'saved-log-events',scope:settings.tokenProfiles ? 'All retained saved Codex logs only' : 'Recent saved Codex logs only',
     days:[...days.values()].sort((a,b)=>a.date.localeCompare(b.date)).map(day=>{
       const models=[...day.models.values()].map(model=>({...model,apiEstimate:estimate([model])}));
       return {...day,models,apiEstimate:estimate(models)};

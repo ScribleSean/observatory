@@ -23,6 +23,11 @@ def cache_event(event, cached=False):
         kind = kind if kind in ('event_msg', 'turn_context', 'response_item') else 'event_msg'
     elif kind == 'turn_context':
         safe = dict(model=label(payload.get('model')), effort=payload.get('effort') if payload.get('effort') in EFFORTS else 'unknown')
+        turn_id = payload.get('usage_turn_key') if cached else payload.get('turn_id')
+        if isinstance(turn_id, str):
+            if cached and not re.fullmatch('[a-f0-9]{64}', turn_id):
+                return None
+            safe['usage_turn_key'] = turn_id if cached else hashlib.sha256(turn_id.encode()).hexdigest()
         if 'service_tier' in payload:
             tier = payload['service_tier']
             safe['service_tier'] = tier if isinstance(tier, str) and tier in TIERS else 'unknown'
@@ -115,7 +120,7 @@ class SettingsCache:
     def signature(info):
         # Windows path stat may report creation time as ctime while fstat reports
         # change time. Do not compare these different fields across APIs.
-        values = [str(info.st_dev), str(info.st_ino), info.st_size, str(info.st_mtime_ns)]
+        values = [2, str(info.st_dev), str(info.st_ino), info.st_size, str(info.st_mtime_ns)]
         if os.name != 'nt':
             values.append(str(info.st_ctime_ns))
         return json.dumps(values)
@@ -173,7 +178,7 @@ class SettingsCache:
         return events
 
     def close(self):
-        # Remove metadata for logs outside the selected recent report set.
+        # Remove metadata for logs no longer in the selected session and archive set.
         try:
             for (key,) in self.db.execute('SELECT key FROM events').fetchall():
                 if key not in self.used:

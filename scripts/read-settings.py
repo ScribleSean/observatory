@@ -34,12 +34,13 @@ def inventory_metadata(meta, salt):
     parents = keys([payload.get('forked_from_id'), payload.get('parent_thread_id')])
     return dict(keys=owned, parents=parents) if owned else None
 
-def summarize(events, cutoff):
+def summarize(events, cutoff, retained=None, seen=None):
     model, effort, speed = 'unknown', 'unknown', 'unknown'
     context_model = None
     selected_model = 'unknown'
     selected_speed = 'unknown'
     prior = None
+    turn_key = None
     profiles, tools = {}, {}
     seen_calls = set()
     for event in events:
@@ -67,6 +68,8 @@ def summarize(events, cutoff):
             else:
                 speed = 'unknown'
         if event.get('type') == 'turn_context':
+            turn_id = p.get('turn_id')
+            turn_key = p.get('usage_turn_key') or (hashlib.sha256(turn_id.encode()).hexdigest() if isinstance(turn_id, str) else None)
             next_model = label(p.get('model'))
             if next_model != model:
                 speed = 'unknown'
@@ -116,21 +119,30 @@ def summarize(events, cutoff):
             delta = {k:number(last.get(k, 0 if k == 'cache_write_input_tokens' else None)) for k in FIELDS}
             if any(v is None for v in delta.values()):
                 continue
-        if stamp < cutoff or any(v < 0 for v in delta.values()) or delta['total_tokens'] == 0:
+        if any(v < 0 for v in delta.values()) or delta['total_tokens'] == 0:
             continue
         # Codex input includes cache reads and writes. Output includes reasoning.
         uncached = delta['input_tokens']-delta['cached_input_tokens']-delta['cache_write_input_tokens']
         if uncached < 0 or abs(delta['input_tokens']+delta['output_tokens']-delta['total_tokens']) > 1:
             continue
+        # Copies inherited by related sessions count once. Each file still
+        # advances its own cumulative baseline before this shared check.
+        if seen is not None and turn_key is not None:
+            identity = (turn_key, stamp.isoformat(), model, effort, speed, tuple(current[k] for k in FIELDS), tuple(delta[k] for k in FIELDS))
+            if identity in seen:
+                continue
+            seen.add(identity)
         key = (date,model,effort,speed)
-        row = profiles.setdefault(key, dict(date=date,model=model,effort=effort,speed=speed,inputTokens=0,cacheReadTokens=0,cacheCreationTokens=0,outputTokens=0,reasoningOutputTokens=0,totalTokens=0))
-        for dest, value in dict(inputTokens=uncached,cacheReadTokens=delta['cached_input_tokens'],cacheCreationTokens=delta['cache_write_input_tokens'],outputTokens=delta['output_tokens'],reasoningOutputTokens=delta['reasoning_output_tokens'],totalTokens=delta['total_tokens']).items():
-            row[dest] += value
+        destinations = ([retained] if retained is not None else []) + ([profiles] if stamp >= cutoff else [])
+        for destination in destinations:
+            row = destination.setdefault(key, dict(date=date,model=model,effort=effort,speed=speed,inputTokens=0,cacheReadTokens=0,cacheCreationTokens=0,outputTokens=0,reasoningOutputTokens=0,totalTokens=0))
+            for dest, value in dict(inputTokens=uncached,cacheReadTokens=delta['cached_input_tokens'],cacheCreationTokens=delta['cache_write_input_tokens'],outputTokens=delta['output_tokens'],reasoningOutputTokens=delta['reasoning_output_tokens'],totalTokens=delta['total_tokens']).items():
+                row[dest] += value
     return list(profiles.values()), [dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in tools.items()]
 
-def summarize_sessions(sessions, cutoff, cache):
-    profiles, tools = {}, {}
-    for file, info in sessions.values():
+def summarize_sessions(sessions, cutoff, cache, lineages):
+    profiles, tools, retained, seen = {}, {}, {}, {}
+    for identity, (file, info) in sorted(sessions.items()):
         def events():
             with file.open(encoding='utf-8') as stream:
                 for line in stream:
@@ -142,7 +154,7 @@ def summarize_sessions(sessions, cutoff, cache):
                             yield row
                     except ValueError:
                         pass
-        rows, calls = summarize(cache.events(file, info) if cache else events(), cutoff)
+        rows, calls = summarize(cache.events(file, info) if cache else events(), cutoff, retained, seen.setdefault(lineages[identity], set()))
         for row in rows:
             key = (row['date'], row['model'], row['effort'], row['speed'])
             if key not in profiles:
@@ -153,7 +165,7 @@ def summarize_sessions(sessions, cutoff, cache):
         for row in calls:
             key = (row['date'], row['category'], row['tool'], row['namespace'])
             tools[key] = tools.get(key, 0) + row['count']
-    return profiles, tools
+    return profiles, tools, retained
 
 
 def collect(folder, *, retry_cache=True, cache_budget=None):
@@ -164,7 +176,13 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
         candidates.extend((root/name).rglob('*.jsonl'))
     if len(candidates) > 20000:
         raise ValueError('Too many files')
-    sessions = {}
+    sessions, lineages, selected_metadata = {}, {}, {}
+    def lineage(identity):
+        lineages.setdefault(identity, identity)
+        while lineages[identity] != identity:
+            lineages[identity] = lineages[lineages[identity]]
+            identity = lineages[identity]
+        return identity
     inventory = dict(status='ok', keys=set(), parents=set())
     salt = globals().get('INVENTORY_SALT')
     for file in candidates:
@@ -187,17 +205,21 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
                 inventory['parents'].update(metadata['parents'])
             else:
                 inventory['status'] = 'incomplete'
-        if info.st_mtime < cutoff.timestamp():
-            continue
-        identity = identity or str(file)
+        identity = identity if isinstance(identity, str) and identity else str(file)
         if identity not in sessions or info.st_size > sessions[identity][1].st_size:
             sessions[identity] = (file,info)
+            selected_metadata[identity] = meta.get('payload', {})
+    for identity, payload in selected_metadata.items():
+        lineage(identity)
+        for parent in (payload.get('forked_from_id'), payload.get('parent_thread_id')):
+            if isinstance(parent, str) and parent:
+                lineages[lineage(identity)] = lineage(parent)
     budget = globals().get('CACHE_SCAN_BUDGET', 1_000_000_000) if cache_budget is None else cache_budget
     cache = SettingsCache(globals()['CACHE_DIRECTORY'], budget) if globals().get('CACHE_DIRECTORY') else None
     if not cache and sum(info.st_size for _,info in sessions.values()) > 1_000_000_000:
         raise ValueError('Report exceeds scan budget')
     try:
-        profiles, tools = summarize_sessions(sessions, cutoff, cache)
+        profiles, tools, retained = summarize_sessions(sessions, cutoff, cache, {identity: lineage(identity) for identity in sessions})
     finally:
         if cache:
             cache.close()
@@ -209,7 +231,7 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
             if retry_cache and cache.remaining > 0:
                 return collect(folder, retry_cache=False, cache_budget=cache.remaining)
             raise ValueError('Private Codex cache warming; complete report unavailable')
-    result = dict(status='ok',profiles=list(profiles.values()),tools=[dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in sorted(tools.items())],scope='Recent saved Codex logs only')
+    result = dict(status='ok',profiles=list(profiles.values()),tokenProfiles=list(retained.values()),tools=[dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in sorted(tools.items())],scope='Recent saved Codex logs only')
     if salt:
         result['inventory'] = {k:sorted(v) if isinstance(v,set) else v for k,v in inventory.items()}
     return result

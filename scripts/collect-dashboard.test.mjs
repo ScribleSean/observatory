@@ -30,6 +30,14 @@ test('tool metadata survives sanitization and legacy categories remain explicit'
   assert.equal(result.tools[2].tool,'Unknown tool');
   assert.ok(!JSON.stringify(result).includes('PRIVATE'));
 });
+test('token history is allowlisted strictly and remains separate from recent profiles',()=>{
+  const profile={date:'2026-09-01',model:'gpt-6-astra',effort:'high',speed:'standard',inputTokens:8,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:2,reasoningOutputTokens:0,totalTokens:10,private:'PRIVATE'};
+  const result=cleanSettings({profiles:[],tools:[],tokenProfiles:[profile]},'Mac');
+  assert.deepEqual(result.tokenProfiles,[{...profile,private:undefined}].map(({private:_,...safe})=>safe));
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+  for(const change of [{date:'bad'},{model:'PRIVATE MODEL'},{inputTokens:1.5},{totalTokens:null}])
+    assert.throws(()=>cleanSettings({profiles:[],tools:[],tokenProfiles:[{...profile,...change}]},'Mac'));
+});
 test('numeric metrics reject coercion, negative and nonfinite values', () => {
   for (const x of [-1, NaN, Infinity, '12', null])
     assert.equal(numeric(x), null);

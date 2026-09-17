@@ -47,7 +47,19 @@ export function cleanSettings(raw, host) {
     tool:r.tool===undefined?null:identifier(r.tool)?r.tool:'Unknown tool',
     namespace:identifier(r.namespace)?r.namespace:'',
   }));
-  return {host,status:'ok',profiles,tools};
+  if (raw.tokenProfiles === undefined) return {host,status:'ok',profiles,tools};
+  if (!Array.isArray(raw.tokenProfiles) || raw.tokenProfiles.length > 50000) throw Error('Invalid token history');
+  const date = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+  const tokenProfiles = raw.tokenProfiles.map(row => {
+    if (!row || typeof row !== 'object' || !date(row.date) || !/^[a-zA-Z0-9._:/-]{1,100}$/.test(row.model) ||
+      fields.some(key => !Number.isSafeInteger(row[key]) || row[key] < 0)) throw Error('Invalid token history');
+    return {date:row.date,model:row.model,
+      effort:['none','minimal','low','medium','high','xhigh','max','ultra'].includes(row.effort)?row.effort:'unknown',
+      speed:['standard','fast'].includes(row.speed)?row.speed:'unknown',
+      ...Object.fromEntries(fields.map(key=>[key,row[key]]))};
+  });
+  return {host,status:'ok',profiles,tools,tokenProfiles};
 }
 export function category(app) {
   if (/codex|chatgpt|antigravity/i.test(app)) return 'AI apps';

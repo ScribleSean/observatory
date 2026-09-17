@@ -75,7 +75,9 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false}={
     const home=(await run(wsl,[...prefix,'/usr/bin/printenv','HOME'])).trim();
     if(!/^\/home\/[A-Za-z0-9_.-]+$/.test(home))throw Error('Unsupported WSL home');
     // Invoking wsl.exe starts the selected installed distro. No terminal is required.
-    return {...JSON.parse(await run(wsl,[...prefix,'/usr/bin/timeout','55s','python3','-',home+'/.codex'],settingsScript)),host:'Ubuntu'};
+    const cacheScript=await readFile(path.join(scripts,'read-settings-cache.py'),'utf8');
+    const cachePrefix=`import pathlib\n_cache = pathlib.Path(${JSON.stringify(home+'/.cache/workspace-observatory/private-codex')})\n_cache.mkdir(mode=0o700, parents=True, exist_ok=True)\nCACHE_DIRECTORY = str(_cache)\n`;
+    return {...JSON.parse(await run(wsl,[...prefix,'/usr/bin/timeout','55s','python3','-',home+'/.codex'],cachePrefix+cacheScript+'\n'+settingsScript)),host:'Ubuntu'};
   }),guarded('Windows',async()=>{
     if(!config.activity)return disconnected('Windows');
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');

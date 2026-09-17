@@ -37,11 +37,14 @@ function activity(raw,host) {
 function codex(raw,host,comparisonId) {
   if(unavailableStatus(raw?.status))return absent(host,raw.status);
   if(raw?.status!=='ok' || !Array.isArray(raw.profiles) || raw.profiles.length>50000 ||
-    !Array.isArray(raw.tools) || raw.tools.length>100000)throw Error('Invalid peer Codex data');
+    !Array.isArray(raw.tools) || raw.tools.length>100000 ||
+    (raw.tokenProfiles!==undefined && (!Array.isArray(raw.tokenProfiles) || raw.tokenProfiles.length>50000)))throw Error('Invalid peer Codex data');
   const safe=cleanSettings(raw,host);
   if(safe.profiles.length!==raw.profiles.length || safe.tools.length!==raw.tools.length ||
     safe.profiles.some(row=>!validDate(row.date) || counters.some(key=>!Number.isSafeInteger(row[key]))) ||
-    safe.tools.some(row=>!validDate(row.date)))throw Error('Invalid peer counters');
+    safe.tools.some(row=>!validDate(row.date)) ||
+    (raw.tokenProfiles!==undefined && (!safe.tokenProfiles || safe.tokenProfiles.length!==raw.tokenProfiles.length ||
+      safe.tokenProfiles.some(row=>!validDate(row.date) || counters.some(key=>!Number.isSafeInteger(row[key]))))))throw Error('Invalid peer counters');
   const tokens=tokensFromSettings(safe,host);
   if(tokens.days.some(row=>counters.some(key=>!Number.isSafeInteger(row[key]))))throw Error('Overflowed peer counters');
   const evidence={version:1,comparisonId,host,status:raw.inventory?.status,

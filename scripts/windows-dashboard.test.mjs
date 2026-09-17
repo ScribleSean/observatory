@@ -20,6 +20,16 @@ test('Windows projection preserves local source shape and optional Ubuntu absenc
   assert.equal(data.activity[1].days[0].seconds,60);assert.equal(data.activity[1].intervals,undefined);
   assert.ok(!JSON.stringify(data).includes('PRIVATE'));assert.ok(!JSON.stringify(data).includes('b'.repeat(64)));
 });
+test('all-retained token profiles supersede the recent settings projection',()=>{
+  const input=raw();
+  input.localSettings.tokenProfiles=[{...input.localSettings.profiles[0],date:'2026-08-01',totalTokens:24,inputTokens:20,outputTokens:4,private:'PRIVATE'}];
+  const {data}=windowsSnapshot(input,[],at);
+  assert.equal(data.tokens[1].scope,'All retained saved Codex logs only');
+  assert.equal(data.tokens[1].days[0].date,'2026-08-01');
+  assert.equal(data.tokens[1].days[0].totalTokens,24);
+  assert.equal(data.settings[0].profiles[0].date,'2026-09-09');
+  assert.ok(!JSON.stringify(data).includes('PRIVATE'));
+});
 test('peer output shares input counters and intervals without duplicating them in public data',()=>{
   const result=windowsSnapshot(raw(),[],at,peerConfig);
   assert.equal(result.peer.status,'ready');assert.equal(result.peer.payload.codex[0].profiles[0].totalTokens,12);
