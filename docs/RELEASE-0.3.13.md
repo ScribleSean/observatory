@@ -66,6 +66,30 @@ artifacts and do not replace the candidates below. The app was ad-hoc signed.
 No production key, update feed, notarization or complete Sparkle update transaction
 was verified by this run.
 
+## Retained Windows candidate, September 16
+
+After the Windows development host returned online, its clean release checkout
+was fast-forwarded from `9f9cec8` to `2b44466`. The new self-contained package
+passed native/runtime and manifest checks, its synthetic dashboard test, and all
+29 signed-update archive regressions with no failures or skips.
+
+The separate TEST installer passed installation, payload verification, running-app
+and overwrite refusal, linked-directory rejection, uninstall and reinstall, with
+saved test data and unrelated registrations preserved. The ordinary installer was
+compiled and retained without executing it against the development installation.
+Its transferred SHA-256 matched the Windows artifact:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Windows x64 setup EXE, source `2b44466` | 98,710,693 | `003ad911e4e69162dc5b6b7e6c709fa12261089e1e8a9a4588421c34aa46f970` |
+
+The candidate remains 0.3.13 build 24, unsigned and unpublished. The development
+installation was read as 0.3.12 build 23 and was unchanged by these checks.
+Synthetic Settings and the 800-by-560 allowance view were inspected. This does
+not establish full accessibility, real-source migration, or production update
+feed verification. The hosted ordinary-install evidence above remains separately
+scoped to its named source and disposable runner.
+
 ## Retained Mac candidate, September 16
 
 A new Mac ZIP was built from clean source `73d1145` with the pinned runtime and
@@ -79,8 +103,7 @@ receipt. Native build checks and ZIP extraction checks passed, including nested
 signatures, archive access, disabled-source collection, rendering and dashboard
 lifecycle. The build also passed synthetic pairing, shutdown and popup checks.
 The app is ad-hoc signed, has no production update trust, and remains unpublished
-and uninstalled. No DMG was requested. The Windows candidate remains the September
-15 artifact below while the personal Windows host is offline.
+and uninstalled. No DMG was requested. The newer Windows candidate is recorded above.
 
 ## Current candidate evidence, September 15
 
