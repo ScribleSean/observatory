@@ -1,6 +1,38 @@
 # Observatory 0.3.13 candidate
 
-Status: development candidates installed on Mac and Windows. Build 24 is not published as a production release.
+Status: development candidates installed on Mac and Windows. Build 25 is not published as a production release.
+
+## Build 25 development upgrade, September 17
+
+Source `53fa934` was built, packaged and installed on both development devices.
+The shared reader now includes all retained session and archive dates for tokens,
+while keeping settings and tool details within their recent window. It reuses
+its private sanitized-event cache, including on Ubuntu. Cold-cache totals remain
+unavailable until the selected history is complete. Recorded turn identities
+and matching counters prevent inherited fork events from being counted twice.
+See [source coverage](SOURCE-COVERAGE.md) for the limits of this evidence.
+
+The Mac ZIP passed independent manifest, privacy, strict deep signature,
+extraction, relocated collector, renderer and lifecycle checks. Its SHA-256 is
+`2512c46726b69da9ef61229956e9111fcef200b929b07d1e594a792c39810387`.
+The ZIP is 65,251,268 bytes and the unpacked app is 187,241,222 bytes.
+The Windows candidate passed native and bundled-runtime checks and full inventory
+verification for 3,067 files totaling 262,298,338 bytes. Its installer SHA-256 is
+`73b4c275c93d3d4808bd2e132fff3327d5aea81b861cfe6db761dc5d739743ec`.
+
+Both upgrades followed normal application quit and retained the previous payloads
+for recovery. Seven checked Mac configuration, snapshot and allowance files and
+all 306 Windows saved-data files were unchanged before relaunch. Both installed
+apps ran again. Their collectors subsequently reported matching retained totals
+across Mac, Windows and Ubuntu, with verified disjoint cross-device inventories.
+The one-time Windows installer launcher was removed after completion.
+
+This is development-device verification, not a public release. The Mac app is
+ad-hoc signed and the Windows installer is unsigned. The Mac Documents permission
+prompt recurred after the new build, and the user allowed it. A subsequent locked
+refresh read all 13 configured sources. Stable signing, permission continuity,
+clean-machine compatibility and production update delivery remain unresolved.
+The unavailable UI-control connection also limits interactive acceptance claims.
 
 ## Hosted verification, September 16
 

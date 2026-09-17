@@ -144,7 +144,7 @@ internal sealed class UsagePopup : Form
         Stat("Active time", Snapshot.Duration(Snapshot.Number(activity?["seconds"])), Snapshot.Text(activity?["date"], "No retained records"));
         Stat("Tokens", Snapshot.Number(tokens?["totalTokens"]) is double total ? DashboardHistoryChart.AxisLabel(total) : "Unknown", Snapshot.Text(tokens?["date"], "No retained records"));
         Separator();
-        if (refreshFailed) Label("Refresh failed. Saved readings are shown. Try again or open Sources.");
+        if (refreshFailed) Label("Refresh failed. Try again or open Sources.");
         var refreshButton = ActionButton(refreshing ? "Refreshing sources…" : "Refresh sources");
         refreshButton.Enabled = !refreshing;
         refreshButton.Click += async (_, _) => await RefreshAsync();

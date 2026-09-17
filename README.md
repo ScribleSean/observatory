@@ -20,7 +20,7 @@ The dashboard opens Allowances for usage limits. Select Activity for screen time
 | View | What it brings into focus |
 | --- | --- |
 | **Screen time** | Active app time, daily and weekly timelines, and overlap-aware Mac and Windows totals. |
-| **AI usage** | Codex tokens by model and day, cached input, and separately reported quota windows where available. |
+| **AI usage** | Retained Codex tokens by model and day, cached input, and separately reported quota windows where available. |
 | **Workflows** | Recorded tool identities, agent receipts and local-model benchmark results, with explicit coverage. |
 | **Dictation** | Voice usage by tool and device, with Wispr recording metadata and explicit gaps in coverage. |
 
@@ -36,7 +36,7 @@ Saved history can be displayed again after a UI repair, but observations that we
 
 **[Open the interactive demo](https://scriblesean.github.io/observatory/)** to explore fictional records without connecting any accounts or devices.
 
-The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md#hosted-verification-september-16).
+The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md#build-25-development-upgrade-september-17).
 
 | Platform | Current status |
 | --- | --- |
