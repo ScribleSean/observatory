@@ -13,6 +13,22 @@ The samplers read process identifiers, parent identifiers and memory counters, t
 
 Both applications returned to one observed native process after collection. This does not establish leak freedom or a long-running idle baseline.
 
+## Build 24 Mac observation, September 17
+
+The installed Mac candidate from `73d1145` was sampled 73 times at five-second
+intervals from 22:06:32 to 22:12:33 UTC. The largest observed descendant tree had
+four processes and summed RSS of 285,786,112 bytes, about 273 MiB. At the final
+sample only the native process remained, using 55,132,160 bytes RSS, about 53 MiB.
+The native process accumulated 0.47 CPU seconds across the 360-second window.
+That CPU counter excludes collector helpers and independent source services.
+
+The window included scheduled collection. One observed collection completed
+partially, reading 11 of 13 configured sources. Resource measurements do not
+establish complete source health. No manual refresh, sleep or logout was used.
+Short-lived helpers may fall between samples, shared pages may be counted more
+than once, and this development-machine observation is not a controlled benchmark
+or evidence of leak freedom.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
