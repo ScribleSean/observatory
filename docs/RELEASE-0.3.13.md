@@ -27,8 +27,21 @@ rendered failure state was inspected and the one-time test launcher removed.
 Normal update startup was explicitly skipped because it requires a disposable
 hosted runner.
 
+A separate TEST-identity installer made from this exact candidate passed per-user
+installation, all payload hashes, native self-tests, shortcut and registration
+checks, running-app and overwrite refusal, and linked-directory rejection.
+Uninstall preserved a synthetic saved-data file and unrelated files and registry
+values. Reinstall and preservation of another startup owner also passed. The test
+installation, shortcuts and saved-data canary were removed afterward. The ordinary
+build-25 installation remained unchanged.
+
 The ordinary Windows installer was compiled and checksummed, not installed.
-Build-26 installer lifecycle and installed-app acceptance remain unverified.
+The isolated TEST identity does not establish ordinary build-26 upgrade behavior,
+clean-machine compatibility or installed dashboard acceptance.
+
+Source `660073c` also passed hosted [Mac and Windows native checks](https://github.com/ScribleSean/observatory/actions/runs/35286024550),
+[update safety on both platforms](https://github.com/ScribleSean/observatory/actions/runs/35286024506)
+and the [complete demo workflow](https://github.com/ScribleSean/observatory/actions/runs/35286024433).
 These candidates remain ad-hoc signed on Mac and unsigned on Windows, without
 production update trust. They are retained development artifacts, not public
 release downloads. Earlier build-25 installation and data-preservation evidence
