@@ -66,6 +66,28 @@ artifacts and do not replace the candidates below. The app was ad-hoc signed.
 No production key, update feed, notarization or complete Sparkle update transaction
 was verified by this run.
 
+## Windows development upgrade, September 17 UTC
+
+The ordinary `2b44466` build-24 installer was applied on the development Windows
+machine after a normal tray-menu quit. The installed build-23 payload first
+passed full inventory verification against an independently retained package
+manifest. A restricted local recovery directory retained the old application,
+saved data, shortcut and registration evidence before uninstalling anything.
+
+The new installed payload passed full inventory and ownership verification.
+All 306 saved-data files matched their pre-upgrade hashes before relaunch, and
+3,056 previous application files remain available for recovery. The existing
+startup setting was restored and the new Start menu shortcut was present.
+Build 24 acknowledged readiness in the logged-in desktop session and subsequently
+completed its configured source reads successfully. The temporary launcher was
+removed, leaving the application running.
+
+This verifies one development-machine upgrade from build 23 to build 24. It does
+not establish clean-machine compatibility, actual login startup, sleep/wake,
+visual dashboard verification, or production signed-feed delivery. The Windows
+process API returned no main-window handle, so process readiness must not be read
+as proof of a visible dashboard. The installer remains unsigned and unpublished.
+
 ## Retained Windows candidate, September 16
 
 After the Windows development host returned online, its clean release checkout
@@ -83,8 +105,8 @@ Its transferred SHA-256 matched the Windows artifact:
 | --- | ---: | --- |
 | Windows x64 setup EXE, source `2b44466` | 98,710,693 | `003ad911e4e69162dc5b6b7e6c709fa12261089e1e8a9a4588421c34aa46f970` |
 
-The candidate remains 0.3.13 build 24, unsigned and unpublished. The development
-installation was read as 0.3.12 build 23 and was unchanged by these checks.
+The candidate remains 0.3.13 build 24, unsigned and unpublished. During candidate preparation, the development installation remained 0.3.12
+build 23. The later installed upgrade is recorded above.
 Synthetic Settings and the 800-by-560 allowance view were inspected. This does
 not establish full accessibility, real-source migration, or production update
 feed verification. The hosted ordinary-install evidence above remains separately
