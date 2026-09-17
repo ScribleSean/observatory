@@ -130,6 +130,7 @@ const views = [
   { id: 'activity', label: 'Activity', icon: Activity },
   { id: 'tokens', label: 'Tokens', icon: Layers3 },
   { id: 'dictation', label: 'Dictation', icon: Mic },
+  { id: 'agents', label: 'Agents', icon: Workflow },
   { id: 'sources', label: 'Sources', icon: Database },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -733,16 +734,14 @@ export default function Home() {
                 </details>
               </TabsContent>
               <TabsContent value="dictation" className="view-panel"><Dictation sources={data.dictation}/></TabsContent>
-              <TabsContent value="sources" className="view-panel">
+              <TabsContent value="agents" className="view-panel">
                 <div className="view-heading">
                   <div>
-                    <h1>Sources</h1>
-                    <p>Connected sources and optional saved execution details.</p>
+                    <h1>Agents</h1>
+                    <p>Saved receipts, local model runs and recorded tool calls.</p>
                   </div>
-                  <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
                 </div>
                 <p className="quiet-note">{data.agents.length} handoff receipts · {data.agents.filter(a=>a.status==='failed').length} saved failures. Not a live agent monitor. Newest receipt: {data.agents.map(a=>a.recordedAt).filter(Boolean).sort().at(-1) || 'Unknown'}.</p>
-                <details className="receipt-panel"><summary>Execution details: receipts, benchmarks and tool requests</summary>
                 <section className="agent-list">
                   {data.agents.map((a) => (
                     <article className="agent-row" key={a.id}>
@@ -826,7 +825,15 @@ export default function Home() {
                   <p>Expand a tool for dated counts. Names and namespaces come from recorded metadata. Calls nested inside a wrapper are not inferred from its code or arguments.</p>
                   {data.settings.map(source=><div key={source.host} className="tool-host"><h3>{source.host}</h3>{source.status==='ok'?<ToolDetail rows={source.tools}/>:<p>Unavailable</p>}</div>)}
                 </details>}
-                </details>
+              </TabsContent>
+              <TabsContent value="sources" className="view-panel">
+                <div className="view-heading">
+                  <div>
+                    <h1>Sources</h1>
+                    <p>Connection status, collection health and coverage.</p>
+                  </div>
+                  <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
+                </div>
                 <div className="source-grid">
                   {sourceRows.map((s) => (
                     <div className="source-row" key={s.host + s.kind}>

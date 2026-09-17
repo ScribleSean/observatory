@@ -12,6 +12,6 @@ Keep the mark monochrome. Leave clear space around it and keep the telescope rec
 
 Use 12 to 18px card radii and soft layered shadows instead of outlined cards. Icon controls are circular, 38 to 46px. Text controls use the same height with capsule corners. Give controls a soft inset highlight and drop shadow. Dividers use the track token (`#dadbd3` light, `#3b3e37` dark). Use opaque surfaces, no web blur layers or continuous animation. Respect reduced motion. The demo and native Mac dashboard share this system. Data collection and native settings remain functional, not simulated by the demo.
 
-Navigation order is Allowances, Activity, Tokens, Dictation, Sources, Settings. Saved agent receipts and benchmarks belong in collapsed execution details under Sources, not a separate Agents page. Make remaining allowance, estimated time coverage to reset and observed hourly pace easy to scan. Never connect chart segments across missing readings or resets.
+Navigation order is Allowances, Activity, Tokens, Dictation, Agents, Sources, Settings. Agents contains saved receipts, benchmarks and recorded tool calls. Sources contains connection status, collection health and coverage. Make remaining allowance, estimated time coverage to reset and observed hourly pace easy to scan. Never connect chart segments across missing readings or resets.
 
 Keep performance claims measured. App size is not memory use, and a single idle sample is not a sustained benchmark. Missing or stale measurements must remain identifiable.

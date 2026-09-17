@@ -16,7 +16,7 @@ Status: in progress. Public entry points are the synthetic demo and building fro
 
 ## 2. Independent collection and private sync
 
-- First-release direction agreed September 9: both the Mac and Windows apps show combined data from the two devices. This remains an implementation target, not a shipped capability.
+Status: combined retained token data is implemented and verified on the Mac, Windows and WSL development pair. Both installed build-25 collectors reported matching totals after authenticated exchange and cross-device overlap checks. This is development-pair evidence, not general clean-machine or offline-recovery verification.
 - Record on each device while offline, without another computer acting as coordinator.
 - Pair trusted devices over optional Tailscale transport.
 - Exchange sanitized records with authentication, stable identities and deduplication.
