@@ -214,8 +214,7 @@ export default function Home() {
   useEffect(() => {
     void load();
     const hash = location.hash.slice(1);
-    if (hash === 'agents') setView('sources');
-    else if (views.some((v) => v.id === hash)) setView(hash);
+    if (views.some((v) => v.id === hash)) setView(hash);
     const q = matchMedia('(max-width: 700px)');
     setMobile(q.matches);
     const changed = () => setMobile(q.matches);
