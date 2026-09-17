@@ -605,10 +605,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func openDashboard(_ tab: String) {
+        let safeTab = NativeDashboardSelection.sections.contains(where: { $0.0 == tab }) ? tab : "allowances"
         closeUsage()
         if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
         if usesNativeDashboard {
-            nativeSelection.section = NativeDashboardSelection.sections.contains(where: { $0.0 == tab }) ? tab : "allowances"
+            nativeSelection.section = safeTab
             nativeSelection.navigationRequest += 1
             if detail == nil {
                 let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
@@ -652,7 +653,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             detail = window
             webView = web
         }
-        let safeTab = tab == "agents" ? "sources" : (["activity", "tokens", "dictation", "sources"].contains(tab) ? tab : "activity")
         webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
         detail?.deminiaturize(nil)
         detail?.makeKeyAndOrderFront(nil)
