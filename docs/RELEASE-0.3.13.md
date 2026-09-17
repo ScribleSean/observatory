@@ -1,6 +1,6 @@
 # Observatory 0.3.13 candidate
 
-Status: preparation only. Build 24 is not published or installed.
+Status: development candidates installed on Mac and Windows. Build 24 is not published as a production release.
 
 ## Hosted verification, September 16
 
@@ -65,6 +65,28 @@ unpacked app. These temporary CI outputs were not retained as downloadable relea
 artifacts and do not replace the candidates below. The app was ad-hoc signed.
 No production key, update feed, notarization or complete Sparkle update transaction
 was verified by this run.
+
+## Mac development upgrade, September 17
+
+The retained `73d1145` build-24 candidate replaced the installed build 22 after
+normal application quit. The retained ZIP matched its recorded SHA-256. The
+replacement verified the old and new payloads against independent manifests and
+passed strict deep code-signature verification. The previous app and both
+manifests remain in a local recovery directory. Seven checked configuration,
+snapshot and allowance files were byte-identical before and after replacement.
+
+The installed app relaunched normally. Its Allowances view rendered and Settings
+visibly reported version 0.3.13, build 24. Check for updates displayed the expected
+notice that updates are unavailable pending release verification. Production
+signing and feed delivery remain unconfigured. The UI-control connection closed
+after these checks, so further interactive checks were not verified in this pass.
+The app process remained running. A subsequent allowance collection completed
+successfully after relaunch. A full collection attempt read 12 of 13 configured
+sources. Configured agent receipts reported a read timeout, so complete source
+health remains unverified. The user reported a renewed Observatory Documents
+access prompt. The old and new ad-hoc signing requirements differ, matching the
+known [permission continuity limitation](MAC-PERMISSIONS.md). Stable signing and
+permission preservation across upgrades remain release requirements.
 
 ## Windows development upgrade, September 17 UTC
 
