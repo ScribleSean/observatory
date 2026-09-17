@@ -588,7 +588,12 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (!FirstRunSetup.AllowsCollection(runtime)) { Open(); return; }
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
-        if (dashboard is NativeDashboard existing) { existing.ShowSourceSettings(); return; }
+        if (nativeDashboard)
+        {
+            Open();
+            if (dashboard is NativeDashboard existing) existing.ShowSourceSettings();
+            return;
+        }
         using var settings = new NativeDashboard(Data, collector.Refresh,
             new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
             (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates);

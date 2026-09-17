@@ -36,3 +36,12 @@ test('Mac pause is visible in both surfaces and gear routes to Settings',async()
   const recovery=settings.slice(settings.indexOf('Button("Pair with Windows'),settings.indexOf('if actions.preview { Text("Device changes'));
   assert.doesNotMatch(recovery,/collectionPausedForPairing|\.disabled\(busy/);
 });
+
+// Structural routing guard. Native desktop interaction remains a separate check.
+test('Windows native tray Configure reuses the main dashboard route',async()=>{
+  const program=await read('native/windows/Program.cs');
+  const configure=program.slice(program.indexOf('private void Configure()'),program.indexOf('private void RefreshStatus()'));
+  const native=configure.slice(configure.indexOf('if (nativeDashboard)'),configure.indexOf('using var settings'));
+  assert.match(native,/Open\(\);[\s\S]*existing\.ShowSourceSettings\(\);[\s\S]*return;/);
+  assert.doesNotMatch(native,/new NativeDashboard|ShowDialog/);
+});
