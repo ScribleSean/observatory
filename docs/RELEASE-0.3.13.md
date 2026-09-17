@@ -2,6 +2,38 @@
 
 Status: development candidates installed on Mac and Windows. Build 25 is not published as a production release.
 
+## Build 26 candidates, September 17
+
+Clean source `660073c957bc38f0107dc5ad46262c128da76edd` was packaged for both
+platforms. Build 26 includes the later Windows popup failure/retry repair and the
+web Agents view. Installed development applications remain build 25.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| macOS arm64 ZIP | 65,251,313 | `ff57da67f0189c5204f3d4f06c801ec228f54cf62241541023f0f9b17cd3d5da` |
+| Windows x64 setup EXE | 98,712,660 | `adfbd42e67c3e521452d26d248f2af41d49bcfe33a8359f22e499e13e1dffbff` |
+
+The Mac candidate passed native build checks, full package and privacy inspection,
+nested signatures, ZIP extraction, relocated collector and renderer checks, and
+window lifecycle checks. Its unpacked size is 187,241,469 bytes. The ZIP has an
+independent manifest, checksum and verification receipt. No DMG was requested.
+
+The Windows candidate passed native/runtime, sharing, archive, sync-owner and
+update-verifier checks. Full inventory verification covered 3,067 files and
+262,302,169 bytes. Its packaged popup ran in the signed-in desktop session with
+fictional records and passed failure, successful retry, concurrent-refresh
+exclusion, host changes during refresh and on-screen placement checks. The
+rendered failure state was inspected and the one-time test launcher removed.
+Normal update startup was explicitly skipped because it requires a disposable
+hosted runner.
+
+The ordinary Windows installer was compiled and checksummed, not installed.
+Build-26 installer lifecycle and installed-app acceptance remain unverified.
+These candidates remain ad-hoc signed on Mac and unsigned on Windows, without
+production update trust. They are retained development artifacts, not public
+release downloads. Earlier build-25 installation and data-preservation evidence
+below does not establish build-26 upgrade behavior.
+
 ## Build 25 development upgrade, September 17
 
 Source `53fa934` was built, packaged and installed on both development devices.
