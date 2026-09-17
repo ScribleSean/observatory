@@ -2,6 +2,28 @@
 
 Status: development candidates installed on Mac and Windows. Build 25 is not published as a production release.
 
+## Clean Mac verification, September 17
+
+The [clean Mac run](https://github.com/ScribleSean/observatory/actions/runs/35288576766)
+passed at source `74ae01ec42197fa629c05b4b64967d21bfcb7194`. Its JavaScript suite
+reported 554 passes, 14 skips and no failures. The complete app build passed
+native self-tests, archive and collector bridges, sync-owner and shutdown checks,
+renderer and lifecycle checks, and all three popup variants. The popup fixture
+now waits for actual AppKit activation before hiding the dashboard instead of
+assuming a fixed delay is sufficient. The assertion that reopening the popup
+keeps that dashboard hidden remains unchanged.
+
+The bundled Sparkle integration smoke test and ZIP verification passed, including
+privacy and manifest inspection, nested signatures, extraction and relocated
+collector, renderer and lifecycle checks. The runner produced a 66,062,487-byte
+ZIP and a 188,092,365-byte unpacked app. These temporary CI outputs were not
+retained as release downloads and do not replace the candidate hashes below.
+This source also includes the later Mac web-fallback navigation correction.
+
+The app remains ad-hoc signed, with no production update trust or notarization.
+This verifies a clean build and synthetic package behavior, not an installed
+upgrade, complete native accessibility or production update delivery.
+
 ## Build 26 candidates, September 17
 
 Clean source `660073c957bc38f0107dc5ad46262c128da76edd` was packaged for both
