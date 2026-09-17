@@ -16,6 +16,8 @@ internal sealed class UsagePopup : Form
     private readonly Action open;
     private readonly FlowLayoutPanel content = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = false, Padding = new Padding(14) };
     private string host = "Windows";
+    private bool refreshing;
+    private bool refreshFailed;
     private const int BodyWidth = 360;
 
     internal UsagePopup(Func<JsonObject?> read, Func<Task> refresh, Action open)
@@ -73,6 +75,17 @@ internal sealed class UsagePopup : Form
         content.Controls.Add(label); return label;
     }
 
+    internal async Task RefreshAsync()
+    {
+        if (refreshing || IsDisposed) return;
+        refreshing = true;
+        refreshFailed = false;
+        Reload();
+        try { await refresh(); }
+        catch { refreshFailed = true; }
+        finally { refreshing = false; if (!IsDisposed) Reload(); }
+    }
+
     internal void Reload()
     {
         if (IsDisposed) return;
@@ -125,13 +138,16 @@ internal sealed class UsagePopup : Form
             hosts.Controls.Add(choice);
         }
         content.Controls.Add(hosts);
+        if (host == "All") Label("All shows verified device totals. Ubuntu contributes tokens only.");
         var activity = Snapshot.Latest(data, "activity", host);
         var tokens = Snapshot.Latest(data, "tokens", host);
         Stat("Active time", Snapshot.Duration(Snapshot.Number(activity?["seconds"])), Snapshot.Text(activity?["date"], "No retained records"));
         Stat("Tokens", Snapshot.Number(tokens?["totalTokens"]) is double total ? DashboardHistoryChart.AxisLabel(total) : "Unknown", Snapshot.Text(tokens?["date"], "No retained records"));
         Separator();
-        var refreshButton = ActionButton("Refresh sources");
-        refreshButton.Click += async (_, _) => { refreshButton.Enabled = false; try { await refresh(); } finally { if (!IsDisposed) Reload(); } };
+        if (refreshFailed) Label("Refresh failed. Saved readings are shown. Try again or open Sources.");
+        var refreshButton = ActionButton(refreshing ? "Refreshing sources…" : "Refresh sources");
+        refreshButton.Enabled = !refreshing;
+        refreshButton.Click += async (_, _) => await RefreshAsync();
         content.Controls.Add(refreshButton);
         var openButton = ActionButton("Open Observatory");
         openButton.Click += (_, _) => { Close(); open(); }; content.Controls.Add(openButton);
@@ -140,6 +156,12 @@ internal sealed class UsagePopup : Form
         // below a scroll area. Screen constraints are applied by ShowNearTray.
         var preferred = content.GetPreferredSize(new Size(ClientSize.Width, 0));
         ClientSize = new Size(ClientSize.Width, preferred.Height);
+        if (Visible)
+        {
+            var area = Screen.FromControl(this).WorkingArea;
+            Location = new Point(Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - Width)),
+                Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - Height)));
+        }
     }
 
     private static string WindowLabel(JsonObject row)

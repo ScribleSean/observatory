@@ -13,7 +13,8 @@ internal static class UsagePopupTests
         var data = Fixture();
         var refreshed = 0;
         var opened = 0;
-        using var popup = new UsagePopup(() => data, () => { refreshed++; return Task.CompletedTask; }, () => opened++);
+        TaskCompletionSource? pending = null;
+        using var popup = new UsagePopup(() => data, () => { refreshed++; return pending?.Task ?? Task.CompletedTask; }, () => opened++);
         popup.Shown += async (_, _) =>
         {
             try
@@ -81,6 +82,23 @@ internal static class UsagePopupTests
                 Check(layout.ClientRectangle.Contains(refresh.Bounds), "Refresh is outside the popup.");
                 refresh.PerformClick();
                 Check(refreshed == 1, "Refresh did not invoke its callback exactly once.");
+                pending = new TaskCompletionSource();
+                var failedRefresh = popup.RefreshAsync();
+                Descendants(popup).OfType<Button>().Single(button => button.Text == "All").PerformClick();
+                Check(Descendants(popup).OfType<Label>().Any(label => label.Text.Contains("Ubuntu contributes tokens only")), "Combined coverage is not explained.");
+                Check(!Descendants(popup).OfType<Button>().Single(button => button.Text == "Refreshing sources…").Enabled, "Host changes reenabled an active refresh.");
+                await popup.RefreshAsync();
+                Check(refreshed == 2, "An overlapping refresh invoked the callback.");
+                pending.SetException(new InvalidOperationException("PRIVATE failure details"));
+                await failedRefresh;
+                Check(Descendants(popup).OfType<Label>().Any(label => label.Text.StartsWith("Refresh failed.")), "Refresh failure has no recovery guidance.");
+                Check(!Descendants(popup).Any(control => control.Text.Contains("PRIVATE")), "Refresh exposed internal failure details.");
+                Check(Descendants(popup).OfType<Button>().Single(button => button.Text == "Refresh sources").Enabled, "Refresh did not recover after failure.");
+                Check(Screen.AllScreens.Any(screen => screen.WorkingArea.Contains(popup.Bounds)), "Failure guidance moved the popup off screen.");
+                Capture(popup, output, "popup-refresh-failed");
+                pending = null;
+                await popup.RefreshAsync();
+                Check(refreshed == 3 && !Descendants(popup).OfType<Label>().Any(label => label.Text.StartsWith("Refresh failed.")), "Successful retry retained the failure.");
                 var open = Descendants(popup).OfType<Button>().Single(button => button.Text == "Open Observatory");
                 Check(layout.ClientRectangle.Contains(open.Bounds), "Open is outside the popup.");
                 open.PerformClick();
