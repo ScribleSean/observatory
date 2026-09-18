@@ -2,6 +2,33 @@
 
 Status: development candidates installed on Mac and Windows. Build 25 is not published as a production release.
 
+## Refreshed Windows build 26, September 18 UTC
+
+Clean source `b6ad17cf1f9f57bb02c220590691632318d51b37` adds Source health naming
+and the responsive saved-history card repair to the earlier build-26 candidate.
+The full Windows build reported 522 test passes, 46 platform skips and no failures
+across its four test groups. Packaged native contracts, isolated sharing/archive
+bridges, sync-owner lifecycle, Python/Node runtime checks, privacy inspection and
+all 3,067 manifest entries passed. The package is 262,303,205 bytes unpacked;
+its independently retained manifest SHA-256 is
+`c1021d6658d0e31fb72b34deda0a9502bdb0426748af368f85083c2a2bc29cf2`.
+The exact packaged dashboard and popup fixtures passed on the development desktop.
+
+The separate unsigned TEST installer is 98,712,832 bytes, SHA-256
+`5b57c3f233a783fa91df207873d83da1755d5c8c922a56d5980a14c3edb71660`.
+Its integration checks passed installation and payload hashes, running-app and
+overwrite refusal, linked-path rejection, saved-data preservation, uninstall and
+reinstall. An outer invocation incorrectly checked an unset native-process exit
+variable after the PowerShell script had completed successfully. Independent
+checks confirmed removal of the test installation, shortcut, uninstall and startup
+registrations. The ordinary application remains build 25.
+
+This refreshed candidate is unpublished and uninstalled. The normal update-startup
+check was explicitly skipped on the personal device; the hosted replacement check
+below covers its named earlier source. No ordinary installer was compiled for this
+refreshed payload yet. The retained Mac candidate remains at `660073c`; this Windows
+candidate does not establish current Mac package acceptance or production updates.
+
 ## Clean Windows verification, September 17
 
 The [clean Windows run](https://github.com/ScribleSean/observatory/actions/runs/35287676897)
