@@ -1,6 +1,6 @@
 # Observatory 0.3.13 candidate
 
-Status: development candidates installed on Mac and Windows. Build 25 is not published as a production release.
+Status: development build 25 is installed on Mac and build 26 on Windows. Neither is published as a production release.
 
 ## Refreshed Windows build 26, September 18 UTC
 
@@ -23,7 +23,7 @@ variable after the PowerShell script had completed successfully. Independent
 checks confirmed removal of the test installation, shortcut, uninstall and startup
 registrations. The ordinary application remains build 25.
 
-This refreshed candidate is unpublished and uninstalled. The normal update-startup
+This refreshed candidate is unpublished. Its development installation is recorded below. The normal update-startup
 check was explicitly skipped on the personal device; the hosted replacement check
 below covers its named earlier source.
 
@@ -31,10 +31,28 @@ The ordinary unsigned installer was compiled separately from a clean checkout at
 the exact package revision. Its metadata confirms build 26 and the manifest hash
 above. It is 98,712,850 bytes, SHA-256
 `d414f4abd693dcedc1e63b3e68c01efc5445defab4138de1795c27f212ec0c71`.
-The generated checksum was independently checked. This ordinary installer has not
-been applied; TEST-installer lifecycle evidence does not prove an ordinary upgrade.
+The generated checksum was independently checked. The ordinary development upgrade
+below is separate from the earlier TEST-installer lifecycle evidence.
 The retained Mac candidate remains at `660073c`; this Windows candidate does not
 establish current Mac package acceptance or production updates.
+
+## Windows build 26 development upgrade, September 18 UTC
+
+The ordinary `b6ad17c` installer was applied after build 25 handled its normal quit
+request. The previous installed payload was checked against its independently
+retained manifest before replacement. A private recovery directory retains all
+3,070 previous application files, saved data, shortcuts and registration metadata.
+
+All 306 saved-data files matched their pre-upgrade hashes after installation and
+before relaunch. The installed payload matched the new candidate manifest; startup
+registration and the Start menu shortcut were checked. The app acknowledged normal
+dashboard readiness in the interactive session as version `0.3.13.26`. The one-time
+upgrade launcher was removed. Its first collection finished at 00:19:49 UTC with
+all seven configured sources read successfully.
+
+This installs the Windows popup recovery, Source health labels and narrow history
+card repair. It does not prove every tray interaction, keyboard/accessibility path,
+clean-machine installation or automatic update transaction. Mac remains build 25.
 
 ## Clean Windows verification, September 17
 
