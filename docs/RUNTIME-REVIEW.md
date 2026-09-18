@@ -1,6 +1,38 @@
 # Dependency and runtime review
 
-Current deployment update: Windows 0.3.2 build 8 (`2265c86`) is installed. Post-activation runtime inspection confirmed OpenSSL 3.5.8 and SQLite 3.53.1. Private-data preservation and fresh paired collection passed. Mac 0.3.2 is verified and staged but not activated. The sections below retain the earlier audit and candidate evidence chronologically. See the [release checklist](RELEASE-CHECKLIST.md) for current gates.
+## Current review, September 18, 2026 UTC
+
+Mac build 25 and Windows build 26 are installed. Read-only executable probes on
+both devices report Node 22.23.2 (OpenSSL 3.5.7, SQLite 3.51.3) and Python 3.13.15
+(OpenSSL 3.5.8, SQLite 3.53.1). The Windows .NET payload remains 10.0.12.
+No runtime was replaced during this review.
+
+A fresh `npm audit --json` reported zero known vulnerabilities across 698 dependency
+entries. The Windows `dotnet list ... package --vulnerable --include-transitive
+--no-restore --format json` query returned no vulnerable entries from NuGet.org.
+These are package-feed results, not native-library or application clearance.
+Current lockfile SHA-256 values:
+
+- `package-lock.json`: `caa344b6249b32dfb35f7ed21ec1b035b6eae662e97f239476cdf313bdfa0095`
+- `native/windows/packages.lock.json`: `da81446ea7bfe69b9216e393c5dea8e305bc66b43cae4a6afa88d44936ed615f`
+
+The [official Node distribution index](https://nodejs.org/dist/index.json) still
+lists 22.23.2 as the newest Node 22 build, with OpenSSL 3.5.7. It lists Node 24.21.0
+with OpenSSL 3.5.8. The [OpenSSL advisory index](https://openssl-library.org/news/vulnerabilities/index.html)
+includes August fixes in 3.5.8, so the separate patched Python runtime does not
+clear Node's embedded library. This identifies an affected library-version range,
+not proof of an exploitable Observatory path. Review Node applicability or verify
+a supported newer runtime before closing this gate; do not replace installed
+binaries individually or change checksum pins without package verification.
+
+The [.NET 10 metadata](https://raw.githubusercontent.com/dotnet/core/main/release-notes/10.0/releases.json)
+still identifies 10.0.12 as its latest security release. Python SQLite 3.53.1 has
+later maintenance fixes in the [SQLite history](https://sqlite.org/changes.html).
+Node's SQLite 3.51.3 includes the previously identified WAL-reset fix. The private
+Node stores and Python settings cache enforce DELETE journal mode. Broader native
+library applicability and OS WebKit/WebView2 review remain open.
+
+## Historical review, September 13
 
 Observed September 13, 2026 UTC. Source baseline `34856e3`. Installed development apps remain `30f91ca`, version 0.3.1. No runtime or package was changed by this review.
 
