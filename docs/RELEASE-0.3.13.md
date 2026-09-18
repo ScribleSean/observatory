@@ -25,9 +25,16 @@ registrations. The ordinary application remains build 25.
 
 This refreshed candidate is unpublished and uninstalled. The normal update-startup
 check was explicitly skipped on the personal device; the hosted replacement check
-below covers its named earlier source. No ordinary installer was compiled for this
-refreshed payload yet. The retained Mac candidate remains at `660073c`; this Windows
-candidate does not establish current Mac package acceptance or production updates.
+below covers its named earlier source.
+
+The ordinary unsigned installer was compiled separately from a clean checkout at
+the exact package revision. Its metadata confirms build 26 and the manifest hash
+above. It is 98,712,850 bytes, SHA-256
+`d414f4abd693dcedc1e63b3e68c01efc5445defab4138de1795c27f212ec0c71`.
+The generated checksum was independently checked. This ordinary installer has not
+been applied; TEST-installer lifecycle evidence does not prove an ordinary upgrade.
+The retained Mac candidate remains at `660073c`; this Windows candidate does not
+establish current Mac package acceptance or production updates.
 
 ## Clean Windows verification, September 17
 
