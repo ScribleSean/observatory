@@ -301,6 +301,14 @@ internal sealed partial class NativeDashboard : Form
             content.Controls.Add(history);
             content.Height = content.GetPreferredSize(new Size(content.Width, 0)).Height;
             AddCard(content, "All-time usage history");
+            void FitHistoryCard()
+            {
+                foreach (var label in content.Controls.OfType<Label>())
+                    label.MaximumSize = new Size(Math.Max(1, content.ClientSize.Width - label.Margin.Horizontal), 0);
+                content.Parent!.Height = content.GetPreferredSize(new Size(content.ClientSize.Width, 0)).Height + content.Parent.Padding.Vertical;
+            }
+            content.ClientSizeChanged += (_, _) => FitHistoryCard();
+            FitHistoryCard();
         }
         Label("Observed on this device");
         AccountAllowance(snapshot?["quota"] as JsonObject);

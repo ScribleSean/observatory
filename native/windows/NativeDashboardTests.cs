@@ -616,7 +616,7 @@ internal static class NativeDashboardTests
             if (size is not null)
             {
                 var historyAction = Children(surface).OfType<Button>().Single(button => button.Text == "Browse saved history");
-                Check(historyAction.Bottom <= historyAction.Parent!.ClientSize.Height, "Narrow history action fits its card");
+                Check(historyAction.Bottom <= historyAction.Parent!.ClientSize.Height, $"Narrow history action fits its card: action={historyAction.Bounds}, content={historyAction.Parent.ClientSize}, card={historyAction.Parent.Parent?.ClientSize}, dpi={historyAction.DeviceDpi}");
                 foreach (var label in historyAction.Parent.Controls.OfType<Label>())
                     Check(label.Right <= historyAction.Parent.ClientSize.Width, "Narrow history text fits its card");
             }
