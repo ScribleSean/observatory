@@ -50,6 +50,14 @@ dashboard readiness in the interactive session as version `0.3.13.26`. The one-t
 upgrade launcher was removed. Its first collection finished at 00:19:49 UTC with
 all seven configured sources read successfully.
 
+A read-only reconciliation of the Mac and upgraded Windows saved snapshots found
+identical per-device, per-date values for all six token counters. Independently
+summing the three device rows by date reproduced each combined counter. The
+collector reported verified inventories with no shared sessions or cross-host
+parents. This checks retained-record agreement after the upgrade, not provider
+billing completeness or recovery of unrecorded usage. Personal usage records and
+aggregate values remain outside the public repository.
+
 This installs the Windows popup recovery, Source health labels and narrow history
 card repair. It does not prove every tray interaction, keyboard/accessibility path,
 clean-machine installation or automatic update transaction. Mac remains build 25.
