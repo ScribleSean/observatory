@@ -103,6 +103,14 @@ jobs:
         run: |
           bundle=$(node -p "require('./.native-build/app.json').bundle")
           node native/mac/package.mjs --bundle "$bundle" --output "$OBSERVATORY_PACKAGE_OUTPUT" --zip-only
+      - name: Retain verified Mac candidate
+        if: inputs.build_app
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-mac-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/observatory-package/
+          retention-days: 1
+          if-no-files-found: error
       # Runtime-only mode does not execute downloaded binaries. The opt-in full
-      # build runs isolated native checks. No publication, live collection,
+      # build runs isolated native checks. No release publication, live collection,
       # application installation or production signing keys are involved.
