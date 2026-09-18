@@ -4,15 +4,18 @@ Automatic production updates are requested but not yet implemented. Source chang
 
 ## Latest hosted verification
 
-The [September 16 clean Windows run](RELEASE-0.3.13.md#hosted-verification-september-16)
-passed the complete installer and update lifecycle at source
-`b2515f63cfc0ac63d1c1f04114a05258c0d462d9`. It verified replacement through the
-external helper, recovery retention, normal dashboard relaunch, exact signed
-receipt persistence and disposable installation cleanup. The fixture used a
-synthetic signer and reused one payload with an advancing receipt. Production
-signing, feed delivery, upgrades between distinct builds and the user-facing
-update action still need verification. Existing candidate downloads retain their
-original source and hashes.
+The [September 17 clean Windows run](RELEASE-0.3.13.md#clean-windows-verification-september-17)
+passed the installer and update lifecycle at source `647be44`. It verified
+replacement through the external helper, recovery retention, normal dashboard
+readiness, exact signed receipt persistence and disposable installation cleanup.
+The fixture used a synthetic signer and reused one payload with an advancing
+receipt. Production signing, feed delivery, upgrades between distinct builds and
+the user-facing update action still need verification.
+
+The [clean Mac run](RELEASE-0.3.13.md#clean-mac-verification-september-17) passed
+at `74ae01e`, including bundled Sparkle integration, native popup checks and ZIP
+verification. It does not establish a production update transaction. Existing
+candidate artifacts retain their original source revisions and hashes.
 
 ## Shared release version
 

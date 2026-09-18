@@ -2,6 +2,30 @@
 
 Status: development candidates installed on Mac and Windows. Build 25 is not published as a production release.
 
+## Clean Windows verification, September 17
+
+The [clean Windows run](https://github.com/ScribleSean/observatory/actions/runs/35287676897)
+passed at source `647be4466cb2693e2649bd6dd07bfaa3434f0fa2`. The earlier attempt
+failed a TLS acknowledgement deadline during parallel permission-heavy tests.
+The affected fixture passed independently and now runs in the existing separate
+test group, with authentication checks and production timeouts unchanged.
+The corrected full package workflow passed.
+
+All 29 signed-archive regressions passed without skips. The isolated installer
+passed installation, payload hashes, ownership and overwrite guards, linked-path
+rejection, uninstall, reinstall and data-preservation checks. On the disposable
+runner, the ordinary installation then passed signed archive extraction and
+staging, wrong-signer rejection, replacement through the verified external helper,
+recovery retention, normal dashboard readiness and graceful quit. The installed
+receipt retained the exact authenticated envelope. The ordinary installation was
+removed after verification.
+
+The update fixture used a synthetic signer and one payload with advancing receipt
+metadata. It does not prove migration between distinct release builds, production
+key/feed delivery or the user-facing update action. The retained candidate hashes
+below and the installed development applications remain unchanged. Later Mac
+routing and Source health label changes need their own packaged acceptance.
+
 ## Clean Mac verification, September 17
 
 The [clean Mac run](https://github.com/ScribleSean/observatory/actions/runs/35288576766)
