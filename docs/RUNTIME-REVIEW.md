@@ -32,6 +32,31 @@ Node's SQLite 3.51.3 includes the previously identified WAL-reset fix. The priva
 Node stores and Python settings cache enforce DELETE journal mode. Broader native
 library applicability and OS WebKit/WebView2 review remain open.
 
+## Node 24 candidate, September 18
+
+The official [Node 24.21.0 LTS release](https://nodejs.org/en/blog/release/v24.21.0)
+updates OpenSSL to 3.5.8. Separate Mac arm64 and Windows x64 archives were downloaded
+from nodejs.org and verified against its published checksums before execution:
+
+- Mac tar.gz: `bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057`
+- Windows ZIP: `158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541`
+
+Both isolated binaries report OpenSSL 3.5.8 and SQLite 3.53.4. The Mac's complete
+JavaScript suite passed with 554 passes, 14 platform skips and no failures. Focused
+Windows token, cache, private-store and trust tests passed with 59 passes and one
+platform skip. Separate Windows TLS client and allowance-exchange groups passed
+with 23 passes and one platform skip. No production credentials or live records
+were used by these tests.
+
+Source runtime pins and matching CI Node versions now select 24.21.0. The next
+package build number is 27; existing build-26 artifacts retain their original
+runtime and identity. Runtime-preparation checks passed (seven passes, one skip),
+as did 12 packaging/version checks. The Mac Node executable is 122,129,232 bytes,
+versus 112,279,936 bytes in the installed bundle; final archive size is not yet
+measured. Full new packages, Windows complete-suite coverage, native bridge checks
+and recoverable deployment still need verification. Installed Mac build 25 and
+Windows build 26 continue to use Node 22.23.2.
+
 ## Historical review, September 13
 
 Observed September 13, 2026 UTC. Source baseline `34856e3`. Installed development apps remain `30f91ca`, version 0.3.1. No runtime or package was changed by this review.

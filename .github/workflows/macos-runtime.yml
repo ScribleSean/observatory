@@ -52,7 +52,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: inputs.build_app
         with:
-          node-version: '22.23.2'
+          node-version: '24.21.0'
       - name: Fetch the pinned Sparkle framework archive
         if: inputs.build_app
         env:
