@@ -9,11 +9,19 @@ const execute=promisify(execFile);
 async function windowsPermissions(directory,initialize=false) {
   const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
   const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
-  try {
-    const {stdout}=await execute(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,
-      ...(initialize?['-Initialize']:[])],{windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
-    if(stdout.trim()!=='private-sync-acl: ok')throw Error('Invalid verification result');
-  } catch {throw Error('Private sync access-control verification failed');}
+  for(let attempt=0;attempt<2;attempt++) {
+    try {
+      const {stdout}=await execute(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,
+        ...(initialize && attempt===0?['-Initialize']:[])],{windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
+      if(stdout.trim()!=='private-sync-acl: ok')throw Error('Invalid verification result');
+      return;
+    } catch(error) {
+      // A transient child can disappear between enumeration and Get-Acl.
+      // Retry the entire inspection once, including the root and every child.
+      if(attempt===0 && error.code===2)continue;
+      throw Error('Private sync access-control verification failed');
+    }
+  }
 }
 
 export async function privateCollectorDirectory(runtime,name,create=false) {

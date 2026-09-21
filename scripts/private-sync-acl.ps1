@@ -51,5 +51,9 @@ try {
 } catch {
     [Console]::Error.WriteLine('Private sync access-control verification failed')
     if ($Diagnostic) { [Console]::Error.WriteLine('Verification stage: ' + $stage) }
+    # A concurrent SQLite transaction can remove its journal during inspection.
+    # Signal a full reinspection, never accept an unchecked child or root.
+    if ($stage -eq 'read-acl' -and $item.FullName -ne $root.FullName -and
+        $_.Exception -is [System.Management.Automation.ItemNotFoundException]) { exit 2 }
     exit 1
 }

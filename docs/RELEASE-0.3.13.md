@@ -2,6 +2,22 @@
 
 Status: development build 25 is installed on Mac and build 26 on Windows. Neither is published as a production release.
 
+## Build 28 permission-check repair
+
+Build 27 Windows verification exposed a race in permission inspection. A child
+file could disappear between directory enumeration and `Get-Acl`, causing a
+concurrent allowance exchange to report unavailable despite retaining its readings.
+A constrained native Windows fixture reproduced the failure and identified
+`ItemNotFoundException` while reading a child ACL in `private-repair`.
+
+Build 28 retries the entire inspection once for that specific condition. The
+retry verifies the root and every current child. Invalid permissions and other
+errors still fail closed. No lock or request timeout was increased. Windows
+regressions verify disappearing-child classification and rejection of broad root
+and file permissions. Three constrained simultaneous-exchange runs passed after
+the repair. Clean package verification and installation are still pending.
+Build 27 artifacts below do not contain this repair.
+
 ## Build 27 verification, September 21
 
 Build 27 pins Node 24.21.0, with OpenSSL 3.5.8 and SQLite 3.53.4.

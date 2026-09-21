@@ -40,6 +40,27 @@ test('Windows file-level broad grants are rejected despite a private parent',
     const file=path.join(directory,'pairing.json');await writeFile(file,'{}');grantEveryone(file);
     await assert.rejects(privateSyncDirectory(runtime));
   });
+test('Windows ACL inspection distinguishes a vanished child from unsafe permissions',
+  {skip:process.platform!=='win32'},async t=>{
+    const runtime=await fixture(t),directory=await privateSyncDirectory(runtime,true);
+    const file=path.join(directory,'journal');await writeFile(file,'synthetic');
+    const literal=value=>"'"+value.replaceAll("'","''")+"'";
+    const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
+    const input=`$ErrorActionPreference='Stop'; $vanishing=${literal(file)};
+      function Get-Acl { param([string]$LiteralPath)
+        if($LiteralPath -eq $vanishing) { Remove-Item -LiteralPath $LiteralPath }
+        Microsoft.PowerShell.Security\\Get-Acl -LiteralPath $LiteralPath
+      }
+      & ${literal(script)} -Directory ${literal(directory)}
+      exit $LASTEXITCODE
+    `;
+    const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
+    assert.throws(()=>execFileSync(executable,['-NoProfile','-NonInteractive','-Command','-'],
+      {input,encoding:'utf8',timeout:15000,env:windowsPowerShellEnvironment()}),error=>error.status===2);
+    assert.equal(await privateSyncDirectory(runtime),directory);
+    grantEveryone(directory);
+    await assert.rejects(privateSyncDirectory(runtime));
+  });
 test('Windows ACL verification ignores incompatible inherited modules',
   {skip:process.platform!=='win32'},async t=>{
     const runtime=await fixture(t),modules=path.join(runtime,'modules');
