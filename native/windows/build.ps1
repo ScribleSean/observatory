@@ -38,7 +38,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Windows self-tests failed.' }
     # Keep permission-heavy CLI/TLS fixtures out of the parallel suite. Their
     # absolute timeouts stay unchanged, and every test file still runs.
-    $isolatedTests = @('peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs')
+    $isolatedTests = @('peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs', 'peer-live-quota.test.mjs')
     $contractTests = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File |
         Where-Object { $_.Name -notin $isolatedTests } | Sort-Object Name |
         ForEach-Object { $_.FullName })
