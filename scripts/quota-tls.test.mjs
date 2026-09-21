@@ -14,8 +14,10 @@ import {syncQuota} from './quota-sync.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 
+// Windows verifies private-directory ACLs through PowerShell for each state access.
+// Allow the sequential fixture to finish without changing individual I/O deadlines.
 test('pinned TLS allowance exchange sends only consented sanitized readings',
-  {skip:!['darwin','win32'].includes(process.platform),timeout:120000},async t=>{
+  {skip:!['darwin','win32'].includes(process.platform),timeout:process.platform==='win32'?300000:120000},async t=>{
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-tls-')));
   const sockets=new Set();let server;
   try {
