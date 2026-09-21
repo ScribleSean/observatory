@@ -1,6 +1,6 @@
 # Observatory 0.3.13 candidate
 
-Status: development build 25 is installed on Mac and build 26 on Windows. Neither is published as a production release.
+Status: development build 25 is installed on Mac and build 28 on Windows. Neither is published as a production release.
 
 ## Build 28 permission-check repair
 
@@ -15,8 +15,59 @@ retry verifies the root and every current child. Invalid permissions and other
 errors still fail closed. No lock or request timeout was increased. Windows
 regressions verify disappearing-child classification and rejection of broad root
 and file permissions. Three constrained simultaneous-exchange runs passed after
-the repair. Clean package verification and installation are still pending.
-Build 27 artifacts below do not contain this repair.
+the repair.
+
+The [clean Mac build 28 run](https://github.com/ScribleSean/observatory/actions/runs/35660345401)
+passed at source `97f1f1a1661cacbe92b76d47adf9a09439de6d3d`, with 554 test passes,
+15 platform skips and no failures. Native updater, extracted collector, WebKit
+and window lifecycle checks passed. The retained ZIP was independently verified
+locally against its checksum, all 1,862 manifest entries and strict nested signatures.
+
+- ZIP size: 68,358,612 bytes. Unpacked app: 197,296,631 bytes.
+- ZIP SHA-256: `e34009220d1cb1a399c597b25dc338a5036fc09c663e72065117fd0682330340`.
+- The candidate is staged for development installation. Signing remains ad hoc,
+  without notarization. The installed Mac application remains build 25.
+
+The local Windows build at the same source passed 523 tests with 46 platform
+skips and no failures. Packaged sharing and allowance bridges, sync-owner
+lifecycle, Python SQLite and timezone checks, and the full 3,067-file manifest
+passed. The unpacked candidate is 268,898,965 bytes. Its independently retained
+manifest SHA-256 is
+`c97f1ccf1114254ece183b7c46678813f4bc2257c95a50d8999dbc3322e7d3d0`.
+The separate TEST installer passed installation, payload hashes, running-app and
+overwrite refusal, linked-path rejection, saved-data preservation, uninstall and
+reinstall. No ordinary app registration was modified. The ordinary unsigned
+installer was compiled and retained. Its subsequent development installation is
+recorded below.
+
+- Ordinary installer: 100,441,067 bytes, SHA-256
+  `970e6d5c9816fe6a362b29ff001ab13d0b4bf38a0dc73ff9ac4aabcaf26d2e37`.
+- TEST installer: 100,440,940 bytes, SHA-256
+  `67fa72170dbce76b7847c4934889bed6b9b191991ce134556ca1a17a036d5e10`.
+
+The [Windows build 28 run](https://github.com/ScribleSean/observatory/actions/runs/35660343229)
+passed full package and installer verification. The clean runner also verified
+native extraction and staging, wrong-signer rejection, authenticated receipt
+retention, recoverable replacement of a complete disposable installation, normal
+dashboard readiness and cleanup. These update checks used a synthetic signer.
+They do not establish production signing or update-feed activation. Build 27
+artifacts below do not contain this repair and are earlier verification evidence.
+
+## Windows build 28 development upgrade, September 21
+
+The ordinary installer at source `97f1f1a` replaced build 26 after its normal
+quit completed. The previous installed payload was verified before replacement.
+A private recovery folder retains all 3,070 previous application files and the
+saved-data backup. All 306 saved files retained their pre-upgrade hashes through
+installation and before relaunch.
+
+The installed payload matched the independent build 28 manifest. Startup
+registration and the Start menu shortcut passed verification. The app acknowledged
+normal dashboard readiness as version `0.3.13.28` in the interactive user session.
+Its first collection finished at 22:18:47 UTC with all seven configured sources
+read successfully. The app remained alive, and the completed one-time upgrade
+launcher was removed. Mac installation and full native interaction acceptance
+remain pending. This development upgrade does not enable production updates.
 
 ## Build 27 verification, September 21
 
@@ -46,8 +97,10 @@ is now five minutes to accommodate repeated PowerShell directory-permission chec
 Individual I/O deadlines and all assertions are unchanged. All five fixture tests
 passed on native Windows and Mac with the pinned runtime. The
 [replacement Windows package run](https://github.com/ScribleSean/observatory/actions/runs/35656223675)
-is pending final package and installer verification. Build 27 installation remains
-gated on that result and inspection of the exact installation artifacts.
+failed in a concurrent allowance fixture. A subsequent run also failed in a
+second simultaneous-exchange fixture. The constrained diagnostic then identified
+the disappearing-child permission race fixed in build 28 above. These failed
+runs do not establish package or installer acceptance.
 
 ## Refreshed Windows build 26, September 18 UTC
 
