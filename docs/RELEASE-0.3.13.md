@@ -2,6 +2,37 @@
 
 Status: development build 25 is installed on Mac and build 26 on Windows. Neither is published as a production release.
 
+## Build 27 verification, September 21
+
+Build 27 pins Node 24.21.0, with OpenSSL 3.5.8 and SQLite 3.53.4.
+The installed applications have not yet been replaced.
+
+The [clean Mac run](https://github.com/ScribleSean/observatory/actions/runs/35656225687)
+passed at source `ae5451e8413b43b4ca0d03ee8ef209d3fd730841`, including
+554 JavaScript tests, 14 platform skips, native checks, updater integration,
+and extracted ZIP checks. The exact ZIP was downloaded and independently checked
+against its checksum and all 1,862 manifest entries. Strict nested signature
+verification passed on the local extracted copy.
+
+- ZIP size: 68,358,326 bytes. Unpacked app: 197,296,005 bytes.
+- ZIP SHA-256: `abfc4e6142e26ba5b73b90a65f59425a8fad7905ec75ab19f0d21eda1a64e6ca`.
+- Signing remains ad hoc, without notarization. This is not a public release
+  or evidence of clean-machine installation.
+
+Extracting under a file-provider-managed Documents directory added Finder metadata
+that caused strict signature verification to fail. Extracting the unchanged ZIP
+into local temporary storage passed both the manifest and signature checks.
+Keep application staging outside managed Documents folders.
+
+The earlier Windows clean run reached the allowance-sharing fixture's overall
+two-minute deadline after three passing checks. The Windows-only fixture deadline
+is now five minutes to accommodate repeated PowerShell directory-permission checks.
+Individual I/O deadlines and all assertions are unchanged. All five fixture tests
+passed on native Windows and Mac with the pinned runtime. The
+[replacement Windows package run](https://github.com/ScribleSean/observatory/actions/runs/35656223675)
+is pending final package and installer verification. Build 27 installation remains
+gated on that result and inspection of the exact installation artifacts.
+
 ## Refreshed Windows build 26, September 18 UTC
 
 Clean source `b6ad17cf1f9f57bb02c220590691632318d51b37` adds Source health naming
