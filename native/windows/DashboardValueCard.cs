@@ -2,7 +2,7 @@ namespace WorkspaceObservatory;
 
 internal sealed class DashboardValueCard : Panel
 {
-    private readonly Font titleFont = DashboardTypography.AtPixels(19, FontStyle.Bold);
+    private readonly Font titleFont = DashboardTypography.AtPixels(DashboardPalette.SectionSize, FontStyle.Bold);
     internal string Title { get; }
     internal DashboardValueCard(string title, (string label, string value)[] rows, bool showHeading = true)
     {

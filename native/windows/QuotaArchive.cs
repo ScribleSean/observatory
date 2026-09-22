@@ -225,7 +225,7 @@ internal sealed class QuotaArchiveWindow : Form
     {
         this.read = read;
         this.lightMode = lightMode;
-        Font = DashboardTypography.AtPixels(14.5f);
+        Font = DashboardTypography.AtPixels(DashboardPalette.BodySize);
         BackColor = Color.FromArgb(28, 29, 27); ForeColor = Color.WhiteSmoke;
         account.ForeColor = kind.ForeColor = Color.Black;
         account.BackColor = kind.BackColor = Color.White;

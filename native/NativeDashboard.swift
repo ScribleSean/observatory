@@ -50,7 +50,7 @@ struct NativeDashboard: View {
             } else {
             VStack(alignment: .leading, spacing: 10) {
                 Label { Text("Observatory") } icon: { Image(nsImage: telescopeImage(template: true)).resizable().scaledToFit().frame(width: 24, height: 24) }
-                    .observatoryFont(19, weight: .semibold).padding(.bottom, 24)
+                    .observatoryFont(ObservatoryTheme.sectionSize, weight: .semibold).padding(.bottom, 24)
                 ForEach(sections, id: \.0) { item in
                     Button { selection.section = item.0 } label: {
                         Label(item.1, systemImage: item.2)
@@ -92,15 +92,13 @@ struct NativeDashboard: View {
                         }
                     } else if selection.section == "allowances" {
                         if archivedSnapshot == nil {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("All-time usage history").observatoryFont(19, weight: .semibold).tracking(-0.3)
-                                Text("Explore saved usage percentages by day, week or all retained dates. Accounts stay separate; missing observations stay unknown.")
-                                    .observatoryFont().foregroundStyle(ObservatoryTheme.muted)
+                            ObservatoryAdaptiveRow {
                                 Button("Browse saved history") { quotaHistoryOpen = true }
                                     .disabled(settingsActions.preview || store.shuttingDown || store.pairingMaintenance)
-                            }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
+                                Text("All retained allowance readings").observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                            }
                         }
-                        Text("Observed on this Mac").observatoryFont(19, weight: .semibold).tracking(0.6)
+                        Text("Observed on this Mac").observatoryFont(ObservatoryTheme.sectionSize, weight: .semibold).tracking(ObservatoryTheme.sectionTracking)
                         if let quota = displayedSnapshot?.object["quota"] as? JSONObject, text(quota["status"]) != "not-connected" {
                             let windows = visibleQuotaWindows(quota["windows"])
                             let columns = windows.count == 1 ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 420), spacing: 18)]
@@ -189,7 +187,7 @@ struct NativeDashboard: View {
     private var dashboardTitle: some View {
         VStack(alignment: .leading, spacing: 4) {
                 Text(sections.first(where: { $0.0 == selection.section })?.1 ?? "Allowances")
-                    .observatoryFont(22, weight: .semibold).tracking(-0.7)
+                    .observatoryFont(ObservatoryTheme.titleSize, weight: .semibold).tracking(ObservatoryTheme.titleTracking)
                 Text(archivedSnapshot == nil ? store.freshness : "Saved snapshot. Not live data.")
                     .foregroundStyle(archivedSnapshot != nil || store.stale ? .orange : .secondary)
         }
@@ -274,40 +272,45 @@ struct NativeDashboard: View {
                     message: "This source is unavailable or has no saved records. Missing data is unknown, not zero.")
                 if key == "activity" { ActivityWatchHelp() }
             } else {
-                HStack {
-                    Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : formattedDuration(number(chosen?[field])))
-                        .observatoryFont(38, weight: .semibold, design: .rounded).monospacedDigit()
-                    Spacer()
-                }
-                Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])), \(selected.count) recorded \(selected.count == 1 ? "date" : "dates"). Missing dates are not filled with zeros.")
-                    .observatoryFont(.callout).foregroundStyle(.secondary)
-                Text("Selected recorded days (up to 30 shown)").observatoryFont(.headline)
-                Chart {
-                    ForEach(Array(selected.suffix(30).enumerated()), id: \.offset) { _, day in
-                        if let value = number(day[field]) {
-                            BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60), width: .fixed(40))
-                                .cornerRadius(4)
-                        }
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(key == "tokens" ? "SAVED TOKENS" : "FOREGROUND TIME")
+                        .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                    HStack {
+                        Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : formattedDuration(number(chosen?[field])))
+                            .observatoryFont(ObservatoryTheme.metricSize, weight: .semibold).monospacedDigit()
+                        Spacer()
                     }
-                }.foregroundStyle(ObservatoryTheme.sage)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: period)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: host)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selectedDate)
-                    .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
-                        AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(11 * selection.textScale))
-                    } }
-                    .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { axis in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let value = axis.as(Double.self) {
-                                Text(formatted(value, compact: true)).font(ObservatoryTheme.font(11 * selection.textScale))
+                    Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])) · \(selected.count) recorded \(selected.count == 1 ? "date" : "dates")")
+                        .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                    Chart {
+                        ForEach(Array(selected.suffix(30).enumerated()), id: \.offset) { _, day in
+                            if let value = number(day[field]) {
+                                BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60), width: .fixed(40))
+                                    .cornerRadius(4)
                             }
                         }
-                    } }
-                    .frame(height: 220 * selection.textScale).modifier(ObservatoryCard()).accessibilityLabel("Up to 30 recorded days. Missing dates are not zero.")
+                    }.foregroundStyle(LinearGradient(colors: [ObservatoryTheme.sage, ObservatoryTheme.sage.opacity(0.8)], startPoint: .top, endPoint: .bottom))
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: period)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: host)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selectedDate)
+                        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
+                            AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
+                        } }
+                        .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { axis in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let value = axis.as(Double.self) {
+                                    Text(formatted(value, compact: true)).font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
+                                }
+                            }
+                        } }
+                        .frame(height: 220 * selection.textScale).accessibilityLabel("Up to 30 recorded days. Missing dates are not zero.")
+                    Text("Up to 30 recorded days shown. Missing dates are not filled with zeros.")
+                        .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
                 Text(key == "tokens" ? "Saved log tokens, not subscription charges. Combined totals require verified deduplication."
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
-                    .observatoryFont(.callout).foregroundStyle(.secondary)
+                    .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 if key == "tokens", let chosen {
                     NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: displayedSnapshot, host: host)
                 } else if let chosen {

@@ -24,11 +24,11 @@ private struct ObservatoryFont: ViewModifier {
 }
 
 extension View {
-    func observatoryFont(_ size: CGFloat = 14.5, weight: Font.Weight = .regular, design: Font.Design? = nil) -> some View {
+    func observatoryFont(_ size: CGFloat = ObservatoryTheme.bodySize, weight: Font.Weight = .regular, design: Font.Design? = nil) -> some View {
         modifier(ObservatoryFont(size: size, weight: weight, design: design))
     }
     func observatoryFont(_ style: Font.TextStyle) -> some View {
-        observatoryFont(style == .caption ? 11 : style == .callout ? 12 : 14.5,
+        observatoryFont(style == .caption ? ObservatoryTheme.chartLabelSize : style == .callout ? ObservatoryTheme.metaSize : ObservatoryTheme.bodySize,
             weight: style == .headline ? .semibold : .regular)
     }
 }
@@ -76,7 +76,7 @@ struct ObservatoryEmptyState: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage).observatoryFont(32).accessibilityHidden(true)
-            Text(title).observatoryFont(22, weight: .semibold).accessibilityAddTraits(.isHeader)
+            Text(title).observatoryFont(ObservatoryTheme.titleSize, weight: .semibold).accessibilityAddTraits(.isHeader)
             Text(message).foregroundStyle(ObservatoryTheme.muted)
         }.multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity).padding(20)
@@ -207,11 +207,8 @@ struct ObservatoryFilterRow<Content: View>: View {
     }
 }
 
-// Keep these values aligned with app/observatory.css and docs/BRAND.md.
+// Palette, dimensions and type scale come from native/design-tokens.json.
 enum ObservatoryTheme {
-    static let cardRadius: CGFloat = 16
-    static let cardPadding: CGFloat = 16
-    static let spacing: [CGFloat] = [4, 8, 12, 16, 24]
     static func color(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             let value = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
@@ -220,14 +217,8 @@ enum ObservatoryTheme {
                            blue: Double(value & 255) / 255, alpha: 1)
         })
     }
-    static let background = color(0xEDEAE5, 0x1C1D1B)
-    static let surface = color(0xF4F1EC, 0x272825)
-    static let text = color(0x292D28, 0xF0EEE8)
-    static let muted = color(0x64695F, 0xB3B7AC)
-    static let sage = color(0x586F50, 0xADC29D)
-    static let purple = color(0x79658E, 0xB7A4CC)
-    static let track = color(0xDADBD3, 0x3B3E37)
-    static func font(_ size: CGFloat = 14.5, weight: Font.Weight = .regular) -> Font {
+    static let sage = accent
+    static func font(_ size: CGFloat = ObservatoryTheme.bodySize, weight: Font.Weight = .regular) -> Font {
         .custom("InterTight-Regular", size: size).weight(weight)
     }
     static func registerFont() {
@@ -240,7 +231,8 @@ struct ObservatoryCard: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     func body(content: Content) -> some View {
         content.padding(ObservatoryTheme.cardPadding).background(ObservatoryTheme.surface, in: RoundedRectangle(cornerRadius: ObservatoryTheme.cardRadius))
-            .shadow(color: .black.opacity(scheme == .dark ? 0.22 : 0.07), radius: 12, x: 0, y: 6)
+            .shadow(color: .black.opacity(Double(scheme == .dark ? ObservatoryTheme.cardShadowDark : ObservatoryTheme.cardShadowLight)),
+                    radius: ObservatoryTheme.cardShadowRadius, x: 0, y: ObservatoryTheme.cardShadowOffset)
             .shadow(color: .white.opacity(scheme == .dark ? 0.025 : 0.6), radius: 1, x: 0, y: -1)
     }
 }
@@ -248,7 +240,7 @@ struct ObservatoryCard: ViewModifier {
 struct ObservatoryGroupBoxStyle: GroupBoxStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            configuration.label.observatoryFont(19, weight: .semibold).tracking(-0.5)
+            configuration.label.observatoryFont(ObservatoryTheme.sectionSize, weight: .semibold).tracking(ObservatoryTheme.sectionTracking)
             configuration.content
         }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
     }

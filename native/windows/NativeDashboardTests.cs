@@ -78,8 +78,8 @@ internal static class NativeDashboardTests
         using (var bitmap = new Bitmap(history.Width, history.Height))
         {
             history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-            var ink = DashboardPalette.Accent(false).ToArgb();
-            var painted = Enumerable.Range(0, bitmap.Width).Where(x => bitmap.GetPixel(x, 100).ToArgb() == ink).ToArray();
+            var background = bitmap.GetPixel(0, 100);
+            var painted = Enumerable.Range(12, bitmap.Width - 90).Where(x => bitmap.GetPixel(x, 100).G > background.G + 40).ToArray();
             Check(painted.Length is >= 39 and <= 41 && Math.Abs(painted.Average() - 417) < 2,
                 "One recorded day paints a bounded centered bar, not a full-width block");
             Check(history.AccessibleDescription == "2026-09-12: " + Snapshot.Format(343_700_000) + " tokens",
@@ -217,7 +217,7 @@ internal static class NativeDashboardTests
                 await Select(form, "Period", "Week");
                 await Select(form, "Period", "Latest 24 hours");
                 Check(Children(form).OfType<Button>().Single(button => button.Text == "Latest 24 hours").AccessibleDescription == "Selected", "Readable period label retains its selected state");
-                Check(Texts(form).Contains("All-time usage history"), "Full-history entry is visible on Allowances");
+                Check(Children(form).OfType<Button>().Any(button => button.Text == "Browse saved history"), "Full-history entry is visible on Allowances");
                 var historyButton = Children(form).OfType<Button>().Single(button => button.Text == "Browse saved history");
                 Check(historyButton.Bottom <= historyButton.Parent!.ClientSize.Height, "Full-history action fits its card");
                 Capture(form, output, "native-history-narrow", new Size(800, 560));
@@ -458,6 +458,16 @@ internal static class NativeDashboardTests
                     sections.SelectedItem = destination;
                     if (destination is "Activity" or "Tokens") await Select(form, "Device", "Windows");
                     Check(form.BackColor == DashboardPalette.Background(true), "Light appearance survives navigation");
+                    foreach (var chip in Children(form).OfType<Button>().Where(button => button.AccessibleDescription == "Selected"))
+                    {
+                        Check(chip.BackColor == DashboardPalette.Accent(true) && chip.ForeColor == DashboardPalette.Background(true),
+                            "Selected chips retain readable light appearance after navigation");
+                        using var image = new Bitmap(chip.Width, chip.Height);
+                        chip.DrawToBitmap(image, new Rectangle(Point.Empty, image.Size));
+                        var fill = image.GetPixel(chip.Width / 2, 8);
+                        Check(fill.R <= chip.BackColor.R && fill.G <= chip.BackColor.G && fill.B <= chip.BackColor.B,
+                            "Selected chip highlight preserves light text contrast");
+                    }
                     foreach (var table in Children(form).OfType<DataGridView>())
                     {
                         Check(!table.EnableHeadersVisualStyles &&
@@ -497,7 +507,8 @@ internal static class NativeDashboardTests
                     catch (IOException) { }
                 }
                 Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName == "Settings page"), "Settings is one continuous page");
-                foreach (var name in new[] { "Start at login card", "Direct device pairing card", "Allowance history sharing card" })
+                foreach (var name in new[] { "About Observatory card", "Source details card", "Save changes card",
+                    "Start at login card", "Direct device pairing card", "Allowance history sharing card" })
                     Check(Children(form).OfType<DashboardCard>().Any(card => card.AccessibleName == name), "Settings has grouped surface: " + name);
                 foreach (var name in new[] { "Toggle login startup", "Check Tailscale", "Check sharing status", "Change allowance sharing" })
                 {
@@ -609,7 +620,7 @@ internal static class NativeDashboardTests
     {
         // Render the actual dashboard controls without hosted-desktop window limits.
         // Mac captures are also content-only. Normal app window behavior is unchanged.
-        var viewport = size ?? new Size(1280, 800);
+        var viewport = size ?? new Size(1280, 860);
         using var surface = new Panel { Size = viewport, Font = form.Font, BackColor = form.BackColor, ForeColor = form.ForeColor };
         var controls = form.Controls.Cast<Control>().ToArray();
         try

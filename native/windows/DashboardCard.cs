@@ -5,7 +5,7 @@ namespace WorkspaceObservatory;
 // Presentation only. Child controls retain their native accessibility and keyboard behavior.
 internal sealed class DashboardCard : Panel
 {
-    internal static readonly Color Surface = Color.FromArgb(39, 40, 37);
+    internal static readonly Color Surface = DashboardPalette.Surface(false);
 
     internal DashboardCard()
     {
@@ -24,7 +24,7 @@ internal sealed class DashboardCard : Panel
         for (var layer = 3; layer > 0; layer--)
         {
             using var shadow = Rounded(new RectangleF(3 - layer, 5 - layer, Width - 6 + layer * 2, Height - 10 + layer * 2), DashboardPalette.CardRadius);
-            using var ink = new SolidBrush(Color.FromArgb(12, Color.Black));
+            using var ink = new SolidBrush(Color.FromArgb((int)(255 * (DashboardPalette.IsLight(this) ? DashboardPalette.CardShadowLight : DashboardPalette.CardShadowDark) / 3), Color.Black));
             e.Graphics.FillPath(ink, shadow);
         }
         using var shape = Rounded(new RectangleF(2, 2, Width - 5, Height - 7), DashboardPalette.CardRadius);

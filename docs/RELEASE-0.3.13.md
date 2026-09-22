@@ -93,16 +93,25 @@ All retained remains available in the separate account-history browser, which
 reads the selected account archive and shows unknown gaps without fabricated
 observations. The change leaves retention, counters and account boundaries intact.
 
-Swift and Windows compilation and native self-tests passed. The Windows synthetic
-dashboard interaction fixture passed, including renamed-period selection, and
-17 targeted archive, gap and audit regressions passed. These source changes are
-not yet in the installed build 28 packages. Full cross-platform style acceptance
-remains open.
+A shared native token file now supplies both palettes, type sizes, spacing and
+card dimensions. Windows links and selected chips follow the same accent. Tokens
+and Activity place their headline, chart and coverage note in one card with soft
+monochrome bars. The archive entry is a compact action. Windows Settings uses
+grouped sections and wrapping action pills, and Activity coverage timestamps use
+local date and time.
+
+Swift and Windows compilation and native self-tests passed. The synthetic Windows
+dashboard fixture verified navigation, source settings, device callbacks, consent
+and theme changes. Bundled-font Mac previews cover light and dark Allowances,
+Tokens, Activity and Settings, plus enlarged text and dashed archive gaps. Twenty
+focused theme, archive and documentation checks passed. These source changes are
+not yet in the installed build 28 packages. Installed interaction and motion
+acceptance remains open.
 
 ## Build 27 verification, September 21
 
 Build 27 pins Node 24.21.0, with OpenSSL 3.5.8 and SQLite 3.53.4.
-The installed applications have not yet been replaced.
+The build 27 observations below predate the build 28 installations recorded above.
 
 The [clean Mac run](https://github.com/ScribleSean/observatory/actions/runs/35656225687)
 passed at source `ae5451e8413b43b4ca0d03ee8ef209d3fd730841`, including
@@ -584,8 +593,8 @@ unverified.
 
 ## Gates remaining
 
-- Upgrade verification against installed Mac build 22 and Windows build 23,
-  preserving private data and a recoverable previous application.
+- Package and install the native UX follow-up, preserving saved data and
+  recoverable build 28 applications.
 - Installed interface and collection checks, signing/distribution limitations,
   clean-machine and lifecycle coverage described in the release checklist.
 

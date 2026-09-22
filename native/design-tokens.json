@@ -1,0 +1,28 @@
+{
+  "colors": {
+    "background": ["EDEAE5", "1C1D1B"],
+    "surface": ["F4F1EC", "272825"],
+    "text": ["292D28", "F0EEE8"],
+    "muted": ["64695F", "B3B7AC"],
+    "strong": ["364632", "DCE6D2"],
+    "accent": ["586F50", "ADC29D"],
+    "track": ["DADBD3", "3B3E37"]
+  },
+  "metrics": {
+    "cardRadius": 16,
+    "cardPadding": 16,
+    "titleSize": 22,
+    "sectionSize": 19,
+    "bodySize": 14.5,
+    "metaSize": 12,
+    "chartLabelSize": 11,
+    "metricSize": 38,
+    "titleTracking": -0.7,
+    "sectionTracking": -0.5,
+    "cardShadowLight": 0.07,
+    "cardShadowDark": 0.22,
+    "cardShadowRadius": 12,
+    "cardShadowOffset": 6
+  },
+  "spacing": [4, 8, 12, 16, 24]
+}

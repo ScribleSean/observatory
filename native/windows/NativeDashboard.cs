@@ -7,10 +7,10 @@ internal sealed partial class NativeDashboard : Form
 {
     private readonly Func<JsonObject?> read;
     private readonly Func<Task> refresh;
-    private readonly Font regular = DashboardTypography.AtPixels(14.5f);
-    private readonly Font heading = DashboardTypography.AtPixels(22, FontStyle.Bold);
-    private readonly Font metric = DashboardTypography.AtPixels(38, FontStyle.Bold);
-    private readonly Font brand = DashboardTypography.AtPixels(19, FontStyle.Bold);
+    private readonly Font regular = DashboardTypography.AtPixels(DashboardPalette.BodySize);
+    private readonly Font heading = DashboardTypography.AtPixels(DashboardPalette.TitleSize, FontStyle.Bold);
+    private readonly Font metric = DashboardTypography.AtPixels(DashboardPalette.MetricSize, FontStyle.Bold);
+    private readonly Font brand = DashboardTypography.AtPixels(DashboardPalette.SectionSize, FontStyle.Bold);
     private readonly ListBox sections = new() { Dock = DockStyle.Left, Width = 170, BorderStyle = BorderStyle.None, ItemHeight = 38 };
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private string host = "Windows", period = "Day", anchor = "";
@@ -252,7 +252,8 @@ internal sealed partial class NativeDashboard : Form
         {
             var archive = NativeHistory.Rows(snapshot?["activityHistory"]).FirstOrDefault(row => Snapshot.Text(row["host"]) == (host == "All" ? "Combined" : host));
             Label(Snapshot.Text(archive?["trackingMessage"], "Tracking freshness is unknown for this saved snapshot."));
-            Label("Last tracking coverage: " + Snapshot.Text(archive?["trackingThrough"]));
+            Label("Last tracking coverage: " + (DateTimeOffset.TryParse(Snapshot.Text(archive?["trackingThrough"]), out var through)
+                ? through.ToLocalTime().ToString("g") : "Unknown")).ForeColor = Color.Silver;
             showActivityHelp = days.Length > 0 && archive is not null && Snapshot.Text(archive["latestReadStatus"]) != "ok";
         }
         if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity") ActivityWatchHelp(); return; }
@@ -262,10 +263,13 @@ internal sealed partial class NativeDashboard : Form
         var selected = NativeHistory.Select(days, period, anchor);
         var field = kind == "activity" ? "seconds" : "totalTokens";
         var total = NativeHistory.Sum(selected, field);
+        var historyStart = body.Controls.Count;
+        Label(kind == "tokens" ? "SAVED TOKENS" : "FOREGROUND TIME").ForeColor = Color.Silver;
         Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " tokens", true);
-        Label($"{selected.Length} recorded {(selected.Length == 1 ? "date" : "dates")}. Missing dates are not filled with zeros.");
-        Label("Selected recorded days (up to 30 shown)");
-        AddCard(new DashboardHistoryChart(selected, kind == "tokens"), "Recorded history");
+        Label($"{selected.Length} recorded {(selected.Length == 1 ? "date" : "dates")}").ForeColor = Color.Silver;
+        body.Controls.Add(new DashboardHistoryChart(selected, kind == "tokens"));
+        Label("Up to 30 recorded days shown. Missing dates are not filled with zeros.").ForeColor = Color.Silver;
+        GroupAccountRows(historyStart, "Recorded history");
         var details = new DashboardButton { Text = showRecordedHistory ? "Hide recorded values" : "Show recorded values", AutoSize = true, Height = 40 };
         details.Click += (_, _) => { showRecordedHistory = !showRecordedHistory; Reload(); };
         body.Controls.Add(details);
@@ -292,23 +296,10 @@ internal sealed partial class NativeDashboard : Form
     {
         if (readArchive is not null)
         {
-            var content = new FlowLayoutPanel { Font = regular, FlowDirection = FlowDirection.TopDown, WrapContents = false, Width = Math.Max(240, ContentWidth - 32) };
-            content.Controls.Add(new Label { Text = "All-time usage history", Font = brand, AutoSize = true });
-            content.Controls.Add(new Label { Text = "Explore saved usage percentages by day, week or all retained dates. Accounts stay separate; missing observations stay unknown.",
-                AutoSize = true, MaximumSize = new Size(Math.Max(240, ContentWidth - 56), 0), Margin = new Padding(3, 8, 3, 12) });
-            var history = new DashboardButton { Text = "Browse saved history", AutoSize = true };
+            var history = new DashboardButton { Text = "Browse saved history", AutoSize = true,
+                AccessibleDescription = "Browse all retained allowance readings by day, week or all retained dates." };
             history.Click += (_, _) => { using var window = new QuotaArchiveWindow(readArchive, lightMode: lightMode); window.ShowDialog(this); };
-            content.Controls.Add(history);
-            content.Height = content.GetPreferredSize(new Size(content.Width, 0)).Height;
-            AddCard(content, "All-time usage history");
-            void FitHistoryCard()
-            {
-                foreach (var label in content.Controls.OfType<Label>())
-                    label.MaximumSize = new Size(Math.Max(1, content.ClientSize.Width - label.Margin.Horizontal), 0);
-                content.Parent!.Height = content.GetPreferredSize(new Size(content.ClientSize.Width, 0)).Height + content.Parent.Padding.Vertical;
-            }
-            content.ClientSizeChanged += (_, _) => FitHistoryCard();
-            FitHistoryCard();
+            body.Controls.Add(history);
         }
         Label("Observed on this device");
         AccountAllowance(snapshot?["quota"] as JsonObject);

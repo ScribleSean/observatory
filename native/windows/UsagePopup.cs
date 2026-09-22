@@ -6,10 +6,10 @@ namespace WorkspaceObservatory;
 
 internal sealed class UsagePopup : Form
 {
-    private readonly Font normalFont = DashboardTypography.AtPixels(14.5f);
-    private readonly Font headingFont = DashboardTypography.AtPixels(19, FontStyle.Bold);
-    private readonly Font titleFont = DashboardTypography.AtPixels(22, FontStyle.Bold);
-    private readonly Font valueFont = DashboardTypography.AtPixels(22, FontStyle.Bold);
+    private readonly Font normalFont = DashboardTypography.AtPixels(DashboardPalette.BodySize);
+    private readonly Font headingFont = DashboardTypography.AtPixels(DashboardPalette.SectionSize, FontStyle.Bold);
+    private readonly Font titleFont = DashboardTypography.AtPixels(DashboardPalette.TitleSize, FontStyle.Bold);
+    private readonly Font valueFont = DashboardTypography.AtPixels(DashboardPalette.TitleSize, FontStyle.Bold);
     private readonly Font secondaryFont = DashboardTypography.AtPixels(13);
     private readonly Func<JsonObject?> read;
     private readonly Func<Task> refresh;

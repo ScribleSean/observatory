@@ -74,7 +74,10 @@ internal sealed class DashboardHistoryChart : Control
         var plot = new RectangleF(12, 22, Width - 90, Height - 52);
         var maximum = Math.Max(1, values.Where(row => row.value is not null).Select(row => row.value!.Value).DefaultIfEmpty(0).Max());
         using var grid = new Pen(DashboardPalette.Grid(this));
-        using var ink = new SolidBrush(Color.FromArgb((int)(255 * inkOpacity), DashboardPalette.Accent(DashboardPalette.IsLight(this))));
+        var accent = DashboardPalette.Accent(DashboardPalette.IsLight(this));
+        using var ink = new SolidBrush(Color.FromArgb((int)(255 * inkOpacity), accent));
+        using var wash = new LinearGradientBrush(plot, Color.FromArgb((int)(255 * inkOpacity), accent),
+            Color.FromArgb((int)(204 * inkOpacity), accent), LinearGradientMode.Vertical);
         for (var line = 0; line <= 2; line++)
         {
             var y = plot.Bottom - plot.Height * line / 2;
@@ -94,7 +97,7 @@ internal sealed class DashboardHistoryChart : Control
                 else
                 {
                     using var bar = DashboardCard.Rounded(new RectangleF(center - barWidth / 2, plot.Bottom - height, barWidth, height), Math.Min(4, Math.Min(barWidth, height) / 2));
-                    g.FillPath(ink, bar);
+                    g.FillPath(wash, bar);
                 }
             }
             if (i % Math.Max(1, (int)Math.Ceiling(values.Length / 5.0)) == 0)

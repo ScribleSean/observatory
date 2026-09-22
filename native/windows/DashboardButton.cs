@@ -33,7 +33,9 @@ internal sealed class DashboardButton : Button
         e.Graphics.FillPath(shadow, shadowPath);
         using var shape = DashboardCard.Rounded(rect, radius);
         var lift = pressed ? 2 : hovered ? 24 : 14;
-        var highlight = Color.FromArgb(Math.Min(255, BackColor.R + lift), Math.Min(255, BackColor.G + lift), Math.Min(255, BackColor.B + lift));
+        // Keep pale selected text readable across the whole light-mode gradient.
+        if (AccessibleDescription == "Selected" && ForeColor.GetBrightness() > .5f) lift = -lift;
+        var highlight = Color.FromArgb(Math.Clamp(BackColor.R + lift, 0, 255), Math.Clamp(BackColor.G + lift, 0, 255), Math.Clamp(BackColor.B + lift, 0, 255));
         using var fill = new LinearGradientBrush(rect, highlight, BackColor, LinearGradientMode.Vertical);
         e.Graphics.FillPath(fill, shape);
         TextRenderer.DrawText(e.Graphics, Text, Font, Rectangle.Round(rect), Enabled ? ForeColor : Color.Gray,

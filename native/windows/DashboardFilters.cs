@@ -19,17 +19,18 @@ internal sealed class DashboardFilters : Panel
                 Text = label, AccessibleName = label, Tag = value,
                 Width = Math.Max(82, TextRenderer.MeasureText(label, Font).Width + 28), Height = 38,
                 FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 8, 8),
-                BackColor = value == selected ? Color.FromArgb(177, 195, 161) : DashboardCard.Surface,
-                ForeColor = value == selected ? Color.FromArgb(28, 29, 27) : Color.WhiteSmoke,
+                BackColor = value == selected ? DashboardPalette.Accent(false) : DashboardCard.Surface,
+                ForeColor = value == selected ? DashboardPalette.Background(false) : DashboardPalette.Text(false),
                 AccessibleDescription = value == selected ? "Selected" : "Not selected"
             };
             button.FlatAppearance.BorderSize = 0;
             button.Click += (_, _) => {
+                var light = DashboardPalette.IsLight(this);
                 foreach (Button chip in chips.Controls)
                 {
                     var active = Equals(chip.Tag, value);
-                    chip.BackColor = active ? Color.FromArgb(177, 195, 161) : DashboardCard.Surface;
-                    chip.ForeColor = active ? Color.FromArgb(28, 29, 27) : ForeColor;
+                    chip.BackColor = active ? DashboardPalette.Accent(light) : DashboardPalette.Surface(light);
+                    chip.ForeColor = active ? DashboardPalette.Background(light) : DashboardPalette.Text(light);
                     chip.AccessibleDescription = active ? "Selected" : "Not selected";
                 }
                 changed(value);
