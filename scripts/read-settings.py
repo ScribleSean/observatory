@@ -24,7 +24,7 @@ def tool_identifier(value, fallback):
 
 def inventory_metadata(meta, salt):
     """Ephemeral comparison keys only. The collector never saves these keys."""
-    payload = meta.get('payload', {}) if meta.get('type') == 'session_meta' else {}
+    payload = meta.get('payload', {}) if isinstance(meta, dict) and meta.get('type') == 'session_meta' else {}
     if not isinstance(payload, dict):
         return None
     def keys(values):
@@ -194,10 +194,12 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
             first = stream.readline(1_000_000)
         try:
             meta = json.loads(first)
-            identity = meta.get('payload',{}).get('id') if meta.get('type') == 'session_meta' else None
         except ValueError:
             meta = {}
-            identity = None
+        payload = meta.get('payload') if isinstance(meta, dict) and meta.get('type') == 'session_meta' else None
+        identity = payload.get('id') if isinstance(payload, dict) else None
+        if not isinstance(identity, str) or not identity:
+            inventory['status'] = 'incomplete'
         if salt:
             metadata = inventory_metadata(meta, salt)
             if metadata:
@@ -208,7 +210,7 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
         identity = identity if isinstance(identity, str) and identity else str(file)
         if identity not in sessions or info.st_size > sessions[identity][1].st_size:
             sessions[identity] = (file,info)
-            selected_metadata[identity] = meta.get('payload', {})
+            selected_metadata[identity] = payload if isinstance(payload, dict) else {}
     for identity, payload in selected_metadata.items():
         lineage(identity)
         for parent in (payload.get('forked_from_id'), payload.get('parent_thread_id')):
