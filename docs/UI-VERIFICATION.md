@@ -2,9 +2,15 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Mac build 30 package and replacement, September 22
+
+The Mac package, native checks, and synthetic demo passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`; the package run reported 557 passes and 15 platform skips. The retained ZIP passed full-manifest and strict nested-signature verification. An approved recoverable replacement installed build 30, retained build 29 for recovery, and left seven specifically checked configuration, snapshot, and private-allowance files unchanged.
+
+The desktop is locked and the new process has not yet produced a post-restart collection or UI observation. This is package and replacement evidence, not build-30 visual, motion, keyboard, or accessibility acceptance. Windows remains installed at build 29 while build-30 packaging is pending.
+
 ## Installed build 29 review, September 22
 
-Both development devices run build 29 from `c23ad3b`. On Mac, Settings was reviewed in light and dark appearances at a standard window size, and Tokens and Activity were reviewed with all seven sidebar destinations, including Agents, present. The 02:47:18 UTC collection reported 12 of 13 reads because ActivityWatch was unavailable; the compact panel reported that point-in-time status without presenting missing data as zero. A later scheduled collection also missed the shared Mac Codex read used by Tokens and Settings. That read recovered automatically at 03:06:20 UTC, restoring 12 of 13 reads. The transient failure's cause is not established. These are point-in-time source checks. Windows build 29 had already completed a seven-source verification.
+At this review, both development devices ran build 29 from `c23ad3b`. On Mac, Settings was reviewed in light and dark appearances at a standard window size, and Tokens and Activity were reviewed with all seven sidebar destinations, including Agents, present. The 02:47:18 UTC collection reported 12 of 13 reads because ActivityWatch was unavailable; the compact panel reported that point-in-time status without presenting missing data as zero. A later scheduled collection also missed the shared Mac Codex read used by Tokens and Settings. That read recovered automatically at 03:06:20 UTC, restoring 12 of 13 reads. The transient failure's cause is not established. These are point-in-time source checks. Windows build 29 had already completed a seven-source verification.
 
 On Mac, the saved-account archive was checked through account selection, all-saved-date selection, loading, Day/Week/All retained graphs, dashed unknown gaps and raw-record pagination. Command-Return loaded the selected range. Command-Right while a date field held focus did not demonstrably page, so this is not claimed as a verified shortcut. Legacy pairing and direct-pair preview were opened and cancelled; the direct-pair cancellation retained saved state and did not create an invitation or identity.
 
