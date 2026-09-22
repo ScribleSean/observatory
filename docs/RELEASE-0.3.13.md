@@ -2,7 +2,7 @@
 
 Status: development build 28 from source `97f1f1a1661cacbe92b76d47adf9a09439de6d3d` is installed on Mac and Windows. Build 29 artifacts from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86` are locally verified and staged, but are not installed. Neither is published as a production release.
 
-## Build 29 verification, September 21
+## Build 29 verification, September 22 UTC
 
 Build 29 is a source and artifact checkpoint for the native UX follow-up below. It has not completed installed-app or live interaction acceptance.
 
@@ -15,7 +15,7 @@ The [clean Mac build 29 run](https://github.com/ScribleSean/observatory/actions/
 The local Windows build at the same source passed 526 tests with 46 platform skips and no failures. Its full 3,068-file manifest passed for an unpacked candidate of 268,902,556 bytes. The retained manifest SHA-256 is `f35a95b3ed574ff6dac63655fed66dd305d535f98a9bfcef1c90ef380bd26c86`. The separate TEST installer passed. The ordinary unsigned installer is retained but has not been executed.
 
 - Ordinary installer: 100,443,284 bytes, SHA-256 `f83fbefdea10de1a29747b97f7c6df20b1817e89e5dd27fed158c9f97ba5b8a6`.
-- The hosted Windows verification run is still in progress and is not evidence of a completed package or installation check.
+- The [hosted Windows verification run](https://github.com/ScribleSean/observatory/actions/runs/35678894118) is still in progress and is not evidence of a completed package or installation check.
 
 ## Build 28 permission-check repair
 
@@ -101,7 +101,7 @@ Build 29 contains this follow-up. Its artifacts are locally verified and staged;
 the installed applications remain build 28 until their separate development
 upgrades complete.
 
-The next style slice keeps the existing Mono Charts, Apple composition and Hart
+The style follow-up keeps the existing Mono Charts, Apple composition and Hart
 direction. Windows token-class tables now use readable metric labels. Mac Activity
 keeps saved-history and tracking status visible, with detailed recovery guidance
 in an expandable section. Both daily-history views use singular date wording for
