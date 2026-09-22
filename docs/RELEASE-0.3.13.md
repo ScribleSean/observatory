@@ -1,6 +1,21 @@
 # Observatory 0.3.13 candidate
 
-Status: development build 28 is installed on Mac and Windows. Neither is published as a production release.
+Status: development build 28 from source `97f1f1a1661cacbe92b76d47adf9a09439de6d3d` is installed on Mac and Windows. Build 29 artifacts from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86` are locally verified and staged, but are not installed. Neither is published as a production release.
+
+## Build 29 verification, September 21
+
+Build 29 is a source and artifact checkpoint for the native UX follow-up below. It has not completed installed-app or live interaction acceptance.
+
+The [clean Mac build 29 run](https://github.com/ScribleSean/observatory/actions/runs/35678888315) passed at source `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`, with 557 test passes, 15 platform skips and no failures. The retained ZIP was independently verified locally against its checksum, all 1,863 manifest entries and strict nested signatures.
+
+- ZIP size: 68,367,959 bytes. Unpacked app: 197,329,754 bytes.
+- ZIP SHA-256: `44c46f9f630eb5d8347c8ff4bb84d9b666a8d468da764b7b6b6b0c01e9801c32`.
+- Signing remains ad hoc, without notarization. Mac replacement remains pending a normal Quit.
+
+The local Windows build at the same source passed 526 tests with 46 platform skips and no failures. Its full 3,068-file manifest passed for an unpacked candidate of 268,902,556 bytes. The retained manifest SHA-256 is `f35a95b3ed574ff6dac63655fed66dd305d535f98a9bfcef1c90ef380bd26c86`. The separate TEST installer passed. The ordinary unsigned installer is retained but has not been executed.
+
+- Ordinary installer: 100,443,284 bytes, SHA-256 `f83fbefdea10de1a29747b97f7c6df20b1817e89e5dd27fed158c9f97ba5b8a6`.
+- The hosted Windows verification run is still in progress and is not evidence of a completed package or installation check.
 
 ## Build 28 permission-check repair
 
@@ -82,8 +97,9 @@ coverage or full native interaction acceptance.
 
 ## Native UX follow-up in source
 
-Build 29 is the next development candidate for this follow-up. Packaging and
-installed verification are pending. The installed applications remain build 28.
+Build 29 contains this follow-up. Its artifacts are locally verified and staged;
+the installed applications remain build 28 until their separate development
+upgrades complete.
 
 The next style slice keeps the existing Mono Charts, Apple composition and Hart
 direction. Windows token-class tables now use readable metric labels. Mac Activity
@@ -107,9 +123,8 @@ Swift and Windows compilation and native self-tests passed. The synthetic Window
 dashboard fixture verified navigation, source settings, device callbacks, consent
 and theme changes. Bundled-font Mac previews cover light and dark Allowances,
 Tokens, Activity and Settings, plus enlarged text and dashed archive gaps. Twenty
-focused theme, archive and documentation checks passed. These source changes are
-not yet in the installed build 28 packages. Installed interaction and motion
-acceptance remains open.
+focused theme, archive and documentation checks passed. Installed interaction,
+motion and accessibility acceptance remains open.
 
 ## Build 27 verification, September 21
 

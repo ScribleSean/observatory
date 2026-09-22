@@ -30,13 +30,13 @@ Missing data stays missing. Estimates stay labeled. Token counts are not subscri
 
 The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional allowance-history exchange is tested with fictional records. Real-device allowance sharing remains unverified and is off on the development pair.
 
-Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Recent allowance graphs use a bounded snapshot. Current Mac and Windows source includes an owner-local saved-history browser with usage-% charts and no automatic archive expiry. This source checkpoint is not an installer release. See [history coverage and recovery](docs/USAGE-LIMITS.md).
+Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Recent allowance graphs use a bounded snapshot. The staged build 29 development candidate includes an owner-local saved-history browser with usage-% charts and no automatic archive expiry. It is not a public installer release. See [history coverage and recovery](docs/USAGE-LIMITS.md).
 
 ## Try it
 
 **[Open the interactive demo](https://scriblesean.github.io/observatory/)** to explore fictional records without connecting any accounts or devices.
 
-The project is an early preview tested on one Mac, Windows and WSL setup. Verified Mac ZIP and Windows installer candidates have been installed on the development machines. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md#build-25-development-upgrade-september-17).
+The project is an early preview tested on one Mac, Windows and WSL setup. Build 28 remains installed on the development machines; build 29 artifacts are staged for a recorded development upgrade. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md).
 
 | Platform | Current status |
 | --- | --- |
