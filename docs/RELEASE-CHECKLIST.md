@@ -4,11 +4,11 @@ Status reviewed September 22, 2026 UTC. A passing development-machine test is no
 
 ## Current development state
 
-The development Mac runs **0.3.13, build 30** from `106f607`, while Windows remains on build 29 from `c23ad3b`. Mac package and recoverable replacement checks passed. Its scheduled collection completed with ActivityWatch unavailable and an optional agent-receipt timeout. The locked desktop prevents build-30 UI checks. Windows build-30 packaging passed locally; hosted verification and installation remain pending. Source synchronization does not update installed binaries.
+Both development devices run **0.3.13, build 30** from `106f607`. Mac package and replacement checks passed; its scheduled collection remained partial with ActivityWatch unavailable and an optional agent-receipt timeout. The locked desktop prevents Mac build-30 UI checks. Windows package, TEST installer lifecycle, hosted synthetic signed-update checks, and the ordinary upgrade passed; its first installed collection read all seven configured sources successfully. These point-in-time results do not establish the timeout cause or build-30 UI acceptance. Source synchronization does not update installed binaries.
 
 The Mac build-30 result and the historical build-29 package/install results do not establish full visual, motion, or accessibility acceptance. See the [build 30 record](RELEASE-0.3.13.md#mac-build-30-verification-september-22-utc), the [build 29 record](RELEASE-0.3.13.md#build-29-verification-september-22-utc), and the [audit reconciliation](AUDIT-STATUS.md) for dated interaction evidence and limits.
 
-The Mac build-30 replacement and Windows build-29 upgrade retained recovery payloads and their checked saved data. Mac remains ad-hoc signed, Windows remains unsigned, and production updates are unavailable. Repeated Documents prompts remain a [Mac permission continuity limitation](MAC-PERMISSIONS.md). The release is unpublished.
+Both build-30 installations retained checked saved state. Mac remains ad-hoc signed, Windows remains unsigned, and production updates are unavailable. Repeated Documents prompts remain a [Mac permission continuity limitation](MAC-PERMISSIONS.md). The release is unpublished.
 
 The table below retains revision-specific historical evidence. References to older installed or staged versions describe those earlier checks, not the current installation. They do not establish clean-install coverage for build 30.
 
@@ -36,7 +36,7 @@ Binary candidates retain their embedded source revisions even when later source-
 
 ## Required release gates still open
 
-The Mac build-30 replacement and recorded Windows build-29 upgrade supersede the older development installation blockers. The remaining gates below still require evidence beyond those successful development upgrades.
+The recorded build-30 installations supersede the older development installation blockers. The remaining gates below still require evidence beyond those successful development upgrades.
 
 - **Private connection:** both installed development collectors incorporated recent peer activity, token, settings and dictation records in the September 13 UTC read-only check. Combined activity and token validation succeeded on both sides, with allowance sharing off. See [installed collection evidence](PRIVATE-SYNC.md#installed-live-collection-september-13-2026-utc). Complete rendered-dashboard verification, authenticated repair/rotation, actual network-disconnection recovery and the remaining native onboarding/confirmation checks. Repeated-transfer and overlap tests do not prove every recovery path. Retain migration backups.
 - **Mac distribution:** the [build 30 ZIP](RELEASE-0.3.13.md#mac-build-30-verification-september-22-utc) passed its full manifest and strict deep signature checks. Its app is installed on the development Mac and remains ad-hoc signed, unnotarized and unpublished. Stable signing identity, permission continuity, clean-environment installation and broader upgrade verification remain open. Older DMG checks are not build-30 DMG evidence.

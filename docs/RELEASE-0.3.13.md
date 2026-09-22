@@ -1,18 +1,18 @@
 # Observatory 0.3.13 candidate
 
-Status: The development Mac runs **0.3.13, build 30** from `106f607421c17ba551cb78bb14ffe4f678ba9428`. Windows remains on build 29 from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`; Windows build-30 packaging and installation are pending. Neither is published as a production release.
+Status: Both development devices run **0.3.13, build 30** from `106f607421c17ba551cb78bb14ffe4f678ba9428`. Neither is published as a production release.
 
 ## Mac build 30 verification, September 22 UTC
 
 The [Mac package run](https://github.com/ScribleSean/observatory/actions/runs/35682004953), [native checks](https://github.com/ScribleSean/observatory/actions/runs/35682005581), and [synthetic demo](https://github.com/ScribleSean/observatory/actions/runs/35682005523) passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`. The package run reported 557 passes, 15 platform skips, and no failures. The retained ZIP is 68,371,991 bytes with SHA-256 `02cee9533a616f1a4768266261ccc0e1b15d63bb398931dd9d3bc164b3e3018e`; its 1,863-file manifest covers 197,344,730 unpacked bytes and passed full-manifest and strict nested-signature verification.
 
-An approved recoverable replacement installed build 30 after build 29. The prior build remains available for recovery, and seven specifically checked configuration, snapshot, and private-allowance files were unchanged. Scheduled collections at 03:23:18 and 03:28:18 UTC completed partial at 11 of 13 reads. Mac, Windows, and Ubuntu token and settings reads succeeded in the first check. Mac ActivityWatch was unavailable, and the optional agent-receipt reader reported `read-timeout` in both checks. The timeout does not establish a permission cause. The desktop remains locked, so no build-30 UI acceptance is claimed.
+An approved replacement installed build 30 and retained checked state. Scheduled collections at 03:23:18 and 03:28:18 UTC completed partial at 11 of 13 reads. Mac, Windows, and Ubuntu token and settings reads succeeded in the first check. Mac ActivityWatch was unavailable, and the optional agent-receipt reader reported `read-timeout` in both checks. The timeout does not establish a permission cause. The desktop remains locked, so no build-30 UI acceptance is claimed.
 
 ## Windows build 30 package, September 22 UTC
 
 The local Windows package and TEST installer lifecycle passed with 526 tests, 46 platform skips, and no failures. The candidate has 3,068 files and 268,902,556 unpacked bytes; its manifest SHA-256 is `6c8a8ef27f62589c0bcd269cfa9754437fbc48e0a8a00a2229b1dee7ee288160`. The ordinary unsigned installer is 100,443,268 bytes with SHA-256 `9626f885c113c7efddaf9d115c201fbc3b9104c35224d86dd08f75afa9e41bc6`.
 
-The [hosted Windows verification run](https://github.com/ScribleSean/observatory/actions/runs/35682006145) is pending. The ordinary Windows build-29 installation is unchanged; no build-30 activation result is claimed.
+The [hosted Windows verification run](https://github.com/ScribleSean/observatory/actions/runs/35682006145) passed full package, TEST installer lifecycle, and complete synthetic signed-update checks. The ordinary upgrade installed `106f607` as `0.3.13.30`, preserved checked saved-state hashes, reached normal startup and readiness, and completed a 03:37:46.819–03:37:51.320 UTC collection with all seven configured sources OK. The app remains running and the completed launcher was removed. The signed-update lifecycle uses a synthetic signer only; it is not production-update evidence.
 
 ## Build 29 verification, September 22 UTC
 
@@ -129,7 +129,7 @@ coverage or full native interaction acceptance.
 
 ## Native UX follow-up in source
 
-Build 29 contains this follow-up and is installed on both development devices.
+Build 29 contains this follow-up and was installed on both development devices before build 30.
 
 The style follow-up keeps the existing Mono Charts, Apple composition and Hart
 direction. Windows token-class tables now use readable metric labels. Mac Activity
@@ -154,7 +154,7 @@ dashboard fixture verified navigation, source settings, device callbacks, consen
 and theme changes. Bundled-font Mac previews cover light and dark Allowances,
 Tokens, Activity and Settings, plus enlarged text and dashed archive gaps. Twenty
 focused theme, archive and documentation checks passed. Installed interaction,
-motion and accessibility acceptance remains open. The later live Mac review also found long-history date clipping and an Activity chart missing an axis unit; the repair in `2cec866` passed native compilation, self-tests and synthetic narrow/enlarged chart review. It is not in build 29. It is included in the installed Mac build 30, whose UI acceptance remains pending; Windows build-30 packaging is pending.
+motion and accessibility acceptance remains open. The later live Mac review also found long-history date clipping and an Activity chart missing an axis unit; the repair in `2cec866` passed native compilation, self-tests and synthetic narrow/enlarged chart review. It is not in build 29. It is included in build 30 on both devices, whose UI acceptance remains pending.
 
 ## Build 27 verification, September 21
 
