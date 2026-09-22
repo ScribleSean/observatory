@@ -246,3 +246,24 @@ with tempfile.TemporaryDirectory() as directory:
 `;
   assert.deepEqual(JSON.parse(execPython(['-c',fixture],{input:JSON.stringify([usage(100),usage(200)])})),{ok:true});
 });
+
+test('malformed session metadata preserves local token counts but withholds inventory eligibility',()=>{
+  const fixture=code.slice(0,code.indexOf('print(json.dumps'))+`
+import pathlib,tempfile
+events=json.load(sys.stdin)
+for event in events: event['timestamp']=dt.datetime.now(dt.timezone.utc).isoformat()
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory); (root/'sessions').mkdir(); (root/'archived_sessions').mkdir()
+    for index,payload in enumerate([None, [], 'PRIVATE_METADATA']):
+        file=root/'sessions'/f'{index}.jsonl'
+        rows=[dict(type='session_meta',payload=payload)]+events
+        file.write_text('\\n'.join(json.dumps(row) for row in rows)+'\\n',encoding='utf-8')
+    m.INVENTORY_SALT='test-salt'
+    result=m.collect(root)
+    assert result['status']=='ok' and result['inventory']['status']=='incomplete'
+    assert sum(row['totalTokens'] for row in result['profiles'])==330
+    assert sum(row['totalTokens'] for row in result['tokenProfiles'])==330
+    print(json.dumps(dict(ok=True)))
+`;
+  assert.deepEqual(JSON.parse(execPython(['-c',fixture],{input:JSON.stringify([usage(100)])})),{ok:true});
+});
