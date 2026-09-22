@@ -1,6 +1,6 @@
 # September 15 audit follow-up
 
-Reviewed through September 22 against the original reports, repairs on main and development-machine checks. Both devices now run build 30 from `106f607`; package, installation, and point-in-time collection results are recorded in the [release notes](RELEASE-0.3.13.md). The unlocked Mac exposed native Allowances and all seven destinations, but further automated interaction failed at the control connection. Full build-30 UI acceptance remains open on both platforms. The [audit reports in PR #1](https://github.com/ScribleSean/observatory/pull/1) predate substantial repairs committed directly to main. The report-only PR is not a pending implementation patch.
+Reviewed through September 22 against the original reports, repairs on main and development-machine checks. Both devices now run build 30 from `106f607`. Package, installation, and point-in-time collection results are recorded in the [release notes](RELEASE-0.3.13.md). Native Mac Allowances, Tokens and all seven destinations were observed through accessibility, and the owner confirmed Source health loads. Repeated control-helper crashes block further automated interaction. Full build-30 UI acceptance remains open on both platforms. The [audit reports in PR #1](https://github.com/ScribleSean/observatory/pull/1) predate substantial repairs committed directly to main. The report-only PR is not a pending implementation patch.
 
 ## Completed source repairs
 
