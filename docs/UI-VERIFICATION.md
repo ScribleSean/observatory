@@ -6,7 +6,7 @@ Revision-specific development-machine checks. These results are not a full acces
 
 Mac build 30 from `106f607421c17ba551cb78bb14ffe4f678ba9428` passed package and replacement checks. See the [release record](RELEASE-0.3.13.md#mac-build-30-verification-september-22-utc) for exact artifacts and validation.
 
-The desktop is locked. Scheduled collection completed with ActivityWatch unavailable and an optional agent-receipt timeout, whose cause is unconfirmed. No Mac build-30 UI observation has occurred. Visual, motion, keyboard, and accessibility checks remain open. Windows now runs build 30 after successful package, TEST installer lifecycle, hosted synthetic signed-update, and ordinary-upgrade/runtime checks; those checks are not Windows UI acceptance.
+After unlock, the installed app exposed native Allowances and all seven navigation destinations through its accessibility tree. Selecting Source health failed at the control connection; resetting the control tool and restarting the app normally did not restore interaction. A process sample showed the app in its normal idle event loop, and source review found no demonstrated rendering defect. Visual, motion, keyboard and screen-reader checks remain open. Agent receipts recovered in an app collection at 04:03:08 UTC before the restart or diagnostic shell read; ActivityWatch remained unavailable. The earlier timeout cause is unconfirmed. Windows now runs build 30 after successful package, TEST installer lifecycle, hosted synthetic signed-update, and ordinary-upgrade/runtime checks; those checks are not Windows UI acceptance.
 
 ## Installed build 29 review, September 22
 
