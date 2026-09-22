@@ -27,6 +27,12 @@ test('demo is deterministic and covers every delivered view without live reads',
   assert.equal(d.demo,true);
   assert.equal(d.quota.history.length,25);
   assert.ok(quotaPace(d.quota,Date.parse(d.collectedAt)).every(p=>['projected','resets-first'].includes(p.status)));
+  assert.equal(d.peerQuota.host,'Windows');
+  assert.equal(d.peerQuota.windows[0].remainingPercent,43);
+  assert.notEqual(d.peerQuota.windows[0].remainingPercent,d.quota.windows[0].remainingPercent);
+  const peerOnly={...d,quota:undefined};
+  assert.equal(peerOnly.quota,undefined);
+  assert.equal(peerOnly.peerQuota.history.length,2);
   assert.equal(d.dictation.length,2);
   for (const source of d.dictation) {
     assert.equal(cleanDictation(source,source.host).status,'ok');

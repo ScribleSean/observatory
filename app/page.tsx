@@ -8,7 +8,7 @@ import { needsWindowsSetup } from '../scripts/setup-state.mjs';
 import WeekTimeline from './week-timeline';
 import ToolDetail from './tool-detail';
 import Dictation, {type DictationSource} from './dictation';
-import Allowances, {type Quota} from './allowances';
+import Allowances, {type PeerQuota, type Quota} from './allowances';
 import { selectTokenDays, aggregateProfiles } from '../scripts/token-periods.mjs';
 import telescopeMark from '../public/brand/telescope.svg';
 import {imageSource} from '../scripts/image-source.mjs';
@@ -90,6 +90,7 @@ type Report = {
   activityHistory?:ActivityRow[];
   agentSource?:{status:string;checkedAt?:string;skipped:number;limited:boolean};
   quota?: Quota;
+  peerQuota?: PeerQuota | null;
   localModel?: {status:string;checkedAt?:string;records?:{model:string;status:string;recordedAt:string|null;seconds:number|null;input:number|null;cached:number|null;output:number|null;ttft:number|null;peakGpuMiB:number|null}[]};
   settings?: {host:string;status:string;checkedAt?:string;snapshotStable?:boolean;profiles?:{date:string;model:string;effort:string;speed:string;totalTokens:number;inputTokens:number;cacheReadTokens:number;cacheCreationTokens:number;outputTokens:number}[];tools?:{date:string;category:string;count:number;tool?:string|null;namespace?:string}[]}[];
   combinedTokens?: {host:string;status:string;days?:Tokens[];verification?:{status:string}};
@@ -368,7 +369,7 @@ export default function Home() {
             </State>
           ) : (
             <>
-              <TabsContent value="allowances" className="view-panel"><Allowances quota={data.quota} demo={data.demo}/></TabsContent>
+              <TabsContent value="allowances" className="view-panel"><Allowances quota={data.quota} peerQuota={data.peerQuota} demo={data.demo}/></TabsContent>
               <TabsContent value="settings" className="view-panel">
                 <div className="view-heading"><div><h1>Settings</h1><p>Appearance and device configuration</p></div></div>
                 <section className="usage-card"><h2>Appearance</h2><p>Use the same calm palette in light or dark mode.</p><Button className="reload" onClick={toggleTheme}>{dark?'Switch to light mode':'Switch to dark mode'}</Button></section>

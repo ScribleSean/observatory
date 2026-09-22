@@ -62,6 +62,10 @@ export function demoData() {
         {bucket:'Example allowance',window:'Five-hour',remainingPercent:96-i,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'},
         {bucket:'Example allowance',window:'Weekly',remainingPercent:64-i*.25,durationMinutes:10080,resetsAt:'2026-09-14T00:00:00Z'},
       ]}))},
+    peerQuota:{host:'Windows',provider:'Codex',status:'stale',checkedAt:'2026-09-08T19:55:00.000Z',receivedAt:collectedAt,
+      windows:[{bucket:'Example allowance',window:'Five-hour',remainingPercent:43,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'}],
+      history:[{checkedAt:'2026-09-08T19:35:00.000Z',windows:[{bucket:'Example allowance',window:'Five-hour',remainingPercent:49,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'}]},
+        {checkedAt:'2026-09-08T19:55:00.000Z',windows:[{bucket:'Example allowance',window:'Five-hour',remainingPercent:43,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'}]}]},
     localModel:{status:'ok',checkedAt:collectedAt,records:[{model:'example-local-model',status:'complete',recordedAt:collectedAt,seconds:31,input:120,cached:0,output:60,ttft:null,peakGpuMiB:6200}]},
   };
 }

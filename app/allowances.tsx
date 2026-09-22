@@ -5,18 +5,20 @@ import {durationText} from '../scripts/display-format.mjs';
 
 type Window = {bucket:string; window:string; remainingPercent:number; durationMinutes:number|null; resetsAt:string|null};
 export type Quota = {status:string; checkedAt?:string; windows?:Window[]; history?:{checkedAt:string; windows:Window[]}[]};
+export type PeerQuota = Quota & {host?:string; provider?:string; receivedAt?:string};
 const duration = (milliseconds:number) => {
   const minutes = Math.max(0, Math.ceil(milliseconds / 60000));
   return durationText(minutes * 60);
 };
-export default function Allowances({quota, demo = false}:{quota?:Quota; demo?:boolean}) {
+export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, demo = false}:{quota?:Quota; peerQuota?:PeerQuota|null; receivedFrom?:string; receivedAt?:string; demo?:boolean}) {
   const [now, setNow] = useState(0);
   useEffect(() => { setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
   const clock = demo ? Date.parse(quota?.checkedAt || '') : now;
   const paces = Number.isFinite(clock) && clock > 0 ? quotaPace(quota, clock) : [];
   const windows = (quota?.windows || []).filter(w => !/spark|bengal[-_ ]?fox/i.test(w.bucket));
+  const peer = !receivedFrom && peerQuota && ['Mac','Windows'].includes(peerQuota.host || '') ? peerQuota : null;
   return <>
-    <div className="view-heading"><div><h1>Allowances</h1><p>{demo ? 'Fictional account history' : 'Observed on this device'}</p></div><span className="period-chip">{quota?.status === 'ok' ? 'Latest reading' : 'Saved source status'}</span></div>
+    <div className="view-heading"><div>{receivedFrom ? <h2>Shared from {receivedFrom}</h2> : <h1>Allowances</h1>}<p>{receivedFrom ? `Received: ${receivedAt || 'Unknown'}. Separate account observation, never added to this device's totals.` : demo ? 'Fictional account history' : 'Observed on this device'}</p></div><span className="period-chip">{quota?.status === 'ok' ? receivedFrom ? 'Received reading' : 'Latest reading' : 'Saved source status'}</span></div>
     {!windows.length && <div className="usage-card"><h2>No account connected</h2><p>Enable an available account source in local source settings. Saved token records are separate from account limits.</p></div>}
     <div className="usage-grid">{windows.map(w => {
       const pace = paces.find((p:{bucket:string;window:string}) => p.bucket === w.bucket && p.window === w.window);
@@ -63,5 +65,6 @@ export default function Allowances({quota, demo = false}:{quota?:Quota; demo?:bo
         </svg><small>Only observed intervals contribute. Missing readings are not zero.</small></>}
       </section>;
     })}</div>
+    {peer && <section aria-label={`Shared allowance history from ${peer.host}`}><Allowances quota={peer} receivedFrom={peer.host} receivedAt={peer.receivedAt} demo={demo}/></section>}
   </>;
 }
