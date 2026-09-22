@@ -2,6 +2,14 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Installed build 29 review, September 22
+
+Both development devices run build 29 from `c23ad3b`. On Mac, Settings was reviewed in light and dark appearances at a standard window size, and Tokens and Activity were reviewed with all seven sidebar destinations, including Agents, present. The 02:47:18 UTC collection reported 12 of 13 reads because ActivityWatch was unavailable; the compact panel reported that point-in-time status without presenting missing data as zero. A later scheduled collection had three unavailable Mac sources, so the earlier count is not a persistent-health claim. Windows build 29 had already completed a seven-source verification.
+
+On Mac, the saved-account archive was checked through account selection, all-saved-date selection, loading, Day/Week/All retained graphs, dashed unknown gaps and raw-record pagination. Command-Return loaded the selected range. Command-Right while a date field held focus did not demonstrably page, so this is not claimed as a verified shortcut. Legacy pairing and direct-pair preview were opened and cancelled; the direct-pair cancellation retained saved state and did not create an invitation or identity.
+
+The review found long-history date clipping and an Activity chart without an axis unit. Their source repairs are under verification and are not part of the installed build. Motion and reduced-motion behavior, complete native accessibility, and actual Windows tray interaction remain unverified. The Mac main process was observed idle in its normal AppKit event loop with no child process left behind; this is not evidence of every lifecycle path.
+
 ## Mac saved history follow-up, September 16
 
 A disposable copy of candidate source `73d1145` ran its synthetic archive preview
@@ -97,7 +105,7 @@ The `ca8c7e7` Mac ZIP includes these fixes and passed extraction plus relocated 
 
 - Complete every-control focus-order and screen-reader review, including populated views in both themes and enlarged layouts. The representative keyboard paths above are not an exhaustive accessibility audit.
 - Repeat the interaction and layout checks in Windows WebView2. A Windows web build does not prove Windows-native interaction behavior.
-- Complete the remaining release checks on the final candidate. The current ZIP and installer artifacts embed `ca8c7e7`; documentation-only commits do not change their embedded revision or require relabeling them.
+- Complete the remaining release checks on the installed build 29 and any later candidate. Documentation-only commits do not change an embedded artifact revision or require relabeling it.
 
 ## Mac disconnect failure and retry
 
