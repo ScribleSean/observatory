@@ -1,16 +1,16 @@
 # Observatory 0.3.13 candidate
 
-Status: Mac remains on development build 28 from source `97f1f1a`. Windows now runs build 29 from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`. The matching Mac build 29 is verified and staged for replacement after a normal Quit. Neither is published as a production release.
+Status: Both development devices run build 29 from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`. Neither is published as a production release.
 
 ## Build 29 verification, September 22 UTC
 
-Build 29 contains the native UX follow-up below. Windows installation and collection are verified; Mac replacement and full native interaction acceptance remain pending.
+Build 29 contains the native UX follow-up below. Both recoverable development upgrades and initial collections are verified. Full native interaction, motion and accessibility acceptance remain pending.
 
 The [clean Mac build 29 run](https://github.com/ScribleSean/observatory/actions/runs/35678888315) passed at source `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`, with 557 test passes, 15 platform skips and no failures. The retained ZIP was independently verified locally against its checksum, all 1,863 manifest entries and strict nested signatures.
 
 - ZIP size: 68,367,959 bytes. Unpacked app: 197,329,754 bytes.
 - ZIP SHA-256: `44c46f9f630eb5d8347c8ff4bb84d9b666a8d468da764b7b6b6b0c01e9801c32`.
-- Signing remains ad hoc, without notarization. Mac replacement remains pending a normal Quit.
+- Signing remains ad hoc, without notarization. The development installation is not a clean-machine or production-distribution result.
 
 The local Windows build at the same source passed 526 tests with 46 platform skips and no failures. Its full 3,068-file manifest passed for an unpacked candidate of 268,902,556 bytes. The retained manifest SHA-256 is `f35a95b3ed574ff6dac63655fed66dd305d535f98a9bfcef1c90ef380bd26c86`. The separate TEST installer passed. The ordinary unsigned installer subsequently completed the development upgrade recorded below.
 
@@ -29,7 +29,13 @@ The app acknowledged normal readiness as `0.3.13.29` and remained running. Its
 first collection completed at 02:39:56 UTC with all seven configured sources
 read successfully. The completed one-time upgrade launcher was removed. This
 verifies the installed payload and collection, not full visual, motion or
-accessibility acceptance. Mac remains build 28 until its normal Quit and upgrade.
+accessibility acceptance.
+
+## Mac build 29 development upgrade, September 22 UTC
+
+The staged Mac candidate replaced build 28 after a normal Quit. Full package-manifest and strict nested-signature checks passed before activation. The prior app remains in recovery, and seven specifically checked configuration, snapshot and private-allowance files were unchanged after replacement.
+
+The launched Settings view visibly reported build 29. The initial collection at 02:47:18 UTC was partial: 12 of 13 reads completed because ActivityWatch was unavailable. This verifies the installed payload, preserved checked state and an honest unavailable-source result. Later scheduled coverage changed and is recorded in source-coverage evidence; neither observation establishes complete screen-time coverage, motion, accessibility or every native interaction.
 
 ## Build 28 permission-check repair
 
@@ -111,8 +117,7 @@ coverage or full native interaction acceptance.
 
 ## Native UX follow-up in source
 
-Build 29 contains this follow-up and is installed on Windows. Its matching Mac
-artifact is verified and staged; the installed Mac app remains build 28.
+Build 29 contains this follow-up and is installed on both development devices.
 
 The style follow-up keeps the existing Mono Charts, Apple composition and Hart
 direction. Windows token-class tables now use readable metric labels. Mac Activity
@@ -137,7 +142,7 @@ dashboard fixture verified navigation, source settings, device callbacks, consen
 and theme changes. Bundled-font Mac previews cover light and dark Allowances,
 Tokens, Activity and Settings, plus enlarged text and dashed archive gaps. Twenty
 focused theme, archive and documentation checks passed. Installed interaction,
-motion and accessibility acceptance remains open.
+motion and accessibility acceptance remains open. The later live Mac review also found long-history date clipping and an Activity chart missing an axis unit; source repairs for those findings are under verification and are not in build 29.
 
 ## Build 27 verification, September 21
 
@@ -624,10 +629,8 @@ unverified.
 
 ## Gates remaining
 
-- Package and install the native UX follow-up, preserving saved data and
-  recoverable build 28 applications.
-- Installed interface and collection checks, signing/distribution limitations,
-  clean-machine and lifecycle coverage described in the release checklist.
+- Resolve and verify the post-build-29 native layout and chart-label findings.
+- Complete installed interaction, signing/distribution, clean-machine and lifecycle coverage described in the release checklist.
 
 No raw messages, transcripts, credentials or private snapshots belong in an
 artifact or its verification report. Synthetic fixtures are used for UI checks.
