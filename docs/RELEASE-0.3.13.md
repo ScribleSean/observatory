@@ -6,7 +6,13 @@ Status: The development Mac runs **0.3.13, build 30** from `106f607421c17ba551cb
 
 The [Mac package run](https://github.com/ScribleSean/observatory/actions/runs/35682004953), [native checks](https://github.com/ScribleSean/observatory/actions/runs/35682005581), and [synthetic demo](https://github.com/ScribleSean/observatory/actions/runs/35682005523) passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`. The package run reported 557 passes, 15 platform skips, and no failures. The retained ZIP is 68,371,991 bytes with SHA-256 `02cee9533a616f1a4768266261ccc0e1b15d63bb398931dd9d3bc164b3e3018e`; its 1,863-file manifest covers 197,344,730 unpacked bytes and passed full-manifest and strict nested-signature verification.
 
-An approved recoverable replacement installed build 30 after build 29. The prior build remains available for recovery, and seven specifically checked configuration, snapshot, and private-allowance files were unchanged. The new process is running, but the desktop is locked: no post-restart collection or build-30 UI acceptance is claimed. Windows build-30 outcomes are not yet available.
+An approved recoverable replacement installed build 30 after build 29. The prior build remains available for recovery, and seven specifically checked configuration, snapshot, and private-allowance files were unchanged. A scheduled collection ran from 03:22:59.794067 to 03:23:18.649147 UTC and completed partial at 11 of 13 reads. Mac, Windows, and Ubuntu token and settings reads were all OK. Mac ActivityWatch was unavailable, and the optional agent-receipt source had an unavailable fixed-diagnostic read timeout; that timeout does not establish a permission cause. The desktop remains locked, so no build-30 UI acceptance is claimed.
+
+## Windows build 30 package, September 22 UTC
+
+The local Windows package and TEST installer lifecycle passed with 526 tests, 46 platform skips, and no failures. The candidate has 3,068 files and 268,902,556 unpacked bytes; its manifest SHA-256 is `6c8a8ef27f62589c0bcd269cfa9754437fbc48e0a8a00a2229b1dee7ee288160`. The ordinary unsigned installer is 100,443,268 bytes with SHA-256 `9626f885c113c7efddaf9d115c201fbc3b9104c35224d86dd08f75afa9e41bc6`.
+
+The [hosted Windows verification run](https://github.com/ScribleSean/observatory/actions/runs/35682006145) is pending. The ordinary Windows build-29 installation is unchanged; no build-30 activation result is claimed.
 
 ## Build 29 verification, September 22 UTC
 

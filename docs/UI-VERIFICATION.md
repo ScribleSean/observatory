@@ -6,7 +6,7 @@ Revision-specific development-machine checks. These results are not a full acces
 
 The Mac package, native checks, and synthetic demo passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`; the package run reported 557 passes and 15 platform skips. The retained ZIP passed full-manifest and strict nested-signature verification. An approved recoverable replacement installed build 30, retained build 29 for recovery, and left seven specifically checked configuration, snapshot, and private-allowance files unchanged.
 
-The desktop is locked and the new process has not yet produced a post-restart collection or UI observation. This is package and replacement evidence, not build-30 visual, motion, keyboard, or accessibility acceptance. Windows remains installed at build 29 while build-30 packaging is pending.
+The desktop is locked. One post-restart scheduled collection completed partial with the known ActivityWatch and optional agent-receipt sources unavailable; successful token and settings reads do not establish the diagnostic timeout cause. No build-30 UI observation has occurred. This is package, replacement, and point-in-time collection evidence, not build-30 visual, motion, keyboard, or accessibility acceptance. Windows remains installed at build 29; its build-30 package passed locally, while hosted verification and installation are pending.
 
 ## Installed build 29 review, September 22
 
