@@ -35,7 +35,7 @@ accessibility acceptance.
 
 The staged Mac candidate replaced build 28 after a normal Quit. Full package-manifest and strict nested-signature checks passed before activation. The prior app remains in recovery, and seven specifically checked configuration, snapshot and private-allowance files were unchanged after replacement.
 
-The launched Settings view visibly reported build 29. The initial collection at 02:47:18 UTC was partial: 12 of 13 reads completed because ActivityWatch was unavailable. This verifies the installed payload, preserved checked state and an honest unavailable-source result. Later scheduled coverage changed and is recorded in source-coverage evidence; neither observation establishes complete screen-time coverage, motion, accessibility or every native interaction.
+The launched Settings view visibly reported build 29. The initial collection at 02:47:18 UTC was partial: 12 of 13 reads completed because ActivityWatch was unavailable. This verifies the installed payload, preserved checked state and an honest unavailable-source result. Later scheduled coverage changed, as recorded in the [installed UI review](UI-VERIFICATION.md#installed-build-29-review-september-22). Neither observation establishes complete screen-time coverage, motion, accessibility or every native interaction.
 
 ## Build 28 permission-check repair
 
