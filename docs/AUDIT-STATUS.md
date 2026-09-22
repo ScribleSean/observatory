@@ -10,6 +10,7 @@ Reviewed through September 22 against the original reports, repairs on main and 
 | Native-first guide and honest distribution instructions | `140dad9` made native setup primary. `11071b1` clarified demo/source distribution. `006dd98` documented Allowances as the landing view. |
 | Web peer allowances | Build 31 source renders received Mac or Windows allowances separately with host and localized receipt time. Shared readings use the existing observation validator and never contribute to local percentages or history. |
 | Malformed token session metadata | Build 31 source retains valid per-device usage when session metadata is malformed and marks its comparison inventory incomplete. Combined totals remain unavailable without verified identities. |
+| Configured peer unavailable before its first saved reading | `f061112` retains unavailable peer activity and token sources in health counts after transport failure, respecting configured host scope. Focused status, payload, revocation and synthetic TLS checks passed 22 tests. This follow-up is not in the retained build-31 packages. |
 | Native Refresh versus web Reload | `0d38a21` corrected the collection versus snapshot-reload documentation. |
 | Demo overwrite behavior | `2bdddc7` added the clear refusal path and preservation checks. |
 | Native Agents navigation and settings routes | `242711c` restored Agents on both native sidebars and removed the Mac redirect to Sources. The current source has the same seven native sections. |

@@ -22,6 +22,10 @@ The local final candidate at `0ad86df` passed package checks and the TEST instal
 
 The [final hosted Windows run](https://github.com/ScribleSean/observatory/actions/runs/35691764297) passed the complete clean-source package and isolated installer lifecycle at `0ad86df`, finishing at 06:10:21 UTC. Immediately before the ordinary upgrade attempt, the development checkout was clean at that source, the installed app was build 30, and no upgrade task or result receipt existed. The subsequent connection attempt and read-only follow-up timed out. Inspect existing task and receipt state after reconnecting before another launch. Build-31 ordinary installation and fresh installed collection remain unconfirmed.
 
+## Source follow-up after build 31
+
+`f061112` keeps configured peer activity and token sources visible as unavailable after a failed connection with no saved peer payload. Health counts include those failures, while excluded Ubuntu scope stays disabled. Standalone collection, saved peer records and the existing freshness limit for combined totals are unchanged. The focused status, payload, revocation and synthetic TLS checks passed 22 tests. This source change is not in the retained or installed build-31 binaries and still needs package and installed verification.
+
 ## Mac build 30 verification, September 22 UTC
 
 The [Mac package run](https://github.com/ScribleSean/observatory/actions/runs/35682004953), [native checks](https://github.com/ScribleSean/observatory/actions/runs/35682005581), and [synthetic demo](https://github.com/ScribleSean/observatory/actions/runs/35682005523) passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`. The package run reported 557 passes, 15 platform skips, and no failures. The retained ZIP is 68,371,991 bytes with SHA-256 `02cee9533a616f1a4768266261ccc0e1b15d63bb398931dd9d3bc164b3e3018e`; its 1,863-file manifest covers 197,344,730 unpacked bytes and passed full-manifest and strict nested-signature verification.
