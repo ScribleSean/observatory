@@ -1,6 +1,6 @@
 # September 15 audit follow-up
 
-Reviewed through September 22 against the original reports, repairs on main and development-machine checks. Both devices now run build 30 from `106f607`; package, installation, and point-in-time collection results are recorded in the [release notes](RELEASE-0.3.13.md). Mac remains desktop-locked with no build-30 UI acceptance, and the successful Windows runtime/update checks do not establish Windows UI acceptance. The [audit reports in PR #1](https://github.com/ScribleSean/observatory/pull/1) predate substantial repairs committed directly to main. The report-only PR is not a pending implementation patch.
+Reviewed through September 22 against the original reports, repairs on main and development-machine checks. Both devices now run build 30 from `106f607`; package, installation, and point-in-time collection results are recorded in the [release notes](RELEASE-0.3.13.md). Mac remains locked with no build-30 UI acceptance, and the successful Windows runtime/update checks do not establish Windows UI acceptance. The [audit reports in PR #1](https://github.com/ScribleSean/observatory/pull/1) predate substantial repairs committed directly to main. The report-only PR is not a pending implementation patch.
 
 ## Completed source repairs
 
