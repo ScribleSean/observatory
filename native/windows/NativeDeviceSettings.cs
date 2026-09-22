@@ -13,19 +13,20 @@ internal sealed partial class NativeDashboard
     private void DeviceConnectionCard()
     {
         var content = new Panel { Height = 140, BackColor = DashboardCard.Surface };
-        var title = new Label { Text = "Device connection", Dock = DockStyle.Top, Height = 28 };
-        var explanation = new Label { Text = "Review pairing details, then pair from the Mac over an existing trusted SSH connection. Credentials stay on their owning device.",
+        var title = new Label { Text = "Device connection", Dock = DockStyle.Top, Height = 28, Font = brand };
+        var explanation = new Label { Text = "Pair from the Mac over an existing trusted SSH connection. Credentials stay on their owning device.",
             AutoSize = true, MaximumSize = new Size(Math.Max(100, ContentWidth - 32), 0), Dock = DockStyle.Top };
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = true };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = false, Padding = new Padding(0, 0, 0, 2) };
         var status = new Label { Dock = DockStyle.Fill };
         if (deviceSettings is not null)
         {
             foreach (var (label, name, action) in new (string, string, Func<Task>)[] {
                 ("Pairing details", "Pairing details for Mac", () => { deviceSettings.PairingDetails(); return Task.CompletedTask; }),
-                ("Disconnect…", "Disconnect paired device", deviceSettings.Disconnect),
-                ("Repair…", "Prepare pairing repair", deviceSettings.Repair) })
+                ("Disconnect device", "Disconnect paired device", deviceSettings.Disconnect),
+                ("Repair pairing", "Prepare pairing repair", deviceSettings.Repair) })
             {
-                var button = new DashboardButton { Text = label, AccessibleName = name, Width = 130, Height = 40, Enabled = !deviceOperation };
+                var button = new DashboardButton { Text = label, AccessibleName = name,
+                    Width = Math.Max(124, TextRenderer.MeasureText(label, regular).Width + 32), Height = 40, Enabled = !deviceOperation };
                 button.FlatAppearance.BorderSize = 0;
                 button.Click += async (_, _) =>
                 {
