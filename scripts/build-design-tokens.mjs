@@ -30,7 +30,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   for (const [path, content] of generatedDesignTokens()) {
     const file = new URL(path, root);
     if (process.argv.includes('--check')) {
-      if (readFileSync(file, 'utf8') !== content) throw new Error(`${path} needs regeneration`);
+      if (readFileSync(file, 'utf8').replace(/\r\n/g, '\n') !== content) throw new Error(`${path} needs regeneration`);
     } else writeFileSync(file, content);
   }
 }

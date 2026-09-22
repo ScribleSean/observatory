@@ -7,7 +7,7 @@ const css = readFileSync(new URL('../app/observatory.css', import.meta.url), 'ut
 const nativeTokens = JSON.parse(readFileSync(new URL('../native/design-tokens.json', import.meta.url), 'utf8'));
 test('both native shells use the current shared design tokens', () => {
   for (const [path, expected] of generatedDesignTokens()) {
-    assert.equal(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'), expected, path);
+    assert.equal(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n'), expected, path);
   }
 });
 test('native allowance charts use the Observatory palette, not the system accent', () => {
