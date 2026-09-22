@@ -715,7 +715,7 @@ export default function Home() {
                   <State>
                     {tokenSource?.status === 'ok'
                       ? 'No token records in this period. Select another date or All time.'
-                      : tokenHost==='All' ? tokenSource?.status==='overlap'?'These hosts contain shared or related session records. The All total is withheld to avoid double-counting. Individual host views remain available.':'An All total needs three successful token reads and a complete cross-host overlap check. Individual host views remain available.' : tokenSource?.status === 'not-connected' ? 'This token source is not connected to this dashboard.' : 'This token source is unavailable.'}
+                      : tokenHost==='All' ? tokenSource?.status==='overlap'?'These hosts contain shared or related session records. The All total is withheld to avoid double-counting. Individual host views remain available.':'An All total needs successful token reads from each configured device and a complete cross-host overlap check. Individual host views remain available.' : tokenSource?.status === 'not-connected' ? 'This token source is not connected to this dashboard.' : 'This token source is unavailable.'}
                   </State>
                 )}
                 </TabsContent>
