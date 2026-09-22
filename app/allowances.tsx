@@ -67,6 +67,6 @@ export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, 
         </svg><small>Only observed intervals contribute. Missing readings are not zero.</small></>}
       </section>;
     })}</div>
-    {peer && <section aria-label={`Shared allowance history from ${peer.host}`}><Allowances quota={peer} receivedFrom={peer.host} receivedAt={peer.receivedAt} demo={demo}/></section>}
+    {peer && <section aria-label={`Shared allowance history from ${peer.host}`}><Allowances quota={peer} receivedFrom={peer.host} receivedAt={peer.receivedAt ?? undefined} demo={demo}/></section>}
   </>;
 }

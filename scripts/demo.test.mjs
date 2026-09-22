@@ -8,6 +8,7 @@ import {selectTokenDays} from './token-periods.mjs';
 import {cleanDictation,summarizeDictation} from './dictation-aggregates.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {quotaPace} from './quota-pace.mjs';
+import {cleanPeerQuotaForDisplay} from './quota-display.mjs';
 test('demo creation refuses existing snapshots without changing their bytes',async t=>{
   const dir=await mkdtemp(path.join(tmpdir(),'observatory-demo-test-'));
   t.after(()=>rm(dir,{recursive:true,force:true}));
@@ -28,8 +29,11 @@ test('demo is deterministic and covers every delivered view without live reads',
   assert.equal(d.quota.history.length,25);
   assert.ok(quotaPace(d.quota,Date.parse(d.collectedAt)).every(p=>['projected','resets-first'].includes(p.status)));
   assert.equal(d.peerQuota.host,'Windows');
+  assert.equal(d.peerQuota.windows[0].bucket,'codex');
+  assert.equal(d.peerQuota.windows[0].window,'primary');
   assert.equal(d.peerQuota.windows[0].remainingPercent,43);
   assert.notEqual(d.peerQuota.windows[0].remainingPercent,d.quota.windows[0].remainingPercent);
+  assert.equal(cleanPeerQuotaForDisplay(d.peerQuota).windows[0].remainingPercent,43);
   const peerOnly={...d,quota:undefined};
   assert.equal(peerOnly.quota,undefined);
   assert.equal(peerOnly.peerQuota.history.length,2);
