@@ -2,6 +2,7 @@
 import {useEffect, useState} from 'react';
 import {quotaPace} from '../scripts/quota-pace.mjs';
 import {durationText} from '../scripts/display-format.mjs';
+import {cleanPeerQuotaForDisplay} from '../scripts/quota-display.mjs';
 
 type Window = {bucket:string; window:string; remainingPercent:number; durationMinutes:number|null; resetsAt:string|null};
 export type Quota = {status:string; checkedAt?:string; windows?:Window[]; history?:{checkedAt:string; windows:Window[]}[]};
@@ -16,10 +17,11 @@ export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, 
   const clock = demo ? Date.parse(quota?.checkedAt || '') : now;
   const paces = Number.isFinite(clock) && clock > 0 ? quotaPace(quota, clock) : [];
   const windows = (quota?.windows || []).filter(w => !/spark|bengal[-_ ]?fox/i.test(w.bucket));
-  const peer = !receivedFrom && peerQuota && ['Mac','Windows'].includes(peerQuota.host || '') ? peerQuota : null;
+  const peer = !receivedFrom ? cleanPeerQuotaForDisplay(peerQuota) : null;
+  const receivedAtLabel=typeof receivedAt==='string' && Number.isFinite(Date.parse(receivedAt)) ? new Date(receivedAt).toLocaleString() : 'Unknown';
   return <>
-    <div className="view-heading"><div>{receivedFrom ? <h2>Shared from {receivedFrom}</h2> : <h1>Allowances</h1>}<p>{receivedFrom ? `Received: ${receivedAt || 'Unknown'}. Separate account observation, never added to this device's totals.` : demo ? 'Fictional account history' : 'Observed on this device'}</p></div><span className="period-chip">{quota?.status === 'ok' ? receivedFrom ? 'Received reading' : 'Latest reading' : 'Saved source status'}</span></div>
-    {!windows.length && <div className="usage-card"><h2>No account connected</h2><p>Enable an available account source in local source settings. Saved token records are separate from account limits.</p></div>}
+    <div className="view-heading"><div>{receivedFrom ? <h2>Shared from {receivedFrom}</h2> : <h1>Allowances</h1>}<p>{receivedFrom ? `Received: ${receivedAtLabel}. Separate account observation, never added to this device's totals.` : demo ? 'Fictional account history' : 'Observed on this device'}</p></div><span className="period-chip">{quota?.status === 'ok' ? receivedFrom ? 'Received reading' : 'Latest reading' : 'Saved source status'}</span></div>
+    {!windows.length && <div className="usage-card"><h2>{receivedFrom?'No shared allowance reading':'No account connected'}</h2><p>{receivedFrom?'This peer has not shared an allowance reading. Its source status is shown above.':'Enable an available account source in local source settings. Saved token records are separate from account limits.'}</p></div>}
     <div className="usage-grid">{windows.map(w => {
       const pace = paces.find((p:{bucket:string;window:string}) => p.bucket === w.bucket && p.window === w.window);
       const reset = Date.parse(w.resetsAt || '');
