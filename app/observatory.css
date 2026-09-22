@@ -1284,13 +1284,14 @@ body, .view-panel { font-size: .90625rem !important; line-height: 1.25; letter-s
 .usage-card progress::-webkit-progress-bar { background: var(--track); }
 .usage-card progress::-webkit-progress-value { background: var(--sage); border-radius: 8px; }
 .usage-card progress::-moz-progress-bar { background: var(--sage); }
-.usage-card .pace-coverage::-webkit-progress-value { background: var(--purple); }
+.usage-card .pace-coverage::-webkit-progress-value { background: var(--sage); }
 .usage-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 6px; }
 .usage-history { width: 100%; height: 180px; margin: 16px 0 0; overflow: visible; }
 .usage-history .chart-grid { stroke: var(--track); stroke-width: 1; }
 .usage-history text { fill: var(--muted); font-size: 12px; font-family: inherit; }
 .usage-history .chart-line { fill: none; stroke: var(--sage); stroke-width: 2.5; }
-.usage-history .chart-bar { fill: var(--purple); }
+.usage-history .chart-bar, .usage-history .chart-point { fill: var(--sage); }
+.usage-history .chart-gap { fill: none; stroke: var(--sage); stroke-width: 1.5; stroke-dasharray: 2 5; opacity: .55; }
 @media (max-width: 760px) {
   .app-bar { padding: 14px 16px; height: auto; flex-wrap: wrap; gap: 14px; }
   .app-actions { gap: 10px; }

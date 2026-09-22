@@ -35,12 +35,14 @@ export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, 
       });
       const first = points[0]?.at || clock, last = points.at(-1)?.at || clock;
       const x = (at:number) => 32 + (at-first)/Math.max(1,last-first)*468;
-      const paths:string[] = [];
+      const paths:string[] = [], gaps:string[] = [];
       const hourly = new Map<number,{used:number;ms:number}>();
       points.forEach((p,i) => {
         const previous = points[i-1];
         const continuous = previous && p.at > previous.at && p.at-previous.at <= 630000 && p.used >= previous.used && p.reset === previous.reset;
         paths.push(`${continuous?'L':'M'}${x(p.at)},${140-p.used*1.2}`);
+        if (previous && p.at-previous.at > 630000 && p.used >= previous.used && p.reset === previous.reset)
+          gaps.push(`M${x(previous.at)},${140-previous.used*1.2}L${x(p.at)},${140-p.used*1.2}`);
         if (continuous && Math.floor(previous.at/3600000) === Math.floor((p.at-1)/3600000)) {
           const hour = Math.floor(previous.at/3600000)*3600000, value = hourly.get(hour) || {used:0,ms:0};
           hourly.set(hour,{used:value.used+p.used-previous.used,ms:value.ms+p.at-previous.at});
@@ -48,10 +50,13 @@ export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, 
       });
       const hours = [...hourly].map(([at,value]) => ({at,rate:value.used*3600000/value.ms}));
       const maxRate = Math.max(1,...hours.map(h=>h.rate));
+      const windowLabel = typeof w.durationMinutes === 'number' && w.durationMinutes > 0
+        ? w.durationMinutes >= 1440 ? `${w.durationMinutes / 1440}-day window` : `${w.durationMinutes / 60}-hour window`
+        : w.window === 'primary' ? 'Primary window' : w.window === 'secondary' ? 'Secondary window' : w.window;
       return <section className="usage-card" key={w.bucket+w.window}>
-        <header><h2>{w.window}</h2><span>{w.remainingPercent.toFixed(1)}% left</span></header>
-        <p>{w.bucket.replaceAll('_',' ')}</p>
-        <progress value={w.remainingPercent} max={100} aria-label={`${w.window} allowance remaining`}/>
+        <header><h2>{windowLabel}</h2><span>{w.remainingPercent.toFixed(1)}% left</span></header>
+        <p>{w.bucket === 'codex' ? 'Codex' : w.bucket.replaceAll('_',' ')}</p>
+        <progress value={w.remainingPercent} max={100} aria-label={`${windowLabel} allowance remaining`}/>
         <p className="usage-number">{projected ? exhaustion >= reset ? 'Until reset' : duration(exhaustion-clock) : pace?.status === 'exhausted' ? 'Allowance used' : 'Learning your pace'}</p>
         <p>{projected ? `Estimated at ${pace!.percentagePointsPerHour!.toFixed(1)} percentage points / hour` : 'An estimate needs recent, continuous readings.'}</p>
         <p>{reset > clock ? `Reset in ${duration(reset-clock)}` : 'Waiting for the next reset reading'}</p>
@@ -59,9 +64,12 @@ export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, 
         <h2 style={{marginTop:24}}>Allowance used</h2>
         {points.length ? <svg className="usage-history" viewBox="0 0 520 180" role="img" aria-label="Recorded used percentage. Gaps and resets are separate segments.">
           {[0,50,100].map(n=><g key={n}><line className="chart-grid" x1="32" x2="500" y1={140-n*1.2} y2={140-n*1.2}/><text x="0" y={144-n*1.2}>{n}%</text></g>)}
+          <path className="chart-gap" d={gaps.join(' ')}/>
           <path className="chart-line" d={paths.join(' ')}/>
+          {points.filter((_,i)=>paths[i].startsWith('M') && (i===points.length-1 || paths[i+1].startsWith('M'))).map(p=><circle key={p.at} className="chart-point" cx={x(p.at)} cy={140-p.used*1.2} r="3"/>)}
           <text x="32" y="168">{new Date(first).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</text><text x="500" y="168" textAnchor="end">{new Date(last).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</text>
         </svg> : <p>History begins with the first successful reading.</p>}
+        {gaps.length > 0 && <small>Dotted lines mark intervals without readings.</small>}
         {hours.length > 0 && <><h2>Usage pace by hour</h2><svg className="usage-history" viewBox="0 0 520 180" role="img" aria-label="Observed percentage points per hour">
           {hours.map((h,i)=><g key={h.at}><rect className="chart-bar" x={32+i*468/hours.length} y={140-h.rate/maxRate*110} width={Math.max(2,468/hours.length-12)} height={h.rate/maxRate*110} rx="4"><title>{h.rate.toFixed(1)} percentage points per hour</title></rect>{i % Math.max(1,Math.ceil(hours.length/4)) === 0 && <text x={32+i*468/hours.length} y="168">{new Date(h.at).getHours()}:00</text>}</g>)}
         </svg><small>Only observed intervals contribute. Missing readings are not zero.</small></>}
