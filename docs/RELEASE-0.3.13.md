@@ -1,10 +1,26 @@
 # Observatory 0.3.13 candidate
 
-Status: Both development devices run **0.3.13, build 30** from `106f607421c17ba551cb78bb14ffe4f678ba9428`. Neither is published as a production release.
+Status: The development Mac runs **0.3.13, build 31** from `0ad86df49f73d836091a78fbb8d4d1bf7152ece2`. Windows build 31 passed local and hosted package checks. Its ordinary upgrade remains unconfirmed after the desktop connection became unavailable. The last confirmed Windows installation is build 30. Neither is published as a production release.
 
-## Build 31 preparation, September 22 UTC
+## Build 31 verification, September 22 UTC
 
-Build 31 source handles malformed token session metadata without dropping the whole source, while preserving the requirement for verified identities before combining devices. The web dashboard now shows received peer allowances separately with source and receipt time, validates received readings and retains unknown history gaps. Package and installation verification are pending. The installed build 30 state below is unchanged.
+Build 31 handles malformed token session metadata without dropping valid per-device usage. Incomplete session identities still prevent unverified combined totals. The web dashboard shows validated peer allowances separately with source and readable receipt time. Its sage charts label usage windows, show isolated observations and use dotted segments for gaps without combining device percentages or crossing resets.
+
+TypeScript, focused reader, allowance and demo regressions, and the production web build passed. An independent browser check with fictional records verified separate local and peer readings, gap labels and layout at desktop and 390-pixel widths. This does not establish installed native UI acceptance.
+
+### Mac build 31
+
+The [clean Mac package run](https://github.com/ScribleSean/observatory/actions/runs/35691762645) passed at `0ad86df`, with 561 tests passed, 15 platform skips and no failures. Native checks, bundled runtime, updater smoke checks, extraction and relocated-package verification passed. The retained ZIP is 68,374,081 bytes with SHA-256 `aeb0ce8c860b5e6563c918a7e1ac06d58df4ed6d61c335dc994aea0877dc4b78`. Full-manifest and strict nested-signature checks passed before installation.
+
+The recoverable replacement preserved checked configuration, saved snapshots and private allowance state under the collection lock. Build 30 remains available for recovery. Actual scheduled collections ending at 06:00:24 and 06:05:23 UTC read all 13 configured sources successfully. Mac, Windows and Ubuntu token reads were available, and combined-token identity verification passed. These are point-in-time retained-record checks, not proof of complete lifetime coverage.
+
+The initial collection had unavailable token sources. An isolated Mac diagnostic confirmed a cache-warming response followed by a successful read. Windows subsequently recovered in scheduled collection, but its earlier failure cause is unconfirmed. Native Allowances and Tokens navigation worked. A later Source health action failed in the control helper, leaving broader visual, motion and accessibility acceptance open. Signing remains ad hoc, without notarization.
+
+### Windows build 31 candidate
+
+The local final candidate at `0ad86df` passed package checks and the TEST installer lifecycle. Its 3,069-file manifest covers 268,908,122 bytes and has SHA-256 `fb11ad13d5f75445eeb2909ad515cf4bab96a8a61bce872599979666bd26e9d9`. The ordinary unsigned installer is 100,445,166 bytes with SHA-256 `a20c02de46086285a1fdeede50511d87694442b979affda2261c77e8ee8ba4d2`.
+
+The [final hosted Windows run](https://github.com/ScribleSean/observatory/actions/runs/35691764297) passed the complete clean-source package and isolated installer lifecycle at `0ad86df`, finishing at 06:10:21 UTC. Immediately before the ordinary upgrade attempt, the development checkout was clean at that source, the installed app was build 30, and no upgrade task or result receipt existed. The subsequent connection attempt and read-only follow-up timed out. Inspect existing task and receipt state after reconnecting before another launch. Build-31 ordinary installation and fresh installed collection remain unconfirmed.
 
 ## Mac build 30 verification, September 22 UTC
 

@@ -2,6 +2,18 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Build 31 review, September 22
+
+The development Mac runs build 31 from `0ad86df`. Its package and recoverable replacement passed. Scheduled collections ending at 06:00:24 and 06:05:23 UTC read all 13 configured sources, with token reads available from all three devices and verified combined identities. See the [release record](RELEASE-0.3.13.md#build-31-verification-september-22-utc) for artifact and installation evidence.
+
+The actual Mac accessibility tree exposed Allowances. Tokens navigation and its All retained selection worked. Attempting Source health then failed in the control helper. This does not establish an Observatory navigation defect or complete visual, motion, keyboard or screen-reader acceptance.
+
+An independent browser review of the final web source used fictional records at desktop and 390-pixel widths. It verified separate local and peer allowances, readable receipt and window labels, sage accents, visible isolated points, labeled dotted gaps without reset bridges, and no horizontal overflow. An existing telescope-image hydration/404 warning remains unresolved. These are browser checks, not native or installed fallback acceptance.
+
+## Windows build 30 installed review, September 22
+
+A live review opened all seven sections, observed readable Tokens labels and Activity dates, checked the 912-by-832 window layout and confirmed visible Tab focus. The actual tray Configure action was not exposed to the control tool and remains unverified. External UI Automation reported focus on the root window despite visible focus movement. Source review found standard WinForms accessibility providers and no demonstrated application defect. Screen-reader behavior and complete keyboard acceptance remain open. This review describes installed build 30. Build 31 passed hosted package checks, but its ordinary upgrade and installed interaction remain unconfirmed after connection loss.
+
 ## Mac build 30 package and replacement, September 22
 
 Mac build 30 from `106f607421c17ba551cb78bb14ffe4f678ba9428` passed package and replacement checks. See the [release record](RELEASE-0.3.13.md#mac-build-30-verification-september-22-utc) for exact artifacts and validation.
