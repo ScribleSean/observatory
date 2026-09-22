@@ -2,6 +2,10 @@
 
 Status: Both development devices run **0.3.13, build 30** from `106f607421c17ba551cb78bb14ffe4f678ba9428`. Neither is published as a production release.
 
+## Build 31 preparation, September 22 UTC
+
+Build 31 source handles malformed token session metadata without dropping the whole source, while preserving the requirement for verified identities before combining devices. The web dashboard now shows received peer allowances separately with source and receipt time, validates received readings and retains unknown history gaps. Package and installation verification are pending. The installed build 30 state below is unchanged.
+
 ## Mac build 30 verification, September 22 UTC
 
 The [Mac package run](https://github.com/ScribleSean/observatory/actions/runs/35682004953), [native checks](https://github.com/ScribleSean/observatory/actions/runs/35682005581), and [synthetic demo](https://github.com/ScribleSean/observatory/actions/runs/35682005523) passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`. The package run reported 557 passes, 15 platform skips, and no failures. The retained ZIP is 68,371,991 bytes with SHA-256 `02cee9533a616f1a4768266261ccc0e1b15d63bb398931dd9d3bc164b3e3018e`; its 1,863-file manifest covers 197,344,730 unpacked bytes and passed full-manifest and strict nested-signature verification.
