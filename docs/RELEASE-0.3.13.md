@@ -82,6 +82,9 @@ coverage or full native interaction acceptance.
 
 ## Native UX follow-up in source
 
+Build 29 is the next development candidate for this follow-up. Packaging and
+installed verification are pending. The installed applications remain build 28.
+
 The next style slice keeps the existing Mono Charts, Apple composition and Hart
 direction. Windows token-class tables now use readable metric labels. Mac Activity
 keeps saved-history and tracking status visible, with detailed recovery guidance
