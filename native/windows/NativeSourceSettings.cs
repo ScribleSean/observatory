@@ -30,7 +30,7 @@ internal sealed partial class NativeDashboard
         Label("About Observatory").Font = brand;
         Label(versionLabel);
         Label("This is the version running on this PC.").ForeColor = Color.Silver;
-        var update = new DashboardButton { Text = "Check for updates…", AccessibleName = "Check for updates", Width = 190, Height = 40,
+        var update = new DashboardButton { Text = "Check for updates", AccessibleName = "Check for updates", Width = 190, Height = 40,
             Enabled = checkUpdates is not null };
         update.Click += async (_, _) =>
         {
