@@ -1,6 +1,6 @@
 # Observatory 0.3.13 candidate
 
-Status: development build 28 from source `97f1f1a1661cacbe92b76d47adf9a09439de6d3d` is installed on Mac and Windows. Build 29 artifacts from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86` are locally verified and staged, but are not installed. Neither is published as a production release.
+Status: Mac remains on development build 28 from source `97f1f1a`. Windows now runs build 29 from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`. The matching Mac build 29 is verified and staged for replacement after a normal Quit. Neither is published as a production release.
 
 ## Build 29 verification, September 22 UTC
 
@@ -12,10 +12,24 @@ The [clean Mac build 29 run](https://github.com/ScribleSean/observatory/actions/
 - ZIP SHA-256: `44c46f9f630eb5d8347c8ff4bb84d9b666a8d468da764b7b6b6b0c01e9801c32`.
 - Signing remains ad hoc, without notarization. Mac replacement remains pending a normal Quit.
 
-The local Windows build at the same source passed 526 tests with 46 platform skips and no failures. Its full 3,068-file manifest passed for an unpacked candidate of 268,902,556 bytes. The retained manifest SHA-256 is `f35a95b3ed574ff6dac63655fed66dd305d535f98a9bfcef1c90ef380bd26c86`. The separate TEST installer passed. The ordinary unsigned installer is retained but has not been executed.
+The local Windows build at the same source passed 526 tests with 46 platform skips and no failures. Its full 3,068-file manifest passed for an unpacked candidate of 268,902,556 bytes. The retained manifest SHA-256 is `f35a95b3ed574ff6dac63655fed66dd305d535f98a9bfcef1c90ef380bd26c86`. The separate TEST installer passed. The ordinary unsigned installer subsequently completed the development upgrade recorded below.
 
 - Ordinary installer: 100,443,284 bytes, SHA-256 `f83fbefdea10de1a29747b97f7c6df20b1817e89e5dd27fed158c9f97ba5b8a6`.
-- The [hosted Windows verification run](https://github.com/ScribleSean/observatory/actions/runs/35678894118) is still in progress and is not evidence of a completed package or installation check.
+The [hosted Windows verification run](https://github.com/ScribleSean/observatory/actions/runs/35678894118) passed full package and installer checks. It verified normal packaged startup, native extraction and staging, wrong-signer rejection, retained authenticated receipts, recoverable replacement and normal dashboard readiness. These disposable update checks use synthetic signing; production signing and update-feed activation remain open.
+
+## Windows build 29 development upgrade, September 22 UTC
+
+The ordinary installer replaced build 28 after normal shutdown. Both the old and
+new payloads were checked against independent package manifests. Recovery retains
+all 3,070 previous app files and a saved-data backup. All 306 saved files retained
+their hashes through installation before relaunch; startup preferences and the
+Start menu shortcut were preserved.
+
+The app acknowledged normal readiness as `0.3.13.29` and remained running. Its
+first collection completed at 02:39:56 UTC with all seven configured sources
+read successfully. The completed one-time upgrade launcher was removed. This
+verifies the installed payload and collection, not full visual, motion or
+accessibility acceptance. Mac remains build 28 until its normal Quit and upgrade.
 
 ## Build 28 permission-check repair
 
@@ -97,9 +111,8 @@ coverage or full native interaction acceptance.
 
 ## Native UX follow-up in source
 
-Build 29 contains this follow-up. Its artifacts are locally verified and staged;
-the installed applications remain build 28 until their separate development
-upgrades complete.
+Build 29 contains this follow-up and is installed on Windows. Its matching Mac
+artifact is verified and staged; the installed Mac app remains build 28.
 
 The style follow-up keeps the existing Mono Charts, Apple composition and Hart
 direction. Windows token-class tables now use readable metric labels. Mac Activity

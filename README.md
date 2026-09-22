@@ -36,7 +36,7 @@ Saved history can be displayed again after a UI repair, but observations that we
 
 **[Open the interactive demo](https://scriblesean.github.io/observatory/)** to explore fictional records without connecting any accounts or devices.
 
-The project is an early preview tested on one Mac, Windows and WSL setup. Build 28 remains installed on the development machines; build 29 artifacts are staged for a recorded development upgrade. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md).
+The project is an early preview tested on one Mac, Windows and WSL setup. Native development apps are installed on the Mac and Windows test machines. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md).
 
 | Platform | Current status |
 | --- | --- |
