@@ -263,7 +263,7 @@ internal sealed partial class NativeDashboard : Form
         var field = kind == "activity" ? "seconds" : "totalTokens";
         var total = NativeHistory.Sum(selected, field);
         Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " tokens", true);
-        Label($"{selected.Length} recorded dates. Missing dates are not filled with zeros.");
+        Label($"{selected.Length} recorded {(selected.Length == 1 ? "date" : "dates")}. Missing dates are not filled with zeros.");
         Label("Selected recorded days (up to 30 shown)");
         AddCard(new DashboardHistoryChart(selected, kind == "tokens"), "Recorded history");
         var details = new DashboardButton { Text = showRecordedHistory ? "Hide recorded values" : "Show recorded values", AutoSize = true, Height = 40 };
@@ -275,7 +275,7 @@ internal sealed partial class NativeDashboard : Form
         if (kind == "tokens")
         {
             Table("Token classes", ["Metric", "Tokens"], new[] { "inputTokens", "cacheReadTokens", "cacheCreationTokens", "outputTokens", "reasoningOutputTokens" }
-                .Select(key => new[] { key, Snapshot.Format(NativeHistory.Sum(selected, key)) }));
+                .Select(key => new[] { TokenLabel(key), Snapshot.Format(NativeHistory.Sum(selected, key)) }));
             Table("Recorded models", ["Date", "Model", "Tokens"], selected.SelectMany(day => NativeHistory.Rows(day["models"]).Select(model => new[] {
                 Snapshot.Text(day["date"]), Snapshot.Text(model["model"]) + (model["inferred"]?.ToJsonString() == "true" ? " (inferred)" : ""), Snapshot.Format(Snapshot.Number(model["totalTokens"])) })));
             Label("Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
@@ -360,7 +360,8 @@ internal sealed partial class NativeDashboard : Form
             Label("Allowance used").Font = heading;
             var historyGraph = new QuotaGraph(quota, window, fitHistory: true) { Height = 180, Width = ContentWidth, BackColor = DashboardCard.Surface };
             historyGraph.SelectPeriod(allowancePeriod);
-            body.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], allowancePeriod, value => { allowancePeriod = value; BeginInvoke(Reload); }) { Width = ContentWidth });
+            body.Controls.Add(new DashboardFilters("Period", ["Day", "Week", "All retained"], allowancePeriod, value => { allowancePeriod = value; BeginInvoke(Reload); },
+                value => value == "All retained" ? "Latest 24 hours" : value) { Width = ContentWidth });
             var recordedDates = QuotaGraph.RecordedDates(quota);
             var recordedDate = recordedDates.Contains(allowanceDate) ? allowanceDate : recordedDates.LastOrDefault() ?? "";
             historyGraph.SelectDate(recordedDate);

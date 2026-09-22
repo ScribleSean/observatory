@@ -220,7 +220,7 @@ struct QuotaPanel: View {
                 }
                 let retained = quotaHistoryPoints(rows(quota["history"]), bucket: text(chosen["bucket"]), window: text(chosen["window"]))
                 if dashboard {
-                    ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"], values: ["Day", "Week", "All retained"], selection: $historyPeriod)
+                    ObservatorySegments(title: "Period", labels: ["Day", "Week", historyOnly ? "All retained" : "Latest 24 hours"], values: ["Day", "Week", "All retained"], selection: $historyPeriod)
                 }
                 let dates = Array(Set(retained.map { quotaRecordedDate($0.at) })).sorted()
                 let anchor = dates.contains(historyDate) ? historyDate : dates.last ?? ""

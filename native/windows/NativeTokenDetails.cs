@@ -6,6 +6,15 @@ internal sealed partial class NativeDashboard
 {
     private string tokenDetail = "";
     private static readonly string[] TokenFields = ["inputTokens", "cacheReadTokens", "cacheCreationTokens", "outputTokens", "totalTokens"];
+    private static string TokenLabel(string field) => field switch {
+        "inputTokens" => "Input",
+        "cacheReadTokens" => "Cache read",
+        "cacheCreationTokens" => "Cache creation",
+        "outputTokens" => "Output",
+        "reasoningOutputTokens" => "Reasoning (included in output)",
+        "totalTokens" => "Total",
+        _ => "Unknown"
+    };
 
     internal static JsonObject[] ReconciledProfiles(JsonObject model, string date, JsonObject? settings)
     {
@@ -37,7 +46,7 @@ internal sealed partial class NativeDashboard
         var (day, model) = entries[Array.IndexOf(choices, tokenDetail)];
         Label("Model: " + Snapshot.Text(model["model"]) + " · Date: " + Snapshot.Text(day["date"])
             + (model["inferred"]?.ToJsonString() == "true" ? " · Inferred model label" : ""));
-        Table("Model token classes", ["Metric", "Tokens"], TokenFields.Select(field => new[] { field, Snapshot.Format(Snapshot.Number(model[field])) }));
+        Table("Model token classes", ["Metric", "Tokens"], TokenFields.Select(field => new[] { TokenLabel(field), Snapshot.Format(Snapshot.Number(model[field])) }));
         SavedEstimate(day["apiEstimate"], "Selected day's saved comparison");
         SavedEstimate(model["apiEstimate"], "Model's saved comparison");
         var settings = host == "All" ? snapshot?["combinedSettings"] as JsonObject

@@ -5,7 +5,7 @@ internal sealed class DashboardFilters : Panel
     private readonly Label caption;
     private readonly FlowLayoutPanel chips = new() { WrapContents = true, Margin = Padding.Empty };
 
-    internal DashboardFilters(string name, string[] values, string selected, Action<string> changed)
+    internal DashboardFilters(string name, string[] values, string selected, Action<string> changed, Func<string, string>? labelFor = null)
     {
         AccessibleName = name;
         AccessibleRole = AccessibleRole.Grouping;
@@ -13,10 +13,11 @@ internal sealed class DashboardFilters : Panel
         Controls.Add(caption); Controls.Add(chips);
         foreach (var value in values)
         {
+            var label = labelFor?.Invoke(value) ?? value;
             var button = new DashboardButton {
                 CornerRadius = 20,
-                Text = value, AccessibleName = value, Tag = value,
-                Width = Math.Max(82, TextRenderer.MeasureText(value, Font).Width + 28), Height = 38,
+                Text = label, AccessibleName = label, Tag = value,
+                Width = Math.Max(82, TextRenderer.MeasureText(label, Font).Width + 28), Height = 38,
                 FlatStyle = FlatStyle.Flat, Margin = new Padding(0, 0, 8, 8),
                 BackColor = value == selected ? Color.FromArgb(177, 195, 161) : DashboardCard.Surface,
                 ForeColor = value == selected ? Color.FromArgb(28, 29, 27) : Color.WhiteSmoke,
@@ -26,7 +27,7 @@ internal sealed class DashboardFilters : Panel
             button.Click += (_, _) => {
                 foreach (Button chip in chips.Controls)
                 {
-                    var active = chip.Text == value;
+                    var active = Equals(chip.Tag, value);
                     chip.BackColor = active ? Color.FromArgb(177, 195, 161) : DashboardCard.Surface;
                     chip.ForeColor = active ? Color.FromArgb(28, 29, 27) : ForeColor;
                     chip.AccessibleDescription = active ? "Selected" : "Not selected";

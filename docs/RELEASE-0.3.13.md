@@ -1,6 +1,6 @@
 # Observatory 0.3.13 candidate
 
-Status: development build 25 is installed on Mac and build 28 on Windows. Neither is published as a production release.
+Status: development build 28 is installed on Mac and Windows. Neither is published as a production release.
 
 ## Build 28 permission-check repair
 
@@ -25,8 +25,8 @@ locally against its checksum, all 1,862 manifest entries and strict nested signa
 
 - ZIP size: 68,358,612 bytes. Unpacked app: 197,296,631 bytes.
 - ZIP SHA-256: `e34009220d1cb1a399c597b25dc338a5036fc09c663e72065117fd0682330340`.
-- The candidate is staged for development installation. Signing remains ad hoc,
-  without notarization. The installed Mac application remains build 25.
+- Signing remains ad hoc, without notarization. The Mac development installation
+  is recorded below.
 
 The local Windows build at the same source passed 523 tests with 46 platform
 skips and no failures. Packaged sharing and allowance bridges, sync-owner
@@ -66,8 +66,38 @@ registration and the Start menu shortcut passed verification. The app acknowledg
 normal dashboard readiness as version `0.3.13.28` in the interactive user session.
 Its first collection finished at 22:18:47 UTC with all seven configured sources
 read successfully. The app remained alive, and the completed one-time upgrade
-launcher was removed. Mac installation and full native interaction acceptance
-remain pending. This development upgrade does not enable production updates.
+launcher was removed. Full native interaction acceptance remains pending. This development upgrade does not enable production updates.
+
+## Mac build 28 development upgrade, September 21
+
+The verified Mac candidate replaced build 25 after a normal Quit. The replacement
+rechecked both package manifests and signatures, retained the previous app in
+recovery, and preserved all seven checked configuration, snapshot and allowance
+files. The launched native Settings view confirmed version 0.3.13, build 28.
+
+The latest observed collection was partial, with 12 of 13 configured reads
+successful. Mac ActivityWatch was unavailable. Saved token, settings and dictation
+sources reported OK. These observations do not establish complete screen-time
+coverage or full native interaction acceptance.
+
+## Native UX follow-up in source
+
+The next style slice keeps the existing Mono Charts, Apple composition and Hart
+direction. Windows token-class tables now use readable metric labels. Mac Activity
+keeps saved-history and tracking status visible, with detailed recovery guidance
+in an expandable section. Both daily-history views use singular date wording for
+one recorded date.
+
+The recent allowance snapshot now labels its full snapshot range Latest 24 hours.
+All retained remains available in the separate account-history browser, which
+reads the selected account archive and shows unknown gaps without fabricated
+observations. The change leaves retention, counters and account boundaries intact.
+
+Swift and Windows compilation and native self-tests passed. The Windows synthetic
+dashboard interaction fixture passed, including renamed-period selection, and
+17 targeted archive, gap and audit regressions passed. These source changes are
+not yet in the installed build 28 packages. Full cross-platform style acceptance
+remains open.
 
 ## Build 27 verification, September 21
 

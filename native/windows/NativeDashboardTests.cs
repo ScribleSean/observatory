@@ -213,6 +213,10 @@ internal static class NativeDashboardTests
                 var sections = Children(form).OfType<ListBox>().Single();
                 Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Source health", "Settings" }), "Dashboard navigation order");
                 Check(sections.SelectedItem?.ToString() == "Allowances", "Allowances is the landing view");
+                Check(!Children(form).OfType<Button>().Any(button => button.Text == "All retained"), "Recent allowance snapshot does not claim archive coverage");
+                await Select(form, "Period", "Week");
+                await Select(form, "Period", "Latest 24 hours");
+                Check(Children(form).OfType<Button>().Single(button => button.Text == "Latest 24 hours").AccessibleDescription == "Selected", "Readable period label retains its selected state");
                 Check(Texts(form).Contains("All-time usage history"), "Full-history entry is visible on Allowances");
                 var historyButton = Children(form).OfType<Button>().Single(button => button.Text == "Browse saved history");
                 Check(historyButton.Bottom <= historyButton.Parent!.ClientSize.Height, "Full-history action fits its card");

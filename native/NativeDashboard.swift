@@ -245,18 +245,28 @@ struct NativeDashboard: View {
                 }
             }
             if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
-                Text("Saved activity history. Last source check: \(text(archive["latestReadStatus"])).")
-                    .observatoryFont(.callout).foregroundStyle(.secondary)
-                if !days.isEmpty && text(archive["latestReadStatus"]) != "ok" { ActivityWatchHelp() }
-                Text(text(archive["trackingMessage"], fallback: "Tracking freshness is unknown for this saved snapshot."))
-                    .observatoryFont(.callout).foregroundStyle(text(archive["trackingStatus"]) == "stale" ? Color.orange : ObservatoryTheme.muted)
-                if let through = parseDate(archive["trackingThrough"]) {
-                    Text("Last tracking coverage: \(through.formatted(date: .abbreviated, time: .shortened))")
-                        .observatoryFont(.caption).foregroundStyle(.secondary)
-                }
-                if let at = parseDate(archive["asOf"]) {
-                    Text("Last successful collection: \(at.formatted(date: .abbreviated, time: .shortened))")
-                        .observatoryFont(.caption).foregroundStyle(.secondary)
+                Text(text(archive["latestReadStatus"]) != "ok"
+                    ? "Saved activity · source unavailable"
+                    : text(archive["trackingStatus"]) == "recent"
+                        ? "Saved activity · recent tracking coverage"
+                        : text(archive["trackingStatus"]) == "stale"
+                            ? "Saved activity · tracking is not current"
+                            : "Saved activity · tracking freshness unknown")
+                    .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                DisclosureGroup("Tracking details and help") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(text(archive["trackingMessage"], fallback: "Tracking freshness is unknown for this saved snapshot."))
+                            .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+                        if let through = parseDate(archive["trackingThrough"]) {
+                            Text("Last tracking coverage: \(through.formatted(date: .abbreviated, time: .shortened))")
+                                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+                        }
+                        if let at = parseDate(archive["asOf"]) {
+                            Text("Last successful collection: \(at.formatted(date: .abbreviated, time: .shortened))")
+                                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+                        }
+                        if !days.isEmpty && text(archive["latestReadStatus"]) != "ok" { ActivityWatchHelp() }
+                    }.padding(.top, 8)
                 }
             }
             if days.isEmpty {
@@ -269,7 +279,7 @@ struct NativeDashboard: View {
                         .observatoryFont(38, weight: .semibold, design: .rounded).monospacedDigit()
                     Spacer()
                 }
-                Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])), \(selected.count) recorded dates. Missing dates are not filled with zeros.")
+                Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])), \(selected.count) recorded \(selected.count == 1 ? "date" : "dates"). Missing dates are not filled with zeros.")
                     .observatoryFont(.callout).foregroundStyle(.secondary)
                 Text("Selected recorded days (up to 30 shown)").observatoryFont(.headline)
                 Chart {
