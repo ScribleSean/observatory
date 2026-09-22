@@ -51,11 +51,12 @@ func renderStylePreview(output: URL) throws {
     let quota: JSONObject = ["status": "ok", "checkedAt": formatter.string(from: now), "windows": [window],
                              "history": history, "pace": [["bucket": "Example allowance", "window": "Seven-day",
                               "status": "resets-first", "asOf": formatter.string(from: now), "percentagePointsPerHour": 1]]]
-    let tokenDays: [JSONObject] = [("2026-09-10", 12_000_000), ("2026-09-12", 45_000_000), ("2026-09-16", 73_400_000)].map { date, total in
-        ["date": date, "totalTokens": total, "inputTokens": total / 2, "outputTokens": total / 2]
+    let tokenDays: [JSONObject] = (1...30).map { day in
+        let total = (day % 8 + 1) * 12_000_000
+        return ["date": String(format: "2026-09-%02d", day), "totalTokens": total, "inputTokens": total / 2, "outputTokens": total / 2]
     }
-    let activityDays: [JSONObject] = [("2026-09-10", 3600), ("2026-09-12", 7200), ("2026-09-16", 10800)].map { date, seconds in
-        ["date": date, "seconds": seconds]
+    let activityDays: [JSONObject] = (1...30).map { day in
+        ["date": String(format: "2026-09-%02d", day), "seconds": (day % 6 + 1) * 4320]
     }
     store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": formatter.string(from: now), "demo": true,
         "quota": quota, "activity": [], "dictation": [], "agents": [],
@@ -72,9 +73,12 @@ func renderStylePreview(output: URL) throws {
         selection.textScale = scale
         for section in scale == 1 ? ["allowances", "tokens", "activity", "settings"] : NativeDashboardSelection.sections.map(\.0) {
         selection.section = section
-        let sizes = scale == 1 ? (section == "allowances" ? [NSSize(width: 760, height: 560), NSSize(width: 1100, height: 820), NSSize(width: 1280, height: 860)] : [NSSize(width: 1280, height: 860)]) : [NSSize(width: 760, height: 560)]
+        for period in ["tokens", "activity"].contains(section) ? ["day", "all"] : ["day"] {
+        let sizes = period == "all"
+            ? (scale == 1 ? [NSSize(width: 1280, height: 860), NSSize(width: 760, height: 860)] : [NSSize(width: 760, height: 1400)])
+            : scale == 1 ? (section == "allowances" ? [NSSize(width: 760, height: 560), NSSize(width: 1100, height: 820), NSSize(width: 1280, height: 860)] : [NSSize(width: 1280, height: 860)]) : [NSSize(width: 760, height: 560)]
         for size in sizes {
-        let view = NativeDashboard(store: store, selection: selection, settingsActions: actions)
+        let view = NativeDashboard(store: store, selection: selection, settingsActions: actions, initialPeriod: period)
             .defaultAppStorage(defaults).frame(width: size.width, height: size.height)
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: size)
@@ -84,9 +88,11 @@ func renderStylePreview(output: URL) throws {
         guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { throw CocoaError(.fileWriteUnknown) }
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
-        let suffix = scale == 2 ? "-200-\(section)" : section != "allowances" ? "-\(section)" : size.width == 1100 ? "" : "-\(Int(size.width))"
+        let suffix = (scale == 2 ? "-200-\(section)" : section != "allowances" ? "-\(section)" : size.width == 1100 ? "" : "-\(Int(size.width))")
+            + (period == "all" ? "-all-\(Int(size.width))" : "")
         try data.write(to: output.appendingPathComponent("observatory-\(mode)\(suffix).png"), options: .withoutOverwriting)
         window.contentView = nil
+        }
         }
         }
         }

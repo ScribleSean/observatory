@@ -66,6 +66,8 @@ struct ObservatoryValueRow: View {
     init(_ title: String, value: String) { self.title = title; self.value = value }
     var body: some View {
         LabeledContent(title, value: value).labeledContentStyle(ObservatoryLabeledContentStyle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title).accessibilityValue(value)
     }
 }
 

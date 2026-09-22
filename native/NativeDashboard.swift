@@ -29,6 +29,11 @@ struct NativeDashboard: View {
     @State private var archiveError = false
     @State private var quotaHistoryOpen = false
     @AppStorage("observatoryAppearance") private var appearance = "dark"
+    init(store: ObservatoryStore, selection: NativeDashboardSelection, settingsActions: NativeSettingsActions,
+         initialPeriod: String = "day") {
+        self.store = store; self.selection = selection; self.settingsActions = settingsActions
+        _period = State(initialValue: initialPeriod)
+    }
     private var displayedAppearance: String { settingsActions.preview ? (selection.previewAppearance ?? appearance) : appearance }
     private func toggleAppearance() {
         let next = displayedAppearance == "dark" ? "light" : "dark"
@@ -227,6 +232,11 @@ struct NativeDashboard: View {
         let anchor = text(days.first(where: { text($0["date"]) == selectedDate })?["date"] ?? days.last?["date"])
         let selected = nativePeriodDays(days, period: period, anchor: anchor)
         let chosen = nativePeriodSummary(selected, kind: key)
+        let chartDays = Array(selected.suffix(30))
+        let axisDates = chartDays.enumerated().compactMap { index, day in
+            index == 0 || index == chartDays.count - 1 || (selection.textScale <= 1.25 && index == chartDays.count / 2)
+                ? text(day["date"]) : nil
+        }
         return VStack(alignment: .leading, spacing: 18) {
             ObservatoryFilterRow(title: "Device") {
                 ObservatorySegments(title: "Device", labels: ["All", "Mac", "Windows", "Ubuntu"],
@@ -283,9 +293,9 @@ struct NativeDashboard: View {
                     Text("\(text(selected.first?["date"])) to \(text(selected.last?["date"])) · \(selected.count) recorded \(selected.count == 1 ? "date" : "dates")")
                         .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                     Chart {
-                        ForEach(Array(selected.suffix(30).enumerated()), id: \.offset) { _, day in
+                        ForEach(Array(chartDays.enumerated()), id: \.offset) { _, day in
                             if let value = number(day[field]) {
-                                BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60), width: .fixed(40))
+                                BarMark(x: .value("Recorded day", text(day["date"])), y: .value(key == "tokens" ? "Tokens" : "Minutes", key == "tokens" ? value : value / 60), width: chartDays.count > 10 ? .ratio(0.8) : .fixed(40))
                                     .cornerRadius(4)
                             }
                         }
@@ -293,14 +303,24 @@ struct NativeDashboard: View {
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: period)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: host)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selectedDate)
-                        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 3)) {
-                            AxisTick(); AxisValueLabel().font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
+                        .chartXAxis { AxisMarks(values: axisDates) { axis in
+                            AxisTick()
+                            AxisValueLabel(centered: chartDays.count == 1,
+                                           anchor: chartDays.count == 1 ? .top : axis.as(String.self) == axisDates.last ? .topTrailing : .topLeading,
+                                           collisionResolution: .greedy) {
+                                if let date = axis.as(String.self) {
+                                    Text(String(date.suffix(5)).replacingOccurrences(of: "-", with: "/"))
+                                        .font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
+                                        .fixedSize()
+                                }
+                            }
                         } }
                         .chartYAxis { AxisMarks(values: .automatic(desiredCount: 4)) { axis in
                             AxisGridLine()
                             AxisValueLabel {
                                 if let value = axis.as(Double.self) {
-                                    Text(formatted(value, compact: true)).font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
+                                    Text(key == "tokens" ? formatted(value, compact: true) : "\(formatted(value)) min")
+                                        .font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
                                 }
                             }
                         } }
