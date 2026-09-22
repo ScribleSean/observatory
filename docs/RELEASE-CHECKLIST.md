@@ -4,7 +4,7 @@ Status reviewed September 22, 2026 UTC. A passing development-machine test is no
 
 ## Current development state
 
-Both development devices run **0.3.13, build 29** from `c23ad3b`. Windows' recoverable upgrade preserved all 306 checked saved files and completed a seven-source collection. Mac's recoverable replacement preserved seven specifically checked configuration, snapshot and private-allowance files; its latest scheduled collection was partial, with ActivityWatch, saved Codex tokens and Settings unavailable. Source synchronization does not update installed binaries.
+Both development devices run **0.3.13, build 29** from `c23ad3b`. Windows' recoverable upgrade preserved all 306 checked saved files and completed a seven-source collection. Mac's recoverable replacement preserved seven specifically checked configuration, snapshot and private-allowance files; its initial collection read 12 of 13 sources, with ActivityWatch unavailable. A later Mac Codex read was transiently unavailable, then recovered automatically at 03:06:20 UTC. Source synchronization does not update installed binaries.
 
 Both build 29 packages from `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86` passed their full hosted and local checks, and both completed recoverable development upgrades. These results do not establish full visual, motion or accessibility acceptance. See the [build 29 record](RELEASE-0.3.13.md#build-29-verification-september-22-utc) and [audit reconciliation](AUDIT-STATUS.md) for remaining interaction checks.
 

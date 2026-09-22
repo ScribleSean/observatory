@@ -142,7 +142,7 @@ dashboard fixture verified navigation, source settings, device callbacks, consen
 and theme changes. Bundled-font Mac previews cover light and dark Allowances,
 Tokens, Activity and Settings, plus enlarged text and dashed archive gaps. Twenty
 focused theme, archive and documentation checks passed. Installed interaction,
-motion and accessibility acceptance remains open. The later live Mac review also found long-history date clipping and an Activity chart missing an axis unit; source repairs for those findings are under verification and are not in build 29.
+motion and accessibility acceptance remains open. The later live Mac review also found long-history date clipping and an Activity chart missing an axis unit; the repair in `2cec866` passed native compilation, self-tests and synthetic narrow/enlarged chart review. It is not in build 29 and is being prepared as a build-30 candidate.
 
 ## Build 27 verification, September 21
 
