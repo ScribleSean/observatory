@@ -1,6 +1,6 @@
 # September 15 audit follow-up
 
-Reviewed through September 22 against the installed build-29 source, subsequent popup repairs, the original repair report and development records. The development Mac now has build 30 from `106f607421c17ba551cb78bb14ffe4f678ba9428`; its package and recoverable replacement passed, and one scheduled collection completed partial with known unavailable sources. The fixed-diagnostic agent-receipt timeout does not establish a permission cause, and build-30 UI acceptance is not yet observed. Windows remains installed at build 29; its build-30 package passed locally while hosted verification and installation are pending. The [audit reports in PR #1](https://github.com/ScribleSean/observatory/pull/1) predate substantial repairs committed directly to main. The report-only PR is not a pending implementation patch.
+Reviewed through September 22 against the original reports, repairs on main and development-machine checks. Mac build 30 is installed; Windows remains on build 29 while its build-30 hosted verification and installation are pending. Build-30 UI acceptance remains open. The [release notes](RELEASE-0.3.13.md) record package, installation and collection results. The [audit reports in PR #1](https://github.com/ScribleSean/observatory/pull/1) predate substantial repairs committed directly to main. The report-only PR is not a pending implementation patch.
 
 ## Completed source repairs
 

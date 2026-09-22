@@ -4,9 +4,9 @@ Revision-specific development-machine checks. These results are not a full acces
 
 ## Mac build 30 package and replacement, September 22
 
-The Mac package, native checks, and synthetic demo passed at `106f607421c17ba551cb78bb14ffe4f678ba9428`; the package run reported 557 passes and 15 platform skips. The retained ZIP passed full-manifest and strict nested-signature verification. An approved recoverable replacement installed build 30, retained build 29 for recovery, and left seven specifically checked configuration, snapshot, and private-allowance files unchanged.
+Mac build 30 from `106f607421c17ba551cb78bb14ffe4f678ba9428` passed package and recoverable replacement checks. The prior app and checked saved data were retained. See the [release record](RELEASE-0.3.13.md#mac-build-30-verification-september-22-utc) for exact artifacts and validation.
 
-The desktop is locked. One post-restart scheduled collection completed partial with the known ActivityWatch and optional agent-receipt sources unavailable; successful token and settings reads do not establish the diagnostic timeout cause. No build-30 UI observation has occurred. This is package, replacement, and point-in-time collection evidence, not build-30 visual, motion, keyboard, or accessibility acceptance. Windows remains installed at build 29; its build-30 package passed locally, while hosted verification and installation are pending.
+The desktop is locked. Scheduled collection completed with ActivityWatch unavailable and an optional agent-receipt timeout, whose cause is unconfirmed. No build-30 UI observation has occurred. Visual, motion, keyboard and accessibility checks remain open. Windows remains installed at build 29; its build-30 package passed locally, while hosted verification and installation are pending.
 
 ## Installed build 29 review, September 22
 
