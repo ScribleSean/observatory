@@ -4,7 +4,7 @@ Status: Mac remains on development build 28 from source `97f1f1a`. Windows now r
 
 ## Build 29 verification, September 22 UTC
 
-Build 29 is a source and artifact checkpoint for the native UX follow-up below. It has not completed installed-app or live interaction acceptance.
+Build 29 contains the native UX follow-up below. Windows installation and collection are verified; Mac replacement and full native interaction acceptance remain pending.
 
 The [clean Mac build 29 run](https://github.com/ScribleSean/observatory/actions/runs/35678888315) passed at source `c23ad3b6aaad92d986d368cd11eebb9da8eb3c86`, with 557 test passes, 15 platform skips and no failures. The retained ZIP was independently verified locally against its checksum, all 1,863 manifest entries and strict nested signatures.
 
