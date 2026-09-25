@@ -1,5 +1,4 @@
 const counters=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens','requestCount'];
-const tokenCounters=counters.slice(0,-1);
 // Accept known Claude family/version shapes, including dated stable releases,
 // but never carry arbitrary local model text into the dashboard.
 const knownModel=/^claude-(?:(?:opus|sonnet|haiku)-[1-9]\d?(?:-\d{1,2})?(?:-\d{8})?(?:-latest)?|[1-9]\d?(?:-\d{1,2})?-(?:opus|sonnet|haiku)(?:-\d{8})?(?:-latest)?)$/;

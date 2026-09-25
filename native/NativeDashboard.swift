@@ -380,10 +380,11 @@ struct NativeDashboard: View {
     }
 
     private var codexProviderRow: some View {
-        let count = rows(displayedSnapshot?.object["tokens"]).filter { text($0["status"]) == "ok" }.count
+        let sources = rows(displayedSnapshot?.object["tokens"]).filter { text($0["status"]) != "not-connected" }
+        let count = sources.filter { text($0["status"]) == "ok" }.count
         return VStack(alignment: .leading, spacing: 3) {
-            ObservatoryValueRow("Codex", value: count == 0 ? "Unknown · no recorded device source" : "\(count) configured \(count == 1 ? "device" : "devices")")
-            Text("Recorded Codex requests. HAPI and Happy relay records use the same native log store.")
+            ObservatoryValueRow("Codex", value: sources.isEmpty ? "Unknown" : "\(count)/\(sources.count) configured devices read")
+            Text("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
         }
     }
@@ -392,7 +393,7 @@ struct NativeDashboard: View {
         if let source, text(source["status"]) == "ok", let summary = providerTokenSummary(source) {
             let dates = summary.dates
             ObservatoryValueRow(name, value: "Recorded local requests · \(formatted(summary.total, compact: true)) tokens")
-            Text("\(dates.first!.formatted(date: .abbreviated, time: .omitted)) to \(dates.last!.formatted(date: .abbreviated, time: .omitted)) · \(text(source["scope"], fallback: "Local device only"))")
+            Text("\(providerDate(dates.first!)) to \(providerDate(dates.last!)) · Local device only")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
@@ -418,13 +419,25 @@ struct NativeDashboard: View {
         let days = rows(source["days"])
         guard !days.isEmpty else { return nil }
         var total = 0.0, dates: [Date] = []
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
         for day in days {
-            guard let value = number(day["totalTokens"]), value <= limit,
-                  let date = ISO8601DateFormatter().date(from: text(day["date"]) + "T00:00:00Z"),
+            guard let value = number(day["totalTokens"]), value <= limit, value.rounded(.towardZero) == value,
+                  let date = formatter.date(from: text(day["date"])), formatter.string(from: date) == text(day["date"]),
                   total <= limit - value else { return nil }
             total += value; dates.append(date)
         }
         return (total, dates.sorted())
+    }
+
+    private func providerDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
     }
 }
 

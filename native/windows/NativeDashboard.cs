@@ -456,16 +456,17 @@ internal sealed partial class NativeDashboard : Form
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
         var providerRows = NativeHistory.Rows(snapshot?["providerTokenSources"]);
-        var codexCount = NativeHistory.Rows(snapshot?["tokens"]).Count(row => Snapshot.Text(row["status"]) == "ok");
+        var codexSources = NativeHistory.Rows(snapshot?["tokens"]).Where(row => Snapshot.Text(row["status"]) != "not-connected").ToArray();
+        var codexCount = codexSources.Count(row => Snapshot.Text(row["status"]) == "ok");
         var providerValues = new List<(string, string)> {
-            ("Codex", codexCount == 0 ? "Unknown · no recorded source" : codexCount + " configured " + (codexCount == 1 ? "device" : "devices")),
+            ("Codex", codexSources.Length == 0 ? "Unknown" : $"{codexCount}/{codexSources.Length} configured devices read"),
             ("ChatGPT", "Unknown · no connected export"),
             ("Cursor", "Unknown · no connected export"),
             ("Antigravity", "Unknown · no connected export")
         };
         providerValues.InsertRange(1, ProviderTokenValues(providerRows.FirstOrDefault(row => Snapshot.Text(row["provider"]) == "claude-code")));
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
-        Label("Codex records include HAPI and Happy relays from the same native log store.").ForeColor = Color.Silver;
+        Label("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
@@ -488,9 +489,9 @@ internal sealed partial class NativeDashboard : Form
         var days = NativeHistory.Rows(source["days"]);
         if (!ProviderTokenSummary(days, out var total, out var dates)) return [("Claude Code · local", "Unknown"),
             ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
-        var range = dates[0].ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture) + " to " + dates[^1].ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture);
+        var range = dates[0].ToString("d", System.Globalization.CultureInfo.CurrentCulture) + " to " + dates[^1].ToString("d", System.Globalization.CultureInfo.CurrentCulture);
         return [("Claude Code · local", Snapshot.Format(total) + " tokens · " + range),
-            ("Claude check", Snapshot.Text(source["status"]) + " · " + Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
     }
 
     private static string ProviderStatus(JsonObject source) => Snapshot.Text(source["status"]) == "not-connected" ? "Collection off" : "Unknown";
@@ -502,7 +503,7 @@ internal sealed partial class NativeDashboard : Form
         if (days.Length == 0) { dates = []; return false; }
         foreach (var day in days)
         {
-            if (Snapshot.Number(day["totalTokens"]) is not { } value || value > safeInteger || total > safeInteger - value ||
+            if (Snapshot.Number(day["totalTokens"]) is not { } value || value > safeInteger || Math.Truncate(value) != value || total > safeInteger - value ||
                 !DateOnly.TryParseExact(Snapshot.Text(day["date"]), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
             { dates = []; return false; }
             total += value; datesList.Add(date);
