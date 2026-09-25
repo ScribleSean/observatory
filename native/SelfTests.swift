@@ -335,6 +335,9 @@ func runSelfTests() {
     precondition((try? CollectorConfiguration.validate(["wispr": true]))?["wispr"] == true)
     precondition((try? CollectorConfiguration.validate(["quota": true]))?["quota"] == true)
     precondition(CollectorConfiguration.defaults["quota"] == false)
+    precondition(CollectorConfiguration.defaults["claude"] == false)
+    precondition((try? CollectorConfiguration.validate(["claude": true]))?["claude"] == true)
+    precondition((try? CollectorConfiguration.validate(["claude": "true"])) == nil)
     for source in ["receipts", "benchmarks"] {
         precondition(CollectorConfiguration.defaults[source] == false)
         precondition((try? CollectorConfiguration.validate([source: true]))?[source] == true)

@@ -64,7 +64,7 @@ internal static class SetupWizardTests
             var config = JsonNode.Parse(File.ReadAllText(Path.Combine(runtime, "collector.config.json")))!;
             Check(config["quota"]!.GetValue<bool>() && config["quotaWslDistribution"]!.GetValue<string>() == "Ubuntu", "Selected account source was not saved.");
             Check(config["wispr"]!.GetValue<bool>(), "Selected Wispr source was not saved.");
-            Check(!config["activity"]!.GetValue<bool>() && !config["codex"]!.GetValue<bool>() && config["wslDistribution"] is null, "Unselected sources were enabled.");
+            Check(!config["activity"]!.GetValue<bool>() && !config["codex"]!.GetValue<bool>() && !config["claude"]!.GetValue<bool>() && config["wslDistribution"] is null, "Unselected sources were enabled.");
             Check(!File.Exists(Path.Combine(runtime, "public/local/usage.json")), "Synthetic setup read real sources.");
             File.WriteAllText(Path.Combine(output, "setup-result.txt"), "setup-wizard: passed");
         }
