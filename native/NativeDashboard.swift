@@ -357,7 +357,7 @@ struct NativeDashboard: View {
             Button("View Agents") { selection.section = "agents" }
             GroupBox("Provider token sources") {
                 VStack(alignment: .leading, spacing: 10) {
-                    providerTokenRow(name: "Codex", source: nil, fallback: "Recorded Codex requests on this device")
+                    codexProviderRow
                     providerTokenRow(name: "Claude Code", source: rows(displayedSnapshot?.object["providerTokenSources"]).first { text($0["provider"]) == "claude-code" }, fallback: "Unknown · enable local Claude Code request collection")
                     providerTokenRow(name: "ChatGPT", source: nil, fallback: "Unknown · no connected personal token export")
                     providerTokenRow(name: "Cursor", source: nil, fallback: "Unknown · no connected personal token export")
@@ -379,23 +379,52 @@ struct NativeDashboard: View {
         }
     }
 
+    private var codexProviderRow: some View {
+        let count = rows(displayedSnapshot?.object["tokens"]).filter { text($0["status"]) == "ok" }.count
+        return VStack(alignment: .leading, spacing: 3) {
+            ObservatoryValueRow("Codex", value: count == 0 ? "Unknown · no recorded device source" : "\(count) configured \(count == 1 ? "device" : "devices")")
+            Text("Recorded Codex requests. HAPI and Happy relay records use the same native log store.")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+        }
+    }
+
     @ViewBuilder private func providerTokenRow(name: String, source: JSONObject?, fallback: String) -> some View {
-        if name == "Codex" {
-            ObservatoryValueRow(name, value: fallback)
-        } else if let source, text(source["status"]) == "ok" {
-            let days = rows(source["days"])
-            let total = days.compactMap { number($0["totalTokens"]) }.reduce(0, +)
-            let dates = days.map { text($0["date"]) }.filter { !$0.isEmpty }.sorted()
-            ObservatoryValueRow(name, value: "Recorded local requests · \(formatted(total, compact: true)) tokens")
-            Text("\(dates.first ?? "Unknown") to \(dates.last ?? "Unknown") · \(text(source["scope"], fallback: "Local device only"))")
+        if let source, text(source["status"]) == "ok", let summary = providerTokenSummary(source) {
+            let dates = summary.dates
+            ObservatoryValueRow(name, value: "Recorded local requests · \(formatted(summary.total, compact: true)) tokens")
+            Text("\(dates.first!.formatted(date: .abbreviated, time: .omitted)) to \(dates.last!.formatted(date: .abbreviated, time: .omitted)) · \(text(source["scope"], fallback: "Local device only"))")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
         } else if let source {
-            ObservatoryValueRow(name, value: "Unknown · \(text(source["status"], fallback: "not enabled"))")
+            ObservatoryValueRow(name, value: providerSourceStatus(source))
+            Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
         } else {
             ObservatoryValueRow(name, value: fallback)
         }
+    }
+
+    private func providerSourceStatus(_ source: JSONObject) -> String {
+        switch text(source["status"]) {
+        case "not-connected": return "Collection off"
+        case "unavailable": return "Unknown"
+        default: return "Unknown"
+        }
+    }
+
+    private func providerTokenSummary(_ source: JSONObject) -> (total: Double, dates: [Date])? {
+        let limit = 9_007_199_254_740_991.0
+        let days = rows(source["days"])
+        guard !days.isEmpty else { return nil }
+        var total = 0.0, dates: [Date] = []
+        for day in days {
+            guard let value = number(day["totalTokens"]), value <= limit,
+                  let date = ISO8601DateFormatter().date(from: text(day["date"]) + "T00:00:00Z"),
+                  total <= limit - value else { return nil }
+            total += value; dates.append(date)
+        }
+        return (total, dates.sorted())
     }
 }
 

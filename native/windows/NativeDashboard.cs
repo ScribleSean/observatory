@@ -265,7 +265,7 @@ internal sealed partial class NativeDashboard : Form
         var total = NativeHistory.Sum(selected, field);
         var historyStart = body.Controls.Count;
         Label(kind == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME").ForeColor = Color.Silver;
-        Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " Codex log tokens", true);
+        Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " tokens", true);
         Label($"{selected.Length} recorded {(selected.Length == 1 ? "date" : "dates")}").ForeColor = Color.Silver;
         body.Controls.Add(new DashboardHistoryChart(selected, kind == "tokens"));
         Label("Up to 30 recorded days shown. Missing dates are not filled with zeros.").ForeColor = Color.Silver;
@@ -456,14 +456,16 @@ internal sealed partial class NativeDashboard : Form
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
         var providerRows = NativeHistory.Rows(snapshot?["providerTokenSources"]);
+        var codexCount = NativeHistory.Rows(snapshot?["tokens"]).Count(row => Snapshot.Text(row["status"]) == "ok");
         var providerValues = new List<(string, string)> {
-            ("Codex · local", "Recorded requests"),
+            ("Codex", codexCount == 0 ? "Unknown · no recorded source" : codexCount + " configured " + (codexCount == 1 ? "device" : "devices")),
             ("ChatGPT", "Unknown · no connected export"),
             ("Cursor", "Unknown · no connected export"),
             ("Antigravity", "Unknown · no connected export")
         };
         providerValues.InsertRange(1, ProviderTokenValues(providerRows.FirstOrDefault(row => Snapshot.Text(row["provider"]) == "claude-code")));
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
+        Label("Codex records include HAPI and Happy relays from the same native log store.").ForeColor = Color.Silver;
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
@@ -480,14 +482,33 @@ internal sealed partial class NativeDashboard : Form
 
     private static IEnumerable<(string, string)> ProviderTokenValues(JsonObject? source)
     {
-        if (source is null) return [("Claude Code · local", "Unknown · not enabled")];
-        if (Snapshot.Text(source["status"]) != "ok") return [("Claude Code · local", "Unknown · " + Snapshot.Text(source["status"], "not enabled"))];
+        if (source is null) return [("Claude Code · local", "Unknown · enable collection")];
+        if (Snapshot.Text(source["status"]) != "ok") return [("Claude Code · local", ProviderStatus(source)),
+            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
         var days = NativeHistory.Rows(source["days"]);
-        var total = NativeHistory.Sum(days, "totalTokens");
-        var dates = days.Select(row => Snapshot.Text(row["date"])).Where(date => date.Length > 0).OrderBy(date => date).ToArray();
-        var range = dates.Length == 0 ? "dates Unknown" : dates[0] + " to " + dates[^1];
+        if (!ProviderTokenSummary(days, out var total, out var dates)) return [("Claude Code · local", "Unknown"),
+            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+        var range = dates[0].ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture) + " to " + dates[^1].ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture);
         return [("Claude Code · local", Snapshot.Format(total) + " tokens · " + range),
             ("Claude check", Snapshot.Text(source["status"]) + " · " + Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+    }
+
+    private static string ProviderStatus(JsonObject source) => Snapshot.Text(source["status"]) == "not-connected" ? "Collection off" : "Unknown";
+
+    private static bool ProviderTokenSummary(JsonObject[] days, out double total, out DateOnly[] dates)
+    {
+        const double safeInteger = 9_007_199_254_740_991d;
+        total = 0; var datesList = new List<DateOnly>();
+        if (days.Length == 0) { dates = []; return false; }
+        foreach (var day in days)
+        {
+            if (Snapshot.Number(day["totalTokens"]) is not { } value || value > safeInteger || total > safeInteger - value ||
+                !DateOnly.TryParseExact(Snapshot.Text(day["date"]), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+            { dates = []; return false; }
+            total += value; datesList.Add(date);
+        }
+        dates = datesList.Order().ToArray();
+        return true;
     }
     protected override void Dispose(bool disposing)
     {
