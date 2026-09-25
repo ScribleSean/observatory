@@ -26,24 +26,23 @@ export default function ProviderCoverage({ tokens, sources = [] }: {
   const claude = sources.filter(source => source.provider === 'claude-code');
   return <section className="receipt-panel" aria-label="Provider coverage">
     <h2>Provider coverage</h2>
-    <p>Each app has its own usage records. A connected device does not establish coverage of every provider.</p>
+    <p>Recorded usage by app. Unknown means no verified token count is available.</p>
     <dl className="model-counts">
       <div><dt>Codex</dt><dd>{codex.length ? `${read}/${codex.length} configured devices read` : 'Unknown'}</dd></div>
-    </dl>
-    <p>Native Codex logs include HAPI and Happy sessions when they use the same log store. Relay messages are not counted again.</p>
-    <dl className="model-counts">
       {claude.length ? claude.map(source => {
         const total = recordedTotal(source);
         return <div key={source.host}><dt>Claude Code · {source.host}</dt>
-          <dd>{total === null ? (source.status === 'not-connected' ? 'Collection off' : 'Unknown') : `${total.toLocaleString('en-US')} recorded tokens on ${source.days!.length} dates`}</dd></div>;
+          <dd>{total === null ? (source.status === 'not-connected' ? 'Collection off' : 'Unknown') : `${total.toLocaleString('en-US')} tokens · ${source.days!.length} recorded ${source.days!.length === 1 ? 'date' : 'dates'}`}</dd></div>;
       }) : <div><dt>Claude Code</dt><dd>Unknown</dd></div>}
-    </dl>
-    <p>Enable saved Claude Code usage in native Settings. Records stay on the collecting device. Counts include input, cache reads, cache writes and output, not subscription limits or a bill.</p>
-    <dl className="model-counts">
       <div><dt>ChatGPT</dt><dd>Unknown</dd></div>
       <div><dt>Cursor</dt><dd>Unknown</dd></div>
       <div><dt>Antigravity</dt><dd>Unknown</dd></div>
     </dl>
-    <p>Token sources for these apps are not connected. ChatGPT app usage is separate from Codex. Selecting a model in Cursor or Antigravity does not create a native Codex or Claude Code record. Saved review receipts do not cover all Antigravity usage.</p>
+    <details className="method-note">
+      <summary>What these counts include</summary>
+      <p>Codex includes HAPI and Happy sessions when they use the same native log store. Relay messages are not counted again.</p>
+      <p>Enable saved Claude Code usage in native Settings. Its records stay on the collecting device. Counts include input, cache reads, cache writes and output, not subscription limits or a bill.</p>
+      <p>ChatGPT, Cursor and Antigravity token sources are not connected. Choosing a model in another app does not create a Codex or Claude Code record. Saved review receipts cover only those reviews.</p>
+    </details>
   </section>;
 }
