@@ -109,10 +109,10 @@ def collect(folder):
                         continue
                     message = event.get('message')
                     if not isinstance(message, dict) or message.get('role') != 'assistant':
-                        continue
+                        return unavailable()
                     usage = message.get('usage')
                     if not isinstance(usage, dict):
-                        continue
+                        return unavailable()
                     saw_assistant = True
                     values = tuple(number(usage.get(field)) for field in FIELDS)
                     identity = (message.get('id'), event.get('requestId'))

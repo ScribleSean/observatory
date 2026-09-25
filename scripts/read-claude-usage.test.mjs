@@ -22,6 +22,11 @@ test('requires Claude assistant envelopes, rejects malformed nonblank lines, and
   await rm(path.join(root,'projects'),{recursive:true});await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-09-25T03:59:59Z'})+event('m1','r1',usage(2,0,0,3),{timestamp:'2026-09-25T04:00:01Z'}));
   assert.equal(read(root).days[0].date,'2026-09-24');
 }));
+test('withholds when an assistant envelope lacks numeric usage while non-assistant events stay out of scope',async()=>fixture(async root=>{
+  const missing=JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r2',message:{role:'assistant',id:'m2'}})+'\n';
+  const ignored=JSON.stringify({type:'system',message:{role:'assistant',id:'m3'}})+'\n';
+  await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2))+ignored+missing);assert.equal(read(root).status,'unavailable');
+}));
 test('uses the earliest date when file order places an older lower snapshot last',async()=>fixture(async root=>{
   await log(root,'a-later.jsonl',event('m1','r1',usage(4,0,0,8),{timestamp:'2026-09-25T04:30:00Z'}));
   await log(root,'z-earlier.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-09-25T03:30:00Z'}));
