@@ -22,6 +22,11 @@ test('requires Claude assistant envelopes, rejects malformed nonblank lines, and
   await rm(path.join(root,'projects'),{recursive:true});await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-09-25T03:59:59Z'})+event('m1','r1',usage(2,0,0,3),{timestamp:'2026-09-25T04:00:01Z'}));
   assert.equal(read(root).days[0].date,'2026-09-24');
 }));
+test('uses the earliest date when file order places an older lower snapshot last',async()=>fixture(async root=>{
+  await log(root,'a-later.jsonl',event('m1','r1',usage(4,0,0,8),{timestamp:'2026-09-25T04:30:00Z'}));
+  await log(root,'z-earlier.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-09-25T03:30:00Z'}));
+  const data=read(root);assert.equal(data.status,'ok');assert.equal(data.days[0].date,'2026-09-24');assert.equal(data.days[0].totalTokens,12);
+}));
 test('deduplicates copied logs, keeps separate identities, and retains old dates',async()=>fixture(async root=>{
   const first=event('m1','r1',usage(1,2,3,4),{timestamp:'2024-01-01T03:00:00Z'});await log(root,'one.jsonl',first+event('m2','r2',usage(5,0,0,6),{timestamp:'2024-01-01T03:00:00Z'}));await log(root,'nested/copy.jsonl',first);
   const data=read(root);assert.equal(data.days.length,1);assert.equal(data.days[0].requestCount,2);assert.equal(data.days[0].totalTokens,21);assert.equal(data.days[0].date,'2023-12-31');

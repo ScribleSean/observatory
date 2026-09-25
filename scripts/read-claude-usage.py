@@ -80,7 +80,7 @@ def collect(folder):
                         return unavailable()
         if not files:
             return {'provider': 'claude-code', 'status': 'not-found'}
-        records, saw_assistant, lines = {}, False, 0
+        records, saw_assistant, lines, bytes_read = {}, False, 0, 0
         for file in sorted(files):
             if file.is_symlink() or not file.is_file():
                 return unavailable()
@@ -88,16 +88,20 @@ def collect(folder):
             if not beneath(resolved, projects) or resolved != file:
                 return unavailable()
             before_stat = file.stat()
-            with file.open('r', encoding='utf-8') as stream:
-                for line in stream:
+            with file.open('rb') as stream:
+                while True:
+                    line = stream.readline(MAX_LINE_BYTES + 1)
+                    if not line:
+                        break
                     lines += 1
-                    if lines > MAX_LINES or len(line.encode('utf-8')) > MAX_LINE_BYTES:
+                    bytes_read += len(line)
+                    if lines > MAX_LINES or len(line) > MAX_LINE_BYTES or bytes_read > MAX_TOTAL_BYTES:
                         return unavailable()
                     if not line.strip():
                         continue
                     try:
-                        event = json.loads(line)
-                    except (TypeError, ValueError):
+                        event = json.loads(line.decode('utf-8'))
+                    except (TypeError, UnicodeError, ValueError):
                         return unavailable()
                     if not isinstance(event, dict):
                         continue
@@ -134,6 +138,8 @@ def collect(folder):
                         records[identity] = (min(prior[0], current[0]), current[1], current[2], current[3])
                     elif not all(a <= b for a, b in zip(after, before)):
                         return unavailable()
+                    else:
+                        records[identity] = (min(prior[0], current[0]), prior[1], prior[2], prior[3])
             after_stat = file.stat()
             if (before_stat.st_dev, before_stat.st_ino, before_stat.st_size, before_stat.st_mtime_ns) != (
                     after_stat.st_dev, after_stat.st_ino, after_stat.st_size, after_stat.st_mtime_ns):
