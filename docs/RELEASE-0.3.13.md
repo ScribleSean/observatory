@@ -1,6 +1,12 @@
 # Observatory 0.3.13 candidate
 
-Status: The development Mac runs **0.3.13, build 31** from `0ad86df49f73d836091a78fbb8d4d1bf7152ece2`. Windows build 31 passed local and hosted package checks. Its ordinary upgrade remains unconfirmed after the desktop connection became unavailable. The last confirmed Windows installation is build 30. Neither is published as a production release.
+Status: Both development devices run **0.3.13, build 31** from `0ad86df49f73d836091a78fbb8d4d1bf7152ece2`. The Windows installation was verified on September 25. Neither is published as a production release.
+
+## Windows installation follow-up, September 25 UTC
+
+The original pinned Windows candidate passed the guarded ordinary upgrade and installed verification. The first attempt timed out waiting for a normal quit and replaced no app files. After the app exited, the failed receipt and task definition were archived. Independent inventory checks confirmed the original build 30 remained intact before one guarded retry.
+
+The retry installed `0.3.13.31`, retained 3,071 previous app files for recovery, preserved all 306 checked saved-data files and confirmed the app running. Installed verification passed and removed the completed launcher task. The scheduled collection ending at 16:49:17 UTC completed with four of seven sources read. Mac and Windows saved Codex records were readable, while Ubuntu records remained unavailable. A read-only WSL launch failed before executing a command with `Wsl/Service/E_UNEXPECTED`. Combined tokens remained unverified. Package and installation success do not establish full source coverage or complete UI acceptance.
 
 ## Build 31 verification, September 22 UTC
 
@@ -20,7 +26,7 @@ The initial collection had unavailable token sources. An isolated Mac diagnostic
 
 The local final candidate at `0ad86df` passed package checks and the TEST installer lifecycle. Its 3,069-file manifest covers 268,908,122 bytes and has SHA-256 `fb11ad13d5f75445eeb2909ad515cf4bab96a8a61bce872599979666bd26e9d9`. The ordinary unsigned installer is 100,445,166 bytes with SHA-256 `a20c02de46086285a1fdeede50511d87694442b979affda2261c77e8ee8ba4d2`.
 
-The [final hosted Windows run](https://github.com/ScribleSean/observatory/actions/runs/35691764297) passed the complete clean-source package and isolated installer lifecycle at `0ad86df`, finishing at 06:10:21 UTC. Immediately before the ordinary upgrade attempt, the development checkout was clean at that source, the installed app was build 30, and no upgrade task or result receipt existed. The subsequent connection attempt and read-only follow-up timed out. Inspect existing task and receipt state after reconnecting before another launch. Build-31 ordinary installation and fresh installed collection remain unconfirmed.
+The [final hosted Windows run](https://github.com/ScribleSean/observatory/actions/runs/35691764297) passed the complete clean-source package and isolated installer lifecycle at `0ad86df`, finishing at 06:10:21 UTC. Immediately before the September 22 upgrade attempt, the development checkout was clean at that source, the installed app was build 30, and no upgrade task or result receipt existed. The subsequent connection attempt and read-only follow-up timed out. The September 25 inspection and verified installation above supersede that unconfirmed state.
 
 ## Source follow-up after build 31
 

@@ -7,6 +7,7 @@ import {durationText, compactCount as compact} from '../scripts/display-format.m
 import { needsWindowsSetup } from '../scripts/setup-state.mjs';
 import WeekTimeline from './week-timeline';
 import ToolDetail from './tool-detail';
+import ProviderCoverage, {type ProviderTokenSource} from './provider-coverage';
 import Dictation, {type DictationSource} from './dictation';
 import Allowances, {type PeerQuota, type Quota} from './allowances';
 import { selectTokenDays, aggregateProfiles } from '../scripts/token-periods.mjs';
@@ -86,6 +87,7 @@ type Agent = {
   recordedAt: string;
 };
 type Report = {
+  providerTokenSources?: ProviderTokenSource[];
   dictation?:DictationSource[];
   activityHistory?:ActivityRow[];
   agentSource?:{status:string;checkedAt?:string;skipped:number;limited:boolean};
@@ -273,12 +275,14 @@ export default function Home() {
     ...(data.dictation||[]).map(s=>({host:s.host,kind:`${s.source || 'Voice'} aggregates`,status:s.status,checkedAt:s.checkedAt})),
     ...(data.agentSource?[{host:'Local',kind:'Handoff receipts',status:data.agentSource.status,checkedAt:data.agentSource.checkedAt}]:[]),
     ...data.activity.map(a=>({...a,kind:'ActivityWatch'})), ...data.tokens.map(t=>({...t,kind:'Codex logs'})),
+    ...(data.providerTokenSources||[]).filter(s=>s.provider==='claude-code').map(s=>({host:s.host,kind:'Claude Code logs',status:s.status,checkedAt:s.checkedAt})),
     ...(data.quota?[{host:'Codex account',kind:'Limits snapshot',status:data.quota.status,checkedAt:data.quota.checkedAt}]:[]),
     ...(data.localModel?[{host:'Ubuntu',kind:'Local model receipts',status:data.localModel.status,checkedAt:data.localModel.checkedAt}]:[]),
     ...(data.settings||[]).map(s=>({host:s.host,kind:'Settings & tool metadata',status:s.status,checkedAt:s.checkedAt}))
   ] : [];
-  const sourceCount=sourceRows.filter(x=>x.status==='ok').length;
-  const sourceTotal=sourceRows.length;
+  const configuredSources=sourceRows.filter(x=>x.status!=='not-connected');
+  const sourceCount=configuredSources.filter(x=>x.status==='ok').length;
+  const sourceTotal=configuredSources.length;
   const settingsSource=tokenHost==='All'?data?.combinedSettings:data?.settings?.find(s=>s.host===tokenHost);
   const localRecords=data?.localModel?.records || [];
   const snapshotAge=freshness(data?.collectedAt,now || Date.now());
@@ -550,8 +554,8 @@ export default function Home() {
               <TabsContent value="tokens" className="view-panel">
                 <div className="view-heading">
                   <div>
-                    <h1>Tokens</h1>
-                    <p>Model workload, not hours worked. Activity shows recorded computer time.</p>
+                    <h1>Codex tokens</h1>
+                    <p>Saved Codex workload across the selected devices. Other providers are listed in Source health.</p>
                   </div>
                   <div className="period-controls">
                     <ToggleGroup value={[tokenPeriod]} onValueChange={v=>v[0] && setTokenPeriod(v[0])} aria-label="Token period" className="period-switch">
@@ -834,6 +838,7 @@ export default function Home() {
                   </div>
                   <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
                 </div>
+                <ProviderCoverage tokens={data.tokens} sources={data.providerTokenSources}/>
                 <div className="source-grid">
                   {sourceRows.map((s) => (
                     <div className="source-row" key={s.host + s.kind}>
