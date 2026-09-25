@@ -1,14 +1,13 @@
 const counters=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens','requestCount'];
 const tokenCounters=counters.slice(0,-1);
-const knownModels=new Set([
-  'claude-3-haiku','claude-3-opus','claude-3-sonnet','claude-3-5-haiku','claude-3-5-sonnet',
-  'claude-3-7-sonnet','claude-haiku-4-5','claude-opus-4','claude-opus-4-1','claude-sonnet-4','claude-sonnet-4-5',
-]);
+// Accept known Claude family/version shapes, including dated stable releases,
+// but never carry arbitrary local model text into the dashboard.
+const knownModel=/^claude-(?:(?:opus|sonnet|haiku)-[1-9]\d?(?:-\d{1,2})?(?:-\d{8})?(?:-latest)?|[1-9]\d?(?:-\d{1,2})?-(?:opus|sonnet|haiku)(?:-\d{8})?(?:-latest)?)$/;
 
 const valid=value=>Number.isSafeInteger(value) && value>=0;
 const validDate=value=>typeof value==='string' && /^\d{4}-\d\d-\d\d$/.test(value) &&
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
-const modelName=value=>knownModels.has(value)?value:'unknown';
+const modelName=value=>typeof value==='string' && knownModel.test(value)?value:'unknown';
 
 function row(raw,{model=false}={}) {
   if(!raw || typeof raw!=='object' || Array.isArray(raw) || counters.some(key=>!valid(raw[key])) ||
@@ -17,18 +16,29 @@ function row(raw,{model=false}={}) {
   return {...(model?{model:modelName(raw.model)}:{}),...Object.fromEntries(counters.map(key=>[key,raw[key]]))};
 }
 
+function sum(rows,key) {
+  let total=0;
+  for(const item of rows) {
+    total+=item[key];
+    if(!Number.isSafeInteger(total)) throw Error('Claude counter overflow');
+  }
+  return total;
+}
+
 // The reader may retain local implementation fields, but this public projection
 // copies only counters and known model names. Its result is intentionally kept
 // outside Codex token aggregation and peer payloads.
 export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString()) {
   if(!['Mac','Windows'].includes(host) || !Number.isFinite(Date.parse(checkedAt)) ||
-    !raw || typeof raw!=='object' || !Array.isArray(raw.days) || raw.days.length>3660) throw Error('Invalid Claude report');
+    !raw || typeof raw!=='object' || raw.provider!=='claude-code' || raw.status!=='ok' ||
+    !Array.isArray(raw.days) || !raw.days.length || raw.days.length>3660) throw Error('Invalid Claude report');
   const seen=new Set();
   const days=raw.days.map(rawDay=>{
-    if(!validDate(rawDay?.date) || seen.has(rawDay.date) || !Array.isArray(rawDay.models) || rawDay.models.length>1000) throw Error('Invalid Claude day');
+    if(!validDate(rawDay?.date) || seen.has(rawDay.date) || !Array.isArray(rawDay.models) || !rawDay.models.length || rawDay.models.length>1000) throw Error('Invalid Claude day');
     seen.add(rawDay.date);
     const day={date:rawDay.date,...row(rawDay),models:rawDay.models.map(model=>row(model,{model:true}))};
-    for(const key of counters)if(day.models.reduce((total,model)=>total+model[key],0)!==day[key])throw Error('Inconsistent Claude day');
+    if(new Set(day.models.map(model=>model.model)).size!==day.models.length) throw Error('Duplicate Claude model');
+    for(const key of counters)if(sum(day.models,key)!==day[key])throw Error('Inconsistent Claude day');
     return day;
   }).sort((a,b)=>a.date.localeCompare(b.date));
   return {provider:'claude-code',host,status:'ok',checkedAt:new Date(checkedAt).toISOString(),scope:'Recorded Claude Code requests',days};

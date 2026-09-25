@@ -62,7 +62,9 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false}={
   const guarded=async(host,action)=>{try{return {...await action(),checkedAt:new Date().toISOString()};}catch{return unavailable(host);}};
   const python=process.env.OBSERVATORY_PYTHON || path.join(process.env.SystemRoot || 'C:/Windows','py.exe');
   const pythonArgs=path.basename(python).toLowerCase()==='py.exe'?['-3','-B','-X','utf8','-']:['-B','-X','utf8','-'];
-  const claudeDirectory=path.isAbsolute(process.env.CLAUDE_CONFIG_DIR || '') ? process.env.CLAUDE_CONFIG_DIR : path.join(homedir(),'.claude');
+  const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
+  const claudeDirectory=configuredClaudeDirectory === undefined || configuredClaudeDirectory === '' ? path.join(homedir(),'.claude') :
+    path.isAbsolute(configuredClaudeDirectory) ? configuredClaudeDirectory : null;
   const wsl=path.join(process.env.SystemRoot || 'C:/Windows','System32/wsl.exe');
   const settingsScript=(pairing?.readerPrefix??'')+await readFile(path.join(scripts,'read-settings.py'),'utf8');
   const [localSettings,ubuntuSettings,windows,wispr]=await Promise.all([guarded('Windows',async()=>{
@@ -106,8 +108,8 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false}={
   let claude;
   if(!config.claude) claude=unavailableClaudeTokenSource('Windows',new Date().toISOString(),'not-connected');
   else try {
-    const raw=JSON.parse(await run(python,pythonArgs,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),
-      {...process.env,CLAUDE_CONFIG_DIR:claudeDirectory}));
+    if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
+    const raw=JSON.parse(await run(python,[...pythonArgs,claudeDirectory],await readFile(path.join(scripts,'read-claude-usage.py'),'utf8')));
     claude=cleanClaudeTokenSource(raw,'Windows');
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   attachProviderTokenSources(result,[claude]);

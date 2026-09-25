@@ -20,9 +20,9 @@ import {refreshAllowances} from './refresh-allowances.mjs';
 import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
-function pythonReport(python,script,args,environment=process.env) {
+function pythonReport(python,script,args) {
   return new Promise((resolve,reject)=>{
-    const child=spawn(python,['-I','-B','-X','utf8','-',...args],{stdio:['pipe','pipe','ignore'],env:environment});
+    const child=spawn(python,['-I','-B','-X','utf8','-',...args],{stdio:['pipe','pipe','ignore']});
     let output='',done=false;
     const finish=(error)=>{
       if(done)return;done=true;clearTimeout(timer);
@@ -64,7 +64,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   const startedAt=new Date().toISOString();
   await atomic('collector.json',{state:'running',startedAt,intervalSeconds:300,maxRunSeconds:240});
   const report=async(name,args,prefix='')=>pythonReport(python,prefix+await readFile(path.join(scripts,name),'utf8'),args);
-  const claudeDirectory=path.isAbsolute(process.env.CLAUDE_CONFIG_DIR || '') ? process.env.CLAUDE_CONFIG_DIR : path.join(homedir(),'.claude');
+  const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
+  const claudeDirectory=configuredClaudeDirectory === undefined || configuredClaudeDirectory === '' ? path.join(homedir(),'.claude') :
+    path.isAbsolute(configuredClaudeDirectory) ? configuredClaudeDirectory : null;
   let previous=[];
   try{previous=await previousActivityHistory(path.join(folder,'usage.json'));}catch{}
   const result=await macSnapshot(config,{
@@ -99,8 +101,8 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   let claude;
   if(!config.claude) claude=unavailableClaudeTokenSource('Mac',new Date().toISOString(),'not-connected');
   else try {
-    const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[],
-      {...process.env,CLAUDE_CONFIG_DIR:claudeDirectory});
+    if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
+    const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[claudeDirectory]);
     claude=cleanClaudeTokenSource(raw,'Mac');
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   attachProviderTokenSources(result,[claude]);
