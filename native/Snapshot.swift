@@ -71,6 +71,7 @@ struct Snapshot {
     var sourceCounts: (read: Int, total: Int) {
         var sources = ["activity", "tokens", "settings", "dictation"].flatMap { rows(object[$0]) }
         sources += ["quota", "localModel", "agentSource"].compactMap { object[$0] as? JSONObject }
+        sources += rows(object["providerTokenSources"])
         sources = sources.filter { text($0["status"]) != "not-connected" }
         return (sources.filter { text($0["status"]) == "ok" }.count, sources.count)
     }

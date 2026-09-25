@@ -283,7 +283,7 @@ struct NativeDashboard: View {
                 if key == "activity" { ActivityWatchHelp() }
             } else {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(key == "tokens" ? "SAVED TOKENS" : "FOREGROUND TIME")
+                    Text(key == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME")
                         .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                     HStack {
                         Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : formattedDuration(number(chosen?[field])))
@@ -328,7 +328,7 @@ struct NativeDashboard: View {
                     Text("Up to 30 recorded days shown. Missing dates are not filled with zeros.")
                         .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
-                Text(key == "tokens" ? "Saved log tokens, not subscription charges. Combined totals require verified deduplication."
+                Text(key == "tokens" ? "Recorded Codex requests only. Saved log tokens are not subscription charges. Combined totals require verified deduplication."
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
                     .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 if key == "tokens", let chosen {
@@ -355,6 +355,15 @@ struct NativeDashboard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button("View Agents") { selection.section = "agents" }
+            GroupBox("Provider token sources") {
+                VStack(alignment: .leading, spacing: 10) {
+                    providerTokenRow(name: "Codex", source: nil, fallback: "Recorded Codex requests on this device")
+                    providerTokenRow(name: "Claude Code", source: rows(displayedSnapshot?.object["providerTokenSources"]).first { text($0["provider"]) == "claude-code" }, fallback: "Unknown · enable local Claude Code request collection")
+                    providerTokenRow(name: "ChatGPT", source: nil, fallback: "Unknown · no connected personal token export")
+                    providerTokenRow(name: "Cursor", source: nil, fallback: "Unknown · no connected personal token export")
+                    providerTokenRow(name: "Antigravity", source: nil, fallback: "Unknown · no connected personal token export")
+                }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
             ForEach(["activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource"], id: \.self) { key in
                 GroupBox(["quota": "Allowances", "localModel": "Local benchmarks", "agentSource": "Agent receipts", "settings": "Tool activity"][key] ?? key.capitalized) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -367,6 +376,25 @@ struct NativeDashboard: View {
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+
+    @ViewBuilder private func providerTokenRow(name: String, source: JSONObject?, fallback: String) -> some View {
+        if name == "Codex" {
+            ObservatoryValueRow(name, value: fallback)
+        } else if let source, text(source["status"]) == "ok" {
+            let days = rows(source["days"])
+            let total = days.compactMap { number($0["totalTokens"]) }.reduce(0, +)
+            let dates = days.map { text($0["date"]) }.filter { !$0.isEmpty }.sorted()
+            ObservatoryValueRow(name, value: "Recorded local requests · \(formatted(total, compact: true)) tokens")
+            Text("\(dates.first ?? "Unknown") to \(dates.last ?? "Unknown") · \(text(source["scope"], fallback: "Local device only"))")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+            Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+        } else if let source {
+            ObservatoryValueRow(name, value: "Unknown · \(text(source["status"], fallback: "not enabled"))")
+        } else {
+            ObservatoryValueRow(name, value: fallback)
         }
     }
 }

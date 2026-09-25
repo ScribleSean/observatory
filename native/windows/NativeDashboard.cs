@@ -264,8 +264,8 @@ internal sealed partial class NativeDashboard : Form
         var field = kind == "activity" ? "seconds" : "totalTokens";
         var total = NativeHistory.Sum(selected, field);
         var historyStart = body.Controls.Count;
-        Label(kind == "tokens" ? "SAVED TOKENS" : "FOREGROUND TIME").ForeColor = Color.Silver;
-        Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " tokens", true);
+        Label(kind == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME").ForeColor = Color.Silver;
+        Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " Codex log tokens", true);
         Label($"{selected.Length} recorded {(selected.Length == 1 ? "date" : "dates")}").ForeColor = Color.Silver;
         body.Controls.Add(new DashboardHistoryChart(selected, kind == "tokens"));
         Label("Up to 30 recorded days shown. Missing dates are not filled with zeros.").ForeColor = Color.Silver;
@@ -282,7 +282,7 @@ internal sealed partial class NativeDashboard : Form
                 .Select(key => new[] { TokenLabel(key), Snapshot.Format(NativeHistory.Sum(selected, key)) }));
             Table("Recorded models", ["Date", "Model", "Tokens"], selected.SelectMany(day => NativeHistory.Rows(day["models"]).Select(model => new[] {
                 Snapshot.Text(day["date"]), Snapshot.Text(model["model"]) + (model["inferred"]?.ToJsonString() == "true" ? " (inferred)" : ""), Snapshot.Format(Snapshot.Number(model["totalTokens"])) })));
-            Label("Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
+            Label("Recorded Codex requests only. Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
             TokenDetails(snapshot, selected);
         }
         else
@@ -455,6 +455,15 @@ internal sealed partial class NativeDashboard : Form
         var details = new DashboardButton { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 40 };
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
+        var providerRows = NativeHistory.Rows(snapshot?["providerTokenSources"]);
+        var providerValues = new List<(string, string)> {
+            ("Codex · local", "Recorded requests"),
+            ("ChatGPT", "Unknown · no connected export"),
+            ("Cursor", "Unknown · no connected export"),
+            ("Antigravity", "Unknown · no connected export")
+        };
+        providerValues.InsertRange(1, ProviderTokenValues(providerRows.FirstOrDefault(row => Snapshot.Text(row["provider"]) == "claude-code")));
+        AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
@@ -466,7 +475,19 @@ internal sealed partial class NativeDashboard : Form
             var title = kind switch { "quota" => "Allowances", "localModel" => "Local benchmarks", "agentSource" => "Agent receipts", "settings" => "Tool activity", _ => char.ToUpperInvariant(kind[0]) + kind[1..] };
             AddCard(new DashboardValueCard(title, values), "Source health");
         }
-        Label("Provider sign-ins remain on their owning devices. Saved execution records do not show which agents are running now.");
+        Label("Provider sign-ins remain on their owning devices. Provider rows are separate and are never added together. Saved execution records do not show which agents are running now.");
+    }
+
+    private static IEnumerable<(string, string)> ProviderTokenValues(JsonObject? source)
+    {
+        if (source is null) return [("Claude Code · local", "Unknown · not enabled")];
+        if (Snapshot.Text(source["status"]) != "ok") return [("Claude Code · local", "Unknown · " + Snapshot.Text(source["status"], "not enabled"))];
+        var days = NativeHistory.Rows(source["days"]);
+        var total = NativeHistory.Sum(days, "totalTokens");
+        var dates = days.Select(row => Snapshot.Text(row["date"])).Where(date => date.Length > 0).OrderBy(date => date).ToArray();
+        var range = dates.Length == 0 ? "dates Unknown" : dates[0] + " to " + dates[^1];
+        return [("Claude Code · local", Snapshot.Format(total) + " tokens · " + range),
+            ("Claude check", Snapshot.Text(source["status"]) + " · " + Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
     }
     protected override void Dispose(bool disposing)
     {

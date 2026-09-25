@@ -48,9 +48,9 @@ internal sealed partial class NativeDashboard
         var draft = sourceDraft;
         Label("Choose what this PC collects. Provider sign-ins stay in their own apps.").ForeColor = Color.Silver;
         Label("Collection").Font = brand;
-        var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 200, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
+        var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 240, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
         collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
-        foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
+        foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("claude", "Recorded Claude Code requests"),
             ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits") })
         {
             var check = new DashboardToggle { Text = title, AccessibleName = key, Width = collection.Width,
@@ -60,6 +60,7 @@ internal sealed partial class NativeDashboard
             collection.Controls.Add(check);
         }
         AddCard(collection, "Collection");
+        Label("Claude Code reads local recorded request metadata only. It does not sign in, copy credentials, or report account billing.").ForeColor = Color.Silver;
         var detailsStart = body.Controls.Count;
         Label("Source details").Font = brand;
         ActivityWatchHelp();
