@@ -490,7 +490,7 @@ internal sealed partial class NativeDashboard : Form
         if (!ProviderTokenSummary(days, out var total, out var dates)) return [("Claude Code · local", "Unknown"),
             ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
         var range = dates[0].ToString("d", System.Globalization.CultureInfo.CurrentCulture) + " to " + dates[^1].ToString("d", System.Globalization.CultureInfo.CurrentCulture);
-        return [("Claude Code · local", Snapshot.Format(total) + " tokens · " + range),
+        return [("Claude Code · local", Snapshot.Format(total) + " tokens"), ("Recorded dates", range),
             ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
     }
 
