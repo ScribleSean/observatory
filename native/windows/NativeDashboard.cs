@@ -264,7 +264,7 @@ internal sealed partial class NativeDashboard : Form
         var field = kind == "activity" ? "seconds" : "totalTokens";
         var total = NativeHistory.Sum(selected, field);
         var historyStart = body.Controls.Count;
-        Label(kind == "tokens" ? "SAVED TOKENS" : "FOREGROUND TIME").ForeColor = Color.Silver;
+        Label(kind == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME").ForeColor = Color.Silver;
         Label(kind == "activity" ? Snapshot.Duration(total) : (total is double count ? DashboardHistoryChart.AxisLabel(count) : "Unknown") + " tokens", true);
         Label($"{selected.Length} recorded {(selected.Length == 1 ? "date" : "dates")}").ForeColor = Color.Silver;
         body.Controls.Add(new DashboardHistoryChart(selected, kind == "tokens"));
@@ -282,7 +282,7 @@ internal sealed partial class NativeDashboard : Form
                 .Select(key => new[] { TokenLabel(key), Snapshot.Format(NativeHistory.Sum(selected, key)) }));
             Table("Recorded models", ["Date", "Model", "Tokens"], selected.SelectMany(day => NativeHistory.Rows(day["models"]).Select(model => new[] {
                 Snapshot.Text(day["date"]), Snapshot.Text(model["model"]) + (model["inferred"]?.ToJsonString() == "true" ? " (inferred)" : ""), Snapshot.Format(Snapshot.Number(model["totalTokens"])) })));
-            Label("Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
+            Label("Recorded Codex requests only. Reasoning is included in output. Tokens are not subscription charges. All-device totals require collector-verified deduplication.");
             TokenDetails(snapshot, selected);
         }
         else
@@ -455,6 +455,18 @@ internal sealed partial class NativeDashboard : Form
         var details = new DashboardButton { Text = "View Agents", AccessibleName = "View Agents", AutoSize = true, Height = 40 };
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
+        var providerRows = NativeHistory.Rows(snapshot?["providerTokenSources"]);
+        var codexSources = NativeHistory.Rows(snapshot?["tokens"]).Where(row => Snapshot.Text(row["status"]) != "not-connected").ToArray();
+        var codexCount = codexSources.Count(row => Snapshot.Text(row["status"]) == "ok");
+        var providerValues = new List<(string, string)> {
+            ("Codex", codexSources.Length == 0 ? "Unknown" : $"{codexCount}/{codexSources.Length} configured devices read"),
+            ("ChatGPT", "Unknown · no connected export"),
+            ("Cursor", "Unknown · no connected export"),
+            ("Antigravity", "Unknown · no connected export")
+        };
+        providerValues.InsertRange(1, ProviderTokenValues(providerRows.FirstOrDefault(row => Snapshot.Text(row["provider"]) == "claude-code")));
+        AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
+        Label("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
@@ -466,7 +478,38 @@ internal sealed partial class NativeDashboard : Form
             var title = kind switch { "quota" => "Allowances", "localModel" => "Local benchmarks", "agentSource" => "Agent receipts", "settings" => "Tool activity", _ => char.ToUpperInvariant(kind[0]) + kind[1..] };
             AddCard(new DashboardValueCard(title, values), "Source health");
         }
-        Label("Provider sign-ins remain on their owning devices. Saved execution records do not show which agents are running now.");
+        Label("Provider sign-ins remain on their owning devices. Provider rows are separate and are never added together. Saved execution records do not show which agents are running now.");
+    }
+
+    private static IEnumerable<(string, string)> ProviderTokenValues(JsonObject? source)
+    {
+        if (source is null) return [("Claude Code · local", "Unknown · enable collection")];
+        if (Snapshot.Text(source["status"]) != "ok") return [("Claude Code · local", ProviderStatus(source)),
+            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+        var days = NativeHistory.Rows(source["days"]);
+        if (!ProviderTokenSummary(days, out var total, out var dates)) return [("Claude Code · local", "Unknown"),
+            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+        var range = dates[0].ToString("d", System.Globalization.CultureInfo.CurrentCulture) + " to " + dates[^1].ToString("d", System.Globalization.CultureInfo.CurrentCulture);
+        return [("Claude Code · local", Snapshot.Format(total) + " tokens"), ("Recorded dates", range),
+            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+    }
+
+    private static string ProviderStatus(JsonObject source) => Snapshot.Text(source["status"]) == "not-connected" ? "Collection off" : "Unknown";
+
+    private static bool ProviderTokenSummary(JsonObject[] days, out double total, out DateOnly[] dates)
+    {
+        const double safeInteger = 9_007_199_254_740_991d;
+        total = 0; var datesList = new List<DateOnly>();
+        if (days.Length == 0) { dates = []; return false; }
+        foreach (var day in days)
+        {
+            if (Snapshot.Number(day["totalTokens"]) is not { } value || value > safeInteger || Math.Truncate(value) != value || total > safeInteger - value ||
+                !DateOnly.TryParseExact(Snapshot.Text(day["date"]), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+            { dates = []; return false; }
+            total += value; datesList.Add(date);
+        }
+        dates = datesList.Order().ToArray();
+        return true;
     }
     protected override void Dispose(bool disposing)
     {

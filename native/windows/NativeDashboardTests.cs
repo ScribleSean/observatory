@@ -563,7 +563,22 @@ internal static class NativeDashboardTests
                 await Task.Delay(50);
                 Capture(form, output, "native-sharing-settings");
                 sections.SelectedItem = "Source health";
-                Check(Children(form).OfType<DashboardValueCard>().Count() == 7, "Source health cards");
+                var sourceTitles = Children(form).OfType<DashboardValueCard>().Select(card => card.Title).ToArray();
+                Check(new[] { "Provider token sources", "Activity", "Tokens", "Tool activity", "Dictation", "Allowances", "Local benchmarks", "Agent receipts" }
+                    .All(sourceTitles.Contains), "Source health categories");
+                string ProviderValue(string label) => Children(Children(form).OfType<DashboardValueCard>().Single(card => card.Title == "Provider token sources"))
+                    .OfType<Label>().Single(item => item.AccessibleName == label + " value").Text;
+                Check(ProviderValue("ChatGPT").StartsWith("Unknown") && ProviderValue("Cursor").StartsWith("Unknown") &&
+                    ProviderValue("Antigravity").StartsWith("Unknown"), "Unsupported providers remain Unknown");
+                var claudeSource = JsonNode.Parse("""{"provider":"claude-code","host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":123}]}""")!.AsObject();
+                data["providerTokenSources"] = new JsonArray(claudeSource);
+                form.Reload();
+                Check(ProviderValue("Claude Code · local") == "123 tokens", "Recorded Claude tokens displayed separately");
+                claudeSource["status"] = "unavailable";
+                form.Reload();
+                Check(ProviderValue("Claude Code · local") == "Unknown", "Unavailable provider hides retained counters");
+                claudeSource["status"] = "ok";
+                form.Reload();
                 Check(!Texts(form).Any(value => value.Contains("TypeWhisper", StringComparison.OrdinalIgnoreCase)), "Retired voice source is absent from Sources");
                 Check(Texts(form).Any(value => value.Contains("Wispr Flow")), "Supported voice source remains visible");
                 Check(Texts(form).Any(value => value.StartsWith("Newest receipt: Updated ")), "Newest receipt uses relative freshness");

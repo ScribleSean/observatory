@@ -16,6 +16,7 @@ Both independent native collectors derive token and settings views from the same
 | --- | --- | --- |
 | ActivityWatch | Foreground app intervals intersected with non-away intervals | Foreground time does not prove typing, focus or model execution |
 | Saved Codex logs and legacy daily reports | Tokens by recorded day and model | Aliases may be inferred, and hosts may contain mirrored sessions |
+| Saved Claude Code logs | Optional local input, cache read, cache write and output token counters | Shown separately in Source health, not paired across devices or added to Codex totals |
 | Codex settings metadata | Token counter increments associated with recorded reasoning effort and service tier | Unreconciled counters are withheld, with missing coverage stated explicitly |
 | Codex tool metadata | Allowlisted categories of saved tool-call requests | Not an execution-success report, duration measure or full SSH history |
 | Codex limits | Read-only account quota windows and reset timestamps | Optional five-minute polling with retained observations and failure backoff, not other providers' limits |
@@ -25,6 +26,26 @@ Both independent native collectors derive token and settings views from the same
 ## Foreground app detail
 
 Recognized app names map to a fixed public list before transfer. Unknown applications become Other app. Raw window titles and arbitrary executable names stay on their source device. ChatGPT and Codex can share one desktop process label, so the dashboard keeps that label combined. Different concurrent app categories are presented as Device overlap and counted once.
+
+## Provider coverage and relay clients
+
+The Tokens view measures Codex logs. All selects configured devices, not all providers. HAPI and Happy can run the same native Codex harness. When they use the same native log store, the existing reader counts those sessions. Relay messages are not a second token source. A session executed on another device must be collected on that device. A custom log root requires a collector configured for that root.
+
+Saved Claude Code usage is an optional source in native Settings. It reads the collecting device's `CLAUDE_CONFIG_DIR` when set to an absolute path, otherwise its `.claude` directory. A desktop app may not inherit a shell-only environment setting. It scans retained `projects/**/*.jsonl` files, including nested subagent logs. This source is disabled by default and does not sign in or make model calls. Its recorded totals appear in Source health. It is not yet included in device pairing, the Codex chart or a combined provider total.
+
+Claude assistant events with the same message and request identifiers are snapshots of one request. The reader keeps the greatest consistent counter tuple and assigns it to the earliest retained New York date. Copied files do not add another request. Conflicting counters or model identities, malformed records, files that change during a read and exceeded scan bounds withhold the result. The scan is limited to 2,000 files, 128 MiB of total input, one million lines and 4 MiB per line. There is no zero-filled history or partial successful total. Deleted records cannot be recovered. Identifiers and conversation content stay out of dashboard data.
+
+These local counters include cached input and are not subscription allowances or invoices. The native log format is version-sensitive. The [ccusage streaming regression](https://github.com/ccusage/ccusage/issues/888) illustrates why repeated snapshots must not be summed or reduced to the first row.
+
+| App | Current token coverage | Available evidence |
+| --- | --- | --- |
+| Codex | Native saved logs on configured devices | Includes relay sessions using those native logs |
+| Claude Code | Optional saved logs on this device | Separate source, no cross-device total |
+| ChatGPT | Unknown | The official [chat export](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data) does not establish a token ledger |
+| Cursor | Unknown | Cursor has its own usage dashboard. Its documented [usage API](https://docs.cursor.com/en/account/teams/admin-api) requires team admin access, which Observatory does not assume |
+| Antigravity | Unknown | Saved review receipts cover only those reviews, not all app usage |
+
+Selecting an OpenAI or Anthropic model in another app does not establish that its request also exists in native Codex or Claude Code logs. Separate sources need observed request identity and overlap checks before combining them.
 
 ## Reasoning, speed and price
 

@@ -283,7 +283,7 @@ struct NativeDashboard: View {
                 if key == "activity" { ActivityWatchHelp() }
             } else {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(key == "tokens" ? "SAVED TOKENS" : "FOREGROUND TIME")
+                    Text(key == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME")
                         .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                     HStack {
                         Text(key == "tokens" ? formatted(number(chosen?[field]), compact: true) : formattedDuration(number(chosen?[field])))
@@ -328,7 +328,7 @@ struct NativeDashboard: View {
                     Text("Up to 30 recorded days shown. Missing dates are not filled with zeros.")
                         .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
-                Text(key == "tokens" ? "Saved log tokens, not subscription charges. Combined totals require verified deduplication."
+                Text(key == "tokens" ? "Recorded Codex requests only. Saved log tokens are not subscription charges. Combined totals require verified deduplication."
                     : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
                     .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 if key == "tokens", let chosen {
@@ -355,6 +355,15 @@ struct NativeDashboard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Button("View Agents") { selection.section = "agents" }
+            GroupBox("Provider token sources") {
+                VStack(alignment: .leading, spacing: 10) {
+                    codexProviderRow
+                    providerTokenRow(name: "Claude Code", source: rows(displayedSnapshot?.object["providerTokenSources"]).first { text($0["provider"]) == "claude-code" }, fallback: "Unknown · enable local Claude Code request collection")
+                    providerTokenRow(name: "ChatGPT", source: nil, fallback: "Unknown · no connected personal token export")
+                    providerTokenRow(name: "Cursor", source: nil, fallback: "Unknown · no connected personal token export")
+                    providerTokenRow(name: "Antigravity", source: nil, fallback: "Unknown · no connected personal token export")
+                }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
             ForEach(["activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource"], id: \.self) { key in
                 GroupBox(["quota": "Allowances", "localModel": "Local benchmarks", "agentSource": "Agent receipts", "settings": "Tool activity"][key] ?? key.capitalized) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -368,6 +377,67 @@ struct NativeDashboard: View {
                 }
             }
         }
+    }
+
+    private var codexProviderRow: some View {
+        let sources = rows(displayedSnapshot?.object["tokens"]).filter { text($0["status"]) != "not-connected" }
+        let count = sources.filter { text($0["status"]) == "ok" }.count
+        return VStack(alignment: .leading, spacing: 3) {
+            ObservatoryValueRow("Codex", value: sources.isEmpty ? "Unknown" : "\(count)/\(sources.count) configured devices read")
+            Text("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+        }
+    }
+
+    @ViewBuilder private func providerTokenRow(name: String, source: JSONObject?, fallback: String) -> some View {
+        if let source, text(source["status"]) == "ok", let summary = providerTokenSummary(source) {
+            let dates = summary.dates
+            ObservatoryValueRow(name, value: "Recorded local requests · \(formatted(summary.total, compact: true)) tokens")
+            Text("\(providerDate(dates.first!)) to \(providerDate(dates.last!)) · Local device only")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+            Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+        } else if let source {
+            ObservatoryValueRow(name, value: providerSourceStatus(source))
+            Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
+                .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
+        } else {
+            ObservatoryValueRow(name, value: fallback)
+        }
+    }
+
+    private func providerSourceStatus(_ source: JSONObject) -> String {
+        switch text(source["status"]) {
+        case "not-connected": return "Collection off"
+        case "unavailable": return "Unknown"
+        default: return "Unknown"
+        }
+    }
+
+    private func providerTokenSummary(_ source: JSONObject) -> (total: Double, dates: [Date])? {
+        let limit = 9_007_199_254_740_991.0
+        let days = rows(source["days"])
+        guard !days.isEmpty else { return nil }
+        var total = 0.0, dates: [Date] = []
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        for day in days {
+            guard let value = number(day["totalTokens"]), value <= limit, value.rounded(.towardZero) == value,
+                  let date = formatter.date(from: text(day["date"])), formatter.string(from: date) == text(day["date"]),
+                  total <= limit - value else { return nil }
+            total += value; dates.append(date)
+        }
+        return (total, dates.sorted())
+    }
+
+    private func providerDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
     }
 }
 

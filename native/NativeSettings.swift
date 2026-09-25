@@ -24,7 +24,7 @@ struct NativeSettings: View {
     @State private var sharingBusy = false
     @State private var confirmSharing = false
     private var busy: Bool { store.shuttingDown || store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing || sharingBusy }
-    private let sources = [("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"),
+    private let sources = [("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("claude", "Recorded Claude Code requests"),
                            ("wispr", "Wispr Flow statistics")]
 
     var body: some View {
@@ -72,7 +72,7 @@ struct NativeSettings: View {
                         Text("Turning monitoring off stops new checks and clears the current allowance view. Previously saved readings remain in the local archive. This does not sign out of Codex or remove saved token logs.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
-                    Text("Adding other providers and signing in directly from Observatory are not available yet.")
+                    Text("Other account sign-ins remain in their owning applications. Claude Code can be read locally from recorded request metadata when enabled above.")
                         .observatoryFont(.callout).foregroundStyle(.secondary)
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }

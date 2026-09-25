@@ -17,6 +17,7 @@ import {collectConfiguredMacQuota} from './legacy-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
+import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -63,6 +64,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   const startedAt=new Date().toISOString();
   await atomic('collector.json',{state:'running',startedAt,intervalSeconds:300,maxRunSeconds:240});
   const report=async(name,args,prefix='')=>pythonReport(python,prefix+await readFile(path.join(scripts,name),'utf8'),args);
+  const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
+  const claudeDirectory=configuredClaudeDirectory === undefined || configuredClaudeDirectory === '' ? path.join(homedir(),'.claude') :
+    path.isAbsolute(configuredClaudeDirectory) ? configuredClaudeDirectory : null;
   let previous=[];
   try{previous=await previousActivityHistory(path.join(folder,'usage.json'));}catch{}
   const result=await macSnapshot(config,{
@@ -92,6 +96,16 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   catch {workflows={agents:[],agentSource:{status:config.receipts?'unavailable':'not-connected'},
     localModel:{host:'Ubuntu',status:config.benchmarks?'unavailable':'not-connected'}};}
   attachWorkflows(result,workflows);
+  // Provider data stays local and is deliberately attached after peer merging.
+  // It is never inserted into Codex totals or the peer payload.
+  let claude;
+  if(!config.claude) claude=unavailableClaudeTokenSource('Mac',new Date().toISOString(),'not-connected');
+  else try {
+    if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
+    const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[claudeDirectory]);
+    claude=cleanClaudeTokenSource(raw,'Mac');
+  } catch {claude=unavailableClaudeTokenSource('Mac');}
+  attachProviderTokenSources(result,[claude]);
   const {data,status}=result;
   await atomic('usage.json',data);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
