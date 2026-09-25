@@ -1,7 +1,6 @@
 """Read numeric Claude Code usage metadata without exporting conversation data."""
 import datetime as dt
 import json
-import math
 import os
 import pathlib
 import re
@@ -9,7 +8,8 @@ import sys
 from zoneinfo import ZoneInfo
 
 MAX_FILES = 2_000
-MAX_BYTES = 10_000_000
+MAX_TOTAL_BYTES = 128 * 1024 * 1024
+MAX_LINE_BYTES = 4 * 1024 * 1024
 MAX_LINES = 1_000_000
 MAX_SAFE = 2**53 - 1
 FIELDS = ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens')
@@ -60,7 +60,7 @@ def collect(folder):
             return {'provider': 'claude-code', 'status': 'not-found'}
         if projects.is_symlink() or not projects.is_dir() or projects.resolve() != projects:
             return unavailable()
-        files = []
+        files, total_bytes = [], 0
         for directory, directory_names, names in os.walk(projects, followlinks=False):
             current = pathlib.Path(directory)
             if current.is_symlink() or not beneath(current.resolve(), projects):
@@ -69,28 +69,39 @@ def collect(folder):
                 return unavailable()
             for name in names:
                 if name.endswith('.jsonl'):
-                    files.append(current / name)
+                    file = current / name
+                    if file.is_symlink() or not file.is_file():
+                        return unavailable()
+                    total_bytes += file.stat().st_size
+                    if total_bytes > MAX_TOTAL_BYTES:
+                        return unavailable()
+                    files.append(file)
                     if len(files) > MAX_FILES:
                         return unavailable()
         if not files:
             return {'provider': 'claude-code', 'status': 'not-found'}
         records, saw_assistant, lines = {}, False, 0
         for file in sorted(files):
-            if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_BYTES:
+            if file.is_symlink() or not file.is_file():
                 return unavailable()
             resolved = file.resolve(strict=True)
             if not beneath(resolved, projects) or resolved != file:
                 return unavailable()
+            before_stat = file.stat()
             with file.open('r', encoding='utf-8') as stream:
                 for line in stream:
                     lines += 1
-                    if lines > MAX_LINES:
+                    if lines > MAX_LINES or len(line.encode('utf-8')) > MAX_LINE_BYTES:
                         return unavailable()
+                    if not line.strip():
+                        continue
                     try:
                         event = json.loads(line)
                     except (TypeError, ValueError):
-                        continue
+                        return unavailable()
                     if not isinstance(event, dict):
+                        continue
+                    if event.get('type') != 'assistant':
                         continue
                     message = event.get('message')
                     if not isinstance(message, dict) or message.get('role') != 'assistant':
@@ -111,15 +122,22 @@ def collect(folder):
                     if prior is None:
                         records[identity] = current
                         continue
-                    if prior[0] != current[0] or prior[2] != current[2]:
+                    if prior[2] != current[2]:
                         return unavailable()
                     before, after = prior[3], current[3]
                     if before == after:
+                        records[identity] = (min(prior[0], current[0]), prior[1], prior[2], prior[3])
                         continue
                     if all(a >= b for a, b in zip(after, before)):
-                        records[identity] = current
+                        # A streamed request can finish after local midnight.
+                        # Keep its earliest retained timestamp as its day.
+                        records[identity] = (min(prior[0], current[0]), current[1], current[2], current[3])
                     elif not all(a <= b for a, b in zip(after, before)):
                         return unavailable()
+            after_stat = file.stat()
+            if (before_stat.st_dev, before_stat.st_ino, before_stat.st_size, before_stat.st_mtime_ns) != (
+                    after_stat.st_dev, after_stat.st_ino, after_stat.st_size, after_stat.st_mtime_ns):
+                return unavailable()
         if not saw_assistant or not records:
             return unavailable()
         days = {}
