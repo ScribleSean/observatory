@@ -23,10 +23,16 @@ test('native collector publishes a separate Claude reading and counts its health
     process.env.CLAUDE_CONFIG_DIR=claude;
     t.after(()=>{if(prior===undefined)delete process.env.CLAUDE_CONFIG_DIR;else process.env.CLAUDE_CONFIG_DIR=prior;});
     const python=execPython(['-c','import sys; print(sys.executable)']).toString().trim();
-    const collect=process.platform==='darwin'?collectMac:collectWindows;
-    const result=await collect(runtime,python);
+    if(process.platform==='win32') {
+      const priorPython=process.env.OBSERVATORY_PYTHON;
+      process.env.OBSERVATORY_PYTHON=python;
+      t.after(()=>{if(priorPython===undefined)delete process.env.OBSERVATORY_PYTHON;else process.env.OBSERVATORY_PYTHON=priorPython;});
+    }
+    const collect=process.platform==='darwin'?()=>collectMac(runtime,python):()=>collectWindows(runtime);
+    const result=await collect();
     assert.equal(result.providerTokenSync.status,'disabled');
     assert.equal(result.data.providerTokenSources.length,1);
+    assert.equal(result.data.providerTokenSources[0].status,'ok','Synthetic Claude source must be readable with the selected test Python');
     assert.equal(result.data.providerTokenSources[0].days[0].totalTokens,10);
     assert.equal(result.data.providerTokenSources[0].host,process.platform==='darwin'?'Mac':'Windows');
     assert.ok(result.data.tokens.every(source=>source.status==='not-connected'));
@@ -36,7 +42,7 @@ test('native collector publishes a separate Claude reading and counts its health
     assert.equal(snapshot.providerTokenSources[0].days[0].requestCount,1);
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({...config,claude:false}),{mode:0o600});
     await rm(claude,{recursive:true});
-    const disabled=await collect(runtime,python);
+    const disabled=await collect();
     assert.equal(disabled.status.sourcesConfigured,0);
     assert.equal(disabled.data.providerTokenSources[0].status,'not-connected');
   });
