@@ -48,6 +48,10 @@ def beneath(child, root):
         return False
 
 
+def walk_error(error):
+    raise error
+
+
 def collect(folder):
     """Return complete, deduplicated daily numeric usage or a fail-closed status."""
     try:
@@ -61,7 +65,7 @@ def collect(folder):
         if projects.is_symlink() or not projects.is_dir() or projects.resolve() != projects:
             return unavailable()
         files, total_bytes = [], 0
-        for directory, directory_names, names in os.walk(projects, followlinks=False):
+        for directory, directory_names, names in os.walk(projects, followlinks=False, onerror=walk_error):
             current = pathlib.Path(directory)
             if current.is_symlink() or not beneath(current.resolve(), projects):
                 return unavailable()

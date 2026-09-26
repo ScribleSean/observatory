@@ -49,3 +49,26 @@ test('reports missing projects as not-found and refuses symlinked logs without l
   const output=JSON.stringify(read(root));assert.equal(JSON.parse(output).status,'unavailable');assert.ok(!output.includes('PRIVATE'));assert.ok(!output.includes('outside'));
 }));
 test('reports a missing root as unavailable',()=>assert.equal(read('/definitely-not-an-observatory-claude-root').status,'unavailable'));
+test('withholds the entire report when project enumeration is unreadable or disappears',async()=>fixture(async root=>{
+  await log(root,'visible.jsonl',event('m1','r1',usage(1,2,3,4)));
+  await log(root,'restricted/hidden.jsonl',event('m2','r2',usage(2,4,6,8)));
+  assert.equal(read(root).days[0].totalTokens,30);
+  const output=JSON.parse(execPython(['-c',`
+import json, os, pathlib, runpy, sys
+from unittest.mock import patch
+reader = runpy.run_path(sys.argv[1])
+projects = pathlib.Path(sys.argv[2]).resolve() / 'projects'
+scandir = os.scandir
+results = []
+for blocked, error in [(projects / 'a' / 'restricted', PermissionError), (projects, PermissionError),
+        (projects / 'a' / 'restricted', FileNotFoundError)]:
+    def denied(folder):
+        if pathlib.Path(folder) == blocked:
+            raise error('Synthetic enumeration failure')
+        return scandir(folder)
+    with patch('os.scandir', denied):
+        results.append(reader['collect'](sys.argv[2]))
+print(json.dumps(results))
+`,script,root]).toString());
+  assert.deepEqual(output,Array(3).fill({provider:'claude-code',status:'unavailable'}));
+}));
