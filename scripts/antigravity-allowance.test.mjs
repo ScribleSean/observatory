@@ -139,6 +139,11 @@ test('unconfigured or invalid executables never launch a command',async()=>{
   assert.equal(calls,0);
 });
 
+test('Windows collection is unsupported until process containment is verified',async()=>{
+  const result=await collectAntigravityAllowance({...options,host:'Windows',run:()=>assert.fail('Windows must not launch')});
+  assert.equal(result.status,'unsupported');assert.deepEqual(result.windows,[]);
+});
+
 test('execution errors including authentication and timeout stay unavailable without retries',async()=>{
   for(const code of ['ETIMEDOUT','EACCES','ENOENT','AUTH_FAILURE']) {
     let calls=0;
@@ -168,12 +173,14 @@ async function syntheticExecutable(t,body) {
 }
 
 test('production runner reads a synthetic executable and discards its stderr',{skip:process.platform==='win32'},async t=>{
+  const listenerCounts=['exit','SIGTERM','SIGINT'].map(signal=>process.listenerCount(signal));
   const {file}=await syntheticExecutable(t,`process.stderr.write('PRIVATE');process.stdout.write(${JSON.stringify(JSON.stringify(fixture()))});`);
   const result=await collectAntigravityAllowance({...options,executable:file});
   assert.equal(result.status,'ok');assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
+  assert.deepEqual(['exit','SIGTERM','SIGINT'].map(signal=>process.listenerCount(signal)),listenerCounts);
 });
 
-test('production runner handles launch failure without exposing paths',async()=>{
+test('production runner handles launch failure without exposing paths',{skip:process.platform==='win32'},async()=>{
   const result=await collectAntigravityAllowance({...options,executable:path.join(tmpdir(),'PRIVATE-missing-client')});
   assert.equal(result.status,'unavailable');assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
 });

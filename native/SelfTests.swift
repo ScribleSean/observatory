@@ -336,6 +336,14 @@ func runSelfTests() {
     precondition((try? CollectorConfiguration.validate(["quota": true]))?["quota"] == true)
     precondition(CollectorConfiguration.defaults["quota"] == false)
     precondition(CollectorConfiguration.defaults["claude"] == false)
+    precondition(CollectorConfiguration.defaults["antigravity"] == false)
+    precondition((try? CollectorConfiguration.validate(["antigravity": true]))?["antigravity"] == true)
+    precondition((try? CollectorConfiguration.validate(["antigravity": "true"])) == nil)
+    let allowanceDate = parseDate("2026-09-25T12:00:00Z")!
+    precondition(antigravitySourceStatus(["status": "ok", "checkedAt": "2026-09-25T12:00:00Z"], now: allowanceDate) == "Latest reading")
+    precondition(antigravitySourceStatus(["status": "ok", "checkedAt": "2026-09-25T11:00:00Z"], now: allowanceDate) == "Saved reading")
+    precondition(antigravitySourceStatus(["status": "unavailable"], now: allowanceDate) == "Unknown")
+    precondition(antigravityPoolLabel("privateCamelCaseBucket", index: 0) == "Allowance 1")
     precondition((try? CollectorConfiguration.validate(["claude": true]))?["claude"] == true)
     precondition((try? CollectorConfiguration.validate(["claude": "true"])) == nil)
     for source in ["receipts", "benchmarks"] {

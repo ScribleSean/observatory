@@ -122,13 +122,13 @@ internal sealed class Collector : IDisposable
         finally { operations.Complete(); }
     }
 
-    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool claude = false)
+    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool claude = false, bool antigravity = false)
     {
         if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
         if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution");
         if (quotaDistro is not null && !Regex.IsMatch(quotaDistro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid quota distribution");
         var file = Path.Combine(runtime, "collector.config.json");
-        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["quotaWslDistribution"] = quotaDistro };
+        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["antigravity"] = antigravity, ["quotaWslDistribution"] = quotaDistro };
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -154,12 +154,15 @@ internal sealed class Collector : IDisposable
         }
         // Older settings views do not expose this opt-in source yet. Preserve
         // their save path while writing a secure default for legacy config.
-        if (desired["claude"] is JsonNode claude)
+        foreach (var optional in new[] { "claude", "antigravity" })
         {
-            if (claude is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
-            current["claude"] = enabled;
+            if (desired[optional] is JsonNode choice)
+            {
+                if (choice is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
+                current[optional] = enabled;
+            }
+            else current[optional] ??= false;
         }
-        else current["claude"] ??= false;
         foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" })
         {
             var distro = desired[key]?.GetValue<string>();
