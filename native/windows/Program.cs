@@ -251,7 +251,11 @@ internal static class Program
         }
         if (args.Length == 1 && args[0] == "--test-sharing-bridge")
         {
-            try { QuotaSharing.BridgeSelfTest().GetAwaiter().GetResult(); }
+            try
+            {
+                QuotaSharing.BridgeSelfTest().GetAwaiter().GetResult();
+                ProviderTokenSharingTests.BridgeSelfTest().GetAwaiter().GetResult();
+            }
             catch { Console.Error.WriteLine("Native sharing bridge failed."); Environment.ExitCode = 1; }
             return;
         }
@@ -273,6 +277,7 @@ internal static class Program
             {
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
+                ProviderTokenSharingTests.ParseSelfTest();
                 InstallationGate.SelfTest();
                 UpdateQuit.SelfTest();
                 UpdateSession.SelfTest();
@@ -486,7 +491,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
     private DeviceSettingsActions DeviceActions() => new(LoginStartup.Registered, LoginStartup.SetRegistered,
-        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing, ReadNetwork: TailscaleReadiness.Read, DirectPair: ShowDirectPairing);
+        ShowPairingDetails, DisconnectPairing, PreparePairingRepair, collector.Sharing, ReadNetwork: TailscaleReadiness.Read, DirectPair: ShowDirectPairing, CanShare: () => !quitting && collector.SharingAvailable);
 
     private void ShowDirectPairing()
     {

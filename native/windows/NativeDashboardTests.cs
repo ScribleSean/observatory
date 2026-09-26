@@ -183,8 +183,9 @@ internal static class NativeDashboardTests
         var devicePending = new TaskCompletionSource();
         var confirmSettings = false;
         var confirmations = new List<string>();
-        var sharingEnabled = false; var sharingConfirmed = false; var sharingChanges = 0;
-        var sharingToken = new string('a', 64);
+        var sharingEnabled = new Dictionary<SharingChannel, bool> { [SharingChannel.Quota] = false, [SharingChannel.ProviderTokens] = false };
+        var sharingConfirmed = false; var sharingChanges = 0; var sharingAvailable = true;
+        var sharingTokens = new Dictionary<SharingChannel, string> { [SharingChannel.Quota] = new('a', 64), [SharingChannel.ProviderTokens] = new('b', 64) };
         Check(QuotaSharing.Parse("{\"version\":1,\"enabled\":false,\"canEnable\":false,\"reason\":\"account-unavailable\",\"token\":null}").CanEnable == false, "Unknown sharing status parsed");
         try { QuotaSharing.Parse("{\"version\":1,\"enabled\":true,\"canEnable\":true,\"reason\":\"ready\",\"token\":\"private\"}"); throw new Exception("Malformed sharing token accepted"); }
         catch (InvalidOperationException) { }
@@ -193,15 +194,15 @@ internal static class NativeDashboardTests
                 operation => { confirmations.Add(operation); return confirmSettings; }),
             new DeviceSettingsActions(() => startupRegistered, value => startupRegistered = value,
                 () => pairingDetails++, () => { disconnects++; return devicePending.Task; }, () => { repairs++; return Task.CompletedTask; },
-                (action, token) =>
+                (action, token, channel) =>
                 {
                     if (action != "status")
                     {
-                        Check(action != "enable" || token == sharingToken, "Sharing confirmation token forwarded");
-                        sharingChanges++; sharingEnabled = action == "enable";
+                        Check(action != "enable" || token == sharingTokens[channel], "Sharing confirmation token forwarded");
+                        sharingChanges++; sharingEnabled[channel] = action == "enable";
                     }
-                    return Task.FromResult(new QuotaSharingStatus(sharingEnabled, true, "ready", sharingToken));
-                }, () => sharingConfirmed, () => { networkChecks++; return Task.FromResult("Synthetic Tailscale status. Peer not checked."); }),
+                    return Task.FromResult(new QuotaSharingStatus(sharingEnabled[channel], true, "ready", sharingTokens[channel]));
+                }, _ => sharingConfirmed, () => { networkChecks++; return Task.FromResult("Synthetic Tailscale status. Peer not checked."); }, CanShare: () => sharingAvailable),
             readArchive: (_, _) => throw new InvalidOperationException("Dashboard rendering must not read private history."),
             checkUpdates: () => { updateChecks++; return updatePending.Task; });
         form.Shown += async (_, _) =>
@@ -430,6 +431,8 @@ internal static class NativeDashboardTests
                 await Task.Delay(30);
                 Check(updateButton.Enabled, "Completed update check restores button");
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Existing settings default Wispr off");
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "antigravity").Checked, "Existing settings default Antigravity off");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "antigravity").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
@@ -440,6 +443,7 @@ internal static class NativeDashboardTests
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
                 Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
+                Check(settingsCollector.ReadConfiguration()["antigravity"]!.GetValue<bool>(), "Antigravity opt-in saved without a provider call");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
                 Capture(form, output, "native-settings");
                 var appearance = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance");
@@ -508,9 +512,9 @@ internal static class NativeDashboardTests
                 }
                 Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName == "Settings page"), "Settings is one continuous page");
                 foreach (var name in new[] { "About Observatory card", "Source details card", "Save changes card",
-                    "Start at login card", "Direct device pairing card", "Allowance history sharing card" })
+                    "Start at login card", "Direct device pairing card", "Usage sharing card" })
                     Check(Children(form).OfType<DashboardCard>().Any(card => card.AccessibleName == name), "Settings has grouped surface: " + name);
-                foreach (var name in new[] { "Toggle login startup", "Check Tailscale", "Check sharing status", "Change allowance sharing" })
+                foreach (var name in new[] { "Toggle login startup", "Check Tailscale", "Check Codex allowances sharing", "Change Codex allowances sharing", "Check Claude Code usage sharing", "Change Claude Code usage sharing" })
                 {
                     Check(Children(form).OfType<Button>().Single(button => button.AccessibleName == name) is DashboardButton,
                         "Settings action uses shared pill styling: " + name);
@@ -539,19 +543,40 @@ internal static class NativeDashboardTests
                 await Task.Delay(100);
                 ClickDevice("Prepare pairing repair");
                 Check(repairs == 1, "Repair callback after operation completion");
-                ClickDevice("Check sharing status");
+                var quotaChannel = SharingChannel.Quota;
+                var claudeChannel = SharingChannel.ProviderTokens;
+                Check(!sharingEnabled[quotaChannel] && !sharingEnabled[claudeChannel], "Both optional sharing channels start off");
+                ClickDevice("Check Codex allowances sharing");
+                ClickDevice("Check Claude Code usage sharing");
                 await Task.Delay(50);
-                ClickDevice("Change allowance sharing");
-                Check(sharingChanges == 0 && !sharingEnabled, "Cancelled sharing consent does not write");
+                ClickDevice("Change Codex allowances sharing");
+                ClickDevice("Change Claude Code usage sharing");
+                Check(sharingChanges == 0 && sharingEnabled.Values.All(value => !value), "Declined consent does not write either channel");
                 sharingConfirmed = true;
-                ClickDevice("Change allowance sharing");
+                ClickDevice("Change Codex allowances sharing");
                 await Task.Delay(50);
-                Check(sharingEnabled && sharingChanges == 1, "Explicit sharing consent applied");
-                ClickDevice("Change allowance sharing");
+                Check(sharingEnabled[quotaChannel] && !sharingEnabled[claudeChannel] && sharingChanges == 1, "Codex consent does not enable Claude sharing");
+                ClickDevice("Change Claude Code usage sharing");
                 await Task.Delay(50);
-                Check(!sharingEnabled && sharingChanges == 2, "Sharing disable applied");
+                Check(sharingEnabled[quotaChannel] && sharingEnabled[claudeChannel] && sharingChanges == 2, "Claude consent uses its separate confirmation token");
+                sharingAvailable = false;
+                await Task.Delay(50);
+                foreach (var name in new[] { "Check Codex allowances sharing", "Change Codex allowances sharing", "Check Claude Code usage sharing", "Change Claude Code usage sharing" })
+                {
+                    Check(!Children(form).OfType<Button>().Single(button => button.AccessibleName == name).Enabled, "Sharing controls disabled during collection or maintenance");
+                    ClickDevice(name);
+                }
+                Check(sharingChanges == 2, "Busy sharing controls do not write");
+                sharingAvailable = true;
+                await Task.Delay(50);
+                ClickDevice("Change Codex allowances sharing");
+                await Task.Delay(50);
+                Check(!sharingEnabled[quotaChannel] && sharingEnabled[claudeChannel] && sharingChanges == 3, "Stopping Codex sharing preserves Claude consent");
+                ClickDevice("Change Claude Code usage sharing");
+                await Task.Delay(50);
+                Check(sharingEnabled.Values.All(value => !value) && sharingChanges == 4, "Claude sharing stops independently");
                 Capture(form, output, "native-device-settings");
-                var sharingButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Change allowance sharing");
+                var sharingButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Change Claude Code usage sharing");
                 for (Control target = sharingButton; target.Parent is not null; target = target.Parent)
                 {
                     if (target.Parent is ScrollableControl scroll && scroll.AutoScroll)
@@ -573,10 +598,14 @@ internal static class NativeDashboardTests
                 var claudeSource = JsonNode.Parse("""{"provider":"claude-code","host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":123}]}""")!.AsObject();
                 data["providerTokenSources"] = new JsonArray(claudeSource);
                 form.Reload();
-                Check(ProviderValue("Claude Code · local") == "123 tokens", "Recorded Claude tokens displayed separately");
+                Check(ProviderValue("Claude Code · Windows") == "123 tokens", "Recorded Claude tokens displayed separately");
+                var peerClaude = JsonNode.Parse("""{"provider":"claude-code","host":"Mac","status":"unavailable"}""")!.AsObject();
+                data["providerTokenSources"]!.AsArray().Add(peerClaude);
+                form.Reload();
+                Check(ProviderValue("Claude Code · Windows") == "123 tokens" && ProviderValue("Claude Code · Mac") == "Unknown", "All provider hosts remain separate");
                 claudeSource["status"] = "unavailable";
                 form.Reload();
-                Check(ProviderValue("Claude Code · local") == "Unknown", "Unavailable provider hides retained counters");
+                Check(ProviderValue("Claude Code · Windows") == "Unknown", "Unavailable provider hides retained counters");
                 claudeSource["status"] = "ok";
                 form.Reload();
                 Check(!Texts(form).Any(value => value.Contains("TypeWhisper", StringComparison.OrdinalIgnoreCase)), "Retired voice source is absent from Sources");

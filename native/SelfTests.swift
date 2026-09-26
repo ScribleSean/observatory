@@ -127,6 +127,25 @@ func runSelfTests() {
     precondition((try? QuotaSharingStatus.parse(sharingOff))?.enabled == false)
     let invalidSharing = Data("{\"version\":1,\"enabled\":true,\"canEnable\":true,\"reason\":\"ready\",\"token\":\"private\"}".utf8)
     precondition((try? QuotaSharingStatus.parse(invalidSharing)) == nil)
+    do {
+        try ProviderTokenSharingTests.parseSelfTest()
+        var quotaConsent = UsageSharingConsent(), claudeConsent = UsageSharingConsent()
+        precondition(quotaConsent.change(confirmed: true) == nil && claudeConsent.change(confirmed: true) == nil)
+        let quotaToken = String(repeating: "a", count: 64), claudeToken = String(repeating: "b", count: 64)
+        quotaConsent.status = QuotaSharingStatus(version: 1, enabled: false, canEnable: true, reason: "ready", token: quotaToken)
+        claudeConsent.status = QuotaSharingStatus(version: 1, enabled: false, canEnable: true, reason: "ready", token: claudeToken)
+        precondition(quotaConsent.change(confirmed: false) == nil && claudeConsent.change(confirmed: false) == nil)
+        precondition(quotaConsent.change(confirmed: true)?.token == quotaToken)
+        precondition(claudeConsent.change(confirmed: true)?.token == claudeToken)
+        quotaConsent.status = QuotaSharingStatus(version: 1, enabled: true, canEnable: true, reason: "ready", token: quotaToken)
+        precondition(claudeConsent.status?.enabled == false && claudeConsent.change(confirmed: false) == nil)
+        claudeConsent.status = QuotaSharingStatus(version: 1, enabled: true, canEnable: true, reason: "ready", token: claudeToken)
+        precondition(quotaConsent.change(confirmed: false)?.action == "disable" && quotaConsent.change(confirmed: false)?.token == nil)
+        quotaConsent.status = QuotaSharingStatus(version: 1, enabled: false, canEnable: true, reason: "ready", token: quotaToken)
+        precondition(claudeConsent.status?.enabled == true && claudeConsent.change(confirmed: false)?.action == "disable")
+        claudeConsent.status = nil
+        precondition(claudeConsent.change(confirmed: true) == nil && quotaConsent.change(confirmed: true)?.token == quotaToken)
+    } catch { preconditionFailure("Provider sharing consent self-test failed") }
     let countedModel: JSONObject = ["inputTokens": 10, "cacheReadTokens": 20, "cacheCreationTokens": 0, "outputTokens": 5, "totalTokens": 35]
     precondition(nativeSettingsCoverage(model: countedModel, profiles: [countedModel]).status == "matched")
     var largerModel = countedModel
@@ -336,6 +355,14 @@ func runSelfTests() {
     precondition((try? CollectorConfiguration.validate(["quota": true]))?["quota"] == true)
     precondition(CollectorConfiguration.defaults["quota"] == false)
     precondition(CollectorConfiguration.defaults["claude"] == false)
+    precondition(CollectorConfiguration.defaults["antigravity"] == false)
+    precondition((try? CollectorConfiguration.validate(["antigravity": true]))?["antigravity"] == true)
+    precondition((try? CollectorConfiguration.validate(["antigravity": "true"])) == nil)
+    let allowanceDate = parseDate("2026-09-25T12:00:00Z")!
+    precondition(antigravitySourceStatus(["status": "ok", "checkedAt": "2026-09-25T12:00:00Z"], now: allowanceDate) == "Latest reading")
+    precondition(antigravitySourceStatus(["status": "ok", "checkedAt": "2026-09-25T11:00:00Z"], now: allowanceDate) == "Saved reading")
+    precondition(antigravitySourceStatus(["status": "unavailable"], now: allowanceDate) == "Unknown")
+    precondition(antigravityPoolLabel("privateCamelCaseBucket", index: 0) == "Allowance 1")
     precondition((try? CollectorConfiguration.validate(["claude": true]))?["claude"] == true)
     precondition((try? CollectorConfiguration.validate(["claude": "true"])) == nil)
     for source in ["receipts", "benchmarks"] {
@@ -512,6 +539,13 @@ func runCollectorSelfTest() {
         print("Packaged repair preparation self-test passed with a retained disabled backup")
         print("Packaged pairing status self-test passed without exposing private credentials")
         print("Packaged pairing revocation self-test passed with temporary data")
+        let sharingFinished = DispatchSemaphore(value: 0)
+        Task.detached {
+            do { try await ProviderTokenSharingTests.bridgeSelfTest(resources: resources) }
+            catch { preconditionFailure("Packaged provider sharing bridge failed") }
+            sharingFinished.signal()
+        }
+        precondition(sharingFinished.wait(timeout: .now() + 90) == .success, "Packaged provider sharing bridge timed out")
         print("Packaged collector self-test passed with all sources disabled")
     } catch {
         FileHandle.standardError.write(Data("Packaged collector self-test error code: \((error as NSError).code)\n".utf8))

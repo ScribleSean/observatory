@@ -6,7 +6,7 @@ import path from 'node:path';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,createPeerRecord,readPeerState} from './peer-store.mjs';
-import {exchangePeerRecord} from './peer-exchange.mjs';
+import {exchangePeerRecord,exchangePeerRequest} from './peer-exchange.mjs';
 
 const supported=['darwin','win32'].includes(process.platform);
 async function fixture(t,publish=true) {
@@ -40,5 +40,25 @@ test('wrong peer identity and extra protocol fields do not replace state',{skip:
 test('missing local export does not accept a one-sided transfer',{skip:!supported},async t=>{
   const {runtime,pair,peer}=await fixture(t,false);
   await assert.rejects(exchangePeerRecord(runtime,{version:1,record:peer}));
+  assert.equal(await readPeerState(runtime,pair.peer),null);
+});
+test('an unmodified core endpoint accepts v1 before and after rejecting an optional provider probe',{skip:!supported},async t=>{
+  const {runtime,pair,local,peer}=await fixture(t);
+  const core={version:1,record:peer};
+  assert.deepEqual(await exchangePeerRecord(runtime,core),{version:1,record:local});
+  const probe={version:1,channel:'provider-tokens',request:{version:1,action:'status',
+    pairId:pair.peer.pairId,deviceId:pair.peer.deviceId}};
+  await assert.rejects(exchangePeerRecord(runtime,probe));
+  assert.deepEqual(await exchangePeerRecord(runtime,core),{version:1,record:local});
+  assert.deepEqual(await readPeerState(runtime,pair.peer),peer);
+});
+test('provider status dispatch has an exact body and does not alter the core record',{skip:!supported},async t=>{
+  const {runtime,pair,peer}=await fixture(t);
+  const status={version:1,channel:'provider-tokens',request:{version:1,action:'status',
+    pairId:pair.peer.pairId,deviceId:pair.peer.deviceId}};
+  assert.deepEqual(await exchangePeerRequest(runtime,status),{version:1,status:'disabled',record:null});
+  await assert.rejects(exchangePeerRequest(runtime,{...status,request:{...status.request,record:null}}));
+  await assert.rejects(exchangePeerRequest(runtime,{...status,request:{...status.request,unexpected:true}}));
+  await assert.rejects(exchangePeerRequest(runtime,{...status,unexpected:true}));
   assert.equal(await readPeerState(runtime,pair.peer),null);
 });

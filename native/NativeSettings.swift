@@ -19,11 +19,7 @@ struct NativeSettings: View {
     @State private var original: [String: Bool] = [:]
     @State private var message = ""
     @State private var loaded = false
-    @State private var sharing: QuotaSharingStatus?
-    @State private var sharingMessage = "Check sharing status to review this Mac's consent."
-    @State private var sharingBusy = false
-    @State private var confirmSharing = false
-    private var busy: Bool { store.shuttingDown || store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing || sharingBusy }
+    private var busy: Bool { store.shuttingDown || store.refreshing || store.pairingMaintenance || store.collectionPausedForPairing }
     private let sources = [("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("claude", "Recorded Claude Code requests"),
                            ("wispr", "Wispr Flow statistics")]
 
@@ -36,7 +32,7 @@ struct NativeSettings: View {
                         Button("Pair with Windows…", action: actions.pair)
                         Button("Disconnect…", action: actions.disconnect)
                         Button("Repair…", action: actions.repair)
-                    }.disabled(store.shuttingDown || store.refreshing || store.pairingMaintenance || sharingBusy || actions.preview)
+                    }.disabled(store.shuttingDown || store.refreshing || store.pairingMaintenance || actions.preview)
                     if actions.preview { Text("Device changes are disabled in this preview.").observatoryFont(.caption).foregroundStyle(.secondary) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -69,7 +65,10 @@ struct NativeSettings: View {
                     Text("Uses the existing sign-in in the installed Codex app. Sign in or switch accounts there. Observatory does not copy that login to another device.")
                     if store.localCollection {
                         Toggle("Monitor Codex account limits online", isOn: binding("quota")).disabled(!loaded || busy)
-                        Text("Turning monitoring off stops new checks and clears the current allowance view. Previously saved readings remain in the local archive. This does not sign out of Codex or remove saved token logs.")
+                        Text("Turning Codex monitoring off stops new checks and clears the current Codex allowance view. Previously saved Codex readings remain in the local archive. This does not sign out of Codex or remove saved token logs.")
+                            .observatoryFont(.callout).foregroundStyle(.secondary)
+                        Toggle("Monitor Antigravity account limits online", isOn: binding("antigravity")).disabled(!loaded || busy)
+                        Text("Uses the installed Antigravity CLI's existing sign-in. Reads current limits during full source collection. Turning it off stops new reads. Antigravity history and allowance sharing are not connected.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
                     Text("Other account sign-ins remain in their owning applications. Claude Code can be read locally from recorded request metadata when enabled above.")
@@ -103,17 +102,13 @@ struct NativeSettings: View {
                     if actions.preview { Text("Device changes are disabled in this preview.").observatoryFont(.caption).foregroundStyle(.secondary) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
-            settingsSection("Allowance history sharing") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals. Credentials stay on their own device. Different devices' account totals are never added together.")
-                    Text(sharingMessage).observatoryFont(.callout).accessibilityLabel(sharingMessage)
-                    ObservatoryAdaptiveRow {
-                        Button("Check sharing status") { changeSharing("status") }
-                            .disabled(busy || actions.preview)
-                        Button(sharing?.enabled == true ? "Disable allowance sharing" : "Enable allowance sharing") {
-                            if sharing?.enabled == true { changeSharing("disable") } else { confirmSharing = true }
-                        }.disabled(busy || actions.preview || !(sharing?.enabled == true || sharing?.canEnable == true))
-                    }
+            settingsSection("Usage sharing") {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Optional for each source. Both devices must enable it separately. Credentials stay on their owning device.")
+                        .observatoryFont(.callout).foregroundStyle(.secondary)
+                    UsageSharingControls(store: store, preview: actions.preview, channel: .quota)
+                    Divider()
+                    UsageSharingControls(store: store, preview: actions.preview, channel: .providerTokens)
                     if actions.preview { Text("Sharing changes are disabled in this isolated preview.").observatoryFont(.caption) }
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -127,33 +122,6 @@ struct NativeSettings: View {
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
         }.onAppear(perform: load)
-        .alert("Enable allowance sharing?", isPresented: $confirmSharing) {
-            Button("Cancel", role: .cancel) {}
-            Button("Enable sharing") { changeSharing("enable") }
-        } message: {
-            Text("Share this account's allowance history and dated token totals with the paired device? Enable sharing on the other device separately. Account changes revoke this consent.")
-        }
-    }
-
-    private func changeSharing(_ action: String) {
-        guard !busy, !actions.preview, let resources = Bundle.main.resourceURL else { return }
-        let token = action == "enable" ? sharing?.token : nil
-        sharingBusy = true
-        store.pairingMaintenance = true
-        Task { @MainActor in
-            defer { sharingBusy = false; store.pairingMaintenance = false }
-            do {
-                let result = try await QuotaSharing.run(runtime: store.runtime, resources: resources, action: action, token: token)
-                sharing = result
-                sharingMessage = result.enabled ? "Sharing is enabled for this account and paired device. This is consent, not proof of a completed exchange." :
-                    result.reason == "pairing-unavailable" ? "Sharing is off. Pair this Mac first." :
-                    result.canEnable ? "Sharing is off. A recent account reading is available." :
-                    "Sharing is off. Enable account monitoring and refresh the account before sharing."
-            } catch {
-                sharing = nil
-                sharingMessage = "Sharing could not be verified. Check status before retrying. A setting change may already have completed."
-            }
-        }
     }
 
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

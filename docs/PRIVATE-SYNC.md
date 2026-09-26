@@ -4,6 +4,14 @@ Implementation in progress. Both native collectors support explicitly paired Mac
 
 See [pairing maintenance](PAIRING-MAINTENANCE.md) for local revocation and the remaining repair limitations.
 
+## Optional Claude usage sharing
+
+Native Settings keeps Claude sharing separate from local collection and Codex allowance sharing. It starts off and requires a recent successful local reading before enabling it. Both paired devices must support and enable the optional `provider-tokens` channel. Its status probe sends no usage, so an older endpoint can reject the channel while existing core synchronization continues.
+
+Only validated per-device counters and observation times are exchanged. The channel uses a separate private `provider-tokens.sqlite` store without changing the core payload or database schema. Pairing identity, generation and host bind every record. New snapshots replace prior snapshots. Repeated deliveries preserve the original observation and receipt times. Failed readings become Unknown, and saved readings become stale after ten minutes. Disabling sharing or retiring the pairing hides received records and fences further exchanges.
+
+Mac and Windows remain separate sources. No request identities are shared, no cross-device request-overlap claim is made, and Claude totals are never added to Codex totals. Protocol, revocation and mixed-version verification uses synthetic fixtures. Installed cross-device acceptance remains a separate gate.
+
 ## Data boundaries
 
 Each device continues collecting independently. Its own data remains available when the other device is disconnected. A received snapshot is a replacement for that device's previous snapshot, never an increment to add again.

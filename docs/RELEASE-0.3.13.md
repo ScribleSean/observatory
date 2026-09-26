@@ -2,6 +2,12 @@
 
 Status: Both development devices run **0.3.13, build 31** from `0ad86df49f73d836091a78fbb8d4d1bf7152ece2`. The Windows installation was verified on September 25. Neither is published as a production release.
 
+## Build 34 integration, September 26 UTC
+
+The next candidate includes optional per-device Claude sharing and Mac Antigravity allowance monitoring. Claude records use a separate opt-in channel without changing core synchronization or adding device totals. Antigravity uses the installed CLI's non-model usage command. Windows execution remains unsupported until process-tree containment is verified. Both provider arrays now contribute to the Mac wrapper's overall health counts, including unavailable sources.
+
+Integrated verification passed 631 JavaScript tests with 15 platform skips, TypeScript and the production web build. The reviewed native integration passed Mac compilation, native self-tests, an isolated provider bridge and Windows cross-compilation. Exact-source hosted package and installed checks remain pending. The installed apps remain build 31. Earlier build 32 and 33 results do not establish build 34 acceptance.
+
 ## Build 32 preparation, September 26 UTC
 
 Build 32 is superseded by the build 33 correction below and should not be activated for Claude collection. Its package results remain evidence for that exact revision.
@@ -15,6 +21,8 @@ The [clean Mac package run](https://github.com/ScribleSean/observatory/actions/r
 ### Build 33 correction
 
 An independent synthetic review found that Python directory traversal silently skipped unreadable Claude project directories. A fixture containing 30 tokens reported 10 when one subtree could not be scanned. Build 33 propagates directory enumeration failures to the existing unavailable result, withholding the entire observation. Regression cases cover an unreadable subtree, an unreadable projects root and a disappearing subtree. Existing successful scans and request reconciliation remain unchanged. Build 33 requires its own package and installed verification.
+
+The [Mac build 33 package](https://github.com/ScribleSean/observatory/actions/runs/36210894230) and [Windows clean package and TEST installer lifecycle](https://github.com/ScribleSean/observatory/actions/runs/36210898429) passed at `34eecf31243902a42c9db5f385658a0f44d334a6`. Activation remains held because build 34 also corrects the wrapper's provider health counts and integrates the reviewed sharing controls. The development Windows build 32 attempt had six local fixture-setup failures from unavailable symlink and ACL privileges. Those failures remain separate from hosted passes. No system privilege change or test weakening was used.
 
 ## Windows installation follow-up, September 25 UTC
 

@@ -21,6 +21,9 @@ test('Windows saved counters fail closed and drop unapproved fields',()=>{
 test('WSL collection is optional and settings reject command-like distro names',()=>{
   assert.equal(windowsCollectorConfig().wslDistribution,null);
   assert.equal(windowsCollectorConfig().claude,false);
+  assert.equal(windowsCollectorConfig().antigravity,false);
+  assert.equal(windowsCollectorConfig({antigravity:true}).antigravity,true);
+  assert.throws(()=>windowsCollectorConfig({antigravity:'true'}));
   assert.equal(windowsCollectorConfig({claude:true}).claude,true);
   assert.throws(()=>windowsCollectorConfig({claude:'true'}));
   assert.equal(windowsCollectorConfig({wslDistribution:'Ubuntu-24.04'}).wslDistribution,'Ubuntu-24.04');

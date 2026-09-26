@@ -36,6 +36,7 @@ internal sealed class Collector : IDisposable
     }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
+    internal bool SharingAvailable => !Busy && !pairingPaused && !lifetime.IsCancellationRequested;
 
     // Queue only. Never perform file or network work inside a power broadcast.
     internal void RequestResumeRefresh() { if (!lifetime.IsCancellationRequested) resumePending = true; }
@@ -94,14 +95,14 @@ internal sealed class Collector : IDisposable
         };
     }
 
-    internal async Task<QuotaSharingStatus> Sharing(string action, string? token)
+    internal async Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel = SharingChannel.Quota)
     {
-        if (lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
+        if (!SharingAvailable || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
             throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
         try
         {
             using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            return await QuotaSharing.Run(runtime, action, token, lifetime.Token);
+            return await QuotaSharing.Run(runtime, action, token, lifetime.Token, channel);
         }
         finally { operations.Complete(); }
     }
@@ -122,13 +123,13 @@ internal sealed class Collector : IDisposable
         finally { operations.Complete(); }
     }
 
-    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool claude = false)
+    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool claude = false, bool antigravity = false)
     {
         if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
         if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution");
         if (quotaDistro is not null && !Regex.IsMatch(quotaDistro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid quota distribution");
         var file = Path.Combine(runtime, "collector.config.json");
-        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["quotaWslDistribution"] = quotaDistro };
+        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["antigravity"] = antigravity, ["quotaWslDistribution"] = quotaDistro };
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -154,12 +155,15 @@ internal sealed class Collector : IDisposable
         }
         // Older settings views do not expose this opt-in source yet. Preserve
         // their save path while writing a secure default for legacy config.
-        if (desired["claude"] is JsonNode claude)
+        foreach (var optional in new[] { "claude", "antigravity" })
         {
-            if (claude is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
-            current["claude"] = enabled;
+            if (desired[optional] is JsonNode choice)
+            {
+                if (choice is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
+                current[optional] = enabled;
+            }
+            else current[optional] ??= false;
         }
-        else current["claude"] ??= false;
         foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" })
         {
             var distro = desired[key]?.GetValue<string>();
@@ -277,6 +281,7 @@ internal sealed class Collector : IDisposable
             collector.RequestResumeRefresh();
             collector.RequestResumeRefresh();
             collector.pairingPaused = true;
+            if (collector.SharingAvailable) throw new Exception("Pairing pause allowed sharing controls.");
             collector.RefreshAfterResumeOrAllowances().GetAwaiter().GetResult();
             if (!collector.resumePending) throw new Exception("Pairing pause lost pending resume.");
             collector.pairingPaused = false;
@@ -296,7 +301,14 @@ internal sealed class Collector : IDisposable
             File.WriteAllText(sentinel, "Synthetic saved history. Do not change.");
             if (!collector.operations.TryBegin()) throw new Exception("Test operation did not start.");
             var stopped = collector.StopGracefully(TimeSpan.FromSeconds(2));
-            if (stopped.IsCompleted || !collector.Busy) throw new Exception("Collector did not wait for active work.");
+            if (stopped.IsCompleted || !collector.Busy || collector.SharingAvailable) throw new Exception("Collector did not wait for active work.");
+            foreach (var channel in new[] { SharingChannel.Quota, SharingChannel.ProviderTokens })
+            {
+                var sharingDenied = false;
+                try { collector.Sharing("status", null, channel).GetAwaiter().GetResult(); }
+                catch (InvalidOperationException) { sharingDenied = true; }
+                if (!sharingDenied) throw new Exception("Sharing bypassed shutdown or collection.");
+            }
             var denied = false;
             try { collector.Configure(null); } catch (InvalidOperationException) { denied = true; }
             if (!denied || File.Exists(Path.Combine(root, "collector.config.json"))) throw new Exception("Configuration changed during shutdown.");
@@ -323,7 +335,14 @@ internal sealed class Collector : IDisposable
             if (!pairingDrain.GetAwaiter().GetResult() || collector.pairingPaused) throw new Exception("Verified pairing cleanup failed.");
             collector.operations.Resume();
             collector.BeginDirectPairing()(false);
-            if (!collector.pairingPaused || collector.Busy) throw new Exception("Unverified helper exit did not preserve collection pause.");
+            if (!collector.pairingPaused || collector.Busy || collector.SharingAvailable) throw new Exception("Unverified helper exit did not preserve collection pause.");
+            foreach (var channel in new[] { SharingChannel.Quota, SharingChannel.ProviderTokens })
+            {
+                var sharingDenied = false;
+                try { collector.Sharing("status", null, channel).GetAwaiter().GetResult(); }
+                catch (InvalidOperationException) { sharingDenied = true; }
+                if (!sharingDenied) throw new Exception("Sharing bypassed pairing repair pause.");
+            }
             collector.Refresh().GetAwaiter().GetResult();
             if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change.") throw new Exception("Paused pairing allowed collection.");
             collector.pairingPaused = false;

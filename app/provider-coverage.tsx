@@ -32,7 +32,7 @@ export default function ProviderCoverage({ tokens, sources = [] }: {
       {claude.length ? claude.map(source => {
         const total = recordedTotal(source);
         return <div key={source.host}><dt>Claude Code · {source.host}</dt>
-          <dd>{total === null ? (source.status === 'not-connected' ? 'Collection off' : 'Unknown') : `${total.toLocaleString('en-US')} tokens · ${source.days!.length} recorded ${source.days!.length === 1 ? 'date' : 'dates'}`}</dd></div>;
+          <dd>{total === null ? (source.status === 'not-connected' ? 'Collection off' : source.status === 'stale' ? 'Unknown · reading is stale' : 'Unknown') : `${total.toLocaleString('en-US')} tokens · ${source.days!.length} recorded ${source.days!.length === 1 ? 'date' : 'dates'}`}</dd></div>;
       }) : <div><dt>Claude Code</dt><dd>Unknown</dd></div>}
       <div><dt>ChatGPT</dt><dd>Unknown</dd></div>
       <div><dt>Cursor</dt><dd>Unknown</dd></div>
@@ -41,7 +41,7 @@ export default function ProviderCoverage({ tokens, sources = [] }: {
     <details className="method-note">
       <summary>What these counts include</summary>
       <p>Codex includes HAPI and Happy sessions when they use the same native log store. Relay messages are not counted again.</p>
-      <p>Enable saved Claude Code usage in native Settings. Its records stay on the collecting device. Counts include input, cache reads, cache writes and output, not subscription limits or a bill.</p>
+      <p>Enable saved Claude Code usage in native Settings. Optional sharing shows each paired device separately when both devices enable it. Device totals are not added together. Counts include input, cache reads, cache writes and output, not subscription limits or a bill.</p>
       <p>ChatGPT, Cursor and Antigravity token sources are not connected. Choosing a model in another app does not create a Codex or Claude Code record. Saved review receipts cover only those reviews.</p>
     </details>
   </section>;

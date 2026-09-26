@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {collectQuota} from './collect-quota.mjs';
+import {collectAntigravityAllowance} from './antigravity-allowance.mjs';
 // This runner uses POSIX process groups and flock. Windows uses Collector.cs,
 // whose contracts are exercised by the native Windows build and live checks.
 const test=(name,fn)=>nodeTest(name,{skip:process.platform==='win32'?'POSIX runner only; Windows uses the native collector':false},fn);
@@ -39,6 +40,42 @@ test('partial agent receipt coverage prevents an all-sources-success status',asy
   assert.equal(run(root),'partial');
   const s=await status(root);
   assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,2);
+});
+test('wrapper health includes configured provider token sources and excludes disabled ones',async t=>{
+  for(const [sourceState,read,configured,state] of [['ok',2,2,'ok'],['unavailable',1,2,'partial'],['not-connected',1,1,'ok']]) {
+    const root=await fixture(t,success.replace('settings:[]',`settings:[],providerTokenSources:[{provider:'claude-code',host:'Mac',status:'${sourceState}'}]`));
+    assert.equal(run(root),state);
+    const result=await status(root);
+    assert.equal(result.sourcesRead,read);assert.equal(result.sourcesConfigured,configured);
+    assert.equal(result.state,state);
+  }
+});
+test('wrapper health includes optional provider allowances without treating Unknown as zero',async t=>{
+  for(const [sourceState,read,configured,state] of [['ok',2,2,'ok'],['unsupported',1,2,'partial'],['not-connected',1,1,'ok']]) {
+    const root=await fixture(t,success.replace('settings:[]',`settings:[],providerAllowances:[{provider:'antigravity',host:'Mac',status:'${sourceState}'}]`));
+    assert.equal(run(root),state);
+    const result=await status(root);
+    assert.equal(result.sourcesRead,read);assert.equal(result.sourcesConfigured,configured);
+  }
+});
+nodeTest('allowance collection contains POSIX clients and never launches a Windows client',async t=>{
+  if(process.platform==='win32') {
+    const result=await collectAntigravityAllowance({executable:process.execPath,host:'Windows',run:()=>assert.fail('Windows must not launch')});
+    assert.equal(result.status,'unsupported');assert.deepEqual(result.windows,[]);
+    return;
+  }
+  const root=await fixture(t,''),client=path.join(root,'synthetic-client'),ready=path.join(root,'client-ready');
+  await writeFile(client,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`,{mode:0o700});
+  const moduleURL=new URL('./antigravity-allowance.mjs',import.meta.url).href;
+  await writeFile(path.join(root,'scripts/collect-dashboard.mjs'),`import {collectAntigravityAllowance} from ${JSON.stringify(moduleURL)};await collectAntigravityAllowance({executable:${JSON.stringify(client)},host:'Mac'});`);
+  assert.equal(run(root,1.5),'failed');
+  const pid=Number(await readFile(ready,'utf8'));
+  t.after(()=>{try {process.kill(pid,'SIGKILL');}catch {}});
+  let alive=true;
+  for(let attempt=0;attempt<100;attempt++) {
+    try {process.kill(pid,0);await new Promise(resolve=>setTimeout(resolve,10));}catch {alive=false;break;}
+  }
+  assert.equal(alive,false,'Owned allowance process survived the collector timeout');
 });
 test('a timed-out reader is stopped and the operating-system lock is released',async t=>{
   const root=await fixture(t,`setInterval(()=>{},1000);`);
