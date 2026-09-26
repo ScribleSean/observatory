@@ -16,7 +16,8 @@ import {attachQuotaSync} from './quota-sync.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
-import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenSync} from './provider-token-sync.mjs';
 import {collectConfiguredAntigravityAllowance,attachProviderAllowances} from './collect-antigravity-allowance.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -104,8 +105,8 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
-  // Windows does not infer a WSL Claude installation. This owner-local record
-  // is added only after peer finalization, so it cannot enter peer exchange.
+  // Windows does not infer a WSL Claude installation. Optional provider sharing
+  // uses its own channel and never changes the core Codex peer payload.
   let claude;
   if(!config.claude) claude=unavailableClaudeTokenSource('Windows',new Date().toISOString(),'not-connected');
   else try {
@@ -113,7 +114,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     const raw=JSON.parse(await run(python,[...pythonArgs,claudeDirectory],await readFile(path.join(scripts,'read-claude-usage.py'),'utf8')));
     claude=cleanClaudeTokenSource(raw,'Windows');
   } catch {claude=unavailableClaudeTokenSource('Windows');}
-  attachProviderTokenSources(result,[claude]);
+  await attachProviderTokenSync(runtime,result,claude);
   attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Windows',
     isEnabled:async()=>windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8'))).antigravity})]);
   const {data,status}=result;

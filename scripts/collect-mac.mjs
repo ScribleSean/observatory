@@ -17,7 +17,8 @@ import {collectConfiguredMacQuota} from './legacy-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
-import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenSync} from './provider-token-sync.mjs';
 import {collectConfiguredAntigravityAllowance,attachProviderAllowances} from './collect-antigravity-allowance.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -97,8 +98,8 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   catch {workflows={agents:[],agentSource:{status:config.receipts?'unavailable':'not-connected'},
     localModel:{host:'Ubuntu',status:config.benchmarks?'unavailable':'not-connected'}};}
   attachWorkflows(result,workflows);
-  // Provider data stays local and is deliberately attached after peer merging.
-  // It is never inserted into Codex totals or the peer payload.
+  // Optional provider sharing uses its own channel after core peer merging.
+  // These records never enter Codex totals or the core peer payload.
   let claude;
   if(!config.claude) claude=unavailableClaudeTokenSource('Mac',new Date().toISOString(),'not-connected');
   else try {
@@ -106,7 +107,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[claudeDirectory]);
     claude=cleanClaudeTokenSource(raw,'Mac');
   } catch {claude=unavailableClaudeTokenSource('Mac');}
-  attachProviderTokenSources(result,[claude]);
+  await attachProviderTokenSync(runtime,result,claude);
   attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Mac',
     isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).antigravity})]);
   const {data,status}=result;
