@@ -8,6 +8,17 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--antigravity-usage"))
+        {
+            Environment.ExitCode = args.Length == 2 && args[0] == "--antigravity-usage"
+                ? AntigravityUsageProcess.Command(args[1]).GetAwaiter().GetResult() : 64;
+            return;
+        }
+        if (args.Any(argument => argument.StartsWith("--test-antigravity-", StringComparison.Ordinal)))
+        {
+            Environment.ExitCode = AntigravityUsageProcessTests.Command(args).GetAwaiter().GetResult();
+            return;
+        }
         if (args.Contains("--test-update-trust"))
         {
             if (args.Length != 2 || args[0] != "--test-update-trust") { Environment.ExitCode = 64; return; }
