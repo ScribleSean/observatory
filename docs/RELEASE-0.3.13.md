@@ -2,6 +2,12 @@
 
 Status: Both development devices run **0.3.13, build 31** from `0ad86df49f73d836091a78fbb8d4d1bf7152ece2`. The Windows installation was verified on September 25. Neither is published as a production release.
 
+## Build 32 preparation, September 26 UTC
+
+Build 32 includes the provider coverage work merged in [PR #2](https://github.com/ScribleSean/observatory/pull/2). Optional Claude Code collection reads retained local request counters, reconciles streaming snapshots and copied records, and withholds incomplete results. Source health identifies the coverage of Codex, Claude Code, ChatGPT, Cursor and Antigravity. The existing token chart is explicitly scoped to Codex.
+
+The merged source passed 573 regression tests with 15 platform skips, TypeScript, the web build, native Mac and Windows compilation and self-tests, Windows dashboard navigation and updater safety checks. Browser verification used fictional records at desktop and phone widths. Build 32 package and installed verification remain pending. Claude collection defaults to off and stays on the collecting device until a separately verified peer extension is available.
+
 ## Windows installation follow-up, September 25 UTC
 
 The original pinned Windows candidate passed the guarded ordinary upgrade and installed verification. The first attempt timed out waiting for a normal quit and replaced no app files. After the app exited, the failed receipt and task definition were archived. Independent inventory checks confirmed the original build 30 remained intact before one guarded retry.

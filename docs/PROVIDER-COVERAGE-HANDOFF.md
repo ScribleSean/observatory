@@ -1,6 +1,6 @@
 # Provider coverage handoff
 
-Updated September 25, 2026. The implementation is in [PR #2](https://github.com/ScribleSean/observatory/pull/2), on `feature/provider-coverage-20260925`. Use that branch until the PR is merged. This handoff contains source and verification context only.
+Updated September 26, 2026 UTC. [PR #2](https://github.com/ScribleSean/observatory/pull/2) is merged on main at `2292d0d`. Build 32 preparation continues from that source. This handoff contains source and verification context only.
 
 ## Outcome and ownership
 
@@ -24,8 +24,8 @@ These provider changes are source changes. Installed build 31 does not contain t
 
 ## Exact next actions
 
-1. Resolve PR check failures or review findings before merging. Keep personal snapshots and credentials out of Git and public demo artifacts.
-2. Advance the shared desktop build number, package both platforms from the same verified revision, then perform the existing recoverable installation procedure. Do not modify a build 31 app bundle in place or enable an unknown configuration key in its strict Mac validator.
+1. The provider PR checks passed and the PR is merged. Keep personal snapshots and credentials out of Git and public demo artifacts.
+2. The shared desktop build number is now 32. Package both platforms from the same verified revision, then perform the existing recoverable installation procedure. Do not modify a build 31 app bundle in place or enable an unknown configuration key in its strict Mac validator.
 3. Enable Claude collection on the development devices after installing compatible builds. Verify scheduled collection, Source health counts and a restart while preserving saved data. Check custom `CLAUDE_CONFIG_DIR` inheritance instead of assuming a desktop app sees shell settings.
 4. Restore Ubuntu collection only through an approved safe WSL recovery. On September 25, Ubuntu was running but even a harmless WSL command failed with `Wsl/Service/E_UNEXPECTED`. No workload was terminated. Mac and Windows records remained readable, while combined tokens were correctly withheld.
 5. Design Claude peer synchronization with explicit protocol compatibility and request-identity overlap checks. The current peer payload deliberately does not export these records.
