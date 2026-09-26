@@ -19,10 +19,13 @@ The dashboard opens Allowances for usage limits. Select Activity for screen time
 
 | View | What it brings into focus |
 | --- | --- |
-| **Screen time** | Active app time, daily and weekly timelines, and overlap-aware Mac and Windows totals. |
-| **AI usage** | Retained Codex tokens by model and day, cached input, and separately reported quota windows where available. |
-| **Workflows** | Recorded tool identities, agent receipts and local-model benchmark results, with explicit coverage. |
-| **Dictation** | Voice usage by tool and device, with Wispr recording metadata and explicit gaps in coverage. |
+| **Allowances** | Available account limits and recorded usage windows, with gaps kept visible. |
+| **Activity** | Recorded foreground app time, daily and weekly history, and overlap-checked device totals. |
+| **Tokens** | Retained Codex tokens by model and day, including cached input. |
+| **Dictation** | Voice usage by tool and device, with Wispr recording metadata and explicit coverage gaps. |
+| **Agents** | Recorded tool identities, agent receipts and local-model benchmark results. |
+| **Source health** | Configured-source coverage and separately reported provider readings, including optional Claude Code counters. |
+| **Settings** | Source choices, device connections and separate sharing consent controls. |
 
 Missing data stays missing. Estimates stay labeled. Token counts are not subscription bills, and app activity is not a productivity score.
 
