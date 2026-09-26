@@ -36,6 +36,8 @@ Saved Claude Code usage is an optional source in native Settings. It reads the c
 
 Claude assistant events with the same message and request identifiers are snapshots of one request. The reader keeps the greatest consistent counter tuple and assigns it to the earliest retained New York date. Copied files do not add another request. Conflicting counters or model identities, malformed records, unreadable directories, files that change during a read and exceeded scan bounds withhold the result. The scan is limited to 2,000 files, 128 MiB of total input, one million lines and 4 MiB per line. There is no zero-filled history or partial successful total. Deleted records cannot be recovered. Identifiers and conversation content stay out of dashboard data.
 
+Client-generated API errors are excluded only when the model marker is exactly `<synthetic>`, `isApiErrorMessage` is true, and all four required usage counters are exact integer zeros. Message identity, timestamp and file-integrity checks still apply. Such an entry adds no recorded request. An archive containing only these entries remains Unknown.
+
 These local counters include cached input and are not subscription allowances or invoices. The native log format is version-sensitive. The [ccusage streaming regression](https://github.com/ccusage/ccusage/issues/888) illustrates why repeated snapshots must not be summed or reduced to the first row.
 
 | App | Current token coverage | Available evidence |
