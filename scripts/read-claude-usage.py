@@ -121,10 +121,16 @@ def collect(folder):
                     values = tuple(number(usage.get(field)) for field in FIELDS)
                     identity = (message.get('id'), event.get('requestId'))
                     day = timestamp(event.get('timestamp'))
-                    if (not all(isinstance(value, str) and 0 < len(value) <= 256 for value in identity)
+                    if (not isinstance(identity[0], str) or not 0 < len(identity[0]) <= 256
                             or day is None or any(value is None for value in values)):
                         return unavailable()
                     raw_model = message.get('model')
+                    # Client-generated API errors carry no recorded request usage.
+                    if (event.get('isApiErrorMessage') is True and raw_model == '<synthetic>'
+                            and all(value == 0 for value in values)):
+                        continue
+                    if not isinstance(identity[1], str) or not 0 < len(identity[1]) <= 256:
+                        return unavailable()
                     current = (day, model_name(raw_model), raw_model, values)
                     prior = records.get(identity)
                     if prior is None:

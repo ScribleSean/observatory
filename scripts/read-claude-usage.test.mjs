@@ -27,6 +27,48 @@ test('withholds when an assistant envelope lacks numeric usage while non-assista
   const ignored=JSON.stringify({type:'system',message:{role:'assistant',id:'m3'}})+'\n';
   await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2))+ignored+missing);assert.equal(read(root).status,'unavailable');
 }));
+test('excludes recognized zero-usage client API errors without counting a request',async()=>fixture(async root=>{
+  const client=JSON.parse(event('client-error',undefined,usage(0,0,0,0),{model:'<synthetic>'}));
+  client.isApiErrorMessage=true;
+  const valid=event('m1','r1',usage(1,2,3,4));
+  await log(root,'one.jsonl',valid+JSON.stringify(client)+'\n');
+  const data=read(root);assert.equal(data.status,'ok');
+  assert.equal(data.days[0].totalTokens,10);assert.equal(data.days[0].requestCount,1);
+  assert.equal(data.days[0].models.length,1);
+  await log(root,'one.jsonl',JSON.stringify(client)+'\n');
+  assert.equal(read(root).status,'unavailable');
+}));
+test('client error recognition does not excuse uncertain usage or malformed envelopes',async()=>fixture(async root=>{
+  const client=JSON.parse(event('client-error',undefined,usage(0,0,0,0),{model:'<synthetic>'}));
+  client.isApiErrorMessage=true;
+  const changes=[
+    value=>{value.isApiErrorMessage=false;},
+    value=>{value.isApiErrorMessage=1;},
+    value=>{value.message.model='<other>';},
+    value=>{value.message.model='claude-sonnet-4-20250514';},
+    value=>{value.message.usage.output_tokens=1;},
+    value=>{value.message.usage.input_tokens=-1;},
+    value=>{value.message.usage.output_tokens=false;},
+    value=>{delete value.message.usage.cache_read_input_tokens;},
+    value=>{delete value.message.id;},
+    value=>{value.timestamp='invalid';},
+    value=>{value.message.role='user';},
+  ];
+  for(const change of changes) {
+    const altered=structuredClone(client);change(altered);
+    await log(root,'one.jsonl',event('m1','r1',usage(1,2,3,4))+JSON.stringify(altered)+'\n');
+    assert.equal(read(root).status,'unavailable');
+  }
+}));
+test('other assistant records retain normal request and usage accounting',async()=>fixture(async root=>{
+  for(const [model,flag,output] of [['<synthetic>',true,3],['<synthetic>',false,0],['<synthetic>',1,0],['claude-sonnet-4-20250514',true,0]]) {
+    const record=JSON.parse(event('m1','r1',usage(0,0,0,output),{model}));
+    record.isApiErrorMessage=flag;
+    await log(root,'one.jsonl',JSON.stringify(record)+'\n');
+    const data=read(root);assert.equal(data.status,'ok');
+    assert.equal(data.days[0].totalTokens,output);assert.equal(data.days[0].requestCount,1);
+  }
+}));
 test('uses the earliest date when file order places an older lower snapshot last',async()=>fixture(async root=>{
   await log(root,'a-later.jsonl',event('m1','r1',usage(4,0,0,8),{timestamp:'2026-09-25T04:30:00Z'}));
   await log(root,'z-earlier.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-09-25T03:30:00Z'}));
