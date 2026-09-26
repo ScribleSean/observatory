@@ -1,12 +1,12 @@
 # Observatory 0.3.13 candidate
 
-Status as of September 26, 2026 UTC: The development Mac runs **0.3.13, build 34** from `d1505872c503eec47c784602415998154c757fc2`. Windows remains **0.3.13, build 31** from `0ad86df49f73d836091a78fbb8d4d1bf7152ece2`. Neither is published as a production release.
+Status as of September 26, 2026 UTC: The development Mac runs **0.3.13, build 34** from `d1505872c503eec47c784602415998154c757fc2`. Windows now runs **0.3.13, build 34** from `80a7aa8397a208fad51599f990b094af3d29458f`, with the host owner's final guarded installation and readiness checks passed. Neither is published as a production release.
 
 ## Build 34 integration, September 26 UTC
 
 Build 34 includes optional per-device Claude sharing and Mac Antigravity allowance monitoring. Claude records use a separate opt-in channel without changing core synchronization or adding device totals. Antigravity uses the installed CLI's non-model usage command. Windows execution remains unsupported until process-tree containment is verified. Both provider arrays now contribute to the Mac wrapper's overall health counts, including unavailable sources.
 
-The Mac package source is `d1505872c503eec47c784602415998154c757fc2`. [PR #4](https://github.com/ScribleSean/observatory/pull/4) merged separately as `143bf69be01a94b3bd8dc11d32bf122ddf5654d8`. The corrected Windows candidate below uses a later test and CI revision with the same production application code and build number. Each artifact retains its actual source identity.
+The Mac package source is `d1505872c503eec47c784602415998154c757fc2`. [PR #4](https://github.com/ScribleSean/observatory/pull/4) merged separately as `143bf69be01a94b3bd8dc11d32bf122ddf5654d8`. The installed Windows package below uses a later test and CI revision with the same production application code and build number. Each artifact retains its actual source identity.
 
 The release coordinator's integrated checks passed 631 JavaScript tests with 15 platform skips, TypeScript and the production web build. All four PR #4 native and update checks passed. The final independent integration check passed all six cases. Earlier reviewed native checks covered Mac compilation, native self-tests, an isolated provider bridge and Windows cross-compilation.
 
@@ -27,15 +27,34 @@ The Mac owner then enabled Antigravity under the collector lock. Its scheduled r
 
 The UI automation stream failed, so restart and navigation verification remain open. Installed Claude peer sharing remains unverified.
 
-### Windows build 34 candidate
+### Windows build 34 package and guarded installation
 
 The Windows host owner reported passing fresh build-34 web, TypeScript, native build, native self-tests and Claude reader regression checks. The [original hosted Windows run](https://github.com/ScribleSean/observatory/actions/runs/36212105943) at `d1505872c503eec47c784602415998154c757fc2` failed its JavaScript gate: 618 tests, 564 passed, 53 skipped and one failed. The sole failure was a new synthetic collector integration fixture that expected day records but received an unavailable result. Installer lifecycle checks were skipped and no package candidate was produced. This does not establish a production reader defect.
 
 The test-only correction in [PR #6](https://github.com/ScribleSean/observatory/pull/6), `80a7aa8397a208fad51599f990b094af3d29458f`, passed targeted Mac and Windows checks and merged separately as `9b21fa8a55056b2c24169a9ccdf975faa63e75e3`. The original fixture also passes on the local Windows host, so the hosted interpreter state and original failure cause remain unverified. Production application code is unchanged.
 
-The [corrected hosted package run](https://github.com/ScribleSean/observatory/actions/runs/36213635154) is in progress at `80a7aa8397a208fad51599f990b094af3d29458f`. It includes artifact retention from [PR #5](https://github.com/ScribleSean/observatory/pull/5), merged as `978a0a03611ee2d4d77ef02b1ce0e0f6bd3fa6e5`. All four PR #5 checks passed, but retained uploads and final artifact identities remain unverified at this checkpoint. Windows remains installed build 31.
+The [corrected hosted package run](https://github.com/ScribleSean/observatory/actions/runs/36213635154), attempt 1, passed at `80a7aa8397a208fad51599f990b094af3d29458f`. Full packaging ran from 03:04:06 to 03:31:57 UTC. TEST installer and ordinary staging lifecycle checks ran from 03:31:57 to 03:36:04 UTC. Both artifact uploads succeeded, and the job completed at 03:36:25 UTC. This verifies the retained uploads introduced by [PR #5](https://github.com/ScribleSean/observatory/pull/5), merged as `978a0a03611ee2d4d77ef02b1ce0e0f6bd3fa6e5`.
 
-The installed Mac keeps its verified `d150587` identity. Test and CI changes do not require a Mac rebuild or justify relabeling it as `80a7aa`. If the corrected hosted Windows artifacts pass retention and verification, no additional local Windows rebuild is planned. Build 32 and 33 package results remain evidence for their exact revisions and do not establish build 34 acceptance.
+The main JavaScript gate reported 627 tests: 574 passed, 53 skipped and none failed. Three isolated test invocations reported 3 passed and 1 skipped, 18 passed and 1 skipped, and 5 passed with no skips. The additional installation verifier passed all 29 checks.
+
+| Artifact | Size or coverage | SHA-256 |
+| --- | --- | --- |
+| Windows candidate manifest | 3,079 files, 268,989,246 unpacked bytes | `0f062da6747c3ec6270516dda5b656b70081c45c273b03ead10dbccb6a452cfd` |
+| Ordinary Windows installer | 100,461,616 bytes | `22ec17127efb9d7ae80323b74f66aa2dd69f63e8980379e993cc8fe0fa8ab148` |
+
+The release coordinator independently verified the artifact ZIP hashes, strict file manifest and ordinary staging receipt. The verification receipt has SHA-256 `f4d8583f0b41df4f79d10e90327deee430a3eebf3628a6113ca3b92f56271311`. This verifies the candidate package. Hosted lifecycle success remains separate from development-machine installation evidence.
+
+The Windows host owner reported ordinary uninstall and install exit codes of zero and passing exact installed manifest and file-version checks. The first guarded attempt stopped during normal process teardown, before backup or uninstall; continuation verified the original build 31 was unchanged and preserved a protected recovery copy. A later saved-state guard stopped before relaunch because private peer state contained a newer valid observation. Read-only checks found intact databases with matching schema, local data and bindings; all other saved files, configuration, trust and consent matched the backup. The writer is unproven. The coordinator accepted retaining the newer observation alongside the immutable original backup and both failure receipts.
+
+The owner's separate locked continuation passed final installation checks and acknowledged ordinary app readiness at 03:54:11 UTC. It reverified source `80a7aa8397a208fad51599f990b094af3d29458f`, file version `0.3.13.34` and the manifest and installer pins above. Saved data matched a separately protected reconciled baseline, preserving the accepted newer peer observation. Startup settings, approval, shortcuts and ownership were preserved. The continuation used the collection and maintained peer-state locks, without data overwrite, another installer or a forced stop. The Mac's bounded collection pause was released normally, with configuration and saved snapshots unchanged.
+
+Claude remained disabled in the installation receipt. The owner verified inherited launch settings and selected the default local Claude directory because no custom `CLAUDE_CONFIG_DIR` was configured. After enabling local Claude collection, the ordinary scheduled run from 03:59:11.812 to 03:59:26.158 UTC reported Claude unavailable. Overall health was 4 of 8 sources, correctly counting one configured Claude source as unread. Codex and privacy isolation checks passed, and Claude sharing remained off. Read-only metadata and runtime checks ruled out links, an unreadable tree, file-count and total-byte limits, and timezone configuration; parser diagnosis remains pending. Windows installation is accepted, but optional local Claude coverage has not passed. Installed cross-device Claude sharing remains unverified.
+
+The installed Mac keeps its verified `d150587` identity. The test and CI changes in `80a7aa` do not require a Mac rebuild or justify relabeling it. No additional local Windows rebuild is planned. Build 32 and 33 package results remain evidence for their exact revisions and do not establish build 34 acceptance.
+
+### Later source UI verification
+
+[PR #8](https://github.com/ScribleSean/observatory/pull/8), source `c34f012`, merged as `1597978cd4c345a7e3b04419aed27f8ff4de704d` after the build-34 package sources. All four native and updater checks passed. Independent review of fresh fictional Windows captures verified readable Metric and Tokens headings in both themes and the empty-chart sentence, “No saved observations in this period.” Inner scrollbar interaction and offscreen rows remain unverified. See the [source UI evidence](UI-VERIFICATION.md#windows-source-screenshot-review-september-26). These repairs are not in the Mac `d150587` or Windows `80a7aa` build-34 packages.
 
 ## Build 32 preparation, September 26 UTC
 

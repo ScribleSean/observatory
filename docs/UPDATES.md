@@ -717,4 +717,12 @@ The `Desktop update safety` GitHub workflow runs these dependency-free receipt, 
 
 The same workflow runs the official Sparkle signing interoperability test on macOS and the WinSparkle test on Windows. Each platform downloads its pinned upstream archive over HTTPS with time and size limits, verifies its SHA-256 digest before extraction, and passes the extracted tool path explicitly so the test runs rather than skips. These checks cover signature compatibility and altered-byte rejection, not native update installation.
 
-The `Native compilation` workflow compiles the Windows C# application with locked NuGet dependencies and the Mac Swift sources, then runs their isolated `--self-test` contracts. Its Windows test executable includes the declared .NET runtime. Neither job packages the dashboard or collector runtimes, installs an app, exercises desktop UI, or uploads a release. These compilation checks supplement, rather than replace, the complete package and installed-app checks.
+The `Native compilation` workflow compiles the Windows C# application with locked NuGet dependencies and the Mac Swift sources, then runs their isolated `--self-test` contracts. Its Windows test executable includes the declared .NET runtime. The Windows job also exercises synthetic dashboard navigation with `--test-native-dashboard` and retains fictional screenshots for visual review. Neither job packages the dashboard or collector runtimes, installs an app, or uploads a release. Complete package checks, real installed interaction and accessibility checks, and release acceptance remain separate.
+
+### Runtime backup coordination
+
+[Graceful quit](../native/windows/Collector.cs) drains the app's collection and pairing work and stops its owned trusted-sync service. The setup gate excludes participating native starts, and `collection.lock` serializes native collection. Neither prevents standalone [SSH peer exchanges](../scripts/peer-exchange.mjs) from accepting valid newer observations while the app is closed.
+
+For a deliberate consistent runtime backup or comparison, drain native work, hold `collection.lock`, then hold the maintained [`withPeerStateLock`](../scripts/peer-lock.mjs) around the backup or comparison. Keep installation/startup exclusion during an upgrade. [Payload replacement](../native/windows/replace-payload.mjs) leaves application data in place and does not restore private databases or require their bytes to remain identical. Preserve valid newer peer observations.
+
+The mutex's `private-repair/operation.sqlite-journal`, when present while held, is a transient coordination file. Verify that it disappears after normal release, with no new holder. This specific allowance does not justify ignoring other database journals or sidecars.

@@ -1,6 +1,6 @@
 # Provider coverage handoff
 
-Updated September 26, 2026 UTC. [PR #2](https://github.com/ScribleSean/observatory/pull/2) added local Claude coverage. [PR #3](https://github.com/ScribleSean/observatory/pull/3) fixed unreadable-directory undercounts and merged at `eb01aa0`. [PR #4](https://github.com/ScribleSean/observatory/pull/4) integrated provider sharing, optional Antigravity allowances and corrected provider health accounting at `143bf69be01a94b3bd8dc11d32bf122ddf5654d8`. The development Mac now runs build 34 from `d1505872c503eec47c784602415998154c757fc2`. Windows remains build 31 while a corrected build-34 package run targets `80a7aa8397a208fad51599f990b094af3d29458f`. These revisions have the same production application code, with later test and CI changes on the Windows candidate.
+Updated September 26, 2026 UTC. [PR #2](https://github.com/ScribleSean/observatory/pull/2) added local Claude coverage. [PR #3](https://github.com/ScribleSean/observatory/pull/3) fixed unreadable-directory undercounts and merged at `eb01aa0`. [PR #4](https://github.com/ScribleSean/observatory/pull/4) integrated provider sharing, optional Antigravity allowances and corrected provider health accounting at `143bf69be01a94b3bd8dc11d32bf122ddf5654d8`. The development Mac now runs build 34 from `d1505872c503eec47c784602415998154c757fc2`. Windows now runs build 34 from `80a7aa8397a208fad51599f990b094af3d29458f`, with the owner's final installation and readiness checks passed. These revisions have the same production application code, with later test and CI changes in the Windows package.
 
 ## Outcome and ownership
 
@@ -17,7 +17,7 @@ The token chart remains scoped to Codex. Source health adds optional Claude Code
 - The optional `antigravity` source defaults to off. Mac uses the installed CLI's non-model usage command with bounded output, process cleanup and consent rechecks. Windows returns unsupported without starting a process. No Antigravity token, history or peer coverage is claimed.
 - The Mac Python wrapper includes provider tokens and allowances when calculating source health. A configured Claude failure can no longer disappear from the overall status.
 - Native and web Source health show provider coverage. The existing Tokens view explicitly describes Codex. Shared typography and colors are retained.
-- The release ledger distinguishes installed Mac build 34, installed Windows build 31 and the pending corrected Windows build-34 candidate.
+- The release ledger distinguishes verified packages, installed applications and provider acceptance. Both devices run build 34; Windows local Claude remains unavailable.
 
 ## Verification and delivery boundaries
 
@@ -25,15 +25,17 @@ Reviewed source and synthetic checks cover protocol compatibility, consent races
 
 The Mac runs build 34 from `d150587`, with independently verified installed inventory and preserved saved data. Scheduled Claude and Antigravity checks passed. Claude is counted once, and provider allowances remain separate from tokens and Codex quota. Latest source health is 12 of 15, with three Ubuntu gaps. Missing readings remain Unknown. Restart and navigation are still unverified after a UI automation stream failure.
 
-Windows remains build 31 and does not contain these provider changes. Its corrected build-34 package at `80a7aa` is pending. Keep that candidate separate from the installed Mac's source identity, even though production application code matches. Installed Claude peer synchronization remains unverified, and combined Claude totals remain unavailable.
+Windows runs build 34 from `80a7aa`. Its package passed independent artifact checks, and the owner's final installation receipt confirms exact installed files, ordinary app readiness and saved-data preservation against the reconciled baseline. The original backup and accepted newer peer observation were retained. The scheduled local Claude reading was unavailable, so optional coverage has not passed. Health correctly reports 4 of 8 sources, including one configured but unread Claude source. Codex and privacy isolation passed. Claude peer sharing remains off and installed synchronization unverified. Combined Claude totals remain unavailable.
+
+Later [source-only PR #8 screenshot evidence and its limits](UI-VERIFICATION.md#windows-source-screenshot-review-september-26) are tracked separately.
 
 The [build 34 release evidence](RELEASE-0.3.13.md#build-34-integration-september-26-utc) is the canonical dated record for source checks, package and installation pins, scheduled verification, PR merges and the Windows fixture failure and corrected run. Earlier build 32 and 33 evidence remains scoped to those revisions. Source, package, installed and live verification remain separate.
 
 ## Exact next actions
 
 1. Keep personal snapshots and credentials out of Git and public demo artifacts. Integrate only reviewed source and publish checkpoints for continuation.
-2. Finish the corrected Windows package run at `80a7aa`, verify retained artifacts, then use the existing recoverable installation procedure. No additional local Windows rebuild is planned if those hosted artifacts pass. Preserve installed Mac source `d150587`, the PR #4 merge identity and the Windows candidate identity separately. Their production application code and build number match, but test and CI revisions differ. Do not relabel artifacts or modify installed bundles in place.
-3. Complete Mac restart and navigation verification. After Windows installation, enable Claude collection and verify scheduled collection, Source health counts and restart while preserving saved data. The Mac's scheduled Claude and Antigravity checks have passed. Check custom `CLAUDE_CONFIG_DIR` inheritance instead of assuming a desktop app sees shell settings.
+2. Retain the reconciled Windows saved-state baseline, newer peer observation and original recovery evidence. Preserve installed Mac source `d150587` and Windows source `80a7aa` separately; do not relabel artifacts or modify installed bundles in place.
+3. Diagnose the unavailable Windows local Claude reading, then verify a successful ordinary scheduled collection while preserving saved data. Runtime and metadata checks passed; parser diagnosis remains pending. The Mac's scheduled Claude and Antigravity checks passed; Mac restart and navigation remain open.
 4. Restore Ubuntu collection only through an approved safe WSL recovery. On September 25, Ubuntu was running but even a harmless WSL command failed with `Wsl/Service/E_UNEXPECTED`. No workload was terminated. Mac and Windows records remained readable, while combined tokens were correctly withheld.
 5. Verify optional Claude sharing with both installed devices, including disable, stale-peer and reconnect behavior. Combined Claude totals remain unavailable until complete request-identity overlap evidence is implemented and verified.
 6. Inspect a supported Cursor export before choosing a reconciliation rule. ChatGPT token coverage remains unknown. Verify Windows process-tree containment before enabling Antigravity execution there. A subscription, app presence or selected model is not proof of a token export or API entitlement. See [source coverage](SOURCE-COVERAGE.md).
