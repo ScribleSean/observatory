@@ -9,6 +9,8 @@ import {readPeerState} from './peer-store.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {readQuotaState} from './quota-store.mjs';
 import {createSharedQuota} from './quota-peer.mjs';
+import {assertOutgoingProviderTokenRequest} from './provider-token-exchange.mjs';
+import {parseProviderTokenReply} from './provider-token-peer.mjs';
 
 const limit=17_000_000;
 const failure=()=>Error('Trusted peer exchange unavailable');
@@ -49,6 +51,13 @@ export async function tlsQuotaRequest(runtime,transport,request,{connect=tls.con
         (request.action==='exchange' && response.status==='ready' && !response.record))throw failure();
       return response;
     }});
+}
+
+export async function tlsProviderTokenRequest(runtime,transport,request,{connect=tls.connect}={}) {
+  request=structuredClone(request);
+  return trustedRequest(runtime,transport,{version:1,channel:'provider-tokens',request},{connect,limit,
+    authorize:async()=>assertOutgoingProviderTokenRequest(runtime,request),
+    decode:response=>parseProviderTokenReply(response,request)});
 }
 
 async function trustedRequest(runtime,transport,request,{connect,limit,authorize,decode}) {
