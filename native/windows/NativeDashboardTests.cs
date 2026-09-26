@@ -85,6 +85,21 @@ internal static class NativeDashboardTests
             Check(history.AccessibleDescription == "2026-09-12: " + Snapshot.Format(343_700_000) + " tokens",
                 "Compact chart labels retain exact accessible recorded values");
         }
+        using (var largeFont = new Font(FontFamily.GenericSansSerif, 28))
+        using (var history = new DashboardHistoryChart(new[] {
+            new JsonObject { ["date"] = "2026-09-12", ["seconds"] = 1800 } }, false, animate: false)
+            { Size = new Size(900, 220), Font = largeFont })
+        using (var bitmap = new Bitmap(history.Width, history.Height))
+        {
+            history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var firstInk = Enumerable.Range(0, 190).First(y => {
+                var pixel = bitmap.GetPixel(417, y);
+                return pixel.G > pixel.R + 10 && pixel.G > pixel.B + 10;
+            });
+            Check(firstInk >= history.Font.Height + 4,
+                "Enlarged chart unit text has a separate band above the plotted bars");
+            bitmap.Save(Path.Combine(output, "native-activity-large-chart-font.png"), ImageFormat.Png);
+        }
         using (var history = new DashboardHistoryChart(new[] {
             new JsonObject { ["date"] = "2026-09-11", ["totalTokens"] = 0 },
             new JsonObject { ["date"] = "2026-09-12" } }, true, animate: false) { Size = new Size(900, 220) })

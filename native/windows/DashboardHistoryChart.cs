@@ -71,7 +71,9 @@ internal sealed class DashboardHistoryChart : Control
         if (Width < 100 || Height < 70) return;
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        var plot = new RectangleF(12, 22, Width - 90, Height - 52);
+        var top = Math.Max(22, Font.Height + 4);
+        if (Height <= top + 30) return;
+        var plot = new RectangleF(12, top, Width - 90, Height - top - 30);
         TextRenderer.DrawText(g, tokens ? "Tokens" : "Minutes", Font,
             new Rectangle((int)plot.Left, 0, (int)plot.Width, Font.Height),
             DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Left);
