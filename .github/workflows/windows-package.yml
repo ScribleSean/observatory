@@ -13,10 +13,10 @@ jobs:
         with:
           path: diagnostic
           persist-credentials: false
-      - name: Read unchanged build 35 source
+      - name: Read pinned pairing fixture correction
         uses: actions/checkout@v4
         with:
-          ref: ced669854940f5892570a6a7a8feb1689b903b80
+          ref: 7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8
           path: source
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -25,10 +25,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Run only the unchanged pairing lifecycle test once
+      - name: Run only the pinned pairing lifecycle test once
         shell: pwsh
         run: |
-          $expected = 'ced669854940f5892570a6a7a8feb1689b903b80'
+          $expected = '7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8'
           $source = Join-Path $env:GITHUB_WORKSPACE 'source'
           if ((git -C $source rev-parse HEAD).Trim() -ne $expected) { throw 'Unexpected test source revision.' }
           if (git -C $source status --porcelain) { throw 'Test source must be clean.' }
@@ -57,4 +57,4 @@ jobs:
           }
           if (git -C $source status --porcelain) { throw 'Diagnostic changed the frozen test source.' }
           if (-not (Test-Path -LiteralPath $trace)) { throw 'Diagnostic trace missing.' }
-          if ($testExit -ne 0) { throw 'The unchanged pairing test failed or timed out.' }
+          if ($testExit -ne 0) { throw 'The pinned pairing test failed or timed out.' }
