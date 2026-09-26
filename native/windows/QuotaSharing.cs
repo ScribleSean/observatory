@@ -4,10 +4,21 @@ using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
+internal enum SharingChannel { Quota, ProviderTokens }
+
 internal sealed record QuotaSharingStatus(bool Enabled, bool CanEnable, string Reason, string? Token);
 
 internal static class QuotaSharing
 {
+    private static (string Script, string UnavailableReason) ChannelSettings(SharingChannel channel) => channel switch
+    {
+        SharingChannel.Quota => ("quota-sharing-control.mjs", "account-unavailable"),
+        SharingChannel.ProviderTokens => ("provider-token-sharing-control.mjs", "source-unavailable"),
+        _ => throw new InvalidOperationException("Invalid sharing channel.")
+    };
+
+    private static bool ValidToken(string? token) => token is { Length: 64 } && Regex.IsMatch(token, "^[a-f0-9]{64}$");
+
     internal static async Task BridgeSelfTest()
     {
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-sharing-bridge-" + Guid.NewGuid().ToString("N"));
@@ -29,8 +40,9 @@ internal static class QuotaSharing
         finally { Directory.Delete(runtime, recursive: true); }
     }
 
-    internal static QuotaSharingStatus Parse(string text)
+    internal static QuotaSharingStatus Parse(string text, SharingChannel channel = SharingChannel.Quota)
     {
+        var settings = ChannelSettings(channel);
         if (text.Length > 4096 || JsonNode.Parse(text) is not JsonObject value || value.Count != 5 ||
             value.Any(entry => entry.Key is not ("version" or "enabled" or "canEnable" or "reason" or "token")) ||
             value["version"]?.GetValue<int>() != 1 ||
@@ -39,20 +51,22 @@ internal static class QuotaSharing
             throw new InvalidOperationException("Invalid sharing status.");
         var reason = value["reason"]?.GetValue<string>();
         var token = value["token"]?.GetValue<string>();
-        if (reason is not ("ready" or "account-unavailable" or "pairing-unavailable") ||
-            (canEnable ? token is null || !Regex.IsMatch(token, "^[a-f0-9]{64}$") || reason != "ready" : token is not null))
+        if ((reason is not ("ready" or "pairing-unavailable") && reason != settings.UnavailableReason) ||
+            (canEnable ? !ValidToken(token) || reason != "ready" : token is not null))
             throw new InvalidOperationException("Invalid sharing status.");
         return new(on, canEnable, reason, token);
     }
 
-    internal static async Task<QuotaSharingStatus> Run(string runtime, string action, string? token, CancellationToken cancellation)
+    internal static async Task<QuotaSharingStatus> Run(string runtime, string action, string? token, CancellationToken cancellation,
+        SharingChannel channel = SharingChannel.Quota)
     {
+        var settings = ChannelSettings(channel);
         if (action is not ("status" or "enable" or "disable") ||
-            (action == "enable" ? token is null || !Regex.IsMatch(token, "^[a-f0-9]{64}$") : token is not null) ||
+            (action == "enable" ? !ValidToken(token) : token is not null) ||
             !Path.IsPathFullyQualified(runtime) || !Directory.Exists(runtime) ||
             File.GetAttributes(runtime).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Invalid sharing request.");
         var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
-        var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "quota-sharing-control.mjs");
+        var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", settings.Script);
         if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Sharing tools are unavailable.");
         using var process = new Process { StartInfo = new(node) { UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true } };
@@ -70,7 +84,7 @@ internal static class QuotaSharing
             await process.WaitForExitAsync(timeout.Token);
             await Task.WhenAll(output, error);
             if (process.ExitCode != 0) throw new InvalidOperationException("Sharing settings changed or are unavailable.");
-            return Parse(await output);
+            return Parse(await output, channel);
         }
         catch
         {
