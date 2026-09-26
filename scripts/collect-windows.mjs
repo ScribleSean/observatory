@@ -19,6 +19,7 @@ import {refreshAllowances} from './refresh-allowances.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
 import {collectConfiguredAntigravityAllowance,attachProviderAllowances} from './collect-antigravity-allowance.mjs';
+import {windowsCollectorLease} from './windows-antigravity-allowance.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const unavailable=host=>({host,status:'unavailable',checkedAt:new Date().toISOString()});
@@ -41,9 +42,12 @@ function run(file,args,input='',environment=process.env) {
   });
 }
 
-export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readAntigravity=collectConfiguredAntigravityAllowance}={}) {
+export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readAntigravity=collectConfiguredAntigravityAllowance,signal,
+  readConfiguration=()=>readFile(path.join(runtime,'collector.config.json'),'utf8')}={}) {
   if(process.platform!=='win32' || !path.isAbsolute(runtime))throw Error('Native Windows runtime required');
-  const config=windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8')));
+  signal?.throwIfAborted();
+  const config=windowsCollectorConfig(JSON.parse(await readConfiguration()));
+  signal?.throwIfAborted();
   const readQuota=()=>collectQuota(runtime,{enabled:config.quota,
     resolveExecutable:()=>findWindowsQuotaClient(config.quotaWslDistribution),readSnapshot:readWindowsQuotaSnapshot,
     isEnabled:async()=>{
@@ -115,8 +119,10 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     claude=cleanClaudeTokenSource(raw,'Windows');
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   await attachProviderTokenSync(runtime,result,claude);
-  attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Windows',
+  signal?.throwIfAborted();
+  attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Windows',signal,
     isEnabled:async()=>windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8'))).antigravity})]);
+  signal?.throwIfAborted();
   const {data,status}=result;
   await atomic('usage.json',data);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),
@@ -125,4 +131,13 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   return result;
 }
 
-if(process.argv[1]===fileURLToPath(import.meta.url))collectWindows(process.env.OBSERVATORY_RUNTIME || '',null,{quotaOnly:process.argv.includes('--quota-only')}).catch(()=>{console.error('Windows collection unavailable');process.exitCode=1;});
+if(process.argv[1]===fileURLToPath(import.meta.url)) {
+  const lease=process.argv.includes('--native-owner-lease')?windowsCollectorLease(process.stdin):null;
+  (async()=>{
+    try {
+      if(lease && !await lease.ready)throw Error('Native collector owner unavailable');
+      await collectWindows(process.env.OBSERVATORY_RUNTIME || '',null,{quotaOnly:process.argv.includes('--quota-only'),signal:lease?.signal});
+    } catch {console.error('Windows collection unavailable');process.exitCode=1;}
+    finally {lease?.dispose();}
+  })();
+}
