@@ -1,115 +1,60 @@
-name: Clean Windows package
+name: Isolated Windows pairing timing
 on:
   workflow_dispatch:
-    inputs:
-      verify_compiler_only:
-        description: Verify only the pinned installer compiler download, without executing it
-        type: boolean
-        default: false
-      verify_installer:
-        description: Compile and exercise the isolated test-identity installer
-        type: boolean
-        default: true
 permissions:
   contents: read
-concurrency:
-  group: windows-package-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
-  package:
+  pairing:
     runs-on: windows-latest
-    timeout-minutes: 40
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Verify the compiler archive without executing downloaded content
-        if: inputs.verify_compiler_only
-        shell: pwsh
-        run: ./native/windows/test-installer-download.ps1
-      - uses: actions/setup-dotnet@v4
-        if: '!inputs.verify_compiler_only'
+      - name: Read diagnostic instrumentation
+        uses: actions/checkout@v4
         with:
-          dotnet-version: '10.0.x'
+          path: diagnostic
+          persist-credentials: false
+      - name: Read unchanged build 35 source
+        uses: actions/checkout@v4
+        with:
+          ref: ced669854940f5892570a6a7a8feb1689b903b80
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
       - uses: actions/setup-python@v5
-        if: '!inputs.verify_compiler_only'
         with:
           python-version: '3.13'
-      - name: Build and verify complete package from a clean checkout
-        if: '!inputs.verify_compiler_only'
+      - name: Run only the unchanged pairing lifecycle test once
         shell: pwsh
         run: |
+          $expected = 'ced669854940f5892570a6a7a8feb1689b903b80'
+          $source = Join-Path $env:GITHUB_WORKSPACE 'source'
+          if ((git -C $source rev-parse HEAD).Trim() -ne $expected) { throw 'Unexpected test source revision.' }
+          if (git -C $source status --porcelain) { throw 'Test source must be clean.' }
           $builder = Join-Path $env:pythonLocation 'python.exe'
           if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) { throw 'Configured build Python is missing.' }
-          . ./native/windows/runtime-assets.ps1
-          $cache = Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild/cache'
-          $timezone = Get-ObservatoryArchive -Name tzdata -CacheRoot $cache
-          & $builder -B -m pip install --no-index --no-deps $timezone
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned build timezone preparation failed.' }
+          $preload = (Resolve-Path 'diagnostic/scripts/peer-pairing-timing-preload.mjs').Path
+          $trace = Join-Path $env:RUNNER_TEMP 'pairing-timing.jsonl'
+          $testLog = Join-Path $env:RUNNER_TEMP 'pairing-test-output.txt'
+          if (Test-Path -LiteralPath $trace) { throw 'Diagnostic trace must be fresh.' }
           $env:OBSERVATORY_TEST_PYTHON = $builder
-          ./native/windows/package.ps1 -BuildPython $builder
-      - name: Compile and verify the isolated installer lifecycle
-        id: candidate
-        if: inputs.verify_installer && !inputs.verify_compiler_only
-        shell: pwsh
-        run: |
-          $release = Join-Path $env:GITHUB_WORKSPACE 'native/windows/release'
-          $packages = @(Get-ChildItem -LiteralPath $release -Directory -Filter 'candidate-*' | ForEach-Object {
-            $app = Join-Path $_.FullName 'Workspace Observatory'
-            if (Test-Path -LiteralPath (Join-Path $app 'package-manifest.json')) { $app }
-          })
-          if ($packages.Count -ne 1) { throw 'Expected exactly one clean-run package.' }
-          $app = $packages[0]
-          & (Join-Path $app 'Runtime/node.exe') native/windows/verify-manifest.mjs $app
-          if ($LASTEXITCODE -ne 0) { throw 'Clean package verification failed.' }
-          $env:OBSERVATORY_TEST_UPDATE_EXTRACTOR = Join-Path $app 'WorkspaceObservatory.exe'
+          $env:OBSERVATORY_PAIRING_TRACE_FILE = $trace
+          $env:OBSERVATORY_PAIRING_TRACE_ORIGIN = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds().ToString()
+          $env:NODE_OPTIONS = '--import="' + ([Uri]::new($preload)).AbsoluteUri + '"'
+          $testExit = 1
+          Push-Location $source
           try {
-            & (Join-Path $app 'Runtime/node.exe') --test scripts/verify-installation.test.mjs
-            if ($LASTEXITCODE -ne 0) { throw 'Signed update archive regression failed.' }
-          } finally { Remove-Item Env:OBSERVATORY_TEST_UPDATE_EXTRACTOR }
-          ./native/windows/installer.ps1 -PackageDirectory $app -TestIdentity
-          ./native/windows/test-installer-download.ps1
-          $receipts = @(Get-ChildItem -LiteralPath $release -Directory -Filter 'installer-*' | ForEach-Object {
-            $receipt = Join-Path $_.FullName 'artifacts/installer-build.json'
-            if (Test-Path -LiteralPath $receipt) { $receipt }
-          })
-          if ($receipts.Count -ne 1) { throw 'Expected exactly one installer build receipt.' }
-          $receipt = Get-Content -LiteralPath $receipts[0] -Raw | ConvertFrom-Json
-          if (-not $receipt.testIdentity) { throw 'Only the isolated test identity is permitted.' }
-          $installer = Join-Path (Split-Path $receipts[0]) $receipt.installerName
-          ./native/windows/test-installer.ps1 -InstallerPath $installer
-          ./native/windows/verify-update-staging.ps1 -PackageDirectory $app
-          $output = Join-Path $env:RUNNER_TEMP 'observatory-windows-retained'
-          $retained = & (Join-Path $app 'Runtime/node.exe') native/windows/retain-candidate.mjs $release $output $env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Verified candidate retention failed.' }
-          $identity = $retained | ConvertFrom-Json
-          "build_number=$($identity.buildNumber)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-      - name: Retain verified ordinary Windows installer
-        if: success() && inputs.verify_installer && !inputs.verify_compiler_only
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-windows-installer-build${{ steps.candidate.outputs.build_number }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/observatory-windows-retained/installer/
-          retention-days: 1
-          if-no-files-found: error
-      - name: Retain verified independent Windows package
-        if: success() && inputs.verify_installer && !inputs.verify_compiler_only
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-windows-package-build${{ steps.candidate.outputs.build_number }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/observatory-windows-retained/package/
-          retention-days: 1
-          if-no-files-found: error
-      - name: Diagnose private-directory failure with a disposable fixture
-        if: failure() && !inputs.verify_compiler_only
-        shell: pwsh
-        run: |
-          $fixture = Join-Path $env:RUNNER_TEMP ('observatory-acl-diagnostic-' + [guid]::NewGuid().ToString('N'))
-          New-Item -ItemType Directory -Path $fixture | Out-Null
-          $directory = Join-Path $fixture 'private-sync'
-          & "$env:SystemRoot/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -File scripts/private-sync-acl.ps1 -Directory $directory -Initialize -Diagnostic
-          exit $LASTEXITCODE
-      # A temporary ordinary installation is verified and removed on this clean runner.
-      # No live sources, signing secrets or publication.
-      # A packaged build is not a clean first-launch or desktop usability test.
+            & node --test --test-reporter=tap --test-name-pattern='^normal native CLI loads pairing, publishes local state and merges a validated peer$' scripts/peer-pairing.test.mjs *> $testLog
+            $testExit = $LASTEXITCODE
+          } finally {
+            Pop-Location
+            Remove-Item Env:NODE_OPTIONS, Env:OBSERVATORY_PAIRING_TRACE_FILE, Env:OBSERVATORY_PAIRING_TRACE_ORIGIN, Env:OBSERVATORY_TEST_PYTHON
+            if (Test-Path -LiteralPath $trace) { Get-Content -LiteralPath $trace }
+            if (Test-Path -LiteralPath $testLog) {
+              Get-Content -LiteralPath $testLog | Where-Object { $_ -match '^# (tests|pass|fail|cancelled|skipped|duration_ms) [0-9.]+$' }
+            }
+          }
+          if (git -C $source status --porcelain) { throw 'Diagnostic changed the frozen test source.' }
+          if (-not (Test-Path -LiteralPath $trace)) { throw 'Diagnostic trace missing.' }
+          if ($testExit -ne 0) { throw 'The unchanged pairing test failed or timed out.' }
