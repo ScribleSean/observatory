@@ -2,6 +2,16 @@
 
 Status as of September 26, 2026 UTC: The development Mac runs **0.3.13, build 34** from `d1505872c503eec47c784602415998154c757fc2`. Windows now runs **0.3.13, build 34** from `80a7aa8397a208fad51599f990b094af3d29458f`, with the host owner's final guarded installation and readiness checks passed. Neither is published as a production release.
 
+## Build 35 preparation, September 26 UTC
+
+Build 35 is prepared from merged source `574da4bd5e953aad60f871619e131210c0129bae`, with packages and installed acceptance pending. [PR #11](https://github.com/ScribleSean/observatory/pull/11) excludes recognized zero-usage client-error placeholders from Claude request counts. [PR #10](https://github.com/ScribleSean/observatory/pull/10) reconciles model buckets that share a sanitized label, and [PR #12](https://github.com/ScribleSean/observatory/pull/12) preserves legacy public order and record digests when no merge is needed. The earlier [PR #8 native table and empty-state repairs](UI-VERIFICATION.md#windows-source-screenshot-review-september-26) are also included. Both installed devices remain build 34 at the distinct source pins above, with Claude sharing off.
+
+The placeholder regression matched the first sanitized Windows blocker. The Windows owner reported one successful direct candidate read at `43808fca2ddaea6dc2884928e80326191293941e`, including Python parsing, arithmetic reconciliation and public projection checks. This is source evidence. It does not establish successful scheduled collection in either installed app.
+
+Independent source validation at `43808fc` reported 614 passed, 15 skipped and four failed tests in the main group. The four synthetic executable fixtures failed because their Node shebang path contained spaces. All four targeted reruns passed with a byte-identical Node 24.21.0 executable staged at a path without spaces. The original failed result is retained. Separate pairing, TLS-client and quota-TLS groups passed 4, 19 and 5 tests respectively, and TypeScript passed. After the order-preservation fix, the coordinator separately verified all 23 focused reader, projection, peer, compatibility and collector-integration tests at `574da4bd`, with no skips, using Node 24.21.0 and Python 3.13.15.
+
+Exact build-35 package verification, guarded installation and ordinary scheduled Claude acceptance remain next. These results do not establish installed peer sharing or combined Claude totals.
+
 ## Build 34 integration, September 26 UTC
 
 Build 34 includes optional per-device Claude sharing and Mac Antigravity allowance monitoring. Claude records use a separate opt-in channel without changing core synchronization or adding device totals. Antigravity uses the installed CLI's non-model usage command. Windows execution remains unsupported until process-tree containment is verified. Both provider arrays now contribute to the Mac wrapper's overall health counts, including unavailable sources.
