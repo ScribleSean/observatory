@@ -40,6 +40,15 @@ test('partial agent receipt coverage prevents an all-sources-success status',asy
   const s=await status(root);
   assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,2);
 });
+test('wrapper health includes configured provider token sources and excludes disabled ones',async t=>{
+  for(const [sourceState,read,configured,state] of [['ok',2,2,'ok'],['unavailable',1,2,'partial'],['not-connected',1,1,'ok']]) {
+    const root=await fixture(t,success.replace('settings:[]',`settings:[],providerTokenSources:[{provider:'claude-code',host:'Mac',status:'${sourceState}'}]`));
+    assert.equal(run(root),state);
+    const result=await status(root);
+    assert.equal(result.sourcesRead,read);assert.equal(result.sourcesConfigured,configured);
+    assert.equal(result.state,state);
+  }
+});
 test('a timed-out reader is stopped and the operating-system lock is released',async t=>{
   const root=await fixture(t,`setInterval(()=>{},1000);`);
   assert.equal(run(root,0.1),'failed');
