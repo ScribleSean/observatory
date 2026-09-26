@@ -35,8 +35,18 @@ export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString
   const days=raw.days.map(rawDay=>{
     if(!validDate(rawDay?.date) || seen.has(rawDay.date) || !Array.isArray(rawDay.models) || !rawDay.models.length || rawDay.models.length>1000) throw Error('Invalid Claude day');
     seen.add(rawDay.date);
-    const day={date:rawDay.date,...row(rawDay),models:rawDay.models.map(model=>row(model,{model:true}))};
-    if(new Set(day.models.map(model=>model.model)).size!==day.models.length) throw Error('Duplicate Claude model');
+    const day={date:rawDay.date,...row(rawDay)};
+    const names=new Set(),models=new Map();
+    for(const rawModel of rawDay.models) {
+      const model=row(rawModel,{model:true});
+      if(names.has(rawModel.model)) throw Error('Duplicate Claude model');
+      names.add(rawModel.model);
+      // Distinct private names share one public bucket without losing counters.
+      const prior=models.get(model.model);
+      if(prior)for(const key of counters)model[key]=sum([prior,model],key);
+      models.set(model.model,model);
+    }
+    day.models=[...models.values()].sort((a,b)=>a.model.localeCompare(b.model));
     for(const key of counters)if(sum(day.models,key)!==day[key])throw Error('Inconsistent Claude day');
     return day;
   }).sort((a,b)=>a.date.localeCompare(b.date));

@@ -24,6 +24,49 @@ test('Claude records are sanitized, internally reconciled, and sorted',()=>{
   assert.throws(()=>cleanClaudeTokenSource({provider:'claude-code',status:'ok',days:[{...report.days[0],models:[report.days[0].models[0],{...report.days[0].models[0],model:'private'}]}]},'Mac'));
 });
 
+test('distinct private model names share one reconciled unknown bucket beside known models',()=>{
+  const models=[
+    {model:'claude-private-beta',inputTokens:7,cacheReadTokens:11,cacheCreationTokens:13,outputTokens:17,totalTokens:48,requestCount:2},
+    {model:'claude-sonnet-4-20250514',...counters},
+    {model:'claude-private-alpha',...counters},
+  ];
+  const raw={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',inputTokens:17,cacheReadTokens:15,cacheCreationTokens:13,outputTokens:23,totalTokens:68,requestCount:4,models}]};
+  const source=cleanClaudeTokenSource(raw,'Windows','2026-09-25T00:00:00Z');
+  assert.deepEqual(source.days[0].models,[
+    {model:'claude-sonnet-4-20250514',...counters},
+    {model:'unknown',inputTokens:12,cacheReadTokens:13,cacheCreationTokens:13,outputTokens:20,totalTokens:58,requestCount:3},
+  ]);
+  assert.equal(source.days[0].totalTokens,68);
+  assert.equal(source.days[0].requestCount,4);
+  assert.ok(!JSON.stringify(source).includes('claude-private'));
+  assert.deepEqual(cleanClaudeTokenSource({...raw,days:[{...raw.days[0],models:[...models].reverse()}]},'Windows',source.checkedAt),source);
+  assert.deepEqual(cleanClaudeTokenSource(source,'Windows',source.checkedAt),source);
+});
+
+test('duplicate raw model identities and invalid arithmetic remain rejected',()=>{
+  for(const model of ['claude-private-alpha','claude-sonnet-4-20250514']) {
+    const doubled=Object.fromEntries(Object.entries(counters).map(([key,value])=>[key,value*2]));
+    const raw={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...doubled,models:[{model,...counters},{model,...counters}]}]};
+    assert.throws(()=>cleanClaudeTokenSource(raw,'Windows'),/Duplicate Claude model/);
+  }
+  for(const change of [{inputTokens:-1},{requestCount:1.5},{totalTokens:11}]) {
+    const raw={...report,days:[{...report.days[0],models:[{...report.days[0].models[0],...change}]}]};
+    assert.throws(()=>cleanClaudeTokenSource(raw,'Windows'),/Invalid Claude token record/);
+  }
+  const mismatched={...report,days:[{...report.days[0],requestCount:2}]};
+  assert.throws(()=>cleanClaudeTokenSource(mismatched,'Windows'),/Inconsistent Claude day/);
+});
+
+test('unknown bucket merging rejects token and request count overflow',()=>{
+  for(const key of ['inputTokens','requestCount']) {
+    const large={inputTokens:0,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:0,requestCount:0,[key]:Number.MAX_SAFE_INTEGER};
+    const small={inputTokens:0,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:0,requestCount:0,[key]:1};
+    if(key==='inputTokens') {large.totalTokens=large.inputTokens;small.totalTokens=small.inputTokens;}
+    const raw={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...large,models:[{model:'claude-private-alpha',...large},{model:'claude-private-beta',...small}]}]};
+    assert.throws(()=>cleanClaudeTokenSource(raw,'Windows'),/Claude counter overflow/);
+  }
+});
+
 test('disabled source is not counted and enabled failure is Unknown, not zero',()=>{
   const disabled=unavailableClaudeTokenSource('Mac','2026-09-25T00:00:00Z','not-connected');
   assert.deepEqual(disabled.days,undefined);
