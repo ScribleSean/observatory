@@ -164,11 +164,13 @@ test('output schema drift and output overflow cannot become successful observati
   }
 });
 
+// Shell exec preserves the fixture PID and exact Node path, including spaces and quotes.
+const nodeLauncher=`#!/bin/sh\n':' //; exec '${process.execPath.replaceAll("'", "'\\''")}' "$0" "$@"`;
 async function syntheticExecutable(t,body) {
   const directory=await mkdtemp(path.join(tmpdir(),'observatory-agy-test-'));
   t.after(()=>rm(directory,{recursive:true,force:true}));
   const file=path.join(directory,'client');
-  await writeFile(file,`#!${process.execPath}\n${body}\n`,{mode:0o700});
+  await writeFile(file,`${nodeLauncher}\n${body}\n`,{mode:0o700});
   return {file,directory};
 }
 
@@ -196,7 +198,7 @@ test('production runner rejects failed exits and excessive output',{skip:process
 test('a hung synthetic client gets normal termination followed by forced process cleanup',{skip:process.platform==='win32'},async t=>{
   const {file,directory}=await syntheticExecutable(t,'');
   const ready=path.join(directory,'ready'),terminated=path.join(directory,'terminated');
-  await writeFile(file,`#!${process.execPath}\nconst fs=require('node:fs');
+  await writeFile(file,`${nodeLauncher}\nconst fs=require('node:fs');
     process.on('SIGTERM',()=>fs.writeFileSync(${JSON.stringify(terminated)},'term'));
     fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);\n`,{mode:0o700});
   t.mock.timers.enable({apis:['setTimeout']});
@@ -226,7 +228,7 @@ test('a hung synthetic client gets normal termination followed by forced process
 test('a successful synthetic client cannot leave a server descendant running',{skip:process.platform==='win32'},async t=>{
   const {file,directory}=await syntheticExecutable(t,'');
   const childPid=path.join(directory,'child-pid');
-  await writeFile(file,`#!${process.execPath}\nconst fs=require('node:fs');
+  await writeFile(file,`${nodeLauncher}\nconst fs=require('node:fs');
     const child=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
     fs.writeFileSync(${JSON.stringify(childPid)},String(child.pid));child.unref();
     process.stdout.write(${JSON.stringify(JSON.stringify(fixture()))});\n`,{mode:0o700});

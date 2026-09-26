@@ -12,6 +12,8 @@ const test=(name,fn)=>nodeTest(name,{skip:process.platform==='win32'?'POSIX runn
 const reader=path.resolve('scripts/run-collector.py');
 const code=`import importlib.util,sys\ns=importlib.util.spec_from_file_location('runner',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nprint(m.run_collection(sys.argv[2],sys.argv[3],300,float(sys.argv[4])))`;
 const success=`require('fs').writeFileSync('public/local/usage.json',JSON.stringify({collectedAt:new Date().toISOString(),activity:[{status:'ok'}],tokens:[],settings:[]}));`;
+// Shell exec preserves the fixture PID and exact Node path, including spaces and quotes.
+const nodeLauncher=`#!/bin/sh\n':' //; exec '${process.execPath.replaceAll("'", "'\\''")}' "$0" "$@"`;
 async function fixture(t,script) {
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'dashboard-runner-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
@@ -65,7 +67,7 @@ nodeTest('allowance collection contains POSIX clients and never launches a Windo
     return;
   }
   const root=await fixture(t,''),client=path.join(root,'synthetic-client'),ready=path.join(root,'client-ready');
-  await writeFile(client,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`,{mode:0o700});
+  await writeFile(client,`${nodeLauncher}\nrequire('node:fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`,{mode:0o700});
   const moduleURL=new URL('./antigravity-allowance.mjs',import.meta.url).href;
   await writeFile(path.join(root,'scripts/collect-dashboard.mjs'),`import {collectAntigravityAllowance} from ${JSON.stringify(moduleURL)};await collectAntigravityAllowance({executable:${JSON.stringify(client)},host:'Mac'});`);
   assert.equal(run(root,1.5),'failed');
