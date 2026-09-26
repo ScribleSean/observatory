@@ -6,7 +6,9 @@ Status: Both development devices run **0.3.13, build 31** from `0ad86df49f73d836
 
 Build 32 includes the provider coverage work merged in [PR #2](https://github.com/ScribleSean/observatory/pull/2). Optional Claude Code collection reads retained local request counters, reconciles streaming snapshots and copied records, and withholds incomplete results. Source health identifies the coverage of Codex, Claude Code, ChatGPT, Cursor and Antigravity. The existing token chart is explicitly scoped to Codex.
 
-The merged source passed 573 regression tests with 15 platform skips, TypeScript, the web build, native Mac and Windows compilation and self-tests, Windows dashboard navigation and updater safety checks. Browser verification used fictional records at desktop and phone widths. Build 32 package and installed verification remain pending. Claude collection defaults to off and stays on the collecting device until a separately verified peer extension is available.
+The merged source passed 573 regression tests with 15 platform skips, TypeScript, the web build, native Mac and Windows compilation and self-tests, Windows dashboard navigation and updater safety checks. Browser verification used fictional records at desktop and phone widths. Claude collection defaults to off and stays on the collecting device until a separately verified peer extension is available.
+
+The [clean Mac package run](https://github.com/ScribleSean/observatory/actions/runs/36210129854) passed at `59e554af02435e062228b151014b39557c4a5298`. The downloaded ZIP is 68,393,244 bytes with SHA-256 `ddfe0fac058f7ffb89000f5ecf4020b06ab5d6bc1621f9090f134e6318d7a1d0`. Independent verification covered all 1,866 manifest entries, 197,410,441 unpacked bytes, strict nested signatures and native self-tests. The manifest SHA-256 is `accc9670d46f656a2f81fa9f177af7e16390fdd536db1b0eb6aefad26bc29b4d`. Signing remains ad hoc and unnotarized. Windows packaging and both installed checks remain pending.
 
 ## Windows installation follow-up, September 25 UTC
 

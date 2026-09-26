@@ -1,10 +1,12 @@
 # Desktop release checklist
 
-Status reviewed September 22, 2026 UTC. A passing development-machine test is not a clean-install result. This checklist tracks the requested desktop release, not every future integration in the [roadmap](ROADMAP.md).
+Status reviewed September 26, 2026 UTC. A passing development-machine test is not a clean-install result. This checklist tracks the requested desktop release, not every future integration in the [roadmap](ROADMAP.md).
 
 ## Current development state
 
-The development Mac runs **0.3.13, build 31** from `0ad86df`. Its package and recoverable replacement passed. Scheduled collections ending at 06:00:24 and 06:05:23 UTC read all 13 sources, including token records from Mac, Windows and Ubuntu with verified combined identities. Windows build 31 passed local and hosted package and TEST installer lifecycle checks. Its last confirmed installation is build 30. Connection loss prevented confirmation of the ordinary upgrade, so task and receipt state must be inspected before another launch. Source synchronization does not update installed binaries.
+Both development devices run **0.3.13, build 31** from `0ad86df`. The Windows ordinary upgrade and saved-data preservation were verified on September 25, superseding the earlier unconfirmed attempt. Its latest recorded collection read four of seven sources. Mac and Windows Codex records were readable, while Ubuntu was unavailable and combined totals remained unverified. The Mac's September 22 collection of all 13 sources is historical evidence, not current fleet coverage. Source synchronization does not update installed binaries.
+
+Build 32 at `59e554a` adds optional local Claude Code collection and explicit provider coverage. The clean Mac package and independent downloaded-candidate checks passed. Installation and live collection must be recorded separately in the [release notes](RELEASE-0.3.13.md#build-32-preparation-september-26-utc).
 
 Installed Mac build-31 Allowances and Tokens navigation worked before another control-helper failure. A live Windows build-30 review covered all seven sections, readable labels, a smaller window and visible Tab focus. These checks do not establish full visual, motion or accessibility acceptance. See the [build 31 record](RELEASE-0.3.13.md#build-31-verification-september-22-utc), [UI verification](UI-VERIFICATION.md) and [audit reconciliation](AUDIT-STATUS.md) for dated evidence and limits.
 
