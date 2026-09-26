@@ -2,6 +2,14 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Mac build 35 installed observation, September 26
+
+From 14:41 to 14:45 UTC, the installed Mac build 35 from `ced669854940f5892570a6a7a8feb1689b903b80` was selected and actual Allowances, Activity and Tokens navigation was observed. The Tokens Week, All retained and All devices controls were selected and verified. ISO calendar dates and Input and Output labels were exposed in accessibility data.
+
+Navigation to Dictation, Agents, Source health and Settings was unobserved. Provider and device labels in Source health, visual chart units, keyboard focus, minimum-window usability, broader accessibility, themes and motion also remain unobserved.
+
+Automatic approval review rejected screenshot emission because of private-usage risk, so no screenshot was sent. The native control pipe closed during restoration of the original Mac and Day filters, leaving the final filter state unknown. No window-layout, configuration, source-choice or consent changes were made. These are control and evidence limits, not demonstrated product defects.
+
 ## Windows source screenshot review, September 26
 
 [PR #8](https://github.com/ScribleSean/observatory/pull/8), source `c34f012`, merged as `1597978cd4c345a7e3b04419aed27f8ff4de704d`. All four native and updater checks passed. Fresh fictional Windows captures from [native run 36214191806](https://github.com/ScribleSean/observatory/actions/runs/36214191806) received independent visual review. Metric and Tokens headings are readable in both light and dark themes, and the empty chart says “No saved observations in this period.”
