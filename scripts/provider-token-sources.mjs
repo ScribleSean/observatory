@@ -46,7 +46,8 @@ export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString
       if(prior)for(const key of counters)model[key]=sum([prior,model],key);
       models.set(model.model,model);
     }
-    day.models=[...models.values()].sort((a,b)=>a.model.localeCompare(b.model));
+    // Preserve public row order because existing peer digests include it.
+    day.models=[...models.values()];
     for(const key of counters)if(sum(day.models,key)!==day[key])throw Error('Inconsistent Claude day');
     return day;
   }).sort((a,b)=>a.date.localeCompare(b.date));
