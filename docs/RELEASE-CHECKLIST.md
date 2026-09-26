@@ -4,13 +4,11 @@ Status reviewed September 26, 2026 UTC. A passing development-machine test is no
 
 ## Current development state
 
-The development Mac runs **0.3.13, build 35** from `ced6698`. The owner verified installed inventory, signatures, protected saved state and normal launch, with build 34 retained for recovery. Scheduled Claude and Antigravity checks passed. Latest source health is **11 of 15**, with three Ubuntu sources and the agent source unavailable. Missing readings remain Unknown.
+Both development apps run **0.3.13, build 35**, with Mac source `ced6698` and Windows source `7c7ae25` retaining identical production application code. Mac local Claude and Antigravity checks passed, and its 14:44 UTC publication read **15 of 15 configured sources**. This does not establish coverage of every provider or combined totals. Missing readings remain Unknown.
 
-Windows retains the verified **0.3.13, build 34** payload from `80a7aa` and its intact protected backup. The ordinary app is stopped, with a temporary uninstaller child still alive after a local activation-helper defect. Continuation is held for one normal manual Cancel or close and revalidation. No forced stop, retry, install or relaunch is authorized while that child remains. Windows build 35 is not installed, and its last scheduled Claude reading was unavailable.
+Windows installation and readiness were accepted at 14:53:56 UTC, with strict payload and prelaunch saved-state checks, startup and shortcut preservation, and protected recovery. The exact live process was independently verified at 14:55 UTC. Windows local scheduled Claude acceptance remains pending. The [release evidence](RELEASE-0.3.13.md#build-35-preparation-september-26-utc) preserves exact package and installed pins, earlier failures and the bounded console-observer limitation.
 
-Both build-35 package gates passed, with Mac source `ced6698` and Windows candidate `7c7ae25` retaining identical production application code. The Windows activation stop does not invalidate its hosted package result. The [release evidence](RELEASE-0.3.13.md#build-35-preparation-september-26-utc) retains exact pins, earlier failures and the required continuation.
-
-Claude sharing remains off on both devices and installed synchronization is unverified. Mac normal Quit and launch were confirmed, but subsequent capture failed, leaving new build-35 UI checks unobserved. Earlier [Windows screenshot evidence](UI-VERIFICATION.md#windows-source-screenshot-review-september-26) does not establish current visual, motion or accessibility acceptance. See [audit reconciliation](AUDIT-STATUS.md) for remaining acceptance work.
+Claude sharing remains off on both devices and installed Claude synchronization is unverified. The [latest installed Mac UI observation](UI-VERIFICATION.md#mac-build-35-installed-observation-september-26) verifies selected navigation and Tokens controls. Broader visual, motion and accessibility checks remain unobserved. See [audit reconciliation](AUDIT-STATUS.md) for remaining acceptance work.
 
 Mac remains ad-hoc signed, Windows remains unsigned, and production updates are unavailable. Repeated Documents prompts remain a [Mac permission continuity limitation](MAC-PERMISSIONS.md). The release is unpublished.
 
