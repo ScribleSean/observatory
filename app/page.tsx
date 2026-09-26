@@ -10,6 +10,7 @@ import ToolDetail from './tool-detail';
 import ProviderCoverage, {type ProviderTokenSource} from './provider-coverage';
 import Dictation, {type DictationSource} from './dictation';
 import Allowances, {type PeerQuota, type Quota} from './allowances';
+import ProviderAllowances, {type ProviderAllowance} from './provider-allowances';
 import { selectTokenDays, aggregateProfiles } from '../scripts/token-periods.mjs';
 import telescopeMark from '../public/brand/telescope.svg';
 import {imageSource} from '../scripts/image-source.mjs';
@@ -87,6 +88,7 @@ type Agent = {
   recordedAt: string;
 };
 type Report = {
+  providerAllowances?: ProviderAllowance[];
   providerTokenSources?: ProviderTokenSource[];
   dictation?:DictationSource[];
   activityHistory?:ActivityRow[];
@@ -276,6 +278,7 @@ export default function Home() {
     ...(data.agentSource?[{host:'Local',kind:'Handoff receipts',status:data.agentSource.status,checkedAt:data.agentSource.checkedAt}]:[]),
     ...data.activity.map(a=>({...a,kind:'ActivityWatch'})), ...data.tokens.map(t=>({...t,kind:'Codex logs'})),
     ...(data.providerTokenSources||[]).filter(s=>s.provider==='claude-code').map(s=>({host:s.host,kind:'Claude Code logs',status:s.status,checkedAt:s.checkedAt})),
+    ...(data.providerAllowances||[]).filter(s=>s.provider==='antigravity').map(s=>({host:s.host,kind:'Antigravity allowance',status:s.status,checkedAt:s.checkedAt})),
     ...(data.quota?[{host:'Codex account',kind:'Limits snapshot',status:data.quota.status,checkedAt:data.quota.checkedAt}]:[]),
     ...(data.localModel?[{host:'Ubuntu',kind:'Local model receipts',status:data.localModel.status,checkedAt:data.localModel.checkedAt}]:[]),
     ...(data.settings||[]).map(s=>({host:s.host,kind:'Settings & tool metadata',status:s.status,checkedAt:s.checkedAt}))
@@ -373,7 +376,7 @@ export default function Home() {
             </State>
           ) : (
             <>
-              <TabsContent value="allowances" className="view-panel"><Allowances quota={data.quota} peerQuota={data.peerQuota} demo={data.demo}/></TabsContent>
+              <TabsContent value="allowances" className="view-panel"><Allowances quota={data.quota} peerQuota={data.peerQuota} providerAllowances={data.providerAllowances} demo={data.demo}/></TabsContent>
               <TabsContent value="settings" className="view-panel">
                 <div className="view-heading"><div><h1>Settings</h1><p>Appearance and device configuration</p></div></div>
                 <section className="usage-card"><h2>Appearance</h2><p>Use the same calm palette in light or dark mode.</p><Button className="reload" onClick={toggleTheme}>{dark?'Switch to light mode':'Switch to dark mode'}</Button></section>
@@ -839,6 +842,7 @@ export default function Home() {
                   <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
                 </div>
                 <ProviderCoverage tokens={data.tokens} sources={data.providerTokenSources}/>
+                <ProviderAllowances sources={data.providerAllowances} now={now}/>
                 <div className="source-grid">
                   {sourceRows.map((s) => (
                     <div className="source-row" key={s.host + s.kind}>

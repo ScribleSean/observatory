@@ -69,7 +69,7 @@ struct Snapshot {
         return visibleQuotaWindows(quota["windows"])
     }
     var sourceCounts: (read: Int, total: Int) {
-        var sources = ["activity", "tokens", "settings", "dictation", "providerTokenSources"].flatMap { rows(object[$0]) }
+        var sources = ["activity", "tokens", "settings", "dictation", "providerTokenSources", "providerAllowances"].flatMap { rows(object[$0]) }
         sources += ["quota", "localModel", "agentSource"].compactMap { object[$0] as? JSONObject }
         sources = sources.filter { text($0["status"]) != "not-connected" }
         return (sources.filter { text($0["status"]) == "ok" }.count, sources.count)

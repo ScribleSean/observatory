@@ -18,6 +18,7 @@ import {attachQuotaSync} from './quota-sync.mjs';
 import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {collectConfiguredAntigravityAllowance,attachProviderAllowances} from './collect-antigravity-allowance.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -37,7 +38,7 @@ function pythonReport(python,script,args) {
   });
 }
 
-export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false}={}) {
+export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false,readAntigravity=collectConfiguredAntigravityAllowance}={}) {
   if(process.platform!=='darwin' || !path.isAbsolute(runtime) || !path.isAbsolute(python || ''))throw Error('Absolute Mac runtime and Python executable required');
   for(const folder of [runtime,path.join(runtime,'public'),path.join(runtime,'public/local')]) {
     await mkdir(folder,{recursive:true,mode:0o700});
@@ -106,6 +107,8 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     claude=cleanClaudeTokenSource(raw,'Mac');
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   attachProviderTokenSources(result,[claude]);
+  attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Mac',
+    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).antigravity})]);
   const {data,status}=result;
   await atomic('usage.json',data);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

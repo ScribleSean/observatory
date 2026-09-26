@@ -9,7 +9,9 @@ const settings={profiles:[{date:'2026-09-08',model:'gpt-6-astra',effort:'medium'
   tools:[{date:'2026-09-08',category:'Shell',tool:'exec_command',namespace:'functions',count:2,arguments:'PRIVATE'}]};
 
 test('Mac local settings accept only explicit source booleans, without remote command settings',()=>{
-  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,claude:false,wispr:false,quota:false,receipts:false,benchmarks:false});
+  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,claude:false,wispr:false,quota:false,antigravity:false,receipts:false,benchmarks:false});
+  assert.equal(macCollectorConfig({antigravity:true}).antigravity,true);
+  assert.throws(()=>macCollectorConfig({antigravity:'true'}));
   assert.equal(macCollectorConfig({claude:true}).claude,true);
   for(const value of [null,[],{wispr:'yes'},{windowsHost:'private-host'},{python:'/arbitrary/program'}])assert.throws(()=>macCollectorConfig(value));
 });

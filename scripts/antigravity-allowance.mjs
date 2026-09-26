@@ -1,4 +1,4 @@
-import {spawn,execFile} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import path from 'node:path';
 
 const argumentsList=Object.freeze(['--print','/usage','--print-timeout','20s','--output-format','json']);
@@ -59,20 +59,23 @@ function runCommand(executable,args,{timeoutMs,maxOutputBytes}) {
     let child,forceTimer,settled=false,failed=false,size=0,chunks=[];
     const stop=force=>{
       if(!child?.pid)return;
-      if(process.platform==='win32') {
-        // Use the existing Windows collector's process-tree cleanup pattern.
-        if(child.exitCode===null && child.signalCode===null)execFile(
-          path.join(process.env.SystemRoot || 'C:/Windows','System32/taskkill.exe'),
-          ['/PID',String(child.pid),'/T',...(force?['/F']:[])],
-          {windowsHide:true,timeout:1000,killSignal:'SIGKILL',maxBuffer:1024},()=>{});
-      } else {
-        // The child has its own process group, so descendants are also stopped.
-        try {process.kill(-child.pid,force?'SIGKILL':'SIGTERM');}catch {}
-      }
+      // The child has its own process group, so descendants are also stopped.
+      try {process.kill(-child.pid,force?'SIGKILL':'SIGTERM');}catch {}
     };
+    // The collector runner terminates its own group on shutdown. This CLI has
+    // a separate group, so explicitly reap it before this Node process exits.
+    const onExit=()=>stop(true);
+    const onTerm=()=>process.exit(143);
+    const onInterrupt=()=>process.exit(130);
+    process.once('exit',onExit);
+    process.once('SIGTERM',onTerm);
+    process.once('SIGINT',onInterrupt);
     const finish=(error,output)=>{
       if(settled)return;
       settled=true;clearTimeout(timer);clearTimeout(forceTimer);chunks=[];
+      process.removeListener('exit',onExit);
+      process.removeListener('SIGTERM',onTerm);
+      process.removeListener('SIGINT',onInterrupt);
       child?.stdout?.destroy();child?.unref();
       if(error)reject(Error('Allowance command unavailable'));
       else resolve(output);
@@ -83,7 +86,7 @@ function runCommand(executable,args,{timeoutMs,maxOutputBytes}) {
       forceTimer=setTimeout(()=>{stop(true);finish(true);},2000);
     };
     const timer=setTimeout(fail,timeoutMs);
-    try {child=spawn(executable,args,{windowsHide:true,detached:process.platform!=='win32',stdio:['ignore','pipe','ignore']});}
+    try {child=spawn(executable,args,{windowsHide:true,detached:true,stdio:['ignore','pipe','ignore']});}
     catch {finish(true);return;}
     child.once('error',()=>{stop(true);finish(true);});
     child.stdout.once('error',fail);
@@ -95,7 +98,7 @@ function runCommand(executable,args,{timeoutMs,maxOutputBytes}) {
     });
     child.once('close',code=>{
       // A successful CLI exit must not leave a local server descendant running.
-      if(process.platform!=='win32')stop(true);
+      stop(true);
       finish(failed || code!==0,Buffer.concat(chunks).toString('utf8'));
     });
   });
@@ -106,6 +109,9 @@ function runCommand(executable,args,{timeoutMs,maxOutputBytes}) {
 export async function collectAntigravityAllowance({executable,host,checkedAt=new Date().toISOString(),run=runCommand}={}) {
   const unavailable=source(host,checkedAt,'unavailable');
   if(executable===undefined || executable===null || executable==='')return source(host,checkedAt,'not-connected');
+  // Windows needs owned process containment before this command can be enabled.
+  // Killing a parent PID after it exits cannot reliably stop its descendants.
+  if(host==='Windows' || (run===runCommand && process.platform==='win32'))return source(host,checkedAt,'unsupported');
   if(typeof executable!=='string' || !path.isAbsolute(executable) || executable.length>4096 ||
     ['\0','\r','\n'].some(character=>executable.includes(character)))return unavailable;
   let output;

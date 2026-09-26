@@ -430,6 +430,8 @@ internal static class NativeDashboardTests
                 await Task.Delay(30);
                 Check(updateButton.Enabled, "Completed update check restores button");
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Existing settings default Wispr off");
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "antigravity").Checked, "Existing settings default Antigravity off");
+                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "antigravity").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
@@ -440,6 +442,7 @@ internal static class NativeDashboardTests
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
                 Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
+                Check(settingsCollector.ReadConfiguration()["antigravity"]!.GetValue<bool>(), "Antigravity opt-in saved without a provider call");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
                 Capture(form, output, "native-settings");
                 var appearance = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance");
@@ -573,10 +576,14 @@ internal static class NativeDashboardTests
                 var claudeSource = JsonNode.Parse("""{"provider":"claude-code","host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":123}]}""")!.AsObject();
                 data["providerTokenSources"] = new JsonArray(claudeSource);
                 form.Reload();
-                Check(ProviderValue("Claude Code · local") == "123 tokens", "Recorded Claude tokens displayed separately");
+                Check(ProviderValue("Claude Code · Windows") == "123 tokens", "Recorded Claude tokens displayed separately");
+                var peerClaude = JsonNode.Parse("""{"provider":"claude-code","host":"Mac","status":"unavailable"}""")!.AsObject();
+                data["providerTokenSources"]!.AsArray().Add(peerClaude);
+                form.Reload();
+                Check(ProviderValue("Claude Code · Windows") == "123 tokens" && ProviderValue("Claude Code · Mac") == "Unknown", "All provider hosts remain separate");
                 claudeSource["status"] = "unavailable";
                 form.Reload();
-                Check(ProviderValue("Claude Code · local") == "Unknown", "Unavailable provider hides retained counters");
+                Check(ProviderValue("Claude Code · Windows") == "Unknown", "Unavailable provider hides retained counters");
                 claudeSource["status"] = "ok";
                 form.Reload();
                 Check(!Texts(form).Any(value => value.Contains("TypeWhisper", StringComparison.OrdinalIgnoreCase)), "Retired voice source is absent from Sources");

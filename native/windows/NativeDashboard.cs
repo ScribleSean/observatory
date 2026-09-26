@@ -303,6 +303,7 @@ internal sealed partial class NativeDashboard : Form
         }
         Label("Observed on this device");
         AccountAllowance(snapshot?["quota"] as JsonObject);
+        ProviderAllowances(snapshot);
         if (snapshot?["peerQuota"] is JsonObject peer && Snapshot.Text(peer["host"]) is "Mac" or "Windows")
         {
             Label("Shared from " + Snapshot.Text(peer["host"]));
@@ -464,8 +465,10 @@ internal sealed partial class NativeDashboard : Form
             ("Cursor", "Unknown · no connected export"),
             ("Antigravity", "Unknown · no connected export")
         };
-        providerValues.InsertRange(1, ProviderTokenValues(providerRows.FirstOrDefault(row => Snapshot.Text(row["provider"]) == "claude-code")));
+        var claudeSources = providerRows.Where(row => Snapshot.Text(row["provider"]) == "claude-code").ToArray();
+        providerValues.InsertRange(1, claudeSources.Length == 0 ? ProviderTokenValues(null) : claudeSources.SelectMany(ProviderTokenValues));
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
+        ProviderAllowances(snapshot);
         Label("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
@@ -484,14 +487,15 @@ internal sealed partial class NativeDashboard : Form
     private static IEnumerable<(string, string)> ProviderTokenValues(JsonObject? source)
     {
         if (source is null) return [("Claude Code · local", "Unknown · enable collection")];
-        if (Snapshot.Text(source["status"]) != "ok") return [("Claude Code · local", ProviderStatus(source)),
-            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+        var label = "Claude Code · " + Snapshot.Text(source["host"]);
+        if (Snapshot.Text(source["status"]) != "ok") return [(label, ProviderStatus(source)),
+            (label + " check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
         var days = NativeHistory.Rows(source["days"]);
-        if (!ProviderTokenSummary(days, out var total, out var dates)) return [("Claude Code · local", "Unknown"),
-            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+        if (!ProviderTokenSummary(days, out var total, out var dates)) return [(label, "Unknown"),
+            (label + " check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
         var range = dates[0].ToString("d", System.Globalization.CultureInfo.CurrentCulture) + " to " + dates[^1].ToString("d", System.Globalization.CultureInfo.CurrentCulture);
-        return [("Claude Code · local", Snapshot.Format(total) + " tokens"), ("Recorded dates", range),
-            ("Claude check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
+        return [(label, Snapshot.Format(total) + " tokens"), (label + " dates", range),
+            (label + " check", Freshness(Snapshot.Text(source["checkedAt"]), DateTimeOffset.UtcNow))];
     }
 
     private static string ProviderStatus(JsonObject source) => Snapshot.Text(source["status"]) == "not-connected" ? "Collection off" : "Unknown";

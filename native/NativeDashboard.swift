@@ -117,9 +117,11 @@ struct NativeDashboard: View {
                                 }
                             }
                         } else {
-                            ObservatoryEmptyState(title: "No account connected", systemImage: "gauge.with.dots.needle.50percent",
-                                message: "Enable an available account source in local source settings. Saved token records are separate from account limits.")
+                            ObservatoryEmptyState(title: "Codex allowance unavailable", systemImage: "gauge.with.dots.needle.50percent",
+                                message: "Enable Codex account monitoring in Settings. Saved token records are separate from account limits.")
                         }
+                        AntigravityAllowancePanel(source: rows(displayedSnapshot?.object["providerAllowances"]).first { text($0["provider"]) == "antigravity" }, now: store.now)
+                            .modifier(ObservatoryCard())
                         if let peer = displayedSnapshot?.object["peerQuota"] as? JSONObject,
                            ["Mac", "Windows"].contains(text(peer["host"])) {
                             Text("Shared from \(text(peer["host"]))").observatoryFont(.headline)
@@ -358,11 +360,20 @@ struct NativeDashboard: View {
             GroupBox("Provider token sources") {
                 VStack(alignment: .leading, spacing: 10) {
                     codexProviderRow
-                    providerTokenRow(name: "Claude Code", source: rows(displayedSnapshot?.object["providerTokenSources"]).first { text($0["provider"]) == "claude-code" }, fallback: "Unknown · enable local Claude Code request collection")
+                    let claudeSources = rows(displayedSnapshot?.object["providerTokenSources"]).filter { text($0["provider"]) == "claude-code" }
+                    if claudeSources.isEmpty {
+                        providerTokenRow(name: "Claude Code", source: nil, fallback: "Unknown · enable local Claude Code request collection")
+                    }
+                    ForEach(Array(claudeSources.enumerated()), id: \.offset) { _, source in
+                        providerTokenRow(name: "Claude Code · " + text(source["host"]), source: source, fallback: "Unknown")
+                    }
                     providerTokenRow(name: "ChatGPT", source: nil, fallback: "Unknown · no connected personal token export")
                     providerTokenRow(name: "Cursor", source: nil, fallback: "Unknown · no connected personal token export")
                     providerTokenRow(name: "Antigravity", source: nil, fallback: "Unknown · no connected personal token export")
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            GroupBox("Provider allowances") {
+                AntigravityAllowancePanel(source: rows(displayedSnapshot?.object["providerAllowances"]).first { text($0["provider"]) == "antigravity" }, now: store.now).padding(8)
             }
             ForEach(["activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource"], id: \.self) { key in
                 GroupBox(["quota": "Allowances", "localModel": "Local benchmarks", "agentSource": "Agent receipts", "settings": "Tool activity"][key] ?? key.capitalized) {
@@ -392,8 +403,8 @@ struct NativeDashboard: View {
     @ViewBuilder private func providerTokenRow(name: String, source: JSONObject?, fallback: String) -> some View {
         if let source, text(source["status"]) == "ok", let summary = providerTokenSummary(source) {
             let dates = summary.dates
-            ObservatoryValueRow(name, value: "Recorded local requests · \(formatted(summary.total, compact: true)) tokens")
-            Text("\(providerDate(dates.first!)) to \(providerDate(dates.last!)) · Local device only")
+            ObservatoryValueRow(name, value: "Recorded requests · \(formatted(summary.total, compact: true)) tokens")
+            Text("\(providerDate(dates.first!)) to \(providerDate(dates.last!)) · \(text(source["host"]))")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
             Text("Last checked: \(parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
