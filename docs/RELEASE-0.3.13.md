@@ -24,7 +24,7 @@ One normal manual Cancel or close has been requested. No forced stop, retry, ins
 
 ### Later Windows allowance helper source
 
-[PR #18](https://github.com/ScribleSean/observatory/pull/18), merged as `472c661004eea4fc6758c9514ad6cf1d15ea8f69`, adds a contained Windows allowance-command helper. All 17 fictional native lifecycle checks passed. [Draft PR #19](https://github.com/ScribleSean/observatory/pull/19) publishes reviewed collector-integration source at `3ed1b772`, with 26 local checks passed and five Windows checks skipped. Windows integration validation remains pending and the production gate is closed. This later source is outside both build-35 packages and does not establish live Windows Antigravity coverage.
+[PR #18](https://github.com/ScribleSean/observatory/pull/18), merged as `472c661004eea4fc6758c9514ad6cf1d15ea8f69`, adds a contained Windows allowance-command helper. All 17 fictional native lifecycle checks passed. [PR #19](https://github.com/ScribleSean/observatory/pull/19) adds reviewed collector integration at `3ed1b772`, with 26 local checks passed and all five native Windows integration cases passing in one later invocation without skips. The owner verified the original spec-format output after a receipt parser incorrectly expected TAP, preserving the failed parser receipt without rerunning tests. Native cleanup and late-launch assertions passed. The production gate remains closed. This later source is outside both build-35 packages and does not establish live Windows Antigravity coverage.
 
 ## Build 34 integration, September 26 UTC
 
