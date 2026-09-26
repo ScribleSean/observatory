@@ -2,6 +2,12 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Windows source screenshot review, September 26
+
+[PR #8](https://github.com/ScribleSean/observatory/pull/8), source `c34f012`, merged as `1597978cd4c345a7e3b04419aed27f8ff4de704d`. All four native and updater checks passed. Fresh fictional Windows captures from [native run 36214191806](https://github.com/ScribleSean/observatory/actions/runs/36214191806) received independent visual review. Metric and Tokens headings are readable in both light and dark themes, and the empty chart says “No saved observations in this period.”
+
+This verifies the pictured repairs only. Inner scrollbar interaction and offscreen rows remain unverified. These source changes are not in the Mac `d150587` or Windows `80a7aa` build-34 packages. Mac restart and navigation remain unverified after the UI automation stream failure. Package and installed identities are tracked in the [release evidence](RELEASE-0.3.13.md#build-34-integration-september-26-utc).
+
 ## Build 31 review, September 22
 
 The development Mac runs build 31 from `0ad86df`. Its package and recoverable replacement passed. Scheduled collections ending at 06:00:24 and 06:05:23 UTC read all 13 configured sources, with token reads available from all three devices and verified combined identities. See the [release record](RELEASE-0.3.13.md#build-31-verification-september-22-utc) for artifact and installation evidence.
