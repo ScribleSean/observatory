@@ -13,7 +13,7 @@
 
 ## What it shows
 
-Observatory shows recorded app activity, Codex tokens, available account limits, tool activity and dictation statistics. A compact Mac menu-bar or Windows system-tray panel opens the full dashboard.
+Observatory shows recorded app activity, Codex tokens, optional Claude Code counters, available account limits, tool activity and dictation statistics. A compact Mac menu-bar or Windows system-tray panel opens the full dashboard.
 
 The dashboard opens Allowances for usage limits. Select Activity for screen time, Tokens for compute usage, or Dictation for voice usage. Missing sources do not block the other views.
 
@@ -28,7 +28,7 @@ Missing data stays missing. Estimates stay labeled. Token counts are not subscri
 
 ## Data and privacy
 
-The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional allowance-history exchange is tested with fictional records. Real-device allowance sharing remains unverified and is off on the development pair.
+The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional Codex allowance-history and per-device Claude usage sharing have separate consent controls. Both are tested with fictional records, remain unverified on the installed development pair, and are off there.
 
 Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Recent allowance graphs use a bounded snapshot. Development builds include an owner-local saved-history browser with usage-% charts and no automatic archive expiry. Public installers are not yet available. See [history coverage and recovery](docs/USAGE-LIMITS.md).
 
