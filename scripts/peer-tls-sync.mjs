@@ -4,7 +4,7 @@ import {isPairingAddress} from './peer-invitation.mjs';
 import {readPeerTrust} from './peer-tls-trust.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
-import {exchangePeerRecord} from './peer-exchange.mjs';
+import {exchangePeerRequest} from './peer-exchange.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {isDeepStrictEqual} from 'node:util';
@@ -65,7 +65,7 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
           if(request?.channel==='quota') {
             if(size>1_100_000 || request.version!==1 || Object.keys(request).length!==3 || !Object.hasOwn(request,'request'))throw unavailable();
             response=await exchangeQuota(runtime,request.request);
-          } else response=await exchangePeerRecord(runtime,request);
+          } else response=await exchangePeerRequest(runtime,request);
           const bytes=JSON.stringify(response);
           if(Buffer.byteLength(bytes)>limit || socket.destroyed)throw unavailable();
           socket.end(bytes);

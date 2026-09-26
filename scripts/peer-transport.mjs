@@ -1,6 +1,7 @@
 import {execFile} from 'node:child_process';
 import path from 'node:path';
 import {isPairingAddress} from './peer-invitation.mjs';
+import {parseProviderTokenReply} from './provider-token-peer.mjs';
 
 const fields=['kind','hostAlias','remoteNode','remoteScript','remoteRuntime'];
 function windowsPath(value) {
@@ -67,6 +68,14 @@ export async function sshQuotaRequest(transport,request,invoke=runSSH) {
     ((request.action==='status' || response.status==='disabled') && response.record!==null) ||
     (request.action==='exchange' && response.status==='ready' && !response.record))throw Error('Invalid allowance response');
   return response;
+}
+
+// Provider-token requests deliberately use the existing peer-exchange
+// endpoint. Older endpoints reject this optional wrapper without changing the
+// core peer record they already understand.
+export async function sshProviderTokenRequest(transport,request,invoke=runSSH) {
+  const response=await sshRequest(transport,{version:1,channel:'provider-tokens',request},'exchange',invoke,17_000_000);
+  return parseProviderTokenReply(response,request);
 }
 
 export async function sshPeerSetup(transport,pairing,invoke=runSSH) {

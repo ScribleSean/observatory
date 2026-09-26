@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validatePeerTransport,sshPeerExchange,sshPeerSetup,sshPeerRepairReadiness} from './peer-transport.mjs';
+import {validatePeerTransport,sshPeerExchange,sshPeerSetup,sshPeerRepairReadiness,sshProviderTokenRequest} from './peer-transport.mjs';
 import {createPairingConfigurations,validatePairing} from './peer-pairing.mjs';
 
 const transport=()=>({kind:'ssh-windows',hostAlias:'windows-codex',remoteNode:'C:/Apps/Observatory/node.exe',
@@ -50,6 +50,20 @@ test('SSH uses verified keys, bounded fixed commands, and stdin for private reco
     return JSON.stringify({version:1,record:{response:'fixture'}});
   });
   assert.deepEqual(result,{response:'fixture'});
+});
+test('optional provider readiness uses the established exchange endpoint and carries no reading',async()=>{
+  const request={version:1,action:'status',pairId:'a'.repeat(64),deviceId:'b'.repeat(64)};
+  const response=await sshProviderTokenRequest(transport(),request,async(args,input)=>{
+    const command=Buffer.from(args.at(-1).split(' ').at(-1),'base64').toString('utf16le');
+    assert.ok(command.includes('peer-exchange.mjs'));
+    assert.ok(!command.includes('quota-exchange.mjs'));
+    assert.deepEqual(JSON.parse(input),{version:1,channel:'provider-tokens',request});
+    assert.equal(input.includes('record'),false);
+    return JSON.stringify({version:1,status:'ready',record:null});
+  });
+  assert.deepEqual(response,{version:1,status:'ready',record:null});
+  await assert.rejects(sshProviderTokenRequest(transport(),request,async()=>
+    JSON.stringify({version:1,status:'ready',record:{unexpected:true}})));
 });
 test('transport rejects command-like aliases, traversal, unexpected executables and protocol fields',async()=>{
   for(const change of [{hostAlias:'-oProxyCommand=bad'},{hostAlias:'host;bad'},

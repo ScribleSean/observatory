@@ -3,6 +3,7 @@ import {readPairing} from './peer-pairing.mjs';
 import {readPeerState,acceptPeerState} from './peer-store.mjs';
 import {assertPairingActive} from './peer-revocation.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
+import {exchangeProviderTokens} from './provider-token-exchange.mjs';
 
 // This is a local stdin/stdout endpoint for an authenticated SSH session, not a
 // network listener. Its caller must authenticate the remote host and account.
@@ -21,6 +22,17 @@ async function exchangePeerRecordLocked(runtime,request,now) {
   return {version:1,record:local};
 }
 
+// Provider readings use an independently versioned optional channel. Keep the
+// core record request exactly as it was so an updated caller and an older peer
+// can still exchange activity snapshots without interpreting provider data.
+export function exchangePeerRequest(runtime,message,now=Date.now()) {
+  if(message && typeof message==='object' && !Array.isArray(message) && message.version===1 &&
+    message.channel==='provider-tokens' && Object.keys(message).length===3 &&
+    ['version','channel','request'].every(key=>Object.hasOwn(message,key)))
+    return exchangeProviderTokens(runtime,message.request,now);
+  return exchangePeerRecord(runtime,message,now);
+}
+
 async function main(runtime) {
   const chunks=[];let size=0;
   const timer=setTimeout(()=>{process.stderr.write('Peer exchange input timeout\n');process.exit(1);},30000);
@@ -29,7 +41,7 @@ async function main(runtime) {
       size+=chunk.length;if(size>17_000_000)throw Error('Exchange input limit');chunks.push(chunk);
     }
     const text=new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));
-    const response=await exchangePeerRecord(runtime,JSON.parse(text));
+    const response=await exchangePeerRequest(runtime,JSON.parse(text));
     process.stdout.write(JSON.stringify(response));
   } finally {clearTimeout(timer);}
 }
