@@ -150,11 +150,12 @@ internal sealed partial class NativeDashboard : Form
     }
     private DataGridView Table(string name, string[] columns, IEnumerable<string[]> values)
     {
-        var table = new DataGridView { Width = ContentWidth, Height = 235, ReadOnly = true,
+        var table = new DataGridView { Width = ContentWidth, Height = 235, ReadOnly = true, Font = regular,
             AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill, BackgroundColor = DashboardCard.Surface,
             BorderStyle = BorderStyle.None, AccessibleName = name, EnableHeadersVisualStyles = false,
             CellBorderStyle = DataGridViewCellBorderStyle.None, ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect };
         table.RowTemplate.Height = 32;
         table.DefaultCellStyle.Padding = new Padding(6, 3, 6, 3);
@@ -163,6 +164,7 @@ internal sealed partial class NativeDashboard : Form
         table.ColumnHeadersDefaultCellStyle.BackColor = DashboardCard.Surface; table.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(190, 196, 185);
         foreach (var column in columns) table.Columns.Add(column, column);
         foreach (var row in values) table.Rows.Add(row.Cast<object>().ToArray());
+        table.AutoResizeColumnHeadersHeight();
         table.Height = Math.Min(235, table.ColumnHeadersHeight + Math.Max(1, table.Rows.Count) * table.RowTemplate.Height + 4);
         AddCard(table, name);
         return table;
