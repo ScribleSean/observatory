@@ -36,6 +36,7 @@ internal sealed class Collector : IDisposable
     }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
+    internal bool SharingAvailable => !Busy && !pairingPaused && !lifetime.IsCancellationRequested;
 
     // Queue only. Never perform file or network work inside a power broadcast.
     internal void RequestResumeRefresh() { if (!lifetime.IsCancellationRequested) resumePending = true; }
@@ -94,14 +95,14 @@ internal sealed class Collector : IDisposable
         };
     }
 
-    internal async Task<QuotaSharingStatus> Sharing(string action, string? token)
+    internal async Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel = SharingChannel.Quota)
     {
-        if (lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
+        if (!SharingAvailable || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
             throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
         try
         {
             using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            return await QuotaSharing.Run(runtime, action, token, lifetime.Token);
+            return await QuotaSharing.Run(runtime, action, token, lifetime.Token, channel);
         }
         finally { operations.Complete(); }
     }
@@ -280,6 +281,7 @@ internal sealed class Collector : IDisposable
             collector.RequestResumeRefresh();
             collector.RequestResumeRefresh();
             collector.pairingPaused = true;
+            if (collector.SharingAvailable) throw new Exception("Pairing pause allowed sharing controls.");
             collector.RefreshAfterResumeOrAllowances().GetAwaiter().GetResult();
             if (!collector.resumePending) throw new Exception("Pairing pause lost pending resume.");
             collector.pairingPaused = false;
@@ -299,7 +301,14 @@ internal sealed class Collector : IDisposable
             File.WriteAllText(sentinel, "Synthetic saved history. Do not change.");
             if (!collector.operations.TryBegin()) throw new Exception("Test operation did not start.");
             var stopped = collector.StopGracefully(TimeSpan.FromSeconds(2));
-            if (stopped.IsCompleted || !collector.Busy) throw new Exception("Collector did not wait for active work.");
+            if (stopped.IsCompleted || !collector.Busy || collector.SharingAvailable) throw new Exception("Collector did not wait for active work.");
+            foreach (var channel in new[] { SharingChannel.Quota, SharingChannel.ProviderTokens })
+            {
+                var sharingDenied = false;
+                try { collector.Sharing("status", null, channel).GetAwaiter().GetResult(); }
+                catch (InvalidOperationException) { sharingDenied = true; }
+                if (!sharingDenied) throw new Exception("Sharing bypassed shutdown or collection.");
+            }
             var denied = false;
             try { collector.Configure(null); } catch (InvalidOperationException) { denied = true; }
             if (!denied || File.Exists(Path.Combine(root, "collector.config.json"))) throw new Exception("Configuration changed during shutdown.");
@@ -326,7 +335,14 @@ internal sealed class Collector : IDisposable
             if (!pairingDrain.GetAwaiter().GetResult() || collector.pairingPaused) throw new Exception("Verified pairing cleanup failed.");
             collector.operations.Resume();
             collector.BeginDirectPairing()(false);
-            if (!collector.pairingPaused || collector.Busy) throw new Exception("Unverified helper exit did not preserve collection pause.");
+            if (!collector.pairingPaused || collector.Busy || collector.SharingAvailable) throw new Exception("Unverified helper exit did not preserve collection pause.");
+            foreach (var channel in new[] { SharingChannel.Quota, SharingChannel.ProviderTokens })
+            {
+                var sharingDenied = false;
+                try { collector.Sharing("status", null, channel).GetAwaiter().GetResult(); }
+                catch (InvalidOperationException) { sharingDenied = true; }
+                if (!sharingDenied) throw new Exception("Sharing bypassed pairing repair pause.");
+            }
             collector.Refresh().GetAwaiter().GetResult();
             if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change.") throw new Exception("Paused pairing allowed collection.");
             collector.pairingPaused = false;

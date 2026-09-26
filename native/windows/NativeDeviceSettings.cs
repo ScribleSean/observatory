@@ -2,8 +2,8 @@ namespace WorkspaceObservatory;
 
 internal sealed record DeviceSettingsActions(Func<bool> ReadStartup, Action<bool> SetStartup,
     Action PairingDetails, Func<Task> Disconnect, Func<Task> Repair,
-    Func<string, string?, Task<QuotaSharingStatus>>? Sharing = null, Func<bool>? ConfirmSharing = null,
-    Func<Task<string>>? ReadNetwork = null, Action? DirectPair = null);
+    Func<string, string?, SharingChannel, Task<QuotaSharingStatus>>? Sharing = null, Func<SharingChannel, bool>? ConfirmSharing = null,
+    Func<Task<string>>? ReadNetwork = null, Action? DirectPair = null, Func<bool>? CanShare = null);
 
 internal sealed partial class NativeDashboard
 {
@@ -120,48 +120,73 @@ internal sealed partial class NativeDashboard
     {
         if (deviceSettings?.Sharing is null) return;
         var groupStart = body.Controls.Count;
-        Label("Allowance history sharing").Font = brand;
-        Label("Optional. Both devices must enable sharing. Exchanges include allowance percentages, observation times and dated account token totals, not sign-in credentials. Accounts on different devices are not assumed to be the same.").ForeColor = Color.Silver;
-        var status = Label("Check sharing status to review this device's consent.");
-        var check = new DashboardButton { Text = "Check sharing status", AccessibleName = "Check sharing status", Height = 40 };
-        var toggle = new DashboardButton { Text = "Sharing unavailable", AccessibleName = "Change allowance sharing", Height = 40, Enabled = false };
+        Label("Usage sharing").Font = brand;
+        Label("Optional for each source. Both devices must enable it separately. Credentials stay on their owning device.").ForeColor = Color.Silver;
+        SharingControls(SharingChannel.Quota);
+        SharingControls(SharingChannel.ProviderTokens);
+        GroupAccountRows(groupStart, "Usage sharing");
+    }
+
+    private void SharingControls(SharingChannel channel)
+    {
+        var quota = channel == SharingChannel.Quota;
+        var title = quota ? "Codex allowances" : "Claude Code usage";
+        Label(title).Font = heading;
+        Label(quota ? "Shares allowance history and dated account token totals. Accounts on different devices are kept separate." :
+            "Shares recorded token usage by device. Prompts and request identifiers stay private. Device totals are not added together.").ForeColor = Color.Silver;
+        var status = Label("Sharing has not been checked.");
+        var check = new DashboardButton { Text = "Check status", AccessibleName = "Check " + title + " sharing", Height = 40 };
+        var toggle = new DashboardButton { Text = "Share with paired device", AccessibleName = "Change " + title + " sharing", Height = 40, Enabled = false };
         QuotaSharingStatus? current = null;
+        bool Available() => !deviceOperation && !busy && (deviceSettings?.CanShare?.Invoke() ?? true);
+        void UpdateButtons()
+        {
+            if (check.IsDisposed || toggle.IsDisposed) return;
+            check.Enabled = Available();
+            toggle.Enabled = check.Enabled && (current?.Enabled == true || current?.CanEnable == true);
+        }
+        // Collection and shutdown can start outside this settings view.
+        // Recheck at UI idle as well as immediately before every operation.
+        EventHandler availability = (_, _) => UpdateButtons();
+        Application.Idle += availability;
+        check.Disposed += (_, _) => Application.Idle -= availability;
         void Show(QuotaSharingStatus next)
         {
             if (status.IsDisposed || toggle.IsDisposed) return;
             current = next;
-            status.Text = next.Enabled ? "Sharing is enabled for this account and paired device. This is consent, not proof of a completed exchange." :
-                next.Reason == "pairing-unavailable" ? "Sharing is off. Pair this device first." :
-                next.CanEnable ? "Sharing is off. A recent account reading is available." : "Sharing is off. Enable account monitoring and refresh the account before sharing.";
-            toggle.Text = next.Enabled ? "Disable allowance sharing" : "Enable allowance sharing";
-            toggle.Enabled = next.Enabled || next.CanEnable;
+            status.Text = next.Enabled ? "Enabled for this pair. This is consent, not proof of a completed exchange." :
+                next.Reason == "pairing-unavailable" ? "Off. Pair this device first." :
+                next.CanEnable ? "Off. A recent reading is available." :
+                quota ? "Off. Enable account monitoring and refresh before sharing." : "Off. Enable Claude Code collection and refresh before sharing.";
+            toggle.Text = next.Enabled ? "Stop sharing" : "Share with paired device";
         }
         async Task Run(string action, string? token)
         {
-            if (deviceOperation) return;
-            deviceOperation = true; check.Enabled = false; toggle.Enabled = false;
-            try { Show(await deviceSettings.Sharing(action, token)); }
+            if (!Available() || deviceSettings?.Sharing is null) return;
+            deviceOperation = true; UpdateButtons();
+            try { Show(await deviceSettings.Sharing(action, token, channel)); }
             catch
             {
                 current = null;
-                if (!status.IsDisposed) status.Text = "Sharing could not be verified. Refresh status before retrying. A setting change may already have completed.";
+                if (!status.IsDisposed) status.Text = "Status could not be verified. Check again before retrying. A change may already have completed.";
             }
-            finally { deviceOperation = false; if (!check.IsDisposed) check.Enabled = true; }
+            finally { deviceOperation = false; UpdateButtons(); }
         }
         check.Click += async (_, _) => await Run("status", null);
         toggle.Click += async (_, _) =>
         {
-            if (deviceOperation || current is null) return;
+            if (!Available() || current is null) return;
             if (!current.Enabled)
             {
-                var confirmed = deviceSettings.ConfirmSharing?.Invoke() ?? MessageBox.Show(this,
-                    "Share this account's allowance history and dated token totals with the paired device? Credentials stay here. Enable sharing on the other device separately. Account changes revoke this consent.",
-                    "Enable allowance sharing", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+                if (!current.CanEnable) return;
+                var confirmed = deviceSettings?.ConfirmSharing?.Invoke(channel) ?? MessageBox.Show(this,
+                    "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.",
+                    "Share " + title + "?", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
                 if (!confirmed) return;
             }
             await Run(current.Enabled ? "disable" : "enable", current.Enabled ? null : current.Token);
         };
         body.Controls.Add(check); body.Controls.Add(toggle);
-        GroupAccountRows(groupStart, "Allowance history sharing");
+        UpdateButtons();
     }
 }
