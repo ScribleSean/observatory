@@ -138,6 +138,8 @@ Quit the app through its tray menu before removing it in Windows Settings. Unins
 
 There is no automatic updater. To update, uninstall the current version and install the new one. To return to an earlier compatible build, uninstall and reinstall that earlier build. Re-enable login startup afterward if wanted. Keep a private backup of saved data before changing versions. The current test covers reinstalling the same schema, not compatibility with future data migrations. If unrelated files keep an old install folder in place, move that folder aside before reinstalling rather than deleting its contents.
 
+An independently launched SSH peer exchange can still update saved peer state after the app quits. Preserve valid newer observations rather than restoring an older database solely because its bytes changed. A consistent backup or comparison needs the [runtime backup coordination](UPDATES.md#runtime-backup-coordination) described in the update guide.
+
 ## Configure sources
 
 Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Ubuntu collection is optional and starts the installed `Ubuntu` WSL distribution in the background during collection. Windows collection does not require WSL. Wispr Flow statistics are separately opt-in.
