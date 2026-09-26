@@ -72,6 +72,9 @@ internal sealed class DashboardHistoryChart : Control
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var plot = new RectangleF(12, 22, Width - 90, Height - 52);
+        TextRenderer.DrawText(g, tokens ? "Tokens" : "Minutes", Font,
+            new Rectangle((int)plot.Left, 0, (int)plot.Width, Font.Height),
+            DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Left);
         var maximum = Math.Max(1, values.Where(row => row.value is not null).Select(row => row.value!.Value).DefaultIfEmpty(0).Max());
         using var grid = new Pen(DashboardPalette.Grid(this));
         var accent = DashboardPalette.Accent(DashboardPalette.IsLight(this));
