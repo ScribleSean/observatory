@@ -21,21 +21,29 @@ export async function findAntigravityExecutable({platform=process.platform,home=
 }
 
 export async function collectConfiguredAntigravityAllowance({enabled=false,host,isEnabled=async()=>enabled,
-  resolveExecutable=findAntigravityExecutable,read=collectAntigravityAllowance,clock=Date.now}={}) {
+  resolveExecutable=findAntigravityExecutable,read=collectAntigravityAllowance,clock=Date.now,signal,windowsRead=null}={}) {
   if(typeof enabled!=='boolean' || !['Mac','Windows'].includes(host))throw Error('Invalid Antigravity source configuration');
   const status=value=>({provider:'antigravity',host,status:value,checkedAt:new Date(clock()).toISOString(),
     scope:'Provider-reported allowance',windows:[]});
   if(!enabled)return status('not-connected');
   let source;
   try {
+    if(signal?.aborted)return status('unavailable');
     if(await isEnabled()!==true)return status('not-connected');
-    if(host==='Windows')return status('unsupported');
+    if(signal?.aborted)return status('unavailable');
+    // Only an explicit in-process dependency can exercise Windows fixtures.
+    // No environment variable or saved setting supplies this capability.
+    if(host==='Windows' && typeof windowsRead!=='function')return status('unsupported');
     const executable=await resolveExecutable();
+    if(signal?.aborted)return status('unavailable');
     if(await isEnabled()!==true)return status('not-connected');
-    source=executable?await read({executable,host,checkedAt:new Date(clock()).toISOString()}):status('unavailable');
+    if(signal?.aborted)return status('unavailable');
+    const options={executable,host,checkedAt:new Date(clock()).toISOString()};
+    if(signal)options.signal=signal;
+    source=executable?await (host==='Windows'?windowsRead:read)(options):status('unavailable');
   } catch {source=status('unavailable');}
   // A switch turned off during this read must not publish a new observation.
-  try {if(await isEnabled()!==true)return status('not-connected');}
+  try {if(await isEnabled()!==true)return status('not-connected');if(signal?.aborted)return status('unavailable');}
   catch {return status('unavailable');}
   return source;
 }

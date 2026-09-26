@@ -29,7 +29,7 @@ Windows retains the intact build-34 payload from `80a7aa` and its protected back
 
 The [build 35 release evidence](RELEASE-0.3.13.md#build-35-preparation-september-26-utc) separates successful package gates from the current Windows activation-helper defect. Mac source `ced6698` and Windows candidate `7c7ae25` have identical production application code. Windows build 35 and its scheduled Claude acceptance remain pending. The direct candidate read and earlier [PR #8 screenshots](UI-VERIFICATION.md#windows-source-screenshot-review-september-26) do not establish those installed checks.
 
-The later [Windows allowance helper and draft collector integration](RELEASE-0.3.13.md#later-windows-allowance-helper-source) remain outside the build-35 packages. Windows validation is pending, the production gate is closed, and live Windows Antigravity coverage remains unverified.
+The later [Windows allowance helper and collector integration](RELEASE-0.3.13.md#later-windows-allowance-helper-source) remain outside the build-35 packages. All five native Windows integration cases passed with fictional processes. The production gate is closed, and live Windows Antigravity coverage remains unverified.
 
 The [build 34 release evidence](RELEASE-0.3.13.md#build-34-integration-september-26-utc) is the canonical dated record for source checks, package and installation pins, scheduled verification, PR merges and the Windows fixture failure and corrected run. Earlier build 32 and 33 evidence remains scoped to those revisions. Source, package, installed and live verification remain separate.
 

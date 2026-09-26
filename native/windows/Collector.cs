@@ -220,19 +220,32 @@ internal sealed class Collector : IDisposable
             if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Collector runtime unavailable");
             if (quotaOnly) WriteAttemptStatus(runtime, true, "running");
             using var process = new Process { StartInfo = new ProcessStartInfo(node)
-                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true } };
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true } };
             process.StartInfo.ArgumentList.Add(script);
+            process.StartInfo.ArgumentList.Add("--native-owner-lease");
+            process.StartInfo.Environment["OBSERVATORY_ANTIGRAVITY_HELPER"] = Path.Combine(AppContext.BaseDirectory, "WorkspaceObservatory.exe");
             if (quotaOnly) process.StartInfo.ArgumentList.Add("--quota-only");
             process.StartInfo.Environment["OBSERVATORY_RUNTIME"] = runtime;
             var python = Path.Combine(AppContext.BaseDirectory, "Runtime", "python", "python.exe");
             if (File.Exists(python)) process.StartInfo.Environment["OBSERVATORY_PYTHON"] = python;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(240));
+            timeout.Token.ThrowIfCancellationRequested();
             process.Start();
             var output = process.StandardOutput.ReadToEndAsync();
             var error = process.StandardError.ReadToEndAsync();
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(240));
-            try { await process.WaitForExitAsync(timeout.Token); }
+            using var cancelLease = timeout.Token.Register(() => { try { process.StandardInput.Close(); } catch { } });
+            try
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+                // This app owns the sole writer. Abrupt app death also sends EOF.
+                process.StandardInput.BaseStream.WriteByte(1);
+                process.StandardInput.BaseStream.Flush();
+                await process.WaitForExitAsync(timeout.Token);
+            }
             catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
+            finally { try { process.StandardInput.Close(); } catch { } }
             await Task.WhenAll(output, error);
             if (process.ExitCode != 0) throw new InvalidOperationException("Collection failed");
             if (quotaOnly) WriteAttemptStatus(runtime, true, "ok");

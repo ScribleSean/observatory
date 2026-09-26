@@ -18,6 +18,8 @@ internal static class AntigravityUsageProcessTests
             if (args.SequenceEqual(new[] { "--test-antigravity-runner" })) { await Check(); return 0; }
             if (args.Length < 3 || args[0] != Flag || !ValidDirectory(args[2])) return 64;
             if (args[1] == "argv") { Console.Write(JsonSerializer.Serialize(args.Skip(3))); return 0; }
+            if (args.Length == 4 && args[1] is "collector-parent" or "collector-parent-before-read")
+                return await CollectorParent(args[2], args[3], args[1] == "collector-parent-before-read");
             return args.Length == 3 ? await Fixture(args[1], args[2]) : 64;
         }
         catch (Exception error)
@@ -169,11 +171,12 @@ internal static class AntigravityUsageProcessTests
 
     private static async Task<int> Fixture(string scenario, string directory)
     {
-        if (scenario is "owner" or "owner-success")
+        if (scenario is "owner" or "owner-success" or "owner-json" or "owner-chain")
         {
             Mark(directory, "owner");
             return await AntigravityUsageProcess.WithCallerLifetime(token =>
-                Run(scenario == "owner-success" ? "exit-closed" : "hang", directory, token));
+                Run(scenario == "owner-success" ? "exit-closed" : scenario == "owner-json" ? "usage-json" : "hang", directory, token,
+                    timeout: scenario == "owner-chain" ? 25000 : 12000));
         }
         if (scenario == "parent")
         {
@@ -207,16 +210,87 @@ internal static class AntigravityUsageProcessTests
             await Task.Delay(TimeSpan.FromSeconds(90));
             return 0;
         }
-        if (scenario is not ("exit-inherited" or "exit-closed" or "hang" or "fail" or "overflow")) return 64;
+        if (scenario is not ("exit-inherited" or "exit-closed" or "usage-json" or "hang" or "fail" or "overflow")) return 64;
         Mark(directory, "root");
-        using var child = Start(scenario == "exit-closed" ? "child-closed" : "child-inherited", directory,
-            redirectOutput: scenario == "exit-closed");
+        var closed = scenario is "exit-closed" or "usage-json";
+        using var child = Start(closed ? "child-closed" : "child-inherited", directory, redirectOutput: closed);
         await Until(() => File.Exists(Path.Combine(directory, "child-ready")), "fictional descendants ready");
         File.WriteAllText(Path.Combine(directory, "ready"), "synthetic");
         if (scenario.StartsWith("exit-", StringComparison.Ordinal)) { Console.Write(Payload); return 0; }
+        if (scenario == "usage-json")
+        {
+            Console.Write(JsonSerializer.Serialize(new {
+                status = "SUCCESS", num_turns = 0, response = "PRIVATE fictional response",
+                usage = new { input_tokens = 0, output_tokens = 0, thinking_tokens = 0, cache_read_tokens = 0, total_tokens = 0 },
+                command = new { name = "usage", data = new { groups = new[] { new { name = "PRIVATE fictional group",
+                    buckets = new[] { new { id = "fixture", window = "5h", remaining_fraction = 0.75,
+                        reset_time = DateTimeOffset.UtcNow.AddHours(5).ToString("O") } } } } } }
+            }));
+            return 0;
+        }
         if (scenario == "fail") return 7;
         if (scenario == "overflow") { Console.Write(new string('x', 8192)); Console.Out.Flush(); }
         await Task.Delay(TimeSpan.FromSeconds(90));
+        return 1;
+    }
+
+    // Dedicated fictional native -> Node -> helper chain. Node's executable is
+    // supplied by the test runner. The script and helper command are fixed here.
+    private static async Task<int> CollectorParent(string directory, string node, bool beforeRead)
+    {
+        if (!Path.IsPathFullyQualified(node) || !string.Equals(Path.GetFileName(node), "node.exe", StringComparison.OrdinalIgnoreCase) ||
+            (File.GetAttributes(node) & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0) return 64;
+        const string fixture = """
+            import path from 'node:path';
+            import {pathToFileURL} from 'node:url';
+            import {spawn} from 'node:child_process';
+            import {readFile,writeFile} from 'node:fs/promises';
+            const [runtime,helper,scripts,mode]=process.argv.slice(1);
+            const bridge=await import(pathToFileURL(path.join(scripts,'windows-antigravity-allowance.mjs')));
+            const {collectConfiguredAntigravityAllowance}=await import(pathToFileURL(path.join(scripts,'collect-antigravity-allowance.mjs')));
+            const {collectWindows}=await import(pathToFileURL(path.join(scripts,'collect-windows.mjs')));
+            if(await bridge.packagedWindowsAllowanceHelper()!==helper)throw Error('Fixture helper capability mismatch');
+            const lease=bridge.windowsCollectorLease(process.stdin);
+            const watchdog=setTimeout(()=>process.exit(1),30000); // Fictional failure cleanup only.
+            try {
+              if(!await lease.ready)throw Error('Fixture lease missing');
+              const options={signal:lease.signal,readAntigravity:options=>collectConfiguredAntigravityAllowance({...options,
+                resolveExecutable:async()=>path.join(runtime,'agy.exe'),windowsRead:options=>bridge.readWindowsAntigravityAllowance({...options,helper,
+                  run:(exe,options)=>bridge.runWindowsAntigravityCommand(exe,{...options,spawnProcess:(file,args,settings)=>{
+                    if(file!==helper || args.length!==2 || args[0]!=='--antigravity-usage' || args[1]!==path.join(runtime,'agy.exe'))
+                      throw Error('Unexpected fictional command');
+                    return spawn(file,['--test-antigravity-process','owner-chain',runtime],settings);
+                  }})})})};
+              if(mode==='before-read') {
+                options.readConfiguration=async()=>{
+                  const text=await readFile(path.join(runtime,'collector.config.json'),'utf8');
+                  await writeFile(path.join(runtime,'before-read-ready'),'synthetic');
+                  if(!lease.signal.aborted)await new Promise(resolve=>lease.signal.addEventListener('abort',resolve,{once:true}));
+                  return text;
+                };
+                options.readAntigravity=async()=>{await writeFile(path.join(runtime,'late-allowance-callback'),'unexpected');throw Error('Late allowance callback');};
+              }
+              await collectWindows(runtime,null,options);
+            } catch {process.exitCode=1;}
+            finally {clearTimeout(watchdog);lease.dispose();}
+            """;
+        using var collector = new Process { StartInfo = new ProcessStartInfo(node) {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+            RedirectStandardOutput = true, RedirectStandardError = true
+        } };
+        foreach (var arg in new[] { "--input-type=module", "--eval", fixture, directory, Executable,
+            Path.Combine(AppContext.BaseDirectory, "Collector", "scripts"), beforeRead ? "before-read" : "active" }) collector.StartInfo.ArgumentList.Add(arg);
+        collector.StartInfo.Environment["OBSERVATORY_ANTIGRAVITY_HELPER"] = Executable;
+        collector.Start();
+        Mark(directory, "native-parent");
+        File.WriteAllText(Path.Combine(directory, "node.pid"), collector.Id.ToString());
+        try
+        {
+            collector.StandardInput.BaseStream.WriteByte(1);
+            collector.StandardInput.BaseStream.Flush();
+            await Task.Delay(TimeSpan.FromSeconds(90));
+        }
+        finally { collector.StandardInput.Close(); await StopOwned(collector); }
         return 1;
     }
 

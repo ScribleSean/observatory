@@ -106,3 +106,46 @@ test('full Mac collection attaches the provider after other merges and quota-onl
   assert.deepEqual(refreshed.providerAllowances,saved.providerAllowances);
   assert.equal(refreshed.collectedAt,saved.collectedAt);
 });
+
+test('Windows fixture injection still requires consent before discovery and execution',async()=>{
+  const fail=()=>assert.fail('Unconsented Windows fixture executed');
+  for(const enabled of [false,true]) {
+    const result=await collectConfiguredAntigravityAllowance({enabled,host:'Windows',clock,isEnabled:async()=>false,
+      resolveExecutable:fail,windowsRead:fail});
+    assert.equal(result.status,'not-connected');
+  }
+  let enabled=true;
+  const result=await collectConfiguredAntigravityAllowance({enabled:true,host:'Windows',clock,isEnabled:async()=>enabled,
+    resolveExecutable:async()=>{enabled=false;return 'C:\\Tools\\agy.exe';},windowsRead:fail});
+  assert.equal(result.status,'not-connected');
+});
+
+test('Windows cancellation before discovery or during discovery prevents the reader',async()=>{
+  for(const early of [true,false]) {
+    const abort=new AbortController();if(early)abort.abort();let discovered=0;
+    const result=await collectConfiguredAntigravityAllowance({enabled:true,host:'Windows',clock,signal:abort.signal,
+      resolveExecutable:async()=>{discovered++;abort.abort();return 'C:\\Tools\\agy.exe';},windowsRead:()=>assert.fail('Cancelled reader launched')});
+    assert.equal(result.status,'unavailable');assert.equal(discovered,early?0:1);
+  }
+});
+
+test('Windows fixture results are discarded on cancelled or revoked consent',async()=>{
+  for(const revoke of [false,true]) {
+    const abort=new AbortController();let enabled=true;
+    const result=await collectConfiguredAntigravityAllowance({enabled:true,host:'Windows',clock,signal:abort.signal,isEnabled:async()=>enabled,
+      resolveExecutable:async()=> 'C:\\Tools\\agy.exe',windowsRead:async options=>{
+        assert.equal(options.signal,abort.signal);if(revoke)enabled=false;else abort.abort();return {...source(),host:'Windows'};
+      }});
+    assert.equal(result.status,revoke?'not-connected':'unavailable');assert.deepEqual(result.windows,[]);
+  }
+});
+
+test('cancellation during asynchronous consent checks prevents subsequent work',async()=>{
+  for(const target of [1,2]) {
+    const abort=new AbortController();let checks=0,discovered=0;
+    const result=await collectConfiguredAntigravityAllowance({enabled:true,host:'Windows',clock,signal:abort.signal,
+      isEnabled:async()=>{if(++checks===target)abort.abort();return true;},
+      resolveExecutable:async()=>{discovered++;return 'C:\\Tools\\agy.exe';},windowsRead:()=>assert.fail('Cancelled reader launched')});
+    assert.equal(result.status,'unavailable');assert.equal(discovered,target===1?0:1);
+  }
+});
