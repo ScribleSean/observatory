@@ -1,6 +1,6 @@
 # September 15 audit follow-up
 
-Reviewed through September 26. Both development apps have accepted build-35 installations, Mac at `ced6698` and Windows at `7c7ae25`. Mac scheduled Claude and Antigravity checks passed, and its 14:44 UTC publication read all 15 configured sources. Windows scheduled local Claude acceptance remains pending. Claude sharing remains off and installed synchronization is unverified. These installation and collection results do not close the remaining visual or accessibility criteria. See the [release evidence](RELEASE-0.3.13.md).
+Reviewed through September 26. Both development apps have accepted build-35 installations, Mac at `ced6698` and Windows at `7c7ae25`. Mac scheduled Claude and Antigravity checks passed, and its 14:44 UTC publication read all 15 configured sources. Windows scheduled local Claude acceptance passed at 22:50 UTC, with local source health 8 of 8 and Claude isolated from Codex totals. Claude sharing remains off and installed synchronization is unverified. These installation and collection results do not close the remaining visual or accessibility criteria. See the [release evidence](RELEASE-0.3.13.md).
 
 The [UI verification record](UI-VERIFICATION.md) separates earlier installed checks from later source-only screenshots. Full visual, motion and accessibility acceptance remains open. The [original PR #1 reports](https://github.com/ScribleSean/observatory/pull/1) predate substantial source repairs; that report-only PR closed without merging on September 22. This ledger retains the unresolved criteria.
 

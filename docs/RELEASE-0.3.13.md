@@ -1,6 +1,6 @@
 # Observatory 0.3.13 candidate
 
-Status as of September 26, 2026 UTC: both development apps run **0.3.13, build 35**. Mac retains source `ced669854940f5892570a6a7a8feb1689b903b80`, with scheduled local Claude and Antigravity checks passed. Windows installation and readiness are accepted at source `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`, with local scheduled Claude acceptance still pending. Claude sharing is off on both devices, and installed Claude synchronization remains unverified. Neither is published as a production release.
+Status as of September 26, 2026 UTC: both development apps run **0.3.13, build 35**. Mac retains source `ced669854940f5892570a6a7a8feb1689b903b80`, with scheduled local Claude and Antigravity checks passed. Windows installation and readiness are accepted at source `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`. Local scheduled Claude acceptance passed at 22:50 UTC. Claude sharing is off on both devices, and installed Claude synchronization remains unverified. Neither is published as a production release.
 
 ## Build 35 preparation, September 26 UTC
 
@@ -24,7 +24,9 @@ The first local Windows activation stopped at the uninstall guard. Read-only che
 
 The subsequent guarded continuation accepted installed build 35 and acknowledged readiness at 14:53:56 UTC. It verified exact source `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8` and file version `0.3.13.35`. The maintained copied-uninstaller route and ordinary installer both exited zero. Strict payload checks, prelaunch saved-state equality, startup and shortcut preservation passed. A new protected recovery copy captured the current build-34 state, with older recovery retained. Locks released normally, and the exact live process was independently verified at 14:55 UTC. At the installation handoff, the outer console observer had not returned even though the helper was absent and installation and readiness receipts passed. Output completion remained unverified. No outer-observer exit code is claimed.
 
-Windows local scheduled Claude acceptance remains pending. Claude sharing is off on both devices. Installed Claude peer sharing and combined Claude totals remain unverified.
+Windows local scheduled Claude acceptance passed at 22:50 UTC against the ordinary collection completed at 22:46:52 UTC. The matching saved publication passed installed schema and private arithmetic checks, with exactly one local Claude row and no peer Claude rows. Local collector health reconciled at 8 of 8 sources. The complete published core, including peer rows, separately reconciled at 10 of 10. Claude remained outside Codex projections and totals. Source configuration was preserved, and sharing status was off and ready. No collection or provider call was triggered for this check.
+
+The running app had restarted since installation. The current process environment was not inspected, so the original launch-time directory selection evidence does not establish the restarted process's effective `CLAUDE_CONFIG_DIR`. This limitation is separate from the verified saved publication. Claude sharing is off on both devices. Installed Claude peer sharing and combined Claude totals remain unverified.
 
 ### Later Windows allowance helper source
 
