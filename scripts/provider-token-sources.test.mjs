@@ -33,13 +33,17 @@ test('distinct private model names share one reconciled unknown bucket beside kn
   const raw={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',inputTokens:17,cacheReadTokens:15,cacheCreationTokens:13,outputTokens:23,totalTokens:68,requestCount:4,models}]};
   const source=cleanClaudeTokenSource(raw,'Windows','2026-09-25T00:00:00Z');
   assert.deepEqual(source.days[0].models,[
-    {model:'claude-sonnet-4-20250514',...counters},
     {model:'unknown',inputTokens:12,cacheReadTokens:13,cacheCreationTokens:13,outputTokens:20,totalTokens:58,requestCount:3},
+    {model:'claude-sonnet-4-20250514',...counters},
   ]);
   assert.equal(source.days[0].totalTokens,68);
   assert.equal(source.days[0].requestCount,4);
   assert.ok(!JSON.stringify(source).includes('claude-private'));
-  assert.deepEqual(cleanClaudeTokenSource({...raw,days:[{...raw.days[0],models:[...models].reverse()}]},'Windows',source.checkedAt),source);
+  const reordered=cleanClaudeTokenSource({...raw,days:[{...raw.days[0],models:[...models.slice(1),models[0]]}]},'Windows',source.checkedAt);
+  assert.deepEqual(reordered.days[0].models.map(model=>model.model),['claude-sonnet-4-20250514','unknown']);
+  const semanticDay=day=>({...day,models:[...day.models].sort((a,b)=>a.model.localeCompare(b.model))});
+  assert.deepEqual(semanticDay(reordered.days[0]),semanticDay(source.days[0]));
+  assert.deepEqual(cleanClaudeTokenSource(raw,'Windows',source.checkedAt),source);
   assert.deepEqual(cleanClaudeTokenSource(source,'Windows',source.checkedAt),source);
 });
 

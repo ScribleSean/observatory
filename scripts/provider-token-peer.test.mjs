@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {createPairingConfigurations} from './peer-pairing.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {createProviderTokenRecord,parseProviderTokenRecord,parseProviderTokenSource,parseProviderTokenRequest,parseProviderTokenReply} from './provider-token-peer.mjs';
@@ -23,6 +24,26 @@ test('provider records bind the public source to device, generation and digest',
   const oversized=record();oversized.payload.source.scope='x'.repeat(17_000_001);
   assert.throws(()=>parseProviderTokenRecord(oversized,pair.local,now),/Invalid provider record/);
   assert.deepEqual(parseProviderTokenSource(unavailableClaudeTokenSource('Mac',new Date(now).toISOString()),'Mac',now).days,undefined);
+});
+
+test('legacy public model order remains unchanged inside its digest-bound record',()=>{
+  const doubled=Object.fromEntries(Object.entries(counters).map(([key,value])=>[key,value*2]));
+  // Construct the prior v1 public payload directly, without the current cleaner.
+  const legacySource={...source,days:[{date:'2026-09-25',...doubled,
+    models:[{model:'unknown',...counters},{model:'claude-sonnet-4',...counters}]}]};
+  const payload={version:1,generation:'a'.repeat(32),source:legacySource};
+  const digest=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+  const legacy={version:1,revision:{...record().revision,digest},payload};
+  const original=JSON.stringify(legacy);
+  const accepted=parseProviderTokenRecord(legacy,pair.local,now);
+  assert.deepEqual(accepted,legacy);
+  assert.equal(JSON.stringify(accepted),original);
+  assert.equal(accepted.revision.digest,digest);
+  assert.equal(JSON.stringify(legacy),original);
+  assert.deepEqual(createProviderTokenRecord(legacySource,pair.local,payload.generation,1,now),legacy);
+  const reordered=structuredClone(legacy);
+  reordered.payload.source.days[0].models.reverse();
+  assert.throws(()=>parseProviderTokenRecord(reordered,pair.local,now),/Provider record integrity mismatch/);
 });
 
 test('readiness contains identities only and disabled replies never carry data',()=>{
