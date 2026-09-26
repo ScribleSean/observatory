@@ -313,11 +313,10 @@ internal sealed class QuotaGraph : Control
             missing = false;
         }
         var selection = Snapshot.Text(window["bucket"]) + " " + Snapshot.Text(window["window"]);
-        var rangeLabel = fitHistory ? period : "24-hour period";
-        AccessibleDescription = count == 0 ? $"{selection}: no observations in this {rangeLabel}."
+        AccessibleDescription = count == 0 ? $"{selection}: no observations in this period."
             : $"{selection}: {count} observations. Allowance used starts at {firstUsed:0.#}%, ends at {lastUsed:0.#}%, and ranges from {minimumUsed:0.#}% to {maximumUsed:0.#}%. Dashed spans mean coverage unknown, not estimated usage. Resets remain separate.";
         if (count == 0)
-            TextRenderer.DrawText(g, $"No saved observations in this {rangeLabel}.", Font, Rectangle.Round(box), ForeColor,
+            TextRenderer.DrawText(g, "No saved observations in this period.", Font, Rectangle.Round(box), ForeColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
     }
 }
