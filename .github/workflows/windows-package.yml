@@ -50,6 +50,7 @@ jobs:
           $env:OBSERVATORY_TEST_PYTHON = $builder
           ./native/windows/package.ps1 -BuildPython $builder
       - name: Compile and verify the isolated installer lifecycle
+        id: candidate
         if: inputs.verify_installer && !inputs.verify_compiler_only
         shell: pwsh
         run: |
@@ -79,6 +80,27 @@ jobs:
           $installer = Join-Path (Split-Path $receipts[0]) $receipt.installerName
           ./native/windows/test-installer.ps1 -InstallerPath $installer
           ./native/windows/verify-update-staging.ps1 -PackageDirectory $app
+          $output = Join-Path $env:RUNNER_TEMP 'observatory-windows-retained'
+          $retained = & (Join-Path $app 'Runtime/node.exe') native/windows/retain-candidate.mjs $release $output $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Verified candidate retention failed.' }
+          $identity = $retained | ConvertFrom-Json
+          "build_number=$($identity.buildNumber)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Retain verified ordinary Windows installer
+        if: success() && inputs.verify_installer && !inputs.verify_compiler_only
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-windows-installer-build${{ steps.candidate.outputs.build_number }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/observatory-windows-retained/installer/
+          retention-days: 1
+          if-no-files-found: error
+      - name: Retain verified independent Windows package
+        if: success() && inputs.verify_installer && !inputs.verify_compiler_only
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-windows-package-build${{ steps.candidate.outputs.build_number }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/observatory-windows-retained/package/
+          retention-days: 1
+          if-no-files-found: error
       - name: Diagnose private-directory failure with a disposable fixture
         if: failure() && !inputs.verify_compiler_only
         shell: pwsh
