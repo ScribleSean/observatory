@@ -486,7 +486,8 @@ internal static class NativeDashboardTests
                 var dictationWeekParent = dictationWeekSelector.Parent;
                 void CaptureDictationWeekSelector(string name)
                 {
-                    // Keep the realized control in its original parent for this capture comparison.
+                    // Supplement the full-form capture, whose reparent/render path has omitted the selected text.
+                    // Capture the realized selector in its original parent without changing its appearance.
                     Check(dictationWeekSelector.Parent == dictationWeekParent, "Direct Dictation selector capture retains its parent");
                     using var bitmap = new Bitmap(dictationWeekSelector.Width, dictationWeekSelector.Height);
                     dictationWeekSelector.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
@@ -494,14 +495,6 @@ internal static class NativeDashboardTests
                     CheckDictationWeekSelector("after " + name);
                 }
                 CaptureDictationWeekSelector("native-dictation-selector-direct");
-                var dictationWeekForeground = dictationWeekSelector.ForeColor;
-                try
-                {
-                    dictationWeekSelector.ForeColor = Color.Black;
-                    CaptureDictationWeekSelector("native-dictation-selector-direct-black");
-                }
-                finally { dictationWeekSelector.ForeColor = dictationWeekForeground; }
-                CheckDictationWeekSelector("after foreground restoration");
                 Capture(form, output, "native-dictation");
                 CheckDictationWeekSelector("after capture");
                 await Select(form, "Period", "All retained");
