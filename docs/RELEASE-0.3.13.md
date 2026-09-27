@@ -2,18 +2,22 @@
 
 Status as of September 26, 2026 UTC: both development apps run **0.3.13, build 35**. Mac retains source `ced669854940f5892570a6a7a8feb1689b903b80`, with scheduled local Claude and Antigravity checks passed. Windows installation and readiness are accepted at source `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`. Local scheduled Claude acceptance passed at 22:50 UTC. Claude sharing is off on both devices, and installed Claude synchronization remains unverified. Neither is published as a production release.
 
-## Build 36 preparation, September 27 UTC
+## Build 36 packages, September 27 UTC
 
-Build 36 is being prepared from reviewed main source `9438680`. It includes
-visible Windows history units and the verified enlarged-font axis and date
-layout repairs. The later Windows Antigravity helper and collector integration
-are included, but the normal collector still does not enable the helper. They
-do not add live Windows allowance coverage.
+Both candidates use exact clean source `cba687250de0468289fe30d725cf678f6074caeb`, prepared from reviewed main `9438680`. They include visible Windows history units and the enlarged-font axis and date layout repairs. The Windows Antigravity helper and collector integration are included, but the normal collector still does not enable the helper. They do not add live Windows allowance coverage. The later allowance presentation repair in PR #32 is outside these candidates.
 
-The shared display version remains 0.3.13, with Mac build 36 and Windows file
-version 0.3.13.36. Build-35 installations and their recovery remain unchanged.
-New exact-source package, installer and manifest checks are required. No
-build-36 artifact, installation or production publication is claimed here.
+The [Mac package run](https://github.com/ScribleSean/observatory/actions/runs/36282301159), attempt 1, passed the full application build, updater integration, distributable extraction and verification. Root and a separate device owner verified all 1,875 manifest files, 197,568,672 unpacked bytes, build identity and strict deep ad-hoc signatures. The owner staged a distinct sibling bundle and reverified it while preserving installed build 35. No candidate launch or installation is claimed.
+
+The [Windows package run](https://github.com/ScribleSean/observatory/actions/runs/36282302296), attempt 1, passed the full clean package, isolated TEST installer lifecycle and retained ordinary installer/package steps. Root independently matched authenticated artifact digests, verified all 3,080 manifest files covering 269,054,022 unpacked bytes, and checked the ordinary installer receipt against the source and manifest. Independent Windows candidate file-version verification and activation preparation remain pending.
+
+| Candidate | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Mac ZIP | 68,445,343 | `3d81937b3aa9d32ef037f010eb6a5cde08f2b8ea3ca18a778455fcde221ec5b4` |
+| Mac manifest | | `5dcfae59d886cdd2a6fcd0058267470f0188e2f8e5ade22a87225587baa8d7fa` |
+| Windows ordinary installer | 100,494,584 | `df3618119b526d21ee3701e9ef1dddb5f961f1e15fff557fa25a68dabd4757df` |
+| Windows manifest | | `4b65e6dec9b2a5ab3af43d03f47356ce42f4a84bdb8539fe7180715c4ffd2840` |
+
+The shared display version remains 0.3.13, with Mac build 36 and expected Windows file version 0.3.13.36. Build-35 installations and recovery remain unchanged. Mac is ad-hoc signed and unnotarized, Windows is unsigned, and these are retained development candidates rather than public production downloads. Package checks do not establish installed collection, UI acceptance, permission continuity or production update trust. Claude sharing remains off at its last accepted observation.
 
 ## Build 35 preparation, September 26 UTC
 
