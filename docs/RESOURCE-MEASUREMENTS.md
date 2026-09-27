@@ -1,8 +1,10 @@
 # Development resource measurements
 
-September 13, 2026 UTC. Both installed applications were version 0.3.8, build 14, source `40d2fb7`. These are observations on one development setup, not hardware requirements or performance guarantees.
+These are dated observations on one development setup, not hardware requirements or performance guarantees. Each section identifies the installed build and measurement scope.
 
-## Observed collection windows
+## Build 14 observations, September 13
+
+Both installed applications were version 0.3.8, build 14, source `40d2fb7`. Times below are UTC.
 
 | Platform | Observation window UTC | Samples | Largest sampled process tree | Largest sampled memory sum | Final native-process memory |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -62,6 +64,26 @@ Source tests ran separately on the same development machine during part of this
 window. This is an uncontrolled observation with a warm retained-history cache,
 not a capacity limit, a cold-cache benchmark or a direct comparison with Mac RSS.
 The WSL VM and independent source services are outside the measured native tree.
+
+## Build 35 Mac observation, September 26–27 UTC
+
+The installed 0.3.13 build 35 from `ced669854940f5892570a6a7a8feb1689b903b80`
+was sampled 72 times at nominal five-second intervals from September 26 at
+23:57:34.664 to September 27 at 00:03:29.716 UTC, a 355-second window. The largest
+sampled descendant tree contained six processes including the native app, with
+summed RSS of 341,884,928 bytes, about 326 MiB. The final sample contained only
+the native app, using 52,379,648 bytes RSS, about 50 MiB. Its process identity
+stayed stable. Native CPU time increased by 2.79 seconds, excluding descendant CPU.
+
+A normal scheduled collection completed from 00:00:02.552 to 00:00:18.351 UTC.
+Its saved status matched the snapshot timestamp and reported 14 of 15 configured
+sources read. The intermediate running state was not sampled. The app retained
+its 300-second collection interval, and no manual refresh or app restart was used.
+
+This observation does not isolate individual adapter costs. Independent source
+services are excluded. Short-lived helpers may be missed, and summed RSS may
+count shared pages more than once. This is not a controlled comparison with
+older builds, a maximum-memory bound, an energy measurement or a leak test.
 
 ## Limits
 
