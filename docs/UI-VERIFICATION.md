@@ -2,6 +2,25 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Windows chart labels, source review September 27
+
+[PR #23](https://github.com/ScribleSean/observatory/pull/23) added visible Minutes
+and Tokens units. [PR #25](https://github.com/ScribleSean/observatory/pull/25)
+separated enlarged unit text from the bars. The resulting capture exposed
+clipped numeric-axis and date labels at larger font sizes.
+
+[PR #27](https://github.com/ScribleSean/observatory/pull/27), tested source
+`154744de38736ec34dbbeae62d291b7f8515e481`, measures axis and footer space from the
+font and reduces date-label density when labels would overlap. All four native
+and update-safety checks passed. Independent review of the fictional 900-pixel
+and 400-pixel captures in both themes from
+[native run 36281970390](https://github.com/ScribleSean/observatory/actions/runs/36281970390)
+confirmed complete numeric and date labels at 28-point text. Exact glyph-mask
+regressions check clipping without requiring identical edge-color compositing.
+
+These fixes are source changes after installed build 35. They do not establish
+installed keyboard, screen-reader, high-DPI, motion or every-page acceptance.
+
 ## Mac build 35 installed observation, September 26
 
 From 14:41 to 14:45 UTC, the installed Mac build 35 from `ced669854940f5892570a6a7a8feb1689b903b80` was selected and actual Allowances, Activity and Tokens navigation was observed. The Tokens Week, All retained and All devices controls were selected and verified. ISO calendar dates and Input and Output labels were exposed in accessibility data.
