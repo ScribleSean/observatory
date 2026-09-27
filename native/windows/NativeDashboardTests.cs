@@ -177,6 +177,33 @@ internal static class NativeDashboardTests
             var expectedColor = fraction == 0 ? DashboardMeter.TrackColor : DashboardMeter.FillColor;
             Check(bitmap.GetPixel(60, 5).ToArgb() == expectedColor.ToArgb(), "Meter zero and full boundaries render accurately");
         }
+        static double Luminance(Color color)
+        {
+            static double Linear(byte value) { var channel = value / 255d; return channel <= .04045 ? channel / 12.92 : Math.Pow((channel + .055) / 1.055, 2.4); }
+            return .2126 * Linear(color.R) + .7152 * Linear(color.G) + .0722 * Linear(color.B);
+        }
+        foreach (var light in new[] { false, true })
+        {
+            using var meter = new DashboardMeter(.5, "Synthetic half allowance") { Size = new Size(120, 10) };
+            DashboardPalette.Apply(meter, light);
+            using var bitmap = new Bitmap(meter.Width, meter.Height);
+            meter.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            // Compare solid interior pixels, not anti-aliased edges.
+            var filled = bitmap.GetPixel(30, 5); var empty = bitmap.GetPixel(90, 5);
+            var first = Luminance(filled); var second = Luminance(empty);
+            Check((Math.Max(first, second) + .05) / (Math.Min(first, second) + .05) >= 3,
+                "Allowance meter fill and track remain distinguishable in both themes");
+            Check(bitmap.GetPixel(58, 5).ToArgb() == filled.ToArgb() && bitmap.GetPixel(61, 5).ToArgb() == empty.ToArgb(),
+                "Theme styling preserves the half-allowance boundary");
+            Check(meter.AccessibilityObject.Value == "50%", "Theme styling preserves the accessible allowance value");
+        }
+        foreach (var (minutes, expected) in new[] { (30d, "30m"), (300d, "5h"), (10080d, "7d") })
+            Check(UsagePopup.WindowLabel(new JsonObject { ["bucket"] = "codex", ["window"] = "primary", ["durationMinutes"] = minutes }) == "Codex · " + expected,
+                "Allowance windows use their recorded duration");
+        foreach (var window in new[] { "primary", "secondary" })
+        foreach (var duration in new JsonNode?[] { null, JsonValue.Create(0), JsonValue.Create(-1), JsonValue.Create("300") })
+            Check(UsagePopup.WindowLabel(new JsonObject { ["bucket"] = "codex", ["window"] = window, ["durationMinutes"] = duration }) == "Codex · Unknown duration",
+                "Missing or invalid duration never turns an internal window key into a time period");
         foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, -0.1, 1.1 })
         {
             var rejected = false;
@@ -339,6 +366,13 @@ internal static class NativeDashboardTests
                 var accountCard = Children(form).OfType<DashboardCard>().Single(card => card.AccessibleName == "Account usage card");
                 Check(Children(accountCard).OfType<QuotaGraph>().Count() == 1, "Allowance history grouped with account reading");
                 Check(Children(accountCard).OfType<DashboardMeter>().Single(bar => bar.AccessibleName == "Allowance remaining").Fraction == 0.65, "Saved remaining reading preserved");
+                Check(Texts(form).Contains("Codex · Unknown duration: 65% remaining"), "Dashboard identifies a missing allowance duration honestly");
+                data["quota"]!["windows"]![0]!["durationMinutes"] = 300;
+                form.Reload();
+                Check(Texts(form).Contains("Codex · 5h: 65% remaining"), "Dashboard uses the shared duration-aware allowance label");
+                Capture(form, output, "native-allowance-duration");
+                data["quota"]!["windows"]![0]!.AsObject().Remove("durationMinutes");
+                form.Reload();
                 var savedQuota = data["quota"]!.DeepClone();
                 var freshAt = DateTimeOffset.UtcNow.ToString("O");
                 data["quota"]!["status"] = "ok";

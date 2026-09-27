@@ -43,7 +43,7 @@ internal sealed class DashboardMeter : Control
         if (Fraction == 0) return;
         var state = e.Graphics.Save();
         e.Graphics.SetClip(track);
-        using var fill = new SolidBrush(FillColor);
+        using var fill = new SolidBrush(DashboardPalette.IsLight(this) ? DashboardPalette.Accent(true) : FillColor);
         e.Graphics.FillRectangle(fill, 0, 0, (float)(bounds.Width * Fraction), bounds.Height);
         e.Graphics.Restore(state);
     }
