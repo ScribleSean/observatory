@@ -2,6 +2,19 @@
 
 Status as of September 26, 2026 UTC: both development apps run **0.3.13, build 35**. Mac retains source `ced669854940f5892570a6a7a8feb1689b903b80`, with scheduled local Claude and Antigravity checks passed. Windows installation and readiness are accepted at source `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`. Local scheduled Claude acceptance passed at 22:50 UTC. Claude sharing is off on both devices, and installed Claude synchronization remains unverified. Neither is published as a production release.
 
+## Build 36 preparation, September 27 UTC
+
+Build 36 is being prepared from reviewed main source `9438680`. It includes
+visible Windows history units and the verified enlarged-font axis and date
+layout repairs. The later Windows Antigravity helper and collector integration
+are included, but the normal collector still does not enable the helper. They
+do not add live Windows allowance coverage.
+
+The shared display version remains 0.3.13, with Mac build 36 and Windows file
+version 0.3.13.36. Build-35 installations and their recovery remain unchanged.
+New exact-source package, installer and manifest checks are required. No
+build-36 artifact, installation or production publication is claimed here.
+
 ## Build 35 preparation, September 26 UTC
 
 The Mac build-35 package source is `ced669854940f5892570a6a7a8feb1689b903b80`, prepared from merged source `574da4bd5e953aad60f871619e131210c0129bae`. The successful Windows package uses `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`. Their production application code is identical, with documentation and test changes between these pins. [PR #11](https://github.com/ScribleSean/observatory/pull/11) excludes recognized zero-usage client-error placeholders from Claude request counts. [PR #10](https://github.com/ScribleSean/observatory/pull/10) reconciles model buckets that share a sanitized label, and [PR #12](https://github.com/ScribleSean/observatory/pull/12) preserves legacy public order and record digests when no merge is needed. The earlier [PR #8 native table and empty-state repairs](UI-VERIFICATION.md#windows-source-screenshot-review-september-26) are also included. The installed and candidate identities remain distinct as recorded below.
