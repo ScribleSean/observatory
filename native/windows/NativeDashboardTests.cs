@@ -735,19 +735,20 @@ internal static class NativeDashboardTests
         Check(ink.Count > 0, "Reference chart label paints text");
         var bounds = Rectangle.FromLTRB(ink.Min(point => point.X), ink.Min(point => point.Y),
             ink.Max(point => point.X) + 1, ink.Max(point => point.Y) + 1);
-        var pixels = new int[bounds.Width * bounds.Height];
+        // GDI can composite edge colors differently. Compare exact ink geometry, including background holes.
+        var mask = new bool[bounds.Width * bounds.Height];
         for (var y = 0; y < bounds.Height; y++)
         for (var x = 0; x < bounds.Width; x++)
-            pixels[y * bounds.Width + x] = reference.GetPixel(bounds.Left + x, bounds.Top + y).ToArgb();
+            mask[y * bounds.Width + x] = reference.GetPixel(bounds.Left + x, bounds.Top + y).ToArgb() != background.ToArgb();
         var anchor = ink[0] - new Size(bounds.Left, bounds.Top);
         for (var top = search.Top; top <= search.Bottom - bounds.Height; top++)
         for (var left = search.Left; left <= search.Right - bounds.Width; left++)
         {
-            if (actual.GetPixel(left + anchor.X, top + anchor.Y).ToArgb() != pixels[anchor.Y * bounds.Width + anchor.X]) continue;
+            if (actual.GetPixel(left + anchor.X, top + anchor.Y).ToArgb() == background.ToArgb()) continue;
             var matches = true;
             for (var y = 0; y < bounds.Height && matches; y++)
             for (var x = 0; x < bounds.Width; x++)
-                if (actual.GetPixel(left + x, top + y).ToArgb() != pixels[y * bounds.Width + x]) { matches = false; break; }
+                if ((actual.GetPixel(left + x, top + y).ToArgb() != background.ToArgb()) != mask[y * bounds.Width + x]) { matches = false; break; }
             if (matches) return new Rectangle(left, top, bounds.Width, bounds.Height);
         }
         if (failureReferencePath is not null) reference.Save(failureReferencePath, ImageFormat.Png);
