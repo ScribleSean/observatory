@@ -482,6 +482,19 @@ internal static class NativeDashboardTests
                     Check(accessibleValue == "2026-09-12", $"Dictation week accessible value {stage}: {accessibleValue}");
                 }
                 CheckDictationWeekSelector("before capture");
+                var dictationWeekSelector = Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Week ending");
+                var dictationWeekParent = dictationWeekSelector.Parent;
+                void CaptureDictationWeekSelector(string name)
+                {
+                    // Supplement the full-form capture, whose reparent/render path has omitted the selected text.
+                    // Capture the realized selector in its original parent without changing its appearance.
+                    Check(dictationWeekSelector.Parent == dictationWeekParent, "Direct Dictation selector capture retains its parent");
+                    using var bitmap = new Bitmap(dictationWeekSelector.Width, dictationWeekSelector.Height);
+                    dictationWeekSelector.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+                    bitmap.Save(Path.Combine(output, name + ".png"), ImageFormat.Png);
+                    CheckDictationWeekSelector("after " + name);
+                }
+                CaptureDictationWeekSelector("native-dictation-selector-direct");
                 Capture(form, output, "native-dictation");
                 CheckDictationWeekSelector("after capture");
                 await Select(form, "Period", "All retained");

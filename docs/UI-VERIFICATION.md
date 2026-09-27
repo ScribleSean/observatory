@@ -2,6 +2,26 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Windows Dictation selector capture, September 27
+
+The full-window fictional Dictation capture showed a blank Week ending selector.
+[PR #34](https://github.com/ScribleSean/observatory/pull/34) verified the selected
+item, displayed text and accessible value as `2026-09-12` before and after that
+capture. This did not explain the missing text in the image.
+
+A comparison at `48642137be3337e00969fc9324ae8405ec2e85e4` in
+[native run 36287041006](https://github.com/ScribleSean/observatory/actions/runs/36287041006)
+captured the realized selector directly in its original parent. Both the original
+foreground and a temporary black foreground displayed the date clearly. The
+full-window capture still omitted it. All selection and accessibility assertions
+passed, as did all four native and update-safety checks.
+
+This establishes a discrepancy between capture paths, not a demonstrated
+production color or selection defect. The fixture retains the original-parent
+selector image as supplemental evidence alongside the full-window image. The
+temporary color probe was removed. Installed interaction and screen-reader
+acceptance remain open.
+
 ## Windows chart labels, source review September 27
 
 [PR #23](https://github.com/ScribleSean/observatory/pull/23) added visible Minutes
