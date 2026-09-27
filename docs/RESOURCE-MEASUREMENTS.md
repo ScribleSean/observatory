@@ -85,6 +85,28 @@ services are excluded. Short-lived helpers may be missed, and summed RSS may
 count shared pages more than once. This is not a controlled comparison with
 older builds, a maximum-memory bound, an energy measurement or a leak test.
 
+## Build 35 Windows observation, September 27 UTC
+
+The installed 0.3.13 build 35 from `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`
+was sampled 36 times from 00:03:48.393 to 00:06:48.462 UTC. Five-second delays
+plus query overhead produced a 180-second window. The largest sampled tree had
+five processes including the native app, with a summed working set of
+318,660,608 bytes, about 304 MiB. The final sample contained only the native app,
+using 62,955,520 bytes, about 60 MiB. Process identity remained stable, and native
+CPU time increased by 0.359375 seconds, excluding child processes.
+
+Sampling stopped after the first matched completed publication, below the
+six-minute cap. Its collection ran from 00:06:38.513 to 00:06:46.938 UTC and
+reported eight of eight configured source reads. No manual collection was
+requested. Scheduled origin is inferred from this ordinary untriggered
+publication, rather than independently verified through a scheduling control.
+
+The measurement did not change the app, sharing settings or source configuration.
+The working set excludes the WSL VM and independent source services. Short-lived helpers may
+be missed and shared pages may be counted more than once. This warm development
+observation is not a cold-cache benchmark, a leak test or a direct comparison
+with Mac RSS.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
