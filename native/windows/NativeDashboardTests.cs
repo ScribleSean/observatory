@@ -467,7 +467,23 @@ internal static class NativeDashboardTests
                 Check(Cell("By tool and device", 2, 3) == "20 (partial)", "Partial word coverage");
                 Check(Cell("By tool and device", 2, 4) == "Unknown", "No audio coverage is unknown");
                 Check(Cell("By tool and device", 3, 5) == "Tracking not yet verified", "ChatGPT coverage explicit");
+                void CheckDictationWeekSelector(string stage)
+                {
+                    var choice = Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Week ending");
+                    Check(choice.Items.Cast<string>().SequenceEqual(new[] { "2026-09-01", "2026-09-12" }), $"Dictation week dates {stage}");
+                    Check(choice.SelectedIndex == 1, $"Dictation week selected index {stage}: {choice.SelectedIndex}");
+                    Check(choice.SelectedItem?.ToString() == "2026-09-12", $"Dictation week selected item {stage}: {choice.SelectedItem}");
+                    Check(choice.Text == "2026-09-12", $"Dictation week text {stage}: {choice.Text}");
+                    Check(choice.IsHandleCreated, $"Dictation week native handle exists {stage}");
+                    Check(choice.AccessibilityObject.Name == "Week ending", $"Dictation week accessible name {stage}");
+                    // A native combo box's accessible Value is the text of its selected list item.
+                    // https://learn.microsoft.com/en-us/windows/win32/winauto/combo-box
+                    var accessibleValue = choice.AccessibilityObject.Value;
+                    Check(accessibleValue == "2026-09-12", $"Dictation week accessible value {stage}: {accessibleValue}");
+                }
+                CheckDictationWeekSelector("before capture");
                 Capture(form, output, "native-dictation");
+                CheckDictationWeekSelector("after capture");
                 await Select(form, "Period", "All retained");
                 Check(Cell("By tool and device", 2, 2) == "14", "Dictation retained records");
                 await Select(form, "Device", "Mac");
