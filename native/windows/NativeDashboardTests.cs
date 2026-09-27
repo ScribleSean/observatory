@@ -92,13 +92,42 @@ internal static class NativeDashboardTests
         using (var bitmap = new Bitmap(history.Width, history.Height))
         {
             history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-            var firstInk = Enumerable.Range(0, 190).First(y => {
-                var pixel = bitmap.GetPixel(417, y);
+            var firstInk = Enumerable.Range(0, 190).First(y => Enumerable.Range(0, bitmap.Width).Any(x => {
+                var pixel = bitmap.GetPixel(x, y);
                 return pixel.G > pixel.R + 10 && pixel.G > pixel.B + 10;
-            });
+            }));
             Check(firstInk >= history.Font.Height + 4,
                 "Enlarged chart unit text has a separate band above the plotted bars");
             bitmap.Save(Path.Combine(output, "native-activity-large-chart-font.png"), ImageFormat.Png);
+        }
+        foreach (var light in new[] { false, true })
+        foreach (var width in new[] { 900, 400 })
+        using (var largeFont = new Font(FontFamily.GenericSansSerif, 28))
+        {
+            var days = Enumerable.Range(1, width == 900 ? 1 : 30).Select(day => new JsonObject {
+                ["date"] = $"2026-09-{day:00}", ["totalTokens"] = 343_700_000 }).ToArray();
+            using var history = new DashboardHistoryChart(days, true, animate: false) {
+                Size = new Size(width, 220), Font = largeFont, BackColor = DashboardPalette.Surface(light) };
+            using var bitmap = new Bitmap(history.Width, history.Height);
+            history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            var axis = new[] { 0d, 171_850_000d, 343_700_000d }.Select(value =>
+                FindChartLabel(bitmap, largeFont, DashboardHistoryChart.AxisLabel(value), light,
+                    new Rectangle(width / 2, 0, width - width / 2, bitmap.Height))).ToArray();
+            Check(axis.All(bounds => bounds is not null), "Enlarged numeric axis renders every complete label");
+            var lastBarRow = Enumerable.Range(0, bitmap.Height).Last(y => Enumerable.Range(0, width).Any(x => {
+                var pixel = bitmap.GetPixel(x, y);
+                return pixel.G > pixel.R + 10 && pixel.G > pixel.B + 10;
+            }));
+            var footer = new Rectangle(0, lastBarRow + 4, axis.Min(bounds => bounds!.Value.Left), bitmap.Height - lastBarRow - 4);
+            var dates = days.Select(day => FindChartLabel(bitmap, largeFont, Snapshot.Text(day["date"])[5..10], light, footer))
+                .Where(bounds => bounds is not null).Select(bounds => bounds!.Value).OrderBy(bounds => bounds.Left).ToArray();
+            Check(dates.Length >= 1 && (width == 900 || dates.Length < 5), "Narrow charts retain complete dates and reduce label density");
+            Check(dates.Zip(dates.Skip(1)).All(pair => pair.Second.Left - pair.First.Right >= 8), "Rendered dates have a visible gap");
+            for (var y = footer.Top; y < footer.Bottom; y++)
+            for (var x = footer.Left; x < footer.Right; x++)
+                if (bitmap.GetPixel(x, y).ToArgb() != history.BackColor.ToArgb())
+                    Check(dates.Any(bounds => bounds.Contains(x, y)), "Date footer contains no clipped or overlapping text fragments");
+            bitmap.Save(Path.Combine(output, $"native-chart-labels-{width}-{(light ? "light" : "dark")}.png"), ImageFormat.Png);
         }
         using (var history = new DashboardHistoryChart(new[] {
             new JsonObject { ["date"] = "2026-09-11", ["totalTokens"] = 0 },
@@ -675,6 +704,42 @@ internal static class NativeDashboardTests
         await Task.Delay(100);
     }
     private static void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); }
+    private static Rectangle? FindChartLabel(Bitmap actual, Font font, string text, bool light, Rectangle search)
+    {
+        // Match complete glyphs against independently rendered, unclipped text on this device.
+        using var reference = new Bitmap(actual.Width, actual.Height);
+        reference.SetResolution(actual.HorizontalResolution, actual.VerticalResolution);
+        var background = DashboardPalette.Surface(light);
+        using (var g = Graphics.FromImage(reference))
+        {
+            g.Clear(background);
+            TextRenderer.DrawText(g, text, font, new Rectangle(4, 4, reference.Width - 8, reference.Height - 8),
+                DashboardPalette.Muted(light), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+        }
+        var ink = new List<Point>();
+        for (var y = 0; y < reference.Height; y++)
+        for (var x = 0; x < reference.Width; x++)
+            if (reference.GetPixel(x, y).ToArgb() != background.ToArgb()) ink.Add(new Point(x, y));
+        Check(ink.Count > 0, "Reference chart label paints text");
+        var bounds = Rectangle.FromLTRB(ink.Min(point => point.X), ink.Min(point => point.Y),
+            ink.Max(point => point.X) + 1, ink.Max(point => point.Y) + 1);
+        var pixels = new int[bounds.Width * bounds.Height];
+        for (var y = 0; y < bounds.Height; y++)
+        for (var x = 0; x < bounds.Width; x++)
+            pixels[y * bounds.Width + x] = reference.GetPixel(bounds.Left + x, bounds.Top + y).ToArgb();
+        var anchor = ink[0] - new Size(bounds.Left, bounds.Top);
+        for (var top = search.Top; top <= search.Bottom - bounds.Height; top++)
+        for (var left = search.Left; left <= search.Right - bounds.Width; left++)
+        {
+            if (actual.GetPixel(left + anchor.X, top + anchor.Y).ToArgb() != pixels[anchor.Y * bounds.Width + anchor.X]) continue;
+            var matches = true;
+            for (var y = 0; y < bounds.Height && matches; y++)
+            for (var x = 0; x < bounds.Width; x++)
+                if (actual.GetPixel(left + x, top + y).ToArgb() != pixels[y * bounds.Width + x]) { matches = false; break; }
+            if (matches) return new Rectangle(left, top, bounds.Width, bounds.Height);
+        }
+        return null;
+    }
     private static void Capture(Form form, string output, string name, Size? size = null)
     {
         // Render the actual dashboard controls without hosted-desktop window limits.

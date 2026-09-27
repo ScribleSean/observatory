@@ -71,13 +71,27 @@ internal sealed class DashboardHistoryChart : Control
         if (Width < 100 || Height < 70) return;
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        var top = Math.Max(22, Font.Height + 4);
-        if (Height <= top + 30) return;
-        var plot = new RectangleF(12, top, Width - 90, Height - top - 30);
-        TextRenderer.DrawText(g, tokens ? "Tokens" : "Minutes", Font,
-            new Rectangle((int)plot.Left, 0, (int)plot.Width, Font.Height),
-            DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Left);
+        const TextFormatFlags textFlags = TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
+        Size Measure(string text) => TextRenderer.MeasureText(g, text, Font, new Size(int.MaxValue, int.MaxValue), textFlags);
         var maximum = Math.Max(1, values.Where(row => row.value is not null).Select(row => row.value!.Value).DefaultIfEmpty(0).Max());
+        var ticks = Enumerable.Range(0, 3).Select(line => AxisLabel(maximum * line / 2)).ToArray();
+        var tickSizes = ticks.Select(Measure).ToArray();
+        var dates = values.Select(row => row.date.Length >= 10 ? row.date[5..10] : row.date).ToArray();
+        var dateSizes = dates.Select(Measure).ToArray();
+        var unit = tokens ? "Tokens" : "Minutes";
+        var unitSize = Measure(unit);
+        var axisWidth = Math.Max(66, tickSizes.Max(size => size.Width));
+        var axisHeight = Math.Max(18, tickSizes.Max(size => size.Height));
+        var dateHeight = Math.Max(20, dateSizes.Select(size => size.Height).DefaultIfEmpty(0).Max());
+        var top = Math.Max(22, Math.Max(Font.Height, unitSize.Height) + 4);
+        var bottom = Math.Max(30, Math.Max(dateHeight + 10, axisHeight / 2 + 4));
+        if (Height <= top + bottom) return;
+        // When labels cannot fit beside the plot, keep the bars and exact accessible values.
+        var showAxis = Width - axisWidth - 24 >= Math.Max(40, unitSize.Width);
+        var plot = new RectangleF(12, top, Width - (showAxis ? axisWidth + 24 : 24), Height - top - bottom);
+        var muted = DashboardPalette.Muted(DashboardPalette.IsLight(this));
+        if (unitSize.Width <= plot.Width)
+            TextRenderer.DrawText(g, unit, Font, new Rectangle(12, 0, (int)plot.Width, unitSize.Height), muted, textFlags);
         using var grid = new Pen(DashboardPalette.Grid(this));
         var accent = DashboardPalette.Accent(DashboardPalette.IsLight(this));
         using var ink = new SolidBrush(Color.FromArgb((int)(255 * inkOpacity), accent));
@@ -87,9 +101,15 @@ internal sealed class DashboardHistoryChart : Control
         {
             var y = plot.Bottom - plot.Height * line / 2;
             g.DrawLine(grid, plot.Left, y, plot.Right, y);
-            TextRenderer.DrawText(g, AxisLabel(maximum * line / 2), Font, new Rectangle(Width - 72, (int)y - 8, 66, 18), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.Right);
+            var labelFits = line == 2 || (line == 0 && plot.Height >= axisHeight + 4) ||
+                (line == 1 && plot.Height / 2 >= axisHeight + 4);
+            if (showAxis && labelFits)
+                TextRenderer.DrawText(g, ticks[line], Font,
+                    new Rectangle(Width - axisWidth - 6, (int)y - axisHeight / 2, axisWidth, axisHeight),
+                    muted, textFlags | TextFormatFlags.Right);
         }
         var slot = plot.Width / Math.Max(1, values.Length);
+        var lastDateRight = float.NegativeInfinity;
         for (var i = 0; i < values.Length; i++)
         {
             var x = plot.Left + i * slot;
@@ -106,8 +126,15 @@ internal sealed class DashboardHistoryChart : Control
                 }
             }
             if (i % Math.Max(1, (int)Math.Ceiling(values.Length / 5.0)) == 0)
-                TextRenderer.DrawText(g, values[i].date.Length >= 10 ? values[i].date[5..10] : values[i].date,
-                    Font, new Rectangle((int)center - 30, (int)plot.Bottom + 6, 60, 20), DashboardPalette.Muted(DashboardPalette.IsLight(this)), TextFormatFlags.HorizontalCenter);
+            {
+                if (dateSizes[i].Width > plot.Width) continue;
+                var width = Math.Min((int)plot.Width, Math.Max(60, dateSizes[i].Width));
+                var left = (int)Math.Clamp(center - width / 2f, plot.Left, plot.Right - width);
+                if (left < lastDateRight + 8) continue;
+                TextRenderer.DrawText(g, dates[i], Font, new Rectangle(left, (int)plot.Bottom + 6, width, dateHeight),
+                    muted, textFlags | TextFormatFlags.HorizontalCenter);
+                lastDateRight = left + width;
+            }
         }
     }
 }
