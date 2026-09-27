@@ -164,11 +164,12 @@ internal sealed class UsagePopup : Form
         }
     }
 
-    private static string WindowLabel(JsonObject row)
+    internal static string WindowLabel(JsonObject row)
     {
         var minutes = Snapshot.Number(row["durationMinutes"]);
-        var duration = minutes is null ? Snapshot.Text(row["window"]) : minutes >= 1440 ? $"{minutes / 1440:0.#}d" : minutes >= 60 ? $"{minutes / 60:0.#}h" : $"{minutes:0.#}m";
-        return Snapshot.Text(row["bucket"]) + " · " + duration;
+        var duration = minutes is not > 0 ? "Unknown duration" : minutes >= 1440 ? $"{minutes / 1440:0.#}d" : minutes >= 60 ? $"{minutes / 60:0.#}h" : $"{minutes:0.#}m";
+        var bucket = Snapshot.Text(row["bucket"]);
+        return (bucket.Equals("codex", StringComparison.OrdinalIgnoreCase) ? "Codex" : bucket) + " · " + duration;
     }
 
     internal void ShowNearTray()

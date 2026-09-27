@@ -328,7 +328,7 @@ internal sealed partial class NativeDashboard : Form
         foreach (var window in windows)
         {
             var remaining = Snapshot.Number(window["remainingPercent"]);
-            var windowTitle = Label(Snapshot.Text(window["bucket"]) + " · " + Snapshot.Text(window["window"]) + ": " + Snapshot.Format(remaining) + "% remaining");
+            var windowTitle = Label(UsagePopup.WindowLabel(window) + ": " + Snapshot.Format(remaining) + "% remaining");
             windowTitle.Font = heading;
             if (remaining is double percent && double.IsFinite(percent) && percent >= 0 && percent <= 100)
                 body.Controls.Add(new DashboardMeter(percent / 100, "Allowance remaining") { Width = ContentWidth,
