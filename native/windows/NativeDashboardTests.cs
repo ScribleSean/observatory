@@ -111,10 +111,15 @@ internal static class NativeDashboardTests
                 Size = new Size(width, 220), Font = largeFont, BackColor = DashboardPalette.Surface(light) };
             using var bitmap = new Bitmap(history.Width, history.Height);
             history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-            var axis = new[] { 0d, 171_850_000d, 343_700_000d }.Select(value =>
-                FindChartLabel(bitmap, largeFont, DashboardHistoryChart.AxisLabel(value), light,
-                    new Rectangle(width / 2, 0, width - width / 2, bitmap.Height))).ToArray();
-            Check(axis.All(bounds => bounds is not null), "Enlarged numeric axis renders every complete label");
+            var fixtureName = $"native-chart-labels-{width}-{(light ? "light" : "dark")}";
+            bitmap.Save(Path.Combine(output, fixtureName + ".png"), ImageFormat.Png);
+            var tickLabels = new[] { 0d, 171_850_000d, 343_700_000d }.Select(DashboardHistoryChart.AxisLabel).ToArray();
+            var axis = tickLabels.Select((label, index) =>
+                FindChartLabel(bitmap, largeFont, label, light,
+                    new Rectangle(width / 2, 0, width - width / 2, bitmap.Height),
+                    Path.Combine(output, $"{fixtureName}-axis-{index}-reference.png"))).ToArray();
+            var missingLabels = tickLabels.Where((_, index) => axis[index] is null).ToArray();
+            Check(missingLabels.Length == 0, $"Enlarged numeric axis renders every complete label: width={width}, theme={(light ? "light" : "dark")}, fontHeight={largeFont.Height}, missing=[{string.Join(", ", missingLabels)}]");
             bool GreenPixel(int x, int y) {
                 var pixel = bitmap.GetPixel(x, y);
                 return pixel.G > pixel.R + 10 && pixel.G > pixel.B + 10;
@@ -135,7 +140,6 @@ internal static class NativeDashboardTests
             for (var x = footer.Left; x < footer.Right; x++)
                 if (bitmap.GetPixel(x, y).ToArgb() != history.BackColor.ToArgb())
                     Check(dates.Any(bounds => bounds.Contains(x, y)), "Date footer contains no clipped or overlapping text fragments");
-            bitmap.Save(Path.Combine(output, $"native-chart-labels-{width}-{(light ? "light" : "dark")}.png"), ImageFormat.Png);
         }
         using (var history = new DashboardHistoryChart(new[] {
             new JsonObject { ["date"] = "2026-09-11", ["totalTokens"] = 0 },
@@ -712,7 +716,7 @@ internal static class NativeDashboardTests
         await Task.Delay(100);
     }
     private static void Check(bool value, string name) { if (!value) throw new InvalidOperationException(name); }
-    private static Rectangle? FindChartLabel(Bitmap actual, Font font, string text, bool light, Rectangle search)
+    private static Rectangle? FindChartLabel(Bitmap actual, Font font, string text, bool light, Rectangle search, string? failureReferencePath = null)
     {
         // Match complete glyphs against independently rendered, unclipped text on this device.
         using var reference = new Bitmap(actual.Width, actual.Height);
@@ -746,6 +750,7 @@ internal static class NativeDashboardTests
                 if (actual.GetPixel(left + x, top + y).ToArgb() != pixels[y * bounds.Width + x]) { matches = false; break; }
             if (matches) return new Rectangle(left, top, bounds.Width, bounds.Height);
         }
+        if (failureReferencePath is not null) reference.Save(failureReferencePath, ImageFormat.Png);
         return null;
     }
     private static void Capture(Form form, string output, string name, Size? size = null)
