@@ -92,7 +92,8 @@ internal static class NativeDashboardTests
         using (var bitmap = new Bitmap(history.Width, history.Height))
         {
             history.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
-            var firstInk = Enumerable.Range(0, 190).First(y => Enumerable.Range(0, bitmap.Width).Any(x => {
+            // ClearType text can contain green subpixels. This central band excludes the unit and axis labels.
+            var firstInk = Enumerable.Range(0, 190).First(y => Enumerable.Range(bitmap.Width / 4, bitmap.Width / 2).Any(x => {
                 var pixel = bitmap.GetPixel(x, y);
                 return pixel.G > pixel.R + 10 && pixel.G > pixel.B + 10;
             }));
@@ -114,10 +115,17 @@ internal static class NativeDashboardTests
                 FindChartLabel(bitmap, largeFont, DashboardHistoryChart.AxisLabel(value), light,
                     new Rectangle(width / 2, 0, width - width / 2, bitmap.Height))).ToArray();
             Check(axis.All(bounds => bounds is not null), "Enlarged numeric axis renders every complete label");
-            var lastBarRow = Enumerable.Range(0, bitmap.Height).Last(y => Enumerable.Range(0, width).Any(x => {
+            bool GreenPixel(int x, int y) {
                 var pixel = bitmap.GetPixel(x, y);
                 return pixel.G > pixel.R + 10 && pixel.G > pixel.B + 10;
-            }));
+            }
+            // Start below the unit, left of the axis, then stop at the bar's first gap before the dates.
+            var firstBarRow = Enumerable.Range(largeFont.Height + 4, bitmap.Height - largeFont.Height - 4)
+                .First(y => Enumerable.Range(12, width / 2 - 12).Any(x => GreenPixel(x, y)));
+            var barColumn = Enumerable.Range(12, width / 2 - 12).First(x => GreenPixel(x, firstBarRow));
+            var barRows = Enumerable.Range(firstBarRow, bitmap.Height - firstBarRow).TakeWhile(y => GreenPixel(barColumn, y)).ToArray();
+            Check(barRows.Length > largeFont.Height, "Footer reference follows a continuous bar, not a text glyph");
+            var lastBarRow = barRows[^1];
             var footer = new Rectangle(0, lastBarRow + 4, axis.Min(bounds => bounds!.Value.Left), bitmap.Height - lastBarRow - 4);
             var dates = days.Select(day => FindChartLabel(bitmap, largeFont, Snapshot.Text(day["date"])[5..10], light, footer))
                 .Where(bounds => bounds is not null).Select(bounds => bounds!.Value).OrderBy(bounds => bounds.Left).ToArray();
