@@ -12,6 +12,8 @@ Claude sharing remains off on both devices and installed Claude synchronization 
 
 Mac remains ad-hoc signed, Windows remains unsigned, and production updates are unavailable. Repeated Documents prompts remain a [Mac permission continuity limitation](MAC-PERMISSIONS.md). The release is unpublished.
 
+Build-36 packages now passed both hosted full-package workflows and root inventory verification. The Mac candidate also passed independent sibling staging. Neither candidate is installed. See [exact candidate pins and remaining gates](RELEASE-0.3.13.md#build-36-packages-september-27-utc).
+
 The table below retains revision-specific historical evidence. Older installed or staged versions describe those earlier checks, not the current installation or current clean-install coverage.
 
 ## Historical preparation evidence
