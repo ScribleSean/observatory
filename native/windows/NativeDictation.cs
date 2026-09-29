@@ -7,6 +7,16 @@ internal sealed partial class NativeDashboard
 {
     private string dictationHost = "All devices", dictationProduct = "All tools", dictationPeriod = "Week", dictationAnchor = "";
 
+    internal static string DictationStatus(string? status) => status switch {
+        "ok" => "Recorded history",
+        "not-connected" => "Not connected",
+        "not-found" => "No statistics found",
+        "unavailable" => "Unavailable",
+        "not-supported" or "Tracking not yet verified" => "Tracking not yet verified",
+        "ambiguous" or "Ambiguous source" => "Ambiguous source",
+        _ => "Unknown"
+    };
+
     internal static string DictationValue(JsonObject[] days, string field, bool wispr)
     {
         var coverage = NativeHistory.Sum(days, field == "words" ? "wordRecords" : "audioRecords");
@@ -52,7 +62,7 @@ internal sealed partial class NativeDashboard
         Label("By tool and device");
         foreach (var row in selected)
             AddCard(new DashboardValueCard(row.source.product + " · " + row.source.device, [
-                ("Status", row.source.status == "ok" ? "Recorded history" : row.source.status),
+                ("Status", DictationStatus(row.source.status)),
                 ("Last checked", Snapshot.Text(row.source.source?["checkedAt"])),
                 ("Records", Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions"))),
                 ("Words", DictationValue(row.days, "words", true)),

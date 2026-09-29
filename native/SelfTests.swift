@@ -208,6 +208,20 @@ func runSelfTests() {
     precondition(voiceSources.count == 4 && voiceSources[0].days.count == 3)
     precondition(voiceSources[1].status == "Tracking not yet verified" && voiceSources[1].days.isEmpty)
     precondition(voiceSources[2].status == "not-connected")
+    precondition(dictationStatus(voiceSources[0].status) == "Recorded history")
+    precondition(dictationStatus(voiceSources[1].status) == "Tracking not yet verified")
+    precondition(dictationStatus(voiceSources[2].status) == "Not connected")
+    for (status, label) in [("not-found", "No statistics found"), ("unavailable", "Unavailable"),
+                            ("not-supported", "Tracking not yet verified"), ("ambiguous", "Ambiguous source"),
+                            ("future-status", "Unknown"), ("", "Unknown")] {
+        var source = voiceFixture
+        source["status"] = status
+        let voice = nativeVoiceSources([source], host: "Mac", tool: "Wispr Flow")[0]
+        precondition(voice.status == status && voice.days.isEmpty)
+        precondition(dictationStatus(voice.status) == label)
+    }
+    precondition(dictationStatus(nil) == "Unknown")
+    precondition(dictationStatus(nativeVoiceSources([voiceFixture, voiceFixture], host: "Mac", tool: "Wispr Flow")[0].status) == "Ambiguous source")
     precondition(nativeVoiceSources([voiceFixture, voiceFixture], host: "Mac", tool: "Wispr Flow")[0].days.isEmpty)
     precondition(nativeVoiceSources([["host": "Mac", "source": "ChatGPT", "status": "ok", "days": dictationRows]], host: "Mac", tool: "ChatGPT")[0].days.isEmpty)
     precondition(nativePeriodDays(voiceSources[0].days, period: "day", anchor: "2026-09-06").count == 1)
