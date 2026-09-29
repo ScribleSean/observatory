@@ -30,6 +30,18 @@ func dictationValue(_ values: [JSONObject], field: String, wispr: Bool) -> Strin
     return display + (partial ? " (partial)" : "")
 }
 
+func dictationStatus(_ status: String?) -> String {
+    switch status {
+    case "ok": return "Recorded history"
+    case "not-connected": return "Not connected"
+    case "not-found": return "No statistics found"
+    case "unavailable": return "Unavailable"
+    case "not-supported", "Tracking not yet verified": return "Tracking not yet verified"
+    case "ambiguous", "Ambiguous source": return "Ambiguous source"
+    default: return "Unknown"
+    }
+}
+
 struct NativeVoiceSource: Identifiable {
     let host: String
     let tool: String
@@ -120,7 +132,7 @@ struct NativeDictation: View {
         let days = nativePeriodDays(source.days, period: period, anchor: end)
         return GroupBox(source.tool + " · " + source.host) {
             VStack(alignment: .leading, spacing: 10) {
-                ObservatoryValueRow("Status", value: source.status == "ok" ? "Recorded history" : source.status)
+                ObservatoryValueRow("Status", value: dictationStatus(source.status))
                 ObservatoryValueRow("Last checked", value: source.checkedAt)
                 ObservatoryValueRow("Records", value: formatted(recordedSum(days, field: "transcriptions")))
                 ObservatoryValueRow("Words", value: dictationValue(days, field: "words", wispr: true))

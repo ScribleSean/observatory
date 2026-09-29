@@ -466,6 +466,8 @@ internal static class NativeDashboardTests
                 Check(Cell("By tool and device", 2, 2) == "4", "Dictation week excludes older records");
                 Check(Cell("By tool and device", 2, 3) == "20 (partial)", "Partial word coverage");
                 Check(Cell("By tool and device", 2, 4) == "Unknown", "No audio coverage is unknown");
+                Check(Cell("By tool and device", 0, 5) == "Not connected", "Missing Dictation source has a readable status");
+                Check(Cell("By tool and device", 2, 5) == "Recorded history", "Recorded Dictation status is readable");
                 Check(Cell("By tool and device", 3, 5) == "Tracking not yet verified", "ChatGPT coverage explicit");
                 void CheckDictationWeekSelector(string stage)
                 {
@@ -497,6 +499,20 @@ internal static class NativeDashboardTests
                 CaptureDictationWeekSelector("native-dictation-selector-direct");
                 Capture(form, output, "native-dictation");
                 CheckDictationWeekSelector("after capture");
+                var voiceSource = data["dictation"]![0]!;
+                foreach (var (status, label) in new[] { ("not-connected", "Not connected"), ("not-found", "No statistics found"),
+                    ("unavailable", "Unavailable"), ("not-supported", "Tracking not yet verified"), ("ambiguous", "Ambiguous source"),
+                    ("future-status", "Unknown"), ("", "Unknown") })
+                {
+                    voiceSource["status"] = status;
+                    form.Reload();
+                    Check(Cell("By tool and device", 2, 5) == label, "Readable Dictation status: " + status);
+                    Check(Cell("By tool and device", 2, 2) == "Unknown", "Non-recorded Dictation source withholds counters: " + status);
+                    Check(Snapshot.Text(voiceSource["status"]) == status, "Dictation display preserves the raw status");
+                }
+                Check(NativeDashboard.DictationStatus(null) == "Unknown", "Missing Dictation status is unknown");
+                voiceSource["status"] = "ok";
+                form.Reload();
                 await Select(form, "Period", "All retained");
                 Check(Cell("By tool and device", 2, 2) == "14", "Dictation retained records");
                 await Select(form, "Device", "Mac");
