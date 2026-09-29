@@ -479,6 +479,21 @@ func runSelfTests() {
     precondition(snapshot.latest("dictation", host: "Windows", source: "Wispr Flow") == nil)
     precondition(snapshot.latest("dictation", host: "Mac", source: "TypeWhisper") == nil)
     precondition(snapshot.sourceCounts.read == 1 && snapshot.sourceCounts.total == 2)
+    for (status, label) in [("ok", "Read"), ("not-connected", "Not connected"), ("partial", "Partial coverage"),
+                            ("unavailable", "Unavailable"), ("not-found", "Not found"), ("stale", "Saved reading"),
+                            ("needs-auth", "Sign in required"), ("unsupported", "Not supported"),
+                            ("rate-limited", "Usage check rate-limited"), ("future-status", "Unknown"), ("", "Unknown")] {
+        precondition(sourceHealthStatus(status) == label)
+    }
+    precondition(sourceHealthStatus(nil) == "Unknown")
+    let healthSources: [JSONObject] = ["ok", "partial", "unavailable", "not-connected"].map { ["status": $0] }
+    let healthSnapshot = Snapshot(object: ["activity": healthSources, "agents": []])
+    precondition(nativeDashboardSources(healthSnapshot.object["activity"], key: "activity").map {
+        sourceHealthStatus(text($0["status"]))
+    } == ["Read", "Partial coverage", "Unavailable", "Not connected"])
+    precondition(healthSnapshot.sourceCounts.read == 1 && healthSnapshot.sourceCounts.total == 3)
+    precondition(rows(healthSnapshot.object["activity"]).map { text($0["status"]) } == ["ok", "partial", "unavailable", "not-connected"])
+    precondition(rows(healthSnapshot.object["agents"]).isEmpty)
     let combined = Snapshot(object: [
         "combined": ["status": "ok", "days": [["date": "2026-09-08", "seconds": 90]]],
         "combinedTokens": ["status": "ok", "verification": ["status": "verified"],

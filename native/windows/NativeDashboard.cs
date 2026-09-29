@@ -440,6 +440,19 @@ internal sealed partial class NativeDashboard : Form
             !double.IsFinite(fraction) || fraction < 0 || fraction > 1) return null;
         return fraction;
     }
+    internal static string SourceHealthStatus(string? status) => status switch {
+        "ok" => "Read",
+        "not-connected" => "Not connected",
+        "partial" => "Partial coverage",
+        "unavailable" => "Unavailable",
+        "not-found" => "Not found",
+        "stale" => "Saved reading",
+        "needs-auth" => "Sign in required",
+        "unsupported" => "Not supported",
+        "rate-limited" => "Usage check rate-limited",
+        _ => "Unknown"
+    };
+
     private void Sources(JsonObject? snapshot)
     {
         var rows = new List<string[]>();
@@ -476,7 +489,7 @@ internal sealed partial class NativeDashboard : Form
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
             var values = entries.SelectMany(row => new[] {
-                (row[1] + " · " + row[2], row[3]),
+                (row[1] + " · " + row[2], SourceHealthStatus(row[3])),
                 ("Last checked", Freshness(row[4], DateTimeOffset.UtcNow))
             }).ToArray();
             if (values.Length == 0) values = [("Status", "No source records")];

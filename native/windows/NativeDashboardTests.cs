@@ -726,6 +726,31 @@ internal static class NativeDashboardTests
                 var sourceTitles = Children(form).OfType<DashboardValueCard>().Select(card => card.Title).ToArray();
                 Check(new[] { "Provider token sources", "Activity", "Tokens", "Tool activity", "Dictation", "Allowances", "Local benchmarks", "Agent receipts" }
                     .All(sourceTitles.Contains), "Source health categories");
+                string SourceValue(string title, string label) => Children(Children(form).OfType<DashboardValueCard>().Single(card => card.Title == title))
+                    .OfType<Label>().Single(item => item.AccessibleName == label + " value").Text;
+                Check(SourceValue("Tokens", "Windows · ") == "Read", "Successful source read has a readable status");
+                Check(SourceValue("Tool activity", "Mac · ") == "Not connected", "Disabled source has a readable status");
+                var receiptSource = data["agentSource"]!;
+                var receiptStatus = receiptSource["status"]!.DeepClone();
+                var receiptSummary = Texts(form).Single(value => value.Contains("handoff receipts ·"));
+                foreach (var (status, label) in new[] { ("ok", "Read"), ("partial", "Partial coverage"), ("unavailable", "Unavailable"),
+                    ("not-connected", "Not connected"), ("not-found", "Not found"), ("stale", "Saved reading"),
+                    ("needs-auth", "Sign in required"), ("unsupported", "Not supported"), ("rate-limited", "Usage check rate-limited"),
+                    ("future-status", "Unknown"), ("", "Unknown") })
+                {
+                    receiptSource["status"] = status;
+                    var sourceData = data.ToJsonString();
+                    form.Reload();
+                    Check(SourceValue("Agent receipts", " · ") == label, "Readable source health status: " + status);
+                    Check(Texts(form).Contains(receiptSummary), "Source status formatting preserves saved receipt counts");
+                    Check(data.ToJsonString() == sourceData, "Source status formatting preserves the raw snapshot");
+                }
+                receiptSource["status"] = null;
+                form.Reload();
+                Check(SourceValue("Agent receipts", " · ") == "Unknown", "Missing source health status is unknown");
+                Check(NativeDashboard.SourceHealthStatus(null) == "Unknown", "Missing source health formatter input is unknown");
+                receiptSource["status"] = receiptStatus;
+                form.Reload();
                 string ProviderValue(string label) => Children(Children(form).OfType<DashboardValueCard>().Single(card => card.Title == "Provider token sources"))
                     .OfType<Label>().Single(item => item.AccessibleName == label + " value").Text;
                 Check(ProviderValue("ChatGPT").StartsWith("Unknown") && ProviderValue("Cursor").StartsWith("Unknown") &&

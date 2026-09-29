@@ -349,7 +349,7 @@ struct NativeDashboard: View {
             Text("Saved execution records").observatoryFont(.headline)
             Text("\(receipts.count) handoff receipts · \(receipts.filter { text($0["status"]) == "failed" }.count) saved failures. Not a live agent monitor.")
                 .observatoryFont(.callout).foregroundStyle(.secondary)
-            Text("Newest receipt: \(latest.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown"). Source: \(text((displayedSnapshot?.object["agentSource"] as? JSONObject)?["status"])).")
+            Text("Newest receipt: \(latest.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown"). Source: \(sourceHealthStatus(text((displayedSnapshot?.object["agentSource"] as? JSONObject)?["status"]))).")
                 .observatoryFont(.caption).foregroundStyle(.secondary)
             if let help = receiptSourceHelp(displayedSnapshot?.object["agentSource"] as? JSONObject) {
                 Label(help, systemImage: "exclamationmark.circle")
@@ -381,7 +381,7 @@ struct NativeDashboard: View {
                         let sources = nativeDashboardSources(displayedSnapshot?.object[key], key: key)
                         if sources.isEmpty { Text("No source records").foregroundStyle(.secondary) }
                         ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-                            ObservatoryValueRow(text(source["host"]) + " · " + text(source["source"], fallback: key), value: text(source["status"]))
+                            ObservatoryValueRow(text(source["host"]) + " · " + text(source["source"], fallback: key), value: sourceHealthStatus(text(source["status"])))
                             ObservatoryValueRow("Last checked", value: parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")
                         }
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
@@ -449,6 +449,21 @@ struct NativeDashboard: View {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateStyle = .medium
         return formatter.string(from: date)
+    }
+}
+
+func sourceHealthStatus(_ status: String?) -> String {
+    switch status {
+    case "ok": return "Read"
+    case "not-connected": return "Not connected"
+    case "partial": return "Partial coverage"
+    case "unavailable": return "Unavailable"
+    case "not-found": return "Not found"
+    case "stale": return "Saved reading"
+    case "needs-auth": return "Sign in required"
+    case "unsupported": return "Not supported"
+    case "rate-limited": return "Usage check rate-limited"
+    default: return "Unknown"
     }
 }
 
