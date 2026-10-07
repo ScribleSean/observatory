@@ -77,16 +77,44 @@ struct Snapshot {
     func latest(_ key: String, host: String, source: String? = nil) -> JSONObject? {
         days(key, host: host, source: source).last
     }
+    func hasNativeAggregateScope(_ key: String) -> Bool {
+        guard ["activity", "tokens"].contains(key) else { return false }
+        let keys = key == "tokens" ? ["tokens", "settings"] : ["activity", "activityHistory"]
+        // Missing optional sources are valid. Present malformed sources cannot prove scope.
+        func scopeRows(_ field: String) -> [JSONObject]? {
+            guard let value = object[field] else { return [] }
+            return value as? [JSONObject]
+        }
+        guard let sources = scopeRows(keys[0]), let siblings = scopeRows(keys[1]) else { return false }
+        let retired = (sources + siblings).contains { row in
+            let host = text(row["host"])
+            return !["Mac", "Windows"].contains(host) && !(key == "activity" && host == "Combined") &&
+                (text(row["status"]) != "not-connected" || ["days", "profiles", "tools"].contains { field in
+                    guard let value = row[field] else { return false }
+                    return (value as? [Any])?.isEmpty != true
+                })
+        }
+        guard !retired else { return false }
+        // Activity's collector contract is native-only. Legacy token verification
+        // can cover Ubuntu too, so require the original native source set as well.
+        if key == "activity" { return true }
+        return ["Mac", "Windows"].allSatisfy { host in
+            let matches = sources.filter { text($0["host"]) == host }
+            return matches.count == 1 && text(matches[0]["status"]) == "ok" && matches[0]["days"] is [Any]
+        }
+    }
     func activityArchive(host: String) -> JSONObject? {
         let name = host == "All" ? "Combined" : host
         return rows(object["activityHistory"]).first { text($0["host"]) == name }
     }
     func recordedDays(_ key: String, host: String) -> [JSONObject] {
+        if host == "All" && !hasNativeAggregateScope(key) { return [] }
         // Archived activity is already sanitized and overlap-deduplicated by
         // the collector. Keep its source status separate from saved records.
         if key == "activity", let archive = activityArchive(host: host) {
             guard text(archive["status"]) == "ok" else { return [] }
-            return rows(archive["days"]).sorted { text($0["date"]) < text($1["date"]) }
+            return rows(archive["days"]).filter { host != "Ubuntu" || validArchivedHistoryDay($0, key: key) }
+                .sorted { text($0["date"]) < text($1["date"]) }
         }
         return days(key, host: host)
     }
@@ -94,6 +122,7 @@ struct Snapshot {
         let selected: JSONObject?
         if host == "All" {
             // Reuse collector-verified aggregates. Never sum device snapshots here.
+            guard hasNativeAggregateScope(key) else { return [] }
             if key == "activity" { selected = object["combined"] as? JSONObject }
             else if key == "tokens" {
                 let combined = object["combinedTokens"] as? JSONObject
@@ -107,7 +136,8 @@ struct Snapshot {
             })
         }
         guard let item = selected, text(item["status"]) == "ok" else { return [] }
-        return rows(item["days"]).sorted { text($0["date"]) < text($1["date"]) }
+        return rows(item["days"]).filter { host != "Ubuntu" || validArchivedHistoryDay($0, key: key) }
+            .sorted { text($0["date"]) < text($1["date"]) }
     }
 }
 

@@ -7,6 +7,8 @@ internal static class NativeDashboardTests
 {
     internal static void Run(string output)
     {
+        NativeSourceHealthTests.Scope();
+        NativeSourceHealthTests.Receipts();
         const string rasterJson = """
             {"version":1,"width":2,"height":2,"from":0,"to":1000,"encoding":"ink-mask-u8","pixels":"AAMAAA==",
              "scanned":1,"observations":1,"gaps":0,"segments":1,"firstAt":500,"lastAt":500,"minUsed":50,"maxUsed":50}
@@ -255,7 +257,7 @@ internal static class NativeDashboardTests
         activityDay["apps"] = JsonNode.Parse("""{"AI apps":{"ChatGPT / Codex":1200},"Mixed activity":{"Do not attribute":600}}""");
         var settingsRoot = Path.Combine(output, "settings-fixture");
         Directory.CreateDirectory(settingsRoot);
-        var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":true,"wslDistribution":null,"quotaWslDistribution":null,"futureSetting":"preserved"}""")!.AsObject();
+        var initialSettings = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":true,"wslDistribution":"Ubuntu-24.04","quotaWslDistribution":"Ubuntu","futureSetting":"preserved"}""")!.AsObject();
         File.WriteAllText(Path.Combine(settingsRoot, "collector.config.json"), initialSettings.ToJsonString());
         using var settingsCollector = new Collector(settingsRoot);
         var startupRegistered = false;
@@ -293,6 +295,7 @@ internal static class NativeDashboardTests
             try
             {
                 await Task.Delay(200);
+                await NativeHistoryRetirementTests.Dashboard(output);
                 Check(form.Font.Name.StartsWith("Inter", StringComparison.Ordinal), "Bundled dashboard typography");
                 var sections = Children(form).OfType<ListBox>().Single();
                 Check(sections.Items.Cast<string>().SequenceEqual(new[] { "Allowances", "Activity", "Tokens", "Dictation", "Agents", "Source health", "Settings" }), "Dashboard navigation order");
@@ -312,13 +315,16 @@ internal static class NativeDashboardTests
                 var persistentRefresh = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "Device connection settings").PerformClick();
                 Check(sections.SelectedItem?.ToString() == "Settings", "Devices opens Settings");
+                Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName is "wslDistribution" or "quotaWslDistribution"), "Retired source selectors remain in Settings");
+                Check(Texts(form).Any(value => value.Contains("Account limits remain Unknown") && value.Contains("not switch")), "Retired account selection has no fail-closed explanation");
                 Check(Children(form).OfType<Button>().Any(button => button.AccessibleName == "Pairing details for Mac"), "Devices opens connection controls");
                 sections.SelectedItem = "Agents";
                 Children(form).OfType<Button>().Single(button => button.Text == "Review collection settings").PerformClick();
                 Check(sections.SelectedItem?.ToString() == "Settings", "Agents collection settings route");
-                Check(Children(form).OfType<CheckBox>().Any(check => check.AccessibleName == "activity"), "Agents opens collection controls after Devices");
+                Check(Children(form).OfType<CheckBox>().Any(check => check.Name == "activity"), "Agents opens collection controls after Devices");
                 Check(ReferenceEquals(persistentRefresh, Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources")), "Refresh survives navigation");
                 sections.SelectedItem = "Activity";
+                Check(!Children(form).OfType<Button>().Any(button => button.Text == "Ubuntu"), "History filters still offer a retired source");
                 Check(Children(form).OfType<DataGridView>().All(grid => grid.Parent is DashboardCard), "Data tables use shared cards");
                 Check(Texts(form).Contains("30 min"), "Day total");
                 await Select(form, "Period", "Week");
@@ -548,7 +554,7 @@ internal static class NativeDashboardTests
                 Check(NativeDashboard.DictationValue([new JsonObject { ["audioRecords"] = 1, ["transcriptions"] = 1, ["audioSeconds"] = 0 }], "audioSeconds", true) == "0 min", "Explicit recorded audio zero stays zero");
                 sections.SelectedItem = "Source health";
                 Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Handoff receipt"), "Sources does not duplicate Agents");
-                Check(Texts(form).Any(value => value.Contains("1 saved failures")), "Saved failure summary visible when collapsed");
+                Check(Texts(form).Contains("1 handoff receipt · 1 saved failure. Not a live agent monitor."), "Saved failure summary visible when collapsed");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "View Agents").PerformClick();
                 await Task.Delay(50);
                 Application.DoEvents();
@@ -576,11 +582,71 @@ internal static class NativeDashboardTests
                 Check(AgentValue("Tool requests", "Tool") == "functions.exec", "Exact tool name");
                 Check(AgentValue("Tool requests", "Namespace") == "functions", "Exact namespace");
                 Capture(form, output, "native-tools");
+                var savedReceipts = data["agents"]!.DeepClone();
+                var savedReceiptSource = data["agentSource"]!.DeepClone();
+                data["agents"] = new JsonArray();
+                data["agentSource"] = null;
+                form.Reload();
+                Check(Texts(form).Contains("Windows does not collect handoff receipts here. Saved Codex tool requests are separate from handoff receipts."),
+                    "Windows receipt empty state identifies missing collection support, not a settings problem");
+                Check(Texts(form).Contains("No handoff receipts available. Missing receipts are not zero usage."), "Absent receipts are not zero usage");
+                Check(!Children(form).OfType<DashboardValueCard>().Any(card => card.AccessibleName == "Handoff receipt"), "Missing receipts do not produce receipt cards");
+                Check(AgentValue("Tool requests", "Tool") == "functions.exec" && AgentValue("Tool requests", "Requests") == "3",
+                    "Codex tool requests remain available without handoff receipts");
+                Capture(form, output, "native-agents-no-receipts");
+                data["agents"] = savedReceipts;
+                data["agentSource"] = savedReceiptSource;
                 ((JsonArray)data["settings"]!).Add(new JsonObject { ["host"] = "Mac", ["status"] = "not-connected" });
                 form.Reload();
                 Check(Texts(form).Contains("Tool records unavailable."), "Unavailable tool host");
                 sections.SelectedItem = "Settings";
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Settings loaded existing disabled source");
+                void CheckCollectionLayout(string stage, bool capture = true)
+                {
+                    var card = Children(form).OfType<DashboardCard>().Single(card => card.AccessibleName == "Collection card");
+                    var collection = card.Controls.OfType<FlowLayoutPanel>().Single();
+                    var toggles = collection.Controls.OfType<CheckBox>().ToArray();
+                    Check(toggles.Length == 6, "Collection retains all six source choices");
+                    if (capture)
+                    {
+                        using var image = new Bitmap(card.Width, card.Height);
+                        card.DrawToBitmap(image, new Rectangle(Point.Empty, image.Size));
+                        image.Save(Path.Combine(output, "native-collection-" + stage + ".png"), ImageFormat.Png);
+                    }
+                    foreach (var toggle in toggles)
+                    {
+                        Check(collection.ClientRectangle.Contains(toggle.Bounds),
+                            $"Collection toggle fits content after {stage}: {toggle.Text}, bounds={toggle.Bounds}, content={collection.ClientSize}");
+                        var boundsInCard = card.RectangleToClient(collection.RectangleToScreen(toggle.Bounds));
+                        Check(card.DisplayRectangle.Contains(boundsInCard),
+                            $"Collection toggle fits padded card after {stage}: {toggle.Text}, bounds={boundsInCard}, card={card.DisplayRectangle}");
+                        Check(toggle.Bottom + toggle.Margin.Bottom <= collection.ClientSize.Height,
+                            $"Collection retains toggle bottom spacing after {stage}: {toggle.Text}");
+                        Check(toggle.AccessibilityObject.Name == toggle.Text,
+                            $"Collection accessible name matches visible title after {stage}: expected={toggle.Text}, actual={toggle.AccessibilityObject.Name}");
+                    }
+                }
+                void CheckCollectionResizing(string theme)
+                {
+                    var card = Children(form).OfType<DashboardCard>().Single(card => card.AccessibleName == "Collection card");
+                    var originalWidth = card.Width;
+                    var originalHeight = card.Height;
+                    try
+                    {
+                        for (var pass = 0; pass < 3; pass++)
+                        {
+                            card.Width = 400;
+                            CheckCollectionLayout(theme + "-narrow", pass == 2);
+                            card.Width = 900;
+                            CheckCollectionLayout(theme + "-wide", pass == 2);
+                        }
+                    }
+                    finally { card.Width = originalWidth; }
+                    Check(card.Height == originalHeight, "Collection height stays stable after repeated width changes");
+                    CheckCollectionLayout(theme + "-restored");
+                }
+                CheckCollectionLayout("initial-dark");
+                CheckCollectionResizing("dark");
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.Name == "activity").Checked, "Settings loaded existing disabled source");
                 var updateButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Check for updates");
                 updateButton.PerformClick();
                 updateButton.PerformClick();
@@ -588,27 +654,31 @@ internal static class NativeDashboardTests
                 updatePending.SetResult();
                 await Task.Delay(30);
                 Check(updateButton.Enabled, "Completed update check restores button");
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Existing settings default Wispr off");
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "antigravity").Checked, "Existing settings default Antigravity off");
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "antigravity").Checked = true;
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = true;
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked = true;
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked, "Existing settings default Wispr off");
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.Name == "antigravity").Checked, "Existing settings default Antigravity off");
+                Children(form).OfType<CheckBox>().Single(check => check.Name == "antigravity").Checked = true;
+                Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked = true;
+                Children(form).OfType<CheckBox>().Single(check => check.Name == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
                 sections.SelectedItem = "Source health";
                 sections.SelectedItem = "Settings";
                 form.Reload();
-                Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "activity").Checked, "Draft survives navigation and reload");
+                Check(Children(form).OfType<CheckBox>().Single(check => check.Name == "activity").Checked, "Draft survives navigation and reload");
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
                 Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
                 Check(settingsCollector.ReadConfiguration()["antigravity"]!.GetValue<bool>(), "Antigravity opt-in saved without a provider call");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
+                Check(Snapshot.Text(settingsCollector.ReadConfiguration()["quotaWslDistribution"]) == "Ubuntu" &&
+                    Snapshot.Text(settingsCollector.ReadConfiguration()["wslDistribution"]) == "Ubuntu-24.04", "Saving native settings changed a legacy source or account selection");
                 Capture(form, output, "native-settings");
                 var appearance = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance");
-                var sourceSwitch = Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr");
+                var sourceSwitch = Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr");
                 appearance.PerformClick();
                 Check(form.BackColor == DashboardPalette.Background(true) && form.ForeColor == DashboardPalette.Text(true), "Light palette applied to dashboard");
-                Check(ReferenceEquals(sourceSwitch, Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr")) && sourceSwitch.Checked,
+                CheckCollectionLayout("light");
+                CheckCollectionResizing("light");
+                Check(ReferenceEquals(sourceSwitch, Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr")) && sourceSwitch.Checked,
                     "Appearance changes preserve existing settings controls and values");
                 using (var switchImage = new Bitmap(sourceSwitch.Width, sourceSwitch.Height))
                 {
@@ -647,19 +717,20 @@ internal static class NativeDashboardTests
                 sections.SelectedItem = "Settings";
                 appearance.PerformClick();
                 Check(form.BackColor == DashboardPalette.Background(false), "Dark appearance restored");
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "quota").Checked = false;
+                CheckCollectionLayout("dark-after-theme");
+                Children(form).OfType<CheckBox>().Single(check => check.Name == "quota").Checked = false;
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["quota"]!.GetValue<bool>() && confirmations.Last() == "quota-removal", "Canceled quota removal preserves setting");
                 confirmSettings = true;
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(!settingsCollector.ReadConfiguration()["quota"]!.GetValue<bool>(), "Confirmed quota opt-out saved");
-                Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked = false;
+                Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked = false;
                 confirmSettings = false;
                 Children(form).OfType<Button>().Single(button => button.Text == "Reload saved settings").PerformClick();
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked && confirmations.Last() == "discard", "Canceled discard retains draft");
+                Check(!Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked && confirmations.Last() == "discard", "Canceled discard retains draft");
                 confirmSettings = true;
                 Children(form).OfType<Button>().Single(button => button.Text == "Reload saved settings").PerformClick();
-                Check(Children(form).OfType<CheckBox>().Single(check => check.AccessibleName == "wispr").Checked, "Confirmed discard reloads saved values");
+                Check(Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked, "Confirmed discard reloads saved values");
                 try { settingsCollector.UpdateConfiguration(initialSettings, initialSettings); throw new Exception("Stale settings accepted"); }
                 catch (InvalidOperationException) { }
                 var current = settingsCollector.ReadConfiguration();
@@ -703,6 +774,18 @@ internal static class NativeDashboardTests
                 Check(repairs == 1, "Repair callback after operation completion");
                 var quotaChannel = SharingChannel.Quota;
                 var claudeChannel = SharingChannel.ProviderTokens;
+                void CheckSharingCaptionWidths(string transition)
+                {
+                    foreach (var name in new[] { "Change Codex allowances sharing", "Change Claude Code usage sharing" })
+                    {
+                        var button = Children(form).OfType<Button>().Single(button => button.AccessibleName == name);
+                        var card = (DashboardCard)button.Parent!.Parent!;
+                        var availableWidth = Math.Max(100, card.ClientSize.Width - card.Padding.Horizontal - 8);
+                        var expectedWidth = Math.Min(availableWidth, Math.Max(140, TextRenderer.MeasureText(button.Text, button.Font).Width + 32));
+                        Check(button.Width == expectedWidth,
+                            $"Sharing caption is content-sized without resizing after {transition}: {name}, caption={button.Text}, width={button.Width}, expected={expectedWidth}");
+                    }
+                }
                 Check(!sharingEnabled[quotaChannel] && !sharingEnabled[claudeChannel], "Both optional sharing channels start off");
                 ClickDevice("Check Codex allowances sharing");
                 ClickDevice("Check Claude Code usage sharing");
@@ -714,9 +797,11 @@ internal static class NativeDashboardTests
                 ClickDevice("Change Codex allowances sharing");
                 await Task.Delay(50);
                 Check(sharingEnabled[quotaChannel] && !sharingEnabled[claudeChannel] && sharingChanges == 1, "Codex consent does not enable Claude sharing");
+                CheckSharingCaptionWidths("enabling Codex sharing");
                 ClickDevice("Change Claude Code usage sharing");
                 await Task.Delay(50);
                 Check(sharingEnabled[quotaChannel] && sharingEnabled[claudeChannel] && sharingChanges == 2, "Claude consent uses its separate confirmation token");
+                CheckSharingCaptionWidths("enabling Claude sharing");
                 sharingAvailable = false;
                 await Task.Delay(50);
                 foreach (var name in new[] { "Check Codex allowances sharing", "Change Codex allowances sharing", "Check Claude Code usage sharing", "Change Claude Code usage sharing" })
@@ -730,9 +815,11 @@ internal static class NativeDashboardTests
                 ClickDevice("Change Codex allowances sharing");
                 await Task.Delay(50);
                 Check(!sharingEnabled[quotaChannel] && sharingEnabled[claudeChannel] && sharingChanges == 3, "Stopping Codex sharing preserves Claude consent");
+                CheckSharingCaptionWidths("stopping Codex sharing");
                 ClickDevice("Change Claude Code usage sharing");
                 await Task.Delay(50);
                 Check(sharingEnabled.Values.All(value => !value) && sharingChanges == 4, "Claude sharing stops independently");
+                CheckSharingCaptionWidths("stopping Claude sharing");
                 Capture(form, output, "native-device-settings");
                 var sharingButton = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Change Claude Code usage sharing");
                 for (Control target = sharingButton; target.Parent is not null; target = target.Parent)
@@ -755,7 +842,7 @@ internal static class NativeDashboardTests
                 Check(SourceValue("Tool activity", "Mac · ") == "Not connected", "Disabled source has a readable status");
                 var receiptSource = data["agentSource"]!;
                 var receiptStatus = receiptSource["status"]!.DeepClone();
-                var receiptSummary = Texts(form).Single(value => value.Contains("handoff receipts ·"));
+                var receiptSummary = Texts(form).Single(value => value.Contains("handoff receipt"));
                 foreach (var (status, label) in new[] { ("ok", "Read"), ("partial", "Partial coverage"), ("unavailable", "Unavailable"),
                     ("not-connected", "Not connected"), ("not-found", "Not found"), ("stale", "Saved reading"),
                     ("needs-auth", "Sign in required"), ("unsupported", "Not supported"), ("rate-limited", "Usage check rate-limited"),

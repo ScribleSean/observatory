@@ -1,6 +1,8 @@
 import Foundation
 
 func runSelfTests() {
+    runNativeHistoryRetirementTests()
+    runNativeSourceHealthTests()
     MacUpdateTrust.selfTest()
     precondition(formatted(1e9, compact: true) == "1B")
     precondition(formatted(1e12, compact: true) == "1T")
@@ -461,6 +463,25 @@ func runSelfTests() {
         let legacy = try CollectorConfiguration.prepare(runtime: directory)
         precondition(legacy == false)
         precondition(!FileManager.default.fileExists(atPath: config.path))
+        // Retain legacy configuration, but never launch its old collector code.
+        let resources = directory.appendingPathComponent("fixture-resources")
+        for relative in ["Runtime/python/bin/python3", "Runtime/node/bin/node", "Collector/scripts/run-collector.py",
+                         "Collector/scripts/collect-mac.mjs", "Collector/scripts/collect-dashboard.mjs"] {
+            let file = resources.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("synthetic launch fixture, never executed".utf8).write(to: file)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+        }
+        let legacyFile = directory.appendingPathComponent("local.config.json")
+        let legacyBytes = try Data(contentsOf: legacyFile)
+        let launch = try CollectorConfiguration.launch(runtime: directory, resources: resources, local: false)
+        precondition(launch.executable == resources.appendingPathComponent("Runtime/python/bin/python3"))
+        precondition(launch.arguments.contains(resources.appendingPathComponent("Collector/scripts/collect-dashboard.mjs").path))
+        precondition(launch.arguments.contains(directory.path))
+        precondition(!launch.arguments.contains(directory.appendingPathComponent("scripts/run-collector.py").path))
+        precondition((try? CollectorConfiguration.launch(runtime: directory, resources: resources, local: false, quotaOnly: true)) == nil)
+        let retainedLegacy = try Data(contentsOf: legacyFile)
+        precondition(retainedLegacy == legacyBytes && !FileManager.default.fileExists(atPath: config.path))
     } catch { preconditionFailure("Collector configuration self-test failed") }
     precondition(number(true) == nil)
     precondition(number(-1) == nil)
@@ -495,6 +516,7 @@ func runSelfTests() {
     precondition(rows(healthSnapshot.object["activity"]).map { text($0["status"]) } == ["ok", "partial", "unavailable", "not-connected"])
     precondition(rows(healthSnapshot.object["agents"]).isEmpty)
     let combined = Snapshot(object: [
+        "tokens": [["host": "Mac", "status": "ok", "days": []], ["host": "Windows", "status": "ok", "days": []]],
         "combined": ["status": "ok", "days": [["date": "2026-09-08", "seconds": 90]]],
         "combinedTokens": ["status": "ok", "verification": ["status": "verified"],
                            "days": [["date": "2026-09-08", "totalTokens": 600]]],

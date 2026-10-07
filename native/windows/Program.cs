@@ -286,6 +286,7 @@ internal static class Program
         {
             try
             {
+                SourceRetirementTests.Run();
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
@@ -477,7 +478,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             catch { MessageBox.Show("Windows could not update startup registration. Check your account permissions.", "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         };
         var totals = new ToolStripMenuItem("Latest recorded totals");
-        foreach (var host in new[] { "All", "Mac", "Windows", "Ubuntu" })
+        foreach (var host in new[] { "All", "Mac", "Windows" })
             totals.DropDownItems.Add(host, null, (_, _) => ShowTotals(host));
         menu.Items.Add(totals);
         menu.Items.Add(new ToolStripSeparator());
@@ -635,7 +636,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             $"Recorded date: {Snapshot.Text(activity?["date"])}\n\n" +
             $"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))}\n" +
             $"Recorded date: {Snapshot.Text(tokens?["date"])}";
-        if (host == "All") message += "\n\nOnly verified combined totals are shown. WSL screen time is part of Windows.";
+        if (host == "All") message += "\n\nOnly verified combined totals are shown. Saved records retain their original source labels.";
         MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 

@@ -48,35 +48,29 @@ internal sealed partial class NativeDashboard
         var draft = sourceDraft;
         Label("Choose what this PC collects. Provider sign-ins stay in their own apps.").ForeColor = Color.Silver;
         Label("Collection").Font = brand;
-        var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Height = 280, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
+        var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
         collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("claude", "Recorded Claude Code requests"),
             ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits"), ("antigravity", "Online Antigravity account limits") })
         {
-            var check = new DashboardToggle { Text = title, AccessibleName = key, Width = collection.Width,
+            var check = new DashboardToggle { Name = key, Text = title, AccessibleName = title, Width = collection.Width,
                 Checked = draft[key] is JsonValue value && value.TryGetValue<bool>(out var enabled) && enabled };
             draft[key] = check.Checked;
             check.CheckedChanged += (_, _) => draft[key] = check.Checked;
             collection.Controls.Add(check);
         }
+        collection.Height = collection.GetPreferredSize(new Size(collection.Width, 0)).Height;
         AddCard(collection, "Collection");
         Label("Claude Code reads local recorded request metadata only. It does not sign in, copy credentials, or report account billing.").ForeColor = Color.Silver;
         Label("Antigravity allowance reading is currently supported on Mac. Enabling it here shows Unknown without starting the CLI.").ForeColor = Color.Silver;
         var detailsStart = body.Controls.Count;
         Label("Source details").Font = brand;
         ActivityWatchHelp();
-        foreach (var (key, title) in new[] { ("wslDistribution", "Additional Codex log device"), ("quotaWslDistribution", "Account client") })
-        {
-            var existing = Snapshot.Text(draft[key], "Windows");
-            var values = new[] { "Windows", "Ubuntu", existing }.Distinct().ToArray();
-            var row = new FlowLayoutPanel { Width = ContentWidth, Height = 42 };
-            row.Controls.Add(new Label { Text = title, AutoSize = true, Padding = new Padding(0, 7, 8, 0) });
-            var choice = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 225, AccessibleName = key };
-            choice.Items.AddRange(values); choice.SelectedItem = existing;
-            choice.SelectedIndexChanged += (_, _) => draft[key] = choice.SelectedItem?.ToString() == "Windows" ? null : choice.SelectedItem?.ToString();
-            row.Controls.Add(choice); body.Controls.Add(row);
-        }
-        Label("Ubuntu options may start WSL. No credentials are copied or switched.").ForeColor = Color.Silver;
+        Label("Sources use installed Windows applications. No credentials are copied or switched.").ForeColor = Color.Silver;
+        if (draft["wslDistribution"] is not null || draft["quotaWslDistribution"] is not null)
+            Label("WSL collection is retired. Existing settings and saved records are preserved.").ForeColor = Color.Silver;
+        if (draft["quotaWslDistribution"] is not null)
+            Label("Account limits remain Unknown for the retired WSL client. Observatory will not switch to a signed-in Windows account.").ForeColor = Color.Silver;
         Label("Turning off account monitoring clears retained account readings on the next collection. Saved log-token history remains.").ForeColor = Color.Silver;
         GroupAccountRows(detailsStart, "Source details");
         var saveStart = body.Controls.Count;

@@ -71,23 +71,20 @@ enum CollectorConfiguration {
 
     static func launch(runtime: URL, resources: URL, local: Bool, quotaOnly: Bool = false) throws -> CollectorLaunch {
         if quotaOnly && !local { throw CocoaError(.featureUnsupported) }
-        if local {
-            _ = try read(runtime: runtime)
-            let python = resources.appendingPathComponent("Runtime/python/bin/python3")
-            let node = resources.appendingPathComponent("Runtime/node/bin/node")
-            let scripts = resources.appendingPathComponent("Collector/scripts")
-            guard FileManager.default.isExecutableFile(atPath: python.path),
-                  FileManager.default.isExecutableFile(atPath: node.path) else { throw CocoaError(.fileReadNoSuchFile) }
-            return CollectorLaunch(executable: python, arguments: ["-I", "-B", scripts.appendingPathComponent("run-collector.py").path,
-                "--runtime", runtime.path, "--collector", scripts.appendingPathComponent("collect-mac.mjs").path,
-                "--node", node.path, "--python", python.path, "--interval", "300"] + (quotaOnly ? ["--quota-only"] : []))
-        }
-        guard let config = readObject(runtime.appendingPathComponent("native-runtime.json")),
-              let python = config["python"] as? String, let node = config["node"] as? String,
-              python.hasPrefix("/"), node.hasPrefix("/"),
-              FileManager.default.isExecutableFile(atPath: python),
-              FileManager.default.isExecutableFile(atPath: node) else { throw CocoaError(.fileReadNoSuchFile) }
-        return CollectorLaunch(executable: URL(fileURLWithPath: python), arguments: [
-            runtime.appendingPathComponent("scripts/run-collector.py").path, "--node", node, "--interval", "300"])
+        if local { _ = try read(runtime: runtime) }
+        // Use the updated bundled collector for both configuration formats.
+        // Retained scripts can still contain retired source invocations.
+        let python = resources.appendingPathComponent("Runtime/python/bin/python3")
+        let node = resources.appendingPathComponent("Runtime/node/bin/node")
+        let scripts = resources.appendingPathComponent("Collector/scripts")
+        let runner = scripts.appendingPathComponent("run-collector.py")
+        let collector = scripts.appendingPathComponent(local ? "collect-mac.mjs" : "collect-dashboard.mjs")
+        guard FileManager.default.isExecutableFile(atPath: python.path),
+              FileManager.default.isExecutableFile(atPath: node.path),
+              FileManager.default.fileExists(atPath: runner.path),
+              FileManager.default.fileExists(atPath: collector.path) else { throw CocoaError(.fileReadNoSuchFile) }
+        return CollectorLaunch(executable: python, arguments: ["-I", "-B", runner.path,
+            "--runtime", runtime.path, "--collector", collector.path,
+            "--node", node.path, "--python", python.path, "--interval", "300"] + (quotaOnly ? ["--quota-only"] : []))
     }
 }

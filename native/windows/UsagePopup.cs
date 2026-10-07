@@ -123,14 +123,14 @@ internal sealed class UsagePopup : Form
         }
         else Label("Account limits not connected");
         var hosts = new Panel { Width = BodyWidth, Height = 38, AccessibleName = "Source host", Margin = new Padding(0, 12, 0, 12) };
-        var names = new[] { "All", "Mac", "Windows", "Ubuntu" };
+        var names = new[] { "All", "Mac", "Windows" };
         for (var index = 0; index < names.Length; index++)
         {
             var name = names[index];
-            var choice = ActionButton(name, BodyWidth / 4 - 3);
+            var choice = ActionButton(name, BodyWidth / names.Length - 3);
             choice.AccessibleRole = AccessibleRole.RadioButton;
             choice.AccessibleDescription = host == name ? "Selected source host" : "Select source host";
-            choice.Location = new Point(index * BodyWidth / 4, 0);
+            choice.Location = new Point(index * BodyWidth / names.Length, 0);
             choice.TextAlign = ContentAlignment.MiddleCenter; choice.Padding = Padding.Empty;
             choice.BackColor = host == name ? DashboardPalette.Accent(false) : DashboardCard.Surface;
             choice.ForeColor = host == name ? DashboardPalette.Text(true) : ForeColor;
@@ -138,7 +138,7 @@ internal sealed class UsagePopup : Form
             hosts.Controls.Add(choice);
         }
         content.Controls.Add(hosts);
-        if (host == "All") Label("All shows verified device totals. Ubuntu contributes tokens only.");
+        if (host == "All") Label("All shows verified device totals.");
         var activity = Snapshot.Latest(data, "activity", host);
         var tokens = Snapshot.Latest(data, "tokens", host);
         Stat("Active time", Snapshot.Duration(Snapshot.Number(activity?["seconds"])), Snapshot.Text(activity?["date"], "No retained records"));

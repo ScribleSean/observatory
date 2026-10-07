@@ -885,7 +885,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 exit(1)
             }
             let filters = tree.filter { identifier($0)?.hasPrefix("observatory-filter-") == true }
-            let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Source host-Ubuntu", "Period-day", "Period-week", "Period-all"]
+            let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Period-day", "Period-week", "Period-all"]
+            precondition(!filters.contains { identifier($0) == "observatory-filter-Source host-Ubuntu" })
             guard NSApp.activationPolicy() == .regular, expected.allSatisfy({ suffix in
                 let matches = filters.filter { identifier($0) == "observatory-filter-" + suffix }
                 let selected = suffix == "Source host-All" || suffix == "Period-all"

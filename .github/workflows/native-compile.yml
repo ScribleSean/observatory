@@ -39,6 +39,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.21.0'
+      - name: Verify native source-retirement contracts
+        run: node --test native/tests/source-retirement.test.mjs
       - name: Verify native updater script integration
         shell: pwsh
         run: |

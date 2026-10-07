@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
@@ -126,16 +125,13 @@ internal sealed class Collector : IDisposable
     internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool claude = false, bool antigravity = false)
     {
         if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
-        if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution");
-        if (quotaDistro is not null && !Regex.IsMatch(quotaDistro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid quota distribution");
+        if (distro is not null || quotaDistro is not null) throw new ArgumentException("WSL sources are retired. New setup supports Windows sources only.");
         var file = Path.Combine(runtime, "collector.config.json");
         var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["antigravity"] = antigravity, ["quotaWslDistribution"] = quotaDistro };
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
-
-    internal string? Distribution => Snapshot.Read(Path.Combine(runtime, "collector.config.json"))?["wslDistribution"]?.GetValue<string>();
 
     internal JsonObject ReadConfiguration() => Snapshot.Read(Path.Combine(runtime, "collector.config.json"))
         ?? throw new InvalidOperationException("Source settings are unavailable.");
@@ -166,9 +162,10 @@ internal sealed class Collector : IDisposable
         }
         foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" })
         {
-            var distro = desired[key]?.GetValue<string>();
-            if (distro is not null && !Regex.IsMatch(distro, "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")) throw new ArgumentException("Invalid distribution.");
-            current[key] = distro;
+            // Keep legacy metadata, especially the account owner. Clearing it
+            // would silently authorize the collector to discover another login.
+            if (desired.TryGetPropertyValue(key, out var selection) && !JsonNode.DeepEquals(current[key], selection))
+                throw new ArgumentException("Retired WSL selections cannot be changed here. Existing source and account settings are preserved.");
         }
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, current.ToJsonString()); File.Move(temporary, file, true); }

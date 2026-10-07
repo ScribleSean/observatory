@@ -29,6 +29,7 @@ internal sealed partial class NativeDashboard
     private void Agents(JsonObject? snapshot)
     {
         Label("Saved handoff receipts").Font = heading;
+        Label("Windows does not collect handoff receipts here. Saved Codex tool requests are separate from handoff receipts.");
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
         Label("Receipt source status: " + Snapshot.Text(snapshot?["agentSource"]?["status"]) + ". Coverage may be incomplete.");
         if (receipts.Length == 0) Label("No handoff receipts available. Missing receipts are not zero usage.");

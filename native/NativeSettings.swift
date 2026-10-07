@@ -79,8 +79,7 @@ struct NativeSettings: View {
                 settingsSection("Configured workflows") {
                     VStack(alignment: .leading, spacing: 12) {
                         Toggle("Read configured agent receipts", isOn: binding("receipts")).disabled(!loaded || busy)
-                        Toggle("Read configured Ubuntu benchmarks", isOn: binding("benchmarks")).disabled(!loaded || busy)
-                        Text("Uses only paths and the SSH connection already configured in a legacy installation. Without that configuration, the source stays disconnected. Benchmark reads may connect to Ubuntu. These records stay local to this dashboard and are not shared through device pairing.")
+                        Text("Uses only the receipt path already configured in a legacy installation. Without that configuration, the source stays disconnected. These records stay local to this dashboard and are not shared through device pairing.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)
                         Text("Turning a workflow source off stops its reads and removes it from the current view. Original receipt files are not deleted.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)

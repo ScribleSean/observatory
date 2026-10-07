@@ -37,12 +37,12 @@ func testDirectPairingModel() async {
     precondition(subject.hosting && bridge.prepared == 1)
     subject.poll(); await settle(); precondition(subject.peerFingerprint != nil)
     subject.confirmHost(); await settle(); precondition(subject.peerFingerprint == nil)
+    precondition(bridge.requests.last?["includeUbuntu"] as? Bool == false)
     subject.shutdown(); subject.shutdown(); precondition(bridge.closed == 1)
-    // A joining Mac requests its own Mac configuration. Ubuntu scope is selected
-    // by the Windows host, even if this model previously held a host choice.
+    // New pairing requests include only native devices on either side.
     let joinBridge = PairingTestBridge()
     let joining = DirectPairingModel(bridge: joinBridge, polling: false)
-    joining.storageConsent = true; joining.includeUbuntu = true
+    joining.storageConsent = true
     joining.invitation = "observatory-pair:v1:synthetic-preview"
     joining.join(); await settle(); precondition(joining.joining)
     joining.finishJoining(); await settle()

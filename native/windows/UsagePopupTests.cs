@@ -31,6 +31,8 @@ internal static class UsagePopupTests
                 Check(controls.OfType<AllowanceMeter>().All(bar => bar.AccessibilityObject.Value?.Contains("remaining") == true), "Allowance values must be accessible.");
                 Check(popup.FormBorderStyle == FormBorderStyle.None, "Tray panel should not use a utility-window title bar.");
                 Check(!controls.OfType<ComboBox>().Any(), "Device navigation should not use a stock dropdown.");
+                Check(controls.OfType<Button>().Where(button => button.AccessibleRole == AccessibleRole.RadioButton)
+                    .Select(button => button.Text).SequenceEqual(new[] { "All", "Mac", "Windows" }), "Tray device filters still offer a retired source.");
                 Check(controls.OfType<Button>().All(button => button.FlatAppearance.BorderSize == 0), "Tray actions should not have outlined button frames.");
                 Check(controls.OfType<Button>().All(button => button is DashboardButton), "Tray actions use shared pill styling.");
                 Check(!controls.OfType<Label>().Any(label => label.Text.Contains("bengalfox")), "Retired allowance is visible.");
@@ -85,7 +87,7 @@ internal static class UsagePopupTests
                 pending = new TaskCompletionSource();
                 var failedRefresh = popup.RefreshAsync();
                 Descendants(popup).OfType<Button>().Single(button => button.Text == "All").PerformClick();
-                Check(Descendants(popup).OfType<Label>().Any(label => label.Text.Contains("Ubuntu contributes tokens only")), "Combined coverage is not explained.");
+                Check(Descendants(popup).OfType<Label>().Any(label => label.Text.Contains("All shows verified device totals.")), "Combined coverage is not explained.");
                 Check(!Descendants(popup).OfType<Button>().Single(button => button.Text == "Refreshing sources…").Enabled, "Host changes reenabled an active refresh.");
                 await popup.RefreshAsync();
                 Check(refreshed == 2, "An overlapping refresh invoked the callback.");
