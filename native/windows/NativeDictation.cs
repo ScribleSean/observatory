@@ -31,7 +31,8 @@ internal sealed partial class NativeDashboard
     private void Dictation(JsonObject? snapshot)
     {
         Label("Your voice usage over time, by tool and device.");
-        Choice("Tool", ["All tools", "Wispr Flow", "ChatGPT"], dictationProduct, value => { dictationProduct = value; dictationAnchor = ""; });
+        Label("ChatGPT voice tracking is not implemented. General ChatGPT screen time is not voice usage.");
+        Choice("Tool", ["All tools", "Wispr Flow"], dictationProduct, value => { dictationProduct = value; dictationAnchor = ""; });
         Choice("Device", ["All devices", "Mac", "Windows"], dictationHost, value => { dictationHost = value; dictationAnchor = ""; });
         Choice("Period", ["Day", "Week", "All retained"], dictationPeriod, value => dictationPeriod = value);
         var devices = dictationHost == "All devices" ? new[] { "Mac", "Windows" } : [dictationHost];
@@ -62,7 +63,7 @@ internal sealed partial class NativeDashboard
         Label("By tool and device");
         foreach (var row in selected)
             AddCard(new DashboardValueCard(row.source.product + " · " + row.source.device, [
-                ("Status", DictationStatus(row.source.status)),
+                ("Status", row.source.product == "ChatGPT" ? "Not implemented" : DictationStatus(row.source.status)),
                 ("Last checked", Snapshot.Text(row.source.source?["checkedAt"])),
                 ("Records", Snapshot.Format(NativeHistory.Sum(row.days, "transcriptions"))),
                 ("Words", DictationValue(row.days, "words", true)),
@@ -77,7 +78,6 @@ internal sealed partial class NativeDashboard
         else Table("Voice over time", ["Date", "Tool", "Device", "Records", "Words", "Audio time"], daily.Take(60));
         Label("Latest 60 tool/device rows shown. Totals cover the selected period. America/New_York dates. Missing dates are gaps, not zeros.");
         Label("More local speech detection coming soon.");
-        Label("ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage.");
         Label("Wispr recording metadata can include silence and unfinished records. Synced or imported histories can overlap, so device totals are not added together. Transcripts, recordings and credentials are excluded.");
     }
 }

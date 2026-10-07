@@ -82,9 +82,11 @@ struct NativeDictation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Your voice usage over time, by tool and device.").foregroundStyle(.secondary)
+            Text("ChatGPT voice tracking is not implemented. General ChatGPT screen time is not voice usage.")
+                .observatoryFont(.callout).foregroundStyle(.secondary)
             ObservatoryFilterRow(title: "Tool") {
-                ObservatorySegments(title: "Tool", labels: ["All tools", "Wispr Flow", "ChatGPT"],
-                    values: ["All tools", "Wispr Flow", "ChatGPT"], selection: $provider)
+                ObservatorySegments(title: "Tool", labels: ["All tools", "Wispr Flow"],
+                    values: ["All tools", "Wispr Flow"], selection: $provider)
                     .onChange(of: provider) { anchor = "" }
             }
             ObservatoryFilterRow(title: "Device") {
@@ -121,7 +123,6 @@ struct NativeDictation: View {
                 sourceSection(source)
             }
             Text("More local speech detection coming soon.").observatoryFont(.headline)
-            Text("ChatGPT voice tracking has not been verified. General ChatGPT screen time is not voice usage.")
             Text("Wispr recording metadata can include silence and unfinished records. Synced or imported histories can overlap, so device totals are not added together.")
             Text("America/New_York dates. Missing dates are gaps, not zeros. Transcripts, recordings and credentials are excluded.")
                 .observatoryFont(.callout).foregroundStyle(.secondary)
@@ -132,7 +133,7 @@ struct NativeDictation: View {
         let days = nativePeriodDays(source.days, period: period, anchor: end)
         return GroupBox(source.tool + " · " + source.host) {
             VStack(alignment: .leading, spacing: 10) {
-                ObservatoryValueRow("Status", value: dictationStatus(source.status))
+                ObservatoryValueRow("Status", value: source.tool == "ChatGPT" ? "Not implemented" : dictationStatus(source.status))
                 ObservatoryValueRow("Last checked", value: source.checkedAt)
                 ObservatoryValueRow("Records", value: formatted(recordedSum(days, field: "transcriptions")))
                 ObservatoryValueRow("Words", value: dictationValue(days, field: "words", wispr: true))
