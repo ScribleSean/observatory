@@ -5,7 +5,7 @@ namespace WorkspaceObservatory;
 internal static class LoginStartup
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "WorkspaceObservatory";
+    private static string ValueName => AppIdentity.Current.StartupName;
     private static string Executable => Path.Combine(AppContext.BaseDirectory, "WorkspaceObservatory.exe");
 
     internal static string Command(string executable)

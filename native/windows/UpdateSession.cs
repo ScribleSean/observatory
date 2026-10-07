@@ -8,15 +8,16 @@ internal sealed class UpdateSession : IDisposable
     private UpdateSession(InstallationGate gate) { this.gate = gate; }
 
     internal static UpdateSession Begin(TimeSpan timeout,
-        string setupName = InstallationGate.Name,
-        string singletonName = "Local\\WorkspaceObservatory",
-        string requestName = UpdateQuit.RequestName)
+        string? setupName = null,
+        string? singletonName = null,
+        string? requestName = null)
     {
         var gate = InstallationGate.TryEnter(setupName)
             ?? throw new IOException("Installation or command-line collection is busy. Retry the update later.");
         try
         {
-            var result = UpdateQuit.Request(singletonName, requestName, timeout);
+            var result = UpdateQuit.Request(singletonName ?? AppIdentity.Current.SingletonName,
+                requestName ?? AppIdentity.Current.QuitName, timeout);
             if (result != UpdateQuit.Result.Stopped)
                 throw new IOException(result == UpdateQuit.Result.Unsupported
                     ? "Quit the older application before updating."

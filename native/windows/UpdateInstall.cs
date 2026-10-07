@@ -10,7 +10,7 @@ internal static class UpdateInstall
         string candidateEnvelope, string pinnedKey, long previousBuild) => Run(
             () => UpdateActivation.Apply(installed, staged, previousReceipt, candidateEnvelope, pinnedKey, previousBuild),
             activated => UpdateReceiptStore.Persist(installed, candidateEnvelope, pinnedKey, previousBuild, activated.SourceRevision,
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Workspace Observatory")),
+                AppIdentity.Current.Runtime),
             activated => UpdateRelaunch.Start(installed, candidateEnvelope, pinnedKey, previousBuild, activated.SourceRevision));
 
     private static async Task<Result> Run(Func<Task<UpdateActivation.Result>> activate,

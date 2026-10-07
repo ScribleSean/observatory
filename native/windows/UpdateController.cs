@@ -27,6 +27,7 @@ internal sealed class UpdateController : IDisposable
         if (Environment.CurrentManagedThreadId != ownerThread)
             throw new InvalidOperationException("Update checks must start on the application thread.");
         ObjectDisposedException.ThrowIf(disposed, this);
+        if (AppIdentity.Current.IsTest) throw new IOException("Release updates are disabled for TEST installations.");
         if (checking) return;
         checking = true;
         try
