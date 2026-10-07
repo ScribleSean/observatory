@@ -2,15 +2,17 @@
 
 # Observatory guide
 
-A native Mac and Windows dashboard for workspace activity, AI usage and dictation, with a Mac menu-bar panel and Windows system-tray panel. Supported sources and platform gaps are listed in [source coverage](SOURCE-COVERAGE.md).
+Observatory is Sean's personal native Mac and Windows app for workspace activity, AI usage and dictation, with a Mac menu-bar panel and Windows system-tray panel. It is built in public, but consumer onboarding and hosted services are not the goal. Supported sources and platform gaps are listed in [source coverage](SOURCE-COVERAGE.md).
 
-[Try the interactive demo](https://scriblesean.github.io/observatory/). It uses the same interface with 14 days of fictional records. No personal activity, account data or connected devices are included.
+Current work is native collection reliability and the remaining UI fixes. WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. Older builds and snapshots may still expose those choices. Do not use them for new setup. This guide does not claim that their implementation has been removed. See [product direction](PRODUCT-DIRECTION.md) and the [roadmap](ROADMAP.md).
 
 The app runs on your computer. It does not send usage records to a hosted service or make model requests.
 
+Desktop version and build identity come from `native/Release.props`. The private npm package version in `package.json` identifies the web build workspace, not an installed desktop release. Changing source files does not update an installed app or justify relabeling an existing package.
+
 ## Native app setup
 
-The native apps are the intended everyday entry point. Public installers are not yet available. For development builds, follow the [Mac build guide](MAC.md#building-the-candidate) or [Windows build guide](WINDOWS.md#build-on-windows). These require developer tools. To explore without building or connecting sources, use the hosted demo above.
+The native apps are the everyday entry point. For development builds, follow the [Mac build guide](MAC.md#building-the-candidate) or [Windows build guide](WINDOWS.md#build-on-windows). These require developer tools. Package safety and recoverable installation still matter for personal use. Public installer distribution is not current work.
 
 1. Launch the native app and complete the first-run wizard. Fresh installations keep sources off until you choose them and complete setup.
 2. For screen time, install and run [ActivityWatch](https://activitywatch.net/) separately on each device you want to track, then enable its source in Observatory. Missing readings remain Unknown. You can use Tokens and Allowances independently.
@@ -27,18 +29,20 @@ Observatory opens Allowances, the usage-limit overview. Activity is a separate s
 | View | Records |
 | --- | --- |
 | Activity | Time spent in app categories and recognized apps on Mac and Windows, excluding away time |
-| Tokens | Daily Codex token counts from Mac, Ubuntu and configured native Windows logs, including cached input |
+| Tokens | Daily Codex token counts from configured native Mac and Windows logs, including cached input |
 | Agents | Available agent receipts, saved local-model benchmarks and partial Codex tool-call counts |
 | Dictation | Voice usage by tool and device, with Wispr recording metadata and explicit coverage |
 | Source health | Which sources were read and which measurements are still missing |
 
-Activity offers daily and weekly timelines and a combined Mac and Windows total. Overlapping intervals count once. Simultaneous activity in different categories is labeled Device overlap, since foreground records cannot establish which device had your attention. Tokens offers All, Mac, Ubuntu and Windows sources with Day, Week and All time periods. The All-host total is available only after successful reads and a cross-host session overlap check.
+Activity offers daily and weekly timelines and a combined Mac and Windows total. Overlapping intervals count once. Simultaneous activity in different categories is labeled Device overlap, since foreground records cannot establish which device had your attention. Tokens has Day, Week and All time periods. Use the native Mac and Windows sources for current collection. Historical snapshots can retain Ubuntu rows. The All-host total is available only after successful reads and a cross-host session overlap check.
 
-This is an early prototype tested on one Mac, Windows and WSL setup. Optional adapters read current Codex limits, saved Claude Code counters, Mac Antigravity allowances, saved reasoning and speed settings, tool-call categories and local benchmark receipts. Claude counters appear by device in Source health, separate from the Codex token chart. Antigravity allowance monitoring uses the installed CLI's non-model usage command on Mac. Windows execution is unsupported.
+Earlier checks used one Mac, Windows and WSL development setup. Those are historical results, not verification of the native-only scope or the latest installed apps. Optional adapters read Codex limits, saved Claude Code counters, Mac Antigravity allowances, saved reasoning and speed settings, tool-call categories and local benchmark receipts. Claude counters appear by device in Source health, separate from the Codex token chart. Antigravity allowance monitoring uses the installed CLI's non-model usage command on Mac. Windows execution is unsupported.
 
 Configured agent receipt files are a separate source from allowance monitoring. Observatory does not capture every terminal command, iPhone activity or Gemini website usage. [Source coverage](SOURCE-COVERAGE.md) explains each adapter's supported records and gaps.
 
-## Try the demo
+## Fictional UI fixture
+
+The [interactive demo](https://scriblesean.github.io/observatory/) uses the web interface with 14 days of fictional records. It is a development fixture, not the main app or a place to connect devices. No personal activity or account data is included. Use a separate checkout for a local fixture.
 
 Select Activity to explore recorded screen time. Day has previous/next controls. Week shows seven dated rows ending on the selected date, with three-hour bands and daily totals. Hover or select a band for details. Select a date to open that day. Missing tracking records are muted, distinct from recorded idle time. All time totals retained daily summaries and lets you open a retained date. Retention starts with the available rolling window and keeps up to 3,650 dates per view, not the complete ActivityWatch archive. Broader reads replace partial days without adding duplicate totals. Failed source reads preserve prior summaries and show their last successful timestamp. Combined history is retained independently, never reconstructed by adding device totals.
 
@@ -75,21 +79,11 @@ ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCount
 
 Open `http://127.0.0.1:5601` on the viewing computer. The host, local server and SSH tunnel must remain running. This is not automatic startup. Stop the tunnel with Ctrl+C. Keep the remote listener restricted to loopback and verify your SSH server permits this forwarding. Do not expose this unauthenticated dashboard to a public or shared network.
 
-The legacy hub collector runs on macOS. It expects ActivityWatch on the Mac and Windows PC, ccusage on the Mac and Ubuntu, and working SSH aliases for Windows and Ubuntu.
+The historical Mac hub used SSH and ccusage reports, including Ubuntu reads and a WSL route to native Windows logs. That route is no longer a setup recommendation. Native Windows logs should be read by the Windows app. Do not copy legacy hub examples into a new setup or restart WSL to recover an old source.
 
-For native Windows tokens, optionally set `windowsCodexHome` to the Windows Codex directory as seen from WSL, such as `/mnt/c/Users/YOUR_USER/.codex`. The installed Ubuntu reader processes those logs separately from Ubuntu logs. Only aggregate reports return to the dashboard. This uses ccusage's documented [Codex data directory override](https://github.com/ccusage/ccusage/blob/main/docs/guide/codex/index.md). Host reports stay individually available. All requires a successful cross-host overlap check.
+Preserve existing private settings and saved snapshots until a tested migration can retain supported Mac/Windows records and retire obsolete source choices. Existing SSH aliases and provider credentials stay with their owning tools. [Legacy Mac migration](MAC-MIGRATION.md) retains the compatibility assessment, not authorization to resume Ubuntu tracking.
 
-Copy `local.config.example.json` to `local.config.json`. Set the executable paths, SSH aliases and receipt directory for your machines. Keep credentials in your existing SSH and provider settings.
-
-The settings and local-model adapters use Python 3.9 or later on the reader's machine. Configure only the optional sources you want. `codexExecutable` enables the read-only Codex limit check. `macCodexHome`, `ubuntuCodexHome` and `windowsCodexHome` enable saved settings and tool metadata. `localModelResults` points to a benchmark directory containing run subdirectories and `*.metrics.json` files. These readers do not run inference.
-
-```sh
-npm run collect
-```
-
-The collector replaces the dashboard snapshot atomically. The page checks for a newer snapshot every 30 seconds while visible, and when it becomes visible again. **Reload snapshot** checks immediately. None of these browser actions starts collection or model tasks. You do not need to rebuild after collecting new records.
-
-Collection is manual by default. The optional [login collector](STARTUP.md) runs every five minutes while the hosting Mac is awake and logged in. An operating-system file lock prevents overlapping runs. Each run has a four-minute limit. Stale timestamps and unsuccessful attempts are visible in the dashboard. ActivityWatch continues recording independently.
+The browser checks for a newer snapshot every 30 seconds while visible, and when it becomes visible again. **Reload snapshot** checks immediately. None of these browser actions starts collection or model tasks. You do not need to rebuild after collecting new records. ActivityWatch records independently of this viewer.
 
 ## How to read the numbers
 
@@ -119,7 +113,7 @@ The Dictation view defaults to all tools and devices. Wispr is the supported rec
 "dictation": { "mac": true, "windows": true }
 ```
 
-Wispr reads `flow.sqlite` from Application Support on Mac and AppData/Roaming on Windows. Windows uses its native `py -3` runtime through the Windows SSH connection to avoid WSL shared-memory locking errors. Read-only SQLite authorizes only History timestamp, duration and numWords columns. No transcript or audio content is fetched. Dates use America/New_York, which requires Python timezone data on each reader. Missing numeric metadata has explicit record coverage and is never presented as a confirmed zero.
+Wispr reads `flow.sqlite` from Application Support on Mac and AppData/Roaming on Windows. The legacy Windows reader uses its native `py -3` runtime through the Windows SSH connection. Read-only SQLite authorizes only History timestamp, duration and numWords columns. No transcript or audio content is fetched. Dates use America/New_York, which requires Python timezone data on each reader. Missing numeric metadata has explicit record coverage and is never presented as a confirmed zero.
 
 Only dates, transcription counts, word counts and recorded audio duration enter the dashboard. App names, custom model names, transcripts, recordings and credentials are excluded. A missing, invalid or unsupported store reports unknown usage, not zero. Dates use America/New_York.
 
@@ -131,11 +125,11 @@ Wispr counts retained history rows, including unfinished or failed entries when 
 
 The native app requires an Apple Silicon Mac running macOS 14 or later. It uses a SwiftUI main window and menu-bar panel. WebKit is an explicit legacy fallback, not the default detail view. Follow the [Mac build guide](MAC.md#building-the-candidate) for runtime preparation, build commands and verification limits.
 
-With an existing ignored `local.config.json`, `node native/install.mjs --install` installs into the current user's Applications folder and enables launch at login. It copies collectors and private configuration into `Library/Application Support/Workspace Observatory`, outside the source checkout. It backs up the old collector login job before disabling it. Existing web-server and tunnel jobs are left unchanged for compatibility.
+Earlier source installations used `node native/install.mjs --install` with an ignored `local.config.json`. That path copied collectors and private configuration into `Library/Application Support/Workspace Observatory`, installed into the current user's Applications folder and enabled login startup. It backed up the old collector login job before disabling it, while retaining web-server and tunnel jobs. This is compatibility context, not a recommendation to replay an old hub configuration. Follow the platform guide and [guarded replacement procedures](UPDATES.md) before changing an installed app.
 
 Click the telescope menu-bar icon for a compact summary. Open Observatory shows the full detail window. Closing that window leaves the menu-bar app running. The app refreshes every five minutes while the Mac is awake and logged in, retries after wake, and preserves the preceding snapshot if a collection fails. Individual unavailable sources are labeled rather than filled with zeros. Remote reads in an existing legacy hub still require its configured SSH hosts and tools.
 
-The panel's All option uses the collector's overlap-aware Mac and Windows active time and verified Mac, Windows and Ubuntu token totals. WSL activity is part of Windows screen time, not an extra desktop to add. Dictation remains per device because synced history may overlap. Missing or unverified combined totals stay unavailable.
+The panel's All option requires collector-verified combined totals. Historical token snapshots may include Ubuntu. They do not prove the native-only source selection has been implemented or verified. Dictation remains per device because synced history may overlap. Missing or unverified combined totals stay unavailable.
 
 Right-click the icon to change Launch at login or quit. This is a locally ad-hoc-signed build, not a notarized distributable or an automatic-update system. ActivityWatch remains a separate collector and is not uninstalled by this app.
 
@@ -157,6 +151,6 @@ The design draws on [lnkiai/m3e-canvas](https://github.com/lnkiai/m3e-canvas), i
 
 With the local dashboard running, `npm run test:server` checks request restrictions without reading or printing your usage records.
 
-Reproducible bugs, adapter improvements and accessibility fixes are welcome. Use synthetic examples in issues and pull requests. Do not attach personal usage records, transcripts or account details.
+Keep changes focused on the native personal workflow, reliable collection and unresolved UI issues. Use synthetic examples in issues and pull requests. Do not attach personal usage records, transcripts or account details. iPhone integration and Hermes `/usage` integration are deferred under [product direction](PRODUCT-DIRECTION.md#deferred-integrations), not current setup options.
 
 The project uses the [MIT license](../LICENSE). See [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) for dependency attribution.

@@ -1,6 +1,12 @@
 # Provider coverage handoff
 
-Updated September 26, 2026 UTC. [PR #2](https://github.com/ScribleSean/observatory/pull/2) added local Claude coverage. [PR #3](https://github.com/ScribleSean/observatory/pull/3) fixed unreadable-directory undercounts and merged at `eb01aa0`. [PR #4](https://github.com/ScribleSean/observatory/pull/4) integrated provider sharing, optional Antigravity allowances and corrected provider health accounting at `143bf69be01a94b3bd8dc11d32bf122ddf5654d8`. Both development apps now run build 35, Mac from `ced669854940f5892570a6a7a8feb1689b903b80` and Windows from `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`. Windows installation and readiness are accepted. Local scheduled Claude acceptance passed at 22:50 UTC. Claude sharing remains off on both devices.
+Current priorities follow the [personal-native scope](PRODUCT-DIRECTION.md) and [roadmap](ROADMAP.md): reliable Mac/Windows collection and unresolved native UI checks. WSL and Ubuntu tracking are out of scope. Broad provider expansion and consumer release work are not the immediate task.
+
+## Historical provider record
+
+The implementation and verification sections below retain the September 26, 2026 UTC handoff. They are not a new check of source, packages or installed apps.
+
+[PR #2](https://github.com/ScribleSean/observatory/pull/2) added local Claude coverage. [PR #3](https://github.com/ScribleSean/observatory/pull/3) fixed unreadable-directory undercounts and merged at `eb01aa0`. [PR #4](https://github.com/ScribleSean/observatory/pull/4) integrated provider sharing, optional Antigravity allowances and corrected provider health accounting at `143bf69be01a94b3bd8dc11d32bf122ddf5654d8`. At that check, both development apps ran build 35, Mac from `ced669854940f5892570a6a7a8feb1689b903b80` and Windows from `7c7ae25541b8b6cc3c2529b6de5fc67de0f656a8`. Windows installation and readiness were accepted. Local scheduled Claude acceptance passed at 22:50 UTC. Claude sharing remained off on both devices.
 
 ## Outcome and ownership
 
@@ -33,14 +39,16 @@ The later [Windows allowance helper and collector integration](RELEASE-0.3.13.md
 
 The [build 34 release evidence](RELEASE-0.3.13.md#build-34-integration-september-26-utc) is the canonical dated record for source checks, package and installation pins, scheduled verification, PR merges and the Windows fixture failure and corrected run. Earlier build 32 and 33 evidence remains scoped to those revisions. Source, package, installed and live verification remain separate.
 
-## Exact next actions
+## Current continuation rules
 
-1. Keep personal snapshots and credentials out of Git and public demo artifacts. Integrate only reviewed source and publish checkpoints for continuation.
-2. Retain current protected recovery and older recovery evidence. Preserve installed Mac source `ced6698` and Windows source `7c7ae25` separately. Do not relabel artifacts or modify installed bundles in place.
+1. Keep personal snapshots and credentials out of Git and demo artifacts. Integrate only reviewed source. This handoff does not authorize publication.
+2. Retain protected recovery and older recovery evidence. Preserve the recorded Mac source `ced6698` and Windows source `7c7ae25` as separate historical pins. Read back the actual installed targets before maintenance. Do not relabel artifacts or modify installed bundles in place.
 3. Preserve the separate installation and scheduled local-Claude evidence. Complete the remaining bounded UI checks without treating observed controls as full visual or accessibility acceptance.
-4. Preserve existing WSL workloads. Any needed Ubuntu recovery requires an approved safe procedure. On September 25, Ubuntu was running but even a harmless WSL command failed with `Wsl/Service/E_UNEXPECTED`. No workload was terminated. Mac and Windows records remained readable, while combined tokens were correctly withheld.
-5. Verify optional Claude sharing with both devices, including disable, stale-peer and reconnect behavior. Combined Claude totals remain unavailable until complete request-identity overlap evidence is implemented and verified.
-6. Inspect a supported Cursor export before choosing a reconciliation rule. ChatGPT token coverage remains unknown. Complete Windows collector integration and installed verification before enabling Antigravity execution there. A subscription, app presence or selected model is not proof of a token export or API entitlement. See [source coverage](SOURCE-COVERAGE.md).
-7. Continue the remaining [audit acceptance](AUDIT-STATUS.md): native visual consistency, motion and accessibility, installed failure recovery, signing, update feeds and clean-machine verification. Do not repeat already completed audit repairs or treat source tests as installed UI acceptance.
+4. Retire WSL and Ubuntu tracking without stopping unrelated workloads or deleting original records. Do not attempt Ubuntu recovery to restore historical coverage. Verify the native-only collection and comparison scope separately.
+5. If Claude sharing is needed, verify consent on both devices plus disable, stale-peer and reconnect behavior. Combined Claude totals remain unavailable until complete request-identity overlap evidence is implemented and verified.
+6. Defer new provider work unless it serves a concrete personal need. A Cursor importer still needs an inspected supported export and reconciliation rule. ChatGPT token coverage remains unknown. Windows Antigravity execution still needs collector integration and installed verification before enabling it. A subscription, app presence or selected model is not proof of usage access. See [source coverage](SOURCE-COVERAGE.md).
+7. Continue the unresolved native visual, motion, accessibility and installed failure/recovery [audit acceptance](AUDIT-STATUS.md). Do not repeat completed repairs or treat source tests as installed UI acceptance. Preserve signing, update-integrity and clean-machine gates without making consumer distribution the priority.
+
+Historical WSL incident: on September 25, Ubuntu was running but even a harmless WSL command failed with `Wsl/Service/E_UNEXPECTED`. No workload was terminated. Mac and Windows records remained readable, while combined tokens were correctly withheld. This record is retained as evidence, not a recovery task.
 
 The design direction remains Mono Charts, Apple and Hart. Prefer fewer visible controls and explanations, one restrained accent and honest gaps. Accuracy, efficient scans and preserved records take priority over decorative changes.

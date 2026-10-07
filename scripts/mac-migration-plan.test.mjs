@@ -9,8 +9,10 @@ const config={macCodexHome:home+'/.codex',windowsHost:'private-windows',ubuntuHo
   codexExecutable:'/private/client',receiptDirectory:'/private/receipts',localModelResults:'/private/models',dictation:{mac:true,windows:true}};
 test('mapping preserves selected sources but never claims migration is ready',()=>{
   const plan=planLegacyMacSources(config,home);
-  assert.equal(plan.status,'review-required');assert.ok(Object.values(plan.sources).every(Boolean));
-  assert.deepEqual(plan.coverageChanges,[]);
+  assert.equal(plan.status,'review-required');assert.equal(plan.sources.benchmarks,false);
+  for(const key of ['activity','codex','wispr','quota','receipts'])assert.equal(plan.sources[key],true);
+  assert.deepEqual(plan.remoteHosts,['Windows']);
+  assert.deepEqual(plan.coverageChanges,['ubuntu-source-retired']);
   assert.ok(plan.requiredChecks.includes('saved-history-archive-and-visibility'));
   assert.ok(!JSON.stringify(plan).includes('private'));assert.ok(!JSON.stringify(plan).includes(home));
 });
@@ -21,7 +23,7 @@ test('optional absent sources stay disabled and custom log locations block autom
 });
 test('invalid source choices cannot become an executable migration plan',()=>{
   const plan=planLegacyMacSources({...config,receiptDirectory:42,dictation:{mac:'yes'},ubuntuHost:'bad;command'},home);
-  assert.equal(plan.status,'unsupported');assert.equal(plan.blockers.length,3);
+  assert.equal(plan.status,'unsupported');assert.equal(plan.blockers.length,2);
 });
 test('assessment leaves configuration bytes and directory inventory unchanged',async t=>{
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-migration-plan-')));

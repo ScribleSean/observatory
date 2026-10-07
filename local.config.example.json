@@ -1,13 +1,8 @@
 {
   "macCcusage": "/absolute/path/to/ccusage",
-  "ubuntuCcusage": "/absolute/path/to/ccusage",
-  "ubuntuHost": "your-ubuntu-ssh-alias",
   "windowsHost": "your-windows-ssh-alias",
-  "windowsCodexHome": "/mnt/c/Users/YOUR_USER/.codex",
   "macCodexHome": "/Users/YOUR_USER/.codex",
-  "ubuntuCodexHome": "/home/YOUR_USER/.codex",
   "codexExecutable": "/absolute/path/to/codex",
-  "localModelResults": "/home/YOUR_USER/local-model-lab/results/raw",
   "receiptDirectory": "/absolute/path/to/review-receipts",
   "dictation": { "mac": false, "windows": false }
 }

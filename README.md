@@ -1,15 +1,17 @@
 <div align="center">
   <img src="public/favicon.svg" width="80" height="80" alt="Observatory telescope">
   <h1>Observatory</h1>
-  <p>Screen time and AI usage across your devices.</p>
+  <p>Sean's local screen-time and AI-usage app for Windows and Mac.</p>
   <p>
-    <a href="https://scriblesean.github.io/observatory/">Explore the demo</a>
+    <a href="docs/PRODUCT-DIRECTION.md">Personal app scope</a>
     &nbsp; · &nbsp;
     <a href="docs/GUIDE.md#development">Build from source</a>
     &nbsp; · &nbsp;
     <a href="docs/ROADMAP.md">Roadmap</a>
   </p>
 </div>
+
+Observatory is an app Sean is building in public for his own use. The source stays public. The priority is dependable collection and a usable native Windows application and tray panel, plus a Mac application and menu-bar panel. It is not being developed as a consumer product or hosted service.
 
 ## What it shows
 
@@ -31,32 +33,35 @@ Missing data stays missing. Estimates stay labeled. Token counts are not subscri
 
 ## Data and privacy
 
-The first release uses [direct device pairing](docs/PAIRING-MAINTENANCE.md), without an Observatory account or hosted sync service. The current pairing flow requires an existing verified SSH connection. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Optional Codex allowance-history and per-device Claude usage sharing have separate consent controls. Both are tested with fictional records, remain unverified on the installed development pair, and are off there.
+Optional [device pairing](docs/PAIRING-MAINTENANCE.md) reuses an existing verified SSH connection, without an Observatory account or hosted sync service. It shares supported sanitized records, not provider credentials, prompts, window titles, transcripts or recordings. Codex allowance-history and per-device Claude usage sharing require separate consent. Historical synthetic checks do not establish that either is enabled or verified on the installed pair.
 
-Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Recent allowance graphs use a bounded snapshot. Development builds include an owner-local saved-history browser with usage-% charts and no automatic archive expiry. Public installers are not yet available. See [history coverage and recovery](docs/USAGE-LIMITS.md).
+Saved history can be displayed again after a UI repair, but observations that were never recorded cannot be reconstructed. Recent allowance graphs use a bounded snapshot. Development builds include an owner-local saved-history browser with usage-% charts and no automatic archive expiry. See [history coverage and recovery](docs/USAGE-LIMITS.md).
 
-## Try it
+## Native development and daily use
 
-**[Open the interactive demo](https://scriblesean.github.io/observatory/)** to explore fictional records without connecting any accounts or devices.
+Use the native apps for collection and daily viewing. Source builds require developer tools. The platform guides retain revision-specific package and installation evidence, not a claim that the latest source is installed or newly verified.
 
-The project is an early preview tested on one Mac, Windows and WSL setup. Native development apps are installed on the Mac and Windows test machines. **Public installers are being prepared, not yet available.** See the [current verification and candidate limitations](docs/RELEASE-0.3.13.md).
-
-| Platform | Current status |
+| Platform | Development guide |
 | --- | --- |
-| macOS, Apple Silicon | [Build the native app from source](docs/MAC.md). Development candidates bundle Node and Python. No public installer yet. |
-| Windows x64 | [Build the native app from source](docs/WINDOWS.md). Installer candidates have been tested on the development machine. No public installer yet. |
-| Ubuntu / WSL | Configured token and workflow sources. Standalone desktop app planned. |
+| Windows x64 | [Windows app and tray](docs/WINDOWS.md), including local builds and guarded package replacement. |
+| macOS, Apple Silicon | [Mac app and menu bar](docs/MAC.md), including bundled runtimes and preview checks. |
 
-For now, choose the hosted demo or build from source using the platform guides above. Building requires developer tools. The download-and-install path is not available yet.
+WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. Older builds and dated evidence may still include those sources. This scope decision does not claim their code has been removed or authorize changing a WSL installation or its records.
 
-Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Provider account management, unified allowance history and clean-machine release verification are still in progress. Read the [setup guide](docs/GUIDE.md) and [integration coverage](docs/SOURCE-COVERAGE.md) before connecting records.
+Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Read the [setup guide](docs/GUIDE.md) and [source coverage](docs/SOURCE-COVERAGE.md) before connecting records. Fixing the remaining native UI issues and making local collection reliable come before adding providers or new setup flows. The [roadmap](docs/ROADMAP.md) lists the acceptance work.
 
-Automatic app updates are not available yet. Changes pushed to this repository do not update an installed app. See [desktop updates](docs/UPDATES.md) for the signing, installation and recovery work required before enabling them.
+Changes pushed to this repository do not update an installed app. Automatic app updates are not available. Public installers and consumer onboarding are not current goals. Package integrity, privacy checks and recoverable updates still matter for personal use. See [desktop updates](docs/UPDATES.md) and the [dated release evidence](docs/RELEASE-0.3.13.md).
+
+## Development fixture and later integrations
+
+The [interactive demo](https://scriblesean.github.io/observatory/) uses fictional records. It remains a UI development fixture, not the product focus or a place to upload personal data.
+
+iPhone integration and integration with Hermes `/usage` commands are later work. iPhone support depends on supported OS permissions and data access. Hermes integration should reuse supported commands or adapters, not require a Hermes core fork. Neither is implemented by this scope change.
 
 ## Go deeper
 
 [Product direction](docs/PRODUCT-DIRECTION.md) · [Usage limits](docs/USAGE-LIMITS.md) · [Tracking reuse](docs/TRACKING-REUSE.md) · [Private sync](docs/PRIVATE-SYNC.md) · [Security](SECURITY.md) · [Roadmap](docs/ROADMAP.md)
 
-Contributions are welcome, especially reproducible bugs, tested adapters and accessibility improvements. Use synthetic examples. Never attach private usage records or account details.
+Reproducible bugs and small fixes to Sean's native workflow are useful. Use synthetic examples. Never attach private usage records or account details. This scope change does not authorize a release or publication of local data.
 
 [MIT license](LICENSE) · [Third-party acknowledgments](THIRD-PARTY-NOTICES.md)

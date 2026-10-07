@@ -1,9 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {retainActivityHistory,previousActivityHistory,activityTrackingHealth} from './activity-history.mjs';
-import {mkdtemp,writeFile,symlink,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileSymlinkOrSkip} from './test-file-symlink.mjs';
 const day=(date,seconds)=>({date,seconds,hours:Array(24).fill(seconds/24),categories:{Editors:seconds},apps:{Editors:{'VS Code':seconds}},trackedSeconds:seconds,trackedHours:Array(24).fill(seconds/24)});
 const source=(host,start,end,days)=>({host,status:'ok',start,end,days});
 const at='2026-09-08T16:00:00Z';
@@ -56,7 +57,7 @@ test('retention is bounded, sorted and strips unexpected fields',()=>{
   assert.equal(kept.find(r=>r.host==='Mac').days.length,1);
   assert.ok(!JSON.stringify(kept).includes('PRIVATE'));
 });
-test('previous snapshot migration and safe file boundaries',async()=>{
+test('previous snapshot migration, missing files, directories and malformed files',async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'activity-history-'));
   try {
     const file=path.join(dir,'usage.json');
@@ -66,11 +67,17 @@ test('previous snapshot migration and safe file boundaries',async()=>{
     assert.equal(migrated.find(r=>r.host==='Mac').days[0].seconds,300);
     await writeFile(file,JSON.stringify({activityHistory:migrated}));
     assert.deepEqual(await previousActivityHistory(file),migrated);
-    const link=path.join(dir,'link.json');
-    await symlink(file,link);
-    await assert.rejects(previousActivityHistory(link));
     await assert.rejects(previousActivityHistory(dir));
     await writeFile(file,'malformed');
     await assert.rejects(previousActivityHistory(file));
+  } finally {await rm(dir,{recursive:true,force:true});}
+});
+test('previous snapshot rejects file symlinks',async t=>{
+  const dir=await mkdtemp(path.join(tmpdir(),'activity-history-'));
+  try {
+    const file=path.join(dir,'usage.json'),link=path.join(dir,'link.json');
+    await writeFile(file,JSON.stringify({activityHistory:[]}));
+    if(!await fileSymlinkOrSkip(t,file,link))return;
+    await assert.rejects(previousActivityHistory(link));
   } finally {await rm(dir,{recursive:true,force:true});}
 });

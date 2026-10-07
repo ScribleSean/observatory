@@ -14,7 +14,7 @@ This follows a September 12 development-machine diagnosis where the legacy colle
 
 `scripts/mac-migration-plan.mjs --runtime ABSOLUTE_RUNTIME` reports source switches, fixed review codes and coverage changes. It does not create a native configuration, connect devices, alter account state or move history. Its output omits private paths and SSH aliases. An existing native configuration is reported separately and is never replaced.
 
-The mapping preserves enabled Mac dictation sources, the explicit account-client selection, configured receipt reads and configured benchmark reads. Custom Mac Codex log locations require separate support rather than silently switching to the default location. Legacy Windows and Ubuntu collection requires equivalent paired source scope before migration.
+The mapping preserves enabled Mac dictation, the explicit account-client selection and configured receipt reads. It leaves benchmark reads disabled and maps only Windows as a paired source. Ubuntu collection is retired. Assessment does not change existing configuration, benchmark records or saved Ubuntu observations. Custom Mac Codex log locations require separate support rather than silently switching to the default location.
 
 ## Gates before activation
 
