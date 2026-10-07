@@ -6,7 +6,7 @@ internal sealed record DashboardAppearancePreferences(Func<bool> Read, Action<bo
 
 internal static class DashboardWindowPreferences
 {
-    private const string Key = @"Software\Observatory\Dashboard";
+    private static string Key => AppIdentity.Current.IsTest ? @"Software\WorkspaceObservatoryInstallerTest\Dashboard" : @"Software\Observatory\Dashboard";
 
     internal static DashboardAppearancePreferences Appearance => new(ReadLightMode, WriteLightMode);
 

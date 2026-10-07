@@ -19,7 +19,7 @@ if ($null -ne $run.GetValue($startupName)) { $run.Dispose(); throw 'Test startup
 if ((Test-Path -LiteralPath $install) -or (Test-Path -LiteralPath $shortcuts)) { throw 'Test install or shortcut folder already exists. Inspect it first.' }
 $work = Join-Path $env:LOCALAPPDATA ('WorkspaceObservatoryBuild\installer-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
-$data = Join-Path $env:LOCALAPPDATA 'Workspace Observatory'
+$data = Join-Path $env:LOCALAPPDATA $appName
 $createdData = -not (Test-Path -LiteralPath $data)
 if ($createdData) { New-Item -ItemType Directory -Path $data | Out-Null }
 if ((Get-Item -LiteralPath $data).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Do not test through a linked saved-data directory.' }
@@ -56,9 +56,9 @@ function Invoke-TestUninstall([int]$Expected = 0) {
 }
 
 try {
-    # Running-app refusal is isolated to this SSH/test session's local mutex.
+    # The TEST singleton is distinct from both ordinary IPC and the setup lock.
     $first = $false
-    $mutex = New-Object System.Threading.Mutex($true, 'Local\WorkspaceObservatory', [ref]$first)
+    $mutex = New-Object System.Threading.Mutex($true, 'Local\WorkspaceObservatoryInstallerTest.App', [ref]$first)
     try {
         Check $first 'An Observatory app is already running in this test session.'
         Invoke-CheckedProcess $InstallerPath '/S' 10

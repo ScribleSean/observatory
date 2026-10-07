@@ -8,17 +8,30 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (!LaunchArguments.Valid(args)) { Environment.ExitCode = 64; return; }
+        try { _ = AppIdentity.Current; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { Environment.ExitCode = 64; return; }
+        if (AppIdentity.Current.IsTest && !LaunchArguments.ValidForTestInstallation(args))
+        { Environment.ExitCode = 64; return; }
+        if (args.SequenceEqual(new[] { "--test-launch-isolation" }))
+        {
+            try { LaunchIsolationTests.Run(); }
+            catch { Environment.ExitCode = 1; }
+            return;
+        }
+        if (args.Length > 0 && args[0] is "--test-antigravity-process" or "--test-antigravity-runner")
+        {
+            Environment.ExitCode = AntigravityUsageProcessTests.Command(args).GetAwaiter().GetResult();
+            return;
+        }
         if (args.Contains("--antigravity-usage"))
         {
             Environment.ExitCode = args.Length == 2 && args[0] == "--antigravity-usage"
                 ? AntigravityUsageProcess.Command(args[1]).GetAwaiter().GetResult() : 64;
             return;
         }
-        if (args.Any(argument => argument.StartsWith("--test-antigravity-", StringComparison.Ordinal)))
-        {
-            Environment.ExitCode = AntigravityUsageProcessTests.Command(args).GetAwaiter().GetResult();
-            return;
-        }
+
         if (args.Contains("--test-update-trust"))
         {
             if (args.Length != 2 || args[0] != "--test-update-trust") { Environment.ExitCode = 64; return; }
@@ -143,7 +156,7 @@ internal static class Program
             {
                 var result = UpdateInstall.ApplyAndRelaunch(args[1], args[2], args[3], args[4], args[5], previousBuild).GetAwaiter().GetResult();
                 if (!result.LaunchConfirmed) throw new IOException("Updated application launch was not confirmed.");
-                if (UpdateQuit.Request("Local\\WorkspaceObservatory", UpdateQuit.RequestName, TimeSpan.FromSeconds(30)) != UpdateQuit.Result.Stopped)
+                if (UpdateQuit.Request(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, TimeSpan.FromSeconds(30)) != UpdateQuit.Result.Stopped)
                     throw new IOException("Updated application did not quit normally.");
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "installed-relaunched-and-stopped", result.SourceRevision, result.Recovery }));
             }
@@ -236,7 +249,7 @@ internal static class Program
             if (args.Length != 1) { Environment.ExitCode = 64; return; }
             try
             {
-                var result = UpdateQuit.Request("Local\\WorkspaceObservatory", UpdateQuit.RequestName, TimeSpan.FromSeconds(270));
+                var result = UpdateQuit.Request(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, TimeSpan.FromSeconds(270));
                 Environment.ExitCode = result == UpdateQuit.Result.Stopped ? 0 : result == UpdateQuit.Result.Unsupported ? 2 : 3;
             }
             catch { Environment.ExitCode = 1; }
@@ -286,6 +299,7 @@ internal static class Program
         {
             try
             {
+                LaunchIsolationTests.Run();
                 SourceRetirementTests.Run();
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
@@ -392,17 +406,17 @@ internal static class Program
             Environment.ExitCode = 1;
             return;
         }
-        using var singleton = new Mutex(true, "Local\\WorkspaceObservatory", out var first);
+        using var singleton = new Mutex(true, AppIdentity.Current.SingletonName, out var first);
         // The singleton now prevents an installer from modifying this process's
         // files. Release the startup gate so existing-instance activation works.
         installationGate.Dispose();
-        using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\WorkspaceObservatory.Open");
+        using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.ActivationName);
         if (!first)
         {
             if (!args.Contains("--background")) activation.Set();
             return;
         }
-        using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, UpdateQuit.RequestName);
+        using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
         var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit);
         EventHandler? readyHandler = null;
         if (updateReady is not null)
@@ -424,7 +438,7 @@ internal static class Program
 
 internal sealed class ObservatoryContext : ApplicationContext
 {
-    private readonly string runtime = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Workspace Observatory");
+    private readonly string runtime = AppIdentity.Current.Runtime;
     private readonly NotifyIcon tray;
     private readonly Collector collector;
     private readonly PowerResumeWindow powerNotifications;

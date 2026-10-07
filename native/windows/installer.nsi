@@ -53,7 +53,7 @@ Function ${PREFIX}NoLinkedPath
 FunctionEnd
 
 Function ${PREFIX}CheckRunning
-  System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\WorkspaceObservatory") p .r0'
+  System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "Local\${APP_ID}") p .r0'
   IntPtrCmp $0 0 not_running
     System::Call 'kernel32::CloseHandle(p r0)'
     MessageBox MB_OK|MB_ICONSTOP "Quit Workspace Observatory from its tray menu, then try again." /SD IDOK

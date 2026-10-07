@@ -9,9 +9,9 @@ internal sealed class InstallationGate : IDisposable
     private readonly Mutex handle;
     private InstallationGate(Mutex handle) { this.handle = handle; }
 
-    internal static InstallationGate? TryEnter(string name = Name)
+    internal static InstallationGate? TryEnter(string? name = null)
     {
-        var handle = new Mutex(false, name, out var created);
+        var handle = new Mutex(false, name ?? AppIdentity.Current.SetupName, out var created);
         if (created) return new InstallationGate(handle);
         handle.Dispose();
         return null;

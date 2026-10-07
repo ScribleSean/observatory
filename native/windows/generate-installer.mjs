@@ -59,6 +59,7 @@ export function generateInstaller(packageRoot,output,{testIdentity=false,install
   const installerName=`Workspace-Observatory-${version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
   const artifacts=path.join(output,'artifacts');
   const values={APP_NAME:name,SETUP_ID:setupId,APP_VERSION:version,SOURCE_REVISION:manifest.sourceRevision,
+    APP_ID:testIdentity?'WorkspaceObservatoryInstallerTest.App':'WorkspaceObservatory',
     STARTUP_NAME:testIdentity?'WorkspaceObservatoryInstallerTest':'WorkspaceObservatory',
     UNINSTALL_KEY:`Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${setupId}`,
     INSTALLER_OUTPUT:path.join(artifacts,installerName),APP_ICON:fileURLToPath(new URL('telescope.ico',import.meta.url)),
