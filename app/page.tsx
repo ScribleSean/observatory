@@ -5,6 +5,7 @@ import { estimate } from '../scripts/api-estimate.mjs';
 import { freshness } from '../scripts/freshness.mjs';
 import {durationText, compactCount as compact} from '../scripts/display-format.mjs';
 import { needsWindowsSetup } from '../scripts/setup-state.mjs';
+import { projectCurrentSources } from '../scripts/current-sources.mjs';
 import WeekTimeline from './week-timeline';
 import ToolDetail from './tool-detail';
 import ProviderCoverage, {type ProviderTokenSource} from './provider-coverage';
@@ -88,6 +89,7 @@ type Agent = {
   recordedAt: string;
 };
 type Report = {
+  hasRetiredSources?: boolean;
   providerAllowances?: ProviderAllowance[];
   providerTokenSources?: ProviderTokenSource[];
   dictation?:DictationSource[];
@@ -205,7 +207,7 @@ export default function Home() {
         !Array.isArray(v.agents) || !Number.isFinite(Date.parse(v.collectedAt))
       )
         throw Error();
-      setData(previous=>previous && Date.parse(previous.collectedAt)>=Date.parse(v.collectedAt)?previous:v);
+      setData(previous=>previous && Date.parse(previous.collectedAt)>=Date.parse(v.collectedAt)?previous:projectCurrentSources(v));
       setCollector(status && ['running','ok','partial','failed'].includes(status.state) && Number.isFinite(Date.parse(status.startedAt)) && [0,300].includes(status.intervalSeconds) && status.maxRunSeconds===240 ? status : null);
       setError(false);
     } catch {
@@ -280,7 +282,6 @@ export default function Home() {
     ...(data.providerTokenSources||[]).filter(s=>s.provider==='claude-code').map(s=>({host:s.host,kind:'Claude Code logs',status:s.status,checkedAt:s.checkedAt})),
     ...(data.providerAllowances||[]).filter(s=>s.provider==='antigravity').map(s=>({host:s.host,kind:'Antigravity allowance',status:s.status,checkedAt:s.checkedAt})),
     ...(data.quota?[{host:'Codex account',kind:'Limits snapshot',status:data.quota.status,checkedAt:data.quota.checkedAt}]:[]),
-    ...(data.localModel?[{host:'Ubuntu',kind:'Local model receipts',status:data.localModel.status,checkedAt:data.localModel.checkedAt}]:[]),
     ...(data.settings||[]).map(s=>({host:s.host,kind:'Settings & tool metadata',status:s.status,checkedAt:s.checkedAt}))
   ] : [];
   const configuredSources=sourceRows.filter(x=>x.status!=='not-connected');
@@ -371,7 +372,7 @@ export default function Home() {
             <State>
               {loading
                 ? 'Reading your local snapshot…'
-                : setupRequired ? 'Set up Windows collection to create your first snapshot. Right-click the Observatory system-tray icon (check the hidden-icons arrow), then choose Configure local collection. Ubuntu and Wispr are optional. After collection finishes, choose Reload snapshot. Mac pairing is not required.'
+                : setupRequired ? 'Set up Windows collection to create your first snapshot. Right-click the Observatory system-tray icon (check the hidden-icons arrow), then choose Configure local collection. Wispr is optional. After collection finishes, choose Reload snapshot. Mac pairing is not required.'
                 : 'No snapshot available yet.'}
             </State>
           ) : (
@@ -610,7 +611,7 @@ export default function Home() {
                       </div>
                       <p>Total recorded tokens</p>
                       {tokenPeriod==='all' && <p className="small-note">All available log history, across {latest.recordedDays} recorded dates. Deleted or unlogged requests cannot be recovered.</p>}
-                      {tokenHost==='All' && <p className="small-note">Mac + Ubuntu + Windows</p>}
+                      {tokenHost==='All' && <p className="small-note">Mac + Windows</p>}
                       <div className="token-parts">
                         <div>
                           <span>Input</span>
@@ -735,7 +736,7 @@ export default function Home() {
                       .map((m) => m.model + (m.inferred ? ' (inferred)' : ''))
                       .join(', ') || 'No model records'}
                     . Totals come from saved Codex usage records. Cached tokens can
-                    dominate. All combines these three Codex log sources only after a cross-host session and parent-link overlap check. If overlap is detected, the combined total is withheld. This does not prove the underlying provider logs capture every request.
+                    dominate. All combines native Codex log sources only after a cross-host session and parent-link overlap check. If overlap is detected, the combined total is withheld. This does not prove the underlying provider logs capture every request.
                     These are the latest recorded dates, which may have gaps. API comparisons are hypothetical and partial, not actual spending or remaining quota.
                   </p>
                 </details>
@@ -748,7 +749,7 @@ export default function Home() {
                     <p>Saved receipts, local model runs and recorded tool calls.</p>
                   </div>
                 </div>
-                <p className="quiet-note">{data.agents.length} handoff receipts · {data.agents.filter(a=>a.status==='failed').length} saved failures. Not a live agent monitor. Newest receipt: {data.agents.map(a=>a.recordedAt).filter(Boolean).sort().at(-1) || 'Unknown'}.</p>
+                <p className="quiet-note">{data.agents.length} handoff receipt{data.agents.length===1?'':'s'} · {data.agents.filter(a=>a.status==='failed').length} saved failure{data.agents.filter(a=>a.status==='failed').length===1?'':'s'}. Not a live agent monitor. Newest receipt: {data.agents.map(a=>a.recordedAt).filter(Boolean).sort().at(-1) || 'Unknown'}.</p>
                 <section className="agent-list">
                   {data.agents.map((a) => (
                     <article className="agent-row" key={a.id}>
@@ -814,9 +815,9 @@ export default function Home() {
                     serving model.
                   </p>
                 </details>
-                {data.localModel && <section className="receipt-panel">
-                  <h2>Local model runs</h2>
-                  <p>Saved benchmark measurements, separate from cloud tokens and your active time.</p>
+                {localRecords.length>0 && data.localModel && <section className="receipt-panel">
+                  <h2>Historical local model runs</h2>
+                  <p>Saved benchmark measurements. These records are excluded from the current-source summary in this web view and are separate from cloud tokens and active time.</p>
                   {data.localModel.status==='ok' ? [...new Set(localRecords.map(r=>r.model))].map(model=>{
                     const rows=localRecords.filter(r=>r.model===model);
                     const durations=rows.map(r=>r.seconds).filter((n):n is number=>n!=null);
@@ -842,6 +843,7 @@ export default function Home() {
                   <span className="period-chip">{sourceCount}/{sourceTotal} read</span>
                 </div>
                 <ProviderCoverage tokens={data.tokens} sources={data.providerTokenSources}/>
+                {data.hasRetiredSources && <p className="quiet-note">This saved snapshot contains historical or unsupported-source records. They are not current source choices or part of Windows and Mac totals. Legacy mixed-source totals remain Unknown until a native collection verifies them.</p>}
                 <ProviderAllowances sources={data.providerAllowances} now={now}/>
                 <div className="source-grid">
                   {sourceRows.map((s) => (
@@ -882,7 +884,6 @@ export default function Home() {
                     {[
                       ...(data.quota?.status==='ok'?['Other provider limits']:['Codex limits']),
                       'Unlogged SSH commands',
-                      ...(data.localModel?.status==='ok'?[]:['Local model receipts']),
                       'iPhone activity',
                       'Gemini web usage',
                     ].map((x) => (

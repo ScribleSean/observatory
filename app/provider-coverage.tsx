@@ -21,14 +21,15 @@ export default function ProviderCoverage({ tokens, sources = [] }: {
   tokens: { host: string; status: string }[];
   sources?: ProviderTokenSource[];
 }) {
-  const codex = tokens.filter(source => source.status !== 'not-connected');
+  const codex = tokens.filter(source => (source.host === 'Mac' || source.host === 'Windows') && source.status !== 'not-connected');
   const read = codex.filter(source => source.status === 'ok').length;
   const claude = sources.filter(source => source.provider === 'claude-code');
   return <section className="receipt-panel" aria-label="Provider coverage">
     <h2>Provider coverage</h2>
     <p>Recorded usage by app. Unknown means no verified token count is available.</p>
+    {tokens.some(source => source.host !== 'Mac' && source.host !== 'Windows') && <p>Archived or unsupported device records are not included in native coverage.</p>}
     <dl className="model-counts">
-      <div><dt>Codex</dt><dd>{codex.length ? `${read}/${codex.length} configured devices read` : 'Unknown'}</dd></div>
+      <div><dt>Codex</dt><dd>{codex.length ? `${read}/${codex.length} native device records read` : 'Unknown'}</dd></div>
       {claude.length ? claude.map(source => {
         const total = recordedTotal(source);
         return <div key={source.host}><dt>Claude Code · {source.host}</dt>
