@@ -88,6 +88,7 @@ enum PairingSetup {
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = FileHandle.nullDevice
+        let startedAt = DispatchTime.now()
         try process.run()
         let timeout = DispatchWorkItem { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
         DispatchQueue.global().asyncAfter(deadline: .now() + 45, execute: timeout)
@@ -106,7 +107,7 @@ enum PairingSetup {
             guard output.count <= 8192 else { throw CocoaError(.fileReadTooLarge) }
         }
         process.waitUntilExit()
-        guard process.terminationReason == .exit, process.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
+        try PairingProcessDiagnostics.check(process, startedAt: startedAt)
         return output
     }
 }

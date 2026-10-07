@@ -546,12 +546,23 @@ func runSelfTests() {
 }
 
 func runCollectorSelfTest() {
+    let startedAt = DispatchTime.now()
+    var currentPhase = "resources"
+    func phase(_ label: String) {
+        currentPhase = label
+        let elapsed = (DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1_000_000
+        try? FileHandle.standardError.write(contentsOf: Data("collector-self-test phase=\(label) elapsed_ms=\(elapsed)\n".utf8))
+    }
     do {
+        phase("resources")
         guard let resources = Bundle.main.resourceURL else { throw CocoaError(.fileReadNoSuchFile) }
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-collector-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: runtime) }
+        phase("prepare")
         _ = try CollectorConfiguration.prepare(runtime: runtime)
+        phase("save-disabled")
         try CollectorConfiguration.save(Dictionary(uniqueKeysWithValues: CollectorConfiguration.defaults.keys.map { ($0, false) }), runtime: runtime)
+        phase("collector-launch")
         let launch = try CollectorConfiguration.launch(runtime: runtime, resources: resources, local: true)
         let task = Process()
         task.executableURL = launch.executable
@@ -559,37 +570,50 @@ func runCollectorSelfTest() {
         task.currentDirectoryURL = runtime
         task.environment = ["PATH": "/usr/bin:/bin", "HOME": runtime.path]
         try task.run()
+        phase("collector-wait")
         task.waitUntilExit()
+        phase("collector-check")
         precondition(task.terminationStatus == 0)
         let object = readObject(runtime.appendingPathComponent("public/local/usage.json"))
         precondition(number(object?["schema"]) == 2)
         let status = readObject(runtime.appendingPathComponent("public/local/collector.json"))
         precondition(number(status?["sourcesConfigured"]) == 0)
+        phase("config-before")
         let configFile = runtime.appendingPathComponent("collector.config.json")
         let originalConfig = try Data(contentsOf: configFile)
+        phase("status-initial")
         let setupStatus = try PairingSetup.readStatus(runtime: runtime, resources: resources)
         precondition(setupStatus.status == .unpaired && setupStatus.request == nil)
         precondition(!FileManager.default.fileExists(atPath: runtime.appendingPathComponent("private-sync").path))
+        phase("revoke-first")
         try PairingMaintenance.runDisconnect(runtime: runtime, resources: resources)
+        phase("revoke-second")
         try PairingMaintenance.runDisconnect(runtime: runtime, resources: resources)
+        phase("revoked-check")
         precondition(FileManager.default.fileExists(atPath: runtime.appendingPathComponent("private-sync/revoked").path))
         let retainedConfig = try Data(contentsOf: configFile)
         precondition(retainedConfig == originalConfig)
+        phase("status-revoked")
         let disabledStatus = try PairingSetup.readStatus(runtime: runtime, resources: resources)
         precondition(disabledStatus.status == .needsRepair && disabledStatus.request == nil)
+        phase("repair")
         try PairingMaintenance.runPrepareRepair(runtime: runtime, resources: resources)
+        phase("repair-check")
         let retired = try FileManager.default.contentsOfDirectory(at: runtime, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent.hasPrefix("private-sync-retired-") }
         precondition(retired.count == 1)
         precondition(FileManager.default.fileExists(atPath: retired[0].appendingPathComponent("revoked").path))
         precondition(!FileManager.default.fileExists(atPath: runtime.appendingPathComponent("private-sync").path))
+        phase("status-repaired")
         let repairedStatus = try PairingSetup.readStatus(runtime: runtime, resources: resources)
         precondition(repairedStatus.status == .unpaired && repairedStatus.request == nil)
+        phase("config-check")
         let configAfterRepair = try Data(contentsOf: configFile)
         precondition(configAfterRepair == originalConfig)
         print("Packaged repair preparation self-test passed with a retained disabled backup")
         print("Packaged pairing status self-test passed without exposing private credentials")
         print("Packaged pairing revocation self-test passed with temporary data")
+        phase("sharing")
         let sharingFinished = DispatchSemaphore(value: 0)
         Task.detached {
             do { try await ProviderTokenSharingTests.bridgeSelfTest(resources: resources) }
@@ -598,8 +622,13 @@ func runCollectorSelfTest() {
         }
         precondition(sharingFinished.wait(timeout: .now() + 90) == .success, "Packaged provider sharing bridge timed out")
         print("Packaged collector self-test passed with all sources disabled")
+        phase("complete")
     } catch {
-        FileHandle.standardError.write(Data("Packaged collector self-test error code: \((error as NSError).code)\n".utf8))
+        let failure = error as NSError
+        let reason = failure.userInfo["childReason"] as? Int ?? -1
+        let status = failure.userInfo["childStatus"] as? Int32 ?? -1
+        let elapsed = failure.userInfo["childElapsedMilliseconds"] as? Int ?? -1
+        try? FileHandle.standardError.write(contentsOf: Data("collector-self-test phase=\(currentPhase) code=\(failure.code) child_reason=\(reason) child_status=\(status) child_elapsed_ms=\(elapsed)\n".utf8))
         preconditionFailure("Packaged collector self-test failed")
     }
 }

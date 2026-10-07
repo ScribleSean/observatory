@@ -41,6 +41,7 @@ enum PairingMaintenance {
         process.currentDirectoryURL = runtime
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
+        let startedAt = DispatchTime.now()
         try process.run()
         let timeout = DispatchWorkItem {
             // Terminate only this owned process. The CLI starts no Mac helpers.
@@ -49,8 +50,6 @@ enum PairingMaintenance {
         DispatchQueue.global().asyncAfter(deadline: .now() + 20, execute: timeout)
         process.waitUntilExit()
         timeout.cancel()
-        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
-            throw CocoaError(.fileWriteUnknown)
-        }
+        try PairingProcessDiagnostics.check(process, startedAt: startedAt)
     }
 }
