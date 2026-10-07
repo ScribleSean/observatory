@@ -1040,8 +1040,8 @@ code {
     height: 40px !important;
   }
   .app-actions { gap: 6px; }
-  .reload span { display: none; }
-  .reload { width: 44px; }
+  .app-actions .reload span { display: none; }
+  .app-actions .reload { width: 44px; }
   .workspace-tabs {
     display: block !important;
     min-height: calc(100dvh - 72px);
