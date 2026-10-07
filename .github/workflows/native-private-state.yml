@@ -44,7 +44,10 @@ jobs:
         run: |
           const {mkdtempSync, mkdirSync, appendFileSync, realpathSync} = require('node:fs');
           const path = require('node:path');
-          const root = mkdtempSync(path.join(realpathSync(process.env.RUNNER_TEMP), 'native-private-state-'));
+          // The Windows runner's temp volume has an untrusted service owner.
+          // Use the account's original local state root without changing ACLs.
+          const base = process.platform === 'win32' ? process.env.LOCALAPPDATA : process.env.RUNNER_TEMP;
+          const root = mkdtempSync(path.join(realpathSync(base), 'native-private-state-'));
           const directories = {
             HOME: 'home', USERPROFILE: 'home', APPDATA: 'appdata', LOCALAPPDATA: 'localappdata',
             XDG_CONFIG_HOME: 'config', XDG_CACHE_HOME: 'cache', TMPDIR: 'tmp', TEMP: 'tmp', TMP: 'tmp',
@@ -80,25 +83,3 @@ jobs:
           scripts/source-python-workflow.test.mjs
           scripts/demo-workflow.test.mjs
           scripts/native-private-state-workflow.test.mjs
-      # Temporary metadata-only diagnosis, never a permission change or retry.
-      - name: Inspect failed Windows fixture ancestry
-        if: failure() && runner.os == 'Windows'
-        timeout-minutes: 1
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $env:PSModulePath = [IO.Path]::Combine($env:SystemRoot, 'System32\WindowsPowerShell\v1.0\Modules')
-          $current = [IO.Path]::GetFullPath($env:TMP)
-          $count = 0
-          while ($current -and $count -lt 32) {
-            $item = Get-Item -LiteralPath $current -Force
-            $acl = Get-Acl -LiteralPath $current
-            $raw = New-Object Security.AccessControl.RawSecurityDescriptor($acl.GetSecurityDescriptorBinaryForm(), 0)
-            $rules = @($raw.DiscretionaryAcl | ForEach-Object {
-              [ordered]@{ type = $_.AceType.ToString(); flags = $_.AceFlags.ToString(); mask = $_.AccessMask; sid = $_.SecurityIdentifier.Value }
-            })
-            [ordered]@{ path = $current; owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; attributes = $item.Attributes.ToString(); rules = $rules } | ConvertTo-Json -Depth 5 -Compress
-            $current = [IO.Path]::GetDirectoryName($current)
-            $count++
-          }
-          if ($current) { throw 'Unexpected ancestry depth' }

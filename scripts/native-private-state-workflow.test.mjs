@@ -26,30 +26,6 @@ const entryPoints = [
   'native-private-state-workflow',
 ].map((name) => `scripts/${name}.test.mjs`);
 
-// Temporary, read-only inspection of the failed disposable Windows fixture.
-const diagnosticStep = String.raw`name: Inspect failed Windows fixture ancestry
-        if: failure() && runner.os == 'Windows'
-        timeout-minutes: 1
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $env:PSModulePath = [IO.Path]::Combine($env:SystemRoot, 'System32\WindowsPowerShell\v1.0\Modules')
-          $current = [IO.Path]::GetFullPath($env:TMP)
-          $count = 0
-          while ($current -and $count -lt 32) {
-            $item = Get-Item -LiteralPath $current -Force
-            $acl = Get-Acl -LiteralPath $current
-            $raw = New-Object Security.AccessControl.RawSecurityDescriptor($acl.GetSecurityDescriptorBinaryForm(), 0)
-            $rules = @($raw.DiscretionaryAcl | ForEach-Object {
-              [ordered]@{ type = $_.AceType.ToString(); flags = $_.AceFlags.ToString(); mask = $_.AccessMask; sid = $_.SecurityIdentifier.Value }
-            })
-            [ordered]@{ path = $current; owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; attributes = $item.Attributes.ToString(); rules = $rules } | ConvertTo-Json -Depth 5 -Compress
-            $current = [IO.Path]::GetDirectoryName($current)
-            $count++
-          }
-          if ($current) { throw 'Unexpected ancestry depth' }
-`;
-
 function verifyGate(workflow) {
   // Keep the deliberately small workflow closed to extra jobs, permissions,
   // conditional skips, shell commands, publication and dependency installs.
@@ -92,7 +68,7 @@ jobs:
     steps:
 `,
   );
-  assert.equal(steps.length, 6, 'Setup, tests and bounded failed-fixture inspection');
+  assert.equal(steps.length, 5, 'Only runtime setup, isolation and tests');
   assert.equal(
     steps[0],
     `uses: actions/checkout@v4
@@ -122,11 +98,16 @@ jobs:
   // Model this inspected Node snippet, not a runner or security sandbox.
   // All filesystem calls are inert and restricted to fresh fictional paths.
   for (const paths of [path.posix, path.win32]) {
-    const base = paths.resolve(
-      paths === path.win32 ? 'C:/runner-temp' : '/runner-temp',
+    const windows = paths === path.win32;
+    const runnerTemp = paths.resolve(
+      windows ? 'D:/runner-temp' : '/runner-temp',
     );
+    const localAppData = paths.resolve(
+      windows ? 'C:/runner-localappdata' : '/unused-localappdata',
+    );
+    const base = windows ? localAppData : runnerTemp;
     const root = paths.join(base, 'native-private-state-owned');
-    const envFile = paths.join(base, 'environment');
+    const envFile = paths.join(runnerTemp, 'environment');
     const calls = [];
     const writes = [];
     vm.runInNewContext(
@@ -160,7 +141,12 @@ jobs:
           };
         },
         process: {
-          env: Object.freeze({ RUNNER_TEMP: base, GITHUB_ENV: envFile }),
+          platform: windows ? 'win32' : 'darwin',
+          env: Object.freeze({
+            RUNNER_TEMP: runnerTemp,
+            LOCALAPPDATA: localAppData,
+            GITHUB_ENV: envFile,
+          }),
         },
       },
       { timeout: 1000 },
@@ -197,7 +183,6 @@ jobs:
           --test --test-concurrency=1 --test-timeout=120000
 ${entryPoints.map((name) => `          ${name}\n`).join('')}`,
   );
-  assert.equal(steps[5], diagnosticStep);
 }
 
 const gatePath = '.github/workflows/native-private-state.yml';
@@ -231,8 +216,10 @@ test('native gate contract rejects unsafe or incomplete workflow edits', () => {
     ['--test-timeout=120000', '--test-timeout=0'],
     ['timeout-minutes: 15', 'timeout-minutes: 360'],
     ['HOME:', 'UNUSED_HOME:'],
-    ['Get-Acl -LiteralPath', 'Set-Acl -LiteralPath'],
-    ['$count -lt 32', '$count -lt 3200'],
+    [
+      'process.env.LOCALAPPDATA : process.env.RUNNER_TEMP',
+      'process.env.RUNNER_TEMP : process.env.RUNNER_TEMP',
+    ],
     ['scripts/archive-retirement-recovery.test.mjs', 'scripts/unused.test.mjs'],
     [
       'scripts/refresh-allowances-retirement.test.mjs',
