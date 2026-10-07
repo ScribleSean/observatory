@@ -19,14 +19,20 @@ async function fixture(t,settled=()=>undefined) {
   });return runtime;
 }
 test('pair generation shares comparison credentials but has distinct device identities',()=>{
-  const pairs=createPairingConfigurations(true),other=createPairingConfigurations();
+  const pairs=createPairingConfigurations(),other=createPairingConfigurations();
   assert.equal(pairs.Mac.local.comparisonSalt,pairs.Windows.local.comparisonSalt);
-  assert.deepEqual(pairs.Mac.peer.codexHosts,['Windows','Ubuntu']);
+  assert.deepEqual(pairs.Mac.peer.codexHosts,['Windows']);
   assert.notEqual(pairs.Mac.local.deviceId,pairs.Windows.local.deviceId);
   assert.notEqual(pairs.Mac.local.pairId,other.Mac.local.pairId);
   assert.ok(!('comparisonSalt' in pairs.Mac.peer));
   const bad=structuredClone(pairs.Mac);bad.peer.deviceId=bad.local.deviceId;
   assert.throws(()=>validatePairing(bad));
+});
+test('new pairings reject retired scope while saved legacy configurations still validate',()=>{
+  assert.throws(()=>createPairingConfigurations(true),/retired/);
+  const legacy=createPairingConfigurations().Mac;
+  legacy.peer.codexHosts=['Windows','Ubuntu'];
+  assert.deepEqual(validatePairing(legacy),legacy);
 });
 test('private pairing round-trips and existing state cannot be overwritten',async t=>{
   const runtime=await fixture(t),pair=createPairingConfigurations().Mac;

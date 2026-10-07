@@ -17,24 +17,27 @@ test('fresh installations never discover workflow sources',async t=>{
   const result=await collectLegacyWorkflows(dir,{receipts:fail,benchmark:fail});
   assert.equal(result.agentSource.status,'not-connected');assert.equal(result.localModel.status,'not-connected');
 });
-test('legacy sources retain sanitized metrics without exporting paths or raw receipts',async t=>{
+test('legacy receipts remain enabled but Ubuntu benchmarks never run',async t=>{
   const dir=await fixture(t,{receiptDirectory:'/private/receipts',ubuntuHost:'test-host',localModelResults:'/private/benchmarks'});
+  let benchmarkReads=0;
   const result=await collectLegacyWorkflows(dir,{enabled,receipts:async folder=>{
     assert.equal(folder,'/private/receipts');return {agents:[{id:'review-1',total:42}],source:{status:'ok'}};
   },benchmark:async(host,folder)=>{
+    benchmarkReads++;
     assert.equal(host,'test-host');assert.equal(folder,'/private/benchmarks');
     return {records:[{model:'test-model',status:'complete',recordedAt:'2026-09-12T12:00:00Z',output:17,prompt:'PRIVATE',path:folder}]};
   }});
-  assert.equal(result.agents[0].total,42);assert.equal(result.localModel.records[0].output,17);
+  assert.equal(benchmarkReads,0);
+  assert.equal(result.agents[0].total,42);assert.equal(result.localModel.status,'not-connected');
   assert.ok(!/PRIVATE|private\/|test-host/.test(JSON.stringify(result)));
 });
 test('a failed benchmark read does not discard agent receipts',async t=>{
   const dir=await fixture(t,{receiptDirectory:'/receipts',ubuntuHost:'test-host',localModelResults:'/benchmarks'});
   const result=await collectLegacyWorkflows(dir,{enabled,receipts:async()=>({agents:[{id:'review-1'}],source:{status:'partial'}}),benchmark:()=>{throw Error('PRIVATE');}});
-  assert.equal(result.agents.length,1);assert.equal(result.agentSource.status,'partial');assert.equal(result.localModel.status,'unavailable');
+  assert.equal(result.agents.length,1);assert.equal(result.agentSource.status,'partial');assert.equal(result.localModel.status,'not-connected');
 });
 test('invalid source settings are rejected before invoking any reader',async t=>{
-  const dir=await fixture(t,{receiptDirectory:'/receipts',ubuntuHost:'bad;host',localModelResults:'/benchmarks'});
+  const dir=await fixture(t,{receiptDirectory:42,ubuntuHost:'bad;host',localModelResults:'/benchmarks'});
   let called=false;
   await assert.rejects(collectLegacyWorkflows(dir,{enabled,receipts:async()=>{called=true;}}));assert.equal(called,false);
 });
@@ -52,7 +55,7 @@ test('benchmark projection is bounded and strips invalid values',()=>{
 test('workflow status counts remain separate and peer output is untouched',()=>{
   const result={data:{quota:{status:'ok'}},peer:{payload:{version:1}},status:{sourcesRead:1,sourcesConfigured:1,state:'ok'}};
   attachWorkflows(result,{agents:[],agentSource:{status:'ok'},localModel:{host:'Ubuntu',status:'unavailable'}});
-  assert.equal(result.status.sourcesRead,2);assert.equal(result.status.sourcesConfigured,3);assert.equal(result.status.state,'partial');
+  assert.equal(result.status.sourcesRead,2);assert.equal(result.status.sourcesConfigured,2);assert.equal(result.status.state,'ok');
   assert.deepEqual(result.peer,{payload:{version:1}});assert.equal(result.data.quota.status,'ok');
 });
 test('native Mac collection retains real sanitized receipt output during migration',{skip:process.platform!=='darwin'},async t=>{

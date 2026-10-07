@@ -2,6 +2,7 @@ import {lstat,readFile,writeFile,rename,unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {attachQuotaSync} from './quota-sync.mjs';
+import {assertAllowanceRefreshAllowed} from './mac-snapshot-archive.mjs';
 
 // Called under the platform collector lock. Never make unrelated sources look
 // freshly collected just because an allowance observation changed.
@@ -18,6 +19,7 @@ export async function refreshAllowances(runtime,{enabled,readQuota,sync=attachQu
   const original=await readFile(file,'utf8');
   const data=JSON.parse(original);
   if(!data || data.schema!==2 || typeof data.collectedAt!=='string' || !Number.isFinite(Date.parse(data.collectedAt)))throw Error('Invalid saved snapshot');
+  await assertAllowanceRefreshAllowed(runtime,data);
   const result={data,status:{state:'ok',mode:'allowances-only'}};
   data.quota=await readQuota();
   await sync(runtime,result,{enabled});

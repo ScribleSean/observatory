@@ -1,10 +1,11 @@
 import {spawn,execFile} from 'node:child_process';
-import {readFile,writeFile,mkdir,rename,lstat} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {cleanWispr} from './wispr.mjs';
-import {previousActivityHistory} from './activity-history.mjs';
+import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {windowsCollectorConfig} from './windows-snapshot.mjs';
 import {windowsSnapshot} from './windows-dashboard.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
@@ -58,12 +59,19 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   let savedPairing=null,pairingFailed=false;
   if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
   let pairing=null;
-  try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Windows',config.wslDistribution?['Windows','Ubuntu']:['Windows']);}catch{}
+  try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Windows',peerConfig.codexHosts?.length===2?['Windows','Ubuntu']:['Windows']);}catch{}
   const folder=path.join(runtime,'public/local');
   await mkdir(folder,{recursive:true});
   if((await lstat(folder)).isSymbolicLink())throw Error('Unsafe runtime directory');
   const startedAt=new Date().toISOString();
-  const atomic=async(name,value)=>{const file=path.join(folder,name);await writeFile(file+'.tmp',JSON.stringify(value),{mode:0o600});await rename(file+'.tmp',file);};
+  const atomic=async(name,value,beforeReplace)=>{
+    const temporary=path.join(folder,`.collector-${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600});
+      await beforeReplace?.();
+      await rename(temporary,path.join(folder,name));
+    } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
+  };
   await atomic('collector.json',{state:'running',startedAt,intervalSeconds:300,maxRunSeconds:240});
   const guarded=async(host,action)=>{try{return {...await action(),checkedAt:new Date().toISOString()};}catch{return unavailable(host);}};
   const python=process.env.OBSERVATORY_PYTHON || path.join(process.env.SystemRoot || 'C:/Windows','py.exe');
@@ -71,23 +79,13 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
   const claudeDirectory=configuredClaudeDirectory === undefined || configuredClaudeDirectory === '' ? path.join(homedir(),'.claude') :
     path.isAbsolute(configuredClaudeDirectory) ? configuredClaudeDirectory : null;
-  const wsl=path.join(process.env.SystemRoot || 'C:/Windows','System32/wsl.exe');
   const settingsScript=(pairing?.readerPrefix??'')+await readFile(path.join(scripts,'read-settings.py'),'utf8');
-  const [localSettings,ubuntuSettings,windows,wispr]=await Promise.all([guarded('Windows',async()=>{
+  const [localSettings,windows,wispr]=await Promise.all([guarded('Windows',async()=>{
     if(!config.codex)return disconnected('Windows');
     const cache=await privateCollectorDirectory(runtime,'private-codex',true);
     const cacheScript=await readFile(path.join(scripts,'read-settings-cache.py'),'utf8');
     return {...JSON.parse(await run(python,[...pythonArgs,path.join(homedir(),'.codex')],
       `CACHE_DIRECTORY = ${JSON.stringify(cache)}\n`+cacheScript+'\n'+settingsScript)),host:'Windows'};
-  }),guarded('Ubuntu',async()=>{
-    if(!config.wslDistribution || !config.codex)return disconnected('Ubuntu');
-    const prefix=['--distribution',config.wslDistribution,'--exec'];
-    const home=(await run(wsl,[...prefix,'/usr/bin/printenv','HOME'])).trim();
-    if(!/^\/home\/[A-Za-z0-9_.-]+$/.test(home))throw Error('Unsupported WSL home');
-    // Invoking wsl.exe starts the selected installed distro. No terminal is required.
-    const cacheScript=await readFile(path.join(scripts,'read-settings-cache.py'),'utf8');
-    const cachePrefix=`import pathlib\n_cache = pathlib.Path(${JSON.stringify(home+'/.cache/workspace-observatory/private-codex')})\n_cache.mkdir(mode=0o700, parents=True, exist_ok=True)\nCACHE_DIRECTORY = str(_cache)\n`;
-    return {...JSON.parse(await run(wsl,[...prefix,'/usr/bin/timeout','55s','python3','-',home+'/.codex'],cachePrefix+cacheScript+'\n'+settingsScript)),host:'Ubuntu'};
   }),guarded('Windows',async()=>{
     if(!config.activity)return disconnected('Windows');
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
@@ -98,10 +96,10 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     const script="MODE = 'windows'\n"+await readFile(path.join(scripts,'read-wispr.py'),'utf8');
     return cleanWispr(JSON.parse(await run(python,[...pythonArgs,homedir()],script)),'Windows');
   })]);
-  let previous=[];
-  try{previous=await previousActivityHistory(path.join(folder,'usage.json'));}catch{}
+  const replacement=await retirementSnapshotGuard(runtime);
+  const previous=replacement.history;
   const collectedAt=new Date().toISOString();
-  const result=windowsSnapshot({localSettings,ubuntuSettings,windows,wispr},previous,collectedAt,pairing?.config??null);
+  const result=windowsSnapshot({localSettings,windows,wispr},previous,collectedAt,pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
   await finalizePeerCollection(runtime,result,savedPairing,previous);
   let quota;
@@ -124,7 +122,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     isEnabled:async()=>windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8'))).antigravity})]);
   signal?.throwIfAborted();
   const {data,status}=result;
-  await atomic('usage.json',data);
+  await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),
     snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
   console.log(JSON.stringify(status));

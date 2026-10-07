@@ -72,12 +72,15 @@ jobs:
         if: inputs.build_app
         env:
           OBSERVATORY_RUNTIME_DIR: ${{ runner.temp }}/observatory-runtime
+          OBSERVATORY_PYTHON: ${{ runner.temp }}/observatory-runtime/python/bin/python3
+          OBSERVATORY_TEST_PYTHON: ${{ runner.temp }}/observatory-runtime/python/bin/python3
           OBSERVATORY_UPDATER_ARCHIVE: ${{ runner.temp }}/Sparkle.tar.xz
           OBSERVATORY_RUNTIME_ARCHIVE: ${{ runner.temp }}/observatory-runtime.tar.gz
         run: |
           test "$(uname -m)" = arm64
           mkdir "$OBSERVATORY_RUNTIME_DIR"
           tar -xzf "$OBSERVATORY_RUNTIME_ARCHIVE" -C "$OBSERVATORY_RUNTIME_DIR"
+          test -x "$OBSERVATORY_PYTHON"
           npm ci --no-audit --no-fund
           node scripts/build-brand.mjs
           npm test

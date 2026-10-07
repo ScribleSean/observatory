@@ -22,7 +22,6 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     const safe=cleanSettings(value,host);tokensFromSettings(safe,host);return safe;
   });
   const localSettings=settingsSource(raw.localSettings,'Windows');
-  const ubuntuSettings=settingsSource(raw.ubuntuSettings,'Ubuntu');
   const windows=clean(raw.windows,'Windows',value=>{
     const {intervals,trackingIntervals,...safe}=cleanActivity(value,'Windows');return safe;
   });
@@ -31,8 +30,8 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     {host:source.host,status:source.status,checkedAt:source.checkedAt};
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[disconnected('Mac'),windows],combined:unavailable('Combined'),
-    tokens:[disconnected('Mac'),tokenSource(localSettings),tokenSource(ubuntuSettings)],combinedTokens:unavailable('All'),
-    settings:[localSettings,ubuntuSettings],combinedSettings:unavailable('All'),
+    tokens:[disconnected('Mac'),tokenSource(localSettings)],combinedTokens:unavailable('All'),
+    settings:[localSettings],combinedSettings:unavailable('All'),
     dictation:[{...wispr,source:'Wispr Flow'}],agents:[],agentSource:disconnected('Local'),
     quota:disconnected('Codex account'),localModel:disconnected('Ubuntu')};
   data.activityHistory=retainActivityHistory(previous,data.activity,at);
@@ -43,8 +42,10 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     try {
       if(peerConfig.host!=='Windows')throw Error('Wrong local peer identity');
       const codex=peerConfig.codexHosts.map(host=>{
-        const safe=host==='Windows'?localSettings:host==='Ubuntu'?ubuntuSettings:null;
-        const original=host==='Windows'?raw.localSettings:raw.ubuntuSettings;
+        // Keep the old wire slot disconnected without collecting or relabeling it.
+        if(host==='Ubuntu')return disconnected('Ubuntu');
+        const safe=host==='Windows'?localSettings:null;
+        const original=raw.localSettings;
         if(!safe)throw Error('Unexpected peer source');
         return safe.status==='ok'?{...safe,inventory:original.inventory}:safe;
       });

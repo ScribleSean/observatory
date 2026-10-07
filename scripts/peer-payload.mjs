@@ -93,15 +93,24 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   const checked=source=>({...source,checkedAt:payloads.find(p=>p.host===(source.host==='Ubuntu'?'Windows':source.host)).collectedAt});
   const normalized=payloads.map(p=>checked(p.activity.status==='ok'?cleanActivity(p.activity,p.host):p.activity));
   const activity=normalized.map(({intervals,trackingIntervals,...safe})=>safe);
-  const settings=payloads.flatMap(p=>p.codex.map(({inventory,...safe})=>checked(safe)));
+  // Validate the entire legacy wire shape above, then project only native
+  // device scope. Never relabel Ubuntu counters as Windows or sum them here.
+  const settings=payloads.flatMap(p=>p.codex.filter(row=>row.host===p.host).map(({inventory,...safe})=>checked(safe)));
   const tokens=settings.map(source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:{...absent(source.host,source.status),checkedAt:source.checkedAt});
-  const expectedHosts=[...localConfig.codexHosts,...peerConfig.codexHosts];
-  const evidence=payloads.flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({version:1,comparisonId:p.comparisonId,host:row.host,...row.inventory})));
+  const expectedHosts=[localConfig.host,peerConfig.host];
+  // Retired counters are excluded above, but their ancestry can still connect
+  // native sessions. Require the full configured evidence scope, not fake usage.
+  const evidenceHosts=[...localConfig.codexHosts,...peerConfig.codexHosts];
+  const evidence=payloads.flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
+    version:1,comparisonId:p.comparisonId,host:row.host,...row.inventory,
+    // Preserve the nonempty-inventory guard for retired recorded usage too.
+    status:!row.inventory.keys.length && (row.profiles.some(profile=>profile.totalTokens>0) ||
+      row.tokenProfiles?.some(profile=>profile.totalTokens>0))
+      ?'incomplete':row.inventory.status})));
   const fresh=payloads.every(p=>now-Date.parse(p.collectedAt)<=600000);
   const combined=fresh?combineActivity(normalized):absent('Combined');
-  const combinedTokens=fresh?combinePeerTokens(tokens,evidence,localConfig.comparisonId,expectedHosts):absent('All');
+  const combinedTokens=fresh?combinePeerTokens(tokens,evidence,localConfig.comparisonId,expectedHosts,evidenceHosts):absent('All');
   const combinedSettings=combinedTokens.status==='ok'?combineSettings(tokens,settings):absent('All');
-  if(!tokens.some(source=>source.host==='Ubuntu'))tokens.push(absent('Ubuntu','not-connected'));
   const collectedAt=new Date(now).toISOString();
   const data={schema:2,timezone:'America/New_York',collectedAt,activity,combined,tokens,combinedTokens,settings,combinedSettings,
     dictation:payloads.flatMap(p=>p.dictation.map(checked)),agents:[],agentSource:absent('Local','not-connected'),

@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {macActivity} from './collect-dashboard.mjs';
 import {macSnapshot,macCollectorConfig} from './mac-snapshot.mjs';
-import {previousActivityHistory} from './activity-history.mjs';
+import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
@@ -58,9 +58,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   let pairing=null;
   try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Mac',['Mac']);}catch{}
   const folder=path.join(runtime,'public/local');
-  const atomic=async(name,value)=>{
+  const atomic=async(name,value,beforeReplace)=>{
     const temporary=path.join(folder,`.collector-${randomUUID()}.tmp`);
-    try{await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600});await rename(temporary,path.join(folder,name));}
+    try{await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600});await beforeReplace?.();await rename(temporary,path.join(folder,name));}
     finally{await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   };
   const startedAt=new Date().toISOString();
@@ -69,8 +69,8 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
   const claudeDirectory=configuredClaudeDirectory === undefined || configuredClaudeDirectory === '' ? path.join(homedir(),'.claude') :
     path.isAbsolute(configuredClaudeDirectory) ? configuredClaudeDirectory : null;
-  let previous=[];
-  try{previous=await previousActivityHistory(path.join(folder,'usage.json'));}catch{}
+  const replacement=await retirementSnapshotGuard(runtime);
+  const previous=replacement.history;
   const result=await macSnapshot(config,{
     activity:()=>macActivity({raw:true}),
     codex:async()=>{
@@ -111,7 +111,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Mac',
     isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).antigravity})]);
   const {data,status}=result;
-  await atomic('usage.json',data);
+  await atomic('usage.json',data,replacement.preserve);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
   console.log(JSON.stringify(status));
   return result;

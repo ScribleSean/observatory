@@ -32,7 +32,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
-    <Content Include="../../scripts/*.mjs;../../scripts/*.py;../../scripts/*.ps1" Exclude="../../scripts/*.test.mjs;../../scripts/test-python.mjs">
+    <Content Include="../../scripts/*.mjs;../../scripts/*.py;../../scripts/*.ps1" Exclude="../../scripts/*.test.mjs;../../scripts/test-python.mjs;../../scripts/test-file-symlink.mjs">
       <Link>Collector/scripts/%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

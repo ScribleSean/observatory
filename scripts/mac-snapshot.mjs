@@ -8,9 +8,9 @@ export function macCollectorConfig(raw) {
   const keys=['activity','codex','claude','wispr','typewhisper','quota','antigravity','receipts','benchmarks'];
   if(!raw || typeof raw!=='object' || Array.isArray(raw) ||
     Object.keys(raw).some(key=>!keys.includes(key) || typeof raw[key]!=='boolean'))throw Error('Invalid local Mac source settings');
-  // Accept the retired boolean only for reading existing configuration.
+  // Accept retired booleans only for reading existing configuration.
   return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,quota:raw.quota===true,antigravity:raw.antigravity===true,
-    receipts:raw.receipts===true,benchmarks:raw.benchmarks===true};
+    receipts:raw.receipts===true,benchmarks:false};
 }
 
 export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().toISOString(),peerConfig=null) {
@@ -40,7 +40,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
   if(!tokens)try{tokens={...tokensFromSettings(settings,'Mac'),checkedAt:at};}catch{tokens=unavailable('Mac');}
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[activity,disconnected('Windows')],combined:unavailable('Combined'),
-    tokens:[tokens,disconnected('Windows'),disconnected('Ubuntu')],combinedTokens:unavailable('All'),
+    tokens:[tokens,disconnected('Windows')],combinedTokens:unavailable('All'),
     settings:[settings],combinedSettings:unavailable('All'),
     dictation:[{...wispr,source:'Wispr Flow'}],
     agents:[],agentSource:disconnected('Local'),quota:disconnected('Codex account'),localModel:disconnected('Ubuntu')};

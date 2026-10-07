@@ -7,28 +7,17 @@ test('native account source does not discover or start WSL',async()=>{
   const client=await findWindowsQuotaClient(null,{findNative:async()=>'/fake/codex',run:()=>{throw Error('Unexpected WSL');}});
   assert.deepEqual(client,{executable:'/fake/codex',prefix:[]});
 });
-test('explicit WSL account source finds a client without shell expansion or credential reads',async()=>{
-  const calls=[];
-  const client=await findWindowsQuotaClient('Ubuntu',{systemRoot:'C:/Windows',findNative:()=>{throw Error('No native fallback');},
-    run:async(file,args,options)=>{calls.push({file,args,options});return {stdout:args.includes('HOME')?'/home/fixture\n':''};}});
-  assert.equal(calls.length,2);
-  assert.deepEqual(calls[0].args,['--distribution','Ubuntu','--exec','/usr/bin/printenv','HOME']);
-  assert.deepEqual(calls[1].args,['--distribution','Ubuntu','--exec','/usr/bin/test','-x','/home/fixture/.local/bin/codex']);
-  assert.deepEqual(client.prefix,['--distribution','Ubuntu','--exec','/usr/bin/timeout','--kill-after=2s','20s','/home/fixture/.local/bin/codex']);
-  assert.ok(calls.every(call=>call.options.timeout===10000 && call.options.maxBuffer===4096));
+test('retired WSL account choices never launch a process or select a native identity',async()=>{
+  for(const distribution of ['Ubuntu','Ubuntu-24.04','Ubuntu; command',true,'']) {
+    let calls=0;
+    const reader=async()=>{calls++;return {stdout:'/home/fixture\n'};};
+    await assert.rejects(findWindowsQuotaClient(distribution,{run:reader,findNative:reader}),/retired|Invalid/);
+    assert.equal(calls,0);
+  }
 });
-test('invalid WSL source or home fails closed, and missing clients never select a different account source',async()=>{
-  await assert.rejects(findWindowsQuotaClient('Ubuntu; command'),/Invalid/);
-  await assert.rejects(findWindowsQuotaClient('Ubuntu',{run:async()=>({stdout:'/home/fixture; command'})}),/Unsupported/);
-  let calls=0;
-  await assert.rejects(findWindowsQuotaClient('Ubuntu',{findNative:()=>{throw Error('Must not fall back');},run:async()=>{
-    if(calls++===0)return {stdout:'/home/fixture\n'};throw Error('Missing');
-  }}),/Selected WSL Codex client unavailable/);
-  assert.equal(calls,4);
-});
-test('WSL invocation retains the account reader protocol and privacy options',async()=>{
+test('native invocation retains the account reader protocol and privacy options',async()=>{
   let invocation;
-  const client={executable:'C:\\Windows\\System32\\wsl.exe',prefix:['--distribution','Ubuntu','--exec','/usr/bin/timeout','--kill-after=2s','20s','/home/fixture/.local/bin/codex']};
+  const client={executable:'C:/fixture/codex.exe',prefix:[]};
   const result=await readWindowsQuotaSnapshot(client,'a'.repeat(64),{
     dailyUsageScope:'b'.repeat(64),
     read:async(file,salt,options)=>{
@@ -39,12 +28,23 @@ test('WSL invocation retains the account reader protocol and privacy options',as
     },spawnProcess:(...args)=>{invocation=args;},
   });
   assert.equal(result.status,'ok');
-  assert.deepEqual(invocation,[client.executable,[...client.prefix,'app-server'],{windowsHide:true,stdio:['pipe','pipe','ignore']}]);
+  assert.deepEqual(invocation,[client.executable,['app-server'],{windowsHide:true,stdio:['pipe','pipe','ignore']}]);
 });
-test('account WSL choice is explicit and independent from saved-log collection',()=>{
+test('a retained WSL client descriptor is rejected before the account reader runs',()=>{
+  let calls=0;
+  assert.throws(()=>readWindowsQuotaSnapshot({executable:'C:\\Windows\\System32\\wsl.exe',prefix:[]},'a'.repeat(64),{
+    read:()=>{calls++;},spawnProcess:()=>{calls++;},
+  }),/retired/);
+  assert.equal(calls,0);
+});
+test('legacy WSL account settings disable polling without clearing the saved identity choice',()=>{
   const defaults=windowsCollectorConfig();
   assert.equal(defaults.quota,false);assert.equal(defaults.quotaWslDistribution,null);
-  const selected=windowsCollectorConfig({quota:true,quotaWslDistribution:'Ubuntu',wslDistribution:null,codex:false});
-  assert.equal(selected.quotaWslDistribution,'Ubuntu');assert.equal(selected.wslDistribution,null);assert.equal(selected.codex,false);
+  const raw={quota:true,quotaWslDistribution:'Ubuntu',wslDistribution:null,codex:false};
+  const selected=windowsCollectorConfig(raw);
+  assert.equal(selected.quota,false);
+  assert.equal(selected.quotaWslDistribution,'Ubuntu');assert.equal(selected.codex,false);
+  assert.equal(raw.quota,true);assert.equal(raw.quotaWslDistribution,'Ubuntu');
+  assert.equal(windowsCollectorConfig({quota:true}).quota,true);
   for(const value of [true,1,'','-Ubuntu','Ubuntu;whoami'])assert.throws(()=>windowsCollectorConfig({quotaWslDistribution:value}));
 });

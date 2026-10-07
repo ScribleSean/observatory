@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdir, unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { cleanIntervals, summarizeTracked, appLabel } from './activity-timeline.mjs';
@@ -16,12 +16,16 @@ import { hostname, homedir } from 'node:os';
 import { cleanWispr } from './wispr.mjs';
 import { selectActivityPairs } from './activity-buckets.mjs';
 import { readBoundedReceipts as readAgentReceipts } from './bounded-receipts.mjs';
-import {cleanLocalModel} from './legacy-workflows.mjs';
 export { cleanReceipts } from './agent-receipts.mjs';
-import {previousActivityHistory,retainActivityHistory} from './activity-history.mjs';
+import {retainActivityHistory} from './activity-history.mjs';
+import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {cachedSettingsScript} from './cached-settings.mjs';
 const exec = promisify(execFile);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const assetRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const runtimeOverride = process.env.OBSERVATORY_RUNTIME;
+if (runtimeOverride !== undefined && !path.isAbsolute(runtimeOverride))
+  throw Error('Absolute runtime path required');
+const root = runtimeOverride ?? assetRoot;
 const fields = [
   'inputTokens',
   'cacheReadTokens',
@@ -193,17 +197,18 @@ export async function guarded(host, fn) {
   }
 }
 export async function collect() {
-  const previousHistory=await previousActivityHistory(path.join(root,'public/local/usage.json'));
+  const replacement=await retirementSnapshotGuard(root);
+  const previousHistory=replacement.history;
   const config = JSON.parse(
     await readFile(path.join(root, 'local.config.json'), 'utf8'),
   );
-  for (const key of ['macCcusage', 'ubuntuCcusage'])
+  for (const key of ['macCcusage'])
     if (!/^\/[a-zA-Z0-9_./-]+$/.test(config[key]))
       throw Error('Invalid configured executable');
   if (config.codexExecutable && !/^\/[a-zA-Z0-9_./-]+$/.test(config.codexExecutable)) throw Error('Invalid Codex executable');
   if (config.windowsCodexHome && !/^\/mnt\/[a-z]\/[a-zA-Z0-9_./-]+$/.test(config.windowsCodexHome))
     throw Error('Invalid Windows log directory');
-  for (const key of ['windowsHost', 'ubuntuHost'])
+  for (const key of ['windowsHost'])
     if (!/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(config[key]))
       throw Error('Invalid SSH alias');
   if (
@@ -212,18 +217,17 @@ export async function collect() {
   )
     throw Error('Invalid receipt directory');
   const ps = await readFile(
-    path.join(root, 'scripts/windows-aggregate-activity.ps1'),
+    path.join(assetRoot, 'scripts/windows-aggregate-activity.ps1'),
     'utf8',
   );
   const readTokens = host => guarded(host, async () => {
     if (host === 'Mac') return cleanTokens(await command(config.macCcusage,
       ['codex','daily','--offline','--no-cost','--timezone','America/New_York','--json']),host);
-    if (host === 'Windows' && !config.windowsCodexHome) return {host,status:'not-connected'};
-    const prefix = host === 'Windows' ? 'env CODEX_HOME=' + config.windowsCodexHome + ' ' : '';
-    return cleanTokens(await command('ssh',['-oBatchMode=yes','-oConnectTimeout=8',config.ubuntuHost,
-      prefix + config.ubuntuCcusage + ' codex daily --offline --no-cost --timezone America/New_York --json']),host);
+    // Windows saved logs now come only from its native collector and pairing.
+    // A legacy mount path never authorizes a read through Ubuntu.
+    return {host,status:'not-connected'};
   });
-  const [mac, windows, macTokens, wslTokens, windowsTokens, quota, localModel] = await Promise.all([
+  const [mac, windows, macTokens, windowsTokens, quota] = await Promise.all([
     guarded('Mac', macActivity),
     guarded('Windows', async () =>
       cleanActivity(
@@ -237,20 +241,15 @@ export async function collect() {
       ),
     ),
     readTokens('Mac'),
-    readTokens('Ubuntu'),
     readTokens('Windows'),
     guarded('Codex', () => collectLegacyQuota(root)),
-    config.localModelResults ? guarded('Ubuntu', async () => {
-      const raw=await pythonReport(config.ubuntuHost, await readFile(path.join(root,'scripts/read-local-model.py'),'utf8'),config.localModelResults);
-      return cleanLocalModel(raw);
-    }) : Promise.resolve({host:'Ubuntu',status:'not-connected'}),
   ]);
   // Comparison keys change every collection and never enter the saved report.
-  const settingsScript = `INVENTORY_SALT = '${randomBytes(32).toString('hex')}'\n` + await readFile(path.join(root,'scripts/read-settings.py'),'utf8');
+  const settingsScript = `INVENTORY_SALT = '${randomBytes(32).toString('hex')}'\n` + await readFile(path.join(assetRoot,'scripts/read-settings.py'),'utf8');
   const inventories = {};
-  const tokenSources = [macTokens, wslTokens, windowsTokens];
+  const tokenSources = [macTokens, windowsTokens];
   const settings = await Promise.all([
-    ['Mac',null,config.macCodexHome], ['Ubuntu',config.ubuntuHost,config.ubuntuCodexHome], ['Windows',config.ubuntuHost,config.windowsCodexHome]
+    ['Mac',null,config.macCodexHome], ['Windows',null,null]
   ].map(([host,ssh,folder],index)=>folder?guarded(host,async()=>{
     const result = await readSettingsSnapshot(tokenSources[index], () => readTokens(host),
       async () => {
@@ -264,7 +263,7 @@ export async function collect() {
     return result.settings;
   }):Promise.resolve({host,status:'not-connected'})));
   const receipts = await readAgentReceipts(config.receiptDirectory);
-  const wisprScript = await readFile(path.join(root,'scripts/read-wispr.py'),'utf8');
+  const wisprScript = await readFile(path.join(assetRoot,'scripts/read-wispr.py'),'utf8');
   const dictation = await Promise.all(['Mac','Windows'].map(async host => {
     const source='Wispr Flow';
     const enabled = config.dictation?.[host.toLowerCase()] === true;
@@ -279,7 +278,7 @@ export async function collect() {
     return {...result,source};
   }));
   const combined = combineActivity([mac, windows]);
-  const combinedTokens = combineTokens(tokenSources,inventories);
+  const combinedTokens = combineTokens(tokenSources,inventories,['Mac','Windows']);
   const data = {
     schema: 2,
     collectedAt: new Date().toISOString(),
@@ -292,7 +291,7 @@ export async function collect() {
     agents: receipts.agents,
     agentSource: receipts.source,
     quota,
-    localModel,
+    localModel:{host:'Ubuntu',status:'not-connected'},
     dictation,
     settings,
   };
@@ -300,8 +299,12 @@ export async function collect() {
   const folder = path.join(root, 'public/local');
   await mkdir(folder, { recursive: true, mode: 0o700 });
   const target = path.join(folder, 'usage.json');
-  await writeFile(target + '.tmp', JSON.stringify(data), { mode: 0o600 });
-  await rename(target + '.tmp', target);
+  const temporary=path.join(folder,`.collector-${randomBytes(16).toString('hex')}.tmp`);
+  try {
+    await writeFile(temporary,JSON.stringify(data),{flag:'wx',mode:0o600});
+    await replacement.preserve();
+    await rename(temporary,target);
+  } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   console.log(
     JSON.stringify({
       collectedAt: data.collectedAt,
