@@ -4,12 +4,11 @@ internal sealed class SetupWizard : Form
 {
     private readonly Collector collector;
     private readonly string runtime;
-    private readonly Dictionary<string, bool> selected = new() { ["activity"] = false, ["codex"] = false, ["wispr"] = false, ["quota"] = false, ["wsl"] = false };
+    private readonly Dictionary<string, bool> selected = new() { ["activity"] = false, ["codex"] = false, ["wispr"] = false, ["quota"] = false };
     private readonly FlowLayoutPanel content = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private readonly Button next = new() { Text = "Continue", AutoSize = true };
     private readonly Button back = new() { Text = "Back", AutoSize = true };
     private int step;
-    private bool ubuntuAccount;
 
     internal SetupWizard(string runtime, Collector collector)
     {
@@ -42,29 +41,13 @@ internal sealed class SetupWizard : Form
         }
         else if (step == 1)
         {
-            foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("wispr", "Wispr Flow statistics"), ("wsl", "Include Ubuntu WSL records with saved Codex"), ("quota", "Codex account limits online") })
+            foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("wispr", "Wispr Flow statistics"), ("quota", "Codex account limits online") })
             {
-                var check = new CheckBox { Text = title, Tag = key, Checked = selected[key], AutoSize = true, Margin = new Padding(0, 0, 0, 8), Enabled = key != "wsl" || selected["codex"] };
-                check.CheckedChanged += (_, _) =>
-                {
-                    selected[key] = check.Checked;
-                    if (key == "codex")
-                    {
-                        var wsl = content.Controls.OfType<CheckBox>().FirstOrDefault(item => Equals(item.Tag, "wsl"));
-                        if (wsl is not null) { wsl.Enabled = check.Checked; if (!check.Checked) wsl.Checked = false; }
-                    }
-                    if (key == "quota")
-                    {
-                        var source = content.Controls.OfType<CheckBox>().FirstOrDefault(item => Equals(item.Tag, "account"));
-                        if (source is not null) source.Enabled = check.Checked;
-                    }
-                };
+                var check = new CheckBox { Text = title, Tag = key, Checked = selected[key], AutoSize = true, Margin = new Padding(0, 0, 0, 8) };
+                check.CheckedChanged += (_, _) => selected[key] = check.Checked;
                 content.Controls.Add(check);
             }
-            var account = new CheckBox { Text = "Use Ubuntu's Codex account instead of Windows", Tag = "account", Checked = ubuntuAccount, AutoSize = true, Enabled = selected["quota"] };
-            account.CheckedChanged += (_, _) => ubuntuAccount = account.Checked;
-            content.Controls.Add(account);
-            Paragraph("Sources need their installed applications and records. Ubuntu options may start WSL. Online monitoring uses that selected client's existing sign-in, with no credential copying or fallback to another account. Enabling a source does not prove it is available.");
+            Paragraph("Sources need their installed Windows applications and records. Online monitoring uses the Windows Codex client's existing sign-in, with no credential copying or fallback to another account. Enabling a source does not prove it is available.");
         }
         else
         {
@@ -79,8 +62,8 @@ internal sealed class SetupWizard : Form
         if (step < 2) { step++; Render(); return; }
         try
         {
-            FirstRunSetup.Complete(runtime, () => collector.Configure(selected["wsl"] ? "Ubuntu" : null, selected["wispr"], selected["quota"],
-                selected["quota"] && ubuntuAccount ? "Ubuntu" : null, selected["activity"], selected["codex"]));
+            FirstRunSetup.Complete(runtime, () => collector.Configure(null, selected["wispr"], selected["quota"],
+                null, selected["activity"], selected["codex"]));
             DialogResult = DialogResult.OK; Close();
         }
         catch { MessageBox.Show("Setup could not be saved. Collection remains paused. Check local storage and try again.", "Setup incomplete"); }

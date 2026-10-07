@@ -14,7 +14,6 @@ final class DirectPairingModel: ObservableObject {
     @Published var peerAddress = ""
     @Published var port = "43128"
     @Published var peerPort = "43128"
-    @Published var includeUbuntu = false
     @Published var storageConsent = false
     @Published var invitation = ""
     @Published private(set) var message = "Choose Host on one device and Join on the other. Use a local network or trusted VPN."
@@ -110,7 +109,7 @@ final class DirectPairingModel: ObservableObject {
         }
         perform(["action": "host-confirm", "peerCertificateSha256": fingerprint,
                  "localEndpoint": ["kind": "tls", "address": address, "port": local],
-                 "peerEndpoint": ["kind": "tls", "address": peerAddress, "port": remote], "includeUbuntu": includeUbuntu])
+                 "peerEndpoint": ["kind": "tls", "address": peerAddress, "port": remote], "includeUbuntu": false])
     }
 
     func join() {
@@ -161,10 +160,6 @@ private struct DirectPairingView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack { TextField("This Mac's private IP", text: $model.address); TextField("Sync port", text: $model.port).frame(width: 90) }
                     HStack { TextField("Windows private IP", text: $model.peerAddress); TextField("Peer sync port", text: $model.peerPort).frame(width: 90) }
-                    Toggle("Include Ubuntu Codex records on Windows", isOn: $model.includeUbuntu)
-                        .disabled(model.joining)
-                    Text("This option applies when hosting on this Mac. When this Mac joins an invitation, choose Ubuntu scope on the Windows host.")
-                        .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button("Create invitation", action: model.host).disabled(model.hosting || model.joining)
                         Button("Confirm this device", action: model.confirmHost).disabled(model.peerFingerprint == nil)

@@ -247,10 +247,19 @@ internal sealed partial class NativeDashboard : Form
     private void History(JsonObject? snapshot, string kind)
     {
         var showActivityHelp = false;
-        Choice("Device", ["All", "Mac", "Windows", "Ubuntu"], host, value => { host = value; anchor = ""; });
+        var devices = NativeHistory.Devices(snapshot, kind);
+        if (!devices.Contains(host)) { host = "Windows"; anchor = ""; }
+        body.Controls.Add(new DashboardFilters("Device", devices, host,
+            value => { host = value; anchor = ""; BeginInvoke(Reload); }, NativeHistory.DeviceLabel) { Width = ContentWidth });
         Choice("Period", ["Day", "Week", "All retained"], period, value => period = value);
         var days = NativeHistory.Days(snapshot, kind, host);
-        if (kind == "activity")
+        if (host == "Ubuntu")
+        {
+            Label(NativeHistory.ArchivedNotice);
+            refreshButton.Enabled = false;
+        }
+        if (host == "All" && !Snapshot.HasNativeAggregateScope(snapshot, kind)) Label(NativeHistory.ScopeNotice);
+        if (kind == "activity" && host != "Ubuntu")
         {
             var archive = NativeHistory.Rows(snapshot?["activityHistory"]).FirstOrDefault(row => Snapshot.Text(row["host"]) == (host == "All" ? "Combined" : host));
             Label(Snapshot.Text(archive?["trackingMessage"], "Tracking freshness is unknown for this saved snapshot."));
@@ -258,7 +267,7 @@ internal sealed partial class NativeDashboard : Form
                 ? through.ToLocalTime().ToString("g") : "Unknown")).ForeColor = Color.Silver;
             showActivityHelp = days.Length > 0 && archive is not null && Snapshot.Text(archive["latestReadStatus"]) != "ok";
         }
-        if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity") ActivityWatchHelp(); return; }
+        if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity" && host != "Ubuntu") ActivityWatchHelp(); return; }
         var dates = days.Select(day => Snapshot.Text(day["date"])).ToArray();
         if (!dates.Contains(anchor)) anchor = dates[^1];
         if (period != "All retained") Choice(period == "Week" ? "Week ending" : "Recorded day", dates, anchor, value => anchor = value);
@@ -289,7 +298,7 @@ internal sealed partial class NativeDashboard : Form
         }
         else
         {
-            Label("Foreground time does not measure attention. Combined activity counts device overlap once. WSL screen time belongs to Windows.");
+            Label("Foreground time does not measure attention. Combined activity counts device overlap once.");
             ActivityDetails(selected);
             if (showActivityHelp) ActivityWatchHelp();
         }
@@ -390,7 +399,7 @@ internal sealed partial class NativeDashboard : Form
         var arranging = false;
         void Arrange()
         {
-            if (arranging) return;
+            if (arranging || card.IsDisposed || card.Disposing || content.IsDisposed || content.Disposing) return;
             arranging = true;
             var y = 0;
             foreach (Control row in content.Controls)
@@ -413,6 +422,7 @@ internal sealed partial class NativeDashboard : Form
         {
             content.Controls.Add(row);
             row.SizeChanged += (_, _) => Arrange();
+            row.TextChanged += (_, _) => Arrange();
         }
         card.Controls.Add(content);
         body.Controls.Add(card);
@@ -463,7 +473,8 @@ internal sealed partial class NativeDashboard : Form
         foreach (var kind in new[] { "quota", "localModel", "agentSource" })
             if (snapshot?[kind] is JsonObject source) rows.Add([kind, Snapshot.Text(source["host"], ""), Snapshot.Text(source["provider"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
-        Label($"{receipts.Length} handoff receipts · {receipts.Count(row => Snapshot.Text(row["status"]) == "failed")} saved failures. Not a live agent monitor.");
+        var failures = receipts.Count(row => Snapshot.Text(row["status"]) == "failed");
+        Label($"{receipts.Length} handoff {(receipts.Length == 1 ? "receipt" : "receipts")} · {failures} saved {(failures == 1 ? "failure" : "failures")}. Not a live agent monitor.");
         var latest = receipts.Select(row => DateTimeOffset.TryParse(Snapshot.Text(row["recordedAt"]), out var date) ? (DateTimeOffset?)date : null)
             .Where(date => date.HasValue).OrderBy(date => date).LastOrDefault();
         var receiptLabel = Label("Newest receipt: " + (latest is DateTimeOffset recorded ? Freshness(recorded.ToString("O"), DateTimeOffset.UtcNow) : "Unknown"));
@@ -472,10 +483,11 @@ internal sealed partial class NativeDashboard : Form
         details.Click += (_, _) => sections.SelectedItem = "Agents";
         body.Controls.Add(details);
         var providerRows = NativeHistory.Rows(snapshot?["providerTokenSources"]);
-        var codexSources = NativeHistory.Rows(snapshot?["tokens"]).Where(row => Snapshot.Text(row["status"]) != "not-connected").ToArray();
+        var codexSources = NativeHistory.Rows(snapshot?["tokens"]).Where(row => Snapshot.Text(row["host"]) is "Mac" or "Windows" &&
+            Snapshot.Text(row["status"]) != "not-connected").ToArray();
         var codexCount = codexSources.Count(row => Snapshot.Text(row["status"]) == "ok");
         var providerValues = new List<(string, string)> {
-            ("Codex", codexSources.Length == 0 ? "Unknown" : $"{codexCount}/{codexSources.Length} configured devices read"),
+            ("Codex", codexSources.Length == 0 ? "Unknown" : $"{codexCount}/{codexSources.Length} native device records read"),
             ("ChatGPT", "Unknown · no connected export"),
             ("Cursor", "Unknown · no connected export"),
             ("Antigravity", "Unknown · no connected export")
@@ -485,11 +497,12 @@ internal sealed partial class NativeDashboard : Form
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
         ProviderAllowances(snapshot);
         Label("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
+        if (rows.Any(row => row[1] == "Ubuntu")) Label(NativeHistory.ArchivedNotice);
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
             var values = entries.SelectMany(row => new[] {
-                (row[1] + " · " + row[2], SourceHealthStatus(row[3])),
+                (NativeHistory.DeviceLabel(row[1]) + " · " + row[2], SourceHealthStatus(row[3])),
                 ("Last checked", Freshness(row[4], DateTimeOffset.UtcNow))
             }).ToArray();
             if (values.Length == 0) values = [("Status", "No source records")];

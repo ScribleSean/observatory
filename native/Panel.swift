@@ -49,8 +49,8 @@ struct ObservatoryPanel: View {
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-                ObservatorySegments(title: "Source host", labels: ["All", "Mac", "Windows", "Ubuntu"],
-                    values: ["All", "Mac", "Windows", "Ubuntu"], selection: $host)
+                ObservatorySegments(title: "Source host", labels: ["All", "Mac", "Windows"],
+                    values: ["All", "Mac", "Windows"], selection: $host)
                 ObservatorySegments(title: "Period", labels: ["Today", "Week", "All time"],
                     values: ["day", "week", "all"], selection: $period)
 
@@ -75,7 +75,7 @@ struct ObservatoryPanel: View {
                     }
                 }
                 if host == "All" {
-                    Text("Tokens include Mac, Windows and Ubuntu. WSL activity is part of Windows screen time.")
+                    Text("All shows verified device totals. Saved records retain their original source labels.")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 let counts = snapshot.sourceCounts

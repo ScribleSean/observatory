@@ -40,6 +40,13 @@ struct NativeDashboard: View {
         if settingsActions.preview { selection.previewAppearance = next } else { appearance = next }
     }
     private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
+    private var historyHost: String {
+        let key = selection.section == "tokens" ? "tokens" : "activity"
+        return nativeHistoryDevices(displayedSnapshot, key: key).contains(host) ? host : "Mac"
+    }
+    private var viewingRetiredHistory: Bool {
+        ["activity", "tokens"].contains(selection.section) && historyHost == "Ubuntu"
+    }
     private let sections = NativeDashboardSelection.sections
 
     var body: some View {
@@ -207,7 +214,7 @@ struct NativeDashboard: View {
                 Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
                     .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
                 Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise").fixedSize() }
-                    .disabled(store.refreshing || archivedSnapshot != nil)
+                    .disabled(store.refreshing || archivedSnapshot != nil || viewingRetiredHistory)
             }
     }
 
@@ -230,7 +237,9 @@ struct NativeDashboard: View {
     private var dailyHistory: some View {
         let key = selection.section == "tokens" ? "tokens" : "activity"
         let field = key == "tokens" ? "totalTokens" : "seconds"
-        let days = displayedSnapshot?.recordedDays(key, host: host) ?? []
+        let devices = nativeHistoryDevices(displayedSnapshot, key: key)
+        let selectedHost = historyHost
+        let days = displayedSnapshot?.recordedDays(key, host: selectedHost) ?? []
         let anchor = text(days.first(where: { text($0["date"]) == selectedDate })?["date"] ?? days.last?["date"])
         let selected = nativePeriodDays(days, period: period, anchor: anchor)
         let chosen = nativePeriodSummary(selected, kind: key)
@@ -241,8 +250,8 @@ struct NativeDashboard: View {
         }
         return VStack(alignment: .leading, spacing: 18) {
             ObservatoryFilterRow(title: "Device") {
-                ObservatorySegments(title: "Device", labels: ["All", "Mac", "Windows", "Ubuntu"],
-                    values: ["All", "Mac", "Windows", "Ubuntu"], selection: $host)
+                ObservatorySegments(title: "Device", labels: devices.map(nativeHistoryDeviceLabel),
+                    values: devices, selection: Binding(get: { selectedHost }, set: { host = $0 }))
             }
             ObservatoryFilterRow(title: "Period") {
                 ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"],
@@ -254,7 +263,13 @@ struct NativeDashboard: View {
                         selection: Binding(get: { anchor }, set: { selectedDate = $0 }))
                 }
             }
-            if key == "activity", let archive = displayedSnapshot?.activityArchive(host: host) {
+            if selectedHost == "Ubuntu" {
+                Text(nativeArchivedHistoryNotice).observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+            }
+            if selectedHost == "All", let snapshot = displayedSnapshot, !snapshot.hasNativeAggregateScope(key) {
+                Text(nativeHistoryScopeNotice).observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
+            }
+            if key == "activity", selectedHost != "Ubuntu", let archive = displayedSnapshot?.activityArchive(host: selectedHost) {
                 Text(text(archive["latestReadStatus"]) != "ok"
                     ? "Saved activity · source unavailable"
                     : text(archive["trackingStatus"]) == "recent"
@@ -282,7 +297,7 @@ struct NativeDashboard: View {
             if days.isEmpty {
                 ObservatoryEmptyState(title: "No verified records", systemImage: "chart.bar",
                     message: "This source is unavailable or has no saved records. Missing data is unknown, not zero.")
-                if key == "activity" { ActivityWatchHelp() }
+                if key == "activity" && selectedHost != "Ubuntu" { ActivityWatchHelp() }
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(key == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME")
@@ -306,11 +321,13 @@ struct NativeDashboard: View {
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: host)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selectedDate)
                         .chartXAxis { AxisMarks(values: axisDates) { axis in
-                            AxisTick()
-                            AxisValueLabel(centered: chartDays.count == 1,
-                                           anchor: chartDays.count == 1 ? .top : axis.as(String.self) == axisDates.last ? .topTrailing : .topLeading,
-                                           collisionResolution: .greedy) {
-                                if let date = axis.as(String.self) {
+                            // Categorical axes can still visit the entire domain.
+                            // Filter the marks as well as requesting sparse values.
+                            if let date = axis.as(String.self), axisDates.contains(date) {
+                                AxisTick()
+                                AxisValueLabel(centered: chartDays.count == 1,
+                                               anchor: chartDays.count == 1 ? .top : date == axisDates.last ? .topTrailing : .topLeading,
+                                               collisionResolution: .greedy) {
                                     Text(String(date.suffix(5)).replacingOccurrences(of: "-", with: "/"))
                                         .font(ObservatoryTheme.font(ObservatoryTheme.chartLabelSize * selection.textScale))
                                         .fixedSize()
@@ -331,10 +348,10 @@ struct NativeDashboard: View {
                         .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 }.frame(maxWidth: .infinity, alignment: .leading).modifier(ObservatoryCard())
                 Text(key == "tokens" ? "Recorded Codex requests only. Saved log tokens are not subscription charges. Combined totals require verified deduplication."
-                    : "Recorded foreground time, not attention. Combined activity counts device overlap once. WSL activity belongs to Windows.")
+                    : "Recorded foreground time, not attention. Combined activity counts device overlap once.")
                     .observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
                 if key == "tokens", let chosen {
-                    NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: displayedSnapshot, host: host)
+                    NativeTokenDetails(day: chosen, recordedDays: selected, snapshot: displayedSnapshot, host: selectedHost)
                 } else if let chosen {
                     NativeActivityDetails(day: chosen, showHours: period == "day")
                 }
@@ -347,7 +364,7 @@ struct NativeDashboard: View {
             let receipts = rows(displayedSnapshot?.object["agents"])
             let latest = receipts.compactMap { parseDate($0["recordedAt"]) }.max()
             Text("Saved execution records").observatoryFont(.headline)
-            Text("\(receipts.count) handoff receipts · \(receipts.filter { text($0["status"]) == "failed" }.count) saved failures. Not a live agent monitor.")
+            Text(nativeReceiptSourceCaption(receipts))
                 .observatoryFont(.callout).foregroundStyle(.secondary)
             Text("Newest receipt: \(latest.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown"). Source: \(sourceHealthStatus(text((displayedSnapshot?.object["agentSource"] as? JSONObject)?["status"]))).")
                 .observatoryFont(.caption).foregroundStyle(.secondary)
@@ -391,10 +408,8 @@ struct NativeDashboard: View {
     }
 
     private var codexProviderRow: some View {
-        let sources = rows(displayedSnapshot?.object["tokens"]).filter { text($0["status"]) != "not-connected" }
-        let count = sources.filter { text($0["status"]) == "ok" }.count
-        return VStack(alignment: .leading, spacing: 3) {
-            ObservatoryValueRow("Codex", value: sources.isEmpty ? "Unknown" : "\(count)/\(sources.count) configured devices read")
+        VStack(alignment: .leading, spacing: 3) {
+            ObservatoryValueRow("Codex", value: nativeCodexSourceCaption(displayedSnapshot))
             Text("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
         }
@@ -450,6 +465,21 @@ struct NativeDashboard: View {
         formatter.dateStyle = .medium
         return formatter.string(from: date)
     }
+}
+
+func nativeCodexSourceCaption(_ snapshot: Snapshot?) -> String {
+    let sources = rows(snapshot?.object["tokens"]).filter {
+        ["Mac", "Windows"].contains(text($0["host"])) && text($0["status"]) != "not-connected"
+    }
+    let count = sources.filter { text($0["status"]) == "ok" }.count
+    return sources.isEmpty ? "Unknown" : "\(count)/\(sources.count) native device records read"
+}
+
+func nativeReceiptSourceCaption(_ receipts: [JSONObject]) -> String {
+    let failures = receipts.filter { text($0["status"]) == "failed" }.count
+    let receiptLabel = receipts.count == 1 ? "receipt" : "receipts"
+    let failureLabel = failures == 1 ? "failure" : "failures"
+    return "\(receipts.count) handoff \(receiptLabel) · \(failures) saved \(failureLabel). Not a live agent monitor."
 }
 
 func sourceHealthStatus(_ status: String?) -> String {

@@ -27,11 +27,7 @@ enum PairingSetupDialog {
             placeholder: "C:/Apps/Observatory/Collector/scripts/peer-exchange.mjs", y: 112)
         let runtime = field("Windows app data directory", value: target?.remoteRuntime,
             placeholder: "C:/Users/Example/AppData/Local/Workspace Observatory", y: 56)
-        let ubuntu = NSButton(checkboxWithTitle: "Include already-configured Ubuntu Codex metadata", target: nil, action: nil)
-        ubuntu.frame = NSRect(x: 0, y: 10, width: 500, height: 24)
-        ubuntu.state = saved.request?.includeUbuntu == true ? .on : .off
-        ubuntu.isEnabled = saved.request == nil
-        form.addSubview(ubuntu)
+
         let pasteAction = PairingDetailsPasteAction(apply: { details in
             node.stringValue = details.remoteNode
             script.stringValue = details.remoteScript
@@ -51,7 +47,8 @@ enum PairingSetupDialog {
             let request = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows",
                 hostAlias: host.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
                 remoteNode: node.stringValue, remoteScript: script.stringValue, remoteRuntime: runtime.stringValue),
-                includeUbuntu: ubuntu.state == .on)
+                // Legacy pairing metadata is fixed for retries, not a source opt-in.
+                includeUbuntu: saved.request?.includeUbuntu ?? false)
             do { try request.validate(); return request }
             catch {
                 let invalid = NSAlert()

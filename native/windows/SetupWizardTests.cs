@@ -42,16 +42,13 @@ internal static class SetupWizardTests
                     var sourcePanel = wispr.Parent!;
                     Check(sourcePanel.ClientRectangle.Contains(wispr.Bounds), "Wispr choice is clipped.");
                     wispr.Checked = true;
-                    Check(!Option("wsl").Enabled && !Option("account").Enabled, "Dependent choices were enabled without their source.");
-                    Option("codex").Checked = true; Option("wsl").Checked = true;
+                    Check(!Descendants(form).OfType<CheckBox>().Any(c => Equals(c.Tag, "wsl") || Equals(c.Tag, "account")), "Retired WSL source or account selector is still offered.");
+                    Option("codex").Checked = true;
                     Option("codex").Checked = false;
-                    Check(!Option("wsl").Enabled && !Option("wsl").Checked, "Ubuntu log choice survived disabling Codex.");
                     Option("quota").Checked = true;
-                    Check(Option("account").Enabled, "Account selection did not enable.");
-                    Option("account").Checked = true;
                     Capture("setup-sources");
                     Button("Continue").PerformClick(); Button("Back").PerformClick();
-                    Check(Option("quota").Checked && Option("account").Checked, "Back lost source choices.");
+                    Check(Option("quota").Checked, "Back lost source choices.");
                     Check(Option("wispr").Checked, "Back lost Wispr choice.");
                     Button("Continue").PerformClick(); Capture("setup-devices");
                     Button("Finish on this PC").PerformClick();
@@ -62,7 +59,7 @@ internal static class SetupWizardTests
             if (failure is not null) throw failure;
             Check(form.DialogResult == DialogResult.OK && FirstRunSetup.AllowsCollection(runtime), "Setup did not complete.");
             var config = JsonNode.Parse(File.ReadAllText(Path.Combine(runtime, "collector.config.json")))!;
-            Check(config["quota"]!.GetValue<bool>() && config["quotaWslDistribution"]!.GetValue<string>() == "Ubuntu", "Selected account source was not saved.");
+            Check(config["quota"]!.GetValue<bool>() && config["quotaWslDistribution"] is null, "Native account consent was not saved.");
             Check(config["wispr"]!.GetValue<bool>(), "Selected Wispr source was not saved.");
             Check(!config["activity"]!.GetValue<bool>() && !config["codex"]!.GetValue<bool>() && !config["claude"]!.GetValue<bool>() && config["wslDistribution"] is null, "Unselected sources were enabled.");
             Check(!File.Exists(Path.Combine(runtime, "public/local/usage.json")), "Synthetic setup read real sources.");

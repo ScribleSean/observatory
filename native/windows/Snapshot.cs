@@ -56,6 +56,34 @@ internal static class Snapshot
         catch { return null; }
     }
 
+    internal static bool HasNativeAggregateScope(JsonObject? snapshot, string kind)
+    {
+        if (kind is not ("activity" or "tokens")) return false;
+        var keys = kind == "tokens" ? new[] { "tokens", "settings" } : new[] { "activity", "activityHistory" };
+        // Missing optional sources are valid. Present malformed sources cannot prove scope.
+        JsonObject[]? ScopeRows(string key)
+        {
+            if (snapshot is null || !snapshot.TryGetPropertyValue(key, out var value)) return [];
+            if (value is not JsonArray array || array.Any(row => row is not JsonObject)) return null;
+            return array.Cast<JsonObject>().ToArray();
+        }
+        var sources = ScopeRows(keys[0]);
+        var siblings = ScopeRows(keys[1]);
+        if (sources is null || siblings is null) return false;
+        if (sources.Concat(siblings).Any(row =>
+            Text(row["host"]) is not ("Mac" or "Windows") && !(kind == "activity" && Text(row["host"]) == "Combined") &&
+            (Text(row["status"]) != "not-connected" || new[] { "days", "profiles", "tools" }.Any(key =>
+                row.TryGetPropertyValue(key, out var value) && value is not JsonArray { Count: 0 })))) return false;
+        // Activity's collector contract is native-only. Legacy token verification
+        // can cover Ubuntu too, so require the original native source set as well.
+        if (kind == "activity") return true;
+        return new[] { "Mac", "Windows" }.All(host =>
+        {
+            var matches = sources.Where(row => Text(row["host"]) == host).ToArray();
+            return matches.Length == 1 && Text(matches[0]["status"]) == "ok" && matches[0]["days"] is JsonArray;
+        });
+    }
+
     internal static JsonObject? Latest(JsonObject? snapshot, string kind, string host)
     {
         JsonObject? source;
@@ -63,6 +91,7 @@ internal static class Snapshot
         {
             source = snapshot?[kind == "activity" ? "combined" : "combinedTokens"] as JsonObject;
             if (kind is not ("activity" or "tokens")) return null;
+            if (!HasNativeAggregateScope(snapshot, kind)) return null;
             if (kind == "tokens" && Text(source?["verification"]?["status"]) != "verified") return null;
         }
         else
@@ -92,7 +121,8 @@ internal static class Snapshot
         Check(Number(JsonValue.Create("1")) is null);
         Check(Number(JsonValue.Create(0)) == 0);
         var data = JsonNode.Parse("""
-            {"combined":{"status":"ok","days":[{"date":"2026-09-08","seconds":90}]},
+            {"tokens":[{"host":"Mac","status":"ok","days":[]},{"host":"Windows","status":"ok","days":[]}],
+             "combined":{"status":"ok","days":[{"date":"2026-09-08","seconds":90}]},
              "combinedTokens":{"status":"ok","verification":{"status":"verified"},
              "days":[{"date":"2026-09-08","totalTokens":600}]}}
             """)!.AsObject();

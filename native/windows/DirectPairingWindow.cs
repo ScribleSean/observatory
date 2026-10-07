@@ -12,7 +12,6 @@ internal sealed class DirectPairingWindow : Form
     private readonly TextBox address = new(), peerAddress = new(), port = new() { Text = "43128" }, peerPort = new() { Text = "43128" };
     private readonly TextBox invitation = new() { MaxLength = 2048 };
     private readonly CheckBox consent = new() { Text = "Allow a device identity stored in a permission-restricted file", AutoSize = true };
-    private readonly CheckBox ubuntu = new() { Text = "Include Ubuntu Codex records on this PC", AutoSize = true };
     private readonly Label status = new() { AutoSize = true, MaximumSize = new Size(540, 0) };
     private readonly Label fingerprint = new() { AutoSize = true, MaximumSize = new Size(540, 0) };
     private readonly List<Button> actions = [];
@@ -32,7 +31,6 @@ internal sealed class DirectPairingWindow : Form
         Note("The key is not stored using DPAPI or encrypted separately by Observatory. A valid existing identity is reused.");
         Field("This PC's numeric private IP", address); Field("This PC's sync port", port);
         Field("Mac numeric private IP", peerAddress); Field("Mac sync port", peerPort);
-        content.Controls.Add(ubuntu);
         ActionButton("Create invitation", Host);
         ActionButton("Confirm this device", ConfirmHost);
         Field("Private invitation", invitation);
@@ -43,7 +41,7 @@ internal sealed class DirectPairingWindow : Form
         });
         Note("Share invitations privately. They expire within ten minutes. Clipboard managers may retain copied invitations.");
         ActionButton("Join with invitation", Join);
-        ActionButton("Finish joining", () => joining ? Send(new() { ["action"] = "join-confirm", ["includeUbuntu"] = ubuntu.Checked }) : Task.CompletedTask);
+        ActionButton("Finish joining", () => joining ? Send(new() { ["action"] = "join-confirm", ["includeUbuntu"] = false }) : Task.CompletedTask);
         content.Controls.Add(fingerprint); content.Controls.Add(status);
         var cancel = new Button { Text = "Cancel setup", AutoSize = true };
         cancel.Click += async (_, _) =>
@@ -126,7 +124,7 @@ internal sealed class DirectPairingWindow : Form
         return Send(new() { ["action"] = "host-confirm", ["peerCertificateSha256"] = pendingFingerprint,
             ["localEndpoint"] = new JsonObject { ["kind"] = "tls", ["address"] = address.Text.Trim(), ["port"] = ReadPort(port) },
             ["peerEndpoint"] = new JsonObject { ["kind"] = "tls", ["address"] = peerAddress.Text.Trim(), ["port"] = ReadPort(peerPort) },
-            ["includeUbuntu"] = ubuntu.Checked });
+            ["includeUbuntu"] = false });
     }
     private Task Join()
     {
@@ -170,6 +168,8 @@ internal sealed class DirectPairingWindow : Form
                 {
                     if (!collector.Busy || window.consent.Checked || window.hosting || window.joining)
                         throw new Exception("Opening setup changed consent or failed to reserve collection.");
+                    if (window.content.Controls.OfType<CheckBox>().Any(check => check.Text.Contains("Ubuntu")))
+                        throw new Exception("Direct pairing still offers retired collection scope.");
                     await window.Send(new() { ["action"] = "host-start", ["address"] = "192.168.1.2", ["port"] = 0 }, true);
                     if (window.hosting || Directory.Exists(Path.Combine(runtime, "private-device-identity")))
                         throw new Exception("Setup created an identity without consent.");
