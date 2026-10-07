@@ -1,7 +1,6 @@
 import {lstat,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {readBoundedReceipts as readAgentReceipts} from './bounded-receipts.mjs';
-import {pythonReport} from './python-report.mjs';
 
 const numeric=value=>typeof value==='number' && Number.isFinite(value) && value>=0?value:null;
 export function cleanLocalModel(raw) {
@@ -16,15 +15,14 @@ export function cleanLocalModel(raw) {
 }
 
 const disabled=()=>({agents:[],agentSource:{status:'not-connected'},localModel:{host:'Ubuntu',status:'not-connected'}});
-// Transitional adapter for explicitly configured legacy sources. No discovery,
-// credential transfer or new opt-in. Private paths never enter its result.
-export async function collectLegacyWorkflows(runtime,{enabled={receipts:false,benchmarks:false},isEnabled=async()=>enabled,receipts=readAgentReceipts,benchmark=async(host,folder)=>
-  pythonReport(host,await readFile(new URL('./read-local-model.py',import.meta.url),'utf8'),folder)}={}) {
+// Only local receipts remain active. Legacy Ubuntu benchmark switches and
+// paths never authorize a read. The cleaner above still supports old records.
+export async function collectLegacyWorkflows(runtime,{enabled={receipts:false,benchmarks:false},isEnabled=async()=>enabled,receipts=readAgentReceipts}={}) {
   const result=disabled();
   const validate=value=>value && typeof value==='object' && !Array.isArray(value) &&
     Object.keys(value).length===2 && typeof value.receipts==='boolean' && typeof value.benchmarks==='boolean';
   if(!validate(enabled))throw Error('Explicit workflow switches required');
-  if(!enabled.receipts && !enabled.benchmarks)return result;
+  if(!enabled.receipts)return result;
   const file=path.join(runtime,'local.config.json');
   let config;
   try {
@@ -38,26 +36,21 @@ export async function collectLegacyWorkflows(runtime,{enabled={receipts:false,be
   }
   const absolute=value=>typeof value==='string' && path.isAbsolute(value) && !/[\r\n\0]/.test(value);
   if(enabled.receipts && config.receiptDirectory!==undefined && !absolute(config.receiptDirectory))throw Error('Invalid receipt directory');
-  if(enabled.benchmarks && config.localModelResults && (!absolute(config.localModelResults) || typeof config.ubuntuHost!=='string' ||
-    !/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(config.ubuntuHost)))throw Error('Invalid benchmark source');
-  await Promise.all([
+
+  await (
     enabled.receipts && config.receiptDirectory?Promise.resolve().then(()=>receipts(config.receiptDirectory)).then(value=>{
       result.agents=value.agents;result.agentSource=value.source;
-    }).catch(()=>{result.agentSource={status:'unavailable'};}):null,
-    enabled.benchmarks && config.localModelResults?Promise.resolve().then(()=>benchmark(config.ubuntuHost,config.localModelResults)).then(value=>{
-      result.localModel=cleanLocalModel(value);
-    }).catch(()=>{result.localModel={host:'Ubuntu',status:'unavailable'};}):null,
-  ]);
+    }).catch(()=>{result.agentSource={status:'unavailable'};}):null
+  );
   const current=await isEnabled();
   if(!validate(current))throw Error('Workflow switches unavailable');
   if(!current.receipts){result.agents=[];result.agentSource={status:'not-connected'};}
-  if(!current.benchmarks)result.localModel={host:'Ubuntu',status:'not-connected'};
   return result;
 }
 
 export function attachWorkflows(result,workflows) {
   Object.assign(result.data,workflows);
-  for(const source of [workflows.agentSource,workflows.localModel]) {
+  for(const source of [workflows.agentSource]) {
     if(source.status==='not-connected')continue;
     result.status.sourcesConfigured++;
     if(source.status==='ok')result.status.sourcesRead++;

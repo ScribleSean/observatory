@@ -9,10 +9,10 @@ function unavailableConfiguredPeerSources(result,pairing) {
   const unavailable=(sources,hosts)=>Array.isArray(sources) && sources.map(source=>
     hosts.includes(source?.host) && source.status==='not-connected'?{...source,status:'unavailable'}:source);
   data.activity=unavailable(data.activity,[pairing.peer.host]);
-  data.tokens=unavailable(data.tokens,pairing.peer.codexHosts);
+  data.tokens=unavailable(data.tokens,[pairing.peer.host]);
   if(result.status && Number.isInteger(result.status.sourcesRead) && Number.isInteger(result.status.sourcesConfigured)) {
     const sources=['activity','tokens','settings','dictation'].flatMap(key=>Array.isArray(data[key])?data[key]:[])
-      .filter(source=>source?.status!=='not-connected');
+      .filter(source=>['Mac','Windows'].includes(source?.host) && source.status!=='not-connected');
     result.status={...result.status,sourcesRead:sources.filter(source=>source.status==='ok').length,
       sourcesConfigured:sources.length,state:sources.length && sources.every(source=>source.status==='ok')?'ok':'partial'};
   }

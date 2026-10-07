@@ -1,0 +1,82 @@
+# Actual native validators run only against disposable hosted fixtures.
+# Hostile ancestry is a failure, never a reason to repair runner permissions.
+name: Native private-state contracts
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'native/**'
+      - 'package.json'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'native/**'
+      - 'package.json'
+      - '.github/workflows/**'
+permissions:
+  contents: read
+concurrency:
+  group: native-private-state-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Isolate fictional state
+        shell: node {0}
+        run: |
+          const {mkdtempSync, mkdirSync, appendFileSync, realpathSync} = require('node:fs');
+          const path = require('node:path');
+          const root = mkdtempSync(path.join(realpathSync(process.env.RUNNER_TEMP), 'native-private-state-'));
+          const directories = {
+            HOME: 'home', USERPROFILE: 'home', APPDATA: 'appdata', LOCALAPPDATA: 'localappdata',
+            XDG_CONFIG_HOME: 'config', XDG_CACHE_HOME: 'cache', TMPDIR: 'tmp', TEMP: 'tmp', TMP: 'tmp',
+          };
+          for (const [key, name] of Object.entries(directories)) {
+            const directory = path.join(root, name);
+            mkdirSync(directory, {recursive: true, mode: 0o700});
+            appendFileSync(process.env.GITHUB_ENV, `${key}=${directory}\n`);
+          }
+      # The preload and test-python receive this selected Python explicitly.
+      # run-collector.test.mjs still uses PATH python3 on Mac, not a child pin.
+      # Windows skips POSIX runner cases, Mac skips Windows DACL models.
+      # Python FakeLib/FakeReader and retirement-recovery remain modeled tests.
+      - name: Verify fictional native private-state contracts
+        timeout-minutes: 12
+        shell: bash
+        env:
+          OBSERVATORY_PYTHON: ${{ steps.python.outputs.python-path }}
+          OBSERVATORY_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: >-
+          node --import ./native/tests/test-source-runtime.mjs
+          --test --test-concurrency=1 --test-timeout=120000
+          scripts/peer-directory.test.mjs
+          scripts/private-directory-policy.test.mjs
+          scripts/private-path-acl.test.mjs
+          scripts/mac-snapshot-archive.test.mjs
+          scripts/archive-retirement-recovery.test.mjs
+          scripts/refresh-allowances-retirement.test.mjs
+          scripts/run-collector.test.mjs
+          scripts/source-python-runner.test.mjs
+          scripts/source-python-test-entry.test.mjs
+          scripts/source-test-packaging.test.mjs
+          scripts/source-python-workflow.test.mjs
+          scripts/demo-workflow.test.mjs
+          scripts/native-private-state-workflow.test.mjs

@@ -51,11 +51,11 @@ export function validatePairing(value) {
 // Returns private configuration in memory only. Delivery requires authenticated
 // transport and explicit device setup. Never print this return value to logs.
 export function createPairingConfigurations(includeUbuntu=false) {
-  if(typeof includeUbuntu!=='boolean')throw Error('Explicit Ubuntu configuration required');
+  if(includeUbuntu!==false)throw Error('Ubuntu source retired. New pairings support native Windows and Mac only.');
   const id=()=>randomBytes(32).toString('hex');
   const shared={pairId:id(),comparisonId:id()},comparisonSalt=id();
   const mac={...shared,deviceId:id(),host:'Mac',codexHosts:['Mac']};
-  const windows={...shared,deviceId:id(),host:'Windows',codexHosts:includeUbuntu?['Windows','Ubuntu']:['Windows']};
+  const windows={...shared,deviceId:id(),host:'Windows',codexHosts:['Windows']};
   return {Mac:validatePairing({version:1,local:{...mac,comparisonSalt},peer:windows}),
     Windows:validatePairing({version:1,local:{...windows,comparisonSalt},peer:mac})};
 }

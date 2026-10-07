@@ -14,7 +14,7 @@ const raw=()=>({localSettings:settings(),ubuntuSettings:{status:'not-connected'}
 test('Windows projection preserves local source shape and optional Ubuntu absence',()=>{
   const {data,status,peer}=windowsSnapshot(raw(),[],at);
   assert.equal(peer,undefined);assert.equal(data.schema,2);assert.equal(data.tokens[0].host,'Mac');
-  assert.equal(data.tokens[1].days[0].totalTokens,12);assert.equal(data.tokens[2].status,'not-connected');
+  assert.equal(data.tokens[1].days[0].totalTokens,12);assert.deepEqual(data.tokens.map(source=>source.host),['Mac','Windows']);
   assert.equal(data.tokens[1].checkedAt,'2026-09-09T12:59:59.000Z');
   assert.equal(data.dictation[0].status,'not-found');assert.equal(status.state,'partial');
   assert.equal(data.activity[1].days[0].seconds,60);assert.equal(data.activity[1].intervals,undefined);
@@ -36,12 +36,16 @@ test('peer output shares input counters and intervals without duplicating them i
   assert.equal(result.peer.payload.activity.intervals.length,1);assert.ok(!JSON.stringify(result).includes('PRIVATE'));
   assert.equal(result.data.activity[1].intervals,undefined);
 });
-test('optional Ubuntu peer source uses its own identity and evidence',()=>{
+test('legacy Ubuntu input is ignored while its peer slot stays explicitly disconnected',()=>{
   const input=raw();input.ubuntuSettings=settings();input.ubuntuSettings.inventory.keys=['c'.repeat(64)];
+  const before=structuredClone(input);
   const result=windowsSnapshot(input,[],at,{...peerConfig,codexHosts:['Windows','Ubuntu']});
-  assert.equal(result.peer.status,'ready');assert.equal(result.peer.payload.codex[1].host,'Ubuntu');
-  assert.deepEqual(result.peer.payload.codex[1].inventory.keys,['c'.repeat(64)]);
-  assert.equal(result.data.tokens[2].days[0].totalTokens,12);
+  assert.equal(result.peer.status,'ready');
+  assert.deepEqual(result.peer.payload.codex[1],{host:'Ubuntu',status:'not-connected'});
+  assert.equal(result.data.tokens.some(source=>source.host==='Ubuntu'),false);
+  assert.equal(result.data.settings.some(source=>source.host==='Ubuntu'),false);
+  assert.equal(result.status.sourcesConfigured,windowsSnapshot(raw(),[],at).status.sourcesConfigured);
+  assert.deepEqual(input,before);
 });
 test('bad inventory disables only export and malformed counters do not become successful zeroes',()=>{
   const missing=raw();delete missing.localSettings.inventory;

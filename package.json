@@ -6,7 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "node --test scripts/*.test.mjs",
+    "test": "node --import ./native/tests/test-source-runtime.mjs --test scripts/*.test.mjs",
     "test:server": "node scripts/check-local-server.mjs",
     "demo": "node scripts/demo.mjs",
     "collect": "python3 scripts/run-collector.py",

@@ -13,6 +13,7 @@ test('Mac local settings accept only explicit source booleans, without remote co
   assert.equal(macCollectorConfig({antigravity:true}).antigravity,true);
   assert.throws(()=>macCollectorConfig({antigravity:'true'}));
   assert.equal(macCollectorConfig({claude:true}).claude,true);
+  assert.equal(macCollectorConfig({benchmarks:true}).benchmarks,false);
   for(const value of [null,[],{wispr:'yes'},{windowsHost:'private-host'},{python:'/arbitrary/program'}])assert.throws(()=>macCollectorConfig(value));
 });
 test('disabled local sources are never invoked and missing peers are unavailable',async()=>{
@@ -22,7 +23,7 @@ test('disabled local sources are never invoked and missing peers are unavailable
   assert.equal(status.sourcesConfigured,0);assert.equal(status.state,'partial');
   assert.equal(calls,0);
   assert.equal(data.combinedTokens.status,'unavailable');assert.equal(data.combined.status,'unavailable');
-  assert.equal(data.tokens[1].status,'not-connected');assert.equal(data.tokens[2].status,'not-connected');
+  assert.equal(data.tokens[1].status,'not-connected');assert.deepEqual(data.tokens.map(source=>source.host),['Mac','Windows']);
 });
 test('Mac local reports are sanitized and token/settings views share one read',async()=>{
   let reads=0;
