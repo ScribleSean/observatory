@@ -453,6 +453,11 @@ internal static class NativeDashboardTests
                 Check(Children(form).OfType<QuotaGraph>().Count() == 0, "Revoked peer graph removed");
                 data["quota"] = localQuota;
                 sections.SelectedItem = "Dictation";
+                var voiceToolChoices = Children(Children(form).OfType<DashboardFilters>().Single(choice => choice.AccessibleName == "Tool"))
+                    .OfType<Button>().Where(button => button.Enabled).Select(button => button.Text).ToArray();
+                Check(voiceToolChoices.SequenceEqual(new[] { "All tools", "Wispr Flow" }), "Unimplemented ChatGPT is not an active Dictation choice");
+                Check(Texts(form).Contains("ChatGPT voice tracking is not implemented. General ChatGPT screen time is not voice usage."),
+                    "Dictation explains unimplemented tracking without using screen time as voice evidence");
                 string Cell(string table, int row, int column)
                 {
                     if (table == "By tool and device")
@@ -468,7 +473,7 @@ internal static class NativeDashboardTests
                 Check(Cell("By tool and device", 2, 4) == "Unknown", "No audio coverage is unknown");
                 Check(Cell("By tool and device", 0, 5) == "Not connected", "Missing Dictation source has a readable status");
                 Check(Cell("By tool and device", 2, 5) == "Recorded history", "Recorded Dictation status is readable");
-                Check(Cell("By tool and device", 3, 5) == "Tracking not yet verified", "ChatGPT coverage explicit");
+                Check(Cell("By tool and device", 3, 5) == "Not implemented", "ChatGPT coverage explicit");
                 void CheckDictationWeekSelector(string stage)
                 {
                     var choice = Children(form).OfType<ComboBox>().Single(combo => combo.AccessibleName == "Week ending");
@@ -515,14 +520,32 @@ internal static class NativeDashboardTests
                 form.Reload();
                 await Select(form, "Period", "All retained");
                 Check(Cell("By tool and device", 2, 2) == "14", "Dictation retained records");
+                Check(Texts(form).Contains("Wispr Flow · Windows: 2 min (partial)"), "Known retained audio remains visible with partial coverage");
+                await Select(form, "Period", "Day");
+                await Select(form, "Recorded day", "2026-09-01");
+                Check(Cell("By tool and device", 2, 2) == "10" && Texts(form).Contains("Wispr Flow · Windows: 2 min"), "Known selected-day Wispr readings remain visible");
+                await Select(form, "Period", "Week");
+                await Select(form, "Week ending", "2026-09-01");
+                Check(Texts(form).Contains("Wispr Flow · Windows: 2 min"), "Known selected-week audio remains visible");
+                Capture(form, output, "native-dictation-known-week");
+                await Select(form, "Period", "All retained");
                 await Select(form, "Device", "Mac");
                 Check(Cell("By tool and device", 0, 2) == "Unknown", "Dictation host not combined");
                 await Select(form, "Device", "Windows");
-                await Select(form, "Tool", "ChatGPT");
-                Check(Cell("By tool and device", 0, 2) == "Unknown", "ChatGPT records not fabricated");
+                await Select(form, "Tool", "Wispr Flow");
+                Check(Cell("By tool and device", 0, 2) == "14", "Supported Wispr tool remains selectable");
+                await Select(form, "Tool", "All tools");
+                var claimedChatGpt = voiceSource.DeepClone().AsObject();
+                claimedChatGpt["source"] = "ChatGPT";
+                ((JsonArray)data["dictation"]!).Add(claimedChatGpt);
+                form.Reload();
+                Check(Cell("By tool and device", 1, 2) == "Unknown" && Cell("By tool and device", 1, 4) == "Unknown" &&
+                    Cell("By tool and device", 1, 5) == "Not implemented", "Legacy claimed ChatGPT readings cannot fabricate coverage");
+                ((JsonArray)data["dictation"]!).Remove(claimedChatGpt);
                 Check(Texts(form).Contains("More local speech detection coming soon."), "Future local speech coverage copy");
                 Check(!Children(form).OfType<ComboBox>().SelectMany(combo => combo.Items.Cast<object>()).Any(item => item.ToString() == "TypeWhisper"), "Retired source selector removed");
                 Check(NativeDashboard.DictationValue([new JsonObject { ["wordRecords"] = 1 }], "words", true) == "Unknown", "Missing dictation counter");
+                Check(NativeDashboard.DictationValue([new JsonObject { ["audioRecords"] = 1, ["transcriptions"] = 1, ["audioSeconds"] = 0 }], "audioSeconds", true) == "0 min", "Explicit recorded audio zero stays zero");
                 sections.SelectedItem = "Source health";
                 Check(!Children(form).OfType<DataGridView>().Any(grid => grid.AccessibleName == "Handoff receipt"), "Sources does not duplicate Agents");
                 Check(Texts(form).Any(value => value.Contains("1 saved failures")), "Saved failure summary visible when collapsed");
