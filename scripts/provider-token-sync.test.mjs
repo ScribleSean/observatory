@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readFile,writeFile,readdir,symlink} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,writeFile,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
@@ -15,6 +15,7 @@ import {readProviderTokenState,updateProviderTokenSource,acceptProviderTokenRepl
 import {providerTokenSharingControl} from './provider-token-sharing-control.mjs';
 import {exchangeProviderTokens,assertOutgoingProviderTokenRequest} from './provider-token-exchange.mjs';
 import {syncProviderTokens,collectProviderTokenSources,attachProviderTokenSync} from './provider-token-sync.mjs';
+import {fileSymlinkOrSkip} from './test-file-symlink.mjs';
 
 const now=Date.now();
 function source(host,at=now,total=14) {
@@ -183,7 +184,7 @@ test('pairing revoke, corruption and retirement fence transport while local disa
   assert.deepEqual((await collectProviderTokenSources(repair,source('Mac'),{clock:()=>now})).sources,[source('Mac')]);
 });
 
-test('private provider database rejects links, extra schema and mismatched saved bindings',async t=>{
+test('private provider database rejects extra schema and mismatched saved bindings',async t=>{
   const {Mac,pair}=await fixture(t);
   const file=path.join(Mac,'private-sync','provider-tokens.sqlite');
   const db=new DatabaseSync(file);
@@ -193,7 +194,12 @@ test('private provider database rejects links, extra schema and mismatched saved
   await assert.rejects(readProviderTokenState(Mac,now));
   const restored=new DatabaseSync(file);restored.prepare('UPDATE provider_token_state SET record=?').run(saved);restored.exec('CREATE TABLE extra(value TEXT)');restored.close();
   await assert.rejects(readProviderTokenState(Mac,now),/schema/);
-  const outside=path.join(Mac,'outside.sqlite');await writeFile(outside,await readFile(file),{mode:0o600});await rm(file);await symlink(outside,file);
-  await assert.rejects(readProviderTokenState(Mac,now));
   assert.ok(pair.Mac.local.deviceId);
+});
+test('private provider database rejects file symlinks',async t=>{
+  const {Mac}=await fixture(t);
+  const file=path.join(Mac,'private-sync','provider-tokens.sqlite');
+  const outside=path.join(Mac,'outside.sqlite');await writeFile(outside,await readFile(file),{mode:0o600});await rm(file);
+  if(!await fileSymlinkOrSkip(t,outside,file))return;
+  await assert.rejects(readProviderTokenState(Mac,now));
 });

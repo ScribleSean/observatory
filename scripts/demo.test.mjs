@@ -26,6 +26,9 @@ test('demo is deterministic and covers every delivered view without live reads',
   const d=demoData();
   assert.deepEqual(d,demoData());
   assert.equal(d.demo,true);
+  assert.deepEqual(d.tokens.map(source=>source.host),['Mac','Windows']);
+  assert.deepEqual(d.settings.map(source=>source.host),['Mac','Windows']);
+  assert.equal(d.localModel?.status,'not-connected');
   assert.equal(d.quota.history.length,25);
   assert.ok(quotaPace(d.quota,Date.parse(d.collectedAt)).every(p=>['projected','resets-first'].includes(p.status)));
   assert.equal(d.peerQuota.host,'Windows');

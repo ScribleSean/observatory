@@ -1,31 +1,47 @@
 # Product direction
 
-Updated September 13, 2026.
+Scope revised October 4, 2026. Earlier implementation notes below are historical evidence, not a new build or installed-app verification.
 
-Observatory is one installable application for viewing supported usage across devices. The primary outcome is a working setup-to-history flow, not separate scripts or a polished but disconnected dashboard.
+Observatory is Sean's personal screen-time and AI-usage app, built in public. The source stays public. The goal is a lean native Windows application with a tray panel and a Mac application with a menu-bar panel. Reliable collection and an interface he can use every day take priority over consumer onboarding, public installer marketing or a hosted service.
 
-## First release priorities
+## Current priorities
 
-1. Download the appropriate macOS or Windows build from the repository and install it without developer tooling.
-2. Complete a first-run wizard covering collection permissions, available provider accounts, device connection and exactly which sanitized data will be shared. Unsupported integrations must not appear connected.
-3. Manage connections in one settings area: inspect status, add accounts, reconnect, switch and remove accounts, select sampling cadence and control startup and sync.
-4. Collect screen time and token records independently of the visible window. Retain actual provider-reported allowance observations for graphs, starting with a 15-minute baseline and allowing faster supported sampling.
-5. Show a consistent history across paired devices, with deduplication, account/window identity, reset markers, freshness and honest gaps. Do not sum account-wide limits or infer percentages from token counts.
-6. Provide a clean native main window, a compact Mac menu-bar or Windows system-tray overview, Start menu discovery on Windows and user-controlled login startup.
+1. Make native Windows and Mac collection dependable without an open dashboard or a WSL dependency. Keep source failures, freshness and retry behavior visible.
+2. Verify the [published source retirement](AUDIT-STATUS.md#published-source-october-7) against the exact packaged and installed candidates. Preserve original logs, historical evidence and recoverable settings. Source publication does not establish that real settings or records have been migrated.
+3. Fix demonstrated native UI defects and finish the unresolved audit checks, including tray/menu-bar actions, readable charts, keyboard access, enlarged layouts and failure recovery.
+4. Preserve actual recorded history and source provenance. Keep account windows, reset markers and observation times distinct. Unknown is not zero. Do not infer allowances from tokens or sum device records without verified deduplication.
+5. Keep source choices and sharing consent understandable in Settings. Reuse the installed providers' supported authentication. Account-manager expansion is not a prerequisite for using existing sources.
+6. Verify login startup, sleep/wake, scheduled collection and recoverable app replacement on both devices. Keep privacy, integrity and reproducibility checks even when the only intended user is Sean.
 
-First-release sync uses direct encrypted device pairing, as selected on September 12, 2026. No Observatory account or hosted sync service is required. The setup wizard must explain device identity, connection requirements, the sanitized records being shared, connection status and how to revoke pairing. Existing SSH-based pairing remains the implementation starting point, not proof of a finished consumer setup flow.
+The [roadmap](ROADMAP.md) turns these priorities into acceptance work. Standalone Linux support is out of scope. Do not install, restart or repair WSL as an Observatory task, and do not stop unrelated WSL workloads to retire a source.
 
-The first-release network scope is the same local network or an existing trusted VPN. Offer optional Tailscale setup for devices on different networks, without making a Tailscale account mandatory for local pairing. The intended wizard has a local-network path and a Tailscale-assisted path. Neither path is implemented as a consumer-ready code/QR flow yet.
+## Local data and existing connections
 
-Initially prefer integration with the installed Tailscale client to avoid bundling another networking runtime. Guide users through its supported sign-in flow, then verify actual device reachability and permissions. Observatory must not collect Tailscale passwords, ask users to paste reusable authentication keys, enable public exposure, or silently alter network policies. Tailscale membership does not replace explicit Observatory device confirmation and data-sharing consent. Evaluate embedded networking separately against installer size, lifecycle and credential-storage requirements.
+Reuse [existing verified SSH pairing](PAIRING-MAINTENANCE.md) for optional Mac/Windows exchange over a trusted network. A configured VPN can provide reachability, not authentication or sharing consent. A new code/QR setup flow, bundled networking runtime and Observatory account service are not needed for the current goal.
+
+Provider authentication and Observatory device linking are separate flows. Connecting one provider must not silently authorize another service or a broader sync scope. Keep credentials on the owning device, use supported sign-in mechanisms and preserve per-category consent and revocation. Never sync raw transcripts, prompts, window titles or recordings. Do not collect Tailscale passwords, reusable authentication keys or silently alter network policies.
+
+Public source does not make local data public. Keep private configuration, snapshots and build caches out of Git and demo artifacts. The existing fictional demo remains useful for UI development, not a deployment target for personal records. This direction does not authorize publishing artifacts, changing repository visibility or adding paid services.
+
+## Deferred integrations
+
+iPhone integration is later work, subject to supported OS permissions and data access. Establish those limits before choosing collection or sharing behavior. Do not promise Screen Time export or desktop-equivalent background collection.
+
+Integration with Hermes `/usage` commands is also later work. Reuse supported commands or adapters after establishing the interface. Preserve source identity, consent and credential ownership without a Hermes core fork or parallel authentication system.
+
+Dashboard customization, workflow routing, broad provider coverage and consumer onboarding remain deferred while collection and native acceptance are unfinished.
+
+## Historical implementation notes
+
+The following September 2026 notes retain their original revision and verification limits. References to installed builds describe those checks, not today's installed state. They do not establish native-only collection or complete the roadmap above.
+
+### Optional network status
 
 The source helper `scripts/tailscale-status.mjs` now reads the installed client's [machine-readable status](https://tailscale.com/docs/reference/tailscale-cli). It returns only a generic state and explicitly unverified peer reachability. It omits account identities, network addresses, peers and login URLs, writes no configuration, and has an eight-second execution bound. Missing installation, sign-in required, device approval required, stopped, starting, running, offline and unavailable states remain distinct. Five focused tests passed on both platforms, and read-only live checks reported running clients on the development pair.
 
 Native Settings now includes an explicit **Check Tailscale** action and a link to the official setup guide in source. Checks are not automatic, and native wrappers validate the bounded response before showing fixed guidance. Both platforms compiled and passed native response tests for source `dc6eb85`. The Windows injected-callback UI test passed, including no automatic query and displaying the requested result. Its synthetic screenshot exposed a low-contrast guide link, corrected and reverified in `62f0860`. The Mac native subprocess bridge also passed against the real read-only helper in a temporary fixture. Full packaged button-to-helper and Mac rendered-interface verification remain open, and these controls are not in installed build 14. They do not establish peer reachability, sign users in automatically or enable code/QR pairing.
 
-Provider authentication and Observatory device linking are separate flows. Connecting one provider must not silently authorize another service or a broader sync scope. Keep credentials on the owning device and use supported authentication mechanisms. Never sync raw transcripts or window titles. Do not introduce a hosted account service or paid services as part of this release.
-
-### Local pairing integration gate
+### Deferred local pairing integration gate
 
 The shared TLS client and opt-in listener now support invitation-pinned device
 claims in synthetic tests. Device identity generation and restricted-file
@@ -37,7 +53,7 @@ The collector now supports explicit TLS transport through `finalizePeerCollectio
 while preserving the existing SSH path. The native application still does not
 start a trusted TLS listener or establish the new setup flow. A successful
 TLS claim therefore does not mean data sync is working. Before
-the native wizard can replace the existing SSH setup, connect these steps:
+any future native flow can replace the existing SSH setup, connect these steps:
 
 1. Explicit identity setup with the chosen key-protection policy and recovery
    behavior. Do not regenerate an established identity after a read failure.
@@ -55,13 +71,9 @@ active sync. Do not label a device as actively syncing solely because it is
 reachable, connected to Tailscale, or has completed a TLS claim. Keep working
 SSH configurations intact during this integration.
 
-## Deferred
+### September native and migration observations
 
-Customizable widgets, rearranging the dashboard and choosing every glanceable metric are future work. Do not implement them until setup, collection, account management and synchronization work end to end. iOS is a later platform, subject to its supported permissions and collection capabilities.
-
-## Current gaps
-
-The desktop previews do not yet deliver this complete flow. Both development machines now have native main windows and compact menu-bar or system-tray panels. First-run consent wizards have passed isolated tests on both platforms. The September 12 Windows update preserved existing settings and its saved snapshot, completed collection after restart, and its native window was confirmed visible by the user. A legacy WebView2 fallback remains available.
+The desktop previews did not deliver the earlier complete consumer setup flow. Both development machines had native main windows and compact menu-bar or system-tray panels. First-run consent wizards had passed isolated tests on both platforms. The September 12 Windows update preserved existing settings and its saved snapshot, completed collection after restart, and its native window was confirmed visible by the user. A legacy WebView2 fallback remained available.
 
 Provider account management and the complete setup-to-sync experience remain unfinished. Native collectors exchange optional allowance history through a separate consent-gated endpoint and display it separately from local readings. Both installed development apps contain these controls. Actual SSH tests with fictional records passed bidirectional retention, duplicate delivery and disable behavior. Real paired consent through both interfaces remains unverified, so pairing alone must not be described as enabling allowance sharing.
 

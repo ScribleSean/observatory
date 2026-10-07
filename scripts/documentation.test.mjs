@@ -5,7 +5,14 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
-test('public documentation links resolve and release status stays explicit',async()=>{
+void test('example source configuration does not offer retired readers',async()=>{
+  const config=JSON.parse(await readFile(path.join(root,'local.config.example.json'),'utf8'));
+  for(const key of ['ubuntuCcusage','ubuntuHost','ubuntuCodexHome','windowsCodexHome','localModelResults'])
+    assert.equal(Object.hasOwn(config,key),false,key);
+  assert.ok(config.macCodexHome);
+  assert.ok(config.windowsHost);
+});
+test('public documentation links resolve and personal native scope stays explicit',async()=>{
   const files=['README.md',...(await readdir(path.join(root,'docs')))
     .filter(name=>name.endsWith('.md')).map(name=>'docs/'+name)];
   for(const name of files) {
@@ -20,11 +27,13 @@ test('public documentation links resolve and release status stays explicit',asyn
     }
   }
   const readme=await readFile(path.join(root,'README.md'),'utf8');
-  assert.match(readme,/early preview/);
-  assert.match(readme,/Public installers are being prepared, not yet available/);
-  assert.match(readme,/Automatic app updates are not available yet/);
+  assert.match(readme,/building in public for his own use/);
+  assert.match(readme,/not being developed as a consumer product or hosted service/);
+  assert.match(readme,/Automatic app updates are not available/);
   assert.match(readme,/Build from source<\/a>/);
-  assert.match(readme,/The download-and-install path is not available yet/);
+  assert.match(readme,/Public installers and consumer onboarding are not current goals/);
+  assert.match(readme,/WSL and Ubuntu tracking are out of scope/);
+  assert.match(readme,/iPhone integration and integration with Hermes `\/usage` commands are later work/);
   assert.doesNotMatch(readme,/>Get started<\/a>/);
   assert.match(readme,/\[desktop updates\]\(docs\/UPDATES\.md\)/);
   const guide=await readFile(path.join(root,'docs/GUIDE.md'),'utf8');

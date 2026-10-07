@@ -1,8 +1,14 @@
 # Windows development preview
 
-The native Windows tray app collects on Windows without a running Mac or open terminal. Current builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener. The native-default build was installed on the development machine on September 12.
+The Windows application and tray panel are part of Sean's personal native app, built in public. Current work is reliable local collection and unresolved UI and lifecycle checks, not a consumer installer launch. WSL and Ubuntu tracking are out of scope. Older builds may still expose those choices, but they are not setup recommendations. This document does not claim their code has been removed. See the [roadmap](ROADMAP.md).
 
-This is a development preview. A per-user installer is implemented and tested, but no public binary release is available yet. Windows x64 is the tested build target. Other Windows architectures are not verified.
+The native Windows tray app collects on Windows without a running Mac or open terminal. Source builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener.
+
+Windows x64 is the documented build target. Other Windows architectures are not verified. Keep the package integrity, isolated installer tests and recoverable replacement procedures below for personal builds. No public binary release is claimed.
+
+## Historical package evidence
+
+The dated checks in this guide apply only to the named revisions and environments. They are not new results or a statement of today's installed version. The native-default build was installed on the development machine on September 12, 2026. Later evidence is retained in the [release record](RELEASE-0.3.13.md).
 
 The [September 15 clean package and installer run for 5907e8a](https://github.com/ScribleSean/observatory/actions/runs/34967825472) passed. All 522 source tests ran across the main suite and a separate ACL-heavy allowance TLS test, with 483 passes, 39 skips and zero failures. The clean package contained 3,051 verified files totaling 258,580,858 unpacked bytes. The unsigned 0.3.12 TEST-identity installer passed installation, payload hashes, shortcut and registration checks, running-app and overwrite refusal, linked-directory rejection, uninstall/reinstall and saved-data preservation. No ordinary app registration was changed and no downloadable artifact was retained. Signing, interactive first launch, login and sleep/wake verification remain separate release gates.
 
@@ -42,13 +48,15 @@ Settings also has a This device page for login registration, pairing details, di
 
 The native default is installed on the development machine, not a published release. Full accessibility review and feature parity remain unfinished. Empty history is explained separately from recorded zero usage, and an unknown quota observation time is identified. It does not add account-history synchronization or provider sign-ins.
 
+The Windows native dashboard does not currently offer the Mac's Command-1 through Command-7 navigation shortcuts or its in-app 75% to 200% text-size control. Enlarged chart fixtures test chart labels, not whole-window zoom. Keyboard focus order, Windows scaling and spoken screen-reader output still require direct acceptance checks. These limitations are documented rather than silently treated as completed parity.
+
 For an isolated desktop check, run `WorkspaceObservatory.exe --test-native-dashboard C:\absolute\path\to\empty-test-directory`. The directory must already exist, be empty and not be linked. The test uses in-memory fictional records, an inert refresh callback and captures only its own form. It does not start a collector or modify installed settings. On September 12 the Windows build and desktop test passed period totals, missing-data handling, unverified combined-token suppression, retired-allowance filtering, source rows, refresh and repeated reload checks. Activity and Allowances captures were visually inspected. These checks do not establish installed native-window behavior or complete native feature parity.
 
 ## First collection
 
 Fresh installations show a native first-run wizard before collection. All sources remain off until setup is completed. Review privacy, choose sources and optionally inspect device-pairing details. Closing incomplete setup leaves collection paused, including after restart. Existing configured installations keep their settings and skip the wizard.
 
-Later, right-click the Observatory system-tray icon and choose **Configure local collection**. Ubuntu collection starts the installed WSL distribution. Neither optional sources nor Mac pairing are required for Windows data.
+Later, right-click the Observatory system-tray icon and choose **Configure local collection** for native Windows sources. Do not enable legacy Ubuntu choices. Neither optional sources nor Mac pairing are required for Windows data.
 
 In the native dashboard, choose **Refresh sources** to start collection using the saved source choices. When the attempt finishes, the dashboard reloads the saved snapshot. Refresh does not enable sources or complete setup for you. If collection fails, the previous saved records remain available.
 
@@ -70,7 +78,7 @@ Use a Windows-local checkout, .NET 10 SDK, Python 3 with the `py` launcher and P
 .\native\windows\build.ps1
 ```
 
-Pass `-Dotnet C:\path\to\dotnet.exe` for a private SDK installation. The script downloads a pinned Node 22 archive from nodejs.org, checks its SHA-256 digest and keeps the runtime and npm cache under `%LOCALAPPDATA%\WorkspaceObservatoryBuild\cache`. It does not replace the system Node installation. Dependencies and compiled output stay in the Windows checkout.
+Pass `-Dotnet C:\path\to\dotnet.exe` for a private SDK installation. The script uses the Node version pinned in [`native/windows/runtime-assets.json`](../native/windows/runtime-assets.json). It downloads the archive from nodejs.org when needed, checks its SHA-256 digest and keeps the runtime and npm cache under `%LOCALAPPDATA%\WorkspaceObservatoryBuild\cache`. It does not replace the system Node installation. Dependencies and compiled output stay in the Windows checkout.
 
 The icon is committed as a small generated asset. Its source is the canonical [telescope mark](../public/brand/telescope.svg). Regenerating that asset currently uses the Mac icon tool, but ordinary Windows builds do not require a Mac.
 
@@ -98,7 +106,7 @@ Recheck an existing candidate without replacing its manifest:
 node .\native\windows\verify-manifest.mjs 'C:\absolute\path\Workspace Observatory'
 ```
 
-This rejects modified, additional or missing payload files, invalid Windows paths, linked entries and dirty-source manifests. For development candidates only, add `--allow-dirty`; file verification still applies. The manifest is an integrity inventory, not a publisher signature or a substitute for the package privacy inspection.
+This rejects modified, additional or missing payload files, invalid Windows paths, linked entries and dirty-source manifests. For development candidates only, add `--allow-dirty`. File verification still applies. The manifest is an integrity inventory, not a publisher signature or a substitute for the package privacy inspection.
 
 Installer-tool preparation uses the pinned NSIS archive in `native/windows/installer-tool.json`. Its SHA-256 was computed after matching the official release listing's SHA-1 over an HTTPS download. It is not a vendor-published SHA-256. The compiler stays in the Windows build cache and is not installed system-wide.
 
@@ -110,7 +118,7 @@ To verify only that download, run `native/windows/installer.ps1 -VerifyCompilerO
 
 The manually dispatched `Clean Windows package` workflow uses a fresh standard Windows runner, an explicit build Python and the complete packaging command without `-SkipWebBuild`. It exercises dependency restoration, dashboard build, source tests, runtime preparation and packaged checks. It does not install the application, collect live records, use signing secrets or publish artifacts. A successful run is clean-build evidence, not a clean first-launch or release-publication result.
 
-The tested candidate is about 224 MiB unpacked, including its private runtimes. This is a disk-size measurement, not a memory or CPU claim. Candidates are unsigned and may trigger Windows security warnings.
+The September 12 candidate recorded below was about 224 MiB unpacked, including its private runtimes. This historical disk-size measurement is not a size guarantee for later builds or a memory/CPU claim. Candidates are unsigned and may trigger Windows security warnings. Do not bypass those warnings because the app is for personal use.
 
 ## Build and test the installer
 
@@ -134,7 +142,7 @@ The integration test accepts only the test identity and refuses pre-existing tes
 
 The installer uses `%LOCALAPPDATA%\Programs\Workspace Observatory` and adds a Start menu shortcut plus the current user's uninstall registration. It requires no administrator privileges. Source collection and login startup stay opt-in. It does not install ActivityWatch, WSL or WebView2, and it does not change system runtimes.
 
-Quit the app through its tray menu before removing it in Windows Settings. Uninstall deletes only the package's recorded files and this installation's registrations. Saved settings and snapshots under `%LOCALAPPDATA%\Workspace Observatory` remain. Unrelated files keep their folders from being removed; linked install directories are refused.
+Quit the app through its tray menu before removing it in Windows Settings. Uninstall deletes only the package's recorded files and this installation's registrations. Saved settings and snapshots under `%LOCALAPPDATA%\Workspace Observatory` remain. Unrelated files keep their folders from being removed. Linked install directories are refused.
 
 Automatic updates are not available. For a guarded development upgrade or rollback, verify the exact candidate, quit normally and protect current saved state and recovery under the [runtime backup locks](UPDATES.md#runtime-backup-coordination). The maintained [installer test](../native/windows/test-installer.ps1) and [receipt lifecycle check](../native/windows/check-installer-receipt-cycle.mjs) copy `Uninstall.exe` outside the install root and pass raw `/S _?=<exactroot>`. Keep `_?=` last and its value unquoted, including paths with spaces, so the caller waits for the real uninstaller. Confirm that exit before running the ordinary installer and verifying payload, saved state, startup and readiness. Stop if an app or uninstaller process is unresolved or a preservation guard fails. Do not move the install folder aside or retry to bypass a guard. The tests cover same-schema reinstall, not future data migrations.
 
@@ -142,13 +150,15 @@ An independently launched SSH peer exchange can still update saved peer state af
 
 ## Configure sources
 
-Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Ubuntu collection is optional and starts the installed `Ubuntu` WSL distribution in the background during collection. Windows collection does not require WSL. Wispr Flow statistics are separately opt-in.
+Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Wispr Flow statistics are separately opt-in. Do not use WSL to read native Windows logs or add Ubuntu as a source.
 
-The app also offers optional [account limits and token history](USAGE-LIMITS.md). The Settings editor's Account client selection chooses the native Windows Codex client or Ubuntu's existing client. Older builds used separate prompts. Selecting Ubuntu may start WSL and uses Ubuntu's signed-in account, even when Ubuntu log collection is off. Closing without saving leaves settings unchanged. The tested Ubuntu route reads limits and daily totals successfully. The native Windows client could not be launched on the tested machine and is not yet verified for account usage. The September 12 development-machine update preserved its existing monitoring-off choice.
+The app also offers optional [account limits and token history](USAGE-LIMITS.md). Account monitoring for the native scope needs a supported, authenticated Windows client and verification on the exact candidate. Do not select Ubuntu as a workaround. A failed native account read stays unavailable rather than becoming zero or an inferred allowance. Saved token logs are a separate source. Closing Settings without saving leaves its choices unchanged.
+
+Historical account-client evidence: the earlier Ubuntu route read limits and daily totals successfully, while the native Windows client could not be launched on the tested machine. The September 12 development-machine update preserved its existing monitoring-off choice. Those checks do not establish native Windows account acceptance. Old builds could start WSL for the account client even when Ubuntu log collection was off. Preserve recoverable settings when retiring that choice. Changing Observatory's source scope does not authorize changing or stopping WSL workloads.
 
 The plain development executable requires a working Python 3 installation with timezone data and a Node installation. Package candidates use their bundled copies instead. Local settings and snapshots live under `%LOCALAPPDATA%\Workspace Observatory`, outside the source checkout. Collection runs every five minutes while the configured app is running.
 
-Only allowlisted metadata enters snapshots. Prompts, tool arguments, window titles, transcripts and recordings are excluded. Unsupported or disconnected sources remain unavailable. Combined cross-device token totals are not published by this collector until private sync and deduplication are implemented.
+Only allowlisted metadata enters snapshots. Prompts, tool arguments, window titles, transcripts and recordings are excluded. Unsupported or disconnected sources remain unavailable. Combined cross-device token totals require authenticated private exchange and complete deduplication evidence. Local collection alone does not establish a combined total.
 
 ## Login startup
 
@@ -158,9 +168,9 @@ Login registration uses `--background`, which starts the system-tray app without
 
 Disable registration before moving or removing the app folder. Another installation's entry is not silently replaced. Actual logout/login and reboot behavior still need release testing. See Microsoft's [Run-key documentation](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys) for platform behavior.
 
-## Verification and remaining gates
+## Historical verification and remaining gates
 
-On the development Windows machine, the native build and snapshot tests pass. The packaged app collected native Windows activity, saved Codex usage, Wispr statistics and optional Ubuntu Codex usage using its bundled runtimes. A signed-in desktop smoke test loaded the packaged React dashboard with fictional records and fetched its local snapshot through WebView2. The Activity view was visually inspected at the tested window size. These checks cover one configured machine, not clean-install compatibility or a full visual and accessibility review.
+Earlier development-machine checks passed the native build and snapshot tests. The packaged app collected native Windows activity, saved Codex usage, Wispr statistics and optional Ubuntu Codex usage using its bundled runtimes. A signed-in desktop smoke test loaded the packaged React dashboard with fictional records and fetched its local snapshot through WebView2. The Activity view was visually inspected at the tested window size. These historical checks cover one configured machine, not native-only source retirement, clean-install compatibility or a full visual and accessibility review.
 
 For a synthetic desktop test, prepare a new private test directory with `node native/windows/prepare-demo-runtime.mjs ABSOLUTE_NEW_DIRECTORY`. Run the packaged executable with `--test-web ABSOLUTE_NEW_DIRECTORY` from the signed-in desktop. The test captures only the WebView and only for a snapshot marked as synthetic. It does not capture other windows or the desktop. The result and WebView cache belong in that test directory, never in a release package.
 
@@ -176,4 +186,4 @@ Native compilation and synthetic notification, disposal, pending-work and shutdo
 
 Development source adds **Browse saved allowance history** to Allowances. The owner-local window selects a saved account, date range and record type, then reads pages of observations, daily token reports or collection results. It reuses the shared archive reader, does not start collection or sharing, and does not expose history through web or peer routes. Filters invalidate the previous page, invalid date ranges cannot load, and closing the window cancels its bounded helper. This source change still needs packaged bridge and installed-window verification. It does not provide cross-device archive exchange or a Windows installer update.
 
-Remaining work includes native accessibility and feature-parity review, provider account management, unified account history, final public-release checks, clean-environment checks, login and sleep/wake testing, CPU and memory measurements, and completion of the consumer pairing flow. Do not publish local snapshots or build caches as release artifacts.
+Current acceptance work is native collection without WSL, the unresolved [audit and UI checks](AUDIT-STATUS.md), login and sleep/wake behavior, failure recovery, and measured CPU/memory use. Keep package, clean-environment, signing and recovery gates explicit rather than treating personal use as verification. Provider-account expansion, consumer pairing and public installer promotion are not current priorities. Do not publish local snapshots or build caches as artifacts.

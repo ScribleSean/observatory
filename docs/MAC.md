@@ -1,6 +1,10 @@
 # Mac development candidate
 
-The Apple Silicon source build uses a SwiftUI main window and menu-bar panel. Development candidates bundle Node and Python and can run the local collector without a checkout or separately installed runtimes. This is not yet a published, clean-install-verified release. Earlier installed previews can retain their legacy cross-device configuration and external runtimes.
+The Mac application and menu-bar panel are part of Sean's personal native app, built in public. Current work is reliable Mac/Windows collection and unresolved UI and lifecycle checks. Consumer onboarding and public installer promotion are not current goals. WSL and Ubuntu tracking are out of scope. See the [roadmap](ROADMAP.md).
+
+The Apple Silicon source build uses a SwiftUI main window and menu-bar panel. Development candidates bundle Node and Python and can run the local collector without a checkout or separately installed runtimes. Keep package integrity and recoverable replacement checks for personal builds. Earlier installed previews can retain legacy cross-device configuration and external runtimes. Preserve supported records and existing verified SSH connections during migration without restarting Ubuntu tracking.
+
+Dated build and installation observations below are historical and revision-specific. They do not verify today's installed app, native-only source retirement or clean-install compatibility. See the [release record](RELEASE-0.3.13.md) for later evidence.
 
 Fresh installations keep all sources off until the first-run wizard is completed. The wizard covers privacy, source choices and optional device pairing. Settings can later change the local sources and optional Codex account-limit monitoring. Changes apply to the next collection. Existing cross-device configuration is preserved, but migration to the native source controls remains unfinished.
 
@@ -17,6 +21,8 @@ The native View menu provides Command-1 through Command-7 for Allowances, Activi
 Current native source builds support **View > Zoom In**, **Zoom Out**, **Actual Size**, and **200%**, with Command-equals, Command-minus and Command-zero shortcuts. The range is 75% to 200%. Native text, chart labels and popup choices enlarge without magnifying the entire window. Above 125%, navigation moves above the dashboard, filter options wrap into equal-width buttons, and label/value rows stack. Settings actions and saved-history controls remain vertically scrollable.
 
 Native sizing lasts for the app session, including closing and reopening the main window. It does not change collection settings, system fonts or the compact menu-bar popup. Standalone pairing and setup dialogs do not yet use this dashboard text-size setting. Synthetic minimum-window previews and control tests cover enlargement, but a complete keyboard and VoiceOver review remains a release gate.
+
+The compact menu-bar panel currently uses an always-dark appearance and macOS system typography. It does not follow the main window's appearance or text-size controls. This is a retained limitation, not a claim of visual or accessibility parity between the two surfaces.
 
 ### Legacy dashboard enlargement
 
@@ -50,7 +56,7 @@ node native/build.mjs --runtime-dir /absolute/extracted-runtime --web-dir /absol
 
 The web directory must include its generated `assets/third-party-licenses.txt`. The builder checks runtime file hashes, preserves relative symlinks, signs all 11 bundled Mach-O binaries, and checks the final app. The runtime manifest records the input files before local signing, not hashes of the signed binaries. Signing is ad hoc, not an Apple Developer ID signature or notarization. No paid signing service is used. Downloaded-app Gatekeeper handling and public distribution are still pending.
 
-The candidate passes configuration and first-run consent tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate earlier live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr successfully. Native Settings was checked in an isolated preview: Save persists the choice, Reload discards unsaved changes, and preview collection remains disabled. This is development-machine evidence, not a clean-machine installation test.
+Earlier candidate checks passed configuration and first-run consent tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr successfully. Native Settings was checked in an isolated preview: Save persisted the choice, Reload discarded unsaved changes, and preview collection remained disabled. This is historical development-machine evidence, not a clean-machine installation test or acceptance of a later candidate.
 
 For an isolated native UI check, launch the built executable with `--preview`. Add `--show` for the popup, `--preview-setup` for the wizard, or `--legacy-dashboard` for the fallback. Temporary settings have every source disabled. Preview source choices affect only that temporary folder, and real collection, pairing and login changes are disabled. Quit the preview when finished.
 
@@ -70,6 +76,8 @@ The build runs `--test-lifecycle` and `--test-popup` for both native and legacy 
 
 ## Distribution packaging
 
+These procedures retain integrity and reproducibility checks for local packages. They do not authorize publication or make a public installer a current milestone. Signing, clean-machine and format-specific release claims still require their separate evidence.
+
 From a clean checkout matching the app's embedded source revision:
 
 ```sh
@@ -84,7 +92,7 @@ DMG creation is bounded to two minutes. macOS may request authorization. Handle 
 
 ## Independent local collector
 
-`scripts/collect-mac.mjs` collects this Mac's ActivityWatch activity, saved Codex token/settings records, and optional Wispr Flow statistics. It does not call SSH, inspect Windows/Ubuntu records, or publish combined cross-device totals. ActivityWatch must already be running locally. The Python readers use only the standard library.
+The unpaired local path in `scripts/collect-mac.mjs` collects this Mac's ActivityWatch activity, saved Codex token/settings records, and optional Wispr Flow statistics. It does not require another computer or WSL. ActivityWatch must already be running locally. The Python readers use only the standard library. Optional authenticated pairing is a separate choice, not enabled by the manual example below.
 
 Prepare a separate private runtime directory outside the checkout. Put `collector.config.json` there:
 
@@ -110,10 +118,10 @@ python3 scripts/run-collector.py \
 
 This is a one-shot command, not a new background service. The POSIX runner serializes collection and stops its own child process group on timeout or termination. The script can stay inside a read-only application bundle while writable settings, snapshots and lock files remain in the private runtime directory. It does not copy private records into the bundle or checkout.
 
-Snapshots include only the existing allowlisted usage fields. Raw prompts, tool arguments, window titles, transcripts and audio do not enter the output. Remote devices remain disconnected, and combined totals remain unavailable until private sync and deduplication are implemented. Read failures are unavailable, not fabricated zeroes.
+Snapshots include only the existing allowlisted usage fields. Raw prompts, tool arguments, window titles, transcripts and audio do not enter the output. The unpaired example does not establish remote coverage or a combined total. Those require authenticated private exchange and complete deduplication evidence. Read failures are unavailable, not fabricated zeroes.
 
-## Verified scope
+## Historical local-collector checks
 
 The local collector was tested in an isolated directory on the development Mac. ActivityWatch, saved Codex usage, Wispr all returned valid metadata. The snapshot passed the private-field shape check. Regression tests cover disabled readers, output filtering, shared token/settings reads, invalid counters, and ActivityWatch interval normalization. POSIX runner tests cover failure, timeout, overlapping runs and separation of bundle code from writable state.
 
-These checks did not modify the installed app, its login registration, its existing settings or its legacy cross-device collector. Public release packaging, clean-machine compatibility, and installed-app migration remain pending. Do not replace the working cross-device collector until optional device sync has been verified.
+These historical checks did not modify the installed app, its login registration, its existing settings or its legacy cross-device collector. They do not establish clean-machine compatibility or installed-app migration. Preserve working Mac/Windows exchange and recoverable state until its replacement is verified. Do not resume Ubuntu tracking to reproduce an old result. Native accessibility, menu-bar interaction, scheduled collection, login and sleep/wake acceptance remain on the [roadmap](ROADMAP.md).

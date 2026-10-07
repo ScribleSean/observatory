@@ -14,22 +14,22 @@ export function planLegacyMacSources(config,home=homedir()) {
   const blockers=[];
   if(!absolute(config.macCodexHome) || path.normalize(config.macCodexHome)!==path.join(home,'.codex'))
     blockers.push('custom-or-missing-mac-codex-home');
-  for(const key of ['codexExecutable','receiptDirectory','localModelResults'])
+  for(const key of ['codexExecutable','receiptDirectory'])
     if(config[key]!==undefined && config[key]!==null && config[key]!=='' && !absolute(config[key]))
       blockers.push(`invalid-${key}`);
   if(config.dictation!==undefined && (!object(config.dictation) ||
     Object.entries(config.dictation).some(([key,value])=>!['mac','windows'].includes(key) || typeof value!=='boolean')))
     blockers.push('invalid-dictation-selection');
-  const remoteHosts=['Windows','Ubuntu'];
-  for(const key of ['windowsHost','ubuntuHost'])
+  const remoteHosts=['Windows'];
+  for(const key of ['windowsHost'])
     if(typeof config[key]!=='string' || !/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(config[key]))blockers.push(`invalid-${key}`);
   const selected=key=>absolute(config[key]);
   return {version:1,status:blockers.length?'unsupported':'review-required',
     sources:{activity:true,codex:true,wispr:config.dictation?.mac===true,
-      quota:selected('codexExecutable'),receipts:selected('receiptDirectory'),benchmarks:selected('localModelResults')},
+      quota:selected('codexExecutable'),receipts:selected('receiptDirectory'),benchmarks:false},
     remoteHosts,blockers,requiredChecks:['confirmed-peer-and-source-scope','saved-history-archive-and-visibility',
       'native-reader-coverage-comparison','collector-lock-and-rollback'],
-    coverageChanges:[]};
+    coverageChanges:['ubuntuHost','ubuntuCodexHome','ubuntuCcusage','localModelResults','windowsCodexHome'].some(key=>config[key])?['ubuntu-source-retired']:[]};
 }
 
 export async function assessMacMigration(runtime,{home=homedir()}={}) {

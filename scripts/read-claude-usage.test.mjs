@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,symlink,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execPython} from './test-python.mjs';
+import {fileSymlinkOrSkip} from './test-file-symlink.mjs';
 
 const script='scripts/read-claude-usage.py';
 const event=(id,requestId,usage,{timestamp='2026-09-25T04:30:00Z',model='claude-sonnet-4-20250514',type='assistant'}={})=>JSON.stringify({type,timestamp,requestId,message:{role:'assistant',id,model,usage,content:'PRIVATE'}})+'\n';
@@ -86,8 +87,13 @@ test('fails closed for absent assistant usage, malformed identity, invalid count
   await rm(path.join(root,'projects'),{recursive:true});await log(root,'bad.jsonl',event('m','r',usage(2**53,0,0,1)));assert.equal(read(root).status,'unavailable');
   await rm(path.join(root,'projects'),{recursive:true});await log(root,'bad.jsonl',event('m','r',usage(1,0,0,1))+event('m','r',usage(2,0,0,2),{model:'claude-opus-4-1-20250805'}));assert.equal(read(root).status,'unavailable');
 }));
-test('reports missing projects as not-found and refuses symlinked logs without leaking content',async()=>fixture(async root=>{
-  assert.equal(read(root).status,'not-found');const outside=path.join(root,'outside.jsonl');await writeFile(outside,event('m','r',usage(1,0,0,1)));const linked=path.join(root,'projects','a','linked.jsonl');await mkdir(path.dirname(linked),{recursive:true});await symlink(outside,linked);
+test('reports missing projects as not-found',async()=>fixture(async root=>{
+  assert.equal(read(root).status,'not-found');
+}));
+test('refuses file symlink logs without leaking content',async t=>fixture(async root=>{
+  const outside=path.join(root,'outside.jsonl');await writeFile(outside,event('m','r',usage(1,0,0,1)));
+  const linked=path.join(root,'projects','a','linked.jsonl');await mkdir(path.dirname(linked),{recursive:true});
+  if(!await fileSymlinkOrSkip(t,outside,linked))return;
   const output=JSON.stringify(read(root));assert.equal(JSON.parse(output).status,'unavailable');assert.ok(!output.includes('PRIVATE'));assert.ok(!output.includes('outside'));
 }));
 test('reports a missing root as unavailable',()=>assert.equal(read('/definitely-not-an-observatory-claude-root').status,'unavailable'));

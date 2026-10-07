@@ -2,6 +2,10 @@
 
 Revision-specific development-machine checks. These results are not a full accessibility review or a clean-install result. Older candidate references below are historical, not the current installed version.
 
+## Native cleanup, source verification October 4
+
+The [native cleanup record](NATIVE-CLEANUP-2026-10-04.md) documents the Windows sharing-caption and Collection-card repairs, semantic accessible names, Mac chart checks and honest source-coverage labels. It also records native archived-history tests, exact source fingerprints and remaining approval gates. These checks used fictional fixtures without replacing installed apps. Keyboard, screen-reader and full installed interaction acceptance remain open.
+
 ## Windows Dictation selector capture, September 27
 
 The full-window fictional Dictation capture showed a blank Week ending selector.
