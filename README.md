@@ -11,8 +11,6 @@
   </p>
 </div>
 
-Observatory is an app Sean is building in public for his own use. The source stays public. The priority is dependable collection and a usable native Windows application and tray panel, plus a Mac application and menu-bar panel. It is not being developed as a consumer product or hosted service.
-
 ## What it shows
 
 Observatory shows recorded app activity, Codex tokens, optional Claude Code counters, available account limits, tool activity and dictation statistics. A compact Mac menu-bar or Windows system-tray panel opens the full dashboard.
