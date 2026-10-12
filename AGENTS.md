@@ -6,7 +6,7 @@
 - Prioritize reliable native Windows and Mac collection, with the Windows application/tray and Mac application/menu-bar experiences. Fix unresolved audit and UI issues before adding features. Keep the app lean and reuse working collectors and controls.
 - WSL and Ubuntu tracking are no longer in scope. Do not add setup, recovery or collection work for them, or plan a standalone Linux app. Retiring support does not authorize stopping WSL workloads, deleting original logs or editing real configurations. Preserve saved evidence and test any source-scope migration before calling it complete.
 - Reuse existing verified SSH connections for optional Mac/Windows pairing. Do not replace working transport just to create consumer onboarding, code/QR pairing or a hosted account service.
-- Defer iPhone integration until supported OS permissions and data access are established. Defer integration with Hermes `/usage` commands until native collection is dependable, then reuse supported commands or adapters without a Hermes core fork. Do not imply either integration is already available.
+- Defer iPhone integration until supported OS permissions and data access are established. Do not imply this integration is already available.
 - The fictional demo is a development fixture. Public installer marketing, hosted services, broad provider expansion and customizable dashboards are not current priorities. This scope does not authorize publication, pushes, releases or repository-visibility changes.
 
 ## Public writing

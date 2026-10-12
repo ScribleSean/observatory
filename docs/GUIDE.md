@@ -151,6 +151,6 @@ The design draws on [lnkiai/m3e-canvas](https://github.com/lnkiai/m3e-canvas), i
 
 With the local dashboard running, `npm run test:server` checks request restrictions without reading or printing your usage records.
 
-Keep changes focused on the native personal workflow, reliable collection and unresolved UI issues. Use synthetic examples in issues and pull requests. Do not attach personal usage records, transcripts or account details. iPhone integration and Hermes `/usage` integration are deferred under [product direction](PRODUCT-DIRECTION.md#deferred-integrations), not current setup options.
+Keep changes focused on the native personal workflow, reliable collection and unresolved UI issues. Use synthetic examples in issues and pull requests. Do not attach personal usage records, transcripts or account details. iPhone integration is deferred under [product direction](PRODUCT-DIRECTION.md#deferred-integrations), not a current setup option.
 
 The project uses the [MIT license](../LICENSE). See [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) for dependency attribution.

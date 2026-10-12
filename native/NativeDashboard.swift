@@ -410,7 +410,7 @@ struct NativeDashboard: View {
     private var codexProviderRow: some View {
         VStack(alignment: .leading, spacing: 3) {
             ObservatoryValueRow("Codex", value: nativeCodexSourceCaption(displayedSnapshot))
-            Text("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.")
+            Text("Includes sessions from other clients that use these native Codex logs. Relay messages are not counted again.")
                 .observatoryFont(.caption).foregroundStyle(ObservatoryTheme.muted)
         }
     }

@@ -41,7 +41,7 @@ export default function ProviderCoverage({ tokens, sources = [] }: {
     </dl>
     <details className="method-note">
       <summary>What these counts include</summary>
-      <p>Codex includes HAPI and Happy sessions when they use the same native log store. Relay messages are not counted again.</p>
+      <p>Codex includes sessions from other clients when they use the same native log store. Relay messages are not counted again.</p>
       <p>Enable saved Claude Code usage in native Settings. Optional sharing shows each paired device separately when both devices enable it. Device totals are not added together. Counts include input, cache reads, cache writes and output, not subscription limits or a bill.</p>
       <p>ChatGPT, Cursor and Antigravity token sources are not connected. Choosing a model in another app does not create a Codex or Claude Code record. Saved review receipts cover only those reviews.</p>
     </details>

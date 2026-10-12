@@ -54,7 +54,7 @@ Changes pushed to this repository do not update an installed app. Automatic app 
 
 The [interactive demo](https://scriblesean.github.io/observatory/) uses fictional records. It remains a UI development fixture, not the product focus or a place to upload personal data.
 
-iPhone integration and integration with Hermes `/usage` commands are later work. iPhone support depends on supported OS permissions and data access. Hermes integration should reuse supported commands or adapters, not require a Hermes core fork. Neither is implemented by this scope change.
+iPhone integration is later work. It depends on supported OS permissions and data access, and it is not implemented.
 
 ## Go deeper
 
