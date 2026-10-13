@@ -126,8 +126,12 @@ def collect(folder):
                         return unavailable()
                     raw_model = message.get('model')
                     # Client-generated API errors carry no recorded request usage.
-                    if (event.get('isApiErrorMessage') is True and raw_model == '<synthetic>'
-                            and all(value == 0 for value in values)):
+                    # The client also writes placeholder replies with no request
+                    # identity, for example after an interrupted turn.
+                    client_flag = event.get('isApiErrorMessage')
+                    if (raw_model == '<synthetic>' and all(value == 0 for value in values)
+                            and (client_flag is True
+                                 or (client_flag is False and event.get('requestId') is None))):
                         continue
                     if not isinstance(identity[1], str) or not 0 < len(identity[1]) <= 256:
                         return unavailable()
