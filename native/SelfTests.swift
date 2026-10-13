@@ -542,6 +542,15 @@ func runSelfTests() {
                 "observatory://user@app/index.html", "observatory://app:80/index.html"] {
         precondition(resolver.resolve(URL(string: url)!) == nil, "Unsafe asset URL accepted")
     }
+    precondition(resolver.resolve(URL(string: "observatory://app/panel.html")!) == nil, "Panel page served without the flag")
+    let panelResolver = AssetResolver(root: URL(fileURLWithPath: "/tmp/observatory-test-assets"), allowPanel: true)
+    precondition(panelResolver.resolve(URL(string: "observatory://app/panel.html")!) != nil)
+    precondition(panelResolver.resolve(URL(string: "observatory://app/local/usage.json")!) == nil)
+    precondition(panelResolver.resolve(URL(string: "observatory://app/other.html")!) == nil)
+    precondition(PanelAction.allCases.map(\.rawValue) == ["refresh", "check-updates", "open-settings", "open-dashboard"])
+    for name in PanelAction.allCases.map(\.rawValue) { precondition(PanelAction.parse(name)?.rawValue == name) }
+    let refused: [Any] = ["", "Refresh", "refresh ", "quit", "open-dashboard:settings", ["refresh"], ["panelAction": "refresh"], 1, NSNull()]
+    for value in refused { precondition(PanelAction.parse(value) == nil, "Unknown panel action accepted") }
     print("Native self-tests passed")
 }
 
