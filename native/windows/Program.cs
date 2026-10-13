@@ -301,6 +301,7 @@ internal static class Program
             {
                 LaunchIsolationTests.Run();
                 SourceRetirementTests.Run();
+                WebPanel.SelfTest();
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
@@ -417,7 +418,8 @@ internal static class Program
             return;
         }
         using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
-        var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit);
+        var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit,
+            webPanel: args.Contains("--web-panel"), panelTiming: args.Contains("--panel-timing"));
         EventHandler? readyHandler = null;
         if (updateReady is not null)
         {
@@ -448,14 +450,20 @@ internal sealed class ObservatoryContext : ApplicationContext
     private SetupWizard? setupWizard;
     private DirectPairingWindow? directPairing;
     private UsagePopup? usagePopup;
+    // Spike. Null unless the app was started with --web-panel.
+    private WebPanel? webPanel;
+    private readonly bool useWebPanel;
+    private Action<string>? panelProbe;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool quitting;
     private readonly UpdateController updater;
     private int updateShutdownRequested;
 
-    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null)
+    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null,
+        bool webPanel = false, bool panelTiming = false)
     {
         this.nativeDashboard = nativeDashboard;
+        useWebPanel = webPanel;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
         updater = new UpdateController(runtime, () => !collector.Busy && !Volatile.Read(ref quitting),
@@ -513,6 +521,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         };
         activationTimer.Start();
         if (show || setupPending) Open();
+        if (panelTiming && !setupPending) _ = MeasurePanel();
     }
 
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
@@ -548,10 +557,108 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void ShowUsage()
     {
+        if (useWebPanel) { _ = ShowWebPanel(); return; }
         if (usagePopup is not null && !usagePopup.IsDisposed) { usagePopup.Close(); return; }
         usagePopup = new UsagePopup(Data, collector.Refresh, Open);
         usagePopup.FormClosed += (_, _) => usagePopup = null;
         usagePopup.ShowNearTray();
+    }
+
+    // The four actions the shared panel may ask for. Each maps to something
+    // the native panel or the tray menu already does. There are no arguments.
+    private void PanelAction(string action)
+    {
+        if (quitting) return;
+        // While the harness presses the page's buttons it records each accepted
+        // action. Only refresh runs for real there, since the others open windows.
+        if (panelProbe is not null) { panelProbe(action); if (action != "refresh") return; }
+        switch (action)
+        {
+            case "refresh": _ = collector.Refresh(); break;
+            case "check-updates": _ = CheckForUpdates(); break;
+            case "open-settings": webPanel?.Hide(); Configure(); break;
+            case "open-dashboard": Open(); break;
+        }
+    }
+
+    private async Task<bool> ShowWebPanel()
+    {
+        if (webPanel is not null && !webPanel.IsDisposed && webPanel.Visible) { webPanel.Hide(); return false; }
+        if (webPanel is null || webPanel.IsDisposed) webPanel = new WebPanel(runtime, PanelAction);
+        return await webPanel.ShowNearTray();
+    }
+
+    // Measurement harness for the spike, run only with --panel-timing. It opens
+    // and closes whichever panel is active and writes one line per event. The
+    // timer starts where the tray click handler starts, not at the mouse click.
+    private async Task MeasurePanel()
+    {
+        var log = Path.Combine(runtime, "panel-timing.log");
+        void Write(string text) => File.AppendAllText(log, DateTimeOffset.UtcNow.ToString("O") + " " + text + Environment.NewLine);
+        async Task<double> OpenOnce()
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            if (useWebPanel)
+            {
+                if (!await ShowWebPanel()) return -1;
+            }
+            else
+            {
+                var shown = new TaskCompletionSource();
+                ShowUsage();
+                if (usagePopup is not { } popup) return -1;
+                // Idle follows the first paint of the newly shown form.
+                EventHandler? idle = null;
+                idle = (_, _) => { Application.Idle -= idle; shown.TrySetResult(); };
+                Application.Idle += idle;
+                await shown.Task;
+            }
+            return watch.Elapsed.TotalMilliseconds;
+        }
+        void CloseOnce() { if (useWebPanel) webPanel?.Hide(); else usagePopup?.Close(); }
+        try
+        {
+            var collected = new TaskCompletionSource();
+            void Done() => collected.TrySetResult();
+            collector.Changed += Done;
+            await Task.WhenAny(collected.Task, Task.Delay(TimeSpan.FromMinutes(6)));
+            collector.Changed -= Done;
+            while (collector.Busy) await Task.Delay(500);
+            await Task.Delay(5000);
+            Write("panel=" + (useWebPanel ? "web" : "native") + " pid=" + Environment.ProcessId);
+            Write("phase=never-opened");
+            await Task.Delay(20000);
+            Write("open=1 ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+            Write("phase=open");
+            await Task.Delay(20000);
+            CloseOnce();
+            Write("phase=closed");
+            await Task.Delay(60000);
+            Write("phase=closed-60s");
+            await Task.Delay(15000);
+            for (var open = 2; open <= 6; open++)
+            {
+                Write("open=" + open + " ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                await Task.Delay(3000);
+                CloseOnce();
+                await Task.Delay(3000);
+            }
+            if (useWebPanel && await ShowWebPanel() && webPanel is { } panel)
+            {
+                Write("page " + await panel.Describe());
+                await panel.SavePreview(Path.Combine(runtime, "panel-timing.png"));
+                panelProbe = action => Write("accepted action=" + action);
+                for (var button = 0; button < 4; button++) { await panel.Press(button); await Task.Delay(1500); }
+                panelProbe = null;
+                var before = Snapshot.Text(Data()?["collectedAt"], "");
+                for (var wait = 0; wait < 120 && (collector.Busy || Snapshot.Text(Data()?["collectedAt"], "") == before); wait++) await Task.Delay(500);
+                await Task.Delay(1500);
+                Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " page " + await panel.Describe());
+                panel.Hide();
+            }
+            Write("phase=done");
+        }
+        catch (Exception error) { try { Write("failed " + error.GetType().Name); } catch { } }
     }
 
     private void ShowPairingDetails()
@@ -635,6 +742,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private void RefreshStatus()
     {
         usagePopup?.Reload();
+        webPanel?.SnapshotChanged();
         var stamp = Snapshot.Text(Data()?["collectedAt"], "");
         tray.Text = DateTimeOffset.TryParse(stamp, out var at)
             ? $"Observatory · updated {Math.Max(0, (int)(DateTimeOffset.UtcNow - at).TotalMinutes)}m ago"
@@ -657,6 +765,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private void Open()
     {
         usagePopup?.Close();
+        webPanel?.Hide();
         if (setupWizard is not null && !setupWizard.IsDisposed) { setupWizard.Activate(); return; }
         try
         {
@@ -716,7 +825,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         updater.Dispose();
         powerNotifications.Dispose();
         activationTimer.Stop(); activationTimer.Dispose();
-        timer.Stop(); timer.Dispose(); collector.Dispose(); dashboard?.Close(); usagePopup?.Close(); tray.Visible = false; tray.Dispose();
+        timer.Stop(); timer.Dispose(); collector.Dispose(); dashboard?.Close(); usagePopup?.Close(); webPanel?.Retire(); tray.Visible = false; tray.Dispose();
         base.ExitThreadCore();
     }
 }
