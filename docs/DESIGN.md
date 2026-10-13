@@ -23,11 +23,17 @@ Claude Code and Codex get equal weight on every screen that shows either one.
 The Mac menu-bar panel and the Windows tray panel have the same content in the same order.
 
 1. **Limits.** One row per provider and window (for example Claude Code 5-hour, Claude Code weekly, Codex 5-hour, Codex weekly). Each row shows percent remaining, a meter and the reset time. A reading that is not current shows the time it was observed.
-2. **Filters.** Device: All, Mac, Windows. Period: Now, Day, Week, Month, All time. The device list comes from the snapshot, so a later device type needs no layout change.
+2. **Filters.** Device: All, then one entry per device. Period: Now, Day, Week, Month, All time. The device list comes from the snapshot, so a later device type needs no layout change.
 3. **Totals.** Tokens and screen time for the selected device and period.
 4. **Actions.** Refresh, Check for updates, Settings, Open Observatory.
 
 Dictation does not appear in the panel.
+
+### Device names
+
+Each device has a name the person can edit in Settings. The app shows it with the platform in parentheses, for example "Studio (Mac)" and "Desk (Windows)". The default is the platform name alone. Phrases such as "this Mac" and "this PC" are retired from views that show data.
+
+The name is stored in local settings and sent only to a paired device. It replaces no identifier used for pairing or deduplication. The snapshot keeps the platform value it has today, so saved history stays readable.
 
 ### Periods
 
@@ -36,7 +42,7 @@ Dictation does not appear in the panel.
 | Now | The last 60 minutes. A meter or small graph, visually distinct from the other four. It leads with pace and estimated time until a limit runs out. |
 | Day | One calendar day in the device's time zone |
 | Week | The seven calendar days ending on the selected day |
-| Month | Open question. See below. |
+| Month | The 30 calendar days ending on the selected day |
 | All time | Every retained day |
 
 The same five names are used in the panel and in the dashboard. "Today", "All retained" and "Latest 24 hours" are retired as filter labels.
@@ -161,9 +167,7 @@ Issue 58 (the Windows app refusing its private folders when started from a packa
 
 ## Open questions
 
-- Month: the 30 calendar days ending on the selected day, or the calendar month that contains it. The coordinator recommends 30 days, to match Week.
 - The exact values for the Claude Code, Codex, warning and error colours.
-- Whether the Mac and Windows apps should show a shared device name instead of "this Mac" and "this PC".
 
 ## Sources
 

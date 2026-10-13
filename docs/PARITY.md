@@ -27,6 +27,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Period filter | Differs | Missing | Change | Mac offers Today, Week, All time. Windows shows the latest recorded day only. |
 | Now period | Missing | Missing | Add | |
 | Month period | Missing | Missing | Add | |
+| Editable device name shown as "Name (Platform)" | Missing | Missing | Add | Both show fixed Mac and Windows labels |
 | Tokens total | Done | Differs | Change | Windows shows the latest recorded day only |
 | Screen time total | Done | Differs | Change | Windows shows the latest recorded day only |
 | Voice row | Done | Missing | Remove | Dictation leaves the panel |
