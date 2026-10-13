@@ -180,11 +180,13 @@ Because the viewer is shared, a skin applies to the panel, the dashboard and the
 Decided in direction on 2026-10-13. Not built, and the working-store part is not designed.
 
 - **Export and import.** Settings offers "Export data" and "Import data". Export writes one `.observatory` file. Import reads one back. This covers backup, moving to a new computer and sharing a sample.
+- **Scope of an export.** An export always holds everything this device has: its own history and the records it has received from each paired device. There is no date-range option. Every record keeps the device it came from and that device's platform.
+- **What import does with devices.** Import groups records by their source device. Records for a device that already exists here are merged into that device's history. Records for a device this installation has never seen are kept as a separate, read-only device and are never folded into another one. A device is matched by its pairing identity when the file carries one, and otherwise by platform and name.
 - **Contents.** A versioned, compressed container holding the same sanitized records the snapshot and the saved history hold today. It holds no pairing keys, device identities, provider credentials, comparison salts, window titles, prompts or file paths.
 - **Import is additive and checked.** Import validates the whole file before changing anything, keeps a recoverable copy of the current data first, never replaces a newer record with an older one and never adds one device's records to another's.
-- **As the working store.** The owner also wants the app to read from and write to this format directly, in place of the separate snapshot, history and archive files. That is a change to how collected data is saved, so it needs its own design, a tested migration from the files both installed apps hold now, and a rollback path. Export and import come first.
+- **As the working store.** The owner wants the app to read from and write to this format directly if that is a sound way to build it, with the result readable, maintainable and effective. The coordinator's recommendation is yes, in this shape: one folder-like container with a small manifest, one file of daily records per device and source, and one file of limit readings, each in plain JSON so a person can open and read it. The viewer keeps reading one snapshot that the collector derives from the store. That is a change to how collected data is saved, so it needs its own design, a tested migration from the files both installed apps hold now, and a rollback path. Export and import come first and use the same format, so the format is proven before anything depends on it.
 
-Open questions: whether the file is one device's history or both paired devices', and whether an export can be limited to a date range.
+Open question: how a device is identified in a file made on an unpaired installation, where no pairing identity exists.
 
 ## Where each platform follows its own conventions
 
