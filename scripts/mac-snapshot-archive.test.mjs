@@ -230,6 +230,27 @@ test('a failed receipt write keeps the current snapshot and retries reuse the co
   assert.deepEqual(await readFile(f.archive),retiredBytes);
 });
 
+test('a zero-filled or empty snapshot counts as a first collection while other damage still fails closed',async t=>{
+  for(const bytes of [Buffer.alloc(0),Buffer.alloc(4096)]) {
+    const f=await retirementFixture(t);
+    await writeFile(f.file,bytes);
+    const guard=await retirementSnapshotGuard(f.runtime);
+    assert.deepEqual(guard.history,[]);
+    await guard.preserve();
+    assert.deepEqual(await readFile(f.file),bytes);
+    await assert.rejects(readFile(f.archive),{code:'ENOENT'});
+    // A snapshot that appears while collecting must still stop the replacement.
+    const racing=await retirementSnapshotGuard(f.runtime);
+    await writeFile(f.file,retiredBytes);
+    await assert.rejects(racing.preserve(),/Snapshot changed during collection/);
+  }
+  for(const bytes of ['{',' ',Buffer.concat([Buffer.alloc(16),Buffer.from('{}')])]) {
+    const f=await retirementFixture(t);
+    await writeFile(f.file,bytes);
+    await assert.rejects(retirementSnapshotGuard(f.runtime));
+  }
+});
+
 test('different or corrupt checkpoints fail closed instead of growing or overwriting retained evidence',async t=>{
   for(const damage of ['different-source','partial-copy','corrupt-receipt','hardlink'])await t.test(damage,async t=>{
     const f=await retirementFixture(t);

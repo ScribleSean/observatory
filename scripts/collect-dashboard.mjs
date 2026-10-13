@@ -301,7 +301,7 @@ export async function collect() {
   const target = path.join(folder, 'usage.json');
   const temporary=path.join(folder,`.collector-${randomBytes(16).toString('hex')}.tmp`);
   try {
-    await writeFile(temporary,JSON.stringify(data),{flag:'wx',mode:0o600});
+    await writeFile(temporary,JSON.stringify(data),{flag:'wx',mode:0o600,flush:true});
     await replacement.preserve();
     await rename(temporary,target);
   } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}

@@ -72,8 +72,20 @@ Recorded on 2026-10-12 and 2026-10-13. The sections above describe `main` at `93
 - Pull request 48 (`eb96249`) removed Hermes, HAPI and request-routing wording and aligned the documentation test with the README. The test passes again.
 - All 47 other branches were deleted from GitHub after the classification above. A local bundle of their commits is kept outside version control.
 - Pull request 49 removed the Archived Ubuntu history device and the WSL source settings from both apps. Account limits on Windows now follow their own switch and read the Codex account signed in on Windows.
-- The build number is 38 for the next candidate. No build 38 package has been built or installed by this change.
+- Build 38 was packaged by CI from `468a3c1` (run `38341644364`) and installed on this PC on 2026-10-13, replacing build 37. Its installer checksum matched, its self-test passed, and saved data was backed up first and left in place by the uninstaller.
+- Pull request 51 raised two test deadlines after the package run failed three times on a slower test step. The cause of the slower run was not investigated.
+- The build number is 39 for the next candidate, which carries the snapshot fix below. No build 39 package has been built or installed by this change.
 - Local Windows checks now work with the repo's pinned Node 24.21.0, .NET SDK 10.0.401 in the build cache, and temporary files under the ignored `.runtime` folder. On that setup the script suite gives 883 passed, 4 failed and 62 skipped. The 4 failures are TLS pairing tests that also fail on `main` on this PC and have not been investigated.
+
+## Collection on this PC
+
+The assessment above says the installed app was running. That was true, but it was not collecting. This section corrects it.
+
+- The saved snapshot `public/local/usage.json` consisted only of zero bytes, with a write time of 2026-10-09 23:22:52. An interrupted write leaves a file like that. The collector refuses to replace a snapshot it cannot read, so every collection from then on reported `failed`, under build 37 and under build 38.
+- The zero-filled file was renamed aside on 2026-10-13. The next scheduled collection wrote a new snapshot with 3 of 6 sources read: Windows activity, Wispr dictation and Claude Code request counts.
+- Activity history that existed only in the lost snapshot is not recoverable on this PC.
+- Codex tokens, Codex account limits and Mac pairing are still unavailable here. `C:\Users\seana\AppData` has a Full Control permission entry for an app-container identity that could not be matched to a program. The app checks every parent folder of `private-codex`, `private-quota` and `private-sync`, and it refuses all three while that entry exists. The entry was not changed. Removing it, or deciding that the app should accept it, is the owner's decision.
+- The fix in this revision flushes snapshot bytes to disk before publishing them, and treats a snapshot of zero bytes only as a first collection. Any other unreadable snapshot still stops collection.
 
 ## Remaining Ubuntu code
 
@@ -91,17 +103,19 @@ The safe order is:
 
 None of this has been run. The Mac changes in pull request 49 were written on Windows and checked only by the macOS CI job, which compiles the app and runs its self-tests.
 
-1. Pull `main` and confirm the revision matches the one used for the Windows build 38 candidate.
+1. Pull `main` and confirm the revision matches the one used for the installed Windows candidate.
 2. Build the Mac app from that revision by following [the Mac guide](MAC.md), and run `--self-test` on the built binary.
 3. Back up the Mac app's data folder before replacing the installed app.
 4. Install the build and open the dashboard. In Activity and Tokens, the Device filter must offer All, Mac and Windows only.
 5. Open a saved snapshot that contains Ubuntu rows, if one exists. No Ubuntu device or Ubuntu row may appear, and the file's bytes must be unchanged afterward.
 6. In Source health, each device list must show Mac and Windows rows only. The Local benchmarks row must be labeled Saved.
 7. Run one collection and confirm Mac activity, Codex tokens and any enabled optional sources still report a status.
-8. Confirm the existing pairing with Windows still exchanges records after both devices run build 38. The All token total is expected to stay unverified until the devices are re-paired.
-9. Report any step that fails with the exact revision and the visible message.
+8. Check whether the Mac's own `public/local/usage.json` is readable JSON. The Windows copy was zero-filled.
+9. Pairing with Windows cannot be confirmed until the permission entry on the Windows `AppData` folder is resolved. After that, confirm the existing pairing still exchanges records. The All token total is expected to stay unverified until the devices are re-paired.
+10. Report any step that fails with the exact revision and the visible message.
 
 ## Next decisions
 
-1. Approve the one-time re-pair of Windows and Mac described above.
-2. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
+1. Decide what to do about the permission entry on `AppData` that blocks Codex tokens, account limits and pairing on this PC.
+2. Approve the one-time re-pair of Windows and Mac described above.
+3. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.

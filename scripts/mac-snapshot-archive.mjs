@@ -133,6 +133,10 @@ async function optionalSnapshot(file) {
   // Only an initially absent entry means first collection. A disappearance
   // after opening or while verifying the read must propagate as a failure.
   try {await lstat(file);}catch(error) {if(error.code==='ENOENT')return null;throw error;}
+  // A crash before the data reached disk can leave a snapshot of zero bytes
+  // only. It holds no records, so it counts as a first collection. Any other
+  // unreadable snapshot still fails closed.
+  if((await readEvidence(file,maximumBytes)).data.every(byte=>byte===0))return null;
   return readSnapshot(file);
 }
 
