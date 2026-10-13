@@ -9,7 +9,7 @@ Observatory is Sean's personal screen-time and AI-usage app, built in public. Th
 ## Current priorities
 
 1. Make native Windows and Mac collection dependable without an open dashboard or a WSL dependency. Keep source failures, freshness and retry behavior visible.
-2. Verify the [published source retirement](AUDIT-STATUS.md#published-source-october-7) against the exact packaged and installed candidates. Preserve original logs, historical evidence and recoverable settings. Source publication does not establish that real settings or records have been migrated.
+2. Verify the published source retirement (archived) against the exact packaged and installed candidates. Preserve original logs, historical evidence and recoverable settings. Source publication does not establish that real settings or records have been migrated.
 3. Fix demonstrated native UI defects and finish the unresolved audit checks, including tray/menu-bar actions, readable charts, keyboard access, enlarged layouts and failure recovery.
 4. Preserve actual recorded history and source provenance. Keep account windows, reset markers and observation times distinct. Unknown is not zero. Do not infer allowances from tokens or sum device records without verified deduplication.
 5. Keep source choices and sharing consent understandable in Settings. Reuse the installed providers' supported authentication. Account-manager expansion is not a prerequisite for using existing sources.
@@ -79,8 +79,8 @@ Provider account management and the complete setup-to-sync experience remain unf
 
 The legacy Mac collector continues recording real allowance observations and configured cross-device sources. A compatibility adapter lets the newer Mac collector retain configured agent receipts and local-model results after migration. Native Mac Settings now includes explicit receipt and benchmark switches, defaulting off. They reuse legacy source locations, not new discovery, and discard disabled in-flight results without deleting original files. The records remain owner-local and are not added to peer payloads. Synthetic collector integration passed, but actual migration, source-location editing and cross-device workflow exchange remain unfinished. Migration must preserve records, explain coverage changes and retain a recoverable configuration. Verified development packages and installed updates do not establish a clean public release.
 
-See [tracking reuse](TRACKING-REUSE.md) for the open-source review and measurement boundaries.
+See tracking reuse (archived) for the open-source review and measurement boundaries.
 
-See [legacy Mac migration](MAC-MIGRATION.md) for the read-only source assessment and activation gates.
+See legacy Mac migration (archived) for the read-only source assessment and activation gates.
 
 The newer Mac collector also preserves an explicitly selected legacy account client instead of discovering a replacement. A legacy configuration without an account selection remains disconnected. The native monitoring switch can disable this read, including discarding an in-flight response. Fresh installations may discover the installed Codex client only after monitoring is enabled. These compatibility paths do not themselves perform configuration migration.

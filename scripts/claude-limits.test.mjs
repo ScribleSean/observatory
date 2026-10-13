@@ -78,7 +78,8 @@ test('recording writes one small private file and reading needs the install mark
   assert.doesNotMatch(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'),/synthetic|project|transcript/i);
   assert.equal((await readClaudeLimits(runtime,{now})).status,'not-connected');
   await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
-  const source=await readClaudeLimits(runtime,{now:now+1000});
+  // Tests never start the real Claude Code command.
+  const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>null});
   assert.equal(source.status,'ok');
   const result={data:{}};attachClaudeLimits(result,source);
   assert.equal(result.data.claudeLimits.windows.length,2);

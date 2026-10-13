@@ -1,6 +1,7 @@
 import {lstat,mkdir,readFile,rename,unlink,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
+import {runClaudeUsage} from './claude-usage-command.mjs';
 
 // Claude Code passes rate_limits to a status line command for Pro and Max
 // subscribers after the first response of a session. This module keeps only
@@ -124,9 +125,16 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
-export async function readClaudeLimits(runtime,{now=Date.now()}={}) {
+// With consent given, each collection also asks the installed CLI for the
+// current figures, so limits stay current when no terminal session is open.
+// A failed or unexpected command result changes nothing.
+export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=runClaudeUsage}={}) {
   const enabled=await claudeStatuslineInstalled(runtime);
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
+  try {
+    const usage=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
+    if(usage)await recordClaudeLimits(runtime,usage,now);
+  } catch {}
   let stored=null;
   try {stored=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_FILE),4096);}catch{}
   return claudeLimitsSource(stored,{enabled:true,now});

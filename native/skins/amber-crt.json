@@ -1,0 +1,54 @@
+{
+  "name": "Amber CRT",
+  "colors": {
+    "background": [
+      "120C04",
+      "120C04"
+    ],
+    "surface": [
+      "1A1207",
+      "1A1207"
+    ],
+    "text": [
+      "FFB54A",
+      "FFB54A"
+    ],
+    "muted": [
+      "B07A2A",
+      "B07A2A"
+    ],
+    "strong": [
+      "FFD08A",
+      "FFD08A"
+    ],
+    "accent": [
+      "FFB54A",
+      "FFB54A"
+    ],
+    "track": [
+      "2B1D08",
+      "2B1D08"
+    ],
+    "claude": [
+      "FF9A3D",
+      "FF9A3D"
+    ],
+    "codex": [
+      "FFD27A",
+      "FFD27A"
+    ],
+    "warning": [
+      "FF6A3D",
+      "FF6A3D"
+    ],
+    "error": [
+      "FF4D4D",
+      "FF4D4D"
+    ]
+  },
+  "font": "mono",
+  "numeralFont": "mono",
+  "radius": 0,
+  "rules": false,
+  "limitStyle": "text"
+}

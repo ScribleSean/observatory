@@ -183,16 +183,18 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 ## Shared web viewer (spike)
 
-Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The shared panel exists as source and is not shown by either installed app.
+Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The shared panel exists as source and is not shown by either installed app. The Windows column was updated the same day for the spike in issue 65, which is source on `win/web-panel-spike` and was run from a staged build.
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Shared panel page (`panel.html`) in the bundled web files | Missing | Missing | Add | Built by the web bundle. Each shell's file guard allows only the index page and `assets/` today. |
-| Panel shown in the system web view behind a flag | Missing | Missing | Add | Default stays the native panel |
-| Four panel actions accepted by the shell | Missing | Missing | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard` |
-| Open time and memory measured | Missing | Missing | Add | Needed before the direction is confirmed |
-| Skins chosen in Settings | Missing | Missing | Add | Shared viewer only. See Skins in the design direction. |
-| Export and import of a `.observatory` file in Settings | Missing | Missing | Add | See the design direction. |
+| Shared panel page (`panel.html`) in the bundled web files | Missing | Done | Add | Built by the web bundle. On Windows a separate panel host serves the page, bundled assets and the snapshot. The dashboard host's guard is unchanged. Mac allows only the index page and `assets/` today. |
+| Panel shown in the system web view behind a flag | Missing | Done | Add | `--web-panel` on Windows. Default stays the native panel. The web view is created on the first opening and kept. |
+| Panel closes when another window is clicked | Unknown | Differs | Add | The Windows native popup does not. The Windows web panel has the behaviour in source. It was not exercised. |
+| Four panel actions accepted by the shell | Missing | Done | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard`. On Windows only `refresh` was run end to end. The other three were accepted and not run. |
+| Open time and memory measured | Missing | Done | Add | Needed before the direction is confirmed. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 132 ms native, and about 390 MiB working set with the panel open against 65 MiB native. |
+| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared panel source. A shell selects one with `data-skin`. No Settings control exists. |
+| Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. No Settings control calls it. |
+| Import of a `.observatory` file | Missing | Missing | Add | Needs the working store first. See the design direction. |
 
 ## Web demo
 

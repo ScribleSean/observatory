@@ -49,7 +49,7 @@ Partial or corrupt files fail closed. A process interrupted during a file write 
 
 The native Mac and Windows menus now include **Disconnect paired device…** in source. The confirmation defaults to Cancel or No and explains that the operation affects this installation only. It refuses to start during local collection. If the bundled tool fails, collection is paused for that app session so an automatic refresh does not immediately attempt another exchange. Retry disconnection or quit until the state can be inspected. This pause is not a persistent setting and does not stop another process or device.
 
-These controls have native build and temporary-runtime integration coverage. On Mac, the unpaired-state message, confirmation layout, cancellation without revocation, confirmed revocation and subsequent local collection were verified in an isolated all-sources-disabled preview. Windows interactive confirmation/cancellation and both platforms' failure/retry presentation still need desktop verification. For the current installed build and package boundaries, see the [release evidence](RELEASE-0.3.8.md).
+These controls have native build and temporary-runtime integration coverage. On Mac, the unpaired-state message, confirmation layout, cancellation without revocation, confirmed revocation and subsequent local collection were verified in an isolated all-sources-disabled preview. Windows interactive confirmation/cancellation and both platforms' failure/retry presentation still need desktop verification. For the current installed build and package boundaries, see the release evidence (archived).
 
 The source CLI supports an explicit local disable operation:
 

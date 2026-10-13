@@ -46,7 +46,7 @@ The [interactive demo](https://scriblesean.github.io/observatory/) uses the web 
 
 Select Activity to explore recorded screen time. Day has previous/next controls. Week shows seven dated rows ending on the selected date, with three-hour bands and daily totals. Hover or select a band for details. Select a date to open that day. Missing tracking records are muted, distinct from recorded idle time. All time totals retained daily summaries and lets you open a retained date. Retention starts with the available rolling window and keeps up to 3,650 dates per view, not the complete ActivityWatch archive. Broader reads replace partial days without adding duplicate totals. Failed source reads preserve prior summaries and show their last successful timestamp. Combined history is retained independently, never reconstructed by adding device totals.
 
-Tokens shows model-level counts and shares. Expand a model for its token categories and supported API-equivalent estimate. The recorded-day selector lets you review older days. [Research notes](USAGE-TRACKING-REFERENCES.md) describe the open-source patterns behind the accounting.
+Tokens shows model-level counts and shares. Expand a model for its token categories and supported API-equivalent estimate. The recorded-day selector lets you review older days. Research notes (archived) describe the open-source patterns behind the accounting.
 
 You need Node.js 22.13 or later. Check `node --version` before running `npm ci`. If Node is missing or older, install a supported version first using your operating system's installation method or your existing Node version manager. Node 20 is not supported.
 
@@ -81,7 +81,7 @@ Open `http://127.0.0.1:5601` on the viewing computer. The host, local server and
 
 The historical Mac hub used SSH and ccusage reports, including Ubuntu reads and a WSL route to native Windows logs. That route is no longer a setup recommendation. Native Windows logs should be read by the Windows app. Do not copy legacy hub examples into a new setup or restart WSL to recover an old source.
 
-Preserve existing private settings and saved snapshots until a tested migration can retain supported Mac/Windows records and retire obsolete source choices. Existing SSH aliases and provider credentials stay with their owning tools. [Legacy Mac migration](MAC-MIGRATION.md) retains the compatibility assessment, not authorization to resume Ubuntu tracking.
+Preserve existing private settings and saved snapshots until a tested migration can retain supported Mac/Windows records and retire obsolete source choices. Existing SSH aliases and provider credentials stay with their owning tools. Legacy Mac migration (archived) retains the compatibility assessment, not authorization to resume Ubuntu tracking.
 
 The browser checks for a newer snapshot every 30 seconds while visible, and when it becomes visible again. **Reload snapshot** checks immediately. None of these browser actions starts collection or model tasks. You do not need to rebuild after collecting new records. ActivityWatch records independently of this viewer.
 
