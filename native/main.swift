@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var reportsPanelTiming: Bool { CommandLine.arguments.contains("--panel-timing") }
     private var webPanel: WebPanelController?
     private var collectionObserver: AnyCancellable?
+    private var dismissMonitors: [Any] = []
     private var expectedDashboardPresent: Bool {
         usesNativeDashboard ? detail?.contentView is NSHostingView<NativeDashboard> && webView == nil : webView != nil
     }
@@ -212,6 +213,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // navigation must close it even if AppKit has attached a child window.
         popover.close()
         usageWindow?.close()
+        removeDismissMonitors()
+    }
+
+    // The popover stays semitransient so a dashboard handoff inside this app
+    // does not close it early. These monitors close it on any click outside
+    // it, in this app or in another one, as other menu-bar panels do.
+    private func installDismissMonitors() {
+        guard dismissMonitors.isEmpty, popover.isShown || usageWindow?.isVisible == true else { return }
+        let mouseDown: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        // A click on the menu-bar icon is left to togglePanel.
+        let onIcon: () -> Bool = { [weak self] in
+            self?.statusItem.button?.window?.frame.contains(NSEvent.mouseLocation) == true
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mouseDown, handler: { [weak self] _ in
+            DispatchQueue.main.async { if !onIcon() { self?.closeUsage() } }
+        }) { dismissMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mouseDown, handler: { [weak self] event in
+            guard let self, !onIcon() else { return event }
+            let panelWindow = self.popover.contentViewController?.view.window
+            if event.window !== panelWindow, event.window !== self.usageWindow { self.closeUsage() }
+            return event
+        }) { dismissMonitors.append(local) }
+    }
+
+    private func removeDismissMonitors() {
+        dismissMonitors.forEach(NSEvent.removeMonitor)
+        dismissMonitors.removeAll()
     }
 
     private func webPanelContent(size: NSSize) -> NSViewController? {
@@ -318,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let alreadyOpen = popover.isShown
         let start = CFAbsoluteTimeGetCurrent()
         presentUsage()
+        installDismissMonitors()
         if !alreadyOpen, usesWebPanel || reportsPanelTiming { panelOpened(since: start) }
     }
 
@@ -740,6 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let window = notification.object as? NSWindow, window === usageWindow {
             window.contentViewController = nil
             usageWindow = nil
+            if !popover.isShown { removeDismissMonitors() }
             return
         }
         guard let window = notification.object as? NSWindow, window === detail else { return }
