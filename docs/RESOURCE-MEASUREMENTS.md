@@ -242,7 +242,7 @@ The four extra processes are the WebKit content, GPU and networking helpers and 
 - What `refresh` and `check-updates` do after the shell accepts them outside preview mode. They call the same functions as the native panel and the menu.
 - The page reloading after `observatory:snapshot-changed`. The shell dispatches the event when a collection ends. The effect on the page was not observed.
 - Light appearance, a second display, the floating fallback window used when the icon is hidden, and keyboard focus.
-- The merged result with later changes on `main`, including skins. An installed package.
+- Timing and memory after merging later changes on `main`, including skins. The merged branch at `f06db1a` passed every builder check, and its web panel opened once in preview mode in the default skin. An installed package was not built.
 - Idle memory over hours, memory after many collections, and behaviour after sleep and wake.
 
 ## Limits
