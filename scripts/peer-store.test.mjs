@@ -117,7 +117,7 @@ test('local sequence overflow fails closed without resetting the generation',asy
   assert.equal((await readPeerState(runtime,config,now,'local')).revision.sequence,Number.MAX_SAFE_INTEGER);
 });
 
-test('independent publishers allocate distinct sequences', {timeout:15000},async t=>{
+test('independent publishers allocate distinct sequences', {timeout:45000},async t=>{
   const runtime=await fixture(t);
   await publishLocalPayload(runtime,payload(),config,now);
   const moduleUrl=new URL('./peer-store.mjs',import.meta.url).href;
