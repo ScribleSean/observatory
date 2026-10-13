@@ -6,7 +6,7 @@ internal static class LaunchArguments
     // must never fall through to an ordinary application launch.
     internal static bool Valid(string[] args)
     {
-        if (args.All(argument => argument is "--background" or "--native-dashboard" or "--legacy-dashboard"))
+        if (args.All(argument => argument is "--background" or "--native-dashboard" or "--legacy-dashboard" or "--web-panel" or "--panel-timing"))
             return args.Distinct(StringComparer.Ordinal).Count() == args.Length;
         if (args.Skip(1).Any(argument => string.IsNullOrWhiteSpace(argument) || argument.StartsWith("--", StringComparison.Ordinal)))
             return false;
@@ -33,7 +33,7 @@ internal static class LaunchArguments
     // Installed TEST apps do not run release updates or helpers accepting an
     // arbitrary runtime path. Source-tree fixtures retain their existing modes.
     internal static bool ValidForTestInstallation(string[] args) => Valid(args) &&
-        (args.Length == 0 || args[0] is "--background" or "--native-dashboard" or "--legacy-dashboard" or
+        (args.Length == 0 || args[0] is "--background" or "--native-dashboard" or "--legacy-dashboard" or "--web-panel" or "--panel-timing" or
             "--self-test" or "--quit-for-update" or "--update-ready" or "--test-update-ready" or
             "--test-launch-isolation");
 }
