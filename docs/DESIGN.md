@@ -155,10 +155,51 @@ The sage accent stays reserved for selected controls. Contrast of these four aga
 | Accessibility | VoiceOver, system text size, View menu zoom | Narrator, system text scaling |
 | Settings shortcut | Command comma | None required |
 
-Two native interfaces remain, fed by the shared files. Replacing them with one shared interface layer is a recorded later option, not current work.
+## Architecture
+
+Decided in direction on 2026-10-13. It is not built. A spike is measuring it first.
+
+The app has three parts.
+
+| Part | What it does | Built how many times |
+| --- | --- | --- |
+| Collector | Reads sources and writes one sanitized snapshot | Once, in the shared scripts |
+| Shell | Tray or menu-bar icon, window, startup, updates, security checks, pairing processes | Once per platform |
+| Viewer | Turns the snapshot into what the person sees | Three times at build 40: SwiftUI, Windows Forms and React |
+
+The direction is one viewer. It is written once with web technology and shown inside each shell in the system web view (WebKit on Mac, WebView2 on Windows), for the dashboard window and for the panel. The web demo is the same viewer with fictional data. No web server, container or browser tab is involved.
+
+The SwiftUI and Windows Forms viewers stay the default until the shared viewer is verified on both of the owner's devices. Nothing is removed during the spike. This replaces the earlier plan to remove the web view from the native apps. Electron was rejected for its size. Tauri, Flutter and similar were rejected because they would also replace the shells, which hold the tested update and security code.
+
+### Spike
+
+The spike builds the panel only. The decision to continue rests on measurements from both devices: time from click to a drawn panel, and memory with the panel open and after it closes. Those numbers do not exist yet.
+
+### Panel contract
+
+| Item | Contract |
+| --- | --- |
+| Page | `panel.html` in the bundled web files. It sets `window.observatoryPanelReady` when it has drawn. |
+| Data | It requests `./local/usage.json` through the existing snapshot bridge. It reads nothing else. |
+| Actions | Four fixed names with no arguments: `refresh`, `check-updates`, `open-settings`, `open-dashboard`. Mac receives them on the `panelAction` message handler. Windows receives `{ "panelAction": name }` as a web message. A shell must ignore any other value. |
+| Reload | The shell may dispatch `observatory:snapshot-changed` on `window` after a collection. The page also reloads every 30 seconds while visible. |
+| Appearance | Follows the system setting. A shell may set `data-theme` to `light` or `dark` on the root element. |
+| Sample data | `panel.html?demo` shows fictional data and labels it "Sample data". |
+
+The four actions map to things each shell already does. This is not a general command channel, and it must not become one.
+
+### Snapshot fields the panel reads that no collector writes yet
+
+| Field | Meaning | Until it exists |
+| --- | --- | --- |
+| `claudeLimits` | Claude Code limit windows in the same shape as `quota` | The panel shows one Claude Code row reading Unknown |
+| `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
+
+These names are proposals. They become part of the snapshot format only when the collector change is reviewed.
 
 ## Order of work
 
+0. The shared-viewer spike described under Architecture. Its result decides whether steps 2 to 8 are built once in the shared viewer or twice in the native viewers.
 1. Removals.
 2. Shared strings file, and wider use of the design tokens.
 3. Month period and the five shared period names.
