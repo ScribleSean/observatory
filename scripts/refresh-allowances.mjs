@@ -30,7 +30,7 @@ export async function refreshAllowances(runtime,{enabled,readQuota,sync=attachQu
   if(!current.isFile() || current.isSymbolicLink() || await readFile(file,'utf8')!==original)throw Error('Snapshot changed during allowance refresh');
   const temporary=path.join(folder,`.allowances-${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary,next,{flag:'wx',mode:0o600});
+    await writeFile(temporary,next,{flag:'wx',mode:0o600,flush:true});
     await rename(temporary,file);
   } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   return result;

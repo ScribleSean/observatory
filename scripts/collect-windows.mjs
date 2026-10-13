@@ -67,7 +67,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   const atomic=async(name,value,beforeReplace)=>{
     const temporary=path.join(folder,`.collector-${randomUUID()}.tmp`);
     try {
-      await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600});
+      await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600,flush:true});
       await beforeReplace?.();
       await rename(temporary,path.join(folder,name));
     } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
