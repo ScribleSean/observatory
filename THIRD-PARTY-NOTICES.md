@@ -8,6 +8,8 @@ ActivityWatch and ccusage are independent external tools. They are not bundled, 
 
 Inter Tight is bundled from the Google Fonts repository under the SIL Open Font License 1.1. Its complete copyright and license text is retained in `public/fonts/OFL.txt`, copied into Mac Resources and included in generated web notices. The app makes no font-service requests.
 
+Fraunces and JetBrains Mono are bundled from the Google Fonts repository under the SIL Open Font License 1.1, for the Almanac, Instrument and Amber CRT skins of the shared web viewer. Their complete copyright and license texts are retained in `public/fonts/Fraunces-OFL.txt` and `public/fonts/JetBrainsMono-OFL.txt` and included in the generated web notices. Fraunces is copyright 2018 The Fraunces Project Authors. JetBrains Mono is copyright 2020 The JetBrains Mono Project Authors. They are used by the web viewer only and are not copied into the native Mac resources or the Windows Fonts folder.
+
 ## Native package notices
 
 Mac candidates include Node and the Astral python-build-standalone distribution of CPython. Versions and archive checksums are pinned in `native/mac/runtime-assets.json`. Their original notices, Python dependency notices, and the generated web notices live inside the app's Resources directory. See [Mac packaging](docs/MAC.md) for the documented system-zlib manifest exception. The app does not replace system runtimes.

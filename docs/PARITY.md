@@ -192,8 +192,9 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | Panel closes when another window is clicked | Unknown | Differs | Add | The Windows native popup does not. The Windows web panel has the behaviour in source. It was not exercised. |
 | Four panel actions accepted by the shell | Missing | Done | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard`. On Windows only `refresh` was run end to end. The other three were accepted and not run. |
 | Open time and memory measured | Missing | Done | Add | Needed before the direction is confirmed. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 132 ms native, and about 390 MiB working set with the panel open against 65 MiB native. |
-| Skins chosen in Settings | Missing | Missing | Add | Shared viewer only. See Skins in the design direction. |
-| Export and import of a `.observatory` file in Settings | Missing | Missing | Add | See the design direction. |
+| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared panel source. A shell selects one with `data-skin`. No Settings control exists. |
+| Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. No Settings control calls it. |
+| Import of a `.observatory` file | Missing | Missing | Add | Needs the working store first. See the design direction. |
 
 ## Web demo
 

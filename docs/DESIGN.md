@@ -145,31 +145,81 @@ The sage accent stays reserved for selected controls. Contrast of these four aga
 
 ## Skins
 
-Decided in direction on 2026-10-13. Not built.
+Decided in direction on 2026-10-13. Four skins and three limit styles exist as source in the shared panel since that date. No installed app shows them, and there is no skin choice in Settings yet.
 
 A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
 
 - **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer ignores unknown fields and rejects a skin with a missing or malformed field.
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
-- **Limit styles.** A fixed list the viewer implements: bar, numeral, text bar, block and dial. A skin picks one. A new style is a change to the viewer, reviewed like any other.
+- **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
 - **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails.
 - **Where skins live.** Bundled skins sit beside `native/design-tokens.json`, which becomes the default skin (Sage). A person's own skins are files in the app's data folder, chosen in Settings.
 
-Skins the owner has asked for first: Sage (default) and Almanac. The candidate list also holds Almanac Night, Ledger, Instrument, Blueprint, Terminal, Amber CRT, Poster, Riso, Arcade and Nordic. None is built.
+Bundled skins, in `native/skins/`:
+
+| Skin | Limit style | Light and dark | Notes |
+| --- | --- | --- | --- |
+| Sage | Bar | Both | The default. Its colours must equal `native/design-tokens.json`, and a test checks that. |
+| Almanac | Numeral | Both | The dark values are the look first sketched as Almanac Night. |
+| Instrument | Bar | Same in both | Dark by nature |
+| Amber CRT | Text bar | Same in both | Dark by nature |
+
+`lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
+
+A shell chooses a skin by setting `data-skin` on the root element or by loading `panel.html?skin=name`. With sample data the page shows a skin picker so a person can compare them.
+
+Fonts: Almanac uses Fraunces and the two mono skins use JetBrains Mono. Both are bundled in `public/fonts/` under the SIL Open Font License, with their licence texts beside them and in the generated web notices. The app makes no font-service requests.
+
+Candidates not built: Ledger, Blueprint, Terminal, Poster, Riso, Arcade and Nordic.
 
 Because the viewer is shared, a skin applies to the panel, the dashboard and the demo on both platforms at once. Skins depend on the shared viewer replacing the native viewers. They are not planned for the SwiftUI or Windows Forms viewers.
 
 ## The `.observatory` file
 
-Decided in direction on 2026-10-13. Not built, and the working-store part is not designed.
+Decided in direction on 2026-10-13. Export and inspection exist as a shared script since that date. Import, the Settings controls and the working store are not built.
+
+### What exists
+
+`scripts/observatory-file.mjs` has two commands.
+
+| Command | What it does |
+| --- | --- |
+| `export --runtime <folder> --out <file.observatory>` | Reads the saved snapshot and writes one file. It refuses to replace an existing file. |
+| `inspect <file.observatory>` | Validates a file and prints its devices, record sets, date ranges and counts. It prints no usage values. |
+
+The file is one gzip-compressed JSON document. Decompressed, it is plain JSON a person can read.
+
+| Section | Holds |
+| --- | --- |
+| Header | Format name, version 1, export time, app version, exporting device, time zone |
+| `devices` | Each device with records in the file: its platform and its custom name when one is set |
+| `records` | One set per device, kind and provider: screen time, Codex tokens, Claude Code tokens, dictation. Each set is a list of days. |
+| `combined` | The collector's verified combined days, kept apart from any device |
+| `limits` | Account-wide limit readings for Codex and Claude Code, with the reading history the snapshot holds |
+
+Rules the script enforces: a record keeps the device it came from, a source that was not read is left out and not written as zero, a combined token set is included only when the collector verified it, and every value must be a number, a boolean, a short label or a small container of those. Text longer than 80 characters is refused, so a title, prompt or path cannot be carried. On import-side validation, unknown top-level fields are dropped and an unknown version is refused.
+
+Limits of version 1:
+
+- Limit history covers what the snapshot holds, which is about the latest 24 hours. The longer history in the private allowance archive is not exported yet.
+- Codex reasoning and speed settings and tool-call counts are not exported.
+- Exercised on the Mac against the real snapshot on 2026-10-13 from the source checkout, writing to a temporary folder: two devices, seven record sets, two combined sets and Codex limits, 38.5 kB compressed from 356 kB. Not exercised on Windows.
+
+### Why import is not built yet
+
+The collector rebuilds token history from the tools' own logs on every run. Records imported from another computer have no logs behind them, so the next collection would drop them. Import therefore needs the working store described below, where imported history can live. Until then a file can be exported, kept as a backup and inspected.
+
+### Direction
 
 - **Export and import.** Settings offers "Export data" and "Import data". Export writes one `.observatory` file. Import reads one back. This covers backup, moving to a new computer and sharing a sample.
+- **Scope of an export.** An export always holds everything this device has: its own history and the records it has received from each paired device. There is no date-range option. Every record keeps the device it came from and that device's platform.
+- **What import does with devices.** Import groups records by their source device. Records for a device that already exists here are merged into that device's history. Records for a device this installation has never seen are kept as a separate, read-only device and are never folded into another one. A device is matched by its pairing identity when the file carries one, and otherwise by platform and name.
 - **Contents.** A versioned, compressed container holding the same sanitized records the snapshot and the saved history hold today. It holds no pairing keys, device identities, provider credentials, comparison salts, window titles, prompts or file paths.
 - **Import is additive and checked.** Import validates the whole file before changing anything, keeps a recoverable copy of the current data first, never replaces a newer record with an older one and never adds one device's records to another's.
-- **As the working store.** The owner also wants the app to read from and write to this format directly, in place of the separate snapshot, history and archive files. That is a change to how collected data is saved, so it needs its own design, a tested migration from the files both installed apps hold now, and a rollback path. Export and import come first.
+- **As the working store.** The owner wants the app to read from and write to this format directly if that is a sound way to build it, with the result readable, maintainable and effective. The coordinator's recommendation is yes, in this shape: one folder-like container with a small manifest, one file of daily records per device and source, and one file of limit readings, each in plain JSON so a person can open and read it. The viewer keeps reading one snapshot that the collector derives from the store. That is a change to how collected data is saved, so it needs its own design, a tested migration from the files both installed apps hold now, and a rollback path. Export and import come first and use the same format, so the format is proven before anything depends on it.
 
-Open questions: whether the file is one device's history or both paired devices', and whether an export can be limited to a date range.
+Open question: how a device is identified in a file made on an unpaired installation, where no pairing identity exists.
 
 ## Where each platform follows its own conventions
 
@@ -227,7 +277,7 @@ The four actions map to things each shell already does. This is not a general co
 
 ### Claude Code limits bridge
 
-Added as source on 2026-10-13. It is not installed on either device and has not run against a real Claude Code session.
+Added as source on 2026-10-13. The owner consented to installing it on the Mac that day, and it produced a real reading there. It is not installed on Windows.
 
 | Piece | File | What it does |
 | --- | --- | --- |
@@ -235,6 +285,18 @@ Added as source on 2026-10-13. It is not installed on either device and has not 
 | Store | `claude-limits/limits.json` in the app's data folder | Two percentages, two reset times and the times they were observed. Nothing else from the status line input is kept. |
 | Installer | `scripts/claude-statusline-install.mjs` | `status`, `install` and `uninstall` for the `statusLine` entry in Claude Code's `settings.json`. Install needs `--consent`, saves the earlier entry, writes a backup beside the settings file and refuses to overwrite a settings file that changed during the update. Uninstall restores the earlier entry. Nothing calls it automatically. |
 | Reader | `scripts/claude-limits.mjs` | Both collectors attach `claudeLimits` to the snapshot. |
+
+### Reading through the usage command
+
+Added on 2026-10-13, after the bridge was found to update only from terminal sessions. On the Mac, two Claude desktop app sessions ran for several minutes without producing a reading, while one terminal session produced one within seconds.
+
+With limits consent given, each collection also runs the installed Claude Code CLI once: `claude -p /usage --output-format json --no-session-persistence`. `scripts/claude-usage-command.mjs` accepts the result only when it reports no error, zero turns, zero cost and the local command name `usage`. It keeps the "Current session" and "Current week (all models)" percentages and reset times and discards the rest of the text. The reading goes into the same store as the bridge's, so the newest one wins.
+
+- Observed on the Mac with Claude Code 2.1.296: the command returned in under half a second by itself, made no model request, and included usage from desktop app sessions. Through the collector's reader the whole read took about 3 seconds.
+- With `--no-session-persistence` it writes no session file. It does create one empty project folder for its working directory, which is the app's `claude-limits` folder, so that happens once.
+- The command prints text meant for a person. If the wording or the JSON fields change, the reader returns nothing and the bridge reading, if any, is still used. Nothing is guessed.
+- The reader looks for `claude` on `PATH` and in a few usual install folders. A desktop app started from the Dock may not have the same `PATH` as a terminal. This is not yet verified inside an installed build, and not at all on Windows.
+- Consent is the same marker the bridge installer writes. A way to give limits consent without changing Claude Code's settings is still needed.
 
 Status values: `not-connected` when the bridge is not installed, `unavailable` when it is installed and no usable reading exists, `ok` when the newest reading is under 10 minutes old, and `stale` when it is older. A window whose reset time has passed is dropped, because its value is unknown until the next reading.
 
@@ -244,7 +306,9 @@ Things a person should be told before they consent:
 - Readings arrive only while a Claude Code session is responding, and only for Pro and Max subscriptions.
 - The limits are account-wide. They are observed on this device and are not sent to a paired device.
 
-Not verified: the command quoting under PowerShell on Windows, the fields Claude Code sends in the installed version on either device, and the native Settings switch, which does not exist yet.
+Verified on the Mac on 2026-10-13, from `main` at `50b2e7e`: the installer added the `statusLine` entry to a settings file that had none, left the other nine keys unchanged and wrote the backup. A Claude Code session in a terminal then wrote a reading with both windows within seconds, and `readClaudeLimits` returned status `ok`. The weekly figure matched the plan usage the Claude desktop app reported for the same account at the same time. The installed command points at the script in the source checkout, because build 40 does not contain it.
+
+Not verified: the command quoting under PowerShell on Windows, the fields Claude Code sends on Windows, uninstall on a real settings file, and the native Settings switch, which does not exist yet. No installed build reads the saved reading into the snapshot yet.
 
 ## Order of work
 
