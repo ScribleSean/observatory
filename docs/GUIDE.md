@@ -4,7 +4,7 @@
 
 Observatory is Sean's personal native Mac and Windows app for workspace activity, AI usage and dictation, with a Mac menu-bar panel and Windows system-tray panel. It is built in public, but consumer onboarding and hosted services are not the goal. Supported sources and platform gaps are listed in [source coverage](SOURCE-COVERAGE.md).
 
-Current work is native collection reliability and the remaining UI fixes. WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. Older builds and snapshots may still expose those choices. Do not use them for new setup. This guide does not claim that their implementation has been removed. See [product direction](PRODUCT-DIRECTION.md) and the [roadmap](ROADMAP.md).
+Current work is native collection reliability and the remaining UI fixes. WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. Current source no longer offers those choices. Older builds and snapshots may still expose them. Do not use them for new setup. See [product direction](PRODUCT-DIRECTION.md) and the [roadmap](ROADMAP.md).
 
 The app runs on your computer. It does not send usage records to a hosted service or make model requests.
 
@@ -129,7 +129,7 @@ Earlier source installations used `node native/install.mjs --install` with an ig
 
 Click the telescope menu-bar icon for a compact summary. Open Observatory shows the full detail window. Closing that window leaves the menu-bar app running. The app refreshes every five minutes while the Mac is awake and logged in, retries after wake, and preserves the preceding snapshot if a collection fails. Individual unavailable sources are labeled rather than filled with zeros. Remote reads in an existing legacy hub still require its configured SSH hosts and tools.
 
-The panel's All option requires collector-verified combined totals. Historical token snapshots may include Ubuntu. They do not prove the native-only source selection has been implemented or verified. Dictation remains per device because synced history may overlap. Missing or unverified combined totals stay unavailable.
+The panel's All option requires collector-verified combined totals. Historical token snapshots may include Ubuntu. The apps do not show those rows, and a combined total that includes them stays unavailable. Dictation remains per device because synced history may overlap. Missing or unverified combined totals stay unavailable.
 
 Right-click the icon to change Launch at login or quit. This is a locally ad-hoc-signed build, not a notarized distributable or an automatic-update system. ActivityWatch remains a separate collector and is not uninstalled by this app.
 

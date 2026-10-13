@@ -62,8 +62,8 @@ internal sealed class SetupWizard : Form
         if (step < 2) { step++; Render(); return; }
         try
         {
-            FirstRunSetup.Complete(runtime, () => collector.Configure(null, selected["wispr"], selected["quota"],
-                null, selected["activity"], selected["codex"]));
+            FirstRunSetup.Complete(runtime, () => collector.Configure(selected["wispr"], selected["quota"],
+                selected["activity"], selected["codex"]));
             DialogResult = DialogResult.OK; Close();
         }
         catch { MessageBox.Show("Setup could not be saved. Collection remains paused. Check local storage and try again.", "Setup incomplete"); }

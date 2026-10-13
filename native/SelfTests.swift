@@ -319,7 +319,7 @@ func runSelfTests() {
     precondition(archivedActivity.latest("activity", host: "Mac") == nil)
     precondition(text(archivedActivity.activityArchive(host: "Mac")?["latestReadStatus"]) == "unavailable")
     precondition(number(archivedActivity.recordedDays("activity", host: "All").last?["seconds"]) == 25)
-    precondition(archivedActivity.recordedDays("activity", host: "Ubuntu").isEmpty)
+    precondition(archivedActivity.recordedDays("activity", host: "Other").isEmpty)
     precondition(nativeHistory.recordedDays("tokens", host: "Mac").count == 2)
     precondition(nativeHistory.days("tokens", host: "Windows").isEmpty)
     precondition(nativeHistory.days("tokens", host: "All").isEmpty)

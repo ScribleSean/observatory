@@ -158,7 +158,7 @@ internal sealed class DirectPairingWindow : Form
         try
         {
             using var collector = new Collector(runtime);
-            collector.Configure(null, activity: false, codex: false);
+            collector.Configure(activity: false, codex: false);
             var release = collector.BeginDirectPairing();
             var bridge = new TlsSetupProcess(runtime, node, Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "peer-tls-control.mjs"));
             using var window = new DirectPairingWindow(bridge, release) { Opacity = 0, ShowInTaskbar = false };

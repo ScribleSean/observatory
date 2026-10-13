@@ -96,7 +96,7 @@ struct Snapshot {
         }
         guard !retired else { return false }
         // Activity's collector contract is native-only. Legacy token verification
-        // can cover Ubuntu too, so require the original native source set as well.
+        // can cover another device too, so require the original native source set as well.
         if key == "activity" { return true }
         return ["Mac", "Windows"].allSatisfy { host in
             let matches = sources.filter { text($0["host"]) == host }
@@ -113,7 +113,7 @@ struct Snapshot {
         // the collector. Keep its source status separate from saved records.
         if key == "activity", let archive = activityArchive(host: host) {
             guard text(archive["status"]) == "ok" else { return [] }
-            return rows(archive["days"]).filter { host != "Ubuntu" || validArchivedHistoryDay($0, key: key) }
+            return rows(archive["days"])
                 .sorted { text($0["date"]) < text($1["date"]) }
         }
         return days(key, host: host)
@@ -136,7 +136,7 @@ struct Snapshot {
             })
         }
         guard let item = selected, text(item["status"]) == "ok" else { return [] }
-        return rows(item["days"]).filter { host != "Ubuntu" || validArchivedHistoryDay($0, key: key) }
+        return rows(item["days"])
             .sorted { text($0["date"]) < text($1["date"]) }
     }
 }

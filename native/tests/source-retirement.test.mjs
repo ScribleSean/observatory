@@ -31,54 +31,46 @@ for (const file of [
   });
 }
 
-for (const [dashboard, history, devices, label] of [
-  [
-    'NativeDashboard.swift',
-    'NativeHistory.swift',
-    'nativeHistoryDevices',
-    'nativeHistoryDeviceLabel',
-  ],
+for (const [dashboard, history, devices] of [
+  ['NativeDashboard.swift', 'NativeHistory.swift', 'nativeHistoryDevices'],
   [
     'windows/NativeDashboard.cs',
     'windows/NativeHistory.cs',
     'NativeHistory.Devices',
-    'NativeHistory.DeviceLabel',
   ],
 ]) {
-  void test(`${dashboard} keeps active filters native-only and retained Ubuntu history explicitly archived`, async () => {
+  void test(`${dashboard} offers Mac and Windows history only`, async () => {
     const [ui, model] = await Promise.all([source(dashboard), source(history)]);
     assert.ok(
-      /native = \["All", "Mac", "Windows"\]/.test(model),
-      'Active devices must stay Mac and Windows',
+      /Devices = \["All", "Mac", "Windows"\]/i.test(model),
+      'History devices must be All, Mac and Windows',
     );
-    assert.ok(
-      ui.includes(devices) && ui.includes(label),
-      'History must use conditional devices and separate display labels',
-    );
-    assert.ok(
-      !/[[{]\s*"All", "Mac", "Windows", "Ubuntu"\s*[\]}]/.test(ui),
-      'Unqualified retired active filter is still offered',
-    );
-    assert.ok(
-      model.includes('"Archived Ubuntu"') &&
-        model.includes('Read-only') &&
-        model.includes('not collecting'),
-      'Archive must not imply active collection',
-    );
-    assert.ok(
-      /recordedDays\(key, host: "Ubuntu"\)\.isEmpty|Days\(snapshot, kind, "Ubuntu"\)\.Length > 0/.test(
-        model,
-      ),
-      'Archive choice requires retained valid records',
-    );
-    assert.ok(
-      !/WSL (?:activity|screen time)|Ubuntu contributes tokens only|Tokens include Mac, Windows and Ubuntu/.test(
-        ui,
-      ),
-      'Active coverage still advertises retired tracking',
-    );
+    assert.ok(ui.includes(devices), 'History must use the shared device list');
+    for (const text of [ui, model])
+      assert.ok(
+        !/Ubuntu|WSL/.test(text),
+        'History still names a source outside Mac and Windows',
+      );
   });
 }
+
+void test('Windows source settings no longer read or describe WSL selectors', async () => {
+  const [settings, collector] = await Promise.all([
+    source('windows/NativeSourceSettings.cs'),
+    source('windows/Collector.cs'),
+  ]);
+  assert.ok(!/WSL|Ubuntu/.test(settings), 'Settings still describes WSL');
+  assert.ok(
+    !/\["(?:quotaWslDistribution|wslDistribution)"\]\s*=/.test(collector),
+    'New configuration still writes a WSL selector',
+  );
+  assert.ok(
+    /"wslDistribution", "quotaWslDistribution" \}\) current\.Remove\(key\)/.test(
+      collector,
+    ),
+    'Saving settings must drop selectors from older files',
+  );
+});
 
 for (const file of [
   'DirectPairingWindow.swift',

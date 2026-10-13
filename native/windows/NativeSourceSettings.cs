@@ -67,10 +67,6 @@ internal sealed partial class NativeDashboard
         Label("Source details").Font = brand;
         ActivityWatchHelp();
         Label("Sources use installed Windows applications. No credentials are copied or switched.").ForeColor = Color.Silver;
-        if (draft["wslDistribution"] is not null || draft["quotaWslDistribution"] is not null)
-            Label("WSL collection is retired. Existing settings and saved records are preserved.").ForeColor = Color.Silver;
-        if (draft["quotaWslDistribution"] is not null)
-            Label("Account limits remain Unknown for the retired WSL client. Observatory will not switch to a signed-in Windows account.").ForeColor = Color.Silver;
         Label("Turning off account monitoring clears retained account readings on the next collection. Saved log-token history remains.").ForeColor = Color.Silver;
         GroupAccountRows(detailsStart, "Source details");
         var saveStart = body.Controls.Count;
@@ -84,6 +80,8 @@ internal sealed partial class NativeDashboard
             try
             {
                 sourceSettings.Save(original, draft);
+                // Saving drops two selectors from older files. Keep the draft equal to the saved file.
+                draft.Remove("wslDistribution"); draft.Remove("quotaWslDistribution");
                 original = draft.DeepClone().AsObject();
                 sourceOriginal = original;
                 status.Text = "Source settings saved. Availability is reported in Source health after collection.";

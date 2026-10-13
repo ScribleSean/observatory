@@ -315,8 +315,8 @@ internal static class NativeDashboardTests
                 var persistentRefresh = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources");
                 Children(form).OfType<Button>().Single(button => button.AccessibleName == "Device connection settings").PerformClick();
                 Check(sections.SelectedItem?.ToString() == "Settings", "Devices opens Settings");
-                Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName is "wslDistribution" or "quotaWslDistribution"), "Retired source selectors remain in Settings");
-                Check(Texts(form).Any(value => value.Contains("Account limits remain Unknown") && value.Contains("not switch")), "Retired account selection has no fail-closed explanation");
+                Check(!Children(form).OfType<ComboBox>().Any(choice => choice.AccessibleName is "wslDistribution" or "quotaWslDistribution"), "Settings offers a selector that is no longer read");
+                Check(!Texts(form).Any(value => value.Contains("WSL")), "Settings still describes a removed source");
                 Check(Children(form).OfType<Button>().Any(button => button.AccessibleName == "Pairing details for Mac"), "Devices opens connection controls");
                 sections.SelectedItem = "Agents";
                 Children(form).OfType<Button>().Single(button => button.Text == "Review collection settings").PerformClick();
@@ -324,7 +324,8 @@ internal static class NativeDashboardTests
                 Check(Children(form).OfType<CheckBox>().Any(check => check.Name == "activity"), "Agents opens collection controls after Devices");
                 Check(ReferenceEquals(persistentRefresh, Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources")), "Refresh survives navigation");
                 sections.SelectedItem = "Activity";
-                Check(!Children(form).OfType<Button>().Any(button => button.Text == "Ubuntu"), "History filters still offer a retired source");
+                Check(Children(Children(form).OfType<DashboardFilters>().Single(choice => choice.AccessibleName == "Device")).OfType<Button>()
+                    .Select(button => button.Text).SequenceEqual(new[] { "All", "Mac", "Windows" }), "History filters offer native devices only");
                 Check(Children(form).OfType<DataGridView>().All(grid => grid.Parent is DashboardCard), "Data tables use shared cards");
                 Check(Texts(form).Contains("30 min"), "Day total");
                 await Select(form, "Period", "Week");
@@ -669,8 +670,8 @@ internal static class NativeDashboardTests
                 Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
                 Check(settingsCollector.ReadConfiguration()["antigravity"]!.GetValue<bool>(), "Antigravity opt-in saved without a provider call");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
-                Check(Snapshot.Text(settingsCollector.ReadConfiguration()["quotaWslDistribution"]) == "Ubuntu" &&
-                    Snapshot.Text(settingsCollector.ReadConfiguration()["wslDistribution"]) == "Ubuntu-24.04", "Saving native settings changed a legacy source or account selection");
+                Check(!settingsCollector.ReadConfiguration().ContainsKey("quotaWslDistribution") &&
+                    !settingsCollector.ReadConfiguration().ContainsKey("wslDistribution"), "Saving native settings kept selectors that are no longer read");
                 Capture(form, output, "native-settings");
                 var appearance = Children(form).OfType<Button>().Single(button => button.AccessibleName == "Toggle appearance");
                 var sourceSwitch = Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr");

@@ -4,7 +4,7 @@ func runNativeSourceHealthTests() {
     let mixed = Snapshot(object: ["tokens": [
         ["host": "Windows", "status": "ok"],
         ["host": "Mac", "status": "unavailable"],
-        ["host": "Ubuntu", "status": "ok"]
+        ["host": "Other", "status": "ok"]
     ]])
     let actual = nativeCodexSourceCaption(mixed)
     precondition(actual == "1/2 native device records read", "Codex native record count: expected 1/2 native device records read, got \(actual)")
@@ -13,13 +13,12 @@ func runNativeSourceHealthTests() {
                  "Receipt grammar: expected singular receipt and failure, got \(receiptCaption)")
     precondition(nativeCodexSourceCaption(nil) == "Unknown")
     precondition(nativeCodexSourceCaption(Snapshot(object: [:])) == "Unknown")
-    let archive: JSONObject = ["host": "Ubuntu", "status": "ok",
+    let archive: JSONObject = ["host": "Other", "status": "ok",
         "days": [["date": "2026-08-01", "totalTokens": 42]]]
     let archived = Snapshot(object: ["tokens": [archive]])
     precondition(nativeCodexSourceCaption(archived) == "Unknown")
-    precondition(text(archived.recordedDays("tokens", host: "Ubuntu").first?["date"]) == "2026-08-01")
-    precondition(number(archived.recordedDays("tokens", host: "Ubuntu").first?["totalTokens"]) == 42)
-    precondition(nativeHistoryDeviceLabel("Ubuntu") == "Archived Ubuntu")
+    precondition(nativeDashboardSources(archived.object["tokens"], key: "tokens").isEmpty, "Rows for another host are not listed")
+    precondition(nativeDashboardSources(mixed.object["tokens"], key: "tokens").map { text($0["host"]) } == ["Windows", "Mac"])
     precondition(parseDate(archive["checkedAt"]) == nil)
     let statuses: [String?] = ["ok", "not-connected", "unavailable", "partial", "stale", "unsupported", "future-status", "", nil]
     for status in statuses {
@@ -29,7 +28,7 @@ func runNativeSourceHealthTests() {
             : status == "ok" ? "1/1 native device records read" : "0/1 native device records read"
         precondition(nativeCodexSourceCaption(Snapshot(object: ["tokens": [row, archive]])) == expected)
     }
-    for host in ["mac", "Windows ", "WSL", "Archived Ubuntu", "archivedUbuntu", "Unknown"] {
+    for host in ["mac", "Windows ", "Linux", "Other", "Unknown"] {
         precondition(nativeCodexSourceCaption(Snapshot(object: ["tokens": [["host": host, "status": "ok"]]])) == "Unknown")
     }
     let duplicates: [JSONObject] = [["host": "Mac", "status": "ok"], ["host": "Mac", "status": "unavailable"],

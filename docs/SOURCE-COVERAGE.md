@@ -1,6 +1,6 @@
 # Source coverage
 
-The active scope is Sean's native Windows and Mac app. WSL and Ubuntu tracking are no longer part of the plan, and there is no standalone Linux target. Older builds, private configurations and historical snapshots may still contain those sources. This documentation does not establish that their code or configuration has been migrated. Do not enable or recover WSL collection to fill a gap. See [product direction](PRODUCT-DIRECTION.md) and the [roadmap](ROADMAP.md).
+The active scope is Sean's native Windows and Mac app. WSL and Ubuntu tracking are no longer part of the plan, and there is no standalone Linux target. Older builds, private configurations and historical snapshots may still contain those sources. The apps no longer show Ubuntu history, and the Windows app ignores WSL source settings from older configuration files. The pairing code and saved-snapshot format still carry Ubuntu fields. Do not enable or recover WSL collection to fill a gap. See [product direction](PRODUCT-DIRECTION.md) and the [roadmap](ROADMAP.md).
 
 The dashboard reads several kinds of records. A successful read means that adapter returned data, not that every activity or model call has been captured. Per-source check times measure the read, not the latest user activity. Snapshot ages update while the page is open. A stale snapshot is not presented as a current read.
 

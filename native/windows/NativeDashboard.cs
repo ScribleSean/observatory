@@ -247,19 +247,13 @@ internal sealed partial class NativeDashboard : Form
     private void History(JsonObject? snapshot, string kind)
     {
         var showActivityHelp = false;
-        var devices = NativeHistory.Devices(snapshot, kind);
-        if (!devices.Contains(host)) { host = "Windows"; anchor = ""; }
-        body.Controls.Add(new DashboardFilters("Device", devices, host,
-            value => { host = value; anchor = ""; BeginInvoke(Reload); }, NativeHistory.DeviceLabel) { Width = ContentWidth });
+        if (!NativeHistory.Devices.Contains(host)) { host = "Windows"; anchor = ""; }
+        body.Controls.Add(new DashboardFilters("Device", NativeHistory.Devices, host,
+            value => { host = value; anchor = ""; BeginInvoke(Reload); }) { Width = ContentWidth });
         Choice("Period", ["Day", "Week", "All retained"], period, value => period = value);
         var days = NativeHistory.Days(snapshot, kind, host);
-        if (host == "Ubuntu")
-        {
-            Label(NativeHistory.ArchivedNotice);
-            refreshButton.Enabled = false;
-        }
         if (host == "All" && !Snapshot.HasNativeAggregateScope(snapshot, kind)) Label(NativeHistory.ScopeNotice);
-        if (kind == "activity" && host != "Ubuntu")
+        if (kind == "activity")
         {
             var archive = NativeHistory.Rows(snapshot?["activityHistory"]).FirstOrDefault(row => Snapshot.Text(row["host"]) == (host == "All" ? "Combined" : host));
             Label(Snapshot.Text(archive?["trackingMessage"], "Tracking freshness is unknown for this saved snapshot."));
@@ -267,7 +261,7 @@ internal sealed partial class NativeDashboard : Form
                 ? through.ToLocalTime().ToString("g") : "Unknown")).ForeColor = Color.Silver;
             showActivityHelp = days.Length > 0 && archive is not null && Snapshot.Text(archive["latestReadStatus"]) != "ok";
         }
-        if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity" && host != "Ubuntu") ActivityWatchHelp(); return; }
+        if (days.Length == 0) { Label("No verified records. Missing data is unknown, not zero."); if (kind == "activity") ActivityWatchHelp(); return; }
         var dates = days.Select(day => Snapshot.Text(day["date"])).ToArray();
         if (!dates.Contains(anchor)) anchor = dates[^1];
         if (period != "All retained") Choice(period == "Week" ? "Week ending" : "Recorded day", dates, anchor, value => anchor = value);
@@ -467,11 +461,11 @@ internal sealed partial class NativeDashboard : Form
     {
         var rows = new List<string[]>();
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation" })
-            foreach (var source in NativeHistory.Rows(snapshot?[kind]).Where(source => kind != "dictation" ||
-                !string.Equals(Snapshot.Text(source["source"]), "TypeWhisper", StringComparison.OrdinalIgnoreCase)))
+            foreach (var source in NativeHistory.Rows(snapshot?[kind]).Where(source => Snapshot.Text(source["host"]) is "Mac" or "Windows" &&
+                (kind != "dictation" || !string.Equals(Snapshot.Text(source["source"]), "TypeWhisper", StringComparison.OrdinalIgnoreCase))))
                 rows.Add([kind, Snapshot.Text(source["host"]), Snapshot.Text(source["source"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         foreach (var kind in new[] { "quota", "localModel", "agentSource" })
-            if (snapshot?[kind] is JsonObject source) rows.Add([kind, Snapshot.Text(source["host"], ""), Snapshot.Text(source["provider"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
+            if (snapshot?[kind] is JsonObject source) rows.Add([kind, kind == "localModel" ? "Saved" : Snapshot.Text(source["host"], ""), Snapshot.Text(source["provider"], ""), Snapshot.Text(source["status"]), Snapshot.Text(source["checkedAt"])]);
         var receipts = NativeHistory.Rows(snapshot?["agents"]);
         var failures = receipts.Count(row => Snapshot.Text(row["status"]) == "failed");
         Label($"{receipts.Length} handoff {(receipts.Length == 1 ? "receipt" : "receipts")} · {failures} saved {(failures == 1 ? "failure" : "failures")}. Not a live agent monitor.");
@@ -497,12 +491,11 @@ internal sealed partial class NativeDashboard : Form
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
         ProviderAllowances(snapshot);
         Label("Includes sessions from other clients that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
-        if (rows.Any(row => row[1] == "Ubuntu")) Label(NativeHistory.ArchivedNotice);
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {
             var entries = rows.Where(row => row[0] == kind).ToArray();
             var values = entries.SelectMany(row => new[] {
-                (NativeHistory.DeviceLabel(row[1]) + " · " + row[2], SourceHealthStatus(row[3])),
+                (row[1] + " · " + row[2], SourceHealthStatus(row[3])),
                 ("Last checked", Freshness(row[4], DateTimeOffset.UtcNow))
             }).ToArray();
             if (values.Length == 0) values = [("Status", "No source records")];

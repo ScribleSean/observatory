@@ -5,14 +5,8 @@ namespace WorkspaceObservatory;
 
 internal static class NativeHistory
 {
-    internal const string ArchivedNotice = "Archived Ubuntu. Read-only saved records. Observatory is not collecting from Ubuntu. These records are not included in native All totals.";
     internal const string ScopeNotice = "All is unavailable because this saved aggregate's device scope is not verified as Mac and Windows only. Select a device to view its recorded history.";
-    internal static string DeviceLabel(string host) => host == "Ubuntu" ? "Archived Ubuntu" : host;
-    internal static string[] Devices(JsonObject? snapshot, string kind)
-    {
-        string[] native = ["All", "Mac", "Windows"];
-        return Days(snapshot, kind, "Ubuntu").Length > 0 ? [..native, "Ubuntu"] : native;
-    }
+    internal static readonly string[] Devices = ["All", "Mac", "Windows"];
     internal static JsonObject[] Rows(JsonNode? value) => (value as JsonArray)?.OfType<JsonObject>().ToArray() ?? [];
     internal static JsonObject[] Days(JsonObject? snapshot, string kind, string host)
     {
@@ -29,7 +23,6 @@ internal static class NativeHistory
         else source = Rows(snapshot?[kind]).FirstOrDefault(row => Snapshot.Text(row["host"]) == host);
         return Snapshot.Text(source?["status"]) == "ok" ? Rows(source?["days"])
             .Where(row => Date(Snapshot.Text(row["date"])).HasValue)
-            .Where(row => host != "Ubuntu" || Snapshot.Number(row[kind == "tokens" ? "totalTokens" : "seconds"]).HasValue)
             .OrderBy(row => Snapshot.Text(row["date"]), StringComparer.Ordinal).ToArray() : [];
     }
     private static DateOnly? Date(string value) => DateOnly.TryParseExact(value, "yyyy-MM-dd",

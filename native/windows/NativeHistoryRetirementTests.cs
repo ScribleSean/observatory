@@ -8,7 +8,7 @@ internal static class NativeHistoryRetirementTests
         {"schema":2,"collectedAt":"2026-09-12T12:00:00Z","tokens":[
           {"host":"Mac","status":"ok","days":[{"date":"2026-09-12","totalTokens":10}]},
           {"host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":20}]},
-          {"host":"Ubuntu","status":"ok","days":[{"date":"2026-09-12","totalTokens":30}]}],
+          {"host":"Other","status":"ok","days":[{"date":"2026-09-12","totalTokens":30}]}],
          "combinedTokens":{"host":"All","status":"ok","verification":{"status":"verified"},
           "days":[{"date":"2026-09-12","totalTokens":60}]}}
         """;
@@ -18,10 +18,10 @@ internal static class NativeHistoryRetirementTests
         var mixed = JsonNode.Parse(MixedSnapshot)!.AsObject();
         var before = mixed.ToJsonString();
         Check(Snapshot.Latest(mixed, "tokens", "All") is null,
-            "Old verified Mac 10 + Windows 20 + Ubuntu 30 aggregate leaked into native All.");
+            "A verified aggregate that includes another device leaked into native All.");
         Check(NativeHistory.Days(mixed, "tokens", "All").Length == 0,
             "Old mixed-scope aggregate is still visible in native All history.");
-        foreach (var (host, tokens) in new[] { ("Mac", 10), ("Windows", 20), ("Ubuntu", 30) })
+        foreach (var (host, tokens) in new[] { ("Mac", 10), ("Windows", 20) })
         {
             Check(Snapshot.Number(Snapshot.Latest(mixed, "tokens", host)?["totalTokens"]) == tokens,
                 "Per-device latest records were lost: " + host);
@@ -53,16 +53,14 @@ internal static class NativeHistoryRetirementTests
         Check(Snapshot.Latest(unknownScope, "tokens", "All") is null && NativeHistory.Days(unknownScope, "tokens", "All").Length == 0,
             "Aggregate-only verification was mistaken for proof of native device scope.");
         var activity = JsonNode.Parse("""
-            {"activity":[{"host":"Ubuntu","status":"ok","days":[{"date":"2026-09-12","seconds":42}]}],
+            {"activity":[{"host":"Other","status":"ok","days":[{"date":"2026-09-12","seconds":42}]}],
              "combined":{"status":"ok","days":[{"date":"2026-09-12","seconds":42}]},
              "activityHistory":[{"host":"Combined","status":"ok","days":[{"date":"2026-09-12","seconds":42}]}]}
             """)!.AsObject();
         var before = activity.ToJsonString();
         Check(Snapshot.Latest(activity, "activity", "All") is null && NativeHistory.Days(activity, "activity", "All").Length == 0,
-            "Retired activity counters leaked into current native All or Combined history.");
-        Check(NativeHistory.Sum(NativeHistory.Days(activity, "activity", "Ubuntu"), "seconds") == 42,
-            "Scope checking lost retired per-device activity history.");
-        Check(activity.ToJsonString() == before, "Scope checking modified retired activity evidence.");
+            "Activity counters from another device leaked into native All or Combined history.");
+        Check(activity.ToJsonString() == before, "Scope checking modified saved activity evidence.");
     }
 
     private static JsonObject NativeScopeSnapshot() => JsonNode.Parse("""
@@ -120,7 +118,7 @@ internal static class NativeHistoryRetirementTests
             Verify(key + "/absent", absent, kind, key != "tokens", key == "activityHistory" ? 1800 : null);
             var empty = NativeScopeSnapshot(); empty[key] = new JsonArray();
             Verify(key + "/empty", empty, kind, key != "tokens", key == "activityHistory" ? 1800 : null);
-            foreach (var shape in new[] { "null", "{}", "\"invalid\"", "7", "true", """{"host":"Ubuntu","status":"ok"}""" })
+            foreach (var shape in new[] { "null", "{}", "\"invalid\"", "7", "true", """{"host":"Other","status":"ok"}""" })
             {
                 var malformed = NativeScopeSnapshot(); malformed[key] = JsonNode.Parse(shape);
                 Verify(key + "/shape/" + shape, malformed, kind, false);
@@ -130,13 +128,13 @@ internal static class NativeHistoryRetirementTests
                 var mixed = NativeScopeSnapshot(); mixed[key]!.AsArray().Add(JsonNode.Parse(member));
                 Verify(key + "/mixed/" + member, mixed, kind, false);
                 var retired = NativeScopeSnapshot();
-                retired[key] = new JsonArray(new JsonObject { ["host"] = "Ubuntu", ["status"] = "ok" }, JsonNode.Parse(member));
+                retired[key] = new JsonArray(new JsonObject { ["host"] = "Other", ["status"] = "ok" }, JsonNode.Parse(member));
                 retired["combinedTokens"]!["days"]![0]!["totalTokens"] = 60;
                 Verify(key + "/retired-mixed/" + member, retired, kind, false);
             }
             foreach (var explicitEmpty in new[] { false, true })
             {
-                var placeholder = new JsonObject { ["host"] = "Ubuntu", ["status"] = "not-connected" };
+                var placeholder = new JsonObject { ["host"] = "Other", ["status"] = "not-connected" };
                 if (explicitEmpty) foreach (var field in new[] { "days", "profiles", "tools" }) placeholder[field] = new JsonArray();
                 var data = NativeScopeSnapshot(); data[key]!.AsArray().Add(placeholder);
                 Verify(key + "/empty-placeholder/" + explicitEmpty, data, kind, true);
@@ -149,7 +147,7 @@ internal static class NativeHistoryRetirementTests
                 foreach (var value in new[] { evidence, "null", "{}", "\"invalid\"", "7", "true" })
                 {
                     var data = NativeScopeSnapshot();
-                    data[key]!.AsArray().Add(new JsonObject { ["host"] = "Ubuntu", ["status"] = "not-connected", [field] = JsonNode.Parse(value) });
+                    data[key]!.AsArray().Add(new JsonObject { ["host"] = "Other", ["status"] = "not-connected", [field] = JsonNode.Parse(value) });
                     Verify(key + "/placeholder/" + field + "/" + value, data, kind, false);
                 }
             }
@@ -164,7 +162,7 @@ internal static class NativeHistoryRetirementTests
         foreach (var source in NativeHistory.Rows(mixed["tokens"]))
             source["days"]!.AsArray().Add(new JsonObject { ["date"] = "2026-09-01", ["totalTokens"] = 7 });
         var before = mixed.ToJsonString();
-        foreach (var host in new[] { "Mac", "Windows", "Ubuntu" })
+        foreach (var host in new[] { "Mac", "Windows" })
         {
             var days = NativeHistory.Days(mixed, "tokens", host);
             Check(days.Select(day => Snapshot.Text(day["date"])).SequenceEqual(new[] { "2026-09-01", "2026-09-12" }),
@@ -173,65 +171,44 @@ internal static class NativeHistoryRetirementTests
                 "Per-device past date was not selectable: " + host);
         }
         Check(mixed.ToJsonString() == before, "Viewing past dates reordered the saved source rows.");
-        Check(NativeHistory.Devices(mixed, "tokens").SequenceEqual(new[] { "All", "Mac", "Windows", "Ubuntu" }),
-            "Valid archived history is not navigable.");
-        Check(NativeHistory.Devices(mixed, "activity").SequenceEqual(new[] { "All", "Mac", "Windows" }),
-            "Archived choice invented activity from token-only records.");
-        foreach (var day in new[] { """{"date":"invalid","totalTokens":42}""", """{"date":"2026-02-30","totalTokens":42}""",
-            """{"date":"2026-09-12","totalTokens":-1}""", """{"date":"2026-09-12","totalTokens":true}""",
-            """{"date":"2026-09-12","totalTokens":"42"}""", """{"date":"2026-09-12"}""" })
-        {
-            var invalid = JsonNode.Parse(UbuntuOnlySnapshot)!.AsObject();
-            invalid["tokens"]![0]!["days"] = new JsonArray(JsonNode.Parse(day));
-            Check(!NativeHistory.Devices(invalid, "tokens").Contains("Ubuntu"), "Malformed archived counter became a device choice.");
-        }
-        foreach (var status in new[] { "unavailable", "not-connected" })
-        {
-            var invalid = JsonNode.Parse(UbuntuOnlySnapshot)!.AsObject();
-            invalid["tokens"]![0]!["status"] = status;
-            Check(!NativeHistory.Devices(invalid, "tokens").Contains("Ubuntu"), "Unavailable archived source became a device choice.");
-        }
+        Check(NativeHistory.Devices.SequenceEqual(new[] { "All", "Mac", "Windows" }),
+            "History offers a device outside the native set.");
     }
 
-    internal const string UbuntuOnlySnapshot = """
+    internal const string OtherOnlySnapshot = """
         {"schema":2,"collectedAt":"2026-09-12T12:00:00Z","tokens":[
-          {"host":"Ubuntu","status":"ok","days":[{"date":"2026-09-12","totalTokens":42}]}]}
+          {"host":"Other","status":"ok","days":[{"date":"2026-09-12","totalTokens":42}]}]}
         """;
 
     internal static async Task Dashboard(string output)
     {
         var data = JsonNode.Parse(MixedSnapshot)!.AsObject();
         var before = data.ToJsonString();
-        var saved = Path.Combine(output, "ubuntu-only-history.json");
-        File.WriteAllText(saved, UbuntuOnlySnapshot);
+        var saved = Path.Combine(output, "other-only-history.json");
+        File.WriteAllText(saved, OtherOnlySnapshot);
         var refreshes = 0;
         using var form = new NativeDashboard(() => data, () => { refreshes++; return Task.CompletedTask; },
-            readArchive: (_, _) => throw new InvalidOperationException("Archived device selection invoked an archive reader."));
+            readArchive: (_, _) => throw new InvalidOperationException("Device selection invoked an archive reader."));
         form.Show();
         try
         {
             var sections = Children(form).OfType<ListBox>().Single();
             sections.SelectedItem = "Tokens";
-            var archive = Children(form).OfType<Button>().SingleOrDefault(button => button.Text == "Archived Ubuntu");
-            Check(archive is not null, "Retained Ubuntu records have no explicit Archived Ubuntu history choice.");
-            Check(Equals(archive!.Tag, "Ubuntu"), "Archived history rewrote the literal Ubuntu source identifier.");
-            Check(!Children(form).OfType<Button>().Any(button => button.Text == "Ubuntu"), "Ubuntu reappeared as an active device choice.");
+            var devices = Children(form).OfType<DashboardFilters>().Single(choice => choice.AccessibleName == "Device");
+            Check(Children(devices).OfType<Button>().Select(button => button.Text).SequenceEqual(new[] { "All", "Mac", "Windows" }),
+                "History offers a device outside the native set.");
             await Device(form, "All");
             Check(!Texts(form).Contains("60 tokens") && !Texts(form).Contains("30 tokens") &&
                 !Children(form).OfType<DashboardHistoryChart>().Any(), "Mixed-scope history showed or recomputed a native All total.");
             Check(Texts(form).Any(value => value.Contains("All") && value.Contains("scope")), "Withheld aggregate has no historical scope explanation.");
-            foreach (var (label, expected) in new[] { ("Mac", "10 tokens"), ("Windows", "20 tokens"), ("Archived Ubuntu", "30 tokens") })
+            foreach (var (label, expected) in new[] { ("Mac", "10 tokens"), ("Windows", "20 tokens") })
             {
                 await Device(form, label);
                 Check(Texts(form).Contains(expected), "Per-device historical value is not navigable: " + label);
             }
-            Check(Texts(form).Any(value => value.Contains("Read-only") && value.Contains("not collecting")), "Archived history does not explain that collection is retired.");
-            Check(!Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").Enabled,
-                "Archived history offers a collection action.");
-            Children(form).OfType<Button>().Single(button => button.Text == "Show recorded values").PerformClick();
-            Check(Children(form).OfType<DataGridView>().All(table => table.ReadOnly && !table.AllowUserToDeleteRows),
-                "Archived history tables are editable.");
-            Check(data.ToJsonString() == before, "Navigating archived history mutated source rows.");
+            Check(Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").Enabled,
+                "Native history lost its refresh action.");
+            Check(data.ToJsonString() == before, "Navigating history mutated source rows.");
 
             foreach (var key in new[] { "tokens", "settings", "activity", "activityHistory" })
             {
@@ -250,44 +227,23 @@ internal static class NativeHistoryRetirementTests
             form.Reload();
             Check(Texts(form).Contains("30 tokens") && Children(form).OfType<DashboardHistoryChart>().Any(),
                 "A valid native aggregate did not recover after malformed scope.");
-            data = JsonNode.Parse(MixedSnapshot)!.AsObject();
-            form.Reload();
-            await Device(form, "Archived Ubuntu");
 
             data = Snapshot.Read(saved)!;
-            var ubuntuBefore = data.ToJsonString();
+            var otherBefore = data.ToJsonString();
             form.Reload();
-            Check(Texts(form).Contains("42 tokens"), "Ubuntu-only snapshot without an aggregate is not viewable.");
-            await Device(form, "Mac");
-            Check(!Children(form).OfType<DashboardHistoryChart>().Any(), "Ubuntu-only records leaked into Mac history.");
-            Check(Children(form).OfType<Button>().Single(button => button.AccessibleName == "Refresh sources").Enabled,
-                "Leaving archived history did not restore native refresh.");
-            await Device(form, "All");
-            Check(!Children(form).OfType<DashboardHistoryChart>().Any(), "Ubuntu-only records became All history.");
-            await Device(form, "Archived Ubuntu");
-            Check(Texts(form).Contains("42 tokens"), "Returning to archived Ubuntu lost its saved records.");
-            Check(data.ToJsonString() == ubuntuBefore && File.ReadAllText(saved) == UbuntuOnlySnapshot,
-                "Read-only history changed original saved rows or bytes.");
-            data["tokens"]![0]!["days"]!.AsArray().Add(new JsonObject { ["date"] = "2026-09-01", ["totalTokens"] = 7 });
-            var pastBefore = data.ToJsonString();
-            form.Reload();
-            var date = Children(form).OfType<ComboBox>().Single(choice => choice.AccessibleName == "Recorded day");
-            date.SelectedItem = "2026-09-01";
-            await Task.Delay(30);
-            Check(Texts(form).Contains("7 tokens") && data.ToJsonString() == pastBefore, "Archived past date is not read-only and navigable.");
-            data = JsonNode.Parse("""
-                {"activityHistory":[{"host":"Ubuntu","status":"ok","latestReadStatus":"unavailable",
-                  "days":[{"date":"2026-09-01","seconds":120}]}]}
-                """)!.AsObject();
-            sections.SelectedItem = "Activity";
-            Check(Texts(form).Contains("2 min") && Texts(form).Contains(NativeHistory.ArchivedNotice), "Retained per-device activity archive is not viewable.");
-            Check(!Children(form).OfType<LinkLabel>().Any(link => link.Text.Contains("ActivityWatch")), "Archived activity offered retired collector setup.");
-            Check(!Texts(form).Any(value => value.StartsWith("Last tracking coverage:")), "Archived activity claimed a current tracking status.");
+            foreach (var label in new[] { "Mac", "Windows", "All" })
+            {
+                await Device(form, label);
+                Check(!Texts(form).Contains("42 tokens") && !Children(form).OfType<DashboardHistoryChart>().Any(),
+                    "Records from another device leaked into " + label + " history.");
+            }
+            Check(data.ToJsonString() == otherBefore && File.ReadAllText(saved) == OtherOnlySnapshot,
+                "Viewing history changed original saved rows or bytes.");
             data = new JsonObject();
             form.Reload();
-            Check(!Children(form).OfType<Button>().Any(button => button.Text == "Archived Ubuntu"), "Archive choice remains after records are absent.");
+            await Device(form, "Windows");
             Check(Children(form).OfType<Button>().Single(button => button.Text == "Windows").AccessibleDescription == "Selected",
-                "History left an invisible retired selection when no records remained.");
+                "History lost its device selection when no records remained.");
             Check(refreshes == 0, "History navigation started collection.");
         }
         finally { form.Close(); }
