@@ -22,7 +22,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Left click opens the panel | Done | Done | Keep | |
 | Name and freshness line | Differs | Differs | Change | Different freshness wording on each. Windows uses "Updated 4m ago". |
 | Codex limits | Differs | Differs | Change | Mac draws rings for up to two windows. Windows shows text and a bar for up to two windows. |
-| Claude Code limits | Missing | Missing | Add | No collector exists yet |
+| Claude Code limits | Missing | Missing | Add | The shared collector writes `claudeLimits` once the status line bridge is installed. No native view reads it. The shared web panel does. |
 | Device filter (All, Mac, Windows) | Differs | Differs | Change | Mac opens on All. Windows opens on Windows. The list is fixed in code on both. |
 | Period filter | Differs | Missing | Change | Mac offers Today, Week, All time. Windows shows the latest recorded day only. |
 | Now period | Missing | Missing | Add | |
@@ -139,6 +139,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Source switches | Differs | Differs | Change | Mac splits them across three groups. Windows lists six in one group. |
 | Save and reload settings | Differs | Differs | Change | "Save collection settings" on Mac. "Save source settings" on Windows. Windows asks for confirmation when limits monitoring is turned off. |
 | Agent receipts switch | Done | Missing | Remove | |
+| Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. |
 | Antigravity switch | Done | Done | Remove | |
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
