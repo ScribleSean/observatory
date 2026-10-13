@@ -25,7 +25,7 @@ The Mac menu-bar panel and the Windows tray panel have the same content in the s
 1. **Limits.** One row per provider and window (for example Claude Code 5-hour, Claude Code weekly, Codex 5-hour, Codex weekly). Each row shows percent remaining, a meter and the reset time. A reading that is not current shows the time it was observed.
 2. **Filters.** Device: All, then one entry per device. Period: Now, Day, Week, Month, All time. The device list comes from the snapshot, so a later device type needs no layout change.
 3. **Totals.** Tokens and screen time for the selected device and period.
-4. **Actions.** Refresh, Check for updates, Settings, Open Observatory.
+4. **Actions.** Refresh, Check for updates, Settings, Open Observatory. The update action uses an upward arrow in a circle. A downward arrow read as "download my data" when the owner first saw it.
 
 Dictation does not appear in the panel.
 
@@ -143,6 +143,34 @@ The sage accent stays reserved for selected controls. Contrast of these four aga
 
 **Wording.** Short labels. At most one caveat sentence per view, with further detail behind an information control. Missing values read "Unknown". Times are relative ("4m ago") with the exact time available on hover or focus. Raw status values such as `ok` are never shown.
 
+## Skins
+
+Decided in direction on 2026-10-13. Not built.
+
+A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
+
+- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer ignores unknown fields and rejects a skin with a missing or malformed field.
+- **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
+- **Limit styles.** A fixed list the viewer implements: bar, numeral, text bar, block and dial. A skin picks one. A new style is a change to the viewer, reviewed like any other.
+- **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
+- **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails.
+- **Where skins live.** Bundled skins sit beside `native/design-tokens.json`, which becomes the default skin (Sage). A person's own skins are files in the app's data folder, chosen in Settings.
+
+Skins the owner has asked for first: Sage (default) and Almanac. The candidate list also holds Almanac Night, Ledger, Instrument, Blueprint, Terminal, Amber CRT, Poster, Riso, Arcade and Nordic. None is built.
+
+Because the viewer is shared, a skin applies to the panel, the dashboard and the demo on both platforms at once. Skins depend on the shared viewer replacing the native viewers. They are not planned for the SwiftUI or Windows Forms viewers.
+
+## The `.observatory` file
+
+Decided in direction on 2026-10-13. Not built, and the working-store part is not designed.
+
+- **Export and import.** Settings offers "Export data" and "Import data". Export writes one `.observatory` file. Import reads one back. This covers backup, moving to a new computer and sharing a sample.
+- **Contents.** A versioned, compressed container holding the same sanitized records the snapshot and the saved history hold today. It holds no pairing keys, device identities, provider credentials, comparison salts, window titles, prompts or file paths.
+- **Import is additive and checked.** Import validates the whole file before changing anything, keeps a recoverable copy of the current data first, never replaces a newer record with an older one and never adds one device's records to another's.
+- **As the working store.** The owner also wants the app to read from and write to this format directly, in place of the separate snapshot, history and archive files. That is a change to how collected data is saved, so it needs its own design, a tested migration from the files both installed apps hold now, and a rollback path. Export and import come first.
+
+Open questions: whether the file is one device's history or both paired devices', and whether an export can be limited to a date range.
+
 ## Where each platform follows its own conventions
 
 | Topic | Mac | Windows |
@@ -233,6 +261,8 @@ Not verified: the command quoting under PowerShell on Windows, the fields Claude
 10. Claude Code log scan cache.
 11. Tailscale pairing and the single sharing choice.
 12. Web demo as mirror and product page, install guides, README.
+13. Skins, starting with Sage and Almanac.
+14. Export and import of the `.observatory` file, then the design for using it as the working store.
 
 Issue 58 (the Windows app refusing its private folders when started from a packaged app) is handled alongside this list.
 
