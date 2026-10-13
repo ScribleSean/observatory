@@ -4,21 +4,20 @@ Assessed on 2026-10-12 from `main` at `93b856b` on the Windows PC. This is a rea
 
 ## Current status
 
-Updated on 2026-10-13 from the Mac. This summary is the starting point. The sections below keep their original dates and wording.
+Updated on 2026-10-13 from the Mac, and again later that day from the Windows PC after the build 40 install. This summary is the starting point. The sections below keep their original dates and wording.
 
 | Topic | State |
 | --- | --- |
 | `main` | Version 0.3.14 build 40 since pull request 56 (`719f3f4` or later) |
-| Installed on Windows | Build 39 from `3ab7332` |
+| Installed on Windows | Build 40 from `57518b7`, installed on 2026-10-13. Started outside a Claude desktop session, its first collection read 6 of 6 sources with state `ok`. |
 | Installed on Mac | Build 40 from `ee29f31`, installed on 2026-10-13. Its first collection read 10 of 10 sources with state `ok`. |
 | Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
 | Pull request 56 | Merged. It fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. |
-| Open issues | 39, which stays open for installed verification of the quota-refresh fix |
-| Not installed on Windows | Build 40. Windows still runs build 39 without the Claude Code reader fix. |
+| Open issues | 39, which stays open for installed verification of the quota-refresh fix. 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. |
 
 Work that is ready to pick up, in order:
 
-1. Package build 40 for Windows in CI and install it on Windows. The Mac already runs it.
+1. Done on 2026-10-13. Build 40 is packaged by CI and installed on Windows. See "Build 40 install on Windows".
 2. Give Claude Code the same place in Tokens and Allowances that Codex has. Both screens show Codex only. The owner wants Claude Code and ChatGPT (Codex) presented with equal weight. Muse and Grok Bot come later. Other providers are not a priority.
 3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps. The re-pair that had to come first is done.
 4. Mac build environment: decide whether the build requires full Xcode or pins an SDK, and make the popup check independent of window focus.
@@ -214,9 +213,11 @@ Recorded on 2026-10-13 from `main` at `ee29f31`.
 
 | Topic | Windows | Mac |
 | --- | --- | --- |
-| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.14 build 40 from `ee29f31` |
+| Installed build | 0.3.14 build 40 from `57518b7` | 0.3.14 build 40 from `ee29f31` |
 | Build 39 produced by | CI package run | Local build with the macOS 26.5 SDK |
-| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | 10 of 10 sources under build 40, including fresh Windows records |
+| Build 40 produced by | CI package run `38443842036` | Local build with the macOS 26.5 SDK |
+| Collection | 6 of 6 sources under build 40 when started outside a Claude desktop session, including Mac records 2 minutes old. 3 of 6 when started from one. | 10 of 10 sources under build 40, including fresh Windows records |
+| Starting the app from a Claude desktop session | The app refuses its private folders. See issue 58. | Not examined |
 | Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
 | TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
 | CI coverage | Package and contract workflows run on pull requests | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
@@ -231,11 +232,76 @@ Recorded on 2026-10-13 from `main` at `ee29f31`.
 5. Look into the three unexplained script test failures, the focus deadline in the popup check, and the two incomplete setup attempts during the re-pair.
 6. The devices are re-paired without the Ubuntu slot, so the legacy pairing shape described under "Remaining Ubuntu code" can now be removed in one change for both apps.
 
+## Build 40 install on Windows
+
+Recorded on 2026-10-13 on the Windows PC from `main` at `57518b7`. The Mac, the pairing and WSL were not touched. No permission was changed.
+
+### Package and checksum
+
+- The Clean Windows package workflow was dispatched on `main`. Run `38443842036` built `57518b7` and succeeded on its first attempt. The PC was shut down and restarted while the run was in progress, which did not affect the run.
+- The installer artifact was downloaded with the GitHub CLI. Its SHA-256 matched the digest the run publishes, `1e55a55fb090b4cdfe0fd9d9c7569864fc6b98c9c103d8290280051f0ca1f9c5`. The setup file inside matched its sidecar, `e64bd09e63ea0ea10115765ceb0e576faac447e4b474d04de31f08d7dc7960ce`. `installer-build.json` records 0.3.14 build 40, source `57518b7` and a clean tree.
+
+### Before the install
+
+- The installed app was 0.3.14.39, read from the version information of the installed executable. `installer-owner.ini` in the install folder recorded revision `3ab7332`.
+- The build 39 installer from run `38345695870` was still on disk. Its artifact matched the digest that run publishes and its setup file matched its sidecar, so build 39 can be reinstalled.
+
+### Backup
+
+- The app was not running after the restart. An earlier quit with `--quit-for-update` had returned 0.
+- The data folder was copied with permissions to a new folder under `%LOCALAPPDATA%\WorkspaceObservatoryBackups`. All 317 files (59,265,996 bytes) matched the originals by SHA-256, with none missing or extra. The `HKCU\Software\Observatory\Dashboard` key was exported into the same folder.
+- The copy was taken without the peer state lock that [the update guide](UPDATES.md#runtime-backup-coordination) describes. The lock could not be taken from the session that ran the install, for the reason recorded under "Starting the app from a Claude desktop session" below. The owner approved a plain copy.
+
+### Replacement
+
+- Build 39 was removed with a copy of its own `Uninstall.exe`, run with `/S _?=` and the install folder. It returned 0, the install folder and the uninstall registration were gone, and the data folder still held 317 files.
+- The build 40 setup file was hashed again and run with `/S`. It returned 0.
+- No Windows security prompt appeared. The setup file had no mark of the web, because it was downloaded with the GitHub CLI and not with a browser. This does not show how Windows treats the same file when it is downloaded another way.
+- `native/windows/replace-payload.mjs` was not used. The update guide describes it as a component that neither installed app invokes.
+
+### Installed target
+
+- File version 0.3.14.40, read from the installed executable. `installer-owner.ini` records revision `57518b7`. The uninstall registration and the Start menu shortcut are present.
+- `--self-test` on the installed executable returned 0 with 32 lines of output and no error output.
+- All 317 saved files were identical to the backup after the install, and the three dashboard registry values were unchanged.
+- The installed `read-claude-usage.py` contains the placeholder handling from pull request 56.
+
+### Collection
+
+- Started from the Claude desktop session that ran the install, build 40 reported `partial` with 3 of 6 sources. Windows activity, Wispr dictation and Claude Code were read. Codex tokens, Codex settings and account limits were `unavailable`, and the Mac was `not-connected`.
+- The app was then quit and started through `Win32_Process.Create`, so that it was not a child of the Claude app. Its first scheduled collection, 14 seconds later, reported `ok` with 6 of 6 sources.
+- In that snapshot Claude Code on Windows is `ok` with 10 recorded days. The last snapshot written by build 39 had Claude Code `unavailable` with 0 days. That build 39 instance had also been started from the session.
+- Mac activity, tokens, settings and dictation are `ok` and 2 minutes old. Account limits are `ok`. The All token total is `ok` and verified, and combined activity and combined settings are `ok`.
+
+### Starting the app from a Claude desktop session
+
+This corrects three earlier statements in this document: the table row under "What is broken or unverified" that attributes the private-directory refusals to entries left by sandbox tools, the fourth point under "Collection on this PC", and the first item under "Next decisions".
+
+- Inside a Claude desktop session, `%USERPROFILE%\AppData` lists a Full Control entry for `S-1-15-3-3557520199-3666692283-3112367039-3524159787-2791857073-3163583606-3692855932`. The AppContainer mappings in the registry hold the same seven numbers under `S-1-15-2-` with the name Claude and the moniker `claude_pzs8sxrjxfjjc`.
+- The same listing run outside the session shows no such entry, and `private-sync-acl.ps1` reports `ok` for `private-repair` there. Inside the session it fails at `inspect-ancestry`.
+- The entry was therefore never on the real folder. It was not added by a restart and it was not removed before the Mac read the folder over SSH. Processes started from the packaged Claude app see it and others do not.
+- The 3 of 6 results recorded above for builds 38 and 39 came from app instances that a session had started. On 2026-10-13 build 39 also read 2 of 6 sources twice after a session restarted it. The zero-filled snapshot described under "Collection on this PC" was a separate and real fault.
+- The script tests that fail with "Private sync access-control verification failed" when their temporary folder is under `AppData` are explained by the same view.
+- Issue 58 holds the evidence and three possible directions. Nothing was fixed.
+
+### Not exercised
+
+- The Refresh sources button, the tray menu and the dashboard windows of the installed build 40.
+- Login startup, sleep and wake, and collection across a restart under build 40.
+- Reinstalling build 39. Its installer was verified but not run.
+- An install from a setup file that carries a mark of the web.
+
+### Unexplained
+
+- A collection under build 39 at 14:36 local time, before the first restart of the app by the session, reported `partial` with 5 of 6 sources. The source that was not read was not examined.
+- Why Windows shows the entry to processes started from the packaged app. File-system virtualization for packaged apps is the likely mechanism. It was not confirmed.
+
 ## Next decisions
 
 Updated on 2026-10-13.
 
-1. Resolved. The permission entry on the Windows `AppData` folder was no longer present when read on 2026-10-13.
+1. Resolved. The permission entry on the Windows `AppData` folder was no longer present when read on 2026-10-13. Later that day the entry was found to be visible only to processes started from a Claude desktop session. See "Build 40 install on Windows" and issue 58.
 2. Done. Windows and Mac were re-paired on 2026-10-13.
 3. Open. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
-4. Open. Decide who installs build 40 on Windows and how.
+4. Done. Build 40 was installed on Windows on 2026-10-13 from CI run `38443842036`.
+5. Open. Decide what to do about issue 58: document how to start the Windows app, report the situation in Source health, or review the ancestry check.
