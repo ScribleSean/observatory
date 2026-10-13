@@ -145,7 +145,7 @@ Collector tests use synthetic records to check filtering, invalid values and rep
 
 The synthetic-demo workflow runs tests, type checking, and a fresh build before publishing to GitHub Pages. It never uploads a workstation build. [ci/check.yml.example](../ci/check.yml.example) is a separate example workflow.
 
-The design draws on [lnkiai/m3e-canvas](https://github.com/lnkiai/m3e-canvas), including its Material 3 Expressive navigation, connected controls and tonal surfaces. [Design notes](DESIGN.md) explain how those ideas apply here.
+The current web dashboard drew on [lnkiai/m3e-canvas](https://github.com/lnkiai/m3e-canvas), including its Material 3 Expressive navigation, connected controls and tonal surfaces. [The design direction](DESIGN.md) replaces that approach, and the web demo is to mirror the native apps.
 
 ## Contributing
 

@@ -2,6 +2,8 @@
 
 Scope revised October 4, 2026. Earlier implementation notes below are historical evidence, not a new build or installed-app verification.
 
+Audience and interface direction revised October 13, 2026. See [the design direction](DESIGN.md) and [the parity table](PARITY.md). Where this document says consumer onboarding, a new pairing flow or the demo are not goals, the design direction is newer: the app should be usable by anyone who installs it, Tailscale with a pairing code is the intended pairing route for other people, and the demo is to mirror the native apps. Collection reliability and the verification gates below are unchanged.
+
 Observatory is Sean's personal screen-time and AI-usage app, built in public. The source stays public. The goal is a lean native Windows application with a tray panel and a Mac application with a menu-bar panel. Reliable collection and an interface he can use every day take priority over consumer onboarding, public installer marketing or a hosted service.
 
 ## Current priorities

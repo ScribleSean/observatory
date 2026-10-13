@@ -2,6 +2,8 @@
 
 Observatory is Sean's personal Windows and Mac app, built in public. Native collection, the application windows and tray/menu-bar panels are the priority. The source stays public. There is no consumer launch, hosted service or standalone Linux app in this plan.
 
+[The design direction](DESIGN.md) of October 13, 2026 adds an ordered list of interface and data work, and [the parity table](PARITY.md) tracks it per platform. Where the deferred list below conflicts with that direction, the direction is newer.
+
 This is planned work, not a list of newly verified capabilities. [Product direction](PRODUCT-DIRECTION.md) defines the scope. The dated [audit follow-up](AUDIT-STATUS.md) and [UI verification record](UI-VERIFICATION.md) retain completed repairs and open acceptance criteria.
 
 ## Now: reliable native collection
