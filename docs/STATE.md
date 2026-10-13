@@ -2,6 +2,28 @@
 
 Assessed on 2026-10-12 from `main` at `93b856b` on the Windows PC. This is a read-only assessment. Nothing was merged, pushed, deleted or installed. A documentation change is not a new build or a verification result.
 
+## Current status
+
+Updated on 2026-10-13 from the Mac. This summary is the starting point. The sections below keep their original dates and wording.
+
+| Topic | State |
+| --- | --- |
+| `main` | Version 0.3.14. Build 39 at `367dc32`. Pull request 56 raises it to build 40 when merged. |
+| Installed on Windows | Build 39 from `3ab7332` |
+| Installed on Mac | Build 39 from `367dc32`. The only difference is the Mac popup fix from pull request 55. |
+| Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
+| Pull request 56 | Fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. CI passed on 2026-10-13. Check whether it has been merged. |
+| Open issues | 39, which stays open for installed verification of the quota-refresh fix |
+| Not installed anywhere | Build 40 |
+
+Work that is ready to pick up, in order:
+
+1. Merge pull request 56 if it is still open. Package build 40 for Windows in CI, build it on the Mac, and install it on both devices.
+2. Give Claude Code the same place in Tokens and Allowances that Codex has. Both screens show Codex only. The owner wants Claude Code and ChatGPT (Codex) presented with equal weight. Muse and Grok Bot come later. Other providers are not a priority.
+3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps. The re-pair that had to come first is done.
+4. Mac build environment: decide whether the build requires full Xcode or pins an SDK, and make the popup check independent of window focus.
+5. Unexplained results to look into: three script tests on the Mac, four TLS pairing tests on Windows, and two incomplete setup attempts during the re-pair.
+
 ## What the app does today
 
 Observatory is a personal app that shows recorded app activity, Codex tokens, optional Claude Code counters, account allowances, agent receipts and dictation statistics. Collection and daily viewing happen in the native apps. Optional device pairing reuses an existing SSH connection.
@@ -114,8 +136,98 @@ None of this has been run. The Mac changes in pull request 49 were written on Wi
 9. Pairing with Windows cannot be confirmed until the permission entry on the Windows `AppData` folder is resolved. After that, confirm the existing pairing still exchanges records. The All token total is expected to stay unverified until the devices are re-paired.
 10. Report any step that fails with the exact revision and the visible message.
 
+Status on 2026-10-13: steps 1 to 4 and 6 to 9 are done and recorded in the Mac section below. Step 5 is still open. Step 1 differs in one way. The Mac build comes from `367dc32`, which adds the Mac popup fix to the Windows revision.
+
+## Mac
+
+Recorded on 2026-10-13 on the Mac (Apple Silicon, macOS 27.0.1) from `main` at `b9dc3e6`, version 0.3.14 build 39. This is the same revision recorded for the Windows build 39 install. The first three subsections describe the Mac at that revision, before the popup fix and before any install. The later install is recorded under "Build 39 install on the Mac". The Windows PC was not touched from the Mac.
+
+### State before any change
+
+- One working checkout existed, on `main` at `93b856b`, clean and six commits behind GitHub. It was fast-forwarded to `b9dc3e6`.
+- Four local branches (`web-peer-quota`, `fix/token-metadata-shape`, `docs/build29-verification`, `archive/settings-style`) hold seven commits whose GitHub branches were deleted. `git cherry` reports all seven as patch-equivalent to commits on `main`, which agrees with the classification above. The local branches were left in place.
+- The installed app is 0.3.13 build 35 from `ced6698`, ad hoc signed. It was running and collecting. Its `public/local/usage.json` was written on 2026-10-13 and is readable JSON, unlike the zero-filled Windows copy.
+
+### What works
+
+- Runtime preparation: the `test_prepare_*.py` tests passed (8 run, 1 skipped). The three pinned runtime archives and the pinned Sparkle archive matched their checksums, and `prepare-runtime.py` produced a runtime archive with 14 dependency notices.
+- The Swift sources compile without changes when `SDKROOT` points at the macOS 26.5 SDK from Apple's Command Line Tools.
+- On the bundle staged by `native/build.mjs`, these checks passed: `--self-test`, `--test-quota-archive`, `--test-trusted-sync-owner`, `--test-shutdown`, `--test-collector`, strict signature verification, `--test-web`, `--test-lifecycle`, `--test-lifecycle --legacy-dashboard` and `--test-popup --legacy-dashboard`. The last two were run by hand because the builder had already stopped.
+- The staged bundle's `build-info.json` records 0.3.14 build 39, source `b9dc3e6` and a clean tree.
+
+### What is broken or unverified
+
+At `b9dc3e6`, `node native/build.mjs` did not complete on this Mac.
+
+- With the default macOS 27.0 SDK, compilation fails because `SwiftUIMacros.StateMacro` cannot be found. The Command Line Tools do not include that compiler plugin and full Xcode is not installed. With the macOS 15.5 SDK, compilation fails because `glassEffect` does not exist there. Only the 26.5 SDK compiles.
+- `--test-popup` fails in native dashboard mode with "reopening usage raised the hidden dashboard". The step passed once and failed eight times across nine executions, with and without `--force-offscreen-popup`. The same check passes with `--legacy-dashboard`. Pull request 55 found and fixed the cause. See below.
+
+Local `npm test` with the prepared Python 3.13 runtime selected: 950 tests, 819 passed, 21 failed, 110 skipped.
+
+| Cause | Failures | Kind |
+| --- | ---: | --- |
+| Slow under parallel load. All pass when the affected files run with `--test-concurrency=1`. Most report "Private path access-control verification failed", whose helper has a 15 second limit. | 16 | Local environment |
+| `scripts/collect-antigravity-allowance.test.mjs` uses the temporary folder path under `/var`, which is a symlink to `/private/var`. It passes when `TMPDIR` is the canonical path. | 1 | Test setup on Mac |
+| `scripts/run-collector.test.mjs` runs `python3` from `PATH`, which is the system Python 3.9.6. It passes with Python 3.13 first on `PATH`. | 1 | Local environment |
+| `scripts/cached-settings.test.mjs` "legacy cache refuses a linked cache directory" and `scripts/peer-revocation.test.mjs` "linked revocation marker is never followed or overwritten". The linked path is still refused, but with a different message than the test expects. | 2 | Unexplained |
+| `scripts/peer-pairing.test.mjs` "initial publish, privacy and merge" reads a null peer state. The test selects `/usr/bin/python3` on Mac. | 1 | Unexplained |
+
+### Build 39 install on the Mac
+
+Recorded on 2026-10-13 from `main` at `367dc32`, which is `b9dc3e6` plus pull request 55.
+
+- Pull request 55 fixed the popup failure. `openDashboard` asked AppKit to restore the dashboard from the Dock on every open. On macOS 27.0.1 the window manager answers that request later, and the answer brought back a dashboard that had been hidden in the meantime. The app now asks only when the window is minimized. After the change, the three `--test-popup` variants each passed 6 of 6.
+- `node native/build.mjs` completed at `367dc32` with `SDKROOT` set to the macOS 26.5 SDK, and every native check passed. `node native/mac/package.mjs --zip-only` verified the bundle and the extracted ZIP. The ZIP is 67,511,299 bytes with SHA-256 `75ba1eaebe3d385b7151cdada039d7e75e5aebe4bba004938ad10c6920e292ae`. It is ad hoc signed, not notarized and not published.
+- Build 35 was quit normally and stopped within about 10 seconds. The app's data folder (132 files) and its preferences file were copied to a new recovery folder, and the copy matched the original by SHA-256.
+- `native/mac/replace-app.mjs` replaced build 35 with the candidate extracted from the verified ZIP. The journal reached `payload-verified` and build 35 is retained in the recovery folder beside the app. The previous manifest was generated from the installed build 35 bundle on this Mac, not from an independent receipt.
+- The installed `build-info.json` records 0.3.14 build 39, source `367dc32` and a clean tree. Strict deep signature verification passed.
+- After launch, the allowance collector reported `ok`. Two scheduled full collections ran five minutes apart and each reported `partial` with 9 of 12 sources read. Build 35 had reported 9 of 13.
+- The new snapshot is readable JSON. Mac and Windows rows report `ok` for activity, tokens, settings and dictation. The Ubuntu rows that build 35 wrote under tokens and settings are no longer present. The Windows rows were less than one minute old, so the existing pairing still exchanges records. The All token total is `unverified`, as expected until the devices are re-paired.
+- Compared with the backup, no saved file was removed. Six files changed (three databases under `private-quota` and `private-sync`, and the three status and snapshot files under `public/local`), and two retirement files were added under `.runtime/private-repair`.
+- Source health showed "2/2 native device records read" for Codex.
+
+Not verified on the Mac: opening a saved snapshot that contains Ubuntu rows, collection with the main window closed, login startup, and sleep and wake.
+
+The builder's popup check also failed twice with "dashboard activation deadline exceeded" while the Mac was in use. The check needs the test app to receive focus within 2 seconds. This is a limitation of the check and was not changed.
+
+### After the install
+
+Recorded later on 2026-10-13 with build 39 from `367dc32` installed.
+
+- In the installed app, the Device filter in Activity and Tokens offers All, Mac and Windows only. Source health lists Mac and Windows rows only, and the Local benchmarks row is labeled Saved.
+- Antigravity account limits and configured agent receipts were turned off in Settings. Antigravity is no longer installed on this Mac and the configured receipt folder does not exist.
+- Claude Code on the Mac reported Unknown because `scripts/read-claude-usage.py` withheld the whole source over 8 placeholder records that Claude Code writes with model `<synthetic>`, zero usage and no request identity. Pull request 56 skips those records. With the change, the reader returns 8 recorded days from the same logs.
+- Mac activity showed 0 minutes with "tracking is not current". The ActivityWatch window watcher and idle watcher on this Mac register under different host names, and the collector paired buckets only within one name. Pull request 56 reads every verified local window bucket against every verified local idle bucket. With the change, tracking reads through the current minute. Pull request 56 is not installed yet. It prepares build 40.
+- The permission entry on the Windows `AppData` folder described under "Collection on this PC" was not found when read from the Mac over SSH. `AppData` now carries a read and execute entry for `CodexSandboxUsers`, and the app's private folders have protected entries for the owner, administrators and the system only.
+- The one-time re-pair was done with the bundled tools. `peer-repair.mjs` reported `prepared` on Windows and on the Mac, and each device retained its old pairing in a `private-sync-retired-*` folder. The Windows step was run over the existing SSH route with the owner's approval, not from the Windows tray menu. `peer-setup.mjs` with `includeUbuntu` false then reported `paired`. Its first two attempts reported "Pairing setup incomplete" and left the Mac pending. The cause was not found. A third attempt succeeded in 3 seconds after the Windows side had been initialized with the same request.
+- The first collection after the re-pair reported Windows as unavailable. The next one, five minutes later, read 9 of 10 sources with fresh Windows records, and the All token total and combined settings reported `ok`. The one source not read was Claude Code on the Mac.
+
+### Differences from Windows
+
+| Topic | Windows | Mac |
+| --- | --- | --- |
+| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.14 build 39 from `367dc32`, which adds the Mac popup fix |
+| Build 39 produced by | CI package run | Local build with the macOS 26.5 SDK |
+| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | 9 of 12 sources under build 39, including fresh Windows records |
+| Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
+| TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
+| CI coverage | Package and contract workflows run on pull requests | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
+| Build tools | Pinned .NET SDK, Node and NSIS are downloaded by the build scripts | The Swift build depends on which Apple SDK is installed. See above. |
+
+### Next steps for the Mac
+
+1. Merge pull request 56, build and install build 40 on both devices, and confirm Claude Code and Mac activity in the installed apps.
+2. Give Claude Code the same place in Tokens and Allowances that Codex has. Today both screens show Codex only.
+3. Check the items listed as not verified above.
+4. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
+5. Look into the three unexplained script test failures, the focus deadline in the popup check, and the two incomplete setup attempts during the re-pair.
+6. The devices are re-paired without the Ubuntu slot, so the legacy pairing shape described under "Remaining Ubuntu code" can now be removed in one change for both apps.
+
 ## Next decisions
 
-1. Decide what to do about the permission entry on `AppData` that blocks Codex tokens, account limits and pairing on this PC.
-2. Approve the one-time re-pair of Windows and Mac described above.
-3. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
+Updated on 2026-10-13.
+
+1. Resolved. The permission entry on the Windows `AppData` folder was no longer present when read on 2026-10-13.
+2. Done. Windows and Mac were re-paired on 2026-10-13.
+3. Open. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
+4. Open. Decide who installs build 40 on Windows and how.
