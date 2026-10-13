@@ -87,6 +87,20 @@ The safe order is:
 2. Re-pair the two devices once. New pairings are already Mac and Windows only, and a verified All token total becomes possible again.
 3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps.
 
+## What the Mac session needs to verify
+
+None of this has been run. The Mac changes in pull request 49 were written on Windows and checked only by the macOS CI job, which compiles the app and runs its self-tests.
+
+1. Pull `main` and confirm the revision matches the one used for the Windows build 38 candidate.
+2. Build the Mac app from that revision by following [the Mac guide](MAC.md), and run `--self-test` on the built binary.
+3. Back up the Mac app's data folder before replacing the installed app.
+4. Install the build and open the dashboard. In Activity and Tokens, the Device filter must offer All, Mac and Windows only.
+5. Open a saved snapshot that contains Ubuntu rows, if one exists. No Ubuntu device or Ubuntu row may appear, and the file's bytes must be unchanged afterward.
+6. In Source health, each device list must show Mac and Windows rows only. The Local benchmarks row must be labeled Saved.
+7. Run one collection and confirm Mac activity, Codex tokens and any enabled optional sources still report a status.
+8. Confirm the existing pairing with Windows still exchanges records after both devices run build 38. The All token total is expected to stay unverified until the devices are re-paired.
+9. Report any step that fails with the exact revision and the visible message.
+
 ## Next decisions
 
 1. Approve the one-time re-pair of Windows and Mac described above.
