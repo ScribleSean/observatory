@@ -10,6 +10,10 @@ internal static partial class DashboardPalette
     internal static Color Strong(bool light) => light ? Color.FromArgb(54, 70, 50) : Color.FromArgb(220, 230, 210);
     internal static Color Accent(bool light) => light ? Color.FromArgb(88, 111, 80) : Color.FromArgb(173, 194, 157);
     internal static Color Track(bool light) => light ? Color.FromArgb(218, 219, 211) : Color.FromArgb(59, 62, 55);
+    internal static Color Claude(bool light) => light ? Color.FromArgb(181, 99, 60) : Color.FromArgb(224, 145, 107);
+    internal static Color Codex(bool light) => light ? Color.FromArgb(63, 110, 140) : Color.FromArgb(143, 184, 212);
+    internal static Color Warning(bool light) => light ? Color.FromArgb(148, 98, 15) : Color.FromArgb(226, 184, 102);
+    internal static Color Error(bool light) => light ? Color.FromArgb(162, 59, 50) : Color.FromArgb(229, 138, 128);
     internal const int CardRadius = 16;
     internal const int CardPadding = 16;
     internal const int TitleSize = 22;

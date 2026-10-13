@@ -31,7 +31,7 @@ Dictation does not appear in the panel.
 
 ### Device names
 
-Each device has a name the person can edit in Settings. The app shows it with the platform in parentheses, for example "Studio (Mac)" and "Desk (Windows)". The default is the platform name alone. Phrases such as "this Mac" and "this PC" are retired from views that show data.
+Each device has a name the person can edit in Settings. With a custom name set, the app shows the name alone in the panel and the name with the platform in parentheses in the dashboard, for example "Studio (Mac)". Without one, it shows "macOS" or "Windows". Phrases such as "this Mac" and "this PC" are retired from views that show data.
 
 The name is stored in local settings and sent only to a paired device. It replaces no identifier used for pairing or deduplication. The snapshot keeps the platform value it has today, so saved history stays readable.
 
@@ -126,7 +126,16 @@ One source for values and one source for words. Each platform generates its cons
 
 Tests fail when a generated file is stale. A later test should fail when a view uses a fixed colour or a local label where a shared one exists.
 
-**Colour.** Keep the earthy sage palette in [brand guidance](BRAND.md). Add one colour for Claude Code, one for Codex, one for warning and one for error. Each has a light and a dark value. Appearance follows the system setting by default, with a manual switch.
+**Colour.** Keep the earthy sage palette in [brand guidance](BRAND.md). Four colours carry meaning and are used the same way on every surface.
+
+| Token | Light | Dark | Use |
+| --- | --- | --- | --- |
+| `claude` | `#B5633C` | `#E0916B` | Claude Code meters, dots and chart series |
+| `codex` | `#3F6E8C` | `#8FB8D4` | Codex meters, dots and chart series |
+| `warning` | `#94620F` | `#E2B866` | A low limit, a reading that is not current |
+| `error` | `#A23B32` | `#E58A80` | A failed read or a failed action |
+
+The sage accent stays reserved for selected controls. Contrast of these four against the background and surface colours has not been measured yet. Appearance follows the system setting by default, with a manual switch.
 
 **Type.** Inter Tight on every surface, including the panel and the setup wizard. Sizes stay at 22, 19, 14.5 and 12. Numbers use tabular figures.
 
@@ -167,7 +176,6 @@ Issue 58 (the Windows app refusing its private folders when started from a packa
 
 ## Open questions
 
-- The exact values for the Claude Code, Codex, warning and error colours.
 
 ## Sources
 

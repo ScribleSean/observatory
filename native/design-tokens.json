@@ -6,7 +6,11 @@
     "muted": ["64695F", "B3B7AC"],
     "strong": ["364632", "DCE6D2"],
     "accent": ["586F50", "ADC29D"],
-    "track": ["DADBD3", "3B3E37"]
+    "track": ["DADBD3", "3B3E37"],
+    "claude": ["B5633C", "E0916B"],
+    "codex": ["3F6E8C", "8FB8D4"],
+    "warning": ["94620F", "E2B866"],
+    "error": ["A23B32", "E58A80"]
   },
   "metrics": {
     "cardRadius": 16,
