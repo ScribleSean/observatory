@@ -244,7 +244,7 @@ The four actions map to things each shell already does. This is not a general co
 
 ### Claude Code limits bridge
 
-Added as source on 2026-10-13. It is not installed on either device and has not run against a real Claude Code session.
+Added as source on 2026-10-13. The owner consented to installing it on the Mac that day, and it produced a real reading there. It is not installed on Windows.
 
 | Piece | File | What it does |
 | --- | --- | --- |
@@ -261,7 +261,9 @@ Things a person should be told before they consent:
 - Readings arrive only while a Claude Code session is responding, and only for Pro and Max subscriptions.
 - The limits are account-wide. They are observed on this device and are not sent to a paired device.
 
-Not verified: the command quoting under PowerShell on Windows, the fields Claude Code sends in the installed version on either device, and the native Settings switch, which does not exist yet.
+Verified on the Mac on 2026-10-13, from `main` at `50b2e7e`: the installer added the `statusLine` entry to a settings file that had none, left the other nine keys unchanged and wrote the backup. A Claude Code session in a terminal then wrote a reading with both windows within seconds, and `readClaudeLimits` returned status `ok`. The weekly figure matched the plan usage the Claude desktop app reported for the same account at the same time. The installed command points at the script in the source checkout, because build 40 does not contain it.
+
+Not verified: whether a session in the Claude desktop app triggers the status line command or only a terminal session does, the command quoting under PowerShell on Windows, the fields Claude Code sends on Windows, uninstall on a real settings file, and the native Settings switch, which does not exist yet. No installed build reads the saved reading into the snapshot yet.
 
 ## Order of work
 
