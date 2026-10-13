@@ -9,6 +9,10 @@ extension ObservatoryTheme {
     static let strong = color(0x364632, 0xDCE6D2)
     static let accent = color(0x586F50, 0xADC29D)
     static let track = color(0xDADBD3, 0x3B3E37)
+    static let claude = color(0xB5633C, 0xE0916B)
+    static let codex = color(0x3F6E8C, 0x8FB8D4)
+    static let warning = color(0x94620F, 0xE2B866)
+    static let error = color(0xA23B32, 0xE58A80)
     static let cardRadius: CGFloat = 16
     static let cardPadding: CGFloat = 16
     static let titleSize: CGFloat = 22
