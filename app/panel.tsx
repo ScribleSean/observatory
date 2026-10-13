@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Download, RefreshCw, Settings } from 'lucide-react';
+import { ArrowUpRight, CircleArrowUp, RefreshCw, Settings } from 'lucide-react';
 import { compact, demoSnapshot, devices, duration, freshness, limits, sourceCounts, totals } from '../lib/panel-data.mjs';
 
 type Snapshot = Record<string, unknown>;
@@ -107,7 +107,7 @@ export default function Panel({ demo = false }: { demo?: boolean }) {
 
       <nav className="ob-actions" aria-label="Actions">
         <button type="button" aria-label="Refresh" title="Refresh" disabled={busy} onClick={refresh}><RefreshCw size={17} className={busy ? 'spin' : ''} aria-hidden="true" /></button>
-        <button type="button" aria-label="Check for updates" title="Check for updates" onClick={() => send('check-updates')}><Download size={17} aria-hidden="true" /></button>
+        <button type="button" aria-label="Check for updates" title="Check for updates" onClick={() => send('check-updates')}><CircleArrowUp size={17} aria-hidden="true" /></button>
         <button type="button" aria-label="Settings" title="Settings" onClick={() => send('open-settings')}><Settings size={17} aria-hidden="true" /></button>
         <button type="button" className="wide" onClick={() => send('open-dashboard')}>Open Observatory<ArrowUpRight size={15} aria-hidden="true" /></button>
       </nav>
