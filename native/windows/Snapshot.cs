@@ -75,7 +75,7 @@ internal static class Snapshot
             (Text(row["status"]) != "not-connected" || new[] { "days", "profiles", "tools" }.Any(key =>
                 row.TryGetPropertyValue(key, out var value) && value is not JsonArray { Count: 0 })))) return false;
         // Activity's collector contract is native-only. Legacy token verification
-        // can cover Ubuntu too, so require the original native source set as well.
+        // can cover another device too, so require the original native source set as well.
         if (kind == "activity") return true;
         return new[] { "Mac", "Windows" }.All(host =>
         {

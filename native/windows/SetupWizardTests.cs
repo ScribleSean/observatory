@@ -15,7 +15,7 @@ internal static class SetupWizardTests
             FirstRunSetup.Prepare(runtime);
             using var collector = new Collector(runtime);
             // Even enabled configuration cannot bypass the pending setup gate.
-            collector.Configure(null, quota: true);
+            collector.Configure(quota: true);
             collector.Refresh().GetAwaiter().GetResult();
             Check(!File.Exists(Path.Combine(runtime, "public/local/collector.json")), "Pending setup started collection.");
             using var form = new SetupWizard(runtime, collector);
@@ -42,7 +42,7 @@ internal static class SetupWizardTests
                     var sourcePanel = wispr.Parent!;
                     Check(sourcePanel.ClientRectangle.Contains(wispr.Bounds), "Wispr choice is clipped.");
                     wispr.Checked = true;
-                    Check(!Descendants(form).OfType<CheckBox>().Any(c => Equals(c.Tag, "wsl") || Equals(c.Tag, "account")), "Retired WSL source or account selector is still offered.");
+                    Check(!Descendants(form).OfType<CheckBox>().Any(c => Equals(c.Tag, "wsl") || Equals(c.Tag, "account")), "A source or account selector outside the native set is offered.");
                     Option("codex").Checked = true;
                     Option("codex").Checked = false;
                     Option("quota").Checked = true;

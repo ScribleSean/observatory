@@ -319,7 +319,7 @@ func runSelfTests() {
     precondition(archivedActivity.latest("activity", host: "Mac") == nil)
     precondition(text(archivedActivity.activityArchive(host: "Mac")?["latestReadStatus"]) == "unavailable")
     precondition(number(archivedActivity.recordedDays("activity", host: "All").last?["seconds"]) == 25)
-    precondition(archivedActivity.recordedDays("activity", host: "Ubuntu").isEmpty)
+    precondition(archivedActivity.recordedDays("activity", host: "Other").isEmpty)
     precondition(nativeHistory.recordedDays("tokens", host: "Mac").count == 2)
     precondition(nativeHistory.days("tokens", host: "Windows").isEmpty)
     precondition(nativeHistory.days("tokens", host: "All").isEmpty)
@@ -507,7 +507,7 @@ func runSelfTests() {
         precondition(sourceHealthStatus(status) == label)
     }
     precondition(sourceHealthStatus(nil) == "Unknown")
-    let healthSources: [JSONObject] = ["ok", "partial", "unavailable", "not-connected"].map { ["status": $0] }
+    let healthSources: [JSONObject] = ["ok", "partial", "unavailable", "not-connected"].map { ["host": "Mac", "status": $0] }
     let healthSnapshot = Snapshot(object: ["activity": healthSources, "agents": []])
     precondition(nativeDashboardSources(healthSnapshot.object["activity"], key: "activity").map {
         sourceHealthStatus(text($0["status"]))

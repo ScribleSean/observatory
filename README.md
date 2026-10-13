@@ -44,7 +44,7 @@ Use the native apps for collection and daily viewing. Source builds require deve
 | Windows x64 | [Windows app and tray](docs/WINDOWS.md), including local builds and guarded package replacement. |
 | macOS, Apple Silicon | [Mac app and menu bar](docs/MAC.md), including bundled runtimes and preview checks. |
 
-WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. Older builds and dated evidence may still include those sources. This scope decision does not claim their code has been removed or authorize changing a WSL installation or its records.
+WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. The apps no longer offer Ubuntu as a history device and the Windows app no longer reads WSL source settings. The pairing code and saved-snapshot format still carry Ubuntu fields until a later change that updates both apps together. Older builds and dated evidence may still include those sources.
 
 Fresh desktop setups ask which sources to enable before collecting. ActivityWatch must be installed separately for screen time. Read the [setup guide](docs/GUIDE.md) and [source coverage](docs/SOURCE-COVERAGE.md) before connecting records. Fixing the remaining native UI issues and making local collection reliable come before adding providers or new setup flows. The [roadmap](docs/ROADMAP.md) lists the acceptance work.
 

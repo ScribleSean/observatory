@@ -59,7 +59,7 @@ private func testMalformedNativeAggregateProvenance() throws {
         var empty = try nativeScopeFixture()
         empty[key] = [Any]()
         try verify(key + "/empty", empty, kind, key != "tokens", history: key == "activityHistory" ? 1800 : nil)
-        for shape in ["null", "{}", #""invalid""#, "7", "true", #"{"host":"Ubuntu","status":"ok"}"#] {
+        for shape in ["null", "{}", #""invalid""#, "7", "true", #"{"host":"Other","status":"ok"}"#] {
             var malformed = try nativeScopeFixture()
             malformed[key] = try fragment(shape)
             try verify(key + "/shape/" + shape, malformed, kind, false)
@@ -69,13 +69,13 @@ private func testMalformedNativeAggregateProvenance() throws {
             mixed[key] = (mixed[key] as! [Any]) + [try fragment(member)]
             try verify(key + "/mixed/" + member, mixed, kind, false)
             var retired = try nativeScopeFixture()
-            retired[key] = [["host": "Ubuntu", "status": "ok"], try fragment(member)] as [Any]
+            retired[key] = [["host": "Other", "status": "ok"], try fragment(member)] as [Any]
             retired["combinedTokens"] = ["status": "ok", "verification": ["status": "verified"],
                 "days": [["date": "2026-09-12", "totalTokens": 60]]]
             try verify(key + "/retired-mixed/" + member, retired, kind, false)
         }
         for explicitEmpty in [false, true] {
-            var placeholder: JSONObject = ["host": "Ubuntu", "status": "not-connected"]
+            var placeholder: JSONObject = ["host": "Other", "status": "not-connected"]
             if explicitEmpty {
                 for field in ["days", "profiles", "tools"] { placeholder[field] = [Any]() }
             }
@@ -89,7 +89,7 @@ private func testMalformedNativeAggregateProvenance() throws {
             ("tools", #"[{"tool":"Codex","totalTokens":30}]"#)] {
             for value in [evidence, "null", "{}", #""invalid""#, "7", "true"] {
                 var object = try nativeScopeFixture()
-                let placeholder: JSONObject = ["host": "Ubuntu", "status": "not-connected", field: try fragment(value)]
+                let placeholder: JSONObject = ["host": "Other", "status": "not-connected", field: try fragment(value)]
                 object[key] = (object[key] as! [Any]) + [placeholder]
                 try verify(key + "/placeholder/" + field + "/" + value, object, kind, false)
             }
@@ -106,7 +106,7 @@ func runNativeHistoryRetirementTests() {
             {"schema":2,"collectedAt":"2026-09-12T12:00:00Z","tokens":[
               {"host":"Mac","status":"ok","days":[{"date":"2026-09-12","totalTokens":10}]},
               {"host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":20}]},
-              {"host":"Ubuntu","status":"ok","days":[{"date":"2026-09-12","totalTokens":30}]}],
+              {"host":"Other","status":"ok","days":[{"date":"2026-09-12","totalTokens":30}]}],
              "combinedTokens":{"host":"All","status":"ok","verification":{"status":"verified"},
               "days":[{"date":"2026-09-12","totalTokens":60}]}}
             """#.utf8)
@@ -114,13 +114,11 @@ func runNativeHistoryRetirementTests() {
         let before = try JSONSerialization.data(withJSONObject: mixed.object, options: .sortedKeys)
         precondition(mixed.latest("tokens", host: "All") == nil, "Mixed-scope verified totals must not become native All")
         precondition(mixed.recordedDays("tokens", host: "All").isEmpty)
-        for (host, total) in [("Mac", 10.0), ("Windows", 20.0), ("Ubuntu", 30.0)] {
+        for (host, total) in [("Mac", 10.0), ("Windows", 20.0)] {
             precondition(number(mixed.latest("tokens", host: host)?["totalTokens"]) == total)
             precondition(number(mixed.recordedDays("tokens", host: host).last?["totalTokens"]) == total)
         }
-        precondition(nativeHistoryDevices(mixed, key: "tokens") == ["All", "Mac", "Windows", "Ubuntu"])
-        precondition(nativeHistoryDeviceLabel("Ubuntu") == "Archived Ubuntu")
-        precondition(nativeArchivedHistoryNotice.contains("Read-only") && nativeArchivedHistoryNotice.contains("not collecting"))
+        precondition(nativeHistoryDevices == ["All", "Mac", "Windows"], "History offers native devices only")
         let after = try JSONSerialization.data(withJSONObject: mixed.object, options: .sortedKeys)
         precondition(before == after, "History scope checking must not rewrite stored records")
         var past = mixed.object
@@ -130,7 +128,7 @@ func runNativeHistoryRetirementTests() {
             return source
         }
         let pastBefore = try JSONSerialization.data(withJSONObject: past, options: .sortedKeys)
-        for host in ["Mac", "Windows", "Ubuntu"] {
+        for host in ["Mac", "Windows"] {
             let days = Snapshot(object: past).recordedDays("tokens", host: host)
             precondition(days.map { text($0["date"]) } == ["2026-09-01", "2026-09-12"])
             precondition(number(nativePeriodDays(days, period: "day", anchor: "2026-09-01").first?["totalTokens"]) == 7)
@@ -139,12 +137,11 @@ func runNativeHistoryRetirementTests() {
         precondition(pastBefore == pastAfter, "Past-date navigation must not reorder stored rows")
 
         var native = mixed.object
-        native["tokens"] = rows(native["tokens"]).filter { text($0["host"]) != "Ubuntu" }
+        native["tokens"] = rows(native["tokens"]).filter { text($0["host"]) != "Other" }
         native["combinedTokens"] = ["status": "ok", "verification": ["status": "verified"],
             "days": [["date": "2026-09-12", "totalTokens": 30]]]
         precondition(number(Snapshot(object: native).latest("tokens", host: "All")?["totalTokens"]) == 30)
         precondition(number(Snapshot(object: native).recordedDays("tokens", host: "All").last?["totalTokens"]) == 30)
-        precondition(nativeHistoryDevices(Snapshot(object: native), key: "tokens") == ["All", "Mac", "Windows"])
         var unknownScope = native
         unknownScope.removeValue(forKey: "tokens")
         precondition(Snapshot(object: unknownScope).latest("tokens", host: "All") == nil)
@@ -155,34 +152,23 @@ func runNativeHistoryRetirementTests() {
         native.removeValue(forKey: "combinedTokens")
         precondition(Snapshot(object: native).latest("tokens", host: "All") == nil, "Do not invent a smaller sum")
 
-        let ubuntuData = Data(#"{"schema":2,"collectedAt":"2026-09-12T12:00:00Z","tokens":[{"host":"Ubuntu","status":"ok","days":[{"date":"2026-09-12","totalTokens":42}]}]}"#.utf8)
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-retired-history-\(UUID().uuidString)")
+        let otherData = Data(#"{"schema":2,"collectedAt":"2026-09-12T12:00:00Z","tokens":[{"host":"Other","status":"ok","days":[{"date":"2026-09-12","totalTokens":42}]}]}"#.utf8)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-other-history-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let file = directory.appendingPathComponent("ubuntu-only.json")
-        try ubuntuData.write(to: file)
-        let ubuntu = try SnapshotArchive.read(file)
-        precondition(nativeHistoryDevices(ubuntu, key: "tokens").contains("Ubuntu"))
-        precondition(number(ubuntu.recordedDays("tokens", host: "Ubuntu").last?["totalTokens"]) == 42)
-        precondition(ubuntu.recordedDays("tokens", host: "All").isEmpty && ubuntu.recordedDays("tokens", host: "Mac").isEmpty)
-        precondition(nativeHistoryDevices(ubuntu, key: "activity") == ["All", "Mac", "Windows"])
+        let file = directory.appendingPathComponent("other-only.json")
+        try otherData.write(to: file)
+        let other = try SnapshotArchive.read(file)
+        precondition(other.recordedDays("tokens", host: "All").isEmpty && other.recordedDays("tokens", host: "Mac").isEmpty &&
+            other.recordedDays("tokens", host: "Windows").isEmpty, "Records from another device must not appear in native history")
         let saved = try Data(contentsOf: file)
-        precondition(saved == ubuntuData, "Opening archived history must preserve exact original bytes")
+        precondition(saved == otherData, "Opening saved history must preserve exact original bytes")
 
-        for day: JSONObject in [["date": "invalid", "totalTokens": 42], ["date": "2026-02-30", "totalTokens": 42],
-                                ["date": "2026-09-12", "totalTokens": -1], ["date": "2026-09-12", "totalTokens": true],
-                                ["date": "2026-09-12", "totalTokens": "42"], ["date": "2026-09-12"]] {
-            let invalid = Snapshot(object: ["tokens": [["host": "Ubuntu", "status": "ok", "days": [day]]]])
-            precondition(!nativeHistoryDevices(invalid, key: "tokens").contains("Ubuntu"))
-        }
-        let absent = Snapshot(object: ["tokens": [["host": "Ubuntu", "status": "unavailable", "days": [["date": "2026-09-12", "totalTokens": 42]]]]])
-        precondition(!nativeHistoryDevices(absent, key: "tokens").contains("Ubuntu"))
         let activity = Snapshot(object: [
-            "activity": [["host": "Ubuntu", "status": "ok", "days": [["date": "2026-09-12", "seconds": 42]]]],
+            "activity": [["host": "Other", "status": "ok", "days": [["date": "2026-09-12", "seconds": 42]]]],
             "combined": ["status": "ok", "days": [["date": "2026-09-12", "seconds": 42]]],
             "activityHistory": [["host": "Combined", "status": "ok", "days": [["date": "2026-09-12", "seconds": 42]]]]])
         precondition(activity.latest("activity", host: "All") == nil && activity.recordedDays("activity", host: "All").isEmpty)
-        precondition(number(activity.recordedDays("activity", host: "Ubuntu").last?["seconds"]) == 42)
-        print("Native historical scope and archived read-only device history passed")
+        print("Native historical scope and native-only device history passed")
     } catch { preconditionFailure("Native retired history fixture failed: \(error)") }
 }

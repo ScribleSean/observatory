@@ -8,11 +8,11 @@ internal static class NativeSourceHealthTests
     internal static int Scope()
     {
         var cases = new (string name, (string? host, string? status)[] rows, string expected)[] {
-            ("mixed-native-and-archive", [("Windows", "ok"), ("Mac", "unavailable"), ("Ubuntu", "ok")], "1/2 native device records read"),
+            ("mixed-native-and-other", [("Windows", "ok"), ("Mac", "unavailable"), ("Other", "ok")], "1/2 native device records read"),
             ("native-only", [("Windows", "ok"), ("Mac", "ok")], "2/2 native device records read"),
-            ("archive-only", [("Ubuntu", "ok")], "Unknown"),
+            ("other-only", [("Other", "ok")], "Unknown"),
             ("empty", [], "Unknown"),
-            ("disabled-native-with-archive", [("Windows", "not-connected"), ("Mac", "not-connected"), ("Ubuntu", "ok")], "Unknown"),
+            ("disabled-native-with-other", [("Windows", "not-connected"), ("Mac", "not-connected"), ("Other", "ok")], "Unknown"),
             ("one-disabled-native", [("Windows", "not-connected"), ("Mac", "ok")], "1/1 native device records read"),
             ("unavailable-native", [("Windows", "unavailable"), ("Mac", "unavailable")], "0/2 native device records read"),
             ("unexpected-hosts", [("Windows", "ok"), ("Linux", "ok"), ("windows", "ok"), ("mac", "ok"), (" Mac", "ok"), (null, "ok")], "1/1 native device records read"),
@@ -32,36 +32,26 @@ internal static class NativeSourceHealthTests
             using var form = Open(data);
             var actual = Value(form, "Provider token sources", "Codex").Text;
             Equal(expected, actual, name);
-            var hasArchive = rows.Any(row => row.host == "Ubuntu");
-            Equal(hasArchive, Children(form).OfType<Label>().Any(label => label.Text == NativeHistory.ArchivedNotice), name + " archive notice");
-            if (hasArchive)
-            {
-                Equal(true, Children(form).OfType<Label>().Any(label => label.Text == "Archived Ubuntu · Codex"), name + " archived label");
-                Equal(false, Children(form).OfType<Label>().Any(label => label.Text == "Ubuntu · Codex"), name + " no unqualified archive label");
-            }
+            Equal(false, Children(form).OfType<Label>().Any(label => label.Text.Contains("Other", StringComparison.Ordinal)), name + " lists native devices only");
             Equal(before, data.ToJsonString(), name + " preserves all rows and timestamps");
             Equal(false, form.Visible, name + " stays hidden");
         }
         using (var form = Open(null)) Equal("Unknown", Value(form, "Provider token sources", "Codex").Text, "missing-snapshot");
-        var archive = JsonNode.Parse("""
-            {"activity":[{"host":"Ubuntu","source":"ActivityWatch","status":"ok","checkedAt":"2026-08-01T11:00:00Z"}],
-             "tokens":[{"host":"Ubuntu","source":"Codex","status":"ok","checkedAt":"2026-08-01T12:00:00Z","days":[{"date":"2026-08-01","totalTokens":42}]}],
-             "settings":[{"host":"Ubuntu","source":"Codex tools","status":"ok","checkedAt":"2026-08-01T13:00:00Z"}],
-             "dictation":[{"host":"Ubuntu","source":"Wispr Flow","status":"stale","checkedAt":"2026-08-01T14:00:00Z"}],
-             "quota":{"host":"Ubuntu","provider":"Codex","status":"stale","checkedAt":"2026-08-01T15:00:00Z"},
-             "localModel":{"host":"Ubuntu","provider":"Saved model","status":"ok","checkedAt":"2026-08-01T16:00:00Z"},
-             "agentSource":{"host":"Ubuntu","provider":"Saved receipts","status":"ok","checkedAt":"2026-08-01T17:00:00Z"},
+        var other = JsonNode.Parse("""
+            {"activity":[{"host":"Other","source":"ActivityWatch","status":"ok","checkedAt":"2026-08-01T11:00:00Z"}],
+             "tokens":[{"host":"Other","source":"Codex","status":"ok","checkedAt":"2026-08-01T12:00:00Z","days":[{"date":"2026-08-01","totalTokens":42}]}],
+             "settings":[{"host":"Other","source":"Codex tools","status":"ok","checkedAt":"2026-08-01T13:00:00Z"}],
+             "dictation":[{"host":"Other","source":"Wispr Flow","status":"stale","checkedAt":"2026-08-01T14:00:00Z"}],
              "combinedTokens":{"status":"ok","days":[{"date":"2026-08-01","totalTokens":999}]}}
             """)!.AsObject();
-        var archiveBefore = archive.ToJsonString();
-        using (var form = Open(archive))
+        var otherBefore = other.ToJsonString();
+        using (var form = Open(other))
         {
-            Equal(7, Children(form).OfType<Label>().Count(label => label.Text.StartsWith("Archived Ubuntu · ", StringComparison.Ordinal)), "all retained Source health categories are archival");
-            Equal(1, Children(form).OfType<Label>().Count(label => label.Text == NativeHistory.ArchivedNotice), "one archival disclaimer");
-            Equal("Read", Value(form, "Tokens", "Archived Ubuntu · Codex").Text, "retained status preserved");
-            Equal(42d, NativeHistory.Sum(NativeHistory.Days(archive, "tokens", "Ubuntu"), "totalTokens"), "archived tokens still readable");
-            Equal(0, NativeHistory.Days(archive, "tokens", "All").Length, "unverified aggregate remains withheld");
-            Equal(archiveBefore, archive.ToJsonString(), "archival rows timestamps and totals unchanged");
+            Equal(0, Children(form).OfType<Label>().Count(label => label.Text.Contains("Other", StringComparison.Ordinal)), "records from another device are not listed");
+            foreach (var title in new[] { "Activity", "Tokens", "Tool activity", "Dictation" })
+                Equal("No source records", Value(form, title, "Status").Text, title + " shows no native source records");
+            Equal(0, NativeHistory.Days(other, "tokens", "All").Length, "unverified aggregate remains withheld");
+            Equal(otherBefore, other.ToJsonString(), "saved rows timestamps and totals unchanged");
         }
         Console.WriteLine($"source-health-scope: passed ({cases.Length + 2} cases)");
         return cases.Length + 2;

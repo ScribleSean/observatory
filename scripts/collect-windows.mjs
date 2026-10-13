@@ -50,10 +50,10 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   const config=windowsCollectorConfig(JSON.parse(await readConfiguration()));
   signal?.throwIfAborted();
   const readQuota=()=>collectQuota(runtime,{enabled:config.quota,
-    resolveExecutable:()=>findWindowsQuotaClient(config.quotaWslDistribution),readSnapshot:readWindowsQuotaSnapshot,
+    resolveExecutable:()=>findWindowsQuotaClient(),readSnapshot:readWindowsQuotaSnapshot,
     isEnabled:async()=>{
       const current=windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8')));
-      return current.quota && current.quotaWslDistribution===config.quotaWslDistribution;
+      return current.quota;
     }});
   if(quotaOnly) return refreshAllowances(runtime,{enabled:config.quota,readQuota});
   let savedPairing=null,pairingFailed=false;

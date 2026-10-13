@@ -18,16 +18,14 @@ test('Windows saved counters fail closed and drop unapproved fields',()=>{
   const clean=tokensFromSettings({profiles:[{...profile,prompt:'private'}],tools:[],secret:'private'},'Windows');
   assert.ok(!JSON.stringify(clean).includes('private'));
 });
-test('WSL collection is retired while legacy settings retain validation',()=>{
-  assert.equal(windowsCollectorConfig().wslDistribution,null);
+test('source settings validate switches and ignore unknown keys',()=>{
+  assert.equal('wslDistribution' in windowsCollectorConfig({wslDistribution:'Ubuntu-24.04'}),false);
   assert.equal(windowsCollectorConfig().claude,false);
   assert.equal(windowsCollectorConfig().antigravity,false);
   assert.equal(windowsCollectorConfig({antigravity:true}).antigravity,true);
   assert.throws(()=>windowsCollectorConfig({antigravity:'true'}));
   assert.equal(windowsCollectorConfig({claude:true}).claude,true);
   assert.throws(()=>windowsCollectorConfig({claude:'true'}));
-  assert.equal(windowsCollectorConfig({wslDistribution:'Ubuntu-24.04'}).wslDistribution,null);
-  assert.throws(()=>windowsCollectorConfig({wslDistribution:'Ubuntu; whoami'}));
   assert.throws(()=>windowsCollectorConfig({wispr:'true'}));
   assert.equal(windowsCollectorConfig({activity:false}).activity,false);
   assert.equal(windowsCollectorConfig().typewhisper,undefined);

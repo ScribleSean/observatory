@@ -40,13 +40,7 @@ struct NativeDashboard: View {
         if settingsActions.preview { selection.previewAppearance = next } else { appearance = next }
     }
     private var displayedSnapshot: Snapshot? { archivedSnapshot ?? store.snapshot }
-    private var historyHost: String {
-        let key = selection.section == "tokens" ? "tokens" : "activity"
-        return nativeHistoryDevices(displayedSnapshot, key: key).contains(host) ? host : "Mac"
-    }
-    private var viewingRetiredHistory: Bool {
-        ["activity", "tokens"].contains(selection.section) && historyHost == "Ubuntu"
-    }
+    private var historyHost: String { nativeHistoryDevices.contains(host) ? host : "Mac" }
     private let sections = NativeDashboardSelection.sections
 
     var body: some View {
@@ -214,7 +208,7 @@ struct NativeDashboard: View {
                 Button(action: openArchive) { Image(systemName: "clock.arrow.circlepath") }
                     .help("Open saved snapshot").accessibilityLabel("Open saved snapshot")
                 Button { store.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise").fixedSize() }
-                    .disabled(store.refreshing || archivedSnapshot != nil || viewingRetiredHistory)
+                    .disabled(store.refreshing || archivedSnapshot != nil)
             }
     }
 
@@ -237,7 +231,6 @@ struct NativeDashboard: View {
     private var dailyHistory: some View {
         let key = selection.section == "tokens" ? "tokens" : "activity"
         let field = key == "tokens" ? "totalTokens" : "seconds"
-        let devices = nativeHistoryDevices(displayedSnapshot, key: key)
         let selectedHost = historyHost
         let days = displayedSnapshot?.recordedDays(key, host: selectedHost) ?? []
         let anchor = text(days.first(where: { text($0["date"]) == selectedDate })?["date"] ?? days.last?["date"])
@@ -250,8 +243,8 @@ struct NativeDashboard: View {
         }
         return VStack(alignment: .leading, spacing: 18) {
             ObservatoryFilterRow(title: "Device") {
-                ObservatorySegments(title: "Device", labels: devices.map(nativeHistoryDeviceLabel),
-                    values: devices, selection: Binding(get: { selectedHost }, set: { host = $0 }))
+                ObservatorySegments(title: "Device", labels: nativeHistoryDevices,
+                    values: nativeHistoryDevices, selection: Binding(get: { selectedHost }, set: { host = $0 }))
             }
             ObservatoryFilterRow(title: "Period") {
                 ObservatorySegments(title: "Period", labels: ["Day", "Week", "All retained"],
@@ -263,13 +256,10 @@ struct NativeDashboard: View {
                         selection: Binding(get: { anchor }, set: { selectedDate = $0 }))
                 }
             }
-            if selectedHost == "Ubuntu" {
-                Text(nativeArchivedHistoryNotice).observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
-            }
             if selectedHost == "All", let snapshot = displayedSnapshot, !snapshot.hasNativeAggregateScope(key) {
                 Text(nativeHistoryScopeNotice).observatoryFont(.callout).foregroundStyle(ObservatoryTheme.muted)
             }
-            if key == "activity", selectedHost != "Ubuntu", let archive = displayedSnapshot?.activityArchive(host: selectedHost) {
+            if key == "activity", let archive = displayedSnapshot?.activityArchive(host: selectedHost) {
                 Text(text(archive["latestReadStatus"]) != "ok"
                     ? "Saved activity · source unavailable"
                     : text(archive["trackingStatus"]) == "recent"
@@ -297,7 +287,7 @@ struct NativeDashboard: View {
             if days.isEmpty {
                 ObservatoryEmptyState(title: "No verified records", systemImage: "chart.bar",
                     message: "This source is unavailable or has no saved records. Missing data is unknown, not zero.")
-                if key == "activity" && selectedHost != "Ubuntu" { ActivityWatchHelp() }
+                if key == "activity" { ActivityWatchHelp() }
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(key == "tokens" ? "SAVED CODEX LOG TOKENS" : "FOREGROUND TIME")
@@ -398,7 +388,7 @@ struct NativeDashboard: View {
                         let sources = nativeDashboardSources(displayedSnapshot?.object[key], key: key)
                         if sources.isEmpty { Text("No source records").foregroundStyle(.secondary) }
                         ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-                            ObservatoryValueRow(text(source["host"]) + " · " + text(source["source"], fallback: key), value: sourceHealthStatus(text(source["status"])))
+                            ObservatoryValueRow((key == "localModel" ? "Saved" : text(source["host"])) + " · " + text(source["source"], fallback: key), value: sourceHealthStatus(text(source["status"])))
                             ObservatoryValueRow("Last checked", value: parseDate(source["checkedAt"]).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Unknown")
                         }
                     }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
@@ -498,6 +488,8 @@ func sourceHealthStatus(_ status: String?) -> String {
 }
 
 func nativeDashboardSources(_ value: Any?, key: String) -> [JSONObject] {
-    let sources = (value as? JSONObject).map { [$0] } ?? rows(value)
+    // Device lists show Mac and Windows only. Rows for any other host are not listed.
+    let sources = (value as? JSONObject).map { [$0] } ??
+        rows(value).filter { ["Mac", "Windows"].contains(text($0["host"])) }
     return sources.filter { key != "dictation" || text($0["source"]).lowercased() != "typewhisper" }
 }

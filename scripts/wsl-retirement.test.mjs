@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 test(
-  'legacy Windows switches cannot start WSL during real collector orchestration',
+  'older WSL settings keys are ignored during real collector orchestration',
   { skip: process.platform !== 'win32' },
   async (t) => {
     const runtime = await realpath(
@@ -21,15 +21,15 @@ test(
       activity: false,
       codex: true,
       wispr: false,
-      quota: true,
+      quota: false,
       wslDistribution: 'Ubuntu',
       quotaWslDistribution: 'Ubuntu',
     });
     await writeFile(file, config);
     const original = childProcess.spawn,
       calls = [];
-    // No reader process can launch. In particular the RED run cannot start WSL
-    // or read an installed account. Only synthetic saved counters are returned.
+    // No real reader process can launch and no installed account is read.
+    // Only synthetic saved counters are returned.
     childProcess.spawn = (executable) => {
       calls.push(executable);
       const child = new EventEmitter();

@@ -122,12 +122,11 @@ internal sealed class Collector : IDisposable
         finally { operations.Complete(); }
     }
 
-    internal void Configure(string? distro, bool wispr = false, bool quota = false, string? quotaDistro = null, bool activity = true, bool codex = true, bool claude = false, bool antigravity = false)
+    internal void Configure(bool wispr = false, bool quota = false, bool activity = true, bool codex = true, bool claude = false, bool antigravity = false)
     {
         if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
-        if (distro is not null || quotaDistro is not null) throw new ArgumentException("WSL sources are retired. New setup supports Windows sources only.");
         var file = Path.Combine(runtime, "collector.config.json");
-        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["wslDistribution"] = distro, ["quota"] = quota, ["antigravity"] = antigravity, ["quotaWslDistribution"] = quotaDistro };
+        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["quota"] = quota, ["antigravity"] = antigravity };
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -160,13 +159,8 @@ internal sealed class Collector : IDisposable
             }
             else current[optional] ??= false;
         }
-        foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" })
-        {
-            // Keep legacy metadata, especially the account owner. Clearing it
-            // would silently authorize the collector to discover another login.
-            if (desired.TryGetPropertyValue(key, out var selection) && !JsonNode.DeepEquals(current[key], selection))
-                throw new ArgumentException("Retired WSL selections cannot be changed here. Existing source and account settings are preserved.");
-        }
+        // Older settings files carried two source selectors that are no longer read.
+        foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" }) current.Remove(key);
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, current.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -320,7 +314,7 @@ internal sealed class Collector : IDisposable
                 if (!sharingDenied) throw new Exception("Sharing bypassed shutdown or collection.");
             }
             var denied = false;
-            try { collector.Configure(null); } catch (InvalidOperationException) { denied = true; }
+            try { collector.Configure(); } catch (InvalidOperationException) { denied = true; }
             if (!denied || File.Exists(Path.Combine(root, "collector.config.json"))) throw new Exception("Configuration changed during shutdown.");
             collector.operations.Complete();
             if (!stopped.GetAwaiter().GetResult()) throw new Exception("Completed collector operation did not drain.");
@@ -333,7 +327,7 @@ internal sealed class Collector : IDisposable
             if (!collector.operations.Busy || collector.operations.Stopping || collector.lifetime.IsCancellationRequested)
                 throw new Exception("Timeout cancelled work or failed to resume.");
             collector.operations.Complete();
-            collector.Configure(null, activity: false, codex: false);
+            collector.Configure(activity: false, codex: false);
             var releasePairing = collector.BeginDirectPairing();
             if (!collector.Busy || collector.operations.TryBegin()) throw new Exception("Pairing did not reserve collection.");
             var duplicateDenied = false;

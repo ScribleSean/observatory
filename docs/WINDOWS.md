@@ -1,6 +1,6 @@
 # Windows development preview
 
-The Windows application and tray panel are part of Sean's personal native app, built in public. Current work is reliable local collection and unresolved UI and lifecycle checks, not a consumer installer launch. WSL and Ubuntu tracking are out of scope. Older builds may still expose those choices, but they are not setup recommendations. This document does not claim their code has been removed. See the [roadmap](ROADMAP.md).
+The Windows application and tray panel are part of Sean's personal native app, built in public. Current work is reliable local collection and unresolved UI and lifecycle checks, not a consumer installer launch. WSL and Ubuntu tracking are out of scope. Current source no longer offers them. Older builds may still expose those choices, but they are not setup recommendations. See the [roadmap](ROADMAP.md).
 
 The native Windows tray app collects on Windows without a running Mac or open terminal. Source builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener.
 
@@ -56,7 +56,7 @@ For an isolated desktop check, run `WorkspaceObservatory.exe --test-native-dashb
 
 Fresh installations show a native first-run wizard before collection. All sources remain off until setup is completed. Review privacy, choose sources and optionally inspect device-pairing details. Closing incomplete setup leaves collection paused, including after restart. Existing configured installations keep their settings and skip the wizard.
 
-Later, right-click the Observatory system-tray icon and choose **Configure local collection** for native Windows sources. Do not enable legacy Ubuntu choices. Neither optional sources nor Mac pairing are required for Windows data.
+Later, right-click the Observatory system-tray icon and choose **Configure local collection** for native Windows sources. Neither optional sources nor Mac pairing are required for Windows data.
 
 In the native dashboard, choose **Refresh sources** to start collection using the saved source choices. When the attempt finishes, the dashboard reloads the saved snapshot. Refresh does not enable sources or complete setup for you. If collection fails, the previous saved records remain available.
 
@@ -150,9 +150,9 @@ An independently launched SSH peer exchange can still update saved peer state af
 
 ## Configure sources
 
-Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Wispr Flow statistics are separately opt-in. Do not use WSL to read native Windows logs or add Ubuntu as a source.
+Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Wispr Flow statistics are separately opt-in.
 
-The app also offers optional [account limits and token history](USAGE-LIMITS.md). Account monitoring for the native scope needs a supported, authenticated Windows client and verification on the exact candidate. Do not select Ubuntu as a workaround. A failed native account read stays unavailable rather than becoming zero or an inferred allowance. Saved token logs are a separate source. Closing Settings without saving leaves its choices unchanged.
+The app also offers optional [account limits and token history](USAGE-LIMITS.md). Account monitoring for the native scope needs a supported, authenticated Windows client and verification on the exact candidate. Settings files from older builds may contain `wslDistribution` and `quotaWslDistribution`. The app ignores both and removes them the next time source settings are saved. When account limits are on, the app reads the Codex account signed in on Windows. A failed native account read stays unavailable rather than becoming zero or an inferred allowance. Saved token logs are a separate source. Closing Settings without saving leaves its choices unchanged.
 
 Historical account-client evidence: the earlier Ubuntu route read limits and daily totals successfully, while the native Windows client could not be launched on the tested machine. The September 12 development-machine update preserved its existing monitoring-off choice. Those checks do not establish native Windows account acceptance. Old builds could start WSL for the account client even when Ubuntu log collection was off. Preserve recoverable settings when retiring that choice. Changing Observatory's source scope does not authorize changing or stopping WSL workloads.
 

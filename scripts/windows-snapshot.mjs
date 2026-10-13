@@ -26,12 +26,7 @@ export function tokensFromSettings(raw,host) {
 
 export function windowsCollectorConfig(raw={}) {
   if(!raw || typeof raw!=='object' || Array.isArray(raw))throw Error('Invalid local Windows source settings');
-  const distro=raw.wslDistribution;
-  const quotaDistro=raw.quotaWslDistribution;
-  if(distro!==undefined && distro!==null && (typeof distro!=='string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(distro)))throw Error('Invalid WSL distribution');
-  if(quotaDistro!==undefined && quotaDistro!==null && (typeof quotaDistro!=='string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(quotaDistro)))throw Error('Invalid quota WSL distribution');
   for(const key of ['activity','codex','claude','wispr','typewhisper','quota','antigravity'])if(raw[key]!==undefined && typeof raw[key]!=='boolean')throw Error('Invalid source setting');
-  // Retired settings remain parseable, but never enable WSL. Preserve an account
-  // selector so an explicit native choice is required before polling resumes.
-  return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,wslDistribution:null,quota:raw.quota===true && quotaDistro==null,antigravity:raw.antigravity===true,quotaWslDistribution:quotaDistro || null};
+  // Unknown keys from older settings files are ignored, never interpreted.
+  return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,quota:raw.quota===true,antigravity:raw.antigravity===true};
 }
