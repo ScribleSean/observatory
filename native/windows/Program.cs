@@ -453,6 +453,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     // Spike. Null unless the app was started with --web-panel.
     private WebPanel? webPanel;
     private readonly bool useWebPanel;
+    private readonly bool panelTiming;
     private Action<string>? panelProbe;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool quitting;
@@ -464,6 +465,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         this.nativeDashboard = nativeDashboard;
         useWebPanel = webPanel;
+        this.panelTiming = panelTiming;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
         updater = new UpdateController(runtime, () => !collector.Busy && !Volatile.Read(ref quitting),
@@ -584,7 +586,8 @@ internal sealed class ObservatoryContext : ApplicationContext
     private async Task<bool> ShowWebPanel()
     {
         if (webPanel is not null && !webPanel.IsDisposed && webPanel.Visible) { webPanel.Hide(); return false; }
-        if (webPanel is null || webPanel.IsDisposed) webPanel = new WebPanel(runtime, PanelAction);
+        if (webPanel is not null && !webPanel.IsDisposed && webPanel.DismissedJustNow) return false;
+        if (webPanel is null || webPanel.IsDisposed) webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
         return await webPanel.ShowNearTray();
     }
 
@@ -655,6 +658,25 @@ internal sealed class ObservatoryContext : ApplicationContext
                 await Task.Delay(1500);
                 Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " page " + await panel.Describe());
                 panel.Hide();
+            }
+            // Dismissal check. The measuring script brings the open panel to the
+            // foreground and then another window. This records what the panel did.
+            await Task.Delay(1000);
+            if (await OpenOnce() >= 0)
+            {
+                Form? shown = useWebPanel ? webPanel : usagePopup;
+                [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+                bool Front() => shown is { IsDisposed: false, IsHandleCreated: true } && GetForegroundWindow() == shown.Handle;
+                bool Showing() => shown is { IsDisposed: false, Visible: true };
+                Write("phase=dismiss-check");
+                await Task.Delay(6000);
+                if (webPanel is not null) webPanel.KeepOpen = false;
+                Write("dismiss foreground=" + Front() + " visible=" + Showing());
+                await Task.Delay(2000);
+                Write("dismiss after-2s foreground=" + Front() + " visible=" + Showing());
+                await Task.Delay(6000);
+                Write("dismiss after-other-window foreground=" + Front() + " visible=" + Showing());
+                CloseOnce();
             }
             Write("phase=done");
         }

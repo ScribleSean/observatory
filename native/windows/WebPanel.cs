@@ -27,7 +27,30 @@ internal sealed class WebPanel : Form
         ShowInTaskbar = false; StartPosition = FormStartPosition.Manual;
         ClientSize = new Size(LogicalToDeviceUnits(PanelWidth), LogicalToDeviceUnits(560));
         Controls.Add(web);
+        // Close when another window is activated, as tray panels usually do.
+        Deactivate += async (_, _) =>
+        {
+            // Focus moving into the page also raises Deactivate, because the
+            // web view is a child window owned by another process. Hide only
+            // when a different top-level window has become the foreground one.
+            await Task.Delay(60);
+            if (KeepOpen || IsDisposed || !Visible || !IsHandleCreated || IsForeground) return;
+            dismissed = Environment.TickCount64; Hide();
+        };
     }
+
+    // Set by the timing harness only. An app that Windows did not bring to the
+    // foreground cannot hold it, so an unattended opening would close at once.
+    internal bool KeepOpen;
+    internal bool IsForeground => IsHandleCreated && GetForegroundWindow() == Handle;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    // A click on the tray icon deactivates the panel before the click handler
+    // runs. Without this, that click would hide the panel and open it again.
+    private long? dismissed;
+    internal bool DismissedJustNow => dismissed is { } at && Environment.TickCount64 - at < 400;
 
     // The web view is created on the first opening and kept afterwards, so a
     // later opening only shows an existing window. Closing hides the panel.
