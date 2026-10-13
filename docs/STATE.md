@@ -114,6 +114,60 @@ None of this has been run. The Mac changes in pull request 49 were written on Wi
 9. Pairing with Windows cannot be confirmed until the permission entry on the Windows `AppData` folder is resolved. After that, confirm the existing pairing still exchanges records. The All token total is expected to stay unverified until the devices are re-paired.
 10. Report any step that fails with the exact revision and the visible message.
 
+## Mac
+
+Recorded on 2026-10-13 on the Mac (Apple Silicon, macOS 27.0.1) from `main` at `b9dc3e6`, version 0.3.14 build 39. This is the same revision recorded for the Windows build 39 install. Nothing was installed, replaced or deleted on the Mac. The Windows PC was not touched from the Mac.
+
+### State before any change
+
+- One working checkout existed, on `main` at `93b856b`, clean and six commits behind GitHub. It was fast-forwarded to `b9dc3e6`.
+- Four local branches (`web-peer-quota`, `fix/token-metadata-shape`, `docs/build29-verification`, `archive/settings-style`) hold seven commits whose GitHub branches were deleted. `git cherry` reports all seven as patch-equivalent to commits on `main`, which agrees with the classification above. The local branches were left in place.
+- The installed app is 0.3.13 build 35 from `ced6698`, ad hoc signed. It was running and collecting. Its `public/local/usage.json` was written on 2026-10-13 and is readable JSON, unlike the zero-filled Windows copy.
+
+### What works
+
+- Runtime preparation: the `test_prepare_*.py` tests passed (8 run, 1 skipped). The three pinned runtime archives and the pinned Sparkle archive matched their checksums, and `prepare-runtime.py` produced a runtime archive with 14 dependency notices.
+- The Swift sources compile without changes when `SDKROOT` points at the macOS 26.5 SDK from Apple's Command Line Tools.
+- On the bundle staged by `native/build.mjs`, these checks passed: `--self-test`, `--test-quota-archive`, `--test-trusted-sync-owner`, `--test-shutdown`, `--test-collector`, strict signature verification, `--test-web`, `--test-lifecycle`, `--test-lifecycle --legacy-dashboard` and `--test-popup --legacy-dashboard`. The last two were run by hand because the builder had already stopped.
+- The staged bundle's `build-info.json` records 0.3.14 build 39, source `b9dc3e6` and a clean tree.
+
+### What is broken or unverified
+
+`node native/build.mjs` does not complete on this Mac, so there is no accepted Mac build 39 and nothing was installed.
+
+- With the default macOS 27.0 SDK, compilation fails because `SwiftUIMacros.StateMacro` cannot be found. The Command Line Tools do not include that compiler plugin and full Xcode is not installed. With the macOS 15.5 SDK, compilation fails because `glassEffect` does not exist there. Only the 26.5 SDK compiles.
+- `--test-popup` fails in native dashboard mode with "reopening usage raised the hidden dashboard". The step passed once and failed eight times across nine executions, with and without `--force-offscreen-popup`. The same check passes with `--legacy-dashboard`. The cause was not investigated. It may be a macOS 27 behavior, an effect of building against the 26.5 SDK, or a defect.
+
+Local `npm test` with the prepared Python 3.13 runtime selected: 950 tests, 819 passed, 21 failed, 110 skipped.
+
+| Cause | Failures | Kind |
+| --- | ---: | --- |
+| Slow under parallel load. All pass when the affected files run with `--test-concurrency=1`. Most report "Private path access-control verification failed", whose helper has a 15 second limit. | 16 | Local environment |
+| `scripts/collect-antigravity-allowance.test.mjs` uses the temporary folder path under `/var`, which is a symlink to `/private/var`. It passes when `TMPDIR` is the canonical path. | 1 | Test setup on Mac |
+| `scripts/run-collector.test.mjs` runs `python3` from `PATH`, which is the system Python 3.9.6. It passes with Python 3.13 first on `PATH`. | 1 | Local environment |
+| `scripts/cached-settings.test.mjs` "legacy cache refuses a linked cache directory" and `scripts/peer-revocation.test.mjs` "linked revocation marker is never followed or overwritten". The linked path is still refused, but with a different message than the test expects. | 2 | Unexplained |
+| `scripts/peer-pairing.test.mjs` "initial publish, privacy and merge" reads a null peer state. The test selects `/usr/bin/python3` on Mac. | 1 | Unexplained |
+
+Not verified on the Mac, because no build was installed: the Device filter, saved snapshots that contain Ubuntu rows, Source health labels, a collection by build 39, and pairing with Windows. Steps 3 to 9 of the list above remain open.
+
+### Differences from Windows
+
+| Topic | Windows | Mac |
+| --- | --- | --- |
+| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.13 build 35 from `ced6698` |
+| Build 39 produced by | CI package run | Local build only, and the builder stops at the popup check |
+| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | Build 35 was collecting and its snapshot is readable |
+| Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
+| TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
+| CI coverage | Package and contract workflows run on pull requests | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
+| Build tools | Pinned .NET SDK, Node and NSIS are downloaded by the build scripts | The Swift build depends on which Apple SDK is installed. See above. |
+
+### Next steps for the Mac
+
+1. Find out why reopening usage raises the hidden dashboard on macOS 27, and fix the app or the check.
+2. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
+3. Build again, back up the app's data folder, install build 39 or later, and work through the verification list above.
+
 ## Next decisions
 
 1. Decide what to do about the permission entry on `AppData` that blocks Codex tokens, account limits and pairing on this PC.
