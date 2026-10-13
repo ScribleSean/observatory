@@ -7,6 +7,19 @@
   font-weight: 100 900;
 }
 
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../public/fonts/Fraunces.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../public/fonts/JetBrainsMono.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 800;
+}
+
 html, body { margin: 0; background: var(--ob-background); color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }

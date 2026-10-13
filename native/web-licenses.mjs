@@ -46,8 +46,9 @@ export function webLicenses(root) {
       }
       // CSS imports are expanded before chunk attribution. Include them explicitly.
       for(const name of ['tailwindcss','tw-animate-css','shadcn'])roots.add(path.join(root,'node_modules',name));
-      const fontLicense=readFileSync(path.join(root,'public/fonts/OFL.txt'),'utf8');
-      this.emitFile({type:'asset',fileName:'assets/third-party-licenses.txt',source:licenseText(roots)+'\nInter Tight\n'+fontLicense});
+      const fonts=[['Inter Tight','OFL.txt'],['Fraunces','Fraunces-OFL.txt'],['JetBrains Mono','JetBrainsMono-OFL.txt']]
+        .map(([name,file])=>`\n${name}\n`+readFileSync(path.join(root,'public/fonts',file),'utf8')).join('');
+      this.emitFile({type:'asset',fileName:'assets/third-party-licenses.txt',source:licenseText(roots)+fonts});
     }
   };
 }

@@ -169,7 +169,7 @@ Bundled skins, in `native/skins/`:
 
 A shell chooses a skin by setting `data-skin` on the root element or by loading `panel.html?skin=name`. With sample data the page shows a skin picker so a person can compare them.
 
-Fonts: Almanac asks for Fraunces and the two mono skins ask for JetBrains Mono. Neither is bundled yet, so those skins fall back to the system serif and system monospace fonts and will look slightly different on Mac and Windows until the fonts are added with their licences.
+Fonts: Almanac uses Fraunces and the two mono skins use JetBrains Mono. Both are bundled in `public/fonts/` under the SIL Open Font License, with their licence texts beside them and in the generated web notices. The app makes no font-service requests.
 
 Candidates not built: Ledger, Blueprint, Terminal, Poster, Riso, Arcade and Nordic.
 
