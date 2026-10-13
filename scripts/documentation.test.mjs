@@ -12,7 +12,7 @@ void test('example source configuration does not offer retired readers',async()=
   assert.ok(config.macCodexHome);
   assert.ok(config.windowsHost);
 });
-test('public documentation links resolve and personal native scope stays explicit',async()=>{
+test('public documentation links resolve and the README states scope and limits',async()=>{
   const files=['README.md',...(await readdir(path.join(root,'docs')))
     .filter(name=>name.endsWith('.md')).map(name=>'docs/'+name)];
   for(const name of files) {
@@ -27,10 +27,13 @@ test('public documentation links resolve and personal native scope stays explici
     }
   }
   const readme=await readFile(path.join(root,'README.md'),'utf8');
-  assert.match(readme,/Sean's local screen-time and AI-usage app for Windows and Mac/);
+  assert.match(readme,/A Mac menu-bar and Windows tray app that shows your Claude Code and Codex limits/);
+  assert.match(readme,/It has no account and no hosted service/);
+  assert.match(readme,/Unknown means a value was not read\. It never means zero/);
   assert.match(readme,/Automatic app updates are not available/);
   assert.match(readme,/Build from source<\/a>/);
-  assert.match(readme,/Public installers and consumer onboarding are not current goals/);
+  assert.match(readme,/Builds are unsigned/);
+  assert.match(readme,/There is no installer download yet/);
   assert.match(readme,/WSL and Ubuntu tracking are out of scope/);
   assert.match(readme,/iPhone integration is later work/);
   assert.doesNotMatch(readme,/>Get started<\/a>/);
