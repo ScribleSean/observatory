@@ -18,3 +18,11 @@ export function selectActivityPairs(buckets, hostnames) {
     return {window: windows[0], afk: afks[0]};
   });
 }
+
+// The window and idle watchers on one computer can register under different
+// verified aliases. Reading every window bucket against every idle bucket keeps
+// that history. Overlapping results are counted once by the caller.
+export function activityCombinations(pairs) {
+  if (!Array.isArray(pairs) || !pairs.length || pairs.length > 8) throw Error('No bounded local activity pairs');
+  return pairs.flatMap(({window}) => pairs.map(({afk}) => ({window, afk})));
+}

@@ -43,7 +43,7 @@ test('client error recognition does not excuse uncertain usage or malformed enve
   const client=JSON.parse(event('client-error',undefined,usage(0,0,0,0),{model:'<synthetic>'}));
   client.isApiErrorMessage=true;
   const changes=[
-    value=>{value.isApiErrorMessage=false;},
+    value=>{value.isApiErrorMessage=false;value.message.usage.output_tokens=1;},
     value=>{value.isApiErrorMessage=1;},
     value=>{value.message.model='<other>';},
     value=>{value.message.model='claude-sonnet-4-20250514';},
@@ -60,6 +60,16 @@ test('client error recognition does not excuse uncertain usage or malformed enve
     await log(root,'one.jsonl',event('m1','r1',usage(1,2,3,4))+JSON.stringify(altered)+'\n');
     assert.equal(read(root).status,'unavailable');
   }
+}));
+test('excludes zero-usage client placeholders that carry no request identity',async()=>fixture(async root=>{
+  const placeholder=JSON.parse(event('client-placeholder',undefined,usage(0,0,0,0),{model:'<synthetic>'}));
+  placeholder.isApiErrorMessage=false;
+  await log(root,'one.jsonl',event('m1','r1',usage(1,2,3,4))+JSON.stringify(placeholder)+'\n');
+  const data=read(root);assert.equal(data.status,'ok');
+  assert.equal(data.days[0].totalTokens,10);assert.equal(data.days[0].requestCount,1);
+  const unflagged=structuredClone(placeholder);delete unflagged.isApiErrorMessage;
+  await log(root,'one.jsonl',event('m1','r1',usage(1,2,3,4))+JSON.stringify(unflagged)+'\n');
+  assert.equal(read(root).status,'unavailable');
 }));
 test('other assistant records retain normal request and usage accounting',async()=>fixture(async root=>{
   for(const [model,flag,output] of [['<synthetic>',true,3],['<synthetic>',false,0],['<synthetic>',1,0],['claude-sonnet-4-20250514',true,0]]) {

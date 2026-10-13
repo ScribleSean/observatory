@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {selectActivityPairs} from './activity-buckets.mjs';
+import {activityCombinations,selectActivityPairs} from './activity-buckets.mjs';
 import {cleanActivity} from './collect-dashboard.mjs';
 
 const pair = hostname => [
@@ -16,6 +16,15 @@ test('does not guess the newest or mix different hosts into a watcher pair', () 
   assert.throws(()=>selectActivityPairs([pair('local')[0],pair('other')[1]],['local','other']));
   assert.throws(()=>selectActivityPairs([...pair('local'),pair('local')[0]],['local']));
   assert.throws(()=>selectActivityPairs(pair('local'),[]));
+});
+test('reads window and idle watchers that registered under different local aliases', () => {
+  const selected=selectActivityPairs([...pair('old'),...pair('new.local'),...pair('remote')],['old','NEW']);
+  assert.deepEqual(activityCombinations(selected),[
+    {window:'window_old',afk:'afk_old'},{window:'window_old',afk:'afk_new.local'},
+    {window:'window_new.local',afk:'afk_old'},{window:'window_new.local',afk:'afk_new.local'}]);
+  assert.deepEqual(activityCombinations([{window:'w',afk:'a'}]),[{window:'w',afk:'a'}]);
+  assert.throws(()=>activityCombinations([]));
+  assert.throws(()=>activityCombinations(Array.from({length:9},(_,i)=>({window:`w${i}`,afk:`a${i}`}))));
 });
 test('rejects malformed IDs and excessive alias sets', () => {
   assert.throws(()=>selectActivityPairs([{...pair('local')[0],id:null},pair('local')[1]],['local']));

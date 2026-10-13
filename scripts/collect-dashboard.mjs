@@ -14,7 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { powershellCommand } from './powershell-command.mjs';
 import { hostname, homedir } from 'node:os';
 import { cleanWispr } from './wispr.mjs';
-import { selectActivityPairs } from './activity-buckets.mjs';
+import { activityCombinations, selectActivityPairs } from './activity-buckets.mjs';
 import { readBoundedReceipts as readAgentReceipts } from './bounded-receipts.mjs';
 export { cleanReceipts } from './agent-receipts.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
@@ -155,7 +155,7 @@ export async function macActivity({raw=false}={}) {
     const {stdout} = await exec('/usr/sbin/scutil', ['--get','LocalHostName'], {timeout:5000,maxBuffer:4096});
     hostnames.push(stdout.trim());
   }
-  const pairs = selectActivityPairs(buckets,hostnames);
+  const pairs = activityCombinations(selectActivityPairs(buckets,hostnames));
   const end = new Date(), start = new Date(end - 7 * 86400000);
   const reports = await Promise.all(pairs.map(async ({window:w,afk:a}) => {
   const q = `w = query_bucket(${JSON.stringify(w)}); a = query_bucket(${JSON.stringify(a)}); a = filter_keyvals(a, "status", ["not-afk"]); RETURN = filter_period_intersect(w, a);`;
