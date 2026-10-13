@@ -8,17 +8,7 @@ The Windows tray preview has an opt-in **Register start at login** control. See 
 
 ## Legacy macOS web dashboard
 
-The following instructions apply to the optional web-server workflow, not the native apps.
-
-The dashboard server and an optional private SSH tunnel can run as per-user LaunchAgents. `scripts/login-jobs.mjs` creates property-list strings from an absolute repository path, a stable Node executable path, and the viewing computer's SSH alias. Generated machine-specific files belong outside Git.
-
-Install the two generated files in `~/Library/LaunchAgents/` and load them with `launchctl bootstrap gui/$(id -u) PATH_TO_PLIST`. Their labels are `io.ai-usage-dashboard.server` and `io.ai-usage-dashboard.tunnel`. Both use KeepAlive with a 30-second restart throttle. The tunnel uses noninteractive authentication and connection keepalives, so a disconnected host can be retried without model calls.
-
-The server and remote listener stay on `127.0.0.1:5601`. No public network listener or billing change is added. These two jobs only serve the existing snapshot.
-
-Once the login jobs are installed, open `http://127.0.0.1:5601/#tokens` in either the Mac browser or the viewing Windows browser. The Windows address reaches the Mac through the private SSH tunnel. Starting Codex is not required and does not itself start these services. They belong to the logged-in Mac session and retry after connectivity returns. Ubuntu supplies configured source data through its existing SSH connection, but the Windows tunnel does not create an Ubuntu localhost listener.
-
-Links from other apps may navigate to the root dashboard document, including its hash-based views. Cross-site fetches, frames and direct navigation to the private JSON routes remain blocked. Hostname checks are unchanged. A Forbidden response should be diagnosed from the request type rather than fixed by removing all cross-site protection or binding the server to the network.
+The login jobs for the earlier web-server workflow were removed on 2026-10-13. Their instructions are kept at the tag described in [the archive note](ARCHIVE.md).
 
 ## Optional automatic collection
 

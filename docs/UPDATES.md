@@ -4,7 +4,7 @@ Automatic production updates are requested but not yet implemented. Source chang
 
 ## Latest hosted verification
 
-The [September 17 clean Windows run](RELEASE-0.3.13.md#clean-windows-verification-september-17)
+The September 17 clean Windows run (archived)
 passed the installer and update lifecycle at source `647be44`. It verified
 replacement through the external helper, recovery retention, normal dashboard
 readiness, exact signed receipt persistence and disposable installation cleanup.
@@ -12,7 +12,7 @@ The fixture used a synthetic signer and reused one payload with an advancing
 receipt. Production signing, feed delivery, upgrades between distinct builds and
 the user-facing update action still need verification.
 
-The [clean Mac run](RELEASE-0.3.13.md#clean-mac-verification-september-17) passed
+The clean Mac run (archived) passed
 at `74ae01e`, including bundled Sparkle integration, native popup checks and ZIP
 verification. It does not establish a production update transaction. Existing
 candidate artifacts retain their original source revisions and hashes.
@@ -21,7 +21,7 @@ candidate artifacts retain their original source revisions and hashes.
 
 `native/Release.props` is the version source for the Mac bundle, Windows application and installer filename. `native/release-version.mjs` validates its numeric fields for JavaScript build tools. The Mac uses the shared display version and build number. Windows uses the same display version and a four-component file version. Advance the build number for each published release, even when its display version stays unchanged. Never reuse an existing release asset URL for different bytes.
 
-Development-machine updates have used verified, recoverable manual activation with retained application backups and private-data checks. These procedures are not an automatic update mechanism. The [release checklist](RELEASE-CHECKLIST.md) distinguishes installed versions from candidates, and [0.3.8 candidate evidence](RELEASE-0.3.8.md) records artifact-specific checks. Release artifacts remain unpublished.
+Development-machine updates have used verified, recoverable manual activation with retained application backups and private-data checks. These procedures are not an automatic update mechanism. The [release checklist](RELEASE-CHECKLIST.md) distinguishes installed versions from candidates, and 0.3.8 candidate evidence (archived) records artifact-specific checks. Release artifacts remain unpublished.
 
 The Mac replacement helper now retains the caller-supplied previous and candidate manifests in its recovery directory before moving either app. Both manifests must first pass the existing package and signature checks. Each file is created exclusively with owner-only permissions and flushed before replacement proceeds. A persistence failure prevents promotion. These retained copies preserve evidence for later inspection, but are not independently authenticated merely because they are on disk. This does not reconstruct a missing receipt for an earlier installation, enable automatic updates or establish power-loss durability.
 
@@ -78,9 +78,9 @@ An isolated development build with Sparkle passed the existing native build chec
 including archive and sync fixtures, shutdown, disabled-source collection, renderer,
 dashboard lifecycle and popup checks. Nested signature verification passed, and
 `otool` confirmed the app links Sparkle 2.10.0 through `@rpath`. The build used a
-dirty development checkout, so it is not a distribution candidate. A later [clean Mac package](RELEASE-0.3.13.md#current-candidate-evidence-september-15)
+dirty development checkout, so it is not a distribution candidate. A later clean Mac package (archived)
 passed packaging checks. A disposable signed replacement through Sparkle's external CLI subsequently passed;
-see [the release evidence](RELEASE-0.3.13.md#disposable-mac-signed-replacement).
+see the release evidence (archived).
 The application Update menu, relaunch and production feed remain unverified.
 
 ### Mac manual update entry point, September 15

@@ -4,7 +4,7 @@ The Mac application and menu-bar panel are part of Sean's personal native app, b
 
 The Apple Silicon source build uses a SwiftUI main window and menu-bar panel. Development candidates bundle Node and Python and can run the local collector without a checkout or separately installed runtimes. Keep package integrity and recoverable replacement checks for personal builds. Earlier installed previews can retain legacy cross-device configuration and external runtimes. Preserve supported records and existing verified SSH connections during migration without restarting Ubuntu tracking.
 
-Dated build and installation observations below are historical and revision-specific. They do not verify today's installed app, native-only source retirement or clean-install compatibility. See the [release record](RELEASE-0.3.13.md) for later evidence.
+Dated build and installation observations below are historical and revision-specific. They do not verify today's installed app, native-only source retirement or clean-install compatibility. See the release record (archived) for later evidence.
 
 Fresh installations keep all sources off until the first-run wizard is completed. The wizard covers privacy, source choices and optional device pairing. Settings can later change the local sources and optional Codex account-limit monitoring. Changes apply to the next collection. Existing cross-device configuration is preserved, but migration to the native source controls remains unfinished.
 
@@ -28,7 +28,7 @@ The compact menu-bar panel currently uses an always-dark appearance and macOS sy
 
 With the legacy dashboard open, the same View commands scale the web page. The keyboard shortcuts are Command-equals (or Command-plus), Command-minus, and Command-zero. Zoom is bounded from 75% to 200%. The menu disables further changes at either limit.
 
-This scales the web page's text and controls, not macOS system fonts or the menu-bar panel. Zoom applies to the open dashboard and resets to 100% after it is closed and reopened. It does not change collection settings. See [native UI verification](UI-VERIFICATION.md) for the tested layouts and remaining limits.
+This scales the web page's text and controls, not macOS system fonts or the menu-bar panel. Zoom applies to the open dashboard and resets to 100% after it is closed and reopened. It does not change collection settings. See native UI verification (archived) for the tested layouts and remaining limits.
 
 ## Building the candidate
 

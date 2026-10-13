@@ -136,7 +136,7 @@ Native runtime paths and script entry points resolve macOS path aliases without
 relaxing private-store path checks. This test is required by build and ZIP checks.
 First-account navigation and saved date ranges help identify account groups.
 Selected synthetic interactions and the dark layout now pass, with explicit
-limits and unresolved SwiftUI warnings in [UI verification](UI-VERIFICATION.md).
+limits and unresolved SwiftUI warnings in UI verification (archived).
 This UI is not installed yet.
 
 Current source also includes allowance-used percentage charts for Day, Week and
