@@ -65,8 +65,29 @@ All 47 non-main branches were compared file by file with `main` and with every e
 | `build32` | 1 | Build 32 release preparation. `main` is at build 37. | Obsolete |
 | `integrate-antigravity-stats` | 1 | Dynamic receipt discovery and agent roles from 2026-09-06. `scripts/agent-receipts.mjs` and `app/page.tsx` on `main` have bounded versions of both. | Already in main |
 
+## Changes since the assessment
+
+Recorded on 2026-10-12 and 2026-10-13. The sections above describe `main` at `93b856b` and are kept as assessed.
+
+- Pull request 48 (`eb96249`) removed Hermes, HAPI and request-routing wording and aligned the documentation test with the README. The test passes again.
+- All 47 other branches were deleted from GitHub after the classification above. A local bundle of their commits is kept outside version control.
+- Pull request 49 removed the Archived Ubuntu history device and the WSL source settings from both apps. Account limits on Windows now follow their own switch and read the Codex account signed in on Windows.
+- The build number is 38 for the next candidate. No build 38 package has been built or installed by this change.
+- Local Windows checks now work with the repo's pinned Node 24.21.0, .NET SDK 10.0.401 in the build cache, and temporary files under the ignored `.runtime` folder. On that setup the script suite gives 883 passed, 4 failed and 62 skipped. The 4 failures are TLS pairing tests that also fail on `main` on this PC and have not been investigated.
+
+## Remaining Ubuntu code
+
+The pairing messages (`includeUbuntu`), the pairing file's `codexHosts` list, three-host token comparison, the `localModel` snapshot slot, the retirement checkpoint code and the legacy migration plan still name Ubuntu.
+
+This PC's saved pairing lists Windows with an Ubuntu slot. With that pairing, the combined All token total stays unverified by design, because the Ubuntu comparison evidence can no longer be supplied. Stored exchange records are validated against the same shape. Removing the legacy shape in code would therefore break the existing pairing.
+
+The safe order is:
+
+1. Install matching builds on Windows and Mac.
+2. Re-pair the two devices once. New pairings are already Mac and Windows only, and a verified All token total becomes possible again.
+3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps.
+
 ## Next decisions
 
-1. Restore the README sentence or update `scripts/documentation.test.mjs`.
-2. Decide whether archived Ubuntu history stays viewable before Ubuntu code is removed.
-3. Decide how to get a working local test and build setup: a newer Node, the .NET SDK, and a fixture folder that the sandbox permissions do not reach. The CI installer artifact is an alternative to a local build.
+1. Approve the one-time re-pair of Windows and Mac described above.
+2. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
