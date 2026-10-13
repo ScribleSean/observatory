@@ -74,7 +74,7 @@ Recorded on 2026-10-12 and 2026-10-13. The sections above describe `main` at `93
 - Pull request 49 removed the Archived Ubuntu history device and the WSL source settings from both apps. Account limits on Windows now follow their own switch and read the Codex account signed in on Windows.
 - Build 38 was packaged by CI from `468a3c1` (run `38341644364`) and installed on this PC on 2026-10-13, replacing build 37. Its installer checksum matched, its self-test passed, and saved data was backed up first and left in place by the uninstaller.
 - Pull request 51 raised two test deadlines after the package run failed three times on a slower test step. The cause of the slower run was not investigated.
-- The build number is 39 for the next candidate, which carries the snapshot fix below. No build 39 package has been built or installed by this change.
+- Build 39 carries the snapshot fix below. It was packaged by CI from `3ab7332` (run `38345695870`) and installed on this PC on 2026-10-13, replacing build 38. Its installer checksum matched and its self-test passed. Its first scheduled collection wrote a snapshot with the same 3 of 6 sources read. Recovery from a zero-filled snapshot was exercised by the synthetic test only, not on the installed app.
 - Local Windows checks now work with the repo's pinned Node 24.21.0, .NET SDK 10.0.401 in the build cache, and temporary files under the ignored `.runtime` folder. On that setup the script suite gives 883 passed, 4 failed and 62 skipped. The 4 failures are TLS pairing tests that also fail on `main` on this PC and have not been investigated.
 
 ## Collection on this PC
