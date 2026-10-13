@@ -169,7 +169,7 @@ void test('provider coverage keeps unknowns, per-device counters and privacy lim
     html,
     /Claude Code · Ubuntu<\/dt><dd>Unknown · reading is stale/,
   );
-  for (const provider of ['ChatGPT', 'Cursor', 'Antigravity']) {
+  for (const provider of ['ChatGPT', 'Cursor']) {
     assert.ok(html.includes(`<dt>${provider}</dt><dd>Unknown</dd>`));
   }
   assert.match(html, /Device totals are not added together/);

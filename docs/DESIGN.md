@@ -98,9 +98,11 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 
 ## Removals
 
-Approved for removal from both apps in one change each: the Agents section and receipt source, local benchmarks, Antigravity limits, the ChatGPT, Cursor and Antigravity placeholder rows, the web fallback inside the native apps, the legacy SSH hub collector, Open saved snapshot, and the remaining Ubuntu fields.
+Approved for removal from both apps in one change each: the Agents section and receipt source, local benchmarks, the ChatGPT and Cursor placeholder rows, the web fallback inside the native apps, the legacy SSH hub collector, Open saved snapshot, and the remaining Ubuntu fields.
 
 Removal from the interface does not authorize deleting saved records or original source files.
+
+Done on 2026-10-13 in source: limits for a third provider that the owner no longer uses were removed from both collectors, both native apps and the earlier web view, with their helper process, launch flags, settings switch and tests. A saved settings file that still holds that provider's key is read without error and the key is ignored. The provider's name remains only in the list of recognised app names for screen time, because saved activity history is validated against that list.
 
 ## Pairing and sharing
 

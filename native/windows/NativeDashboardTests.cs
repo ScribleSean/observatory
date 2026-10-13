@@ -606,7 +606,7 @@ internal static class NativeDashboardTests
                     var card = Children(form).OfType<DashboardCard>().Single(card => card.AccessibleName == "Collection card");
                     var collection = card.Controls.OfType<FlowLayoutPanel>().Single();
                     var toggles = collection.Controls.OfType<CheckBox>().ToArray();
-                    Check(toggles.Length == 6, "Collection retains all six source choices");
+                    Check(toggles.Length == 5, "Collection retains all five source choices");
                     if (capture)
                     {
                         using var image = new Bitmap(card.Width, card.Height);
@@ -656,8 +656,6 @@ internal static class NativeDashboardTests
                 await Task.Delay(30);
                 Check(updateButton.Enabled, "Completed update check restores button");
                 Check(!Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked, "Existing settings default Wispr off");
-                Check(!Children(form).OfType<CheckBox>().Single(check => check.Name == "antigravity").Checked, "Existing settings default Antigravity off");
-                Children(form).OfType<CheckBox>().Single(check => check.Name == "antigravity").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.Name == "wispr").Checked = true;
                 Children(form).OfType<CheckBox>().Single(check => check.Name == "activity").Checked = true;
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>() == false, "Draft is not saved early");
@@ -668,7 +666,6 @@ internal static class NativeDashboardTests
                 Children(form).OfType<Button>().Single(button => button.Text == "Save source settings").PerformClick();
                 Check(settingsCollector.ReadConfiguration()["activity"]!.GetValue<bool>(), "Source settings saved");
                 Check(settingsCollector.ReadConfiguration()["wispr"]!.GetValue<bool>(), "Wispr opt-in saved");
-                Check(settingsCollector.ReadConfiguration()["antigravity"]!.GetValue<bool>(), "Antigravity opt-in saved without a provider call");
                 Check(Snapshot.Text(settingsCollector.ReadConfiguration()["futureSetting"]) == "preserved", "Unrelated settings preserved");
                 Check(!settingsCollector.ReadConfiguration().ContainsKey("quotaWslDistribution") &&
                     !settingsCollector.ReadConfiguration().ContainsKey("wslDistribution"), "Saving native settings kept selectors that are no longer read");
@@ -864,8 +861,7 @@ internal static class NativeDashboardTests
                 form.Reload();
                 string ProviderValue(string label) => Children(Children(form).OfType<DashboardValueCard>().Single(card => card.Title == "Provider token sources"))
                     .OfType<Label>().Single(item => item.AccessibleName == label + " value").Text;
-                Check(ProviderValue("ChatGPT").StartsWith("Unknown") && ProviderValue("Cursor").StartsWith("Unknown") &&
-                    ProviderValue("Antigravity").StartsWith("Unknown"), "Unsupported providers remain Unknown");
+                Check(ProviderValue("ChatGPT").StartsWith("Unknown") && ProviderValue("Cursor").StartsWith("Unknown"), "Unsupported providers remain Unknown");
                 var claudeSource = JsonNode.Parse("""{"provider":"claude-code","host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":123}]}""")!.AsObject();
                 data["providerTokenSources"] = new JsonArray(claudeSource);
                 form.Reload();

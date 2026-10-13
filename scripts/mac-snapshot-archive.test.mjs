@@ -34,7 +34,7 @@ async function retirementFixture(t) {
   await mkdir(path.dirname(file),{recursive:true,mode:0o700});
   await writeFile(file,retiredBytes,{mode:0o600});
   const config=JSON.stringify({activity:false,codex:false,wispr:false,quota:false,claude:false,
-    antigravity:false,receipts:false,benchmarks:false,...(process.platform==='win32'?{wslDistribution:'Ubuntu'}:{})});
+    receipts:false,benchmarks:false,...(process.platform==='win32'?{wslDistribution:'Ubuntu'}:{})});
   await writeFile(path.join(runtime,'collector.config.json'),config);
   await writeFile(path.join(runtime,'original-record.json'),'fictional-original-record-bytes');
   return {runtime,file,config,archive:path.join(runtime,'.runtime/private-repair','retirement-snapshot.json'),
@@ -305,9 +305,10 @@ test('a source changed during archiving is not replaced after saving earlier evi
 
 test('a stale temporary-file alias cannot overwrite evidence before the archive guard',nativeOptions,async t=>{
   const f=await retirementFixture(t);
-  await assert.rejects(nativeCollect(f,{readAntigravity:async()=>{
+  // The limits reader is the last step before the snapshot is written, so it stands in for anything that runs then.
+  await assert.rejects(nativeCollect(f,{readLimits:async()=>{
     await fsPromises.link(f.file,f.file+'.tmp');
-    return {provider:'Antigravity',host:process.platform==='win32'?'Windows':'Mac',status:'not-connected'};
+    return {provider:'Claude Code',scope:'account',status:'not-connected',windows:[]};
   }}));
   assert.deepEqual(await readFile(f.file),retiredBytes);
 });

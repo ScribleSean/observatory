@@ -33,7 +33,7 @@ test('a malformed client descriptor is rejected before the account reader runs',
 test('older WSL settings keys are ignored and never change the account switch',()=>{
   const defaults=windowsCollectorConfig();
   assert.equal(defaults.quota,false);
-  assert.deepEqual(Object.keys(defaults).sort(),['activity','antigravity','claude','codex','quota','wispr']);
+  assert.deepEqual(Object.keys(defaults).sort(),['activity','claude','codex','quota','wispr']);
   const raw={quota:true,quotaWslDistribution:'Ubuntu',wslDistribution:'Ubuntu',codex:false};
   const selected=windowsCollectorConfig(raw);
   assert.equal(selected.quota,true);assert.equal(selected.codex,false);

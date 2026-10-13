@@ -74,7 +74,6 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Limits shared from the paired device | Done | Done | Keep | |
 | Raw status text ("Account source: ok") | Missing | Differs | Change | Windows prints the raw status value |
 | Claude Code limits | Missing | Missing | Add | |
-| Antigravity limits panel | Done | Differs | Remove | Windows shows it as unsupported |
 
 ## Activity
 
@@ -126,7 +125,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. |
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
-| ChatGPT, Cursor and Antigravity placeholder rows | Done | Done | Remove | |
+| ChatGPT and Cursor placeholder rows | Done | Done | Remove | |
 | Local benchmarks row | Done | Done | Remove | |
 | Agent receipts rows and "View Agents" button | Done | Done | Remove | |
 | Clear message when the private-folder check fails | Missing | Missing | Add | See issue 58 for Windows and issue 60 for Mac |
@@ -140,7 +139,6 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Save and reload settings | Differs | Differs | Change | "Save collection settings" on Mac. "Save source settings" on Windows. Windows asks for confirmation when limits monitoring is turned off. |
 | Agent receipts switch | Done | Missing | Remove | |
 | Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. |
-| Antigravity switch | Done | Done | Remove | |
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
 | Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. |

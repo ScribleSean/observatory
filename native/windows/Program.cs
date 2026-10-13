@@ -20,17 +20,6 @@ internal static class Program
             catch { Environment.ExitCode = 1; }
             return;
         }
-        if (args.Length > 0 && args[0] is "--test-antigravity-process" or "--test-antigravity-runner")
-        {
-            Environment.ExitCode = AntigravityUsageProcessTests.Command(args).GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Contains("--antigravity-usage"))
-        {
-            Environment.ExitCode = args.Length == 2 && args[0] == "--antigravity-usage"
-                ? AntigravityUsageProcess.Command(args[1]).GetAwaiter().GetResult() : 64;
-            return;
-        }
 
         if (args.Contains("--test-update-trust"))
         {

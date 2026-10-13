@@ -76,7 +76,7 @@ On first launch the app asks which sources to read. Nothing is collected before 
 
 - Records stay on your devices. The app stores daily totals and limit readings, not prompts, window titles, transcripts, commands or recordings.
 - Provider sign-ins stay in their own apps. Observatory does not read, copy or store credentials.
-- Reading limits asks the provider's own installed client for the account's current limits (Codex, and optionally Antigravity on Mac). Collection makes no other request to a provider.
+- Reading limits asks the provider's own installed client for the account's current limits. Collection makes no other request to a provider.
 - [Pairing](docs/PAIRING-MAINTENANCE.md) is optional and sends sanitized records directly between your two devices. Sharing limit history or Claude Code usage needs separate consent on both.
 
 See [private sync](docs/PRIVATE-SYNC.md) and [security](SECURITY.md).

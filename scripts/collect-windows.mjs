@@ -19,9 +19,8 @@ import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
-import {collectConfiguredAntigravityAllowance,attachProviderAllowances} from './collect-antigravity-allowance.mjs';
 import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource} from './claude-limits.mjs';
-import {windowsCollectorLease} from './windows-antigravity-allowance.mjs';
+import {windowsCollectorLease} from './windows-collector-lease.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const unavailable=host=>({host,status:'unavailable',checkedAt:new Date().toISOString()});
@@ -44,7 +43,7 @@ function run(file,args,input='',environment=process.env) {
   });
 }
 
-export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readAntigravity=collectConfiguredAntigravityAllowance,signal,
+export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits,signal,
   readConfiguration=()=>readFile(path.join(runtime,'collector.config.json'),'utf8')}={}) {
   if(process.platform!=='win32' || !path.isAbsolute(runtime))throw Error('Native Windows runtime required');
   signal?.throwIfAborted();
@@ -119,11 +118,8 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   await attachProviderTokenSync(runtime,result,claude);
   signal?.throwIfAborted();
-  attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Windows',signal,
-    isEnabled:async()=>windowsCollectorConfig(JSON.parse(await readFile(path.join(runtime,'collector.config.json'),'utf8'))).antigravity})]);
-  signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await readClaudeLimits(runtime).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachClaudeLimits(result,await readLimits(runtime).catch(()=>claudeLimitsSource(null,{enabled:true})));
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),
