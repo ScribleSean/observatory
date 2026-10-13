@@ -2,6 +2,28 @@
 
 Assessed on 2026-10-12 from `main` at `93b856b` on the Windows PC. This is a read-only assessment. Nothing was merged, pushed, deleted or installed. A documentation change is not a new build or a verification result.
 
+## Current status
+
+Updated on 2026-10-13 from the Mac. This summary is the starting point. The sections below keep their original dates and wording.
+
+| Topic | State |
+| --- | --- |
+| `main` | `367dc32`, version 0.3.14 build 39 |
+| Installed on Windows | Build 39 from `3ab7332` |
+| Installed on Mac | Build 39 from `367dc32`. The only difference is the Mac popup fix from pull request 55. |
+| Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
+| Open pull requests | 56 fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. CI passed. 54 adds this summary and the Mac section. |
+| Open issues | 39, which stays open for installed verification of the quota-refresh fix |
+| Not installed anywhere | Build 40 |
+
+Work that is ready to pick up, in order:
+
+1. Merge pull request 56. Package build 40 for Windows in CI, build it on the Mac, and install it on both devices.
+2. Give Claude Code the same place in Tokens and Allowances that Codex has. Both screens show Codex only. The owner wants Claude Code and ChatGPT (Codex) presented with equal weight. Muse and Grok Bot come later. Other providers are not a priority.
+3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps. The re-pair that had to come first is done.
+4. Mac build environment: decide whether the build requires full Xcode or pins an SDK, and make the popup check independent of window focus.
+5. Unexplained results to look into: three script tests on the Mac, four TLS pairing tests on Windows, and two incomplete setup attempts during the re-pair.
+
 ## What the app does today
 
 Observatory is a personal app that shows recorded app activity, Codex tokens, optional Claude Code counters, account allowances, agent receipts and dictation statistics. Collection and daily viewing happen in the native apps. Optional device pairing reuses an existing SSH connection.
@@ -114,6 +136,8 @@ None of this has been run. The Mac changes in pull request 49 were written on Wi
 9. Pairing with Windows cannot be confirmed until the permission entry on the Windows `AppData` folder is resolved. After that, confirm the existing pairing still exchanges records. The All token total is expected to stay unverified until the devices are re-paired.
 10. Report any step that fails with the exact revision and the visible message.
 
+Status on 2026-10-13: steps 1 to 4 and 6 to 9 are done and recorded in the Mac section below. Step 5 is still open. Step 1 differs in one way. The Mac build comes from `367dc32`, which adds the Mac popup fix to the Windows revision.
+
 ## Mac
 
 Recorded on 2026-10-13 on the Mac (Apple Silicon, macOS 27.0.1) from `main` at `b9dc3e6`, version 0.3.14 build 39. This is the same revision recorded for the Windows build 39 install. The first three subsections describe the Mac at that revision, before the popup fix and before any install. The later install is recorded under "Build 39 install on the Mac". The Windows PC was not touched from the Mac.
@@ -201,6 +225,9 @@ Recorded later on 2026-10-13 with build 39 from `367dc32` installed.
 
 ## Next decisions
 
-1. Decide what to do about the permission entry on `AppData` that blocks Codex tokens, account limits and pairing on this PC.
-2. Approve the one-time re-pair of Windows and Mac described above.
-3. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
+Updated on 2026-10-13.
+
+1. Resolved. The permission entry on the Windows `AppData` folder was no longer present when read on 2026-10-13.
+2. Done. Windows and Mac were re-paired on 2026-10-13.
+3. Open. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
+4. Open. Decide who installs build 40 on Windows and how.
