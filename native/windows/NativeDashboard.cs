@@ -308,7 +308,6 @@ internal sealed partial class NativeDashboard : Form
         }
         Label("Observed on this device");
         AccountAllowance(snapshot?["quota"] as JsonObject);
-        ProviderAllowances(snapshot);
         if (snapshot?["peerQuota"] is JsonObject peer && Snapshot.Text(peer["host"]) is "Mac" or "Windows")
         {
             Label("Shared from " + Snapshot.Text(peer["host"]));
@@ -483,13 +482,11 @@ internal sealed partial class NativeDashboard : Form
         var providerValues = new List<(string, string)> {
             ("Codex", codexSources.Length == 0 ? "Unknown" : $"{codexCount}/{codexSources.Length} native device records read"),
             ("ChatGPT", "Unknown · no connected export"),
-            ("Cursor", "Unknown · no connected export"),
-            ("Antigravity", "Unknown · no connected export")
+            ("Cursor", "Unknown · no connected export")
         };
         var claudeSources = providerRows.Where(row => Snapshot.Text(row["provider"]) == "claude-code").ToArray();
         providerValues.InsertRange(1, claudeSources.Length == 0 ? ProviderTokenValues(null) : claudeSources.SelectMany(ProviderTokenValues));
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
-        ProviderAllowances(snapshot);
         Label("Includes sessions from other clients that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {

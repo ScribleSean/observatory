@@ -3,7 +3,6 @@ import {useEffect, useState} from 'react';
 import {quotaPace} from '../scripts/quota-pace.mjs';
 import {durationText} from '../scripts/display-format.mjs';
 import {cleanPeerQuotaForDisplay} from '../scripts/quota-display.mjs';
-import ProviderAllowances, {type ProviderAllowance} from './provider-allowances';
 
 type Window = {bucket:string; window:string; remainingPercent:number; durationMinutes:number|null; resetsAt:string|null};
 export type Quota = {status:string; checkedAt?:string; windows?:Window[]; history?:{checkedAt:string; windows:Window[]}[]};
@@ -12,7 +11,7 @@ const duration = (milliseconds:number) => {
   const minutes = Math.max(0, Math.ceil(milliseconds / 60000));
   return durationText(minutes * 60);
 };
-export default function Allowances({quota, peerQuota, providerAllowances, receivedFrom, receivedAt, demo = false}:{quota?:Quota; peerQuota?:PeerQuota|null; providerAllowances?:ProviderAllowance[]; receivedFrom?:string; receivedAt?:string; demo?:boolean}) {
+export default function Allowances({quota, peerQuota, receivedFrom, receivedAt, demo = false}:{quota?:Quota; peerQuota?:PeerQuota|null; receivedFrom?:string; receivedAt?:string; demo?:boolean}) {
   const [now, setNow] = useState(0);
   useEffect(() => { setNow(Date.now()); const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
   const clock = demo ? Date.parse(quota?.checkedAt || '') : now;
@@ -76,7 +75,6 @@ export default function Allowances({quota, peerQuota, providerAllowances, receiv
         </svg><small>Only observed intervals contribute. Missing readings are not zero.</small></>}
       </section>;
     })}</div>
-    {!receivedFrom && <ProviderAllowances sources={providerAllowances} now={clock}/>}
     {peer && <section aria-label={`Shared allowance history from ${peer.host}`}><Allowances quota={peer} receivedFrom={peer.host} receivedAt={peer.receivedAt ?? undefined} demo={demo}/></section>}
   </>;
 }

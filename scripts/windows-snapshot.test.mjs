@@ -21,8 +21,8 @@ test('Windows saved counters fail closed and drop unapproved fields',()=>{
 test('source settings validate switches and ignore unknown keys',()=>{
   assert.equal('wslDistribution' in windowsCollectorConfig({wslDistribution:'Ubuntu-24.04'}),false);
   assert.equal(windowsCollectorConfig().claude,false);
-  assert.equal(windowsCollectorConfig().antigravity,false);
-  assert.equal(windowsCollectorConfig({antigravity:true}).antigravity,true);
+  // A saved key for a source that was removed is still accepted and is no longer read.
+  assert.equal(Object.hasOwn(windowsCollectorConfig({antigravity:true}),'antigravity'),false);
   assert.throws(()=>windowsCollectorConfig({antigravity:'true'}));
   assert.equal(windowsCollectorConfig({claude:true}).claude,true);
   assert.throws(()=>windowsCollectorConfig({claude:'true'}));

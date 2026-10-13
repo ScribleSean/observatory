@@ -44,7 +44,6 @@ internal static class LaunchIsolationTests
             ["--apply-update", "installed", "staged", "receipt", "envelope", "7"],
             ["--test-update-install", "installed", "staged", "receipt", "envelope", "key", "7"] })
             Check(LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));
-        Check(LaunchArguments.Valid(["--test-antigravity-process", "argv", "fixture", "--self-test"]));
         var current = AppIdentity.Current;
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schema = 1, status = "launch-isolation-passed",
             testIdentity = current.IsTest, dataName = current.DataName, startupName = current.StartupName,

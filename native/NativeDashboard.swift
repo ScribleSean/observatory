@@ -121,8 +121,6 @@ struct NativeDashboard: View {
                             ObservatoryEmptyState(title: "Codex allowance unavailable", systemImage: "gauge.with.dots.needle.50percent",
                                 message: "Enable Codex account monitoring in Settings. Saved token records are separate from account limits.")
                         }
-                        AntigravityAllowancePanel(source: rows(displayedSnapshot?.object["providerAllowances"]).first { text($0["provider"]) == "antigravity" }, now: store.now)
-                            .modifier(ObservatoryCard())
                         if let peer = displayedSnapshot?.object["peerQuota"] as? JSONObject,
                            ["Mac", "Windows"].contains(text(peer["host"])) {
                             Text("Shared from \(text(peer["host"]))").observatoryFont(.headline)
@@ -376,11 +374,7 @@ struct NativeDashboard: View {
                     }
                     providerTokenRow(name: "ChatGPT", source: nil, fallback: "Unknown · no connected personal token export")
                     providerTokenRow(name: "Cursor", source: nil, fallback: "Unknown · no connected personal token export")
-                    providerTokenRow(name: "Antigravity", source: nil, fallback: "Unknown · no connected personal token export")
                 }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            GroupBox("Provider allowances") {
-                AntigravityAllowancePanel(source: rows(displayedSnapshot?.object["providerAllowances"]).first { text($0["provider"]) == "antigravity" }, now: store.now).padding(8)
             }
             ForEach(["activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource"], id: \.self) { key in
                 GroupBox(["quota": "Allowances", "localModel": "Local benchmarks", "agentSource": "Agent receipts", "settings": "Tool activity"][key] ?? key.capitalized) {

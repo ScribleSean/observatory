@@ -18,7 +18,7 @@ export function demoData() {
       const offset=host==='Windows'?2:0;
       tracking.push({start:at(date,13+offset),end:at(date,20),category:'Other'});
       if(date==='2026-09-03') return;
-      rows.push({start:at(date,13+offset),end:at(date,14+offset),category:'AI apps',app:host==='Mac'?'ChatGPT / Codex':'Antigravity'},
+      rows.push({start:at(date,13+offset),end:at(date,14+offset),category:'AI apps',app:host==='Mac'?'ChatGPT / Codex':'Cursor'},
         {start:at(date,15+offset),end:at(date,16+offset)+(i%3)*600000,category:'Editors',app:host==='Mac'?'Cursor':'VS Code'},
         {start:at(date,19),end:at(date,19)+900000,category:host==='Mac'?'Browser':'Terminal',app:host==='Mac'?'Safari':'Terminal'});
     });

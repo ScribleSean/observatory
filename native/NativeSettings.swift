@@ -67,9 +67,6 @@ struct NativeSettings: View {
                         Toggle("Monitor Codex account limits online", isOn: binding("quota")).disabled(!loaded || busy)
                         Text("Turning Codex monitoring off stops new checks and clears the current Codex allowance view. Previously saved Codex readings remain in the local archive. This does not sign out of Codex or remove saved token logs.")
                             .observatoryFont(.callout).foregroundStyle(.secondary)
-                        Toggle("Monitor Antigravity account limits online", isOn: binding("antigravity")).disabled(!loaded || busy)
-                        Text("Uses the installed Antigravity CLI's existing sign-in. Reads current limits during full source collection. Turning it off stops new reads. Antigravity history and allowance sharing are not connected.")
-                            .observatoryFont(.callout).foregroundStyle(.secondary)
                     }
                     Text("Other account sign-ins remain in their owning applications. Claude Code can be read locally from recorded request metadata when enabled above.")
                         .observatoryFont(.callout).foregroundStyle(.secondary)

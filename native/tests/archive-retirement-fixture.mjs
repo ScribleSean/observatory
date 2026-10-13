@@ -160,9 +160,6 @@ export async function retirementFixture(t, bytes) {
       export async function attachQuotaSync(){syncs++;}`,
     'provider-token-sync.mjs':
       'export async function attachProviderTokenSync(){}',
-    'collect-antigravity-allowance.mjs': `
-      export async function collectConfiguredAntigravityAllowance(){return {status:'not-connected'};}
-      export function attachProviderAllowances(){}`,
   };
   await fs.mkdir(scripts, { recursive: true });
   await fs.mkdir(path.join(runtime, 'public/local'), { recursive: true });
@@ -197,7 +194,6 @@ export async function retirementFixture(t, bytes) {
     wispr: false,
     quota: false,
     claude: false,
-    antigravity: false,
   });
   await fs.writeFile(path.join(runtime, 'collector.config.json'), config);
   const rename = fs.rename;

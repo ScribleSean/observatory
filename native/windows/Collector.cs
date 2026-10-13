@@ -122,11 +122,11 @@ internal sealed class Collector : IDisposable
         finally { operations.Complete(); }
     }
 
-    internal void Configure(bool wispr = false, bool quota = false, bool activity = true, bool codex = true, bool claude = false, bool antigravity = false)
+    internal void Configure(bool wispr = false, bool quota = false, bool activity = true, bool codex = true, bool claude = false)
     {
         if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
         var file = Path.Combine(runtime, "collector.config.json");
-        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["quota"] = quota, ["antigravity"] = antigravity };
+        var settings = new JsonObject { ["activity"] = activity, ["codex"] = codex, ["claude"] = claude, ["wispr"] = wispr, ["quota"] = quota };
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, settings.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -150,7 +150,7 @@ internal sealed class Collector : IDisposable
         }
         // Older settings views do not expose this opt-in source yet. Preserve
         // their save path while writing a secure default for legacy config.
-        foreach (var optional in new[] { "claude", "antigravity" })
+        foreach (var optional in new[] { "claude" })
         {
             if (desired[optional] is JsonNode choice)
             {
@@ -215,7 +215,6 @@ internal sealed class Collector : IDisposable
                     RedirectStandardOutput = true, RedirectStandardError = true } };
             process.StartInfo.ArgumentList.Add(script);
             process.StartInfo.ArgumentList.Add("--native-owner-lease");
-            process.StartInfo.Environment["OBSERVATORY_ANTIGRAVITY_HELPER"] = Path.Combine(AppContext.BaseDirectory, "WorkspaceObservatory.exe");
             if (quotaOnly) process.StartInfo.ArgumentList.Add("--quota-only");
             process.StartInfo.Environment["OBSERVATORY_RUNTIME"] = runtime;
             var python = Path.Combine(AppContext.BaseDirectory, "Runtime", "python", "python.exe");

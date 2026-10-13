@@ -152,17 +152,11 @@ void test('malformed, mixed and unknown commands return 64 before helper or UI d
   const flags = new Set(
     [...program.matchAll(/"(--[a-z-]+)"/g)].map((match) => match[1]),
   );
-  flags.delete('--test-antigravity-');
   for (const flag of flags)
     assert.ok(
       validation.includes('"' + flag + '"'),
       `Unvalidated handler: ${flag}`,
     );
-  assert.ok(
-    program.indexOf('AntigravityUsageProcessTests.Command(args)') <
-      program.indexOf('AntigravityUsageProcess.Command(args[1])'),
-    'The synthetic argv round trip must dispatch before interpreting its payload as another command',
-  );
 });
 
 void test('TEST installations refuse production update and explicit-runtime helper routes', () => {
@@ -173,7 +167,7 @@ void test('TEST installations refuse production update and explicit-runtime help
   );
   assert.ok(
     program.indexOf('!LaunchArguments.ValidForTestInstallation(args)') <
-      program.indexOf('AntigravityUsageProcessTests.Command(args)'),
+      program.indexOf('LaunchIsolationTests.Run()'),
   );
   const allowed = read('LaunchArguments.cs').split(
     'internal static bool ValidForTestInstallation',
