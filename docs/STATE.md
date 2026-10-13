@@ -8,17 +8,17 @@ Updated on 2026-10-13 from the Mac. This summary is the starting point. The sect
 
 | Topic | State |
 | --- | --- |
-| `main` | Version 0.3.14. Build 39 at `367dc32`. Pull request 56 raises it to build 40 when merged. |
+| `main` | Version 0.3.14 build 40 since pull request 56 (`719f3f4` or later) |
 | Installed on Windows | Build 39 from `3ab7332` |
-| Installed on Mac | Build 39 from `367dc32`. The only difference is the Mac popup fix from pull request 55. |
+| Installed on Mac | Build 40 from `ee29f31`, installed on 2026-10-13. Its first collection read 10 of 10 sources with state `ok`. |
 | Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
-| Pull request 56 | Fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. CI passed on 2026-10-13. Check whether it has been merged. |
+| Pull request 56 | Merged. It fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. |
 | Open issues | 39, which stays open for installed verification of the quota-refresh fix |
-| Not installed anywhere | Build 40 |
+| Not installed on Windows | Build 40. Windows still runs build 39 without the Claude Code reader fix. |
 
 Work that is ready to pick up, in order:
 
-1. Merge pull request 56 if it is still open. Package build 40 for Windows in CI, build it on the Mac, and install it on both devices.
+1. Package build 40 for Windows in CI and install it on Windows. The Mac already runs it.
 2. Give Claude Code the same place in Tokens and Allowances that Codex has. Both screens show Codex only. The owner wants Claude Code and ChatGPT (Codex) presented with equal weight. Muse and Grok Bot come later. Other providers are not a priority.
 3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps. The re-pair that had to come first is done.
 4. Mac build environment: decide whether the build requires full Xcode or pins an SDK, and make the popup check independent of window focus.
@@ -202,13 +202,21 @@ Recorded later on 2026-10-13 with build 39 from `367dc32` installed.
 - The one-time re-pair was done with the bundled tools. `peer-repair.mjs` reported `prepared` on Windows and on the Mac, and each device retained its old pairing in a `private-sync-retired-*` folder. The Windows step was run over the existing SSH route with the owner's approval, not from the Windows tray menu. `peer-setup.mjs` with `includeUbuntu` false then reported `paired`. Its first two attempts reported "Pairing setup incomplete" and left the Mac pending. The cause was not found. A third attempt succeeded in 3 seconds after the Windows side had been initialized with the same request.
 - The first collection after the re-pair reported Windows as unavailable. The next one, five minutes later, read 9 of 10 sources with fresh Windows records, and the All token total and combined settings reported `ok`. The one source not read was Claude Code on the Mac.
 
+### Build 40 install on the Mac
+
+Recorded on 2026-10-13 from `main` at `ee29f31`.
+
+- `node native/build.mjs` completed on the first attempt with `SDKROOT` set to the macOS 26.5 SDK. `node native/mac/package.mjs --zip-only` verified the bundle and the extracted ZIP, with SHA-256 `ab2ffcd5fc3e3f9ae909e2fa4a01543c3b8240c905a8974c7f8db9c350a1a7ca`.
+- Build 39 was quit normally. The data folder (140 files) and preferences were copied to a new recovery folder and matched by SHA-256. `native/mac/replace-app.mjs` reached `payload-verified` and retained build 39 beside the app.
+- The first scheduled collection under build 40 reported state `ok` with 10 of 10 sources read. Claude Code on the Mac reported `ok` with 8 recorded days. Mac activity tracked through the current minute. Windows records were about three minutes old, and the All token total and combined settings reported `ok`.
+
 ### Differences from Windows
 
 | Topic | Windows | Mac |
 | --- | --- | --- |
-| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.14 build 39 from `367dc32`, which adds the Mac popup fix |
+| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.14 build 40 from `ee29f31` |
 | Build 39 produced by | CI package run | Local build with the macOS 26.5 SDK |
-| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | 9 of 12 sources under build 39, including fresh Windows records |
+| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | 10 of 10 sources under build 40, including fresh Windows records |
 | Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
 | TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
 | CI coverage | Package and contract workflows run on pull requests | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
@@ -216,7 +224,7 @@ Recorded later on 2026-10-13 with build 39 from `367dc32` installed.
 
 ### Next steps for the Mac
 
-1. Merge pull request 56, build and install build 40 on both devices, and confirm Claude Code and Mac activity in the installed apps.
+1. Install build 40 on Windows. The Mac runs it and reads Claude Code and Mac activity.
 2. Give Claude Code the same place in Tokens and Allowances that Codex has. Today both screens show Codex only.
 3. Check the items listed as not verified above.
 4. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
