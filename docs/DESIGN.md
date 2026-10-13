@@ -253,6 +253,18 @@ Added as source on 2026-10-13. The owner consented to installing it on the Mac t
 | Installer | `scripts/claude-statusline-install.mjs` | `status`, `install` and `uninstall` for the `statusLine` entry in Claude Code's `settings.json`. Install needs `--consent`, saves the earlier entry, writes a backup beside the settings file and refuses to overwrite a settings file that changed during the update. Uninstall restores the earlier entry. Nothing calls it automatically. |
 | Reader | `scripts/claude-limits.mjs` | Both collectors attach `claudeLimits` to the snapshot. |
 
+### Reading through the usage command
+
+Added on 2026-10-13, after the bridge was found to update only from terminal sessions. On the Mac, two Claude desktop app sessions ran for several minutes without producing a reading, while one terminal session produced one within seconds.
+
+With limits consent given, each collection also runs the installed Claude Code CLI once: `claude -p /usage --output-format json --no-session-persistence`. `scripts/claude-usage-command.mjs` accepts the result only when it reports no error, zero turns, zero cost and the local command name `usage`. It keeps the "Current session" and "Current week (all models)" percentages and reset times and discards the rest of the text. The reading goes into the same store as the bridge's, so the newest one wins.
+
+- Observed on the Mac with Claude Code 2.1.296: the command returned in under half a second by itself, made no model request, and included usage from desktop app sessions. Through the collector's reader the whole read took about 3 seconds.
+- With `--no-session-persistence` it writes no session file. It does create one empty project folder for its working directory, which is the app's `claude-limits` folder, so that happens once.
+- The command prints text meant for a person. If the wording or the JSON fields change, the reader returns nothing and the bridge reading, if any, is still used. Nothing is guessed.
+- The reader looks for `claude` on `PATH` and in a few usual install folders. A desktop app started from the Dock may not have the same `PATH` as a terminal. This is not yet verified inside an installed build, and not at all on Windows.
+- Consent is the same marker the bridge installer writes. A way to give limits consent without changing Claude Code's settings is still needed.
+
 Status values: `not-connected` when the bridge is not installed, `unavailable` when it is installed and no usable reading exists, `ok` when the newest reading is under 10 minutes old, and `stale` when it is older. A window whose reset time has passed is dropped, because its value is unknown until the next reading.
 
 Things a person should be told before they consent:
@@ -263,7 +275,7 @@ Things a person should be told before they consent:
 
 Verified on the Mac on 2026-10-13, from `main` at `50b2e7e`: the installer added the `statusLine` entry to a settings file that had none, left the other nine keys unchanged and wrote the backup. A Claude Code session in a terminal then wrote a reading with both windows within seconds, and `readClaudeLimits` returned status `ok`. The weekly figure matched the plan usage the Claude desktop app reported for the same account at the same time. The installed command points at the script in the source checkout, because build 40 does not contain it.
 
-Not verified: whether a session in the Claude desktop app triggers the status line command or only a terminal session does, the command quoting under PowerShell on Windows, the fields Claude Code sends on Windows, uninstall on a real settings file, and the native Settings switch, which does not exist yet. No installed build reads the saved reading into the snapshot yet.
+Not verified: the command quoting under PowerShell on Windows, the fields Claude Code sends on Windows, uninstall on a real settings file, and the native Settings switch, which does not exist yet. No installed build reads the saved reading into the snapshot yet.
 
 ## Order of work
 
