@@ -25,7 +25,6 @@ Record revision-specific evidence for each affected path. Leave unobserved cases
 ## Later: only integrations useful to the personal workflow
 
 - Explore iPhone integration through supported OS permissions and data access before choosing an implementation. Do not promise Screen Time export, background collection or feature parity.
-- Integrate with Hermes `/usage` commands through supported commands or adapters. Establish the interface and preserve provenance, consent and credential ownership. Do not fork Hermes core.
 - Add a provider adapter only for a concrete need and a verified data source, with fixtures, bounded reads and honest coverage. A selected model or subscription is not proof of usage access.
 
 Consumer onboarding, new code/QR pairing, hosted accounts, broad provider expansion, workflow routing and dashboard customization are deferred. The existing fictional demo remains a development fixture. Public installer promotion is not a milestone.

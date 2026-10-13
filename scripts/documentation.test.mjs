@@ -27,13 +27,12 @@ test('public documentation links resolve and personal native scope stays explici
     }
   }
   const readme=await readFile(path.join(root,'README.md'),'utf8');
-  assert.match(readme,/building in public for his own use/);
-  assert.match(readme,/not being developed as a consumer product or hosted service/);
+  assert.match(readme,/Sean's local screen-time and AI-usage app for Windows and Mac/);
   assert.match(readme,/Automatic app updates are not available/);
   assert.match(readme,/Build from source<\/a>/);
   assert.match(readme,/Public installers and consumer onboarding are not current goals/);
   assert.match(readme,/WSL and Ubuntu tracking are out of scope/);
-  assert.match(readme,/iPhone integration and integration with Hermes `\/usage` commands are later work/);
+  assert.match(readme,/iPhone integration is later work/);
   assert.doesNotMatch(readme,/>Get started<\/a>/);
   assert.match(readme,/\[desktop updates\]\(docs\/UPDATES\.md\)/);
   const guide=await readFile(path.join(root,'docs/GUIDE.md'),'utf8');

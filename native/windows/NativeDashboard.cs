@@ -496,7 +496,7 @@ internal sealed partial class NativeDashboard : Form
         providerValues.InsertRange(1, claudeSources.Length == 0 ? ProviderTokenValues(null) : claudeSources.SelectMany(ProviderTokenValues));
         AddCard(new DashboardValueCard("Provider token sources", providerValues.ToArray()), "Provider token sources");
         ProviderAllowances(snapshot);
-        Label("Includes HAPI and Happy sessions that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
+        Label("Includes sessions from other clients that use these native Codex logs. Relay messages are not counted again.").ForeColor = Color.Silver;
         if (rows.Any(row => row[1] == "Ubuntu")) Label(NativeHistory.ArchivedNotice);
         foreach (var kind in new[] { "activity", "tokens", "settings", "dictation", "quota", "localModel", "agentSource" })
         {

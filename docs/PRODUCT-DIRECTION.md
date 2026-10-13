@@ -27,9 +27,7 @@ Public source does not make local data public. Keep private configuration, snaps
 
 iPhone integration is later work, subject to supported OS permissions and data access. Establish those limits before choosing collection or sharing behavior. Do not promise Screen Time export or desktop-equivalent background collection.
 
-Integration with Hermes `/usage` commands is also later work. Reuse supported commands or adapters after establishing the interface. Preserve source identity, consent and credential ownership without a Hermes core fork or parallel authentication system.
-
-Dashboard customization, workflow routing, broad provider coverage and consumer onboarding remain deferred while collection and native acceptance are unfinished.
+Dashboard customization, broad provider coverage and consumer onboarding remain deferred while collection and native acceptance are unfinished.
 
 ## Historical implementation notes
 

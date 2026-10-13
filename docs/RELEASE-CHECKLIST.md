@@ -54,6 +54,6 @@ The recorded development installations supersede the older installation blockers
 
 ## Later coverage, not claims of this release
 
-Broader providers, other-provider quota, general shell/SSH history, iPhone activity, standalone Linux UI and optional request routing remain roadmap work. They need their own supported sources, privacy boundaries and verification. Token counts are not subscription charges, and a router only observes traffic explicitly sent through it.
+Broader providers, other-provider quota, general shell/SSH history, iPhone activity and standalone Linux UI remain roadmap work. They need their own supported sources, privacy boundaries and verification. Token counts are not subscription charges.
 
 See [source coverage](SOURCE-COVERAGE.md), [Mac verification](MAC.md) and [Windows verification](WINDOWS.md) for measurement limits and commands.
