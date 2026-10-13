@@ -488,8 +488,8 @@ func sourceHealthStatus(_ status: String?) -> String {
 }
 
 func nativeDashboardSources(_ value: Any?, key: String) -> [JSONObject] {
-    if let single = value as? JSONObject { return [single] }
     // Device lists show Mac and Windows only. Rows for any other host are not listed.
-    return rows(value).filter { ["Mac", "Windows"].contains(text($0["host"])) &&
-        (key != "dictation" || text($0["source"]).lowercased() != "typewhisper") }
+    let sources = (value as? JSONObject).map { [$0] } ??
+        rows(value).filter { ["Mac", "Windows"].contains(text($0["host"])) }
+    return sources.filter { key != "dictation" || text($0["source"]).lowercased() != "typewhisper" }
 }

@@ -507,7 +507,7 @@ func runSelfTests() {
         precondition(sourceHealthStatus(status) == label)
     }
     precondition(sourceHealthStatus(nil) == "Unknown")
-    let healthSources: [JSONObject] = ["ok", "partial", "unavailable", "not-connected"].map { ["status": $0] }
+    let healthSources: [JSONObject] = ["ok", "partial", "unavailable", "not-connected"].map { ["host": "Mac", "status": $0] }
     let healthSnapshot = Snapshot(object: ["activity": healthSources, "agents": []])
     precondition(nativeDashboardSources(healthSnapshot.object["activity"], key: "activity").map {
         sourceHealthStatus(text($0["status"]))
