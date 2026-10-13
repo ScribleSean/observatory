@@ -116,7 +116,7 @@ None of this has been run. The Mac changes in pull request 49 were written on Wi
 
 ## Mac
 
-Recorded on 2026-10-13 on the Mac (Apple Silicon, macOS 27.0.1) from `main` at `b9dc3e6`, version 0.3.14 build 39. This is the same revision recorded for the Windows build 39 install. Nothing was installed, replaced or deleted on the Mac. The Windows PC was not touched from the Mac.
+Recorded on 2026-10-13 on the Mac (Apple Silicon, macOS 27.0.1) from `main` at `b9dc3e6`, version 0.3.14 build 39. This is the same revision recorded for the Windows build 39 install. The first three subsections describe the Mac at that revision, before the popup fix and before any install. The later install is recorded under "Build 39 install on the Mac". The Windows PC was not touched from the Mac.
 
 ### State before any change
 
@@ -133,10 +133,10 @@ Recorded on 2026-10-13 on the Mac (Apple Silicon, macOS 27.0.1) from `main` at `
 
 ### What is broken or unverified
 
-`node native/build.mjs` does not complete on this Mac, so there is no accepted Mac build 39 and nothing was installed.
+At `b9dc3e6`, `node native/build.mjs` did not complete on this Mac.
 
 - With the default macOS 27.0 SDK, compilation fails because `SwiftUIMacros.StateMacro` cannot be found. The Command Line Tools do not include that compiler plugin and full Xcode is not installed. With the macOS 15.5 SDK, compilation fails because `glassEffect` does not exist there. Only the 26.5 SDK compiles.
-- `--test-popup` fails in native dashboard mode with "reopening usage raised the hidden dashboard". The step passed once and failed eight times across nine executions, with and without `--force-offscreen-popup`. The same check passes with `--legacy-dashboard`. The cause was not investigated. It may be a macOS 27 behavior, an effect of building against the 26.5 SDK, or a defect.
+- `--test-popup` fails in native dashboard mode with "reopening usage raised the hidden dashboard". The step passed once and failed eight times across nine executions, with and without `--force-offscreen-popup`. The same check passes with `--legacy-dashboard`. Pull request 55 found and fixed the cause. See below.
 
 Local `npm test` with the prepared Python 3.13 runtime selected: 950 tests, 819 passed, 21 failed, 110 skipped.
 
@@ -148,15 +148,31 @@ Local `npm test` with the prepared Python 3.13 runtime selected: 950 tests, 819 
 | `scripts/cached-settings.test.mjs` "legacy cache refuses a linked cache directory" and `scripts/peer-revocation.test.mjs` "linked revocation marker is never followed or overwritten". The linked path is still refused, but with a different message than the test expects. | 2 | Unexplained |
 | `scripts/peer-pairing.test.mjs` "initial publish, privacy and merge" reads a null peer state. The test selects `/usr/bin/python3` on Mac. | 1 | Unexplained |
 
-Not verified on the Mac, because no build was installed: the Device filter, saved snapshots that contain Ubuntu rows, Source health labels, a collection by build 39, and pairing with Windows. Steps 3 to 9 of the list above remain open.
+### Build 39 install on the Mac
+
+Recorded on 2026-10-13 from `main` at `367dc32`, which is `b9dc3e6` plus pull request 55.
+
+- Pull request 55 fixed the popup failure. `openDashboard` asked AppKit to restore the dashboard from the Dock on every open. On macOS 27.0.1 the window manager answers that request later, and the answer brought back a dashboard that had been hidden in the meantime. The app now asks only when the window is minimized. After the change, the three `--test-popup` variants each passed 6 of 6.
+- `node native/build.mjs` completed at `367dc32` with `SDKROOT` set to the macOS 26.5 SDK, and every native check passed. `node native/mac/package.mjs --zip-only` verified the bundle and the extracted ZIP. The ZIP is 67,511,299 bytes with SHA-256 `75ba1eaebe3d385b7151cdada039d7e75e5aebe4bba004938ad10c6920e292ae`. It is ad hoc signed, not notarized and not published.
+- Build 35 was quit normally and stopped within about 10 seconds. The app's data folder (132 files) and its preferences file were copied to a new recovery folder, and the copy matched the original by SHA-256.
+- `native/mac/replace-app.mjs` replaced build 35 with the candidate extracted from the verified ZIP. The journal reached `payload-verified` and build 35 is retained in the recovery folder beside the app. The previous manifest was generated from the installed build 35 bundle on this Mac, not from an independent receipt.
+- The installed `build-info.json` records 0.3.14 build 39, source `367dc32` and a clean tree. Strict deep signature verification passed.
+- After launch, the allowance collector reported `ok`. Two scheduled full collections ran five minutes apart and each reported `partial` with 9 of 12 sources read. Build 35 had reported 9 of 13.
+- The new snapshot is readable JSON. Mac and Windows rows report `ok` for activity, tokens, settings and dictation. The Ubuntu rows that build 35 wrote under tokens and settings are no longer present. The Windows rows were less than one minute old, so the existing pairing still exchanges records. The All token total is `unverified`, as expected until the devices are re-paired.
+- Compared with the backup, no saved file was removed. Six files changed (three databases under `private-quota` and `private-sync`, and the three status and snapshot files under `public/local`), and two retirement files were added under `.runtime/private-repair`.
+- Source health showed "2/2 native device records read" for Codex.
+
+Not verified on the Mac: the Device filter in Activity and Tokens, the lower part of Source health including the Local benchmarks label, opening a saved snapshot that contains Ubuntu rows, collection with the main window closed, login startup, and sleep and wake. The three sources that were not read are Claude Code on the Mac, the Antigravity allowance and saved execution receipts. Antigravity is no longer installed on this Mac and the configured receipt folder does not exist, so those two should be turned off in Settings.
+
+The builder's popup check also failed twice with "dashboard activation deadline exceeded" while the Mac was in use. The check needs the test app to receive focus within 2 seconds. This is a limitation of the check and was not changed.
 
 ### Differences from Windows
 
 | Topic | Windows | Mac |
 | --- | --- | --- |
-| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.13 build 35 from `ced6698` |
-| Build 39 produced by | CI package run | Local build only, and the builder stops at the popup check |
-| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | Build 35 was collecting and its snapshot is readable |
+| Installed build | 0.3.14 build 39 from `3ab7332` | 0.3.14 build 39 from `367dc32`, which adds the Mac popup fix |
+| Build 39 produced by | CI package run | Local build with the macOS 26.5 SDK |
+| Collection | 3 of 6 sources after the zero-filled snapshot was moved aside | 9 of 12 sources under build 39, including fresh Windows records |
 | Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
 | TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
 | CI coverage | Package and contract workflows run on pull requests | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
@@ -164,9 +180,11 @@ Not verified on the Mac, because no build was installed: the Device filter, save
 
 ### Next steps for the Mac
 
-1. Find out why reopening usage raises the hidden dashboard on macOS 27, and fix the app or the check.
-2. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
-3. Build again, back up the app's data folder, install build 39 or later, and work through the verification list above.
+1. Check the items listed as not verified above in the installed app.
+2. Turn off the Antigravity and receipt sources in Settings, and find out why Claude Code on the Mac reports Unknown.
+3. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
+4. Look into the three unexplained script test failures and the focus deadline in the popup check.
+5. Both devices now run build 39, so the one-time re-pair described under "Remaining Ubuntu code" can go ahead once it is approved.
 
 ## Next decisions
 
