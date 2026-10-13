@@ -237,7 +237,7 @@ Open question: how a device is identified in a file made on an unpaired installa
 
 ## Architecture
 
-Decided in direction on 2026-10-13. It is not built. A spike is measuring it first.
+Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). Only the panel exists so far, behind a launch flag on each platform.
 
 The app has three parts.
 
@@ -253,7 +253,7 @@ The SwiftUI and Windows Forms viewers stay the default until the shared viewer i
 
 ### Spike
 
-The spike builds the panel only. The decision to continue rests on measurements from both devices: time from click to a drawn panel, and memory with the panel open and after it closes. Those numbers do not exist yet.
+The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.md) and [the measurements record](RESOURCE-MEASUREMENTS.md). Open time was acceptable on both platforms. Memory was acceptable on the Mac. On Windows the web view must be released after the panel closes, and that is not measured yet.
 
 ### Panel contract
 
