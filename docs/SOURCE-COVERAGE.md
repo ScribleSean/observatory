@@ -25,7 +25,6 @@ Both independent native collectors derive token and settings views from the same
 | Codex tool metadata | Allowlisted categories of saved tool-call requests | Not an execution-success report, duration measure or full SSH history |
 | Codex limits | Read-only account quota windows and reset timestamps | Optional five-minute polling with retained observations and failure backoff, not other providers' limits |
 | Claude Code limits | 5-hour and 7-day percentages and reset times that Claude Code passes to a status line command | Optional, with consent. Read two ways: from the status line bridge while a terminal session responds, and from the installed CLI's local `/usage` command at each collection, which makes no model request. Subscription sign-in only. Not shared with a paired device. Exercised on the Mac from source on 2026-10-13. Not in an installed build and not exercised on Windows. |
-| Antigravity limits | Current provider-reported remaining percentages and reset times | Optional on Mac through the installed CLI. No token history, account identity, saved history or peer sharing |
 | Local model receipts | Saved benchmark call counts, output tokens, latency and GPU measurements | Not general local-model history or proof the runtime is currently running |
 | Dictation statistics | Wispr metadata on Mac/Windows | Counts and durations only, not transcripts, recordings or microphone monitoring. ChatGPT voice tracking is unverified. |
 
@@ -51,9 +50,6 @@ These local counters include cached input and are not subscription allowances or
 | Claude Code | Optional saved logs on each collecting device | Optional sharing of per-device records, no cross-device total |
 | ChatGPT | Unknown | The official [chat export](https://help.openai.com/en/articles/7260999-exporting-your-chatgpt-history-and-data) does not establish a token ledger |
 | Cursor | Unknown | Individual accounts can offer a [usage CSV export](https://forum.cursor.com/t/usage-not-showing/154766/17), but its exact schema, token arithmetic and repeated-export reconciliation remain unverified here. Team APIs are not assumed |
-| Antigravity | Unknown | Current allowance percentages are a separate optional source. They are not token counts |
-
-Antigravity allowance monitoring runs the installed CLI's [non-model usage command](https://www.antigravity.google/docs/cli/commands/usage). The reader requires the inspected structured schema and zero invocation turns and tokens. It bounds runtime and output, verifies consent before discovery and execution, and discards a result if monitoring was disabled during the read. Mac checks run with full collection, normally every five minutes. Native Windows execution remains unsupported until process-tree cleanup is verified. Saved observations keep their original time and become stale after ten minutes. No account history or cross-device combination is inferred from these percentages.
 
 Selecting an OpenAI or Anthropic model in another app does not establish that its request also exists in native Codex or Claude Code logs. Separate sources need observed request identity and overlap checks before combining them.
 

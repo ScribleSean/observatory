@@ -16,7 +16,7 @@ The native apps are the everyday entry point. For development builds, follow the
 
 1. Launch the native app and complete the first-run wizard. Fresh installations keep sources off until you choose them and complete setup.
 2. For screen time, install and run [ActivityWatch](https://activitywatch.net/) separately on each device you want to track, then enable its source in Observatory. Missing readings remain Unknown. You can use Tokens and Allowances independently.
-3. Review source choices in Settings. Enable only the records you want to read. Claude Code usage and Mac Antigravity allowance monitoring are off by default. Provider sign-ins remain in their owning applications, not an Observatory account manager.
+3. Review source choices in Settings. Enable only the records you want to read. Claude Code usage is off by default. Provider sign-ins remain in their owning applications, not an Observatory account manager.
 4. Use **Refresh sources** to collect, then inspect Source health for availability and timestamps. Browser **Reload snapshot** only rereads saved data and does not collect.
 5. Optionally pair devices from the Mac over an existing trusted SSH connection. Follow [pairing maintenance](PAIRING-MAINTENANCE.md) for prerequisites and supported records. Claude usage sharing requires separate consent on both paired devices under Usage sharing. Direct TLS is a separate preview, not a verified replacement for that path.
 
@@ -36,7 +36,7 @@ Observatory opens Allowances, the usage-limit overview. Activity is a separate s
 
 Activity offers daily and weekly timelines and a combined Mac and Windows total. Overlapping intervals count once. Simultaneous activity in different categories is labeled Device overlap, since foreground records cannot establish which device had your attention. Tokens has Day, Week and All time periods. Use the native Mac and Windows sources for current collection. Historical snapshots can retain Ubuntu rows. The All-host total is available only after successful reads and a cross-host session overlap check.
 
-Earlier checks used one Mac, Windows and WSL development setup. Those are historical results, not verification of the native-only scope or the latest installed apps. Optional adapters read Codex limits, saved Claude Code counters, Mac Antigravity allowances, saved reasoning and speed settings, tool-call categories and local benchmark receipts. Claude counters appear by device in Source health, separate from the Codex token chart. Antigravity allowance monitoring uses the installed CLI's non-model usage command on Mac. Windows execution is unsupported.
+Earlier checks used one Mac, Windows and WSL development setup. Those are historical results, not verification of the native-only scope or the latest installed apps. Optional adapters read Codex limits, saved Claude Code counters, saved reasoning and speed settings, tool-call categories and local benchmark receipts. Claude counters appear by device in Source health, separate from the Codex token chart.
 
 Configured agent receipt files are a separate source from allowance monitoring. Observatory does not capture every terminal command, iPhone activity or Gemini website usage. [Source coverage](SOURCE-COVERAGE.md) explains each adapter's supported records and gaps.
 
@@ -91,7 +91,7 @@ ActivityWatch records foreground windows and away time. The dashboard separates 
 
 Native Codex counts come from saved logs. The legacy SSH collector uses ccusage reports. Cached tokens are included in the reported total, and reasoning tokens are part of output. These counts cannot tell you how much subscription allowance remains or how much money you spent.
 
-Saved agent receipts may contain cumulative conversation counters. The dashboard keeps the newest snapshot for each conversation instead of adding them together. These receipts are separate from Antigravity allowance percentages. A failed call shows Unknown token usage. A returned response does not establish that its answer was correct.
+Saved agent receipts may contain cumulative conversation counters. The dashboard keeps the newest snapshot for each conversation instead of adding them together. A failed call shows Unknown token usage. A returned response does not establish that its answer was correct.
 
 Dates use America/New_York. Token history follows the selected period: Day shows one recorded date, Week covers the seven calendar days ending on that date, and All time includes all retained daily records, with missing dates left as gaps. Activity is collected over a rolling seven-day window and displayed by calendar day. The first and current days may be partial. During daylight saving transitions, repeated clock hours share one chart cell, while totals retain elapsed duration.
 

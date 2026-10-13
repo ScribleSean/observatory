@@ -51,7 +51,7 @@ internal sealed partial class NativeDashboard
         var collection = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, WrapContents = false, Width = ContentWidth - 32, BackColor = DashboardCard.Surface };
         collection.ClientSizeChanged += (_, _) => { foreach (Control toggle in collection.Controls) toggle.Width = collection.ClientSize.Width; };
         foreach (var (key, title) in new[] { ("activity", "ActivityWatch screen time"), ("codex", "Saved Codex usage and settings"), ("claude", "Recorded Claude Code requests"),
-            ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits"), ("antigravity", "Online Antigravity account limits") })
+            ("wispr", "Wispr Flow statistics"), ("quota", "Online Codex account limits") })
         {
             var check = new DashboardToggle { Name = key, Text = title, AccessibleName = title, Width = collection.Width,
                 Checked = draft[key] is JsonValue value && value.TryGetValue<bool>(out var enabled) && enabled };
@@ -62,7 +62,6 @@ internal sealed partial class NativeDashboard
         collection.Height = collection.GetPreferredSize(new Size(collection.Width, 0)).Height;
         AddCard(collection, "Collection");
         Label("Claude Code reads local recorded request metadata only. It does not sign in, copy credentials, or report account billing.").ForeColor = Color.Silver;
-        Label("Antigravity allowance reading is currently supported on Mac. Enabling it here shows Unknown without starting the CLI.").ForeColor = Color.Silver;
         var detailsStart = body.Controls.Count;
         Label("Source details").Font = brand;
         ActivityWatchHelp();

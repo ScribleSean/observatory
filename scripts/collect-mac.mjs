@@ -19,7 +19,6 @@ import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
-import {collectConfiguredAntigravityAllowance,attachProviderAllowances} from './collect-antigravity-allowance.mjs';
 import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource} from './claude-limits.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -40,7 +39,7 @@ function pythonReport(python,script,args) {
   });
 }
 
-export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false,readAntigravity=collectConfiguredAntigravityAllowance}={}) {
+export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits}={}) {
   if(process.platform!=='darwin' || !path.isAbsolute(runtime) || !path.isAbsolute(python || ''))throw Error('Absolute Mac runtime and Python executable required');
   for(const folder of [runtime,path.join(runtime,'public'),path.join(runtime,'public/local')]) {
     await mkdir(folder,{recursive:true,mode:0o700});
@@ -109,10 +108,8 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     claude=cleanClaudeTokenSource(raw,'Mac');
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
-  attachProviderAllowances(result,[await readAntigravity({enabled:config.antigravity,host:'Mac',
-    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).antigravity})]);
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await readClaudeLimits(runtime).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachClaudeLimits(result,await readLimits(runtime).catch(()=>claudeLimitsSource(null,{enabled:true})));
   const {data,status}=result;
   await atomic('usage.json',data,replacement.preserve);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

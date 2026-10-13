@@ -9,8 +9,9 @@ const settings={profiles:[{date:'2026-09-08',model:'gpt-6-astra',effort:'medium'
   tools:[{date:'2026-09-08',category:'Shell',tool:'exec_command',namespace:'functions',count:2,arguments:'PRIVATE'}]};
 
 test('Mac local settings accept only explicit source booleans, without remote command settings',()=>{
-  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,claude:false,wispr:false,quota:false,antigravity:false,receipts:false,benchmarks:false});
-  assert.equal(macCollectorConfig({antigravity:true}).antigravity,true);
+  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,claude:false,wispr:false,quota:false,receipts:false,benchmarks:false});
+  // A saved key for a source that was removed is still accepted and is no longer read.
+  assert.equal(Object.hasOwn(macCollectorConfig({antigravity:true}),'antigravity'),false);
   assert.throws(()=>macCollectorConfig({antigravity:'true'}));
   assert.equal(macCollectorConfig({claude:true}).claude,true);
   assert.equal(macCollectorConfig({benchmarks:true}).benchmarks,false);
