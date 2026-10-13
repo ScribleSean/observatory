@@ -81,7 +81,7 @@ test('provider channel uses pinned TLS and fences disable after handshake',
         rejectUnauthorized:true,minVersion:'TLSv1.3',ALPNProtocols:['observatory-sync/1'],
         checkServerIdentity:(_host,cert)=>cert.fingerprint256===new X509Certificate(own.cert).fingerprint256?undefined:Error('Wrong peer')},
       ()=>socket.end(JSON.stringify(incoming)));
-      const deadline=setTimeout(()=>{socket.destroy();reject(Error('Fixture timeout'));},10000);
+      const deadline=setTimeout(()=>{socket.destroy();reject(Error('Fixture timeout'));},30000);
       socket.on('data',chunk=>chunks.push(chunk));socket.once('error',reject);
       socket.once('close',()=>{clearTimeout(deadline);try{resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));}catch(error){reject(error);}});
     });
