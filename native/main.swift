@@ -629,7 +629,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryNativeDetail") }
                 detail = window
             }
-            detail?.deminiaturize(nil)
+            // An unconditional request is answered later by the window manager
+            // and can bring back a dashboard that was hidden in the meantime.
+            if detail?.isMiniaturized == true { detail?.deminiaturize(nil) }
             detail?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -654,7 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             webView = web
         }
         webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
-        detail?.deminiaturize(nil)
+        if detail?.isMiniaturized == true { detail?.deminiaturize(nil) }
         detail?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
