@@ -2,12 +2,21 @@
 
 ## Scope and priorities
 
-- Observatory is Sean's personal app, built in public. This is a public-source application repository, not a private repo or a consumer product. Personal context repositories store only pointers and private operating policy, not application source or required dependencies.
+- Observatory is Sean's app, built in public. It should be usable by anyone who installs it on a Mac or a Windows PC without his setup. It is not sold. This is a public-source application repository. Personal context repositories store only pointers and private operating policy, not application source or required dependencies.
+- [The design direction](docs/DESIGN.md) records the agreed product and interface direction. [The parity table](docs/PARITY.md) records what each platform has. Read both before changing an interface, a shared script or a data format.
 - Prioritize reliable native Windows and Mac collection, with the Windows application/tray and Mac application/menu-bar experiences. Fix unresolved audit and UI issues before adding features. Keep the app lean and reuse working collectors and controls.
 - WSL and Ubuntu tracking are no longer in scope. Do not add setup, recovery or collection work for them, or plan a standalone Linux app. The apps no longer show Ubuntu history or read WSL source settings. Ubuntu fields remain in the pairing code and saved-snapshot format until both apps can be updated together. Removal does not authorize stopping WSL workloads, deleting original logs or editing real configurations. Test any source-scope migration before calling it complete.
-- Reuse existing verified SSH connections for optional Mac/Windows pairing. Do not replace working transport just to create consumer onboarding, code/QR pairing or a hosted account service.
+- Keep the existing verified SSH pairing working. The intended pairing route for other people is the installed Tailscale client for reachability with a pairing code for trust. Do not remove the SSH path until the new path is verified on both devices. A hosted account service is not planned.
 - Defer iPhone integration until supported OS permissions and data access are established. Do not imply this integration is already available.
-- The fictional demo is a development fixture. Public installer marketing, hosted services, broad provider expansion and customizable dashboards are not current priorities. This scope does not authorize publication, pushes, releases or repository-visibility changes.
+- The fictional demo mirrors the native apps and doubles as the product page. It contains fictional data only. Builds stay unsigned, with install guides that state the platform warnings plainly. Hosted services, broad provider expansion and customizable dashboards are not current priorities. This scope does not authorize publication, pushes, releases or repository-visibility changes.
+
+## Sessions and branches
+
+- Three sessions work in this repository: a coordinator, a Mac session and a Windows session. They coordinate only through files, issues and pull requests in this repository.
+- Branch names start with `shared/` for coordinator work, `mac/` for the Mac session and `win/` for the Windows session. Every change reaches `main` by pull request.
+- The coordinator owns shared scripts, data formats, `native/design-tokens.json`, the shared strings file, `docs/DESIGN.md` and `docs/PARITY.md`. The platform sessions own their native interface code.
+- Issues labelled `mac` or `windows` describe work for that session, including what to port from the other platform and how it should look.
+- On Windows, an acceptance check must start the app outside a Claude desktop session. See issue 58.
 
 ## Public writing
 
