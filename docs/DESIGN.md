@@ -192,10 +192,31 @@ The four actions map to things each shell already does. This is not a general co
 
 | Field | Meaning | Until it exists |
 | --- | --- | --- |
-| `claudeLimits` | Claude Code limit windows in the same shape as `quota` | The panel shows one Claude Code row reading Unknown |
+| `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
 | `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
 
-These names are proposals. They become part of the snapshot format only when the collector change is reviewed.
+`deviceNames` is still a proposal. It becomes part of the snapshot format only when the collector change is reviewed.
+
+### Claude Code limits bridge
+
+Added as source on 2026-10-13. It is not installed on either device and has not run against a real Claude Code session.
+
+| Piece | File | What it does |
+| --- | --- | --- |
+| Bridge | `scripts/claude-statusline-bridge.mjs` | Claude Code runs it as the status line command. It saves the 5-hour and 7-day percentages and reset times, then prints what the person's earlier status line command prints. With no earlier command it prints one line such as "5h 77% left · 7d 59% left". |
+| Store | `claude-limits/limits.json` in the app's data folder | Two percentages, two reset times and the times they were observed. Nothing else from the status line input is kept. |
+| Installer | `scripts/claude-statusline-install.mjs` | `status`, `install` and `uninstall` for the `statusLine` entry in Claude Code's `settings.json`. Install needs `--consent`, saves the earlier entry, writes a backup beside the settings file and refuses to overwrite a settings file that changed during the update. Uninstall restores the earlier entry. Nothing calls it automatically. |
+| Reader | `scripts/claude-limits.mjs` | Both collectors attach `claudeLimits` to the snapshot. |
+
+Status values: `not-connected` when the bridge is not installed, `unavailable` when it is installed and no usable reading exists, `ok` when the newest reading is under 10 minutes old, and `stale` when it is older. A window whose reset time has passed is dropped, because its value is unknown until the next reading.
+
+Things a person should be told before they consent:
+
+- Claude Code hides most of its footer keyboard hints while any custom status line is configured.
+- Readings arrive only while a Claude Code session is responding, and only for Pro and Max subscriptions.
+- The limits are account-wide. They are observed on this device and are not sent to a paired device.
+
+Not verified: the command quoting under PowerShell on Windows, the fields Claude Code sends in the installed version on either device, and the native Settings switch, which does not exist yet.
 
 ## Order of work
 

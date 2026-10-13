@@ -24,6 +24,7 @@ Both independent native collectors derive token and settings views from the same
 | Codex settings metadata | Token counter increments associated with recorded reasoning effort and service tier | Unreconciled counters are withheld, with missing coverage stated explicitly |
 | Codex tool metadata | Allowlisted categories of saved tool-call requests | Not an execution-success report, duration measure or full SSH history |
 | Codex limits | Read-only account quota windows and reset timestamps | Optional five-minute polling with retained observations and failure backoff, not other providers' limits |
+| Claude Code limits | 5-hour and 7-day percentages and reset times that Claude Code passes to a status line command | Optional. Needs the status line bridge installed with consent. Updates only while a Claude Code session responds. Pro and Max subscriptions only. Not shared with a paired device. Not installed or exercised on either device yet. |
 | Antigravity limits | Current provider-reported remaining percentages and reset times | Optional on Mac through the installed CLI. No token history, account identity, saved history or peer sharing |
 | Local model receipts | Saved benchmark call counts, output tokens, latency and GPU measurements | Not general local-model history or proof the runtime is currently running |
 | Dictation statistics | Wispr metadata on Mac/Windows | Counts and durations only, not transcripts, recordings or microphone monitoring. ChatGPT voice tracking is unverified. |
