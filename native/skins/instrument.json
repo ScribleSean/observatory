@@ -1,0 +1,54 @@
+{
+  "name": "Instrument",
+  "colors": {
+    "background": [
+      "0E1622",
+      "0E1622"
+    ],
+    "surface": [
+      "152234",
+      "152234"
+    ],
+    "text": [
+      "E8E2D0",
+      "E8E2D0"
+    ],
+    "muted": [
+      "8FA0B5",
+      "8FA0B5"
+    ],
+    "strong": [
+      "F4EEDC",
+      "F4EEDC"
+    ],
+    "accent": [
+      "E3B565",
+      "E3B565"
+    ],
+    "track": [
+      "2A3A50",
+      "2A3A50"
+    ],
+    "claude": [
+      "E8A26B",
+      "E8A26B"
+    ],
+    "codex": [
+      "8FC3E0",
+      "8FC3E0"
+    ],
+    "warning": [
+      "E8704A",
+      "E8704A"
+    ],
+    "error": [
+      "F07A7A",
+      "F07A7A"
+    ]
+  },
+  "font": "mono",
+  "numeralFont": "mono",
+  "radius": 4,
+  "rules": false,
+  "limitStyle": "bar"
+}

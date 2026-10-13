@@ -145,18 +145,33 @@ The sage accent stays reserved for selected controls. Contrast of these four aga
 
 ## Skins
 
-Decided in direction on 2026-10-13. Not built.
+Decided in direction on 2026-10-13. Four skins and three limit styles exist as source in the shared panel since that date. No installed app shows them, and there is no skin choice in Settings yet.
 
 A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
 
 - **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer ignores unknown fields and rejects a skin with a missing or malformed field.
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
-- **Limit styles.** A fixed list the viewer implements: bar, numeral, text bar, block and dial. A skin picks one. A new style is a change to the viewer, reviewed like any other.
+- **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
 - **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails.
 - **Where skins live.** Bundled skins sit beside `native/design-tokens.json`, which becomes the default skin (Sage). A person's own skins are files in the app's data folder, chosen in Settings.
 
-Skins the owner has asked for first: Sage (default) and Almanac. The candidate list also holds Almanac Night, Ledger, Instrument, Blueprint, Terminal, Amber CRT, Poster, Riso, Arcade and Nordic. None is built.
+Bundled skins, in `native/skins/`:
+
+| Skin | Limit style | Light and dark | Notes |
+| --- | --- | --- | --- |
+| Sage | Bar | Both | The default. Its colours must equal `native/design-tokens.json`, and a test checks that. |
+| Almanac | Numeral | Both | The dark values are the look first sketched as Almanac Night. |
+| Instrument | Bar | Same in both | Dark by nature |
+| Amber CRT | Text bar | Same in both | Dark by nature |
+
+`lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
+
+A shell chooses a skin by setting `data-skin` on the root element or by loading `panel.html?skin=name`. With sample data the page shows a skin picker so a person can compare them.
+
+Fonts: Almanac asks for Fraunces and the two mono skins ask for JetBrains Mono. Neither is bundled yet, so those skins fall back to the system serif and system monospace fonts and will look slightly different on Mac and Windows until the fonts are added with their licences.
+
+Candidates not built: Ledger, Blueprint, Terminal, Poster, Riso, Arcade and Nordic.
 
 Because the viewer is shared, a skin applies to the panel, the dashboard and the demo on both platforms at once. Skins depend on the shared viewer replacing the native viewers. They are not planned for the SwiftUI or Windows Forms viewers.
 

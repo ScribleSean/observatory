@@ -191,7 +191,7 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | Panel shown in the system web view behind a flag | Missing | Missing | Add | Default stays the native panel |
 | Four panel actions accepted by the shell | Missing | Missing | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard` |
 | Open time and memory measured | Missing | Missing | Add | Needed before the direction is confirmed |
-| Skins chosen in Settings | Missing | Missing | Add | Shared viewer only. See Skins in the design direction. |
+| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared panel source. A shell selects one with `data-skin`. No Settings control exists. |
 | Export and import of a `.observatory` file in Settings | Missing | Missing | Add | See the design direction. |
 
 ## Web demo
