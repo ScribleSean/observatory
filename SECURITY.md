@@ -10,7 +10,7 @@ The native applications load bundled static UI assets in system WebKit or WebVie
 
 The current source at `34856e3` was checked without installing or updating dependencies. npm reported zero known vulnerabilities across 698 dependencies. NuGet's vulnerable-package query, including transitive dependencies, returned no vulnerable entries for the Windows project. These are advisory-feed results for the resolved dependencies, not a whole-application audit.
 
-See [runtime review](docs/RUNTIME-REVIEW.md) for the exact lockfile hashes, commands, installed runtime versions and unresolved Windows Python dependency findings. Final publication remains gated on that review.
+See runtime review (archived) for the exact lockfile hashes, commands, installed runtime versions and unresolved Windows Python dependency findings. Final publication remains gated on that review.
 
 ### Earlier dependency changes, September 9
 
