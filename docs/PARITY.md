@@ -189,8 +189,9 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | --- | --- | --- | --- | --- |
 | Shared panel page (`panel.html`) in the bundled web files | Missing | Done | Add | Built by the web bundle. On Windows a separate panel host serves the page, bundled assets and the snapshot. The dashboard host's guard is unchanged. Mac allows only the index page and `assets/` today. |
 | Panel shown in the system web view behind a flag | Missing | Done | Add | `--web-panel` on Windows. Default stays the native panel. The web view is created on the first opening and kept. |
+| Panel closes when another window is clicked | Unknown | Differs | Add | The Windows native popup does not. The Windows web panel has the behaviour in source. It was not exercised. |
 | Four panel actions accepted by the shell | Missing | Done | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard`. On Windows only `refresh` was run end to end. The other three were accepted and not run. |
-| Open time and memory measured | Missing | Done | Add | Needed before the direction is confirmed. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 110 ms native, and about 400 MiB working set with the panel open against 65 MiB native. |
+| Open time and memory measured | Missing | Done | Add | Needed before the direction is confirmed. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 132 ms native, and about 390 MiB working set with the panel open against 65 MiB native. |
 | Skins chosen in Settings | Missing | Missing | Add | Shared viewer only. See Skins in the design direction. |
 | Export and import of a `.observatory` file in Settings | Missing | Missing | Add | See the design direction. |
 

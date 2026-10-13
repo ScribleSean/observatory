@@ -113,11 +113,11 @@ Recorded on 2026-10-13 for issue 65. It compares the shared web panel in WebView
 
 ### What was measured
 
-- Source: `f9f444c` on the `win/web-panel-spike` branch, which is `main` at `7b2403c` plus the flagged panel host.
-- Build: a staged folder, not an installed package. The app binary and the web bundle came from `f9f444c`. The collector scripts and the Node and Python runtimes were copied from the installed build 40 (`57518b7`). The installed app was quit for the runs and restarted afterwards.
+- Source: `11de960` on the `win/web-panel-spike` branch, which is `main` at `7b2403c` plus the flagged panel host. Earlier runs used `f9f444c`, before the panel closed on a click elsewhere.
+- Build: a staged folder, not an installed package. The app binary and the web bundle came from the commit under test. The collector scripts and the Node and Python runtimes were copied from the installed build 40 (`57518b7`). The installed app was quit for the runs and restarted afterwards.
 - Start: each instance was started through `Win32_Process.Create`, so its parent was `WmiPrvSE.exe` and not the Claude desktop app, as issue 58 requires. Each used the real data folder and completed one collection before the first sample.
 - Machine: Intel Core i7-14700F, 31.8 GiB of memory, Windows 11 Home build 26300, WebView2 Runtime 155.0.4283.45, display scale 100 percent, system appearance dark.
-- Sequence: `--panel-timing` waits for one collection, then opens the panel once, holds it for 20 seconds, closes it, waits 75 seconds and opens and closes it five more times. The web runs added `--web-panel`.
+- Sequence: `--panel-timing` waits for one collection, then opens the panel once, holds it for 20 seconds, closes it, waits 75 seconds and opens and closes it five more times. The web runs added `--web-panel`. The harness keeps the web panel open while it measures, because an app that Windows did not bring to the foreground would otherwise close its panel at once.
 
 ### How the numbers were taken
 
@@ -128,26 +128,35 @@ Recorded on 2026-10-13 for issue 65. It compares the shared web panel in WebView
 
 ### Open time
 
-| Opening | Web panel, final code | Web panel, earlier run | Native popup |
-| --- | ---: | ---: | ---: |
-| First | 256.3 ms | 378.0 ms | 109.6 ms |
-| Second | 5.7 ms | 3.9 ms | 19.6 ms |
-| Third | 5.7 ms | 6.6 ms | 18.6 ms |
-| Fourth | 3.9 ms | 2.7 ms | 17.2 ms |
-| Fifth | 4.4 ms | 2.8 ms | 20.8 ms |
-| Sixth | 3.8 ms | 3.6 ms | 18.1 ms |
+| Opening | Web panel | Native popup |
+| --- | ---: | ---: |
+| First | 255.8 ms | 132.3 ms |
+| Second | 10.4 ms | 20.8 ms |
+| Third | 4.0 ms | 23.8 ms |
+| Fourth | 5.3 ms | 18.2 ms |
+| Fifth | 12.3 ms | 27.3 ms |
+| Sixth | 4.3 ms | 12.6 ms |
 
-The earlier web run used the same build before a change to how the window height is measured. The final run followed it by about three minutes, which may explain its shorter first open. Neither run started from a cold machine.
+Both columns are from `11de960`. Earlier runs gave these first opens: web 378.0 ms and 256.3 ms at `f9f444c`, then 255.2 ms, 251.0 ms and 256.6 ms on intermediate builds, and native 109.6 ms at `f9f444c`. The 378.0 ms run was the first of the day. None of the runs started from a cold machine.
 
 ### Memory
 
-| State | Web panel, final code | Web panel, earlier run | Native popup |
-| --- | --- | --- | --- |
-| Panel never opened | 1 process, 57.1 MiB working set, 17.0 MiB private | 1 process, 57.4 MiB, 16.9 MiB | 1 process, 57.1 MiB, 17.0 MiB |
-| Panel open | 7 processes, 396.1 MiB working set, 181.5 MiB private | 7 processes, 409.8 MiB, 187.2 MiB | 1 process, 65.4 MiB, 20.2 MiB |
-| One minute after closing | 7 processes, 405.3 MiB working set, 184.3 MiB private | 7 processes, 419.1 MiB, 190.6 MiB | 1 process, 68.3 MiB, 21.1 MiB |
+| State | Web panel | Native popup |
+| --- | --- | --- |
+| Panel never opened | 1 process, 59.3 MiB working set, 19.1 MiB private | 1 process, 57.2 MiB working set, 17.0 MiB private |
+| Panel open | 7 processes, 391.8 MiB working set, 181.7 MiB private | 1 process, 65.3 MiB working set, 20.9 MiB private |
+| One minute after closing | 7 processes, 406.7 MiB working set, 185.5 MiB private | 1 process, 67.6 MiB working set, 20.8 MiB private |
+
+Four earlier web runs gave 392.3 to 409.8 MiB of working set with the panel open and 405.3 to 419.1 MiB one minute after closing.
 
 The six extra processes are `msedgewebview2.exe`. They stay because the web view is kept. Disposing the web view on close was not built or measured, so the cost of a cold open on every click is not known.
+
+### Closing on a click elsewhere
+
+- The native popup has no handler for losing activation. Reading `UsagePopup.cs` shows it closes on Escape, on a second tray click and when the dashboard opens. It does not close when another window is clicked. It was not changed.
+- The web panel now hides when a different top-level window becomes the foreground window. Focus moving into the page raises the same event, so the panel checks the foreground window before hiding. A tray click that dismissed the panel does not open it again within 400 ms.
+- This was not exercised. The measuring script asked Windows to bring the open panel to the foreground and then to give the foreground back. Windows refused the first request (`SetForegroundWindow` returned false), so the panel never held the foreground and nothing could be clicked away from. In both runs the panel stayed visible, which shows nothing about the behaviour. It needs a person to click the tray icon and then another window.
+- An earlier build of this change failed to reopen the panel at all. The cause was an overflow in the 400 ms guard, found through the harness and fixed before the recorded runs.
 
 ### What was seen
 
@@ -161,6 +170,7 @@ The six extra processes are `msedgewebview2.exe`. They stay because the web view
 ### Not exercised
 
 - A physical click on the tray icon and on the page's buttons. The harness called the same handlers.
+- Closing the panel by clicking another window. See above.
 - What `check-updates`, `open-settings` and `open-dashboard` do after the host accepts them. The harness records them without running them, because they open windows. They map to the existing tray menu functions.
 - Light appearance, display scales other than 100 percent, a second monitor, Escape to close and keyboard focus.
 - An installed package. The Clean Windows package workflow was not run for this revision.
