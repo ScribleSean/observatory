@@ -25,17 +25,56 @@ Open time is acceptable on both. Memory is acceptable on the Mac. On Windows it 
 6. The demo site is the shared viewer with sample data.
 7. Every claim in the README is true of an installed build.
 
+## Standing approvals from the owner
+
+Given on 2026-10-13. The owner asked for the build to run without questions until the app meets "What done means", unless he is truly needed.
+
+Approved in advance, with the condition beside each:
+
+| Action | Condition |
+| --- | --- |
+| Squash-merging a workstream's pull request | CI passes and an independent reviewer session has checked it |
+| Removing the SwiftUI viewer, the Windows Forms viewer and the earlier web dashboard | The shared viewer is the default on that platform and its checks pass. Tag `main` first, as `archive/pre-web-direction` was. List the removed files in the pull request. |
+| The removals in R1, and the Ubuntu fields and legacy pairing shape in P1 | Saved settings and saved history stay readable. Tests show it. |
+| The settings bridge contract in B1 | An independent reviewer session checks it against the rule that no action carries a path, a command or free text that reaches a shell. The contract is recorded in the design direction before a shell implements it. |
+| Replacing the installed app on the Mac or the PC with a build from `main` | The data folder is backed up and matches by checksum first, the previous build stays recoverable, and the result is recorded in the state record |
+| Installing the Claude Code limits bridge on the PC | It was approved on the Mac the same day. Record what changed. |
+
+Still needs the owner, because no session can do it or because it reaches outside his machines:
+
+- Publishing the demo page, a release, or anything else public beyond pull requests in this repository.
+- Anything that costs money.
+- Weakening a security rule, a file guard or the private-folder check. Issue 58 stays open until he decides.
+- Physical or account steps: signing in to Tailscale, typing a pairing code on the second device, a real click that a session cannot perform.
+- Deleting saved history, backups or anything in a data folder.
+
+When one of these blocks a workstream, record exactly what is needed in the issue, carry on with everything that does not depend on it, and put all such items in one list for him at the end.
+
+## Sessions on two machines and two tools
+
+Checked on 2026-10-13 from the Mac.
+
+| Route | Works | Use |
+| --- | --- | --- |
+| Claude sessions on the Mac, started by an orchestrator | Yes | Shared and Mac workstreams, each in its own worktree |
+| The Claude session on the PC, reached by a session message | Yes. It received two messages that day and acted on both. Delivery is not confirmed to the sender. | Windows workstreams. Put the instructions in the issue as well, so the work does not depend on the message. |
+| The Claude command line tool on the PC over the existing SSH connection | The tool is installed there. Running a session this way was not tried. | A fallback when the PC session is not open |
+| Codex on the Mac in non-interactive mode (`codex exec`) | Yes. A read-only task returned in 10 seconds. | An independent second review of a pull request, or a bounded task with a clear file list |
+| Codex on the PC over SSH | No. The command line tool was not found there. | None |
+
+Codex and Claude sessions both read `AGENTS.md`. They coordinate only through this repository.
+
 ## Rules for every session
 
 - Read `AGENTS.md`, [the design direction](DESIGN.md) and [the parity table](PARITY.md) before changing anything.
 - One workstream per session. Touch only the paths that workstream owns. If a change is needed in a path another workstream owns, open an issue for it and say what is needed.
 - Sessions on the same machine each work in their own Git worktree. Never switch branches in a checkout another session is using.
-- Branch names start with `shared/`, `mac/` or `win/`. Everything reaches `main` by pull request. A session may squash-merge its own pull request when CI passes, except where this plan says the owner or the coordinator must review.
+- Branch names start with `shared/`, `mac/` or `win/`. Everything reaches `main` by pull request. A session may squash-merge its own pull request when CI passes and an independent reviewer session has checked it.
 - Use synthetic data in tests. Never print, commit or attach real usage values.
 - Unknown is never zero. Device records are never added together outside the collector's verified aggregate.
-- Do not delete code, files or data that the workstream does not explicitly list for removal. Ask the owner before any deletion that is not listed.
+- Do not delete code, files or data that the workstream or the standing approvals do not list for removal.
 - Do not publish a release, the demo page or anything else. Do not change repository settings. Spend nothing.
-- Do not replace or quit the installed app without telling the owner first. Mac measurement runs quit it three times on 2026-10-13.
+- Quit the installed app only when a workstream requires it, relaunch it straight afterwards and record how long it was closed. Mac measurement runs quit it three times on 2026-10-13.
 - Mac native work can only be built and checked on the Mac. Windows native work can only be built and checked on the Windows PC, and every Windows acceptance check must start the app outside a Claude desktop session (issue 58).
 - When blocked for more than a few minutes on one thing, write down what was tried in the issue or pull request and stop.
 - Update [the parity table](PARITY.md) in the same pull request as the change it describes. Record what was verified, on which revision, and what was not.
@@ -65,14 +104,14 @@ Each view is one workstream, built from V1's components and `lib/panel-data.mjs`
 | V3 | Activity view: total, bar chart, categories and apps, hourly breakdown, tracking status and ActivityWatch help. | `app/viewer/activity/**` | Any | V1, D1 for Now |
 | V4 | Tokens view: Claude Code and Codex by day and model, token classes, cost estimates, reasoning and speed settings. | `app/viewer/tokens/**` | Any | V1, D2 for cost |
 | V5 | Sources and Dictation views. | `app/viewer/sources/**`, `app/viewer/dictation/**` | Any | V1 |
-| B1 | Settings bridge contract. Write the contract first as a section of the design direction and have the owner approve it: a fixed list of named actions with typed, bounded arguments (source switches, skin, device name, startup, pairing actions, limits consent, export). No action takes a path, a command or free text that reaches a shell. Then the Settings view against a fake bridge. | `app/viewer/settings/**`, `lib/bridge-contract.mjs`, the contract section of `docs/DESIGN.md` | Any | V1. Owner approval of the contract before any shell implements it. |
+| B1 | Settings bridge contract. Write the contract first as a section of the design direction and have an independent reviewer session check it: a fixed list of named actions with typed, bounded arguments (source switches, skin, device name, startup, pairing actions, limits consent, export). No action takes a path, a command or free text that reaches a shell. Then the Settings view against a fake bridge. | `app/viewer/settings/**`, `lib/bridge-contract.mjs`, the contract section of `docs/DESIGN.md` | Any | V1. Reviewer check of the contract before any shell implements it. |
 
 ### Phase 3, after the views exist
 
 | Id | Workstream | Owns | Machine | Depends on |
 | --- | --- | --- | --- | --- |
-| M2 | Mac shell implements the bridge contract and makes the shared dashboard the default. Then removes the SwiftUI viewer files. The owner must approve the exact file list before the removal. | `native/*.swift` | Mac | B1, V2 to V5, M1 |
-| W2 | Windows shell implements the bridge contract and makes the shared dashboard the default. Then removes the Windows Forms viewer files. The owner must approve the exact file list before the removal. | `native/windows/**` | Windows PC | B1, V2 to V5, W1 |
+| M2 | Mac shell implements the bridge contract and makes the shared dashboard the default. Then removes the SwiftUI viewer files under the standing approval above. | `native/*.swift` | Mac | B1, V2 to V5, M1 |
+| W2 | Windows shell implements the bridge contract and makes the shared dashboard the default. Then removes the Windows Forms viewer files under the standing approval above. | `native/windows/**` | Windows PC | B1, V2 to V5, W1 |
 | S1 | Demo and site. Remove the earlier web dashboard (`app/page.tsx`, `app/observatory.css`, `components/ui/**` and unused packages) once neither shell loads it. Build the demo from the shared viewer in sample-data mode with a short product page. Publishing needs the owner's approval. | `app/*.tsx` outside `app/viewer`, `components/**`, `.github/workflows/demo.yml`, `package.json` | Any | M2 and W2 no longer load the earlier dashboard |
 | G1 | Guides and checks. Install guides for both platforms that state the unsigned-build warning plainly, a README that matches the installed builds, and the Mac test suite running on pull requests. | `docs/MAC.md`, `docs/WINDOWS.md`, `docs/GUIDE.md`, `README.md`, `.github/workflows/**` except the demo workflow | Any | M2, W2 |
 
