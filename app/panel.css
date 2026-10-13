@@ -7,6 +7,19 @@
   font-weight: 100 900;
 }
 
+@font-face {
+  font-family: 'Fraunces';
+  src: url('../public/fonts/Fraunces.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../public/fonts/JetBrainsMono.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 800;
+}
+
 html, body { margin: 0; background: var(--ob-background); color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -19,7 +32,7 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
   padding: 14px;
   background: var(--ob-background);
   color: var(--ob-text);
-  font: 400 var(--ob-body-size)/1.35 'Inter Tight', system-ui, sans-serif;
+  font: 400 var(--ob-body-size)/1.35 var(--ob-font, 'Inter Tight', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   cursor: default;
@@ -30,14 +43,14 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ob-space-2); }
 .ob-meta { color: var(--ob-muted); font-size: var(--ob-meta-size); }
 .ob-meta.warn, .ob-num.warn { color: var(--ob-warning); }
-.ob-card { background: var(--ob-surface); border-radius: 12px; padding: var(--ob-space-3); margin-top: 10px; }
+.ob-card { background: var(--ob-surface); border-radius: var(--ob-radius, 12px); padding: var(--ob-space-3); margin-top: 10px; }
 .ob-card > .ob-meta:first-child { margin-bottom: var(--ob-space-2); }
 .ob-limit + .ob-limit { margin-top: 10px; }
 .ob-indent { margin-left: 14px; }
 .ob-sub { padding-left: 2px; }
 .ob-gap { margin: 2px 0 10px; }
 .ob-foot { margin-top: 10px; padding: 0 2px; }
-.ob-num { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
+.ob-num { font-family: var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
 .ob-num.big { font-size: var(--ob-section-size); }
 .ob-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .ob-dot.claude, .ob-bar i.claude { background: var(--ob-claude); }
@@ -48,7 +61,7 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 
 .ob-segments { display: flex; gap: var(--ob-space-1); margin: var(--ob-space-2) 0 0; padding: 0; border: 0; min-width: 0; }
 .ob-segments button, .ob-actions button {
-  font: inherit; color: var(--ob-muted); background: var(--ob-surface); border: 0; border-radius: 999px; cursor: pointer;
+  font: inherit; color: var(--ob-muted); background: var(--ob-surface); border: 0; border-radius: calc(var(--ob-radius, 12px) * 99); cursor: pointer;
   transition: background-color 120ms ease-out, transform 120ms ease-out;
 }
 .ob-segments button { flex: 1 1 0; min-width: 0; padding: 6px 4px; font-size: var(--ob-meta-size); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -67,3 +80,20 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
   .ob-segments button, .ob-actions button { transition: none; }
   .ob-actions button:active:not(:disabled) { transform: none; }
 }
+
+.ob-numerals { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.ob-figure { font: 500 34px/1 var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.ob-figure.warn, .ob-blocks .warn { color: var(--ob-warning); }
+.ob-blocks { display: flex; font-family: var(--ob-numeral-font, inherit); line-height: 1; margin: 4px 0; overflow: hidden; }
+.ob-blocks span { flex: 1 1 0; text-align: center; font-size: 15px; }
+.ob-blocks .claude { color: var(--ob-claude); }
+.ob-blocks .codex { color: var(--ob-codex); }
+.ob-rules .ob-card { border-top: 1px solid var(--ob-text); border-bottom: 1px solid var(--ob-text); padding-left: 0; padding-right: 0; }
+.ob-rules .ob-segments button, .ob-rules .ob-actions button { border: 1px solid var(--ob-track); }
+.ob-rules .ob-segments button.on { border-color: var(--ob-accent); }
+.ob-foot select { font: inherit; color: inherit; background: var(--ob-surface); border: 1px solid var(--ob-track); border-radius: 4px; }
+.ob-actions button.wide { white-space: nowrap; }
+.ob-font-mono { font-size: 13px; }
+.ob-font-mono .ob-actions button.wide { font-size: 12px; }
+.ob-font-mono .ob-segments button { padding-left: 0; padding-right: 0; letter-spacing: -0.3px; }
+.ob-foot { flex-wrap: wrap; }

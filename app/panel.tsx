@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, CircleArrowUp, RefreshCw, Settings } from 'lucide-react';
 import { compact, demoSnapshot, devices, duration, freshness, limits, sourceCounts, totals } from '../lib/panel-data.mjs';
+import { skinCss, validateSkin } from '../lib/skins.mjs';
+import sage from '../native/skins/sage.json';
+import almanac from '../native/skins/almanac.json';
+import instrument from '../native/skins/instrument.json';
+import amberCrt from '../native/skins/amber-crt.json';
 
 type Snapshot = Record<string, unknown>;
 export type PanelAction = 'refresh' | 'check-updates' | 'open-settings' | 'open-dashboard';
+
+// Bundled skins. A person's own skin files will arrive through the shell later.
+export const SKINS: Record<string, unknown> = { sage, almanac, instrument, 'amber-crt': amberCrt };
 
 const PERIOD_LABELS: [string, string][] = [['now', 'Now'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['all', 'All time']];
 
@@ -28,7 +36,61 @@ function Segments({ label, options, value, onChange }: { label: string; options:
   );
 }
 
-export default function Panel({ demo = false }: { demo?: boolean }) {
+type Limit = ReturnType<typeof limits>[number];
+
+function LimitRows({ rows, style }: { rows: Limit[]; style: string }) {
+  const value = (row: Limit) => row.remaining === null ? 'Unknown' : `${Math.round(row.remaining)}%`;
+  if (style === 'numeral') return (
+    <div className="ob-numerals">
+      {rows.map((row, index) => (
+        <div key={index}>
+          <div className={row.low ? 'ob-figure warn' : 'ob-figure'}>{value(row)}</div>
+          <div><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name} <span className="ob-meta">{row.window}</span></div>
+          <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>
+        </div>
+      ))}
+    </div>
+  );
+  if (style === 'text') return (
+    <div className="ob-textbars">
+      {rows.map((row, index) => {
+        const filled = row.remaining === null ? 0 : Math.round(row.remaining / 5);
+        return (
+          <div key={index} className="ob-limit">
+            <div className="ob-row">
+              <span>{row.name} <span className="ob-meta">{row.window}</span></span>
+              <span className={row.low ? 'ob-num warn' : 'ob-num'}>{value(row)}</span>
+            </div>
+            <div className="ob-blocks" aria-hidden="true">{Array.from({ length: 20 }, (_, cell) => (
+              <span key={cell} className={cell < filled ? (row.low ? 'warn' : row.provider) : 'ob-meta'}>{cell < filled ? '█' : '░'}</span>
+            ))}</div>
+            <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+  return (
+    <>
+      {rows.map((row, index) => (
+        <div key={index} className="ob-limit">
+          <div className="ob-row">
+            <span><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name} <span className="ob-meta">{row.window}</span></span>
+            <span className={row.low ? 'ob-num warn' : 'ob-num'}>{value(row)}</span>
+          </div>
+          <div className={row.stale ? 'ob-meta ob-indent warn' : 'ob-meta ob-indent'}>{row.note}</div>
+          <div className="ob-bar" aria-hidden="true">
+            {row.remaining !== null && <i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining}%` }} />}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
+  const [skinId, setSkinId] = useState(() => Object.hasOwn(SKINS, initialSkin) ? initialSkin : 'sage');
+  const skin = useMemo(() => validateSkin(SKINS[skinId]), [skinId]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
   const [host, setHost] = useState('All');
@@ -63,7 +125,8 @@ export default function Panel({ demo = false }: { demo?: boolean }) {
   const refresh = () => { setBusy(true); send('refresh'); setTimeout(() => setBusy(false), 20000); };
 
   return (
-    <main className="ob-panel">
+    <main className={`ob-panel ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`}>
+      <style>{skinCss(skin)}</style>
       <header className="ob-row">
         <h1><span className="ob-mark" aria-hidden="true" />Observatory</h1>
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? 'Loading' : busy ? 'Refreshing' : snapshot ? fresh.label : 'No snapshot yet'}</span>
@@ -71,18 +134,7 @@ export default function Panel({ demo = false }: { demo?: boolean }) {
 
       <section className="ob-card" aria-label="Limits">
         <div className="ob-row ob-meta"><span>Limits</span><span>remaining</span></div>
-        {rows.map((row, index) => (
-          <div key={index} className="ob-limit">
-            <div className="ob-row">
-              <span><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name} <span className="ob-meta">{row.window}</span></span>
-              <span className={row.low ? 'ob-num warn' : 'ob-num'}>{row.remaining === null ? 'Unknown' : `${Math.round(row.remaining)}%`}</span>
-            </div>
-            <div className={row.stale ? 'ob-meta ob-indent warn' : 'ob-meta ob-indent'}>{row.note}</div>
-            <div className="ob-bar" aria-hidden="true">
-              {row.remaining !== null && <i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining}%` }} />}
-            </div>
-          </div>
-        ))}
+        <LimitRows rows={rows} style={skin.limitStyle} />
       </section>
 
       <Segments label="Device" value={selected} onChange={setHost}
@@ -102,7 +154,13 @@ export default function Panel({ demo = false }: { demo?: boolean }) {
 
       <div className="ob-row ob-meta ob-foot">
         <span>{snapshot ? `${counts.read} of ${counts.total} sources read` : 'Waiting for the first collection'}</span>
-        {snapshot?.demo === true && <span>Sample data</span>}
+        {snapshot?.demo === true && (
+          <label>Sample data · Skin{' '}
+            <select value={skinId} onChange={event => setSkinId(event.target.value)}>
+              {Object.keys(SKINS).map(id => <option key={id} value={id}>{validateSkin(SKINS[id]).name}</option>)}
+            </select>
+          </label>
+        )}
       </div>
 
       <nav className="ob-actions" aria-label="Actions">
