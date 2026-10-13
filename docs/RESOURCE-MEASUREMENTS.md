@@ -107,6 +107,79 @@ be missed and shared pages may be counted more than once. This warm development
 observation is not a cold-cache benchmark, a leak test or a direct comparison
 with Mac RSS.
 
+## Web panel spike on Windows, October 13
+
+Recorded on 2026-10-13 for issue 65. It compares the shared web panel in WebView2 with the native tray popup on one Windows PC. These are single runs on one machine. They are not requirements or guarantees.
+
+### What was measured
+
+- Source: `11de960` on the `win/web-panel-spike` branch, which is `main` at `7b2403c` plus the flagged panel host. Earlier runs used `f9f444c`, before the panel closed on a click elsewhere.
+- Build: a staged folder, not an installed package. The app binary and the web bundle came from the commit under test. The collector scripts and the Node and Python runtimes were copied from the installed build 40 (`57518b7`). The installed app was quit for the runs and restarted afterwards.
+- Start: each instance was started through `Win32_Process.Create`, so its parent was `WmiPrvSE.exe` and not the Claude desktop app, as issue 58 requires. Each used the real data folder and completed one collection before the first sample.
+- Machine: Intel Core i7-14700F, 31.8 GiB of memory, Windows 11 Home build 26300, WebView2 Runtime 155.0.4283.45, display scale 100 percent, system appearance dark.
+- Sequence: `--panel-timing` waits for one collection, then opens the panel once, holds it for 20 seconds, closes it, waits 75 seconds and opens and closes it five more times. The web runs added `--web-panel`. The harness keeps the web panel open while it measures, because an app that Windows did not bring to the foreground would otherwise close its panel at once.
+
+### How the numbers were taken
+
+- Open time starts where the tray click handler starts. It does not include the time Windows takes to deliver the click.
+- For the web panel it ends when the window is visible, `window.observatoryPanelReady` is true and the window has been sized to the page. For the native popup it ends at the first idle message after the form is shown.
+- The web view is created on the first opening and kept afterwards. Closing hides the window. A later opening shows that existing window, so later web opens measure showing a drawn page, not drawing one.
+- Memory is the sum over the app's process tree, read from `Win32_Process` 12 seconds after each marker, or 1 second after the 60-second mark. Working set counts shared pages once per process, so the sum overstates what the tree holds. Private bytes are listed beside it.
+
+### Open time
+
+| Opening | Web panel | Native popup |
+| --- | ---: | ---: |
+| First | 255.8 ms | 132.3 ms |
+| Second | 10.4 ms | 20.8 ms |
+| Third | 4.0 ms | 23.8 ms |
+| Fourth | 5.3 ms | 18.2 ms |
+| Fifth | 12.3 ms | 27.3 ms |
+| Sixth | 4.3 ms | 12.6 ms |
+
+Both columns are from `11de960`. Earlier runs gave these first opens: web 378.0 ms and 256.3 ms at `f9f444c`, then 255.2 ms, 251.0 ms and 256.6 ms on intermediate builds, and native 109.6 ms at `f9f444c`. The 378.0 ms run was the first of the day. None of the runs started from a cold machine.
+
+### Memory
+
+| State | Web panel | Native popup |
+| --- | --- | --- |
+| Panel never opened | 1 process, 59.3 MiB working set, 19.1 MiB private | 1 process, 57.2 MiB working set, 17.0 MiB private |
+| Panel open | 7 processes, 391.8 MiB working set, 181.7 MiB private | 1 process, 65.3 MiB working set, 20.9 MiB private |
+| One minute after closing | 7 processes, 406.7 MiB working set, 185.5 MiB private | 1 process, 67.6 MiB working set, 20.8 MiB private |
+
+Four earlier web runs gave 392.3 to 409.8 MiB of working set with the panel open and 405.3 to 419.1 MiB one minute after closing.
+
+The six extra processes are `msedgewebview2.exe`. They stay because the web view is kept. Disposing the web view on close was not built or measured, so the cost of a cold open on every click is not known.
+
+### Closing on a click elsewhere
+
+- The native popup has no handler for losing activation. Reading `UsagePopup.cs` shows it closes on Escape, on a second tray click and when the dashboard opens. It does not close when another window is clicked. It was not changed.
+- The web panel now hides when a different top-level window becomes the foreground window. Focus moving into the page raises the same event, so the panel checks the foreground window before hiding. A tray click that dismissed the panel does not open it again within 400 ms.
+- This was not exercised. The measuring script asked Windows to bring the open panel to the foreground and then to give the foreground back. Windows refused the first request (`SetForegroundWindow` returned false), so the panel never held the foreground and nothing could be clicked away from. In both runs the panel stayed visible, which shows nothing about the behaviour. It needs a person to click the tray icon and then another window.
+- An earlier build of this change failed to reopen the panel at all. The cause was an overflow in the 400 ms guard, found through the harness and fixed before the recorded runs.
+
+### What was seen
+
+- The panel drew with real data and matched the layout of the dark capture from pull request 63: header and freshness, limits card, device and period segments, totals card, source count and the four buttons. The update button shows the icon from pull request 67.
+- Text used Inter Tight. The page reported the font as loaded and as the computed font of the panel element. The host serves the bundled `.ttf` file, which the existing dashboard host does not.
+- The page followed the system dark appearance, with background `rgb(28, 29, 27)`. Light appearance was not tried.
+- The page was 388 CSS pixels wide and the window was sized to 509 pixels, the height of the panel element.
+- The harness pressed each of the four buttons in the page. The host accepted `refresh`, `check-updates`, `open-settings` and `open-dashboard` in that order. `refresh` started a collection, the snapshot changed and the page text changed after `observatory:snapshot-changed` was dispatched.
+- With the real snapshot the panel showed one Codex limit window, a Claude Code limits row reading Unknown and "10 of 10 sources read". The collector reported 6 of 6 for the same snapshot. The two counts use different rules. That difference was not examined.
+
+### Not exercised
+
+- A physical click on the tray icon and on the page's buttons. The harness called the same handlers.
+- Closing the panel by clicking another window. See above.
+- What `check-updates`, `open-settings` and `open-dashboard` do after the host accepts them. The harness records them without running them, because they open windows. They map to the existing tray menu functions.
+- Light appearance, display scales other than 100 percent, a second monitor, Escape to close and keyboard focus.
+- An installed package. The Clean Windows package workflow was not run for this revision.
+- Idle memory over hours, memory after many collections, and behaviour after sleep and wake.
+
+### Left behind
+
+`panel-timing.log` and `panel-timing.png` in the app's data folder. The image shows real usage values and stays out of this repository.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
