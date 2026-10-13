@@ -162,9 +162,21 @@ Recorded on 2026-10-13 from `main` at `367dc32`, which is `b9dc3e6` plus pull re
 - Compared with the backup, no saved file was removed. Six files changed (three databases under `private-quota` and `private-sync`, and the three status and snapshot files under `public/local`), and two retirement files were added under `.runtime/private-repair`.
 - Source health showed "2/2 native device records read" for Codex.
 
-Not verified on the Mac: the Device filter in Activity and Tokens, the lower part of Source health including the Local benchmarks label, opening a saved snapshot that contains Ubuntu rows, collection with the main window closed, login startup, and sleep and wake. The three sources that were not read are Claude Code on the Mac, the Antigravity allowance and saved execution receipts. Antigravity is no longer installed on this Mac and the configured receipt folder does not exist, so those two should be turned off in Settings.
+Not verified on the Mac: opening a saved snapshot that contains Ubuntu rows, collection with the main window closed, login startup, and sleep and wake.
 
 The builder's popup check also failed twice with "dashboard activation deadline exceeded" while the Mac was in use. The check needs the test app to receive focus within 2 seconds. This is a limitation of the check and was not changed.
+
+### After the install
+
+Recorded later on 2026-10-13 with build 39 from `367dc32` installed.
+
+- In the installed app, the Device filter in Activity and Tokens offers All, Mac and Windows only. Source health lists Mac and Windows rows only, and the Local benchmarks row is labeled Saved.
+- Antigravity account limits and configured agent receipts were turned off in Settings. Antigravity is no longer installed on this Mac and the configured receipt folder does not exist.
+- Claude Code on the Mac reported Unknown because `scripts/read-claude-usage.py` withheld the whole source over 8 placeholder records that Claude Code writes with model `<synthetic>`, zero usage and no request identity. Pull request 56 skips those records. With the change, the reader returns 8 recorded days from the same logs.
+- Mac activity showed 0 minutes with "tracking is not current". The ActivityWatch window watcher and idle watcher on this Mac register under different host names, and the collector paired buckets only within one name. Pull request 56 reads every verified local window bucket against every verified local idle bucket. With the change, tracking reads through the current minute. Pull request 56 is not installed yet. It prepares build 40.
+- The permission entry on the Windows `AppData` folder described under "Collection on this PC" was not found when read from the Mac over SSH. `AppData` now carries a read and execute entry for `CodexSandboxUsers`, and the app's private folders have protected entries for the owner, administrators and the system only.
+- The one-time re-pair was done with the bundled tools. `peer-repair.mjs` reported `prepared` on Windows and on the Mac, and each device retained its old pairing in a `private-sync-retired-*` folder. The Windows step was run over the existing SSH route with the owner's approval, not from the Windows tray menu. `peer-setup.mjs` with `includeUbuntu` false then reported `paired`. Its first two attempts reported "Pairing setup incomplete" and left the Mac pending. The cause was not found. A third attempt succeeded in 3 seconds after the Windows side had been initialized with the same request.
+- The first collection after the re-pair reported Windows as unavailable. The next one, five minutes later, read 9 of 10 sources with fresh Windows records, and the All token total and combined settings reported `ok`. The one source not read was Claude Code on the Mac.
 
 ### Differences from Windows
 
@@ -180,11 +192,12 @@ The builder's popup check also failed twice with "dashboard activation deadline 
 
 ### Next steps for the Mac
 
-1. Check the items listed as not verified above in the installed app.
-2. Turn off the Antigravity and receipt sources in Settings, and find out why Claude Code on the Mac reports Unknown.
-3. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
-4. Look into the three unexplained script test failures and the focus deadline in the popup check.
-5. Both devices now run build 39, so the one-time re-pair described under "Remaining Ubuntu code" can go ahead once it is approved.
+1. Merge pull request 56, build and install build 40 on both devices, and confirm Claude Code and Mac activity in the installed apps.
+2. Give Claude Code the same place in Tokens and Allowances that Codex has. Today both screens show Codex only.
+3. Check the items listed as not verified above.
+4. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
+5. Look into the three unexplained script test failures, the focus deadline in the popup check, and the two incomplete setup attempts during the re-pair.
+6. The devices are re-paired without the Ubuntu slot, so the legacy pairing shape described under "Remaining Ubuntu code" can now be removed in one change for both apps.
 
 ## Next decisions
 
