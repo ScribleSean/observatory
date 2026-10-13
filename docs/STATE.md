@@ -8,17 +8,17 @@ Updated on 2026-10-13 from the Mac. This summary is the starting point. The sect
 
 | Topic | State |
 | --- | --- |
-| `main` | `367dc32`, version 0.3.14 build 39 |
+| `main` | Version 0.3.14. Build 39 at `367dc32`. Pull request 56 raises it to build 40 when merged. |
 | Installed on Windows | Build 39 from `3ab7332` |
 | Installed on Mac | Build 39 from `367dc32`. The only difference is the Mac popup fix from pull request 55. |
 | Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
-| Open pull requests | 56 fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. CI passed. 54 adds this summary and the Mac section. |
+| Pull request 56 | Fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. CI passed on 2026-10-13. Check whether it has been merged. |
 | Open issues | 39, which stays open for installed verification of the quota-refresh fix |
 | Not installed anywhere | Build 40 |
 
 Work that is ready to pick up, in order:
 
-1. Merge pull request 56. Package build 40 for Windows in CI, build it on the Mac, and install it on both devices.
+1. Merge pull request 56 if it is still open. Package build 40 for Windows in CI, build it on the Mac, and install it on both devices.
 2. Give Claude Code the same place in Tokens and Allowances that Codex has. Both screens show Codex only. The owner wants Claude Code and ChatGPT (Codex) presented with equal weight. Muse and Grok Bot come later. Other providers are not a priority.
 3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps. The re-pair that had to come first is done.
 4. Mac build environment: decide whether the build requires full Xcode or pins an SDK, and make the popup check independent of window focus.
