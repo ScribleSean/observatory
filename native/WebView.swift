@@ -15,7 +15,7 @@ final class DashboardWebView: WKWebView {
 
 final class BundledAssets: NSObject, WKURLSchemeHandler {
     private let resolver: AssetResolver
-    init(root: URL) { resolver = AssetResolver(root: root) }
+    init(root: URL, allowPanel: Bool = false) { resolver = AssetResolver(root: root, allowPanel: allowPanel) }
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard task.request.httpMethod == "GET", let url = task.request.url,
               let file = resolver.resolve(url),
@@ -74,28 +74,31 @@ final class LocalNavigation: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 }
 
+// Routes the two saved snapshot files through the snapshot bridge. Every
+// other request goes to the bundled file guard.
+let snapshotFetchScript = """
+(() => {
+  const original = window.fetch.bind(window);
+  window.fetch = (input, options) => {
+    const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+    if (url.protocol === 'observatory:' && url.hostname === 'app' &&
+        ['/local/usage.json', '/local/collector.json'].includes(url.pathname)) {
+      const name = url.pathname.includes('collector') ? 'collector' : 'usage';
+      return window.webkit.messageHandlers.snapshot.postMessage(name)
+        .then(value => new Response(JSON.stringify(value), {status:200, headers:{'Content-Type':'application/json'}}));
+    }
+    return original(input, options);
+  };
+})();
+"""
+
 @MainActor
 func makeDashboard(runtime: URL, resources: URL) -> WKWebView {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .nonPersistent()
     config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web")), forURLScheme: "observatory")
     config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
-    let script = """
-    (() => {
-      const original = window.fetch.bind(window);
-      window.fetch = (input, options) => {
-        const url = new URL(typeof input === 'string' ? input : input.url, location.href);
-        if (url.protocol === 'observatory:' && url.hostname === 'app' &&
-            ['/local/usage.json', '/local/collector.json'].includes(url.pathname)) {
-          const name = url.pathname.includes('collector') ? 'collector' : 'usage';
-          return window.webkit.messageHandlers.snapshot.postMessage(name)
-            .then(value => new Response(JSON.stringify(value), {status:200, headers:{'Content-Type':'application/json'}}));
-        }
-        return original(input, options);
-      };
-    })();
-    """
-    config.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     let web = DashboardWebView(frame: .zero, configuration: config)
     web.underPageBackgroundColor = .windowBackgroundColor
     web.allowsBackForwardNavigationGestures = false

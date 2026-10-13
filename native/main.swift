@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Combine
 import SwiftUI
 import ServiceManagement
 import WebKit
@@ -27,6 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             !store.pairingMaintenance && !store.collectionPausedForPairing
     }
     private var usesNativeDashboard: Bool { !CommandLine.arguments.contains("--legacy-dashboard") }
+    // Spike only. Without this flag the native panel is shown as before.
+    private var usesWebPanel: Bool { CommandLine.arguments.contains("--web-panel") }
+    private var reportsPanelTiming: Bool { CommandLine.arguments.contains("--panel-timing") }
+    private var webPanel: WebPanelController?
+    private var collectionObserver: AnyCancellable?
+    private var dismissMonitors: [Any] = []
     private var expectedDashboardPresent: Bool {
         usesNativeDashboard ? detail?.contentView is NSHostingView<NativeDashboard> && webView == nil : webView != nil
     }
@@ -206,9 +213,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         // navigation must close it even if AppKit has attached a child window.
         popover.close()
         usageWindow?.close()
+        removeDismissMonitors()
+    }
+
+    // The popover stays semitransient so a dashboard handoff inside this app
+    // does not close it early. These monitors close it on any click outside
+    // it, in this app or in another one, as other menu-bar panels do.
+    private func installDismissMonitors() {
+        guard dismissMonitors.isEmpty, popover.isShown || usageWindow?.isVisible == true else { return }
+        let mouseDown: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        // A click on the menu-bar icon is left to togglePanel.
+        let onIcon: () -> Bool = { [weak self] in
+            self?.statusItem.button?.window?.frame.contains(NSEvent.mouseLocation) == true
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mouseDown, handler: { [weak self] _ in
+            DispatchQueue.main.async { if !onIcon() { self?.closeUsage() } }
+        }) { dismissMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mouseDown, handler: { [weak self] event in
+            guard let self, !onIcon() else { return event }
+            let panelWindow = self.popover.contentViewController?.view.window
+            if event.window !== panelWindow, event.window !== self.usageWindow { self.closeUsage() }
+            return event
+        }) { dismissMonitors.append(local) }
+    }
+
+    private func removeDismissMonitors() {
+        dismissMonitors.forEach(NSEvent.removeMonitor)
+        dismissMonitors.removeAll()
+    }
+
+    private func webPanelContent(size: NSSize) -> NSViewController? {
+        guard usesWebPanel, let resources = Bundle.main.resourceURL else { return nil }
+        if webPanel == nil {
+            webPanel = WebPanelController(runtime: store.runtime, resources: resources) { [weak self] action in
+                guard let self else { return }
+                if self.reportsPanelTiming { print("panel-action name=\(action.rawValue)"); fflush(stdout) }
+                switch action {
+                case .refresh: self.store.refresh()
+                case .checkUpdates: self.checkForUpdates()
+                case .openSettings: self.openPanelSettings()
+                case .openDashboard: self.openDefault()
+                }
+            }
+            // The page reloads its snapshot when a collection ends.
+            collectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
+                .receive(on: DispatchQueue.main).sink { [weak self] _ in self?.webPanel?.snapshotChanged() }
+        }
+        webPanel?.preferredContentSize = size
+        webPanel?.view.setFrameSize(size)
+        webPanel?.loadIfNeeded()
+        return webPanel
+    }
+
+    // Timing is printed only with --panel-timing. The web panel also takes its
+    // height from the page once the page reports that it has drawn.
+    private func panelOpened(since start: CFAbsoluteTime) {
+        let report: (String) -> Void = { [weak self] kind in
+            guard self?.reportsPanelTiming == true else { return }
+            print("panel-open kind=\(kind) ms=\(Int(((CFAbsoluteTimeGetCurrent() - start) * 1000).rounded()))")
+            fflush(stdout)
+        }
+        guard usesWebPanel, let webPanel else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.popover.isShown || self.usageWindow?.isVisible == true else { return }
+                (self.popover.contentViewController?.view ?? self.usageWindow?.contentView)?.displayIfNeeded()
+                CATransaction.flush()
+                report("native")
+            }
+            return
+        }
+        webPanel.whenDrawn { [weak self] height in
+            report(height == nil ? "web-not-ready" : "web")
+            guard let self, let height else { return }
+            let visible = (self.statusItem.button?.window?.screen ?? NSScreen.main)?.visibleFrame.height ?? 800
+            let size = NSSize(width: webPanel.preferredContentSize.width, height: min(height, max(240, visible - 48)))
+            webPanel.preferredContentSize = size
+            if self.popover.isShown { self.popover.contentSize = size }
+            else if let window = self.usageWindow, window.isVisible {
+                let top = window.frame.maxY
+                window.setContentSize(size)
+                window.setFrameTopLeftPoint(NSPoint(x: window.frame.minX, y: top))
+            }
+        }
     }
 
     private func usageContent(size: NSSize) -> NSViewController {
+        if let web = webPanelContent(size: size) { return web }
         let panel = ScrollView(.vertical) { ObservatoryPanel(store: store,
                 open: { [weak self] tab in self?.openDashboard(tab) },
                 settings: { [weak self] in self?.openPanelSettings() }, panelWidth: size.width) }
@@ -227,7 +317,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
         window.title = "Observatory usage"
-        window.appearance = NSAppearance(named: .darkAqua)
+        // The native panel is always dark. The web panel follows the system.
+        if !usesWebPanel { window.appearance = NSAppearance(named: .darkAqua) }
         window.isFloatingPanel = true
         window.hidesOnDeactivate = true
         window.isReleasedWhenClosed = false
@@ -252,6 +343,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     @objc private func showUsage() {
+        let alreadyOpen = popover.isShown
+        let start = CFAbsoluteTimeGetCurrent()
+        presentUsage()
+        installDismissMonitors()
+        if !alreadyOpen, usesWebPanel || reportsPanelTiming { panelOpened(since: start) }
+    }
+
+    private func presentUsage() {
         store.reload()
         // A status-item click opens only the usage surface. Activating the app
         // here can bring its existing dashboard forward behind the popup.
@@ -259,9 +358,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return }
         guard let button = statusItem.button else { return }
         let visible = button.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let width = min(370, max(240, visible.width - 32))
-        let measurement = NSHostingView(rootView: ObservatoryPanel(store: store, open: { _ in }, settings: {}, panelWidth: width))
-        let size = NSSize(width: width, height: min(ceil(measurement.fittingSize.height), max(240, visible.height - 48)))
+        let width = min(usesWebPanel ? WebPanelController.width : 370, max(240, visible.width - 32))
+        let size: NSSize
+        if usesWebPanel {
+            size = NSSize(width: width, height: min(webPanel?.contentHeight ?? 520, max(240, visible.height - 48)))
+        } else {
+            let measurement = NSHostingView(rootView: ObservatoryPanel(store: store, open: { _ in }, settings: {}, panelWidth: width))
+            size = NSSize(width: width, height: min(ceil(measurement.fittingSize.height), max(240, visible.height - 48)))
+        }
         // A hidden or overflowed menu-bar item cannot anchor an NSPopover.
         // Keep the same usage view available to the explicit menu/keyboard action.
         if button.visibleRect.isEmpty || button.window?.isVisible != true {
@@ -665,6 +769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let window = notification.object as? NSWindow, window === usageWindow {
             window.contentViewController = nil
             usageWindow = nil
+            if !popover.isShown { removeDismissMonitors() }
             return
         }
         guard let window = notification.object as? NSWindow, window === detail else { return }

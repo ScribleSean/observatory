@@ -180,6 +180,71 @@ The six extra processes are `msedgewebview2.exe`. They stay because the web view
 
 `panel-timing.log` and `panel-timing.png` in the app's data folder. The image shows real usage values and stays out of this repository.
 
+## Web panel spike on Mac, October 13
+
+Recorded on 2026-10-13 for issue 64. It compares the shared web panel in WKWebView with the native SwiftUI panel in the menu-bar popover on one Mac. These are single runs on one machine. They are not requirements or guarantees.
+
+### What was measured
+
+- Source: `cc9ed3e` on the `mac/web-panel-spike` branch, which is `main` at `7b2403c` plus the flagged panel and the change that closes the panel on a click elsewhere. The panel page at that revision does not include the later skins change.
+- Build: the bundle staged by `node native/build.mjs` with `SDKROOT` set to the macOS 26.5 SDK. Every builder check passed. It was not installed. The installed build 40 was quit for the runs and started again afterwards.
+- Start: `/usr/bin/open -n -g` on the staged bundle with `--background --panel-timing`, and `--web-panel` for the web runs. Starting the binary from a shell inside a Claude desktop session made macOS record the Claude app as responsible for the WebKit helper processes, so that method was not used for the numbers.
+- Each instance used the real data folder and completed one scheduled collection before the first sample.
+- Machine: MacBook Air (Mac16,12), Apple M4, 16 GiB of memory, macOS 27.0.1, system appearance dark.
+- Sequence: a real click on the menu-bar icon, a memory sample 6 seconds later, a click to close, then five more open and close pairs about 2 seconds apart, then a memory sample 60 seconds after the last close.
+
+### How the numbers were taken
+
+- Open time starts where the icon's click handler asks for the panel. It does not include the time macOS takes to deliver the click.
+- For the web panel it ends when the page has loaded, `window.observatoryPanelReady` is true and two animation frames have passed. For the native panel it ends on the next main-queue turn after the popover is shown, after forcing display and flushing the layer transaction. The two end points are not the same event.
+- The web view is created on the first opening and kept afterwards. A later opening shows the same web view again, so later web opens measure showing a drawn page, not loading one.
+- Memory is the sum over the app, its descendants and the processes macOS records the app as responsible for, which is how the WebKit helpers are found. Resident size counts shared pages once per process, so the sum overstates what the tree holds. Physical footprint is listed beside it.
+
+### Open time
+
+| Opening | Web panel | Native panel |
+| --- | ---: | ---: |
+| First | 333 ms | 195 ms |
+| Second | 104 ms | 122 ms |
+| Third | 100 ms | 126 ms |
+| Fourth | 91 ms | 127 ms |
+| Fifth | 93 ms | 129 ms |
+| Sixth | 82 ms | 123 ms |
+
+Earlier runs on an unoptimized rebuild of the same source gave first web opens of 301, 317 and 388 ms and a first native open of 273 ms. None of the runs started from a cold machine.
+
+### Memory
+
+| State | Web panel | Native panel |
+| --- | --- | --- |
+| Panel never opened | 2 processes, 60 MiB resident, 18 MiB footprint | 2 processes, 61 MiB resident, 17 MiB footprint |
+| Panel open | 6 processes, 203 MiB resident, 97 MiB footprint | 2 processes, 103 MiB resident, 49 MiB footprint |
+| One minute after closing | 6 processes, 222 MiB resident, 108 MiB footprint | 2 processes, 106 MiB resident, 51 MiB footprint |
+
+The four extra processes are the WebKit content, GPU and networking helpers and an audio sandbox helper. They stay because the web view is kept. In the web runs the app process itself held 43 MiB of footprint with the panel open, against 46 MiB for the native panel. Releasing the web view on close was not built or measured, so the cost of a cold open on every click is not known.
+
+### Closing on a click elsewhere
+
+- The popover stays semitransient, so opening the dashboard from this app does not close it early. Two event monitors now close the panel on a mouse press outside it, one for other apps and one for this app's own windows. A press on the menu-bar icon is left to the existing toggle.
+- This applies to the native panel and the web panel. It is not behind the flag.
+- It was exercised with real clicks in the isolated preview mode, once for each panel: a click on an empty part of the menu bar closed the panel, a click in the app's own dashboard window closed it, a click on the icon while it was open closed it, and the next click on the icon opened it again.
+
+### What was seen
+
+- In preview mode the web panel appeared in the popover under the icon at 388 points wide and was sized to the page, which reported a height of 525 points. It showed the header, the limits card, the device and period segments, the totals card, the status line and the four buttons.
+- The page followed the system dark appearance. Light appearance was not tried.
+- The text looked like Inter Tight in a capture. The computed font was not read from the page.
+- A real click on each of the four buttons reached the shell as `refresh`, `check-updates`, `open-settings` and `open-dashboard`. The last two opened the dashboard window.
+
+### Not exercised
+
+- A comparison with the captures in pull request 63, and the panel's appearance with real data. The panel was opened with real data during the timed runs, but no capture was kept.
+- What `refresh` and `check-updates` do after the shell accepts them outside preview mode. They call the same functions as the native panel and the menu.
+- The page reloading after `observatory:snapshot-changed`. The shell dispatches the event when a collection ends. The effect on the page was not observed.
+- Light appearance, a second display, the floating fallback window used when the icon is hidden, and keyboard focus.
+- Timing and memory after merging later changes on `main`, including skins. The merged branch at `f06db1a` passed every builder check, and its web panel opened once in preview mode in the default skin. An installed package was not built.
+- Idle memory over hours, memory after many collections, and behaviour after sleep and wake.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
