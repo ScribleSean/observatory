@@ -180,6 +180,17 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Price table | Missing | Missing | Add | The guide records the current rates as last checked on 2026-09-06 |
 | Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together |
 
+## Shared web viewer (spike)
+
+Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The shared panel exists as source and is not shown by either installed app.
+
+| Element | Mac | Windows | Direction | Notes |
+| --- | --- | --- | --- | --- |
+| Shared panel page (`panel.html`) in the bundled web files | Missing | Missing | Add | Built by the web bundle. Each shell's file guard allows only the index page and `assets/` today. |
+| Panel shown in the system web view behind a flag | Missing | Missing | Add | Default stays the native panel |
+| Four panel actions accepted by the shell | Missing | Missing | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard` |
+| Open time and memory measured | Missing | Missing | Add | Needed before the direction is confirmed |
+
 ## Web demo
 
 The web dashboard is not a third product surface. It should mirror the native apps with fictional data.

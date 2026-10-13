@@ -1,0 +1,69 @@
+@import './design-tokens.css';
+
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('../public/fonts/InterTight.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+html, body { margin: 0; background: var(--ob-background); color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+.ob-panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 14px;
+  background: var(--ob-background);
+  color: var(--ob-text);
+  font: 400 var(--ob-body-size)/1.35 'Inter Tight', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+.ob-panel * { box-sizing: border-box; }
+.ob-panel h1 { margin: 0; font-size: var(--ob-section-size); font-weight: 600; letter-spacing: var(--ob-section-tracking); display: flex; align-items: center; gap: var(--ob-space-2); }
+.ob-mark { width: 22px; height: 22px; background: currentColor; -webkit-mask: url('../public/brand/telescope.svg') center / contain no-repeat; mask: url('../public/brand/telescope.svg') center / contain no-repeat; }
+.ob-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ob-space-2); }
+.ob-meta { color: var(--ob-muted); font-size: var(--ob-meta-size); }
+.ob-meta.warn, .ob-num.warn { color: var(--ob-warning); }
+.ob-card { background: var(--ob-surface); border-radius: 12px; padding: var(--ob-space-3); margin-top: 10px; }
+.ob-card > .ob-meta:first-child { margin-bottom: var(--ob-space-2); }
+.ob-limit + .ob-limit { margin-top: 10px; }
+.ob-indent { margin-left: 14px; }
+.ob-sub { padding-left: 2px; }
+.ob-gap { margin: 2px 0 10px; }
+.ob-foot { margin-top: 10px; padding: 0 2px; }
+.ob-num { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
+.ob-num.big { font-size: var(--ob-section-size); }
+.ob-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.ob-dot.claude, .ob-bar i.claude { background: var(--ob-claude); }
+.ob-dot.codex, .ob-bar i.codex { background: var(--ob-codex); }
+.ob-bar { height: 5px; border-radius: 3px; background: var(--ob-track); margin-top: 5px; overflow: hidden; }
+.ob-bar i { display: block; height: 100%; border-radius: 3px; }
+.ob-bar i.warn { background: var(--ob-warning); }
+
+.ob-segments { display: flex; gap: var(--ob-space-1); margin: var(--ob-space-2) 0 0; padding: 0; border: 0; min-width: 0; }
+.ob-segments button, .ob-actions button {
+  font: inherit; color: var(--ob-muted); background: var(--ob-surface); border: 0; border-radius: 999px; cursor: pointer;
+  transition: background-color 120ms ease-out, transform 120ms ease-out;
+}
+.ob-segments button { flex: 1 1 0; min-width: 0; padding: 6px 4px; font-size: var(--ob-meta-size); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-segments button.on { background: var(--ob-accent); color: var(--ob-background); }
+.ob-actions { display: flex; gap: 6px; margin-top: 10px; }
+.ob-actions button { flex: 1; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ob-actions button.wide { flex: 3; color: var(--ob-text); font-size: 13px; font-weight: 500; }
+.ob-segments button:hover:not(.on), .ob-actions button:hover:not(:disabled) { background: var(--ob-track); }
+.ob-actions button:active:not(:disabled) { transform: scale(0.98); }
+.ob-actions button:disabled { opacity: 0.6; cursor: default; }
+.ob-panel button:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.spin { animation: ob-spin 900ms linear infinite; }
+@keyframes ob-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
+  .ob-segments button, .ob-actions button { transition: none; }
+  .ob-actions button:active:not(:disabled) { transform: none; }
+}

@@ -1,0 +1,62 @@
+/* Generated from native/design-tokens.json by scripts/build-design-tokens.mjs. */
+:root {
+  --ob-background: #edeae5;
+  --ob-surface: #f4f1ec;
+  --ob-text: #292d28;
+  --ob-muted: #64695f;
+  --ob-strong: #364632;
+  --ob-accent: #586f50;
+  --ob-track: #dadbd3;
+  --ob-claude: #b5633c;
+  --ob-codex: #3f6e8c;
+  --ob-warning: #94620f;
+  --ob-error: #a23b32;
+  --ob-card-shadow: 0.07;
+  --ob-card-radius: 16px;
+  --ob-card-padding: 16px;
+  --ob-title-size: 22px;
+  --ob-section-size: 19px;
+  --ob-body-size: 14.5px;
+  --ob-meta-size: 12px;
+  --ob-chart-label-size: 11px;
+  --ob-metric-size: 38px;
+  --ob-title-tracking: -0.7px;
+  --ob-section-tracking: -0.5px;
+  --ob-card-shadow-radius: 12px;
+  --ob-card-shadow-offset: 6px;
+  --ob-space-1: 4px;
+  --ob-space-2: 8px;
+  --ob-space-3: 12px;
+  --ob-space-4: 16px;
+  --ob-space-5: 24px;
+}
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme="light"]) {
+  --ob-background: #1c1d1b;
+  --ob-surface: #272825;
+  --ob-text: #f0eee8;
+  --ob-muted: #b3b7ac;
+  --ob-strong: #dce6d2;
+  --ob-accent: #adc29d;
+  --ob-track: #3b3e37;
+  --ob-claude: #e0916b;
+  --ob-codex: #8fb8d4;
+  --ob-warning: #e2b866;
+  --ob-error: #e58a80;
+  --ob-card-shadow: 0.22;
+}
+}
+:root[data-theme="dark"] {
+  --ob-background: #1c1d1b;
+  --ob-surface: #272825;
+  --ob-text: #f0eee8;
+  --ob-muted: #b3b7ac;
+  --ob-strong: #dce6d2;
+  --ob-accent: #adc29d;
+  --ob-track: #3b3e37;
+  --ob-claude: #e0916b;
+  --ob-codex: #8fb8d4;
+  --ob-warning: #e2b866;
+  --ob-error: #e58a80;
+  --ob-card-shadow: 0.22;
+}
