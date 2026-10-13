@@ -177,7 +177,40 @@ Because the viewer is shared, a skin applies to the panel, the dashboard and the
 
 ## The `.observatory` file
 
-Decided in direction on 2026-10-13. Not built, and the working-store part is not designed.
+Decided in direction on 2026-10-13. Export and inspection exist as a shared script since that date. Import, the Settings controls and the working store are not built.
+
+### What exists
+
+`scripts/observatory-file.mjs` has two commands.
+
+| Command | What it does |
+| --- | --- |
+| `export --runtime <folder> --out <file.observatory>` | Reads the saved snapshot and writes one file. It refuses to replace an existing file. |
+| `inspect <file.observatory>` | Validates a file and prints its devices, record sets, date ranges and counts. It prints no usage values. |
+
+The file is one gzip-compressed JSON document. Decompressed, it is plain JSON a person can read.
+
+| Section | Holds |
+| --- | --- |
+| Header | Format name, version 1, export time, app version, exporting device, time zone |
+| `devices` | Each device with records in the file: its platform and its custom name when one is set |
+| `records` | One set per device, kind and provider: screen time, Codex tokens, Claude Code tokens, dictation. Each set is a list of days. |
+| `combined` | The collector's verified combined days, kept apart from any device |
+| `limits` | Account-wide limit readings for Codex and Claude Code, with the reading history the snapshot holds |
+
+Rules the script enforces: a record keeps the device it came from, a source that was not read is left out and not written as zero, a combined token set is included only when the collector verified it, and every value must be a number, a boolean, a short label or a small container of those. Text longer than 80 characters is refused, so a title, prompt or path cannot be carried. On import-side validation, unknown top-level fields are dropped and an unknown version is refused.
+
+Limits of version 1:
+
+- Limit history covers what the snapshot holds, which is about the latest 24 hours. The longer history in the private allowance archive is not exported yet.
+- Codex reasoning and speed settings and tool-call counts are not exported.
+- Exercised on the Mac against the real snapshot on 2026-10-13 from the source checkout, writing to a temporary folder: two devices, seven record sets, two combined sets and Codex limits, 38.5 kB compressed from 356 kB. Not exercised on Windows.
+
+### Why import is not built yet
+
+The collector rebuilds token history from the tools' own logs on every run. Records imported from another computer have no logs behind them, so the next collection would drop them. Import therefore needs the working store described below, where imported history can live. Until then a file can be exported, kept as a backup and inspected.
+
+### Direction
 
 - **Export and import.** Settings offers "Export data" and "Import data". Export writes one `.observatory` file. Import reads one back. This covers backup, moving to a new computer and sharing a sample.
 - **Scope of an export.** An export always holds everything this device has: its own history and the records it has received from each paired device. There is no date-range option. Every record keeps the device it came from and that device's platform.
