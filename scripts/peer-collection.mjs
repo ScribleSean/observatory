@@ -11,6 +11,7 @@ export function preparePeerCollection(value,host,codexHosts) {
     !['Mac','Windows'].includes(host) ||
     (Object.hasOwn(value,'codexHosts') && (!Array.isArray(value.codexHosts) || value.codexHosts.length!==1 || value.codexHosts[0]!==host)) ||
     (codexHosts!==undefined && (!Array.isArray(codexHosts) || codexHosts.length!==1 || codexHosts[0]!==host)))throw Error('Invalid private collection pairing');
-  const {comparisonSalt,codexHosts:legacyHosts,...config}=value;
-  return {config:{...config},readerPrefix:`INVENTORY_SALT = '${comparisonSalt}'\n`};
+  const {comparisonSalt,...config}=value;
+  delete config.codexHosts;
+  return {config,readerPrefix:`INVENTORY_SALT = '${comparisonSalt}'\n`};
 }

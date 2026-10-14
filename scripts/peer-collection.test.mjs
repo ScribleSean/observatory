@@ -15,7 +15,7 @@ test('paired source reader receives a bounded literal salt, projection configura
   assert.ok(!JSON.stringify(result.config).includes(value.comparisonSalt));
   assert.equal(result.config.comparisonId,value.comparisonId);
   assert.equal(Object.hasOwn(result.config,'codexHosts'),false);
-  const {codexHosts,...current}=value;
+  const current={...value};delete current.codexHosts;
   assert.deepEqual(preparePeerCollection(current,'Windows'),result);
   assert.throws(()=>preparePeerCollection(value,'Windows',['Windows','Ubuntu']));
 });

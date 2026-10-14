@@ -114,7 +114,7 @@ test('unavailable and disabled sources remain explicit, not zero',()=>{
 
 test('single-host legacy and current configurations produce the same wire payload',()=>{
   for(const host of ['Mac','Windows']) {
-    const {codexHosts,...current}=config(host);
+    const current={host,comparisonId};
     assert.deepEqual(createPeerPayload(raw(host),current),packet(host));
     for(const scope of [null,undefined,[],[host,host],['Ubuntu'],{0:host,length:1}])
       assert.throws(()=>createPeerPayload(raw(host),{...current,codexHosts:scope}));

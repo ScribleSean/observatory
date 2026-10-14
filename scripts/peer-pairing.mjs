@@ -48,8 +48,8 @@ export function validatePairing(value) {
 
 // Returns private configuration in memory only. Delivery requires authenticated
 // transport and explicit device setup. Never print this return value to logs.
-export function createPairingConfigurations() {
-  if([...arguments].some(value=>value!==undefined))throw Error('Pairing options are not supported.');
+export function createPairingConfigurations(...options) {
+  if(options.some(value=>value!==undefined))throw Error('Pairing options are not supported.');
   const id=()=>randomBytes(32).toString('hex');
   const shared={pairId:id(),comparisonId:id()},comparisonSalt=id();
   const mac={...shared,deviceId:id(),host:'Mac'};
