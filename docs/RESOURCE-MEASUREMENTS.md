@@ -301,6 +301,15 @@ With `--web-dashboard` the main window showed the shared viewer through the same
 - An installed package. The Clean Windows package workflow was not run for this revision.
 - Release behaviour across sleep and wake, and memory over hours.
 
+## Web view release rule on Mac, October 14
+
+Recorded for M1 (issue 83, pull request 126). This entry states a rule from source and staged-build checks. It is not a measurement.
+
+- The main window's web view, both the shared dashboard behind `--web-dashboard` and the earlier web dashboard, is released when its window closes. Opening the window again creates a new web view and loads the page again.
+- The menu-bar panel's web view behind `--web-panel` is created on its first opening and kept for the rest of the app session.
+- `--test-lifecycle --web-dashboard` checks that three open and close cycles release the dashboard window's content view and web view while the menu-bar app keeps running. It passed in staged builds of the M1 branch.
+- Memory before opening, while open and after release was not measured on the Mac for either web view. The Windows numbers above do not stand in for the Mac.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
