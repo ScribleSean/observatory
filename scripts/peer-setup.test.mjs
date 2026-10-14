@@ -13,7 +13,7 @@ async function fixture(t) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-setup-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
-const request=()=>({includeUbuntu:false,transport:{kind:'ssh-windows',hostAlias:'fixture-host',
+const request=()=>({transport:{kind:'ssh-windows',hostAlias:'fixture-host',
   remoteNode:'C:/Test/Runtime/node.exe',remoteScript:'C:/Test/Collector/peer-exchange.mjs',remoteRuntime:'C:/Test/Private'}});
 const sendTo=windows=>async(_transport,pairing)=>ensureWindowsPairing(windows,{version:1,pairing},'win32');
 
@@ -21,7 +21,7 @@ test('SSH setup rejects TLS before staging a pairing or contacting the peer',asy
   const mac=await fixture(t),transport={kind:'tls',address:'100.64.0.2',port:43128};
   let calls=0;
   const remote=async()=>{calls++;throw Error('Must not contact peer');};
-  await assert.rejects(setupPairing(mac,{includeUbuntu:false,transport},remote,'darwin',remote),/SSH/);
+  await assert.rejects(setupPairing(mac,{transport},remote,'darwin',remote),/SSH/);
   const pair={...createPairingConfigurations().Mac,transport};
   assert.throws(()=>complementaryWindowsPairing(pair),/SSH/);
   await assert.rejects(preparePendingPairing(mac,pair),/SSH/);
@@ -102,7 +102,7 @@ test('lost reply retains an inactive pending generation and retry does not chang
   assert.deepEqual(await readPairing(windows),remote);
 });
 
-test('retry cannot change its target or Ubuntu scope, and revocation stops setup',async t=>{
+test('retry rejects extra fields and target changes, and revocation stops setup',async t=>{
   const mac=await fixture(t),input=request();let calls=0;
   const offline=async()=>{calls++;throw Error('Offline');};
   await assert.rejects(setupPairing(mac,input,offline,'darwin'));

@@ -41,9 +41,7 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
   if(peerConfig) {
     try {
       if(peerConfig.host!=='Windows')throw Error('Wrong local peer identity');
-      const codex=peerConfig.codexHosts.map(host=>{
-        // Keep the old wire slot disconnected without collecting or relabeling it.
-        if(host==='Ubuntu')return disconnected('Ubuntu');
+      const codex=['Windows'].map(host=>{
         const safe=host==='Windows'?localSettings:null;
         const original=raw.localSettings;
         if(!safe)throw Error('Unexpected peer source');
