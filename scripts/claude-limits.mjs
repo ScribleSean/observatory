@@ -9,6 +9,7 @@ import {runClaudeUsage} from './claude-usage-command.mjs';
 // transcript, a working directory or a session identifier.
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
+export const CLAUDE_LIMITS_CONSENT_FILE='consent.json';
 export const CLAUDE_STATUSLINE_FILE='statusline.json';
 const windows={five_hour:300,seven_day:10080};
 const currentSeconds=10*60;
@@ -122,6 +123,16 @@ export async function claudeStatuslineInstalled(runtime) {
   catch {return false;}
 }
 
+export async function claudeLimitsConsent(runtime) {
+  let consentMarker=false;
+  try {
+    const marker=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096);
+    consentMarker=isObject(marker) && marker.consent===true;
+  } catch {}
+  const statusLine=await claudeStatuslineInstalled(runtime);
+  return {given:consentMarker || statusLine,consentMarker,statusLine};
+}
+
 const base={provider:'Claude Code',scope:'account'};
 
 // The snapshot shape matches the Codex quota source so one view can draw both.
@@ -146,7 +157,7 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
 // current figures, so limits stay current when no terminal session is open.
 // A failed or unexpected command result changes nothing.
 export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=runClaudeUsage}={}) {
-  const enabled=await claudeStatuslineInstalled(runtime);
+  const {given:enabled}=await claudeLimitsConsent(runtime);
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
   try {
     const usage=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});

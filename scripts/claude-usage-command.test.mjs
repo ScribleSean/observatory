@@ -8,6 +8,8 @@ import {chmod} from 'node:fs/promises';
 import {parseClaudeUsage,parseResetTime,runClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
 import {readClaudeLimits,withinTime} from './claude-limits.mjs';
 
+import {setLimitsConsent,clearLimitsConsent} from './claude-limits-consent.mjs';
+
 const now=Date.parse('2026-10-13T22:20:00Z');
 const text=(session='23% used · resets Oct 13 at 11:09pm (America/New_York)',week='75% used · resets Oct 16 at 6pm (America/New_York)')=>
   `You are currently using your subscription to power your Claude Code usage\n\nCurrent session: ${session}\nCurrent week (all models): ${week}\n\nWhat's contributing to your limits usage?\nLast 24h · 12 requests · 3 sessions\n  Top skills: /synthetic 1%`;
@@ -94,4 +96,16 @@ test('a working command is read, and a parent session variable never reaches it'
 test('a limits read that never settles is cut off', async () => {
   await assert.rejects(withinTime(new Promise(()=>{}),50),/Timed out/);
   assert.equal(await withinTime(Promise.resolve('ok'),50),'ok');
+});
+test('consent alone runs usage and clearing it stops collection', async t => {
+  const runtime=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-consent-usage-')));
+  t.after(()=>rm(runtime,{recursive:true,force:true}));
+  await setLimitsConsent({runtime,consent:true});
+  let runs=0;
+  const readUsage=async()=>{runs++;return parseClaudeUsage(envelope(),now);};
+  assert.equal((await readClaudeLimits(runtime,{now,readUsage})).status,'ok');
+  assert.equal(runs,1);
+  await clearLimitsConsent({runtime});
+  assert.equal((await readClaudeLimits(runtime,{now,readUsage})).status,'not-connected');
+  assert.equal(runs,1);
 });

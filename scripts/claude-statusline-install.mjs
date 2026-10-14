@@ -7,7 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {CLAUDE_STATUSLINE_FILE,ensureClaudeLimitsFolder,writeJsonAtomic} from './claude-limits.mjs';
+import {CLAUDE_STATUSLINE_FILE,claudeLimitsConsent,ensureClaudeLimitsFolder,writeJsonAtomic} from './claude-limits.mjs';
 
 const bridgeName='claude-statusline-bridge.mjs';
 const isObject=value=>value!==null && typeof value==='object' && !Array.isArray(value);
@@ -57,12 +57,17 @@ async function writeSettings(file,settings,expectedText) {
 
 export async function statuslineStatus({runtime,settingsPath=defaultSettingsPath()}) {
   const {settings}=await readSettings(settingsPath);
-  return {installed:isOurs(settings.statusLine),otherStatusLine:isObject(settings.statusLine) && !isOurs(settings.statusLine),settingsPath,runtime};
+  return {installed:isOurs(settings.statusLine),otherStatusLine:isObject(settings.statusLine) && !isOurs(settings.statusLine),settingsPath,runtime,
+    ...(typeof runtime==='string' && path.isAbsolute(runtime)?{limitsConsent:await claudeLimitsConsent(runtime)}:{})};
 }
 
 export async function installStatusline({runtime,settingsPath=defaultSettingsPath(),node=process.execPath,
   bridge=fileURLToPath(new URL('./'+bridgeName,import.meta.url)),consent=false,now=new Date()}) {
   if(consent!==true)throw Error('Install changes Claude Code settings and needs explicit consent');
+  if(typeof bridge!=='string' || !path.isAbsolute(bridge) || path.basename(bridge)!==bridgeName)throw Error('Bridge must be an absolute path named claude-statusline-bridge.mjs');
+  let info;
+  try {info=await lstat(bridge);}catch {throw Error('Bridge must exist as a plain file');}
+  if(!info.isFile() || info.isSymbolicLink())throw Error('Bridge must be a plain file');
   const command=bridgeCommand(node,bridge,runtime);
   const folder=await ensureClaudeLimitsFolder(runtime);
   const {text,settings}=await readSettings(settingsPath);
@@ -98,10 +103,10 @@ if(process.argv[1] && path.basename(process.argv[1])==='claude-statusline-instal
   const [action,...rest]=process.argv.slice(2);
   const option=name=>{const index=rest.indexOf(name);return index>=0?rest[index+1]:undefined;};
   const options={runtime:option('--runtime') ?? process.env.OBSERVATORY_RUNTIME ?? '',
-    ...(option('--settings')?{settingsPath:option('--settings')}:{}),...(option('--node')?{node:option('--node')}:{}),consent:rest.includes('--consent')};
+    ...(option('--settings')?{settingsPath:option('--settings')}:{}),...(option('--node')?{node:option('--node')}:{}),...(rest.includes('--bridge')?{bridge:option('--bridge') ?? ''}:{}),consent:rest.includes('--consent')};
   const run=action==='install'?installStatusline:action==='uninstall'?uninstallStatusline:action==='status'?statuslineStatus:null;
   if(!run || !path.isAbsolute(options.runtime)) {
-    console.error('Usage: claude-statusline-install.mjs status|install|uninstall --runtime <absolute folder> [--settings <file>] [--consent]');
+    console.error('Usage: claude-statusline-install.mjs status|install|uninstall --runtime <absolute folder> [--settings <file>] [--bridge <file>] [--consent]');
     process.exitCode=2;
   } else run(options).then(result=>console.log(JSON.stringify(result))).catch(error=>{console.error(error.message);process.exitCode=1;});
 }
