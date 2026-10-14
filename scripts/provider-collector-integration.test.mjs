@@ -46,3 +46,27 @@ test('native collector publishes a separate Claude reading and counts its health
     assert.equal(disabled.status.sourcesConfigured,0);
     assert.equal(disabled.data.providerTokenSources[0].status,'not-connected');
   });
+
+test('Mac collection ignores saved receipt and benchmark settings',
+  {skip:process.platform!=='darwin'},async t=>{
+    const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-retired-workflows-')));
+    t.after(()=>rm(runtime,{recursive:true,force:true}));
+    const receipts=path.join(runtime,'fixture-receipts');
+    await mkdir(receipts);
+    await writeFile(path.join(receipts,'fixture.usage.json'),JSON.stringify({conversationId:'fixture',
+      requestedModel:'test-model',status:'SUCCESS',usage:{total_tokens:42},prompt:'PRIVATE'}));
+    await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({activity:false,codex:false,
+      claude:false,wispr:false,quota:false,receipts:true,benchmarks:true}),{mode:0o600});
+    const localConfig=path.join(runtime,'local.config.json');
+    await writeFile(localConfig,JSON.stringify({receiptDirectory:receipts}),{mode:0o600});
+    const before=await readFile(localConfig);
+    const python=execPython(['-c','import sys; print(sys.executable)']).toString().trim();
+    const result=await collectMac(runtime,python);
+    assert.deepEqual(result.data.agents,[]);
+    assert.deepEqual(result.data.agentSource,{host:'Local',status:'not-connected'});
+    assert.deepEqual(result.data.localModel,{host:'Ubuntu',status:'not-connected'});
+    assert.equal(result.status.sourcesConfigured,0);
+    const published=await readFile(path.join(runtime,'public/local/usage.json'),'utf8');
+    assert.ok(!published.includes(receipts));
+    assert.deepEqual(await readFile(localConfig),before);
+  });
