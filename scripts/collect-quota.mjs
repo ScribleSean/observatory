@@ -1,4 +1,4 @@
-import {access,lstat,realpath} from 'node:fs/promises';
+import {access,lstat,readFile,realpath} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -13,11 +13,12 @@ import {quotaPace} from './quota-pace.mjs';
 const execute=promisify(execFile);
 const disconnected=()=>({status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]});
 
-export async function findCodexExecutable() {
+export async function findCodexExecutable({runtime,appCandidates,toolCandidates}={}) {
   let candidates=[];
   if(process.platform==='darwin') {
-    candidates=['/Applications',path.join(homedir(),'Applications')].flatMap(root=>
+    const apps=appCandidates??['/Applications',path.join(homedir(),'Applications')].flatMap(root=>
       ['ChatGPT.app','Codex.app'].map(app=>path.join(root,app,'Contents/Resources/codex')));
+    candidates=[...apps,...(toolCandidates??['/opt/homebrew/bin/codex','/usr/local/bin/codex'])];
   } else if(process.platform==='win32') {
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
     const {stdout}=await execute(powershell,['-NoProfile','-NonInteractive','-Command',
@@ -31,6 +32,22 @@ export async function findCodexExecutable() {
       const resolved=await realpath(file),info=await lstat(resolved);
       if(!info.isFile())continue;
       await access(resolved,constants.X_OK);return resolved;
+    } catch {}
+  }
+  if(process.platform==='darwin' && typeof runtime==='string' && path.isAbsolute(runtime)) {
+    try {
+      const file=path.join(runtime,'local.config.json'),info=await lstat(file);
+      if(!info.isFile() || info.isSymbolicLink() || info.size>65536)throw Error('Invalid configuration');
+      const config=JSON.parse(await readFile(file,'utf8'));
+      if(!config || typeof config!=='object' || Array.isArray(config))throw Error('Invalid configuration');
+      const executable=config.codexExecutable;
+      if(executable!==undefined && executable!==null && executable!=='') {
+        if(typeof executable!=='string' || executable.length>4096 || !path.isAbsolute(executable) || /[\x00-\x1f\x7f]/.test(executable))
+          throw Error('Invalid configured client');
+        const resolved=await realpath(executable),stat=await lstat(resolved);
+        if(!stat.isFile())throw Error('Invalid configured client');
+        await access(resolved,constants.X_OK);return resolved;
+      }
     } catch {}
   }
   throw Error('Installed Codex client unavailable');

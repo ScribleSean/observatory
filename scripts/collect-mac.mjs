@@ -50,7 +50,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   const config=macCollectorConfig(JSON.parse(await readFile(configFile,'utf8')));
   const readQuota=()=>collectQuota(runtime,{enabled:config.quota,
     isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota,
-    resolveExecutable:findCodexExecutable});
+    resolveExecutable:()=>findCodexExecutable({runtime})});
   if(quotaOnly) return refreshAllowances(runtime,{enabled:config.quota,readQuota});
   let savedPairing=null,pairingFailed=false;
   if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}

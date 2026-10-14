@@ -1,27 +1,78 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readdir,readFile,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,realpath,rm,readdir,readFile,symlink,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {collectQuota} from './collect-quota.mjs';
+import {collectQuota,findCodexExecutable} from './collect-quota.mjs';
 import {readQuotaArchive,readQuotaState} from './quota-store.mjs';
 const now=Date.parse('2026-09-09T12:00:00Z');
-test('quota discovery ignores the legacy executable and preserves local configuration',async()=>fixture(async runtime=>{
-  const file=path.join(runtime,'local.config.json');
-  const original=Buffer.from('{"codexExecutable":"/synthetic/legacy/codex"}');
+const macOnly={skip:process.platform!=='darwin'};
+const emptyCandidates={appCandidates:[],toolCandidates:[]};
+async function executable(runtime,name='codex') {
+  const file=path.join(runtime,name);
+  await writeFile(file,'#!/bin/sh\nexit 0\n',{mode:0o700});
+  return file;
+}
+test('quota discovery uses a validated configured executable without changing configuration',macOnly,async()=>fixture(async runtime=>{
+  const target=await executable(runtime),link=path.join(runtime,'codex-link');
+  await symlink(target,link);
+  const file=path.join(runtime,'local.config.json'),original=Buffer.from(JSON.stringify({codexExecutable:link}));
   await writeFile(file,original);
-  const executables=[];
-  await collectQuota(runtime,{enabled:true,clock:()=>now,resolveExecutable:async()=>'/synthetic/discovered/codex',
-    readSnapshot:async executable=>{executables.push(executable);return {status:'unavailable'};}});
-  assert.deepEqual(executables,['/synthetic/discovered/codex']);
-  assert.equal(executables.includes('/synthetic/legacy/codex'),false);
+  assert.equal(await findCodexExecutable({runtime,...emptyCandidates}),await realpath(target));
   assert.deepEqual(await readFile(file),original);
+}));
+for(const kind of ['app','tool'])test(`quota discovery prefers the ${kind} candidate over configuration`,macOnly,async()=>fixture(async runtime=>{
+  const configured=await executable(runtime),preferred=await executable(runtime,kind),other=await executable(runtime,'other');
+  await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:configured}));
+  const options=kind==='app'?{appCandidates:[preferred,other],toolCandidates:[other]}:
+    {appCandidates:[path.join(runtime,'missing-app')],toolCandidates:[preferred,other]};
+  assert.equal(await findCodexExecutable({runtime,...options}),await realpath(preferred));
+}));
+const refusedValues={
+  relative:async()=> 'relative/codex',
+  missing:async runtime=>path.join(runtime,'missing'),
+  'non-executable':async runtime=>{const file=path.join(runtime,'codex');await writeFile(file,'synthetic',{mode:0o600});return file;},
+  directory:async runtime=>{const file=path.join(runtime,'directory');await mkdir(file);return file;},
+  'directory symlink':async runtime=>{const file=path.join(runtime,'link');await symlink(runtime,file);return file;},
+  newline:async runtime=>path.join(runtime,'codex\n'),
+  control:async runtime=>path.join(runtime,'codex\x01'),
+  delete:async runtime=>path.join(runtime,'codex\x7f'),
+  oversized:async runtime=>path.join(runtime,'x'.repeat(4097)),
+  'non-string':async()=>42
+};
+for(const [name,value] of Object.entries(refusedValues))test(`quota discovery refuses configured ${name}`,macOnly,async()=>fixture(async runtime=>{
+  await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:await value(runtime)}));
+  await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});
+}));
+for(const kind of ['symlink','array','oversized','malformed','directory','missing','undefined','null','empty'])
+  test(`quota discovery refuses ${kind} configuration without a candidate`,macOnly,async()=>fixture(async runtime=>{
+    const file=path.join(runtime,'local.config.json'),target=await executable(runtime);
+    if(kind==='symlink') {
+      const config=path.join(runtime,'config.json');
+      await writeFile(config,JSON.stringify({codexExecutable:target}));await symlink(config,file);
+    } else if(kind==='directory')await mkdir(file);
+    else if(kind!=='missing')await writeFile(file,kind==='array'?'[]':kind==='oversized'?' '.repeat(65537):
+      kind==='malformed'?'{':JSON.stringify(kind==='undefined'?{}:{codexExecutable:kind==='null'?null:''}));
+    await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});
+  }));
+test('refused configured client is unavailable without reading a snapshot',macOnly,async()=>fixture(async runtime=>{
+  await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:'relative/codex'}));
+  let calls=0;
+  const result=await collectQuota(runtime,{enabled:true,clock:()=>now,
+    resolveExecutable:()=>findCodexExecutable({runtime,...emptyCandidates}),
+    readSnapshot:async()=>{calls++;throw Error('Should not run');}});
+  assert.equal(result.status,'unavailable');assert.equal(calls,0);
+}));
+test('quota discovery does not consult configuration without an absolute runtime',macOnly,async()=>fixture(async runtime=>{
+  await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:await executable(runtime)}));
+  for(const runtime of [undefined,'relative',42])
+    await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});
 }));
 test('Mac quota collection uses installed client discovery without the legacy adapter',async()=>{
   const source=await readFile(new URL('./collect-mac.mjs',import.meta.url),'utf8');
   assert.equal(source.includes('legacy-quota'),false);
   assert.equal(source.includes('collectConfiguredMacQuota'),false);
-  assert.ok(source.includes('findCodexExecutable'));
+  assert.ok(source.includes('findCodexExecutable({runtime})'));
 });
 test('collector opt-out preserves the archive without polling or fabricating records',async()=>fixture(async runtime=>{
   const scope='a'.repeat(64);
