@@ -408,7 +408,7 @@ internal static class Program
         }
         using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
         var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit,
-            webPanel: args.Contains("--web-panel"), panelTiming: args.Contains("--panel-timing"));
+            webPanel: args.Contains("--web-panel"), panelTiming: args.Contains("--panel-timing"), webDashboard: args.Contains("--web-dashboard"));
         EventHandler? readyHandler = null;
         if (updateReady is not null)
         {
@@ -442,18 +442,22 @@ internal sealed class ObservatoryContext : ApplicationContext
     // Spike. Null unless the app was started with --web-panel.
     private WebPanel? webPanel;
     private readonly bool useWebPanel;
+    // True when the app was started with --web-dashboard. The main window then shows the shared viewer.
+    private readonly bool useWebDashboard;
     private readonly bool panelTiming;
     private Action<string>? panelProbe;
+    private Action? panelReleased;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 30000 };
     private bool quitting;
     private readonly UpdateController updater;
     private int updateShutdownRequested;
 
     internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null,
-        bool webPanel = false, bool panelTiming = false)
+        bool webPanel = false, bool panelTiming = false, bool webDashboard = false)
     {
         this.nativeDashboard = nativeDashboard;
         useWebPanel = webPanel;
+        useWebDashboard = webDashboard;
         this.panelTiming = panelTiming;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
@@ -467,11 +471,11 @@ internal sealed class ObservatoryContext : ApplicationContext
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
         menu.Items.Add("Refresh sources", null, async (_, _) => await collector.Refresh());
-        menu.Items.Add("Check for updates…", null, async (_, _) => await CheckForUpdates());
+        menu.Items.Add("Check for updatesâ€¦", null, async (_, _) => await CheckForUpdates());
         menu.Items.Add("Configure local collection", null, (_, _) => Configure());
-        menu.Items.Add("Pairing details for Mac…", null, (_, _) => ShowPairingDetails());
-        menu.Items.Add("Disconnect paired device…", null, async (_, _) => await DisconnectPairing());
-        menu.Items.Add("Prepare pairing repair…", null, async (_, _) => await PreparePairingRepair());
+        menu.Items.Add("Pairing details for Macâ€¦", null, (_, _) => ShowPairingDetails());
+        menu.Items.Add("Disconnect paired deviceâ€¦", null, async (_, _) => await DisconnectPairing());
+        menu.Items.Add("Prepare pairing repairâ€¦", null, async (_, _) => await PreparePairingRepair());
         var startup = new ToolStripMenuItem("Register start at login");
         menu.Items.Add(startup);
         menu.Opening += (_, _) =>
@@ -576,7 +580,11 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (webPanel is not null && !webPanel.IsDisposed && webPanel.Visible) { webPanel.Hide(); return false; }
         if (webPanel is not null && !webPanel.IsDisposed && webPanel.DismissedJustNow) return false;
-        if (webPanel is null || webPanel.IsDisposed) webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
+        if (webPanel is null || webPanel.IsDisposed)
+        {
+            webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
+            webPanel.FormClosed += (closed, _) => { if (ReferenceEquals(webPanel, closed)) webPanel = null; panelReleased?.Invoke(); };
+        }
         return await webPanel.ShowNearTray();
     }
 
@@ -608,6 +616,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             return watch.Elapsed.TotalMilliseconds;
         }
         void CloseOnce() { if (useWebPanel) webPanel?.Hide(); else usagePopup?.Close(); }
+        panelReleased = () => { try { Write("released web view"); } catch { } };
         try
         {
             var collected = new TaskCompletionSource();
@@ -618,6 +627,23 @@ internal sealed class ObservatoryContext : ApplicationContext
             while (collector.Busy) await Task.Delay(500);
             await Task.Delay(5000);
             Write("panel=" + (useWebPanel ? "web" : "native") + " pid=" + Environment.ProcessId);
+            if (useWebDashboard)
+            {
+                // Record what the shared dashboard window drew, then close it so it is released.
+                Open();
+                if (dashboard is WebDashboard web)
+                {
+                    Write("dashboard " + await web.Describe());
+                    await web.SavePreview(Path.Combine(runtime, "dashboard-timing.png"));
+                    Write("phase=dashboard-open");
+                    await Task.Delay(20000);
+                    web.Close();
+                    Write("phase=dashboard-closed");
+                    await Task.Delay(20000);
+                }
+                Write("phase=done");
+                return;
+            }
             Write("phase=never-opened");
             await Task.Delay(20000);
             Write("open=1 ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
@@ -627,6 +653,9 @@ internal sealed class ObservatoryContext : ApplicationContext
             Write("phase=closed");
             await Task.Delay(60000);
             Write("phase=closed-60s");
+            // The web panel releases its web view about now. Sample again five minutes later.
+            await Task.Delay(TimeSpan.FromMinutes(5));
+            Write("phase=closed-6min");
             await Task.Delay(15000);
             for (var open = 2; open <= 6; open++)
             {
@@ -737,7 +766,8 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (!FirstRunSetup.AllowsCollection(runtime)) { Open(); return; }
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
-        if (nativeDashboard)
+        // The shared dashboard has no Settings view yet, so settings open in their own window.
+        if (nativeDashboard && !useWebDashboard)
         {
             Open();
             if (dashboard is NativeDashboard existing) existing.ShowSourceSettings();
@@ -754,10 +784,11 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         usagePopup?.Reload();
         webPanel?.SnapshotChanged();
+        (dashboard as WebDashboard)?.SnapshotChanged();
         var stamp = Snapshot.Text(Data()?["collectedAt"], "");
         tray.Text = DateTimeOffset.TryParse(stamp, out var at)
-            ? $"Observatory · updated {Math.Max(0, (int)(DateTimeOffset.UtcNow - at).TotalMinutes)}m ago"
-            : "Observatory · waiting for first snapshot";
+            ? $"Observatory Â· updated {Math.Max(0, (int)(DateTimeOffset.UtcNow - at).TotalMinutes)}m ago"
+            : "Observatory Â· waiting for first snapshot";
     }
 
     private void ShowTotals(string host)
@@ -770,7 +801,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             $"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))}\n" +
             $"Recorded date: {Snapshot.Text(tokens?["date"])}";
         if (host == "All") message += "\n\nOnly verified combined totals are shown. Saved records retain their original source labels.";
-        MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show(message, $"Observatory Â· {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void Open()
@@ -793,7 +824,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
-            dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
+            dashboard = useWebDashboard ? new WebDashboard(runtime) : nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
                 new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
                 (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
@@ -819,7 +850,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         quitting = true;
         try
         {
-            tray.Text = "Observatory · finishing collection before quitting";
+            tray.Text = "Observatory Â· finishing collection before quitting";
             if (directPairing is { } pairingWindow) { await pairingWindow.Shutdown(); if (!pairingWindow.IsDisposed) pairingWindow.Close(); }
             if (!await collector.StopGracefully(TimeSpan.FromSeconds(260)))
             {

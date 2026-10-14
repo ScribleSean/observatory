@@ -8,8 +8,8 @@ namespace WorkspaceObservatory;
 // UsagePopup stays the default and is not used or changed by this class.
 internal sealed class WebPanel : Form
 {
-    private const string Origin = "https://observatory.invalid";
-    private const string Page = "panel.html";
+    internal const string Origin = "https://observatory.invalid";
+    internal const string Page = "panel.html";
     private const int PanelWidth = 388;
     internal static readonly string[] Actions = ["refresh", "check-updates", "open-settings", "open-dashboard"];
     private readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = DashboardPalette.Background(false) };
@@ -25,35 +25,54 @@ internal sealed class WebPanel : Form
         BackColor = DashboardPalette.Background(false);
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false; StartPosition = FormStartPosition.Manual;
+        // A tray panel stays above other windows while it is shown.
+        TopMost = true;
         ClientSize = new Size(LogicalToDeviceUnits(PanelWidth), LogicalToDeviceUnits(560));
         Controls.Add(web);
-        // Close when another window is activated, as tray panels usually do.
-        Deactivate += async (_, _) =>
+        VisibleChanged += (_, _) => { release.Stop(); if (!Visible && !IsDisposed && started is not null) release.Start(); };
+        release.Tick += (_, _) => { release.Stop(); if (!IsDisposed && !Visible) Retire(); };
+        // Close when another window comes to the foreground, as tray panels do.
+        // The form's Deactivate event is not used: it also fires when focus
+        // moves into the page, and then does not fire again. The foreground
+        // window is read on a short timer while the panel is shown instead.
+        watch.Tick += (_, _) =>
         {
-            // Focus moving into the page also raises Deactivate, because the
-            // web view is a child window owned by another process. Hide only
-            // when a different top-level window has become the foreground one.
-            await Task.Delay(60);
-            if (KeepOpen || IsDisposed || !Visible || !IsHandleCreated || IsForeground) return;
+            if (IsDisposed || !Visible || !IsHandleCreated) { watch.Stop(); return; }
+            var front = GetForegroundWindow();
+            var ours = front == Handle || (front != IntPtr.Zero && GetAncestor(front, 3) == Handle);
+            // Only a panel that has held the foreground can lose it. One that
+            // Windows never brought forward stays until it is used or closed.
+            if (ours) { held = true; return; }
+            if (!held || KeepOpen || front == IntPtr.Zero) return;
             dismissed = Environment.TickCount64; Hide();
         };
+        VisibleChanged += (_, _) => { held = false; if (Visible) watch.Start(); else watch.Stop(); };
     }
 
-    // Set by the timing harness only. An app that Windows did not bring to the
-    // foreground cannot hold it, so an unattended opening would close at once.
-    internal bool KeepOpen;
-    internal bool IsForeground => IsHandleCreated && GetForegroundWindow() == Handle;
+    private readonly System.Windows.Forms.Timer watch = new() { Interval = 150 };
+    private bool held;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+
+    // Set by the timing harness only, so an unattended opening is not closed
+    // while it is being measured.
+    internal bool KeepOpen;
+    internal bool IsForeground => IsHandleCreated && GetForegroundWindow() == Handle;
 
     // A click on the tray icon deactivates the panel before the click handler
     // runs. Without this, that click would hide the panel and open it again.
     private long? dismissed;
     internal bool DismissedJustNow => dismissed is { } at && Environment.TickCount64 - at < 400;
 
-    // The web view is created on the first opening and kept afterwards, so a
-    // later opening only shows an existing window. Closing hides the panel.
+    // The web view is created when the panel opens. Closing hides the panel, so
+    // reopening soon is fast. After the panel has stayed hidden for a minute the
+    // form and its web view are disposed, which ends the browser processes. The
+    // owner then creates a new panel on the next opening.
+    internal static readonly TimeSpan ReleaseAfter = TimeSpan.FromSeconds(60);
+    private readonly System.Windows.Forms.Timer release = new() { Interval = (int)ReleaseAfter.TotalMilliseconds };
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (e.CloseReason == CloseReason.UserClosing && !retire) { e.Cancel = true; Hide(); }
@@ -167,7 +186,7 @@ internal sealed class WebPanel : Form
         // The page sends four fixed action names. Nothing is sent to the page.
         core.Settings.IsWebMessageEnabled = true;
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-        core.WebResourceRequested += (_, e) => Serve(environment, e);
+        core.WebResourceRequested += (_, e) => Respond(environment, e, runtime, Page);
         core.NavigationStarting += (_, e) => { if (!IsPanel(e.Uri)) e.Cancel = true; };
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
@@ -214,29 +233,32 @@ internal sealed class WebPanel : Form
     private static bool IsLocal(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
         uri.Scheme == "https" && uri.Host == "observatory.invalid" && uri.IsDefaultPort && uri.UserInfo.Length == 0;
 
-    internal static bool IsPanel(string value) => IsLocal(value) && new Uri(value) is { } uri &&
-        uri.AbsolutePath == "/" + Page && uri.Fragment.Length == 0 && uri.Query is "" or "?demo";
+    internal static bool IsPanel(string value) => IsPage(value, Page);
+
+    internal static bool IsPage(string value, string page) => IsLocal(value) && new Uri(value) is { } uri &&
+        uri.AbsolutePath == "/" + page && uri.Fragment.Length == 0 && uri.Query is "" or "?demo";
 
     // Returns the bundled file for a request path, or null when the path is
-    // outside what the panel may load: its own page, bundled assets and the
-    // sanitized snapshot.
-    internal static string? Resolve(string runtime, string relative)
+    // outside what a shared viewer page may load: that one page, bundled assets
+    // and the sanitized snapshot.
+    internal static string? Resolve(string runtime, string relative, string page = Page)
     {
+        if (page is not (Page or WebDashboard.Page)) return null;
         if (relative == "local/usage.json") return Snapshot.DashboardFile(runtime, "usage.json");
-        if (relative != Page && !relative.StartsWith("assets/", StringComparison.Ordinal)) return null;
+        if (relative != page && !relative.StartsWith("assets/", StringComparison.Ordinal)) return null;
         if (Path.GetExtension(relative).Equals(".json", StringComparison.OrdinalIgnoreCase)) return null;
         if (relative.Contains('\\') || relative.Contains(':') || relative.Contains('\0') || relative.Split('/').Contains("..")) return null;
         return Snapshot.UnlinkedFile(Path.Combine(AppContext.BaseDirectory, "Web"), relative);
     }
 
-    private void Serve(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs e)
+    internal static void Respond(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs e, string runtime, string page)
     {
         const string policy = "Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff";
         try
         {
             if (e.Request.Method != "GET" || !IsLocal(e.Request.Uri)) throw new InvalidOperationException();
             var relative = Uri.UnescapeDataString(new Uri(e.Request.Uri).AbsolutePath).TrimStart('/');
-            var file = Resolve(runtime, relative) ?? throw new InvalidOperationException();
+            var file = Resolve(runtime, relative, page) ?? throw new InvalidOperationException();
             var info = new FileInfo(file);
             if (!info.Exists || info.Length > Snapshot.MaxBytes || info.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException();
             var mime = Path.GetExtension(file) switch
@@ -252,7 +274,7 @@ internal sealed class WebPanel : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) web.Dispose();
+        if (disposing) { release.Dispose(); watch.Dispose(); web.Dispose(); }
         base.Dispose(disposing);
     }
 
@@ -274,6 +296,11 @@ internal sealed class WebPanel : Form
         foreach (var path in new[] { "index.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json", "assets/../panel.html",
             "assets/data.json", "assets\\x.js", "assets/c:x.js", "panel.html/", "Panel.html", "" })
             Check(Resolve(runtime, path) is null, "refuses " + path);
+        Check(IsPage(Origin + "/dashboard.html", WebDashboard.Page) && !IsPage(Origin + "/panel.html", WebDashboard.Page) &&
+            !IsPage(Origin + "/dashboard.html", Page) && !IsPage(Origin + "/index.html", WebDashboard.Page), "dashboard page");
+        foreach (var path in new[] { "panel.html", "index.html", "local/collector.json", "private-sync/pairing.json", "assets/../dashboard.html", "Dashboard.html" })
+            Check(Resolve(runtime, path, WebDashboard.Page) is null, "dashboard refuses " + path);
+        Check(Resolve(runtime, "panel.html", "index.html") is null && Resolve(runtime, "index.html", "index.html") is null, "unknown page");
         Console.WriteLine("Web panel action, page and file contracts passed.");
     }
 }
