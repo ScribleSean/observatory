@@ -125,6 +125,7 @@ internal static class ObservatoryStrings
         internal const string ChartTitle = "{provider} tokens by day, last 30 days";
         internal const string ApiEstimate = "API-equivalent (estimate)";
         internal const string SessionCost = "Session cost (estimate)";
+        internal const string UnderCent = "Under $0.01";
         internal const string PricesChecked = "Prices checked {date}";
         internal const string PricesUnknown = "Price check date Unknown";
         internal const string Partial = "Covers {covered} of {total} tokens. Models without a price are left out.";

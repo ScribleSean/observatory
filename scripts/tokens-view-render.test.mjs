@@ -54,7 +54,7 @@ void test('sample Mac week has a recorded total and estimate', () => {
   const source = sampleSnapshot(now);
   const claude = card(render(source, 'Mac'), 'Claude Code');
   assert.ok(claude.includes('>' + compact(tokensView(source, { host: 'Mac', period: 'week', now }).claude.totals.total) + '<'));
-  assert.ok(claude.includes('$'));
+  assert.match(claude, /API-equivalent \(estimate\)<\/span><span>\$[0-9]/);
   assert.ok(!claude.includes('By device'));
 });
 
@@ -82,7 +82,7 @@ void test('Claude days without estimates show Unknown', () => {
 
 void test('unpriced models never become free', () => {
   const html = render(synthetic({ ...estimate, usd: null, coveredTokens: 0, excluded: 1 }), 'Mac');
-  assert.ok(html.includes('Unknown'));
+  assert.match(html, /API-equivalent \(estimate\)<\/span><span>Unknown<\/span>/);
   assert.ok(!html.includes('$0.00'));
 });
 
@@ -94,7 +94,7 @@ void test('partial estimate discloses covered tokens', () => {
 void test('stale session cost is Unknown with a stale note', () => {
   const source = synthetic();
   source.claudeLimits = { sessionCost: { usd: 3.42, observedAt: new Date(now - 15 * 60000).toISOString() } };
-  const claude = card(render(source, 'Mac'), 'Claude Code');
+  const claude = card(render(source, 'All'), 'Claude Code');
   assert.match(claude, /Session cost \(estimate\)<\/span><span>Unknown<\/span>/);
   assert.ok(claude.includes('Last session cost is more than 10 minutes old'));
   assert.ok(!claude.includes('$3.42'));
@@ -113,4 +113,29 @@ void test('dashboard tokens section mounts the view', () => {
 void test('caveat sentence appears in exactly one element', () => {
   const html = render(sampleSnapshot(now));
   assert.equal((html.match(/<p>Dollar figures are estimates at list price\. A subscription is not billed per token\.<\/p>/g) ?? []).length, 1);
+});
+
+void test('session cost appears only with initialHost All', () => {
+  for (const initialHost of ['Windows', 'All']) {
+    const html = renderToStaticMarkup(createElement(TokensView, { snapshot: sampleSnapshot(now), now, initialHost }));
+    assert.equal(html.includes('Session cost (estimate)'), initialHost === 'All');
+  }
+});
+
+void test('Codex price date is independent of missing Claude estimates', () => {
+  const source = synthetic({ ...estimate, checked: '2026-10-01' });
+  delete source.providerTokenSources[0].days[0].apiEstimate;
+  delete source.providerTokenSources[0].days[0].models[0].apiEstimate;
+  const html = render(source, 'Mac');
+  assert.ok(card(html, 'Codex').includes('Prices checked 2026-10-01'));
+  assert.ok(card(html, 'Claude Code').includes('Price check date Unknown'));
+  assert.ok(!card(html, 'Claude Code').includes('Prices checked 2026-10-01'));
+});
+
+void test('positive estimates below half a cent do not render zero', () => {
+  const html = render(synthetic({ ...estimate, usd: 0.004 }), 'Mac');
+  for (const provider of ['Codex', 'Claude Code']) {
+    assert.match(card(html, provider), /API-equivalent \(estimate\)<\/span><span>Under \$0\.01<\/span>/);
+  }
+  assert.ok(!html.includes('$0.00'));
 });

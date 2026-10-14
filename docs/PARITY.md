@@ -99,7 +99,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The native dashboards' comparison note still names OpenAI's price page as the source. The shared viewer's Tokens view refers to the shared price table and shows the date it was checked. |
 | Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health in the native apps. The shared viewer's Tokens view shows them by day, model and token class, per device, with All reading "By device". Neither app shows the shared dashboard by default. |
 | API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows, so the shared viewer's Tokens view shows Unknown for it until they do. |
-| Claude Code session cost | Missing | Missing | Add | The shared viewer's Tokens view shows `claudeLimits.sessionCost` as "Session cost (estimate)" when it is under 10 minutes old, and Unknown otherwise. No collector writes the field yet. |
+| Claude Code session cost | Missing | Missing | Add | The shared viewer's Tokens view shows `claudeLimits.sessionCost` as "Session cost (estimate)" when the device filter is All, because the snapshot does not say which device observed it. It reads Unknown when the cost is 10 minutes old or older. No collector writes the field yet. |
 
 ## Dictation
 

@@ -7,6 +7,7 @@ import './tokens.css';
 
 type Computed = ReturnType<typeof tokensView>;
 type Block = Omit<Computed['codex'], 'models'> & {
+  checkedOn: string | null;
   models: { model: string; total: number | null; usd: number | null }[];
 };
 type Result = Omit<Computed, 'claude' | 'codex'> & {
@@ -23,6 +24,7 @@ const periods: [string, string][] = [
 const classes = ['input', 'cached', 'cacheWrite', 'output'] as const;
 const count = (value: number | null) => value === null ? STRINGS.status.unknown : compact(value);
 const dollars = (usd: number | null) => {
+  if (typeof usd === 'number' && Number.isFinite(usd) && usd > 0 && usd < 0.005) return STRINGS.tokens.underCent;
   const value = money(usd);
   return value === null ? STRINGS.status.unknown : format(STRINGS.formats.usd, { value });
 };
@@ -38,7 +40,7 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
   const label = provider === 'claude' ? STRINGS.providers.claudeCode : STRINGS.providers.codex;
   const note = statusNote(block.status);
   const session = result.claude.sessionCost;
-  const checked = result.prices.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: result.prices.checkedOn }) : STRINGS.tokens.pricesUnknown;
+  const checked = block.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: block.checkedOn }) : STRINGS.tokens.pricesUnknown;
   return <Card label={label}>
     <h3><ProviderDot provider={provider} />{label}</h3>
     <div className="ob-figure">{block.status === 'ok' ? count(block.totals.total) : statusWord(block.status)}</div>
@@ -56,7 +58,7 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
       })}</p>}
     </div>
     </>}
-    {provider === 'claude' && <div className="ob-tokens-session">
+    {provider === 'claude' && result.host === 'All' && session.status !== 'all-only' && <div className="ob-tokens-session">
       <Row><span>{STRINGS.tokens.sessionCost}</span><span>{dollars(session.usd)}</span></Row>
       {session.status === 'ok' && session.observedAt && <p className="ob-tokens-note">{format(STRINGS.formats.asOf, {
         time: new Date(session.observedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),

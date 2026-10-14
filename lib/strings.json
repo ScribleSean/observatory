@@ -110,6 +110,7 @@
     "chartTitle": "{provider} tokens by day, last 30 days",
     "apiEstimate": "API-equivalent (estimate)",
     "sessionCost": "Session cost (estimate)",
+    "underCent": "Under $0.01",
     "pricesChecked": "Prices checked {date}",
     "pricesUnknown": "Price check date Unknown",
     "partial": "Covers {covered} of {total} tokens. Models without a price are left out.",

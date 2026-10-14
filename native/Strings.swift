@@ -111,6 +111,7 @@ enum ObservatoryStrings {
         static let `chartTitle` = "{provider} tokens by day, last 30 days"
         static let `apiEstimate` = "API-equivalent (estimate)"
         static let `sessionCost` = "Session cost (estimate)"
+        static let `underCent` = "Under $0.01"
         static let `pricesChecked` = "Prices checked {date}"
         static let `pricesUnknown` = "Price check date Unknown"
         static let `partial` = "Covers {covered} of {total} tokens. Models without a price are left out."

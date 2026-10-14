@@ -163,28 +163,88 @@ test('charts cover the anchored month independently of the selected period', () 
   assert.equal(view(source, { period: 'day', now: new Date('2026-10-14T01:00:00Z') }).codex.days.at(-1).date, '2026-10-13');
 });
 
-test('price metadata falls back only to shared valid checked dates', () => {
+test('price metadata falls back independently to shared valid provider dates', () => {
   const source = snapshot();
-  assert.deepEqual(view(source).prices, { checkedOn: checked, source: null });
+  assert.deepEqual(view(source).prices, { checkedOn: null, source: null });
+  for (const provider of ['codex', 'claude']) assert.equal(view(source)[provider].checkedOn, checked);
   source.providerTokenSources[0].days[0].apiEstimate.checked = '2026-10-10';
-  assert.equal(view(source).prices.checkedOn, null);
+  assert.equal(view(source).claude.checkedOn, null);
+  assert.equal(view(source).codex.checkedOn, checked);
   source.prices = { checkedOn: '2026-10-12', source: 'https://example.invalid/prices' };
   assert.deepEqual(view(source).prices, source.prices);
+  for (const provider of ['codex', 'claude']) assert.equal(view(source)[provider].checkedOn, source.prices.checkedOn);
   source.prices = { checkedOn: 123, source: 'http://example.invalid' };
   assert.deepEqual(view(source).prices, { checkedOn: null, source: null });
-  assert.equal(view({}).prices.checkedOn, null);
-  source.providerTokenSources = [];
   source.tokens[0].days[0].models[0].apiEstimate.checked = 'bad';
-  assert.equal(view(source).prices.checkedOn, null);
+  assert.equal(view(source).codex.checkedOn, null);
+  for (const provider of ['codex', 'claude']) assert.equal(view({})[provider].checkedOn, null);
+});
+
+test('missing Claude estimates do not discard the Codex price date', () => {
+  const source = snapshot([day({ apiEstimate: priced({ checked: '2026-10-01' }), models: [] })]);
+  delete source.providerTokenSources[0].days[0].apiEstimate;
+  const result = view(source);
+  assert.equal(result.prices.checkedOn, null);
+  assert.equal(result.codex.checkedOn, '2026-10-01');
+  assert.equal(result.claude.checkedOn, null);
+  source.tokens[0].days.push(day({ apiEstimate: undefined, models: [] }));
+  assert.equal(view(source).codex.checkedOn, '2026-10-01');
+});
+
+test('Claude All uses price dates from all device computations', () => {
+  const source = snapshot();
+  source.providerTokenSources.push({ provider: 'claude-code', host: 'Windows', status: 'ok', days: [day()] });
+  assert.equal(view(source, { host: 'All' }).claude.checkedOn, checked);
+  source.providerTokenSources[1].days[0].models[0].apiEstimate.checked = '2026-10-01';
+  assert.equal(view(source, { host: 'All' }).claude.checkedOn, null);
+});
+
+test('verified aggregates that were not read remain unknown', () => {
+  for (const status of [undefined, 'unavailable', 'not-connected']) {
+    const source = sampleSnapshot(now);
+    source.combinedTokens.status = status;
+    assertEmpty(view(source, { host: 'All' }).codex, 'unknown');
+  }
+});
+
+test('invalid day dates make the whole source unknown', () => {
+  for (const date of [undefined, null, 20261014, '', '2026-1-14', 'invalid']) {
+    for (const days of [[day({ date })], [day(), day({ date })]]) {
+      const source = snapshot(days);
+      for (const provider of ['codex', 'claude']) assertEmpty(view(source)[provider], 'unknown');
+      const aggregate = sampleSnapshot(now);
+      aggregate.combinedTokens.days = days;
+      assertEmpty(view(aggregate, { host: 'All' }).codex, 'unknown');
+    }
+  }
+});
+
+test('Claude-only hosts populate devices, byDevice and settings', () => {
+  const source = { providerTokenSources: snapshot().providerTokenSources };
+  const result = view(source, { host: 'All' });
+  assert.deepEqual(result.devices, [{ id: 'Mac', label: 'macOS' }]);
+  assert.deepEqual(result.claude.byDevice, [{ host: 'Mac', label: 'macOS', status: 'ok', total: 10, usd: 1 }]);
+  assert.deepEqual(result.settings, [{ host: 'Mac', label: 'macOS', status: 'unknown', rows: [] }]);
+  source.providerTokenSources.unshift({ provider: 'claude-code', host: 'Windows', status: 'unavailable' });
+  source.providerTokenSources.push({ provider: 'claude-code', host: 'Ubuntu', status: 'ok' });
+  source.deviceNames = { Mac: '  Studio  ', Windows: ' ' };
+  assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Studio' }, { id: 'Windows', label: 'Windows' }]);
+  source.providerTokenSources[0].status = 'not-connected';
+  assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Studio' }]);
+});
+
+test('device session cost is All only', () => {
+  assert.deepEqual(view(sampleSnapshot(now), { host: 'Windows' }).claude.sessionCost,
+    { usd: null, observedAt: null, status: 'all-only' });
 });
 
 test('session cost observes freshness, validity and future tolerance', () => {
   const cost = (usd, age, observedAt = new Date(now - age).toISOString()) =>
-    view({ claudeLimits: { sessionCost: { usd, observedAt } } }).claude.sessionCost;
+    view({ claudeLimits: { sessionCost: { usd, observedAt } } }, { host: 'All' }).claude.sessionCost;
   assert.deepEqual(cost(3, 360000), { usd: 3, observedAt: '2026-10-14T11:54:00.000Z', status: 'ok' });
   assert.deepEqual(cost(3, 600000), { usd: null, observedAt: '2026-10-14T11:50:00.000Z', status: 'stale' });
   const unknown = { usd: null, observedAt: null, status: 'unknown' };
-  assert.deepEqual(view({}).claude.sessionCost, unknown);
+  assert.deepEqual(view({}, { host: 'All' }).claude.sessionCost, unknown);
   for (const usd of [-1, 10001, '3', null, NaN]) assert.deepEqual(cost(usd, 0), unknown);
   assert.deepEqual(cost(3, 0, 'not-a-date'), unknown);
   assert.deepEqual(cost(3, -60001), unknown);
@@ -218,7 +278,7 @@ test('Now leaves provider blocks empty while preserving settings and session cos
   for (const host of ['Mac', 'All']) {
     const result = view(sampleSnapshot(now), { host, period: 'now' });
     for (const provider of ['codex', 'claude']) assertEmpty(result[provider], 'hourly-unavailable');
-    assert.equal(result.claude.sessionCost.status, 'ok');
+    assert.equal(result.claude.sessionCost.status, host === 'All' ? 'ok' : 'all-only');
     assert.equal(result.settings[0].status, 'ok');
   }
 });
