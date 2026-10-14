@@ -5,6 +5,25 @@ enum ObservatoryStrings {
     }
     enum Limits {
         static let `deviceNamed` = "{name} ({platform})"
+        static let `nowCaption` = "Pace over the last hour"
+        static let `perHour` = "{value}% per hour"
+        static let `resetsFirst` = "Resets before running out at this pace."
+        static let `exhausted` = "No limit was left at the last reading."
+        static let `stale` = "The reading is too old to estimate pace."
+        static let `insufficientHistory` = "More readings are needed to estimate pace."
+        static let `noRecentConsumption` = "No use was observed in the last hour."
+        static let `resetUnknown` = "The reset time is unknown."
+        static let `resetPending` = "Waiting for the reset to be observed."
+        static let `awaitingObservation` = "Waiting for a new reading."
+        static let `sessionCost` = "Session cost (estimate)"
+        static let `history` = "History"
+        static let `chartTitle` = "{provider} {window} remaining"
+        static let `historyCaveat` = "History covers the readings this device keeps, about the latest 24 hours."
+        static let `historyInfo` = "About history"
+        static let `historyDetail` = "Each point is the last reading in its interval and an interval without a reading is a gap, never zero percent."
+        static let `sharedFrom` = "Shared from {device}"
+        static let `observed` = "Observed {span} ago"
+        static let `observationUnknown` = "Observation time unknown"
     }
     enum Sections {
         static let `limits` = "Limits"

@@ -5,6 +5,7 @@ import { skinCss, validateSkin } from '../../lib/skins.mjs';
 import { SKINS, useSkin } from './skin';
 
 import { EmptyState, Row } from './components';
+import LimitsView from './limits/LimitsView';
 
 type Snapshot = Record<string, unknown>;
 const SECTIONS = [
@@ -89,7 +90,7 @@ export function DashboardView({ demo = false, snapshot, loaded, now, skinId, ski
         <main>
           <section aria-labelledby={`ob-section-${selected}`}>
             <h2 id={`ob-section-${selected}`}>{title}</h2>
-            <EmptyState text={STRINGS.sections.emptyState} />
+            {selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : <EmptyState text={STRINGS.sections.emptyState} />}
           </section>
         </main>
       </div>
