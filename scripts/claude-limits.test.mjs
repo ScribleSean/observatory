@@ -150,3 +150,103 @@ test('the bridge records limits and prints the earlier status line output', asyn
   assert.equal((await invoke('not json')).stdout,'earlier line');
   assert.equal(ownLine({},Date.now()),'');
 });
+
+test('cost extraction validates bounds and rounds to cents without inventing missing values', () => {
+  for(const usd of [0,1.236,10000]) {
+    const sessionCost={usd:Math.round(usd*100)/100,observedAt:seconds};
+    assert.deepEqual(extractClaudeLimits({cost:{total_cost_usd:usd}},now),{observedAt:seconds,windows:{},sessionCost});
+    assert.deepEqual(extractClaudeLimits({...input(),cost:{total_cost_usd:usd}},now).sessionCost,sessionCost);
+  }
+  for(const cost of [undefined,null,{},'bad',{total_cost_usd:'1'},{total_cost_usd:NaN},
+    {total_cost_usd:Infinity},{total_cost_usd:-1},{total_cost_usd:10000.01}]) {
+    assert.equal(extractClaudeLimits({cost},now),null);
+    assert.deepEqual(extractClaudeLimits({...input(),cost},now),extractClaudeLimits(input(),now));
+  }
+});
+
+test('stored costs are sanitized independently of windows and determine the newest observation', () => {
+  const record=extractClaudeLimits(input(),now);
+  const cost={usd:1.236,observedAt:seconds+60,private:'synthetic'};
+  assert.deepEqual(mergeClaudeLimits({...record,sessionCost:cost},null,now),
+    {...record,observedAt:seconds+60,sessionCost:{usd:1.24,observedAt:seconds+60}});
+  assert.deepEqual(mergeClaudeLimits({sessionCost:cost},null,now),
+    {observedAt:seconds+60,windows:{},sessionCost:{usd:1.24,observedAt:seconds+60}});
+  for(const sessionCost of [null,[],{usd:'1',observedAt:seconds},{usd:NaN,observedAt:seconds},
+    {usd:-1,observedAt:seconds},{usd:10000.01,observedAt:seconds},
+    ...[0,-1,seconds+61,seconds+0.5,Number.MAX_SAFE_INTEGER+1,'1'].map(observedAt=>({usd:1,observedAt}))]) {
+    assert.deepEqual(mergeClaudeLimits({...record,sessionCost},null,now),record);
+    assert.equal(mergeClaudeLimits({windows:{},sessionCost},null,now),null);
+  }
+});
+
+test('cost freshness and consent do not change window status or checked time', () => {
+  const record=extractClaudeLimits({...input(),cost:{total_cost_usd:2.34}},now);
+  for(const age of [599,600,601]) {
+    const source=claudeLimitsSource(record,{enabled:true,now:now+age*1000});
+    const {sessionCost,...windowSource}=source;
+    assert.deepEqual(windowSource,claudeLimitsSource(extractClaudeLimits(input(),now),{enabled:true,now:now+age*1000}));
+    if(age===599)assert.deepEqual(sessionCost,{usd:2.34,observedAt:new Date(now).toISOString()});
+    else assert.equal(Object.hasOwn(source,'sessionCost'),false);
+  }
+  assert.deepEqual(claudeLimitsSource(record,{enabled:false,now}),
+    {provider:'Claude Code',scope:'account',status:'not-connected',windows:[]});
+  const later=now+4*86400000;
+  const cost={usd:0,observedAt:later/1000};
+  assert.deepEqual(claudeLimitsSource({...record,sessionCost:cost},{enabled:true,now:later}),
+    {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],sessionCost:{usd:0,observedAt:new Date(later).toISOString()}});
+  const source=claudeLimitsSource({...record,sessionCost:{usd:1,observedAt:seconds+600}},{enabled:true,now:now+600000});
+  assert.equal(source.status,'stale');
+  assert.equal(source.checkedAt,new Date(now).toISOString());
+  assert.equal(source.sessionCost.usd,1);
+});
+
+test('cost merges use newest observation with next winning ties and absence preserving the cost', () => {
+  const record=(usd,at)=>extractClaudeLimits({cost:{total_cost_usd:usd}},at);
+  const first=record(3,now),later=record(1,now+1000);
+  assert.deepEqual(mergeClaudeLimits(first,later,now+1000),later);
+  assert.deepEqual(mergeClaudeLimits(later,first,now+1000),later);
+  assert.deepEqual(mergeClaudeLimits(first,record(2,now),now),record(2,now));
+  const windows=extractClaudeLimits(input(),now+1000);
+  assert.deepEqual(mergeClaudeLimits(first,windows,now+1000),{...windows,sessionCost:first.sessionCost});
+  assert.equal(Object.hasOwn(mergeClaudeLimits(windows,windows,now+1000),'sessionCost'),false);
+});
+
+test('the bridge stores only windows and cost and prints nothing for cost alone', async t => {
+  const bridge=fileURLToPath(new URL('./claude-statusline-bridge.mjs',import.meta.url));
+  for(const kind of ['both','windows','cost']) {
+    const runtime=await folder(t),at=Math.floor(Date.now()/1000);
+    const value={...input(),cost:{total_cost_usd:1.236,private:'synthetic'},extra:'synthetic'};
+    value.rate_limits.five_hour.resets_at=at+7200;
+    value.rate_limits.seven_day.resets_at=at+86400;
+    if(kind==='windows')delete value.cost;
+    if(kind==='cost')delete value.rate_limits;
+    const child=run(process.execPath,[bridge,'--runtime',runtime],{timeout:15000});
+    child.child.stdin.end(JSON.stringify(value));
+    assert.equal((await child).stdout,kind==='cost'?'':'5h 77% left · 7d 59% left\n');
+    const stored=JSON.parse(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'));
+    assert.ok(stored.observedAt>=at && stored.observedAt<=Math.floor(Date.now()/1000));
+    assert.deepEqual(stored,extractClaudeLimits(value,stored.observedAt*1000));
+    assert.equal(Object.hasOwn(stored,'sessionCost'),kind!=='windows');
+    if(kind==='cost')assert.deepEqual(claudeLimitsSource(stored,{enabled:true,now:stored.observedAt*1000}),
+      {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],
+        sessionCost:{usd:1.24,observedAt:new Date(stored.observedAt*1000).toISOString()}});
+  }
+  assert.equal(ownLine({cost:{total_cost_usd:1}},now),'');
+});
+
+test('usage readings after bridge storage preserve cost and cannot inject a replacement', async t => {
+  const {parseClaudeUsage}=await import('./claude-usage-command.mjs');
+  const usage=parseClaudeUsage({is_error:false,num_turns:0,total_cost_usd:0,duration_api_ms:0,local_command:'usage',type:'result',
+    result:'Current session: 30% used · resets Mar 10 at 5pm (UTC)'},now);
+  assert.ok(usage);
+  for(const extra of [{},{cost:{total_cost_usd:99}}]) {
+    const runtime=await folder(t);
+    const saved=await recordClaudeLimits(runtime,{...input(),cost:{total_cost_usd:1.23}},now);
+    await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
+    const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({...usage,...extra})});
+    const stored=JSON.parse(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'));
+    assert.deepEqual(stored.sessionCost,saved.sessionCost);
+    assert.equal(stored.windows.five_hour.usedPercentage,30);
+    assert.deepEqual(source.sessionCost,{usd:1.23,observedAt:new Date(now).toISOString()});
+  }
+});

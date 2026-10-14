@@ -5,7 +5,7 @@ import {runClaudeUsage} from './claude-usage-command.mjs';
 
 // Claude Code passes rate_limits to a status line command for Pro and Max
 // subscribers after the first response of a session. This module keeps only
-// the two percentages and reset times. It never reads a credential, a
+// the two percentages, reset times and session cost. It never reads a credential, a
 // transcript, a working directory or a session identifier.
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
@@ -24,31 +24,42 @@ function cleanWindow(raw,observedAt) {
   return {usedPercentage:Math.round(used*10)/10,resetsAt:Math.round(resets)};
 }
 
-// Returns a sanitized record, or null when the input has no usable window.
+function cleanCost(usd,observedAt) {
+  if(typeof usd!=='number' || !Number.isFinite(usd) || usd<0 || usd>10000)return null;
+  return {usd:Math.round(usd*100)/100,observedAt};
+}
+
+// Returns a sanitized record, or null when the input has no usable window or cost.
 export function extractClaudeLimits(input,now=Date.now()) {
   const observedAt=Math.floor(now/1000);
-  if(!isObject(input) || !isObject(input.rate_limits))return null;
+  if(!isObject(input))return null;
   const record={observedAt,windows:{}};
   for(const name of Object.keys(windows)) {
-    const window=cleanWindow(input.rate_limits[name],observedAt);
+    const window=cleanWindow(isObject(input.rate_limits)?input.rate_limits[name]:null,observedAt);
     if(window)record.windows[name]={...window,observedAt};
   }
-  return Object.keys(record.windows).length?record:null;
+  const cost=isObject(input.cost)?cleanCost(input.cost.total_cost_usd,observedAt):null;
+  if(cost)record.sessionCost=cost;
+  return Object.keys(record.windows).length || cost?record:null;
 }
 
 function cleanStored(raw,now) {
   const seconds=Math.floor(now/1000);
-  if(!isObject(raw) || !isObject(raw.windows))return null;
+  if(!isObject(raw))return null;
   const record={observedAt:0,windows:{}};
   for(const name of Object.keys(windows)) {
-    const stored=raw.windows[name];
+    const stored=isObject(raw.windows)?raw.windows[name]:null;
     if(!isObject(stored) || !Number.isSafeInteger(stored.observedAt) || stored.observedAt<=0 || stored.observedAt>seconds+60)continue;
     const window=cleanWindow(stored,stored.observedAt);
     if(!window)continue;
     record.windows[name]={...window,observedAt:stored.observedAt};
     record.observedAt=Math.max(record.observedAt,stored.observedAt);
   }
-  return Object.keys(record.windows).length?record:null;
+  const stored=raw.sessionCost;
+  const cost=isObject(stored) && Number.isSafeInteger(stored.observedAt) && stored.observedAt>0 && stored.observedAt<=seconds+60
+    ? cleanCost(stored.usd,stored.observedAt) : null;
+  if(cost) {record.sessionCost=cost;record.observedAt=Math.max(record.observedAt,cost.observedAt);}
+  return Object.keys(record.windows).length || cost?record:null;
 }
 
 // Several sessions report the same account. Within one reset period usage
@@ -65,6 +76,9 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage
       ? {...before,observedAt:after.observedAt} : after;
   }
+  const before=saved.sessionCost,after=next.sessionCost;
+  const cost=after && (!before || after.observedAt>=before.observedAt)?after:before;
+  if(cost)merged.sessionCost=cost;
   return merged;
 }
 
@@ -116,11 +130,14 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   const record=cleanStored(stored,now);
   const seconds=Math.floor(now/1000);
   if(!record)return {...base,status:'unavailable',windows:[]};
+  const cost=record.sessionCost;
+  const sessionCost=cost && seconds-cost.observedAt<currentSeconds
+    ? {sessionCost:{usd:cost.usd,observedAt:new Date(cost.observedAt*1000).toISOString()}} : {};
   // A window whose reset time has passed has an unknown value until the next reading.
   const live=Object.entries(record.windows).filter(([,window])=>window.resetsAt>seconds);
-  if(!live.length)return {...base,status:'unavailable',windows:[]};
+  if(!live.length)return {...base,status:'unavailable',windows:[],...sessionCost};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
-  return {...base,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
+  return {...base,...sessionCost,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
     windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
@@ -133,7 +150,7 @@ export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=runClau
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
   try {
     const usage=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
-    if(usage)await recordClaudeLimits(runtime,usage,now);
+    if(usage)await recordClaudeLimits(runtime,{rate_limits:usage.rate_limits},now);
   } catch {}
   let stored=null;
   try {stored=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_FILE),4096);}catch{}
