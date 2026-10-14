@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const workflow = readFileSync(
   new URL('../.github/workflows/script-suite.yml', import.meta.url),
@@ -55,8 +58,8 @@ test('workflow contains no write permission text', () => {
   assert.doesNotMatch(workflow, /write/i);
 });
 
-test('matrix contains exactly Windows and macOS runners', () => {
-  assert.match(workflow, /      matrix:\n        os: \[windows-latest, macos-14\]\n    runs-on: \$\{\{ matrix.os \}\}/);
+test('matrix contains exactly the runner and suite part axes', () => {
+  assert.match(workflow, /      matrix:\n        os: \[windows-latest, macos-14\]\n        part: \[general, tls\]\n    runs-on: \$\{\{ matrix.os \}\}/);
 });
 
 test('Node is pinned to 24.21.0', () => {
@@ -108,15 +111,135 @@ test('suite invokes Node through the source runtime preload', () => {
   assert.ok(suite.includes('spawnSync(process.execPath, [...args,'));
 });
 
-for (const name of ['peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs']) {
-  test(`${name} appears in the isolated suite list`, () => {
-    assert.ok(suite.split('\n').find((line) => line.includes('const isolated =')).includes(`'${name}'`));
+const tls = [
+  'peer-pairing.test.mjs',
+  'peer-repair.test.mjs',
+  'peer-setup.test.mjs',
+  'peer-tls-client.test.mjs',
+  'peer-tls-service.test.mjs',
+  'peer-tls-sync.test.mjs',
+  'peer-tls-trust.test.mjs',
+  'provider-token-sync.test.mjs',
+  'provider-token-tls.test.mjs',
+  'quota-sync.test.mjs',
+  'quota-tls.test.mjs',
+];
+const general = ['z-synthetic.test.mjs', 'a-synthetic.test.mjs'];
+const args = ['--import', './native/tests/test-source-runtime.mjs', '--test', '--test-timeout=300000'];
+const suiteScript = suite.split('        run: |\n')[1]
+  .split('\n').map((line) => line.slice(10)).join('\n');
+
+function runSuite(t, part, platform = 'win32', names = [...tls, ...general], status = 0) {
+  const root = mkdtempSync(join(tmpdir(), 'script-suite-workflow-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'scripts'));
+  for (const name of names) writeFileSync(join(root, 'scripts', name), '');
+  writeFileSync(join(root, 'scripts', 'ignored.mjs'), '');
+  mkdirSync(join(root, 'scripts', 'directory.test.mjs'));
+  const shim = `
+    const { runInNewContext } = require('node:vm')
+    runInNewContext(${JSON.stringify(suiteScript)}, {
+      require: (name) => name === 'node:child_process' ? {
+        spawnSync: (executable, args, options) => {
+          console.log(JSON.stringify({ executable, args, options }))
+          return { status: ${JSON.stringify(status)} }
+        }
+      } : require(name),
+      process: {
+        env: process.env,
+        platform: ${JSON.stringify(platform)},
+        execPath: 'synthetic-node',
+        exit: (code) => process.exit(code)
+      },
+      console
+    })
+  `;
+  const result = spawnSync(process.execPath, ['-e', shim], {
+    cwd: root,
+    env: { ...process.env, SUITE_PART: part },
+    encoding: 'utf8',
   });
+  assert.ifError(result.error);
+  return {
+    ...result,
+    calls: result.stdout.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line)),
+  };
 }
 
-test('macOS runs each invocation with concurrency one', () => {
-  assert.ok(suite.includes("if (process.platform === 'darwin') args.push('--test-concurrency=1')"));
+test('TLS list contains exactly the eleven files in order', () => {
+  const list = suite.match(/const tls = (\[[^\n]+\])/)[1];
+  assert.deepEqual(JSON.parse(list.replaceAll("'", '"')), tls);
 });
+
+test('suite step sets only SUITE_PART from matrix.part', () => {
+  assert.match(suite, /        env:\n          SUITE_PART: \$\{\{ matrix.part \}\}\n        run: \|\n/);
+});
+
+test('suite refuses an unknown part before launching tests', (t) => {
+  const result = runSuite(t, 'unknown');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /SUITE_PART must be general or tls/);
+  assert.deepEqual(result.calls, []);
+});
+
+test('both parts refuse a missing TLS file before launching tests', (t) => {
+  for (const part of ['general', 'tls']) {
+    for (const missing of tls) {
+      const result = runSuite(t, part, 'win32', [...tls, ...general].filter((name) => name !== missing));
+      assert.equal(result.status, 1);
+      assert.ok(result.stderr.includes(missing));
+      assert.deepEqual(result.calls, []);
+    }
+  }
+});
+
+test('TLS runs one file per invocation in order with concurrency one on every runner', (t) => {
+  for (const platform of ['win32', 'darwin']) {
+    const result = runSuite(t, 'tls', platform);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.calls, tls.map((name) => ({
+      executable: 'synthetic-node',
+      args: [...args, '--test-concurrency=1', `scripts/${name}`],
+      options: { stdio: 'inherit' },
+    })));
+  }
+});
+
+test('general runs one sorted batch and keeps concurrency one only on darwin', (t) => {
+  for (const platform of ['win32', 'darwin']) {
+    const result = runSuite(t, 'general', platform);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.calls, [{
+      executable: 'synthetic-node',
+      args: [...args, ...(platform === 'darwin' ? ['--test-concurrency=1'] : []),
+        ...general.toSorted().map((name) => `scripts/${name}`)],
+      options: { stdio: 'inherit' },
+    }]);
+  }
+});
+
+test('general plus TLS covers every synthetic test file exactly once', (t) => {
+  const results = ['general', 'tls'].map((part) => runSuite(t, part));
+  for (const result of results) assert.equal(result.status, 0, result.stderr);
+  const files = results.flatMap((result) => result.calls.flatMap((call) =>
+    call.args.filter((arg) => arg.startsWith('scripts/'))));
+  assert.deepEqual(files.sort(), [...tls, ...general].map((name) => `scripts/${name}`).sort());
+  assert.equal(new Set(files).size, files.length);
+});
+
+test('suite stops at the first nonzero child exit', (t) => {
+  const result = runSuite(t, 'tls', 'win32', [...tls, ...general], 7);
+  assert.equal(result.status, 7);
+  assert.equal(result.calls.length, 1);
+});
+
+for (const command of ['npx tsc --noEmit', 'npx oxlint', 'node scripts/build-design-tokens.mjs --check']) {
+  test(`${command} runs only in the general part`, () => {
+    const matches = steps.filter((step) => step.includes(`run: ${command}\n`));
+    assert.equal(matches.length, 1);
+    assert.match(matches[0], /^        if: matrix.part == 'general'$/m);
+  });
+}
 
 test('workflow runs the TypeScript check', () => {
   assert.ok(workflow.includes('npx tsc --noEmit'));
@@ -134,7 +257,7 @@ test('only the advisory oxlint step may continue on error', () => {
   assert.equal([...workflow.matchAll(/continue-on-error/g)].length, 1);
   assert.match(
     steps.find((step) => step.includes('continue-on-error')),
-    /^name: oxlint \(advisory until the earlier web dashboard is removed\)\n        continue-on-error: true\n        run: npx oxlint\n$/,
+    /^name: oxlint \(advisory until the earlier web dashboard is removed\)\n        if: matrix.part == 'general'\n        continue-on-error: true\n        run: npx oxlint\n$/,
   );
 });
 
