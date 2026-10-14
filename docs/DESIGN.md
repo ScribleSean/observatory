@@ -268,6 +268,90 @@ The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.m
 
 The four actions map to things each shell already does. This is not a general command channel, and it must not become one.
 
+### Settings bridge contract
+
+Written on 2026-10-14 for B1, before any shell implements it. It needs two reviewer checks against the rule below before code starts. No shell implements it yet.
+
+The Settings view, the first-run steps and the pairing screens in the shared viewer change settings by sending named actions to the shell. This contract is the whole list. A shell accepts nothing else, and the list grows only by a reviewed change to this section.
+
+**The rule.** No action carries a path, a command or free text that reaches a shell. Every argument is a boolean, a bounded integer, a value from a fixed list, or a string with a fixed pattern and length. Two strings are opaque to the page, the pairing invitation and the sharing confirmation token. They reach only the private pipe of the pairing control process or the standard input of a sharing control script, never a command line, a file name, a URL or a log.
+
+#### Messages
+
+- The page sends one string holding JSON text: `{"id": <id>, "action": "<name>", "args": {...}}`. On the Mac it goes through `webkit.messageHandlers.bridge.postMessage`, on Windows through `chrome.webview.postMessage`. A message that is not a string is ignored.
+- The whole string is at most 4 KiB (4,096 bytes of UTF-8). A longer one is ignored.
+- `id` is an integer from 1 to 2,147,483,647, chosen by the page and not reused within one page load. `action` is one of the names below. `args` is an object with exactly the listed keys, so `{}` for an action without arguments. A missing key, an extra key, a duplicate key, a wrong type or a value out of bounds refuses the message.
+- The shell accepts messages only from the main frame of its own bundled pages at its local origin (`observatory://app` on the Mac, `https://observatory.invalid` on Windows), as the panel bridge does today.
+- Every string argument is refused if it contains a control character (U+0000 to U+001F or U+007F to U+009F), unless its own rule below is stricter.
+
+#### Results
+
+- The shell answers by dispatching `observatory:bridge-result` on `window`, with `detail` set to `{id, ok, code}` and, for the actions that say so, `value`. The shell builds `detail` with a JSON encoder and never by inserting page text into script.
+- `code` is one of `done`, `refused` (the message broke this contract), `busy` (a pairing step is already running), `cancelled`, `expired` (an invitation or sharing token is no longer current) or `unavailable` (anything else). `ok` is true only with `done`. The code carries no error text, path or stage name.
+- A message with no readable `id` is ignored without a result. A refused message with a readable `id` gets `{id, ok: false, code: "refused"}`.
+- The page treats a missing result after 30 seconds as `unavailable` and reads pairing progress through `status`.
+
+#### Actions
+
+| Action | Arguments | What the shell does |
+| --- | --- | --- |
+| `refresh` | none | The panel's existing refresh |
+| `check-updates` | none | The existing update check |
+| `open-dashboard` | `section`: one of `limits`, `activity`, `tokens`, `dictation`, `sources`, `settings` | Opens the dashboard window at that section |
+| `open-settings` | none | Opens the dashboard at Settings |
+| `set-source` | `source`: one of `activity`, `codex`, `claude`, `wispr`, `quota`. `enabled`: boolean | Sets that switch in the local source settings, the same keys the native Settings writes today |
+| `set-skin` | `skin`: a bundled skin id (`sage`, `almanac`, `instrument`, `amber-crt`) or a custom skin name matching `^[A-Za-z0-9][A-Za-z0-9 -]{0,31}$` (the `lib/skins.mjs` name rule, at most 32 characters) | Selects that skin. A custom name must equal a name in the list the shell enumerated from its own skins folder. The shell never builds a file name from the string. |
+| `set-device-name` | `name`: 1 to 40 characters after trimming, with no control or format characters and no `/`, `\` or `:`. Or `null` to clear it. | Writes `<runtime>/device.json` as the D1 snapshot additions describe |
+| `set-startup` | `enabled`: boolean | Login Items on the Mac, start-at-login registration on Windows |
+| `set-appearance` | `mode`: one of `system`, `light`, `dark` | Sets `data-theme` on the shell's pages |
+| `set-limits-consent` | `enabled`: boolean | Runs the limits consent script (D1-5) with fixed arguments `set --consent` or `clear`. The page shows the consent text from "Claude Code limits bridge" before it sends `true`. |
+| `set-sharing` | `channel`: one of `codex-limits`, `claude-code-tokens`. `enabled`: boolean. `token`: exactly 64 lowercase hexadecimal characters, required when `enabled` is true and absent when it is false. | Writes `{"action": "enable", "token": ...}` or `{"action": "disable"}` to the standard input of `quota-sharing-control.mjs` (`codex-limits`) or `provider-token-sharing-control.mjs` (`claude-code-tokens`). The token comes from `status` and only fences a stale confirmation view. |
+| `pairing-identity-create` | none | Sends `identity-create` with storage `restricted-file` to the pairing control process, after the page has shown what that storage means |
+| `pairing-host-start` | `address`: at most 45 characters and accepted by `isPairingAddress` (a private IPv4 address in 10/8, 172.16/12, 192.168/16 or the Tailscale range 100.64/10, or a unique local IPv6 address in fc00::/7). `port`: integer from 1024 to 65535. | Sends `host-start` to the pairing control process. `value` is `{invitation}`, which the page shows with the clipboard warning. |
+| `pairing-host-confirm` | `fingerprint`: exactly 64 lowercase hexadecimal characters. `peerAddress`: the same rule as `address`. `peerPort`: integer from 1024 to 65535. | Sends `host-confirm`. The shell supplies the local endpoint from its own `pairing-host-start` values and `includeUbuntu: false`. |
+| `pairing-join-claim` | `invitation`: at most 2,048 characters, starting with `observatory-pair:v1:` and followed only by base64url characters (`A-Z`, `a-z`, `0-9`, `-`, `_`) | Sends `join-claim`. The control process decodes and validates it. |
+| `pairing-join-confirm` | none | Sends `join-confirm` with `includeUbuntu: false` |
+| `pairing-cancel` | none | Sends `cancel` |
+| `pairing-disconnect` | none | Runs `peer-revocation.mjs --revoke` for this runtime. The page asks the person to confirm first. |
+| `pairing-repair-prepare` | none | Runs `peer-repair.mjs --confirm-local-retirement` for this runtime. The page asks the person to confirm first. |
+| `tailscale-check` | none | Runs `tailscale-status.mjs`, which takes no arguments. `value` is `{status}`, one of `running`, `offline`, `needs-login`, `needs-device-approval`, `stopped`, `starting`, `other-user`, `not-installed`, `unsupported` or `unavailable`. |
+| `export-data` | none | Shows the shell's own save panel. If the person picks a file, it runs `observatory-file.mjs export` with the runtime and that file. The page never sees or sends the path. Cancelling the panel returns `cancelled`. |
+| `status` | none | The one query. `value` is described below. |
+| `complete-setup` | none | Reserved for O1. It records that first-run setup finished. It is added to the generated contract only in O1's reviewed amendment. |
+
+Every script the shell runs above is a bundled script at a fixed location, started with fixed arguments and the runtime folder the shell already owns. Nothing from the page joins those arguments.
+
+#### The `status` value
+
+One bounded object, at most 16 KiB as JSON, holding only:
+
+- `version`: 1
+- `app`: `{version, build}`, the version string (at most 32 characters) and build number
+- `sources`: the five switches as booleans
+- `skin`: `{current, bundled, custom}`, the bundled ids and at most 32 custom names, each following the `set-skin` rule
+- `deviceName`: the stored name or `null`
+- `startup`: boolean
+- `appearance`: `system`, `light` or `dark`
+- `limitsConsent`: boolean
+- `pairing`: `{state, peerFingerprint, transport}`. `state` is one of the statuses the pairing control process and its identity check report today (`idle`, `identity-ready`, `identity-required`, `identity-recovery-required`, `inactive`, `waiting`, `confirming`, `awaiting-confirmation`, `local-ready`, `acknowledged`, `configuration-ready`, `working`, `cancelled`) or `paired`, `unpaired` or `unavailable`. A new status is added here first. `peerFingerprint` is 64 lowercase hexadecimal characters while a host waits for confirmation and `null` otherwise. `transport` is `none`, `ssh` or `tls`.
+- `sharing`: one entry per channel, `{enabled, canEnable, reason, token}`, as the sharing control scripts return it. `token` is 64 lowercase hexadecimal characters or `null`.
+
+It holds no path, address, account identity, key, comparison salt or usage value.
+
+#### Outside the contract
+
+- **SSH pairing.** Its request carries a host alias and three Windows paths that reach a PowerShell command, so it cannot be an action. It stays a native menu item in each shell until P1-7 removes it.
+- **Export location.** Only the shell's own save panel chooses where an export goes.
+- **Import.** Not built, as "The `.observatory` file" describes. When it is built, the file comes from the shell's own open panel in the same way.
+
+#### Pairing code
+
+The owner decided on 2026-10-14 that "pairing code" in this document and in the product direction means the existing invitation: the `observatory-pair:v1:` string made on the first device and pasted on the second. There is no separate short numeric code. The invitation is a bearer secret that expires after 10 minutes. The page shows it once with a warning that it should not be left on the clipboard or sent through a shared channel.
+
+#### First-run setup
+
+The owner decided on 2026-10-14 that the first-run wizard lives in the shared viewer (O1). It writes through `set-source` and `set-limits-consent`, and finishes with `complete-setup`, reserved above.
+
 ### Snapshot fields the panel reads that no collector writes yet
 
 | Field | Meaning | Until it exists |
