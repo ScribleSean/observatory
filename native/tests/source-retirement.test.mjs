@@ -72,30 +72,14 @@ void test('Windows source settings no longer read or describe WSL selectors', as
   );
 });
 
-for (const [file, expectsRetiredKey] of [
-  ['DirectPairingWindow.swift', false],
-  // The C# entry flips in R2-4.
-  ['windows/DirectPairingWindow.cs', true],
+for (const file of [
+  'DirectPairingWindow.swift',
+  'windows/DirectPairingWindow.cs',
 ]) {
   void test(`${file} does not offer or request retired collection scope`, async () => {
     const text = await source(file);
-    assert.ok(
-      !/(?:Toggle|Text\s*=)\s*\(?\s*"Include Ubuntu/.test(text),
-      'Retired pairing checkbox is still offered',
-    );
-    if (!expectsRetiredKey) {
-      assert.ok(!text.includes('includeUbuntu'), 'Retired pairing key is still present');
-      assert.ok(!text.includes('Include Ubuntu'), 'Retired pairing control is still present');
-      return;
-    }
-    const scopes = [
-      ...text.matchAll(/"includeUbuntu"\]?\s*[:=]\s*([^,}\]\r\n]+)/g),
-    ].map((match) => match[1].trim());
-    assert.deepEqual(
-      scopes,
-      ['false', 'false'],
-      'Both host and join must explicitly request native-only scope',
-    );
+    assert.ok(!text.includes('includeUbuntu'), 'Retired pairing key is still present');
+    assert.ok(!text.includes('Include Ubuntu'), 'Retired pairing control is still present');
   });
 }
 

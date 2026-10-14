@@ -177,7 +177,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
 | Price table | Done | Done | Keep | `native/prices.json`, taken from LiteLLM's open table and checked on 2026-10-14. The packaged collectors read its generated twin `scripts/price-data.mjs`. `scripts/price-refresh.mjs` refreshes both by hand. |
-| Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together. R2 (issue 111): the pairing scripts and the Mac pairing requests no longer carry the Ubuntu slot, and saved pairings stay readable. The Windows pairing window (R2-4) and the snapshot `localModel` slot (R2-2) remain. |
+| Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together. R2 (issue 111): the pairing scripts and both apps' pairing requests no longer carry the Ubuntu slot, and saved pairings stay readable. The snapshot `localModel` slot (R2-2) remains. |
 
 ## Shared web viewer (spike)
 
