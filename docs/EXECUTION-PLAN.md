@@ -281,7 +281,7 @@ Scope as corrected: finish integration step 5 on the existing TLS path over Tail
 
 ### N1. Internal rename (branches `shared/n1-names`, `mac/n1`, `win/n1`, after M2 and W2, two reviews, both devices)
 
-Pending the owner's answer on the bundle identifier (section 10, question 2). Recommended shape:
+Pending the owner's answer on the bundle identifier (section 10, question 2, decided on 2026-10-14: the identifier is kept). Recommended shape:
 
 - N1-1 (shared). A single `native/app-names.json` read by `release-version.mjs`, `build.mjs`, `package.mjs`, `replace-app.mjs`, `inspect-package.mjs`, `install.mjs`, `generate-installer.mjs`, `package.ps1`, `retain-candidate.mjs`, `update-appcast.mjs`, with the visible names ("Observatory", `Observatory.app`, `Observatory-<version>-...` artifacts, data folders `Observatory`) and the internal identifiers listed separately. The 16 assertions in `verify-installation.test.mjs`, `mac-package.test.mjs`, `mac-replacement.test.mjs`, `installer.test.mjs`, `windows-retention.test.mjs`, `windows-test-isolation.test.mjs`, `LaunchIsolationTests.cs` follow. `docs/BRAND.md:5` rewritten.
 - N1-2 (Mac). `main.swift:75` data folder, a migration helper `native/mac/migrate-data.mjs`: copy the old folder to the new one, verify by SHA-256, switch, keep the old folder until the owner confirms. `replace-app.mjs` accepts the new basename and a one-time rename install (new bundle beside the old, old retained). Login item re-registered. `activitywatch-headless.mjs` label. If the identifier changes, UserDefaults copy and the privacy prompts documented.
@@ -303,7 +303,7 @@ Pending the owner's answer on the bundle identifier (section 10, question 2). Re
 
 ### F1. Finish
 
-Tag `v<version>-build.<n>` (the form `update-appcast.mjs` implies), one `SHA256SUMS.txt` covering both assets, a release created with the owner's `gh` session carrying the install guides as notes and the release checklist result, then `gh workflow run demo.yml --ref main`. See section 10, question 3, on whether F1 stops for one confirmation before publishing.
+Tag `v<version>-build.<n>` (the form `update-appcast.mjs` implies), one `SHA256SUMS.txt` covering both assets, a release created with the owner's `gh` session carrying the install guides as notes and the release checklist result, then `gh workflow run demo.yml --ref main`. See section 10, question 3, on whether F1 stops for one confirmation before publishing (decided on 2026-10-14: it does not).
 
 ## 5. Reviews
 
@@ -474,7 +474,7 @@ Refinements from the verdicts that changed what I will do:
 | The limits reading on the PC stays not-connected. | H1-b installs with consent outside a session and verifies through the usage command. The PowerShell quoting result is recorded. |
 | Two sample fixtures drift. | V1-4 makes one and tests that every view finds its fields. |
 | Strings extraction changes rendered text that tests and PARITY depend on. | V1-2 keeps every value unchanged. Renames are a later, reviewed change. |
-| The run publishes something on the strength of line 49 against the written rules. | F1 stops at a draft in its issue unless the owner answers question 3 otherwise. |
+| The run publishes something on the strength of line 49 against the written rules. | F1 stops at a draft in its issue unless the owner answers question 3 otherwise. (Decided on 2026-10-14, see section 10: F1 publishes once at the finished state with no further confirmation, and nothing else is published.) |
 | An acceptance run on the PC started from a session reads 2 or 3 of 6 sources and looks like a regression. | Every PC check starts the app through `Win32_Process.Create` and records the parent. |
 | STATE.md and PARITY.md drift under conflicting ownership. | The shared-records rule and the Wave 0 rewrite. |
 
@@ -506,9 +506,14 @@ Contradictions between maps, resolved by reading the files: `native-private-stat
 
 ## 10. Decisions that need the owner
 
+The owner answered questions 1 to 3 on 2026-10-14. Each answer is recorded below the question, and the original options are kept as they were asked. The decisions are also in the owner's decisions table of `docs/BUILD-PLAN.md`.
+
 1. **Pairing code.** The invitation is a 374-character string. Option A (recommended): "pairing code" means the invitation. The owner copies it from the first device and pastes it on the second, then confirms the claimed device on the first. Done item 4, `AGENTS.md:9` and `DESIGN.md:109` are reworded to "an invitation". Option B: a short typed code, which is a new password-authenticated exchange with its own design and two reviews, and done item 4 then cannot complete in this run.
+   - **Decided on 2026-10-14: option A.** "Pairing code" means the existing invitation, pasted on the second device. Done item 4 now reads "Two devices pair through Tailscale and an invitation pasted on the second device".
 2. **Mac bundle identifier.** Option A (recommended): rename everything the owner sees (app file, data folders, Start menu, artifacts) and keep `io.workspace-observatory.app`, the mutex names, the uninstall key and the receipt product string as internal identifiers, which `docs/BRAND.md:5` allows. Option B: change the identifier too, accepting the login item re-registration, UserDefaults reset and new privacy prompts, plus an invalidated Windows receipt history if the Windows product string changes too.
+   - **Decided on 2026-10-14: option A.** Keep the Mac bundle identifier `io.workspace-observatory.app` during the rename. Visible names change and internal identifiers stay.
 3. **Publishing.** Option A (recommended): F1 posts the release draft, both checksums and the demo build location in its issue and stops for one reply, which satisfies `AGENTS.md`, `DESIGN.md:118` and the owner's global rule, costing one message at the end. Option B: publish on the standing approval at line 49 with no further message, and the three documents are changed in Wave 0 to say so.
+   - **Decided on 2026-10-14: option B.** Do not stop for a confirmation before publishing. F1 publishes once, at the finished state, as section 4 describes. `docs/BUILD-PLAN.md`, `AGENTS.md` and `docs/DESIGN.md` were changed in the plan corrections pull request to approve that one publication and nothing else. The risk row in section 8 about publishing on the strength of line 49 no longer applies.
 4. **Still needs the owner during the run** (one list, kept in the F1 issue): the tray click and click elsewhere on Windows with `--web-panel`. Trying the web panel on both devices before it becomes the default. A Windows Firewall rule for the sync port if the first live TLS test times out. Pasting the invitation and confirming on the other device during P1-6. Typing nothing else. Anything that costs money, weakens a security rule, or deletes saved history stays with him, as the build plan says.
 
 ## Handoff
@@ -552,6 +557,10 @@ The main checkout stays on `main` and is clean.
 - The Codex route was exercised once in this run (task Q1-a-1) with the command in section 1, from the worktree, with the reply written to a file. It worked.
 - The two reviewer sessions for pull request 87 were run as fresh-context agents with the brief in section 5. That route works and the reviews are on issue 84.
 - The session scratchpad holding the raw suite logs, the Codex task and reply files and the seven codebase maps is session-specific and may not survive. The counts above are the record.
+
+### Update of 2026-10-14
+
+A new orchestrator session took over on 2026-10-14. The owner answered the three questions in section 10 that day (pairing code means the invitation, keep the Mac bundle identifier, publish once at the end with no extra confirmation). The plan corrections branch was rebased onto `main` after pull request 95 and finished there: the corrected workstream tables, the review list, the "Reviews" and "Corrections of 2026-10-14" sections in `docs/BUILD-PLAN.md`, the decisions, and the edits to `docs/DESIGN.md`, `docs/PARITY.md`, `docs/STATE.md` and `AGENTS.md` listed in section 3.1. The tables above describe the state at the first handoff and are kept as they were.
 
 ### What the next session does first
 
