@@ -1,21 +1,21 @@
-@import './design-tokens.css';
+@import '../../design-tokens.css';
 
 @font-face {
   font-family: 'Inter Tight';
-  src: url('../public/fonts/InterTight.ttf') format('truetype');
+  src: url('../../../public/fonts/InterTight.ttf') format('truetype');
   font-style: normal;
   font-weight: 100 900;
 }
 
 @font-face {
   font-family: 'Fraunces';
-  src: url('../public/fonts/Fraunces.ttf') format('truetype');
+  src: url('../../../public/fonts/Fraunces.ttf') format('truetype');
   font-style: normal;
   font-weight: 100 900;
 }
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../public/fonts/JetBrainsMono.ttf') format('truetype');
+  src: url('../../../public/fonts/JetBrainsMono.ttf') format('truetype');
   font-style: normal;
   font-weight: 100 800;
 }
@@ -39,7 +39,7 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 }
 .ob-panel * { box-sizing: border-box; }
 .ob-panel h1 { margin: 0; font-size: var(--ob-section-size); font-weight: 600; letter-spacing: var(--ob-section-tracking); display: flex; align-items: center; gap: var(--ob-space-2); }
-.ob-mark { width: 22px; height: 22px; background: currentColor; -webkit-mask: url('../public/brand/telescope.svg') center / contain no-repeat; mask: url('../public/brand/telescope.svg') center / contain no-repeat; }
+.ob-mark { width: 22px; height: 22px; background: currentColor; -webkit-mask: url('../../../public/brand/telescope.svg') center / contain no-repeat; mask: url('../../../public/brand/telescope.svg') center / contain no-repeat; }
 .ob-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ob-space-2); }
 .ob-meta { color: var(--ob-muted); font-size: var(--ob-meta-size); }
 .ob-meta.warn, .ob-num.warn { color: var(--ob-warning); }
@@ -97,3 +97,17 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-font-mono .ob-actions button.wide { font-size: 12px; }
 .ob-font-mono .ob-segments button { padding-left: 0; padding-right: 0; letter-spacing: -0.3px; }
 .ob-foot { flex-wrap: wrap; }
+
+.ob-info { font: inherit; color: var(--ob-muted); background: var(--ob-surface); border: 1px solid var(--ob-track); border-radius: var(--ob-radius); padding: var(--ob-space-1) var(--ob-space-2); cursor: pointer; }
+.ob-info:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+
+.ob-chart { margin: 0; min-width: 0; color: var(--ob-text); }
+.ob-chart svg { display: block; max-width: min(100%, 480px); }
+.ob-chart text { font-family: var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; font-size: var(--ob-meta-size); fill: var(--ob-muted); }
+.ob-chart-frame, .ob-chart-unknown { fill: none; stroke: var(--ob-track); }
+.ob-chart-unknown { stroke-dasharray: 4 3; }
+.ob-chart-line { fill: none; stroke-width: 2; }
+.ob-chart-reveal { display: block; font-size: var(--ob-meta-size); cursor: pointer; }
+.ob-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.ob-chart figcaption:has(input:checked) .ob-visually-hidden { position: static; width: 100%; height: auto; margin: 0; overflow: visible; clip-path: none; white-space: normal; table-layout: fixed; overflow-wrap: anywhere; }
+.ob-chart th, .ob-chart td { text-align: start; font-variant-numeric: tabular-nums; }

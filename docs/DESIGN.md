@@ -81,7 +81,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 | Claude Code limits | Read the documented `rate_limits` fields that Claude Code passes to a status line command. A small bridge script writes them to a private file that the collector reads. Installing the bridge needs explicit consent, must pass data through to any status line the person already has, and must be removable. |
 | Claude Code limits, not allowed | Do not call the undocumented OAuth usage endpoint. Do not read the Claude Code token from the Keychain or a credentials file. Do not read browser cookies. Anthropic's legal page says developers may not collect, store or intermediate Claude.ai credentials or session tokens. |
 | Codex limits | Keep the read through the Codex app-server (`account/rateLimits/read`). Handle the newer response that lists several named limits. |
-| Price table | One file in the repository, taken from a maintained open table. A script refreshes it. The app shows the date it was last checked. A test fails when a model in the fixtures has no price. No network request at runtime. |
+| Price table | One file in the repository, `native/prices.json`, taken from [LiteLLM's open price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json). It holds `source`, `checkedOn` and, per model, `input`, `cachedInput`, `cacheWrite` and `output` in USD per million tokens. The packaged apps ship only script files, so `scripts/price-data.mjs` carries the same data and a test fails when the two differ. `scripts/price-refresh.mjs` refreshes both by hand and is never imported by a collector. The app shows the date it was last checked. A test fails when a model in the fixtures has no price, apart from a short list of older models the source table does not carry under their direct names. No network request at runtime. |
 | Claude Code log scan | Replace the hard stop at 2,000 files or 128 MiB with an incremental cache keyed by file, as the Codex reader already has. |
 | Time zone | Days follow the device's time zone. Saved history needs a tested migration before this ships. |
 | Combined Claude Code total | Per device until cross-device overlap checks exist. |
@@ -124,9 +124,9 @@ One source for values and one source for words. Each platform generates its cons
 | Shared file | Holds | Generated into |
 | --- | --- | --- |
 | `native/design-tokens.json` | Palette, meaning colours, provider colours, chart colours, type sizes, spacing, radii, shadows | Swift, C# and CSS |
-| A shared strings file (to be added) | Section names, period names, status words, button labels, time formats | Swift, C# and TypeScript |
+| `lib/strings.json` | Section names, period names, status words, button labels, time formats | Swift (`native/Strings.swift`), C# (`native/windows/Strings.cs`) and TypeScript (`lib/strings.generated.ts`) by `scripts/build-strings.mjs` |
 
-Tests fail when a generated file is stale. A later test should fail when a view uses a fixed colour or a local label where a shared one exists.
+Tests fail when a generated file is stale. Since 2026-10-14 the shared viewer reads every label from the strings file. The Swift and C# outputs are compiled but no native view reads them yet. A later test should fail when a view uses a fixed colour or a local label where a shared one exists.
 
 **Colour.** Keep the earthy sage palette in [brand guidance](BRAND.md). Four colours carry meaning and are used the same way on every surface.
 
@@ -147,7 +147,7 @@ The sage accent stays reserved for selected controls. Contrast of these four aga
 
 ## Skins
 
-Decided in direction on 2026-10-13. Four skins and three limit styles exist as source in the shared panel since that date. No installed app shows them, and there is no skin choice in Settings yet.
+Decided in direction on 2026-10-13. Four skins and three limit styles exist as source in the shared panel since that date, and since 2026-10-14 one hook applies the skin to the panel and the dashboard page alike. No installed app shows them, and there is no skin choice in Settings yet.
 
 A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
 
@@ -169,7 +169,7 @@ Bundled skins, in `native/skins/`:
 
 `lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
 
-A shell chooses a skin by setting `data-skin` on the root element or by loading `panel.html?skin=name`. With sample data the page shows a skin picker so a person can compare them.
+A shell chooses a skin by setting `data-skin` on the root element. The page reads it on load and follows a later change to it, so a shell can switch skins without reloading. A shell should not use `?skin=name`, because the Windows host refuses query strings. The query works only for the sample pages in a browser. An unknown name falls back to Sage. With sample data each page shows a skin picker so a person can compare them.
 
 Fonts: Almanac uses Fraunces and the two mono skins use JetBrains Mono. Both are bundled in `public/fonts/` under the SIL Open Font License, with their licence texts beside them and in the generated web notices. The app makes no font-service requests.
 
@@ -237,7 +237,7 @@ Open question: how a device is identified in a file made on an unpaired installa
 
 ## Architecture
 
-Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). So far the shared panel exists behind `--web-panel` on both platforms. Windows also hosts the dashboard window behind `--web-dashboard`, which shows `panel.html` until the bundle has `dashboard.html`. The Mac has no dashboard flag or host yet. Workstream M1 adds them.
+Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). So far the shared panel exists behind `--web-panel` on both platforms. Since 2026-10-14 the bundle also builds `dashboard.html` with the six sections as empty states. Windows hosts the dashboard window behind `--web-dashboard`. The Mac has no dashboard flag or host yet. Workstream M1 adds them.
 
 The app has three parts.
 
@@ -264,7 +264,7 @@ The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.m
 | Actions | Four fixed names with no arguments: `refresh`, `check-updates`, `open-settings`, `open-dashboard`. Mac receives them on the `panelAction` message handler. Windows receives `{ "panelAction": name }` as a web message. A shell must ignore any other value. |
 | Reload | The shell may dispatch `observatory:snapshot-changed` on `window` after a collection. The page also reloads every 30 seconds while visible. |
 | Appearance | Follows the system setting. A shell may set `data-theme` to `light` or `dark` on the root element. |
-| Sample data | `panel.html?demo` shows fictional data and labels it "Sample data". |
+| Sample data | `panel.html?demo` shows fictional data and labels it "Sample data". The data comes from `lib/sample-snapshot.mjs`, the one fixture both viewer pages use. |
 
 The four actions map to things each shell already does. This is not a general command channel, and it must not become one.
 
@@ -421,12 +421,29 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | Ready flag | `dashboard.html` sets `window.observatoryDashboardReady` to `true` when it has drawn, as `panel.html` sets `window.observatoryPanelReady`. The Windows dashboard host already reads this name, and the Mac host and the test harnesses use the same one. |
 | Web view data folder on Windows | The panel host and the dashboard host share one WebView2 user data folder, `WebViewCache` in the app's data folder. Both hosts create their WebView2 environment with that folder (`WebPanel.cs` and `WebDashboard.cs`), so a second host does not start a separate browser profile. |
 
+### Dashboard page contract
+
+| Item | Contract |
+| --- | --- |
+| Page | `dashboard.html` in the bundled web files. It sets `window.observatoryDashboardReady` after its first render. |
+| Data | It requests `./local/usage.json` through the existing snapshot bridge, reloads on `observatory:snapshot-changed` and every 30 seconds while visible, and reads nothing else. |
+| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. |
+| Actions | None. The page sends nothing to the shell. |
+| Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
+| Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
+
+The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2 and will be checked against those changes when they land. Until then no collector writes them.
+
 ### Snapshot fields the panel reads that no collector writes yet
 
 | Field | Meaning | Until it exists |
 | --- | --- | --- |
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
 | `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
+| `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked | The dashboard reads `checked` from each estimate |
+| `apiEstimate` on Claude Code day rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table after the peer merge, on the device that shows it. It is never part of the exchanged record. A model with no price is excluded and leaves `usd` null. | Claude Code rows carry no estimate |
+
+`prices` and `apiEstimate` on Claude Code rows are written by the second part of the price table work (D2-4).
 
 `deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
 

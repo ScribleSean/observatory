@@ -63,3 +63,9 @@ test('demo is deterministic and covers every delivered view without live reads',
   assert.ok(!JSON.stringify(d).includes('/Users/'));
   assert.ok(!JSON.stringify(d).includes('/home/'));
 });
+
+test('demo re-exports the shared sample function', async () => {
+  const demo = await import('./demo.mjs');
+  const sample = await import('../lib/sample-snapshot.mjs');
+  assert.equal(demo.sampleSnapshot, sample.sampleSnapshot);
+});

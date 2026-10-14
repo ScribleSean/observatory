@@ -1,3 +1,4 @@
+export { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
