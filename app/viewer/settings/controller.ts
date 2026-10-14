@@ -16,12 +16,19 @@ export function createSettingsController(bridge: Bridge) {
     }
     return result;
   };
-  const stopLate = bridge.onLateResult(() => { if (!disposed) void status(); });
+  const lateListeners = new Set<(result: BridgeOutcome, action: string) => void>();
+  const stopLate = bridge.onLateResult((result, action) => {
+    if (disposed) return;
+    void status().catch(() => {}).then(() => {
+      if (!disposed) for (const listener of lateListeners) listener(result, action);
+    });
+  });
   const send = async (action: string, args: Record<string, unknown> = {}): Promise<BridgeOutcome> => {
     const validated = validateArgs(action, args);
     if (!validated.ok || !('args' in validated)) return { id: 0, ok: false, code: 'refused', local: true };
     const result = await bridge.send(action, validated.args as Record<string, unknown>);
-    if (result.code === 'done' || action.startsWith('pairing-')) await status();
+    if (result.timedOut) void status().catch(() => {});
+    else if (result.code === 'done' || action.startsWith('pairing-')) await status();
     return result;
   };
   const port = (value: string | number) => typeof value === 'number' ? value : /^[0-9]+$/.test(value) ? Number(value) : NaN;
@@ -34,6 +41,7 @@ export function createSettingsController(bridge: Bridge) {
   };
   return {
     status,
+    onLateResult(listener: (result: BridgeOutcome, action: string) => void) { lateListeners.add(listener); return () => { lateListeners.delete(listener); }; },
     getStatus: () => current,
     subscribe(listener: (status: BridgeStatus | null) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     setSource: (source: string, enabled: boolean) => send('set-source', { source, enabled }),
@@ -55,7 +63,26 @@ export function createSettingsController(bridge: Bridge) {
     tailscaleCheck: () => send('tailscale-check'),
     checkUpdates: () => send('check-updates'),
     exportData: () => send('export-data'),
-    dispose() { disposed = true; stopLate(); listeners.clear(); },
+    dispose() { disposed = true; stopLate(); listeners.clear(); lateListeners.clear(); },
   };
 }
 export type SettingsController = ReturnType<typeof createSettingsController>;
+
+export function limitsConsentFlow(controller: SettingsController) {
+  let open = false;
+  return {
+    request() { open = true; return open; },
+    cancel() { open = false; return open; },
+    confirm() {
+      if (!open) return null;
+      open = false;
+      return controller.setLimitsConsent(true);
+    },
+  };
+}
+
+export async function changeAppearance(controller: SettingsController, mode: string, demo: boolean, apply: (mode: string) => void) {
+  const result = await controller.setAppearance(mode);
+  if (demo && result.code === 'done') apply(mode);
+  return result;
+}

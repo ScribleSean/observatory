@@ -5,7 +5,7 @@ export type BridgeOutcome = BridgeResultDetail & { local?: boolean; timedOut?: b
 export interface Bridge {
   available: boolean;
   send(action: string, args: Record<string, unknown>): Promise<BridgeOutcome>;
-  onLateResult(listener: (result: BridgeOutcome) => void): () => void;
+  onLateResult(listener: (result: BridgeOutcome, action: string) => void): () => void;
   dispose(): void;
 }
 type WebView = EventTarget & { postMessage(text: string): void };
@@ -19,8 +19,8 @@ export function createBridge(win: BridgeWindow = window, timeoutMs = contract.li
   const windows = win.chrome?.webview;
   const transport = mac ?? windows;
   const pending = new Map<number, { resolve: (result: BridgeOutcome) => void; timer: ReturnType<typeof setTimeout> }>();
-  const late = new Set<number>();
-  const listeners = new Set<(result: BridgeOutcome) => void>();
+  const late = new Map<number, string>();
+  const listeners = new Set<(result: BridgeOutcome, action: string) => void>();
   let disposed = false;
   const handle = (raw: unknown) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
@@ -33,8 +33,10 @@ export function createBridge(win: BridgeWindow = window, timeoutMs = contract.li
       clearTimeout(entry.timer);
       pending.delete(result.id);
       entry.resolve(result);
-    } else if (late.delete(result.id)) {
-      for (const listener of listeners) listener(result);
+    } else if (late.has(result.id)) {
+      const action = late.get(result.id)!;
+      late.delete(result.id);
+      for (const listener of listeners) listener(result, action);
     }
   };
   const custom = (event: Event) => handle((event as CustomEvent<unknown>).detail);
@@ -58,7 +60,7 @@ export function createBridge(win: BridgeWindow = window, timeoutMs = contract.li
       return new Promise(resolve => {
         const timer = setTimeout(() => {
           pending.delete(id);
-          late.add(id);
+          late.set(id, action);
           resolve({ id, ok: false, code: 'unavailable', timedOut: true });
         }, timeoutMs);
         pending.set(id, { resolve, timer });

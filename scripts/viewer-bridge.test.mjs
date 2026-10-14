@@ -96,11 +96,14 @@ void test('timeout is followed by one late result and unsubscribe works', async 
   const { win } = fixture('mac');
   const bridge = createBridge(win, 5);
   const late = [];
-  const unsubscribe = bridge.onLateResult(value => late.push(value));
+  const unsubscribe = bridge.onLateResult((value, action) => late.push({ value, action }));
   assert.deepEqual(await bridge.send('status', {}), { id: 1, ok: false, code: 'unavailable', timedOut: true });
   result(win, 1, { extra: true });
   assert.equal(late.length, 0);
   result(win, 1); result(win, 1);
+  assert.equal(late.length, 1);
+  assert.equal(late[0].action, 'status');
+  result(win, 999);
   assert.equal(late.length, 1);
   await bridge.send('status', {});
   unsubscribe(); result(win, 2);

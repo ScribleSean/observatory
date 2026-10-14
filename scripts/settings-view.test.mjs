@@ -12,8 +12,8 @@ const { createServer } = await load('vite');
 const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
-const { SettingsContent, SettingsView } = await server.ssrLoadModule('/app/viewer/settings/settings.tsx');
-const { createSettingsController } = await server.ssrLoadModule('/app/viewer/settings/controller.ts');
+const { SettingsContent, SettingsView, presentResult } = await server.ssrLoadModule('/app/viewer/settings/settings.tsx');
+const { createSettingsController, limitsConsentFlow, changeAppearance } = await server.ssrLoadModule('/app/viewer/settings/controller.ts');
 const { createFakeBridge } = await server.ssrLoadModule('/app/viewer/settings/fake-bridge.ts');
 const { validateBridgeStatus } = await server.ssrLoadModule('/app/viewer/settings/status.ts');
 const { DashboardView } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
@@ -203,4 +203,118 @@ void test('hosting never writes invitation into browser storage or navigation', 
   for (const file of ['app/viewer/bridge.ts', 'app/viewer/settings/settings.tsx', 'app/viewer/settings/controller.ts', 'app/viewer/settings/fake-bridge.ts']) {
     assert.doesNotMatch(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), /localStorage|sessionStorage|indexedDB|pushState|replaceState|navigator\.clipboard|console\./);
   }
+});
+
+void test('terminal pairing states offer another pairing attempt', () => {
+  for (const state of ['cancelled', 'inactive', 'unavailable', 'identity-recovery-required']) {
+    const status = sampleBridgeStatus(); status.pairing.state = state;
+    assert.match(render(status), /Pair a device/);
+  }
+});
+void test('limits disclosure requests and cancellation send nothing, confirmation sends once', async () => {
+  const bridge = recordingBridge();
+  const controller = createSettingsController(bridge);
+  const consent = limitsConsentFlow(controller);
+  const { STRINGS } = await server.ssrLoadModule('/lib/strings.generated.ts');
+  const html = render(sampleBridgeStatus(), { disclosureOpen: consent.request() });
+  for (const key of ['disclosureHints', 'disclosureReadings', 'disclosureSharing']) {
+    assert.ok(html.includes(STRINGS.settings[key]));
+  }
+  assert.equal(bridge.messages.length, 0);
+  assert.equal(consent.cancel(), false);
+  assert.equal(consent.confirm(), null);
+  assert.equal(bridge.messages.length, 0);
+  consent.request(); await consent.confirm();
+  assert.deepEqual(bridge.messages.map(m => [m.action, m.args]), [['set-limits-consent', { enabled: true }], ['status', {}]]);
+  assert.equal(consent.confirm(), null);
+  const status = sampleBridgeStatus(); status.limitsConsent = false;
+  const original = bridge.send.bind(bridge);
+  bridge.send = async (action, args) => {
+    const result = await original(action, args);
+    return action === 'set-limits-consent' ? { id: result.id, ok: false, code: 'cancelled' } : result;
+  };
+  consent.request();
+  const cancelled = presentResult(await consent.confirm(), 'set-limits-consent', status);
+  const cancelledHtml = render(status, cancelled);
+  assert.match(cancelledHtml, />Cancelled</);
+  assert.match(cancelledHtml, /<input[^>]*aria-checked="false"[^>]*\/>Claude Code limits/);
+  controller.dispose();
+});
+void test('join text survives status refresh and unknown switches have mixed semantics', async () => {
+  const controller = createSettingsController(recordingBridge());
+  const joinText = 'observatory-pair:v1:U0FNUExF';
+  await controller.status();
+  const before = render(controller.getStatus(), { initialFlow: 'join', joinText });
+  await controller.status();
+  const after = render(controller.getStatus(), { initialFlow: 'join', joinText });
+  assert.equal(after, before);
+  assert.match(after, /<textarea[^>]*>observatory-pair:v1:U0FNUExF<\/textarea>/);
+  assert.equal((render(null).match(/aria-checked="mixed"/g) ?? []).length, 9);
+  controller.dispose();
+});
+void test('appearance callback runs only for successful demo changes', async () => {
+  const controller = createSettingsController(recordingBridge());
+  const modes = [];
+  for (const mode of ['light', 'dark', 'system']) await changeAppearance(controller, mode, true, value => modes.push(value));
+  await changeAppearance(controller, 'dark', false, value => modes.push(value));
+  assert.deepEqual(modes, ['light', 'dark', 'system']);
+  controller.dispose();
+});
+void test('late results retain their action, refresh, and replace timeout presentation', async () => {
+  const { createBridge } = await server.ssrLoadModule('/app/viewer/bridge.ts');
+  const win = new EventTarget();
+  const posted = [];
+  const status = sampleBridgeStatus();
+  Object.assign(status.pairing, { state: 'waiting', invitationKept: true });
+  const emit = (id, value) => {
+    const event = new Event('observatory:bridge-result');
+    Object.defineProperty(event, 'detail', { value: { id, ok: true, code: 'done', ...(value ? { value } : {}) } });
+    win.dispatchEvent(event);
+  };
+  win.webkit = { messageHandlers: { bridge: { postMessage(text) {
+    const message = JSON.parse(text); posted.push(message);
+    if (message.action === 'status') emit(message.id, status);
+  } } } };
+  const bridge = createBridge(win, 5);
+  const controller = createSettingsController(bridge);
+  const presentations = [];
+  controller.onLateResult((result, action) => presentations.push(presentResult(result, action, controller.getStatus())));
+  const host = await controller.pairingHostStart('100.64.0.1', 9090);
+  assert.equal(host.timedOut, true);
+  const invitation = 'observatory-pair:v1:U0FNUExF';
+  emit(host.id, { invitation });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(render(controller.getStatus(), presentations[0]).includes(invitation));
+  for (const value of [{ invitation, extra: true }, { invitation: 'invalid' }, 'invalid']) {
+    assert.equal(presentResult({ id: 1, ok: true, code: 'done', value }, 'pairing-host-start', status).invitation, undefined);
+  }
+  const source = await controller.setSource('activity', false);
+  emit(source.id);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(render(controller.getStatus(), presentations[1]), />Done</);
+  const tailscale = await controller.tailscaleCheck();
+  emit(tailscale.id, { status: 'running' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(presentations[2].tailscale.includes('running') || presentations[2].tailscale.includes('Running'));
+  const count = posted.length;
+  emit(123456);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(posted.length, count);
+  assert.equal(presentations.length, 3);
+  controller.dispose(); bridge.dispose();
+});
+void test('pairing timeout returns while its follow-up status is still pending', async () => {
+  const { createBridge } = await server.ssrLoadModule('/app/viewer/bridge.ts');
+  const win = new EventTarget();
+  const posted = [];
+  win.webkit = { messageHandlers: { bridge: { postMessage: text => posted.push(JSON.parse(text)) } } };
+  const bridge = createBridge(win, 10);
+  const controller = createSettingsController(bridge);
+  let statusSettled = false;
+  const send = bridge.send.bind(bridge);
+  bridge.send = (action, args) => send(action, args).then(result => { if (action === 'status') statusSettled = true; return result; });
+  assert.equal((await controller.pairingJoinConfirm()).timedOut, true);
+  assert.deepEqual(posted.map(m => m.action), ['pairing-join-confirm', 'status']);
+  assert.equal(statusSettled, false);
+  controller.dispose(); bridge.dispose();
 });
