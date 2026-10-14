@@ -7,6 +7,30 @@ internal static class ObservatoryStrings
     {
         internal const string Title = "Observatory";
     }
+    internal static class Limits
+    {
+        internal const string DeviceNamed = "{name} ({platform})";
+        internal const string NowCaption = "Pace over the last hour";
+        internal const string PerHour = "{value}% per hour";
+        internal const string BelowTenth = "<0.1";
+        internal const string ResetsFirst = "Resets before running out at this pace.";
+        internal const string Exhausted = "No limit was left at the last reading.";
+        internal const string Stale = "The reading is too old to estimate pace.";
+        internal const string InsufficientHistory = "More readings are needed to estimate pace.";
+        internal const string NoRecentConsumption = "No use was observed in the last hour.";
+        internal const string ResetUnknown = "The reset time is unknown.";
+        internal const string ResetPending = "Waiting for the reset to be observed.";
+        internal const string AwaitingObservation = "Waiting for a new reading.";
+        internal const string SessionCost = "Session cost (estimate)";
+        internal const string History = "History";
+        internal const string ChartTitle = "{provider} {window} remaining";
+        internal const string HistoryCaveat = "History covers the readings this device keeps, about the latest 24 hours.";
+        internal const string HistoryInfo = "About history";
+        internal const string HistoryDetail = "Each point is the last reading in its interval and an interval without a reading is a gap, never zero percent.";
+        internal const string SharedFrom = "Shared from {device}";
+        internal const string Observed = "Observed {span} ago";
+        internal const string ObservationUnknown = "Observation time unknown";
+    }
     internal static class Sections
     {
         internal const string Limits = "Limits";

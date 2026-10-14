@@ -1,6 +1,7 @@
 import { STRINGS, format } from '../../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
-import { ActionBar, Card, FilterGroup, Meter, Numeral, ProviderDot, Row, TextBar } from '../components';
+import { ActionBar, Card, FilterGroup, ProviderDot, Row } from '../components';
+import { LimitRows } from '../components/LimitRows';
 import type { PanelAction } from '../components/ActionBar';
 export type { PanelAction } from '../components/ActionBar';
 import { compact, demoSnapshot, devices, duration, freshness, limits, sourceCounts, totals } from '../../../lib/panel-data.mjs';
@@ -21,20 +22,6 @@ function send(action: PanelAction) {
   if (host.webkit?.messageHandlers?.panelAction) host.webkit.messageHandlers.panelAction.postMessage(action);
   else if (host.chrome?.webview) host.chrome.webview.postMessage({ panelAction: action });
   else window.dispatchEvent(new CustomEvent('observatory:panel-action', { detail: action }));
-}
-
-type Limit = ReturnType<typeof limits>[number];
-
-function LimitRows({ rows, style }: { rows: Limit[]; style: string }) {
-  const children = rows.map((row, index) => {
-    const props = { ...row, value: row.remaining === null ? STRINGS.status.unknown : format(STRINGS.formats.percent, { value: Math.round(row.remaining) }) };
-    if (style === 'numeral') return <Numeral key={index} {...props} />;
-    if (style === 'text') return <TextBar key={index} {...props} filledBlock={STRINGS.formats.filledBlock} emptyBlock={STRINGS.formats.emptyBlock} />;
-    return <Meter key={index} {...props} />;
-  });
-  if (style === 'numeral') return <div className="ob-numerals">{children}</div>;
-  if (style === 'text') return <div className="ob-textbars">{children}</div>;
-  return <>{children}</>;
 }
 
 export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {

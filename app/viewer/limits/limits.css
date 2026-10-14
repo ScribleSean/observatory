@@ -1,0 +1,14 @@
+.ob-limits { min-width: 0; overflow-wrap: anywhere; }
+.ob-limits h3, .ob-limits h4 { margin: 0 0 var(--ob-space-2); font-size: var(--ob-body-size); font-weight: 600; }
+.ob-limits-providers { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
+.ob-limits-providers > * { min-width: 0; }
+.ob-limits .ob-row { flex-wrap: wrap; }
+.ob-limits .ob-num { white-space: normal; }
+.ob-limits .ob-numerals { grid-template-columns: minmax(0, 1fr); }
+.ob-limits-pace, .ob-limits-cost, .ob-limits-caveat { margin-top: var(--ob-space-3); }
+.ob-limits-pace.warn > .ob-num { color: var(--ob-warning); }
+.ob-limits .ob-chart + .ob-chart { margin-top: var(--ob-space-3); }
+.ob-limits-now .ob-limits-providers { margin-top: var(--ob-space-3); }
+@media (min-width: 720px) {
+  .ob-limits-providers { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
