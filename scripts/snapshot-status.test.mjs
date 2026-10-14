@@ -33,7 +33,7 @@ test('fictional sample exposes statuses and structural counts',()=>{
   assert.equal(result.pricesCheckedOn,snapshot.prices?.checkedOn ?? null);
   assert.ok(result.keys.includes('tokens[].days[].hours'));
   assert.ok(result.keys.includes('claudeLimits.sessionCost.usd'));
-  assert.deepEqual(result.keys,[...new Set(result.keys)].sort());
+  assert.deepEqual(result.keys,[...new Set(result.keys)].sort((a,b)=>a<b?-1:a>b?1:0));
   assert.deepEqual(result.counts,{rows:10,keys:result.keys.length});
 });
 

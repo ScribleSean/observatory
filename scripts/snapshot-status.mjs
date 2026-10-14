@@ -48,7 +48,7 @@ export function snapshotStatus(snapshot) {
     }
   }
   visit(snapshot,'',0);
-  const keys=[...paths].sort(),checkedOn=snapshot.prices?.checkedOn;
+  const keys=[...paths].sort((a,b)=>a<b?-1:a>b?1:0),checkedOn=snapshot.prices?.checkedOn;
   return {rows,limits,
     ...(Object.hasOwn(snapshot,'combinedTokens')?{combinedTokens:{status:word(snapshot.combinedTokens?.status),
       verification:word(isObject(snapshot.combinedTokens?.verification)?snapshot.combinedTokens.verification.status:snapshot.combinedTokens?.verification)}}:{}),
