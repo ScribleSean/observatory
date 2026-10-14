@@ -17,13 +17,13 @@ Updated on 2026-10-14 from the Mac, by reading `main`, GitHub and the build 41 i
 | Pairing | Re-paired on 2026-10-13 without the Ubuntu slot, over SSH. The Mac reads fresh Windows records and the All token total reports `ok`. |
 | Plan | [The build plan](BUILD-PLAN.md), corrected on 2026-10-14, and [the execution plan](EXECUTION-PLAN.md) approved that day. |
 | Open pull requests | 94, the script suite workflow (Q1-a). Its first run failed on both hosted runners. |
-| Open issues | 79 to 84 for workstreams V1, D1, D2, R1, M1 and W1. 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. 60, the same question on the Mac. 39, which R2 is expected to supersede. |
+| Open issues | 79 to 84 and 96 to 113, one per workstream (the build plan's "How progress is tracked" lists them). 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. 60, the same question on the Mac. 39, which R2 is expected to supersede. |
 | Script suite on the Mac | 925 tests, 816 passed, 4 failed and 105 skipped on `02b83ac`, run serially with the installed app's Python 3.13. The four failures are named in [the execution plan](EXECUTION-PLAN.md) under "Baselines" and also fail on the hosted macOS runner. |
 
 Work that is ready to pick up, in order (the execution plan, section 2, has the full order):
 
 1. Finish and merge the plan corrections pull request.
-2. Open the missing workstream issues and post the corrected scope on issues 79 to 84.
+2. Done on 2026-10-14. The missing workstream issues are open (96 to 113), and the corrected scope is posted on issues 79 to 84.
 3. Unblock pull request 94: Python 3.13 on the Windows runner lacks `tzdata`, and the four failing tests on the Mac need a decision.
 4. Send the Windows session the W1 items from the last orchestrator comment on issue 84.
 5. Start R1, V1, M1 and the rest of Q1 in parallel. D1 and D2 follow R1. R2 can run at any time, with both apps installed from it together.

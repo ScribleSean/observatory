@@ -281,7 +281,7 @@ Scope as corrected: finish integration step 5 on the existing TLS path over Tail
 
 ### N1. Internal rename (branches `shared/n1-names`, `mac/n1`, `win/n1`, after M2 and W2, two reviews, both devices)
 
-Pending the owner's answer on the bundle identifier (section 10, question 2). Recommended shape:
+Pending the owner's answer on the bundle identifier (section 10, question 2, decided on 2026-10-14: the identifier is kept). Recommended shape:
 
 - N1-1 (shared). A single `native/app-names.json` read by `release-version.mjs`, `build.mjs`, `package.mjs`, `replace-app.mjs`, `inspect-package.mjs`, `install.mjs`, `generate-installer.mjs`, `package.ps1`, `retain-candidate.mjs`, `update-appcast.mjs`, with the visible names ("Observatory", `Observatory.app`, `Observatory-<version>-...` artifacts, data folders `Observatory`) and the internal identifiers listed separately. The 16 assertions in `verify-installation.test.mjs`, `mac-package.test.mjs`, `mac-replacement.test.mjs`, `installer.test.mjs`, `windows-retention.test.mjs`, `windows-test-isolation.test.mjs`, `LaunchIsolationTests.cs` follow. `docs/BRAND.md:5` rewritten.
 - N1-2 (Mac). `main.swift:75` data folder, a migration helper `native/mac/migrate-data.mjs`: copy the old folder to the new one, verify by SHA-256, switch, keep the old folder until the owner confirms. `replace-app.mjs` accepts the new basename and a one-time rename install (new bundle beside the old, old retained). Login item re-registered. `activitywatch-headless.mjs` label. If the identifier changes, UserDefaults copy and the privacy prompts documented.
@@ -303,7 +303,7 @@ Pending the owner's answer on the bundle identifier (section 10, question 2). Re
 
 ### F1. Finish
 
-Tag `v<version>-build.<n>` (the form `update-appcast.mjs` implies), one `SHA256SUMS.txt` covering both assets, a release created with the owner's `gh` session carrying the install guides as notes and the release checklist result, then `gh workflow run demo.yml --ref main`. See section 10, question 3, on whether F1 stops for one confirmation before publishing.
+Tag `v<version>-build.<n>` (the form `update-appcast.mjs` implies), one `SHA256SUMS.txt` covering both assets, a release created with the owner's `gh` session carrying the install guides as notes and the release checklist result, then `gh workflow run demo.yml --ref main`. See section 10, question 3, on whether F1 stops for one confirmation before publishing (decided on 2026-10-14: it does not).
 
 ## 5. Reviews
 
@@ -474,7 +474,7 @@ Refinements from the verdicts that changed what I will do:
 | The limits reading on the PC stays not-connected. | H1-b installs with consent outside a session and verifies through the usage command. The PowerShell quoting result is recorded. |
 | Two sample fixtures drift. | V1-4 makes one and tests that every view finds its fields. |
 | Strings extraction changes rendered text that tests and PARITY depend on. | V1-2 keeps every value unchanged. Renames are a later, reviewed change. |
-| The run publishes something on the strength of line 49 against the written rules. | F1 stops at a draft in its issue unless the owner answers question 3 otherwise. |
+| The run publishes something on the strength of line 49 against the written rules. | F1 stops at a draft in its issue unless the owner answers question 3 otherwise. (Decided on 2026-10-14, see section 10: F1 publishes once at the finished state with no further confirmation, and nothing else is published.) |
 | An acceptance run on the PC started from a session reads 2 or 3 of 6 sources and looks like a regression. | Every PC check starts the app through `Win32_Process.Create` and records the parent. |
 | STATE.md and PARITY.md drift under conflicting ownership. | The shared-records rule and the Wave 0 rewrite. |
 
