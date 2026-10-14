@@ -7,14 +7,15 @@ const sum = values => values.reduce((total, value) => total + value, 0);
 const fields = ['inputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'outputTokens', 'reasoningOutputTokens', 'totalTokens'];
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} versus ${expected}`);
 
-for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
+for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
   test(`shared sample invariants at ${stamp}`, () => {
     const now = Date.parse(stamp), snapshot = sampleSnapshot(now);
     assert.equal(demoSnapshot, sampleSnapshot);
     assert.deepEqual(snapshot, sampleSnapshot(now));
     assert.equal(snapshot.demo, true);
     assert.equal(snapshot.timezone, 'UTC');
-    assert.equal(snapshot.collectedAt, new Date(now - 120000).toISOString());
+    const read = now - Math.min(120000, now - new Date(now).setUTCHours(0, 0, 0, 0));
+    assert.equal(snapshot.collectedAt, new Date(read).toISOString());
     const serialized = JSON.stringify(snapshot);
     for (const forbidden of ['/Users/', '/home/', 'C:\\', '@', 'http://']) assert.ok(!serialized.includes(forbidden));
     assert.deepEqual([...new Set(serialized.match(/https:\/\/[^" ]+/g))], ['https://example.invalid/model-prices.json']);
@@ -31,8 +32,9 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     assert.deepEqual(snapshot.quota.pace, [{ bucket: 'codex', window: 'primary', asOf: new Date(now - 90000).toISOString(),
       status: 'projected', estimatedExhaustionAt: new Date(now + 170 * 60000).toISOString() }]);
     const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources, snapshot.combinedTokens];
-    const read = now - 120000, readDate = new Date(read).toISOString().slice(0, 10);
+    const readDate = new Date(read).toISOString().slice(0, 10);
     for (const source of [...tokenSources, ...snapshot.activity, snapshot.combined, ...snapshot.activityHistory]) {
+      assert.equal(source.days[0].date, new Date(now).toISOString().slice(0, 10));
       assert.equal(source.days.length, 40);
       assert.equal(new Set(source.days.map(day => day.date)).size, 40);
       if (source === snapshot.combinedTokens) {
@@ -138,3 +140,55 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     }
   });
 }
+
+const requiredPaths = [
+  'deviceNames.Mac', 'deviceNames.Windows', 'collectedAt', 'timezone',
+  'claudeLimits.status', 'claudeLimits.checkedAt', 'claudeLimits.windows.*.remainingPercent',
+  'claudeLimits.windows.*.resetsAt', 'claudeLimits.history.*.windows',
+  'claudeLimits.sessionCost.usd', 'claudeLimits.sessionCost.observedAt',
+  'quota.windows.*.remainingPercent', 'quota.pace.*.estimatedExhaustionAt', 'quota.history.*.windows',
+  'peerQuota.windows.*.remainingPercent', 'peerQuota.history',
+  'tokens.*.days.*.totalTokens', 'tokens.*.days.*.hours', 'tokens.*.days.*.models', 'tokens.*.days.*.apiEstimate.usd',
+  'combinedTokens.days.*.totalTokens', 'combinedTokens.days.0.hours',
+  'providerTokenSources.*.days.*.totalTokens', 'providerTokenSources.*.days.*.hours', 'providerTokenSources.*.days.*.apiEstimate.usd',
+  'prices.source', 'prices.checkedOn',
+  'activity.*.days.*.seconds', 'activity.*.days.*.hours', 'activity.*.days.*.categories', 'activity.*.days.*.apps',
+  'combined.days.*.hours', 'activityHistory.*.days', 'settings.*.profiles', 'settings.*.tools',
+  'dictation.0.days', 'dictation.1.days', 'dictation.1.refusal',
+];
+
+function incompletePaths(snapshot) {
+  const unknown = new Set(SAMPLE_UNKNOWN.map(entry => entry.path));
+  const failures = [];
+  const complete = value => typeof value === 'number' ? Number.isFinite(value)
+    : typeof value === 'string' ? value.trim().length > 0
+    : Array.isArray(value) ? value.length > 0
+    : value !== null && typeof value === 'object' && Object.keys(value).length > 0;
+  function walk(value, parts, path) {
+    if (parts.length === 0) {
+      const valid = unknown.has(path)
+        ? value == null || value === 'unavailable' || value.status === 'unavailable'
+        : complete(value);
+      if (!valid) failures.push(path);
+      return;
+    }
+    const [key, ...rest] = parts;
+    if (key === '*') {
+      if (!Array.isArray(value) || value.length === 0) {
+        failures.push([...path.split('.'), ...parts].join('.'));
+        return;
+      }
+      value.forEach((entry, index) => walk(entry, rest, `${path}.${index}`));
+    } else walk(value?.[key], rest, path ? `${path}.${key}` : key);
+  }
+  for (const path of requiredPaths) walk(snapshot, path.split('.'), '');
+  return failures;
+}
+
+test('sample fields for all six views are complete except declared Unknown paths', () => {
+  const snapshot = sampleSnapshot(Date.parse('2026-10-14T12:00:00Z'));
+  assert.deepEqual(incompletePaths(snapshot), []);
+  const missingPriceDate = structuredClone(snapshot);
+  delete missingPriceDate.prices.checkedOn;
+  assert.deepEqual(incompletePaths(missingPriceDate), ['prices.checkedOn']);
+});
