@@ -14,7 +14,6 @@ import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota,findCodexExecutable} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
-import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
@@ -89,15 +88,6 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
-  // Preserve explicitly configured workflows during a future legacy migration.
-  // These owner-local results are attached after peer merge, never exported.
-  let workflows;
-  const workflowFlags=value=>({receipts:value.receipts,benchmarks:value.benchmarks});
-  try {workflows=await collectLegacyWorkflows(runtime,{enabled:workflowFlags(config),
-    isEnabled:async()=>workflowFlags(macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))))});}
-  catch {workflows={agents:[],agentSource:{status:config.receipts?'unavailable':'not-connected'},
-    localModel:{host:'Ubuntu',status:config.benchmarks?'unavailable':'not-connected'}};}
-  attachWorkflows(result,workflows);
   // Optional provider sharing uses its own channel after core peer merging.
   // These records never enter Codex totals or the core peer payload.
   let claude;
