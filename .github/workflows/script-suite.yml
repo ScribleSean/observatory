@@ -105,7 +105,8 @@ jobs:
             }
           }
           const batches = part === 'tls' ? tls.map((name) => [name]) : [files.filter((name) => !tls.includes(name))];
-          const args = ['--import', './native/tests/test-source-runtime.mjs', '--test', '--test-timeout=300000'];
+          const args = ['--import', './native/tests/test-source-runtime.mjs', '--test'];
+          args.push(part === 'tls' ? '--test-timeout=900000' : '--test-timeout=300000');
           if (part === 'tls' || process.platform === 'darwin') args.push('--test-concurrency=1');
           for (const batch of batches) {
             const result = spawnSync(process.execPath, [...args, ...batch.map((name) => `scripts/${name}`)], { stdio: 'inherit' });

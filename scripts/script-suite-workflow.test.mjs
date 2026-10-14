@@ -104,10 +104,11 @@ test('Windows installs pinned time zone data through the selected Python before 
 
 test('suite job timeout is 50 minutes', () => {
   assert.match(workflow, /^    timeout-minutes: 50$/m);
+  assert.equal([...workflow.matchAll(/timeout-minutes:/g)].length, 1);
 });
 
 test('suite invokes Node through the source runtime preload', () => {
-  assert.ok(suite.includes("['--import', './native/tests/test-source-runtime.mjs', '--test', '--test-timeout=300000']"));
+  assert.ok(suite.includes("['--import', './native/tests/test-source-runtime.mjs', '--test']"));
   assert.ok(suite.includes('spawnSync(process.execPath, [...args,'));
 });
 
@@ -125,7 +126,7 @@ const tls = [
   'quota-tls.test.mjs',
 ];
 const general = ['z-synthetic.test.mjs', 'a-synthetic.test.mjs'];
-const args = ['--import', './native/tests/test-source-runtime.mjs', '--test', '--test-timeout=300000'];
+const args = ['--import', './native/tests/test-source-runtime.mjs', '--test'];
 const suiteScript = suite.split('        run: |\n')[1]
   .split('\n').map((line) => line.slice(10)).join('\n');
 
@@ -199,7 +200,7 @@ test('TLS runs one file per invocation in order with concurrency one on every ru
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.calls, tls.map((name) => ({
       executable: 'synthetic-node',
-      args: [...args, '--test-concurrency=1', `scripts/${name}`],
+      args: [...args, '--test-timeout=900000', '--test-concurrency=1', `scripts/${name}`],
       options: { stdio: 'inherit' },
     })));
   }
@@ -211,7 +212,7 @@ test('general runs one sorted batch and keeps concurrency one only on darwin', (
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.calls, [{
       executable: 'synthetic-node',
-      args: [...args, ...(platform === 'darwin' ? ['--test-concurrency=1'] : []),
+      args: [...args, '--test-timeout=300000', ...(platform === 'darwin' ? ['--test-concurrency=1'] : []),
         ...general.toSorted().map((name) => `scripts/${name}`)],
       options: { stdio: 'inherit' },
     }]);
