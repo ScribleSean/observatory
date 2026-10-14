@@ -245,6 +245,62 @@ The four extra processes are the WebKit content, GPU and networking helpers and 
 - Timing and memory after merging later changes on `main`, including skins. The merged branch at `f06db1a` passed every builder check, and its web panel opened once in preview mode in the default skin. An installed package was not built.
 - Idle memory over hours, memory after many collections, and behaviour after sleep and wake.
 
+## Web view release on Windows, October 13
+
+Recorded on 2026-10-13 for issue 84. It measures the rule the build plan asked for: the Windows shell releases the web view after the panel has been hidden for a minute. These are a few runs on one PC. They are not requirements or guarantees.
+
+### What was measured
+
+- Source: the `win/w1-release-web-view` branch, which is `main` at `3da7eab` plus this change.
+- Build: a staged folder, not an installed package. The app binary and the web bundle came from the branch. The collector scripts and the Node and Python runtimes were copied from the installed build 40 (`57518b7`). The installed app was quit for each run and restarted afterwards.
+- Start: each instance was started through `Win32_Process.Create`, so its parent was `WmiPrvSE.exe` and not the Claude desktop app, as issue 58 requires. Each used the real data folder and completed one collection before the first sample.
+- Sequence: `--web-panel --panel-timing` opens the panel once, holds it for 20 seconds and closes it. The panel disposes its web view 60 seconds later. Memory is sampled 1 second, 20 seconds and 5 minutes after that. The panel is then opened five more times.
+- The owner was using the PC during the runs, with a game in the foreground in at least the last one. That did not change what was counted for memory. It probably slowed the open times.
+
+### Memory
+
+Working set summed over the app's process tree, with private bytes beside it.
+
+| State | Run 1 | Run 2 | Run 3 | Run 4 |
+| --- | --- | --- | --- | --- |
+| Panel never opened | 57.1 MiB, 16.7 private, 1 process | 59.3 MiB, 19.1 private, 1 process | 59.7 MiB, 18.4 private, 1 process | 59.3 MiB, 18.3 private, 1 process |
+| Panel open | 407.6 MiB, 190.3 private, 7 processes | 405.7 MiB, 190.7 private, 7 processes | 394.1 MiB, 184.7 private, 7 processes | 407.5 MiB, 187.9 private, 7 processes |
+| 1 second after release | 74.2 MiB, 22.5 private, 1 process | 74.3 MiB, 23.1 private, 1 process | 74.6 MiB, 23.3 private, 1 process | 77.6 MiB, 23.6 private, 1 process |
+| 20 seconds after release | 74.4 MiB, 22.6 private, 1 process | 74.1 MiB, 22.9 private, 1 process | 74.5 MiB, 23.2 private, 1 process | 77.4 MiB, 23.4 private, 1 process |
+| 5 minutes after release | 74.6 MiB, 22.5 private, 1 process | 75.3 MiB, 22.7 private, 1 process | 73.9 MiB, 22.0 private, 1 process | 76.2 MiB, 21.6 private, 1 process |
+
+All six `msedgewebview2.exe` processes were gone one second after release in every run and did not come back until the next opening. Five minutes after release the tree held 14 to 18 MiB more working set and 3 to 6 MiB more private bytes than before the panel was first opened. The native popup measured 67.6 MiB one minute after closing in the spike above.
+
+### Open time
+
+| Opening | Run 1 | Run 2 | Run 3 | Run 4 |
+| --- | ---: | ---: | ---: | ---: |
+| First | 447.8 ms | 600.4 ms | 591.2 ms | 745.1 ms |
+| Next open after release | 283.3 ms | 475.2 ms | 477.9 ms | 492.7 ms |
+| Later opens, web view still kept | 5.4 to 30.2 ms | 5.2 to 41.2 ms | 5.9 to 188.1 ms | 4.8 to 9.3 ms |
+
+An opening after release pays the cost of a first opening again. The first openings here are slower than the 256 ms in the spike above. The cause was not established. The PC was in use during these runs and was not during the spike.
+
+### Shared dashboard window
+
+With `--web-dashboard` the main window showed the shared viewer through the same host. The bundle has no `dashboard.html` yet, so the window showed `panel.html`, which is the fallback built in for that case. The page reported ready, 1134 by 731 CSS pixels, Inter Tight and the dark appearance. The tree held 418.5 MiB in 7 processes with the window open and 72.5 MiB in 1 process 12 seconds after it was closed. Closing the window disposes the web view at once.
+
+### Closing on a click elsewhere
+
+- The panel now stays above other windows while shown and reads the foreground window every 150 ms. Once it has held the foreground, it hides when a different top-level window holds it.
+- An earlier version used the form's `Deactivate` event. That event also fires when focus moves into the page and then does not fire again, so the panel stayed open. A panel that was not above other windows could also open behind them.
+- Checked in run 4. An injected click inside the panel gave it the foreground and it stayed open. The owner, who was using the PC, then clicked into another app. The panel stayed visible while the harness held it open and was hidden within about a second of the harness releasing it, while that other app still held the foreground. The script's own click on a test window came after the panel was already hidden, so it showed nothing.
+- That is one observation with a harness hold in the middle. It is not a clean check of a tray click followed by a click elsewhere. The 400 ms guard against a tray click reopening the panel was not exercised.
+- The check injected mouse clicks and showed a small window above the owner's applications while he was using the PC. That should not be repeated without telling him first.
+
+### Not exercised
+
+- A physical click on the tray icon.
+- The dashboard page itself, which does not exist yet.
+- Light appearance, display scales other than 100 percent, Escape to close and keyboard focus.
+- An installed package. The Clean Windows package workflow was not run for this revision.
+- Release behaviour across sleep and wake, and memory over hours.
+
 ## Limits
 
 - Processes that started and exited between samples can be missed. These are observed peaks, not maximum memory bounds.
