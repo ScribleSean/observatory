@@ -25,9 +25,7 @@ export const STRINGS = {
     "macOS": "macOS",
     "windows": "Windows",
     "device": "Device",
-    "period": "Period",
-    "sampleMac": "Studio",
-    "sampleWindows": "Desk"
+    "period": "Period"
   },
   "providers": {
     "claudeCode": "Claude Code",

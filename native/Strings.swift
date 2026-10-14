@@ -26,8 +26,6 @@ enum ObservatoryStrings {
         static let `windows` = "Windows"
         static let `device` = "Device"
         static let `period` = "Period"
-        static let `sampleMac` = "Studio"
-        static let `sampleWindows` = "Desk"
     }
     enum Providers {
         static let `claudeCode` = "Claude Code"

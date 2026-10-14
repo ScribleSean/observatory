@@ -33,8 +33,6 @@ internal static class ObservatoryStrings
         internal const string Windows = "Windows";
         internal const string Device = "Device";
         internal const string Period = "Period";
-        internal const string SampleMac = "Studio";
-        internal const string SampleWindows = "Desk";
     }
     internal static class Providers
     {

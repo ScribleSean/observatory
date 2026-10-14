@@ -42,7 +42,7 @@ function sectionNames(html) {
 }
 
 void test('dashboard sections omit disconnected dictation and preserve their order', () => {
-  assert.deepEqual(sectionNames(dashboard()), ['Limits', 'Activity', 'Tokens', 'Sources', 'Settings']);
+  assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [] } })), ['Limits', 'Activity', 'Tokens', 'Sources', 'Settings']);
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [{ status: 'ok' }] } })), ['Limits', 'Activity', 'Tokens', 'Dictation', 'Sources', 'Settings']);
 });
 
