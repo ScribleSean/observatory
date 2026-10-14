@@ -161,6 +161,30 @@ export const STRINGS = {
     "detail": "Missing dates are gaps, not zeros. Transcripts, recordings and credentials are not collected.",
     "info": "About dictation records",
     "noMatch": "No dictation records match these filters"
+  },
+  "tokens": {
+    "input": "Input",
+    "cached": "Cached input",
+    "cacheWrite": "Cache writes",
+    "output": "Output",
+    "total": "Total",
+    "classes": "Token classes",
+    "byModel": "By model",
+    "model": "Model",
+    "chartTitle": "{provider} tokens by day, last 30 days",
+    "apiEstimate": "API-equivalent (estimate)",
+    "underCent": "Under $0.01",
+    "pricesChecked": "Prices checked {date}",
+    "pricesUnknown": "Price check date Unknown",
+    "partial": "Covers {covered} of {total} tokens. Models without a price are left out.",
+    "settingsTitle": "Recorded reasoning and speed",
+    "effort": "Reasoning",
+    "speed": "Speed",
+    "noSettings": "No settings recorded",
+    "caveat": "Dollar figures are estimates at list price. A subscription is not billed per token.",
+    "caveatLabel": "About these figures",
+    "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free. Session cost is the figure Claude Code reported for its latest session on this device.",
+    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked."
   }
 } as const;
 

@@ -162,4 +162,28 @@ enum ObservatoryStrings {
         static let `info` = "About dictation records"
         static let `noMatch` = "No dictation records match these filters"
     }
+    enum Tokens {
+        static let `input` = "Input"
+        static let `cached` = "Cached input"
+        static let `cacheWrite` = "Cache writes"
+        static let `output` = "Output"
+        static let `total` = "Total"
+        static let `classes` = "Token classes"
+        static let `byModel` = "By model"
+        static let `model` = "Model"
+        static let `chartTitle` = "{provider} tokens by day, last 30 days"
+        static let `apiEstimate` = "API-equivalent (estimate)"
+        static let `underCent` = "Under $0.01"
+        static let `pricesChecked` = "Prices checked {date}"
+        static let `pricesUnknown` = "Price check date Unknown"
+        static let `partial` = "Covers {covered} of {total} tokens. Models without a price are left out."
+        static let `settingsTitle` = "Recorded reasoning and speed"
+        static let `effort` = "Reasoning"
+        static let `speed` = "Speed"
+        static let `noSettings` = "No settings recorded"
+        static let `caveat` = "Dollar figures are estimates at list price. A subscription is not billed per token."
+        static let `caveatLabel` = "About these figures"
+        static let `caveatDetail` = "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free. Session cost is the figure Claude Code reported for its latest session on this device."
+        static let `deviceNote` = "Claude Code totals are shown per device until overlap between devices can be checked."
+    }
 }

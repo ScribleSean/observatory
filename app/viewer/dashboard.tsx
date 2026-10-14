@@ -6,6 +6,7 @@ import { SKINS, useSkin } from './skin';
 
 import { EmptyState, Row } from './components';
 import LimitsView from './limits/LimitsView';
+import { TokensView } from './tokens/tokens';
 import { SourcesView } from './sources/SourcesView';
 import { DictationView } from './dictation/DictationView';
 
@@ -94,7 +95,7 @@ export function DashboardView({ demo = false, snapshot, loaded, now, skinId, ski
         <main>
           <section aria-labelledby={`ob-section-${selected}`}>
             <h2 id={`ob-section-${selected}`}>{title}</h2>
-            {selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : <EmptyState text={STRINGS.sections.emptyState} />}
+            {selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : selected === 'tokens' ? <TokensView snapshot={snapshot} now={now} /> : selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : <EmptyState text={STRINGS.sections.emptyState} />}
           </section>
         </main>
       </div>
