@@ -27,8 +27,13 @@ export const BRIDGE_CONTRACT = {
     "queue": 4,
     "resultTimeoutSeconds": 60,
     "cacheRefreshSeconds": 5,
-    "pairingPollSeconds": 2,
-    "statusMaxBytes": 16384
+    "pairingPollSeconds": 2
+  },
+  "status": {
+    "version": 1,
+    "maxBytes": 16384,
+    "appVersionMaxLength": 32,
+    "customSkinsMax": 32
   },
   "dashboardFragments": [
     "limits",

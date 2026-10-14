@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 const root = new URL('../', import.meta.url);
 const notice = '// Generated from lib/bridge-contract.json by scripts/build-bridge-contract.mjs. Do not edit.\n';
 
-function validateContract(data) {
+export function validateContract(data) {
   const fail = () => { throw new Error('Invalid bridge contract data'); };
   const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   const keys = (v, required, optional = []) => {
@@ -13,14 +13,28 @@ function validateContract(data) {
   const positive = v => { if (!Number.isSafeInteger(v) || v < 1) fail(); };
   const strings = v => { if (!Array.isArray(v) || !v.length || v.some(s => typeof s !== 'string' || !s.length) || new Set(v).size !== v.length) fail(); };
   const bounds = v => { keys(v, ['min', 'max']); positive(v.min); positive(v.max); if (v.min > v.max) fail(); };
-  keys(data, ['version', 'source', 'message', 'codes', 'limits', 'dashboardFragments', 'whiteSpace', 'address', 'values', 'actions']);
+  const checkStrings = value => {
+    if (typeof value === 'string') {
+      if (!value.isWellFormed()) fail();
+      for (let i = 0; i < value.length; i++) {
+        const unit = value.charCodeAt(i);
+        if (unit < 32 || (unit >= 127 && unit <= 159)) fail();
+      }
+    } else if (value !== null && typeof value === 'object') {
+      for (const [key, child] of Object.entries(value)) { checkStrings(key); checkStrings(child); }
+    }
+  };
+  checkStrings(data);
+  keys(data, ['status', 'version', 'source', 'message', 'codes', 'limits', 'dashboardFragments', 'whiteSpace', 'address', 'values', 'actions']);
   positive(data.version); if (typeof data.source !== 'string') fail();
   keys(data.message, ['maxBytes', 'maxDepth', 'id', 'keys']);
   positive(data.message.maxBytes); positive(data.message.maxDepth); bounds(data.message.id); strings(data.message.keys);
   if (data.message.keys.length !== 3 || ['id', 'action', 'args'].some(k => !data.message.keys.includes(k))) fail();
   strings(data.codes); strings(data.dashboardFragments);
-  keys(data.limits, ['queue', 'resultTimeoutSeconds', 'cacheRefreshSeconds', 'pairingPollSeconds', 'statusMaxBytes']);
+  keys(data.limits, ['queue', 'resultTimeoutSeconds', 'cacheRefreshSeconds', 'pairingPollSeconds']);
   Object.values(data.limits).forEach(positive);
+  keys(data.status, ['version', 'maxBytes', 'appVersionMaxLength', 'customSkinsMax']);
+  Object.values(data.status).forEach(positive);
   if (!Array.isArray(data.whiteSpace) || !data.whiteSpace.length || new Set(data.whiteSpace).size !== data.whiteSpace.length || data.whiteSpace.some(c => !Number.isInteger(c) || c < 0 || c > 0x10ffff || (c >= 0xd800 && c <= 0xdfff))) fail();
   keys(data.address, ['maxLength', 'ipv4', 'ipv6FirstGroup']); positive(data.address.maxLength); bounds(data.address.ipv6FirstGroup);
   if (data.address.ipv6FirstGroup.max > 65535 || !Array.isArray(data.address.ipv4) || !data.address.ipv4.length) fail();
@@ -59,12 +73,41 @@ function validateContract(data) {
   }
 }
 
+export function swiftLiteral(value) {
+  let result = '"';
+  for (let i = 0; i < value.length; i++) {
+    let unit = value.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const low = value.charCodeAt(i + 1);
+      if (!(low >= 0xdc00 && low <= 0xdfff)) throw new Error('Lone surrogate in Swift literal');
+      unit = 0x10000 + (unit - 0xd800) * 0x400 + low - 0xdc00;
+      i++;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) throw new Error('Lone surrogate in Swift literal');
+    if (unit === 34 || unit === 92) result += '\\' + String.fromCharCode(unit);
+    else if (unit < 32 || unit >= 127) result += '\\u{' + unit.toString(16).padStart(4, '0') + '}';
+    else result += String.fromCharCode(unit);
+  }
+  return result + '"';
+}
+
+export function csLiteral(value) {
+  let result = '"';
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i);
+    if (unit === 34 || unit === 92) result += '\\' + value[i];
+    else if (unit < 32 || unit >= 127) result += '\\u' + unit.toString(16).padStart(4, '0');
+    else result += value[i];
+  }
+  return result + '"';
+}
+
 const quote = JSON.stringify;
 function nativeData(value, language) {
   const swift = language === 'swift';
+  const quote = swift ? swiftLiteral : csLiteral;
   if (value === null) return swift ? 'BridgeNode("null")' : 'new BridgeNode("null")';
   if (typeof value === 'string') {
-    const literal = swift ? quote(value).replace(/\\u([0-9a-f]{4})/gi, '\\u{$1}') : quote(value);
+    const literal = quote(value);
     return swift ? `BridgeNode("string", ${literal})` : `new BridgeNode("string", ${literal})`;
   }
   if (typeof value === 'number' || typeof value === 'boolean') return `${swift ? '' : 'new '}BridgeNode(${quote(typeof value === 'number' ? 'number' : 'boolean')}, ${quote(String(value))})`;
@@ -80,7 +123,7 @@ function swiftData(data) {
     if (value === null || typeof value !== 'object') return nativeData(value, 'swift');
     const expression = Array.isArray(value)
       ? `BridgeNode(items: [${value.map(visit).join(', ')}])`
-      : `BridgeNode(entries: [${Object.entries(value).map(([key, child]) => `(${quote(key)}, ${visit(child)})`).join(', ')}])`;
+      : `BridgeNode(entries: [${Object.entries(value).map(([key, child]) => `(${swiftLiteral(key)}, ${visit(child)})`).join(', ')}])`;
     const name = `value${serial++}`;
     declarations.push(`        let ${name}: BridgeNode = ${expression}`);
     return name;
@@ -273,6 +316,7 @@ enum BridgeContract {
     static let message = data["message"]
     static let actions = data["actions"]
     static let limits = data["limits"]
+    static let status = data["status"]
     static let codes = data["codes"].strings
     static let dashboardFragments = data["dashboardFragments"].strings
     static let whiteSpace = Set(data["whiteSpace"].items.map { UInt32($0.number) })
@@ -577,6 +621,10 @@ internal static class BridgeContract
     internal static readonly BridgeNode Message = Data["message"];
     internal static readonly BridgeNode Actions = Data["actions"];
     internal static readonly BridgeNode Limits = Data["limits"];
+    internal static readonly int StatusVersion = Data["status"]["version"].Number;
+    internal static readonly int StatusMaxBytes = Data["status"]["maxBytes"].Number;
+    internal static readonly int StatusAppVersionMaxLength = Data["status"]["appVersionMaxLength"].Number;
+    internal static readonly int StatusCustomSkinsMax = Data["status"]["customSkinsMax"].Number;
     internal static readonly BridgeNode Codes = Data["codes"];
     internal static readonly BridgeNode DashboardFragments = Data["dashboardFragments"];
     internal static readonly BridgeNode WhiteSpace = Data["whiteSpace"];
