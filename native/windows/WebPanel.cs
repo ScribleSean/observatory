@@ -16,10 +16,14 @@ internal sealed class WebPanel : Form
     private readonly string runtime;
     private readonly Action<string> act;
     private Task? started;
+    private bool failed;
+    private readonly Func<Task>? startOverride;
 
-    internal WebPanel(string runtime, Action<string> act)
+    internal WebPanel(string runtime, Action<string> act, TimeSpan? releaseAfter = null, Func<Task>? startOverride = null)
     {
         this.runtime = runtime; this.act = act;
+        this.startOverride = startOverride;
+        release.Interval = (int)Math.Clamp((releaseAfter ?? DefaultReleaseAfter).TotalMilliseconds, 100, int.MaxValue);
         Text = "Observatory";
         AccessibleName = "Observatory usage overview";
         BackColor = DashboardPalette.Background(false);
@@ -29,8 +33,8 @@ internal sealed class WebPanel : Form
         TopMost = true;
         ClientSize = new Size(LogicalToDeviceUnits(PanelWidth), LogicalToDeviceUnits(560));
         Controls.Add(web);
-        VisibleChanged += (_, _) => { release.Stop(); if (!Visible && !IsDisposed && started is not null) release.Start(); };
-        release.Tick += (_, _) => { release.Stop(); if (!IsDisposed && !Visible) Retire(); };
+        VisibleChanged += (_, _) => { release.Stop(); if (ShouldRelease(Visible, IsDisposed, started is not null, failed)) release.Start(); };
+        release.Tick += (_, _) => { release.Stop(); if (ShouldRelease(Visible, IsDisposed, started is not null, failed)) Retire(); };
         // Close when another window comes to the foreground, as tray panels do.
         // The form's Deactivate event is not used: it also fires when focus
         // moves into the page, and then does not fire again. The foreground
@@ -71,8 +75,11 @@ internal sealed class WebPanel : Form
     // reopening soon is fast. After the panel has stayed hidden for a minute the
     // form and its web view are disposed, which ends the browser processes. The
     // owner then creates a new panel on the next opening.
-    internal static readonly TimeSpan ReleaseAfter = TimeSpan.FromSeconds(60);
-    private readonly System.Windows.Forms.Timer release = new() { Interval = (int)ReleaseAfter.TotalMilliseconds };
+    internal static readonly TimeSpan DefaultReleaseAfter = TimeSpan.FromSeconds(60);
+    private readonly System.Windows.Forms.Timer release = new();
+
+    internal static bool ShouldRelease(bool visible, bool disposed, bool started, bool failed) =>
+        !visible && !disposed && (started || failed);
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (e.CloseReason == CloseReason.UserClosing && !retire) { e.Cancel = true; Hide(); }
@@ -80,7 +87,12 @@ internal sealed class WebPanel : Form
     }
 
     private bool retire;
-    internal void Retire() { retire = true; Close(); }
+    internal void Retire()
+    {
+        if (retire || IsDisposed) return;
+        retire = true;
+        Close();
+    }
 
     // Completes when the panel is visible and the page reports that it has drawn.
     internal async Task<bool> ShowNearTray()
@@ -90,7 +102,7 @@ internal sealed class WebPanel : Form
         Show(); Activate();
         try
         {
-            await (started ??= Start());
+            await (started ??= startOverride is null ? Start() : startOverride());
             for (var attempt = 0; attempt < 400 && !IsDisposed && Visible; attempt++)
             {
                 if (await web.CoreWebView2.ExecuteScriptAsync("window.observatoryPanelReady === true") == "true")
@@ -101,7 +113,15 @@ internal sealed class WebPanel : Form
                 await Task.Delay(25);
             }
         }
-        catch { started = null; }
+        catch
+        {
+            failed = true;
+            if (!IsDisposed && !retire)
+            {
+                Hide();
+                Retire();
+            }
+        }
         return false;
     }
 
@@ -174,8 +194,20 @@ internal sealed class WebPanel : Form
     private async Task Start()
     {
         var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(runtime, "WebViewCache"));
+        if (IsDisposed) return;
         await web.EnsureCoreWebView2Async(environment);
+        if (IsDisposed) return;
         var core = web.CoreWebView2;
+        core.ProcessFailed += (_, _) =>
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action(Retire)); }
+                catch (InvalidOperationException) when (IsDisposed || Disposing || !IsHandleCreated) { }
+            }
+            else Retire();
+        };
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.AreHostObjectsAllowed = false;
@@ -238,17 +270,43 @@ internal sealed class WebPanel : Form
     internal static bool IsPage(string value, string page) => IsLocal(value) && new Uri(value) is { } uri &&
         uri.AbsolutePath == "/" + page && uri.Fragment.Length == 0 && uri.Query is "" or "?demo";
 
+    internal static string? RequestPath(string uri, string page)
+    {
+        if (!IsLocal(uri)) return null;
+        var request = new Uri(uri);
+        var relative = Uri.UnescapeDataString(request.AbsolutePath).TrimStart('/');
+        if (relative.Contains('\0')) return null;
+        if (request.Query.Length != 0 && !(page == Page && relative == Page && request.Query == "?demo")) return null;
+        return relative;
+    }
+
     // Returns the bundled file for a request path, or null when the path is
     // outside what a shared viewer page may load: that one page, bundled assets
     // and the sanitized snapshot.
-    internal static string? Resolve(string runtime, string relative, string page = Page)
+    internal static string? Resolve(string runtime, string relative, string page = Page, string? webRoot = null)
     {
         if (page is not (Page or WebDashboard.Page)) return null;
+        if (relative.EndsWith('/') || relative.Contains('\\') || relative.Contains(':') || relative.Contains('\0') ||
+            relative.Split('/').Any(part => part is "." or "..")) return null;
         if (relative == "local/usage.json") return Snapshot.DashboardFile(runtime, "usage.json");
         if (relative != page && !relative.StartsWith("assets/", StringComparison.Ordinal)) return null;
-        if (Path.GetExtension(relative).Equals(".json", StringComparison.OrdinalIgnoreCase)) return null;
-        if (relative.Contains('\\') || relative.Contains(':') || relative.Contains('\0') || relative.Split('/').Contains("..")) return null;
-        return Snapshot.UnlinkedFile(Path.Combine(AppContext.BaseDirectory, "Web"), relative);
+        var file = Snapshot.UnlinkedFile(webRoot ?? Path.Combine(AppContext.BaseDirectory, "Web"), relative);
+        if (file is null) return null;
+        var extension = Path.GetExtension(file);
+        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase) ||
+            (extension.Equals(".html", StringComparison.OrdinalIgnoreCase) && relative != page)) return null;
+        return file;
+    }
+
+    internal static string Untrusted(string? text, int max = 2048)
+    {
+        if (text is null) return "Unknown";
+        const string marker = "...[truncated]";
+        max = Math.Max(0, max);
+        var truncated = text.Length > max;
+        var length = truncated ? Math.Max(0, max - marker.Length) : text.Length;
+        var clean = new string(text.Take(length).Select(character => char.IsControl(character) ? ' ' : character).ToArray());
+        return truncated ? clean + marker[..Math.Min(max, marker.Length)] : clean;
     }
 
     internal static void Respond(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs e, string runtime, string page)
@@ -256,14 +314,15 @@ internal sealed class WebPanel : Form
         const string policy = "Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff";
         try
         {
-            if (e.Request.Method != "GET" || !IsLocal(e.Request.Uri)) throw new InvalidOperationException();
-            var relative = Uri.UnescapeDataString(new Uri(e.Request.Uri).AbsolutePath).TrimStart('/');
+            if (e.Request.Method != "GET") throw new InvalidOperationException();
+            var relative = RequestPath(e.Request.Uri, page) ?? throw new InvalidOperationException();
             var file = Resolve(runtime, relative, page) ?? throw new InvalidOperationException();
             var info = new FileInfo(file);
             if (!info.Exists || info.Length > Snapshot.MaxBytes || info.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException();
             var mime = Path.GetExtension(file) switch
             {
                 ".html" => "text/html", ".js" => "text/javascript", ".css" => "text/css", ".json" => "application/json",
+                ".txt" => "text/plain; charset=utf-8", ".ico" => "image/x-icon", ".woff" => "font/woff",
                 ".svg" => "image/svg+xml", ".png" => "image/png", ".woff2" => "font/woff2", ".ttf" => "font/ttf",
                 _ => throw new InvalidOperationException()
             };
@@ -294,13 +353,55 @@ internal sealed class WebPanel : Form
             Check(!IsPanel(other), "other page " + other);
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-web-panel-" + Guid.NewGuid().ToString("N"));
         foreach (var path in new[] { "index.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json", "assets/../panel.html",
-            "assets/data.json", "assets\\x.js", "assets/c:x.js", "panel.html/", "Panel.html", "" })
+            "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/x.json/", "assets/./x.js", "assets/page.html", "assets\\x.js", "assets/c:x.js", "panel.html/", "Panel.html", "" })
             Check(Resolve(runtime, path) is null, "refuses " + path);
         Check(IsPage(Origin + "/dashboard.html", WebDashboard.Page) && !IsPage(Origin + "/panel.html", WebDashboard.Page) &&
             !IsPage(Origin + "/dashboard.html", Page) && !IsPage(Origin + "/index.html", WebDashboard.Page), "dashboard page");
         foreach (var path in new[] { "panel.html", "index.html", "local/collector.json", "private-sync/pairing.json", "assets/../dashboard.html", "Dashboard.html" })
             Check(Resolve(runtime, path, WebDashboard.Page) is null, "dashboard refuses " + path);
         Check(Resolve(runtime, "panel.html", "index.html") is null && Resolve(runtime, "index.html", "index.html") is null, "unknown page");
+        foreach (var visible in new[] { false, true })
+        foreach (var disposed in new[] { false, true })
+        foreach (var hasStarted in new[] { false, true })
+        foreach (var hasFailed in new[] { false, true })
+            Check(ShouldRelease(visible, disposed, hasStarted, hasFailed) == (!visible && !disposed && (hasStarted || hasFailed)),
+                "release truth table");
+        Check(RequestPath(Origin + "/assets/x.js", Page) == "assets/x.js", "asset request");
+        Check(RequestPath(Origin + "/panel.html?demo", Page) == Page, "panel demo request");
+        Check(RequestPath(Origin + "/dashboard.html?demo", WebDashboard.Page) is null, "dashboard demo refused");
+        foreach (var uri in new[] { Origin + "/assets/x.js?v=1", Origin + "/local/usage.json?x", Origin + "/panel.html?skin=x",
+            "http://observatory.invalid/panel.html", "https://observatory.invalid:444/panel.html", "https://user@observatory.invalid/panel.html",
+            "https://example.com/panel.html", Origin + "/assets/x%00.js" })
+            Check(RequestPath(uri, Page) is null, "request refused " + uri);
+        var trailing = RequestPath(Origin + "/assets/x.json%2F", Page);
+        Check(trailing == "assets/x.json/" && Resolve(runtime, trailing) is null, "encoded trailing slash refused");
+        var traversal = RequestPath(Origin + "/assets/..%2Fpanel.html", Page);
+        Check(traversal is not null && Resolve(runtime, traversal) is null, "encoded traversal refused");
+        var root = Path.Combine(Path.GetTempPath(), "observatory-web-fixture-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "assets"));
+            File.WriteAllText(Path.Combine(root, Page), "<html>Fixture panel</html>");
+            File.WriteAllText(Path.Combine(root, WebDashboard.Page), "<html>Fixture dashboard</html>");
+            File.WriteAllText(Path.Combine(root, "assets", "app.js"), "void 0");
+            File.WriteAllText(Path.Combine(root, "assets", "data.json"), "{}");
+            File.WriteAllText(Path.Combine(root, "assets", "inner.html"), "<html>Fixture asset</html>");
+            Check(Resolve(runtime, Page, Page, root) == Path.Combine(root, Page), "fixture panel");
+            Check(Resolve(runtime, "assets/app.js", Page, root) == Path.Combine(root, "assets", "app.js"), "fixture script");
+            Check(Resolve(runtime, WebDashboard.Page, WebDashboard.Page, root) == Path.Combine(root, WebDashboard.Page), "fixture dashboard");
+            foreach (var path in new[] { "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/inner.html", WebDashboard.Page })
+                Check(Resolve(runtime, path, Page, root) is null, "fixture refuses " + path);
+            Check(trailing is not null && Resolve(runtime, trailing, Page, root) is null, "fixture encoded trailing slash refused");
+            Check(traversal is not null && Resolve(runtime, traversal, Page, root) is null, "fixture encoded traversal refused");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+        Check(Untrusted(null) == "Unknown", "missing page text");
+        var capped = Untrusted(new string('a', 5000));
+        Check(capped.Length == 2048 && capped.EndsWith("...[truncated]", StringComparison.Ordinal), "page text capped");
+        Check(Untrusted("a\r\nb") == "a  b" && Untrusted("a\0\tb") == "a  b", "page controls removed");
         Console.WriteLine("Web panel action, page and file contracts passed.");
     }
 }

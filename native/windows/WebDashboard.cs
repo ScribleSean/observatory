@@ -61,7 +61,8 @@ internal sealed class WebDashboard : Form
         catch
         {
             if (IsDisposed) return;
-            web.Visible = false;
+            Controls.Remove(web);
+            web.Dispose();
             Controls.Add(new Label { Dock = DockStyle.Fill, ForeColor = DashboardPalette.Text(false), Padding = new Padding(30),
                 Text = "The dashboard could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window." });
         }
