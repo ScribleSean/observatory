@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   readFileSync,
+  readdirSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -312,4 +313,13 @@ void test('generated TEST metadata separates setup, singleton, startup and unins
     false,
     'TEST generation must not relax ordinary dirty-source refusal',
   );
+});
+
+void test('Windows sources hold no double-encoded text', () => {
+  const folder = new URL('../windows/', import.meta.url);
+  for (const name of readdirSync(folder).filter((file) => file.endsWith('.cs'))) {
+    const bytes = readFileSync(new URL(name, folder));
+    for (const broken of [Buffer.from([0xc3, 0xa2, 0xe2, 0x82, 0xac]), Buffer.from([0xc3, 0x82, 0xc2])])
+      assert.equal(bytes.includes(broken), false, `${name} has text saved through the wrong encoding`);
+  }
 });

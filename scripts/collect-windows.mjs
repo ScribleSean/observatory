@@ -19,7 +19,7 @@ import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
-import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource} from './claude-limits.mjs';
+import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,withinTime} from './claude-limits.mjs';
 import {windowsCollectorLease} from './windows-collector-lease.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -119,7 +119,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   await attachProviderTokenSync(runtime,result,claude);
   signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await readLimits(runtime).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),

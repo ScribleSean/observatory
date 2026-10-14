@@ -4,8 +4,9 @@ import {mkdtemp,mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseClaudeUsage,parseResetTime} from './claude-usage-command.mjs';
-import {readClaudeLimits} from './claude-limits.mjs';
+import {chmod} from 'node:fs/promises';
+import {parseClaudeUsage,parseResetTime,runClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
+import {readClaudeLimits,withinTime} from './claude-limits.mjs';
 
 const now=Date.parse('2026-10-13T22:20:00Z');
 const text=(session='23% used · resets Oct 13 at 11:09pm (America/New_York)',week='75% used · resets Oct 16 at 6pm (America/New_York)')=>
@@ -55,4 +56,42 @@ test('a collection with consent stores the command reading and one without conse
   const failing=await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>{throw Error('synthetic failure');}});
   assert.equal(failing.status,'ok');
   assert.equal((await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>null})).windows.length,2);
+});
+
+test('the command gets a fixed small environment and never a parent session\'s variables', () => {
+  const source={HOME:'/synthetic/home',PATH:'/synthetic/bin',CLAUDECODE:'1',CLAUDE_CODE_ENTRYPOINT:'synthetic',ANTHROPIC_API_KEY:'synthetic',CLAUDE_CONFIG_DIR:'/synthetic/config',SECRET:'synthetic'};
+  assert.deepEqual(usageEnvironment(source,'darwin'),{HOME:'/synthetic/home',PATH:'/synthetic/bin',CLAUDE_CONFIG_DIR:'/synthetic/config'});
+  assert.deepEqual(usageEnvironment({...source,USERPROFILE:'C:\\Users\\synthetic'},'win32'),{USERPROFILE:'C:\\Users\\synthetic',PATH:'/synthetic/bin',CLAUDE_CONFIG_DIR:'/synthetic/config'});
+});
+
+test('a command that ignores a stop request cannot outlive the time limit', {skip:process.platform==='win32'}, async t => {
+  const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-hang-')));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const fake=path.join(folder,'claude'),pidFile=path.join(folder,'pid');
+  await writeFile(fake,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));process.on('SIGTERM',()=>{});process.on('SIGINT',()=>{});setInterval(()=>{},1000);\n`);
+  await chmod(fake,0o700);
+  const started=Date.now();
+  assert.equal(await runClaudeUsage({cwd:folder,find:async()=>fake,timeoutMs:400}),null);
+  assert.ok(Date.now()-started<3000,'the reader must settle near its limit');
+  const pid=Number(await readFile(pidFile,'utf8'));
+  let alive=true;
+  for(let attempt=0;attempt<100 && alive;attempt++) {try {process.kill(pid,0);await new Promise(resolve=>setTimeout(resolve,20));}catch {alive=false;}}
+  assert.equal(alive,false,'the stuck command must be gone');
+});
+
+test('a working command is read, and a parent session variable never reaches it', {skip:process.platform==='win32'}, async t => {
+  const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-ok-')));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const fake=path.join(folder,'claude');
+  const reply=JSON.stringify(envelope(text('23% used · resets Oct 13 at 11:09pm (America/New_York)','75% used · resets Oct 16 at 6pm (America/New_York)')));
+  await writeFile(fake,`#!${process.execPath}\nif(process.env.CLAUDECODE||process.env.SYNTHETIC_PARENT){process.exit(3);}process.stdout.write(${JSON.stringify(reply)});\n`);
+  await chmod(fake,0o700);
+  const parsed=await runClaudeUsage({cwd:folder,now,find:async()=>fake,environment:usageEnvironment({...process.env,CLAUDECODE:'1',SYNTHETIC_PARENT:'1'})});
+  assert.deepEqual(Object.keys(parsed.rate_limits),['five_hour','seven_day']);
+  assert.equal(await runClaudeUsage({cwd:folder,now,find:async()=>fake,environment:{...process.env,SYNTHETIC_PARENT:'1'}}),null);
+});
+
+test('a limits read that never settles is cut off', async () => {
+  await assert.rejects(withinTime(new Promise(()=>{}),50),/Timed out/);
+  assert.equal(await withinTime(Promise.resolve('ok'),50),'ok');
 });
