@@ -594,11 +594,23 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (webPanel is null || webPanel.IsDisposed)
         {
             webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
+            webPanel.Failed += () =>
+            {
+                if (WebPanel.ShowsFailure(true, panelTiming)) MessageBox.Show(WebPanel.RuntimeMessage, "Observatory");
+                else
+                {
+                    try
+                    {
+                        File.AppendAllText(Path.Combine(runtime, "panel-timing.log"),
+                            DateTimeOffset.UtcNow.ToString("O") + " failed web-panel" + Environment.NewLine);
+                    }
+                    catch { }
+                }
+            };
             webPanel.FormClosed += (closed, _) => { if (ReferenceEquals(webPanel, closed)) webPanel = null; panelReleased?.Invoke(); };
         }
         var panel = webPanel;
         var shown = await panel.ShowNearTray();
-        if (!shown && panel.FailedToStart) MessageBox.Show(WebPanel.RuntimeMessage, "Observatory");
         return shown;
     }
 

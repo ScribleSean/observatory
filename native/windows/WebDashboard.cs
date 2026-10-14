@@ -41,6 +41,7 @@ internal sealed class WebDashboard : Form
             if (IsDisposed || web.IsDisposed) return;
             var core = web.CoreWebView2;
             core.Settings.AreDevToolsEnabled = false;
+            core.Settings.AreBrowserAcceleratorKeysEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.AreHostObjectsAllowed = false;
             core.Settings.IsPasswordAutosaveEnabled = false;

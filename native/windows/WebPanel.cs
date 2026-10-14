@@ -19,6 +19,8 @@ internal sealed class WebPanel : Form
     private Task? started;
     private bool failed;
     internal bool FailedToStart => failed;
+    internal event Action? Failed;
+    internal static bool ShowsFailure(bool failed, bool unattended) => failed && !unattended;
     private readonly Func<Task>? startOverride;
 
     internal WebPanel(string runtime, Action<string> act, TimeSpan? releaseAfter = null, Func<Task>? startOverride = null)
@@ -94,6 +96,7 @@ internal sealed class WebPanel : Form
         if (retire || IsDisposed) return;
         retire = true;
         Close();
+        if (failed) Failed?.Invoke();
     }
 
     // Completes when the panel is visible and the page reports that it has drawn.
@@ -214,6 +217,7 @@ internal sealed class WebPanel : Form
         var core = web.CoreWebView2;
         core.ProcessFailed += (_, _) =>
         {
+            failed = true;
             if (IsDisposed) return;
             if (InvokeRequired)
             {
@@ -223,6 +227,7 @@ internal sealed class WebPanel : Form
             else Retire();
         };
         core.Settings.AreDevToolsEnabled = false;
+        core.Settings.AreBrowserAcceleratorKeysEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.AreHostObjectsAllowed = false;
         core.Settings.IsPasswordAutosaveEnabled = false;
@@ -243,7 +248,7 @@ internal sealed class WebPanel : Form
             if (!IsPanel(e.Source)) return;
             if (ParseAction(e.WebMessageAsJson) is { } action) act(action);
         };
-        // The control forwards accelerator keys pressed inside the page.
+        // Browser shortcut settings do not stop accelerator events forwarded as KeyDown.
         web.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { e.Handled = true; Hide(); } };
         // Read once per web view. Changes apply when the next panel is created.
         var (skin, theme) = WebViewerPreferences.Read();
@@ -299,16 +304,28 @@ internal sealed class WebPanel : Form
         return relative;
     }
 
+    internal static bool SafePart(string part)
+    {
+        if (part.Length == 0 || part is "." or ".." || part.EndsWith('.')) return false;
+        foreach (var character in part)
+            if (!(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-' or '_')) return false;
+        var name = part.Split('.')[0];
+        // Device names are a second layer, including '$' and superscripts already refused above.
+        foreach (var reserved in new[] { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$" })
+            if (name.Equals(reserved, StringComparison.OrdinalIgnoreCase)) return false;
+        if (name.Length == 4 && (name.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+            (name[3] is >= '0' and <= '9' or '¹' or '²' or '³')) return false;
+        return true;
+    }
+
     // Returns the bundled file for a request path, or null when the path is
     // outside what a shared viewer page may load: that one page, bundled assets
     // and the sanitized snapshot.
     internal static string? Resolve(string runtime, string relative, string page = Page, string? webRoot = null)
     {
         if (page is not (Page or WebDashboard.Page)) return null;
-        if (relative.EndsWith('/') || relative.Contains('\\') || relative.Contains(':') || relative.Contains('\0') ||
-            relative.Split('/').Any(part => part is "." or ".." || part.EndsWith('.') || part.EndsWith(' ') ||
-                part.Where((character, index) => character == '~' && index + 1 < part.Length &&
-                    part[index + 1] >= '0' && part[index + 1] <= '9').Any())) return null;
+        if (relative.Split('/').Any(part => !SafePart(part))) return null;
         if (relative == "local/usage.json") return Snapshot.DashboardFile(runtime, "usage.json");
         if (relative != page && !relative.StartsWith("assets/", StringComparison.Ordinal)) return null;
         var file = Snapshot.UnlinkedFile(webRoot ?? Path.Combine(AppContext.BaseDirectory, "Web"), relative);
@@ -381,6 +398,16 @@ internal sealed class WebPanel : Form
         foreach (var hasFailed in new[] { false, true })
             Check(ShouldRelease(visible, disposed, hasStarted, hasFailed) == (!visible && !disposed && (hasStarted || hasFailed)),
                 "release truth table");
+        Check(!ShowsFailure(false, false) && !ShowsFailure(false, true) &&
+            ShowsFailure(true, false) && !ShowsFailure(true, true), "failure notification truth table");
+        foreach (var name in new[] { "dashboard-CHiCUGIs.js", "JetBrainsMono--VKQJH3W.ttf", "third-party-licenses.txt",
+            "view-limits-nrcUblbB.js", "a_b.css", "CONSOLE.js", "COM10.js", "nul1.css" })
+            Check(SafePart(name), "safe bundle name " + name);
+        foreach (var name in new[] { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$" })
+            Check(!SafePart(name) && !SafePart(name.ToLowerInvariant() + ".js"), "device name " + name);
+        foreach (var prefix in new[] { "COM", "LPT" })
+        foreach (var digit in "0123456789¹²³")
+            Check(!SafePart(prefix + digit) && !SafePart(prefix.ToLowerInvariant() + digit + ".js"), "numbered device name");
         Check(RequestPath(Origin + "/assets/x.js", Page) == "assets/x.js", "asset request");
         Check(RequestPath(Origin + "/panel.html?demo", Page) == Page, "panel demo request");
         Check(RequestPath(Origin + "/dashboard.html?demo", WebDashboard.Page) is null, "dashboard demo refused");
@@ -409,6 +436,16 @@ internal sealed class WebPanel : Form
             foreach (var path in new[] { "index.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json", "assets/../panel.html",
                 "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/x.json/", "assets/./x.js", "assets/page.html", "assets\\x.js", "assets/c:x.js", "panel.html/", "Panel.html", "" })
                 Check(Resolve(runtime, path, Page, root) is null, "refuses " + path);
+            foreach (var name in new[] { "x y.js", "x%41.js", "／x.js", "dashboard-CHiCUGIs.js",
+                "JetBrainsMono--VKQJH3W.ttf", "third-party-licenses.txt" })
+                File.WriteAllText(Path.Combine(root, "assets", name), "fixture");
+            foreach (var path in new[] { "assets/CON.js", "assets/con", "assets/NUL.css", "assets/AUX.png",
+                "assets/COM1.js", "assets/com9.css", "assets/LPT1", "assets/CONIN$.js", "assets/COM¹.js",
+                "assets/x.js:stream", "assets/x.js::$DATA", "assets//x.js", "/assets/x.js", "assets/x y.js",
+                "assets/x%41.js", "assets/x*.js", "assets/x?.js", "assets/／x.js" })
+                Check(Resolve(runtime, path, Page, root) is null, "unsafe part refused " + path);
+            foreach (var name in new[] { "dashboard-CHiCUGIs.js", "JetBrainsMono--VKQJH3W.ttf", "third-party-licenses.txt" })
+                Check(Resolve(runtime, "assets/" + name, Page, root) is not null, "fixture bundle " + name);
             Check(IsPage(Origin + "/dashboard.html", WebDashboard.Page) && !IsPage(Origin + "/panel.html", WebDashboard.Page) &&
                 !IsPage(Origin + "/dashboard.html", Page) && !IsPage(Origin + "/index.html", WebDashboard.Page), "dashboard page");
             foreach (var path in new[] { "panel.html", "index.html", "local/collector.json", "private-sync/pairing.json", "assets/../dashboard.html", "Dashboard.html" })
@@ -427,7 +464,8 @@ internal sealed class WebPanel : Form
                 Check(Resolve(runtime, path, Page, root) is null, "fixture refuses " + path);
             Check(Resolve(runtime, "local/usage.json", Page, root) is { } snapshotFile && Path.GetFullPath(snapshotFile) == Path.GetFullPath(Path.Combine(runtime, "public", "local", "usage.json")), "fixture snapshot");
             foreach (var uri in new[] { Origin + "/assets/data.json%2F", Origin + "/assets/data.json%2F.",
-                Origin + "/assets/data.json%20", Origin + "/assets/data.json." })
+                Origin + "/assets/data.json%20", Origin + "/assets/data.json.",
+                Origin + "/assets/x.js%3Astream", Origin + "/assets%5Cx.js", Origin + "/assets/x%3F.js" })
             {
                 var path = RequestPath(uri, Page);
                 Check(path is null || Resolve(runtime, path, Page, root) is null, "encoded fixture refusal " + uri);
