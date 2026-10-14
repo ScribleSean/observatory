@@ -73,7 +73,7 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
         t.signal.throwIfAborted();
         phase.signal.throwIfAborted();
         return execFileSync(process.execPath,[script],{env:{...process.env,OBSERVATORY_RUNTIME:runtime,
-          OBSERVATORY_PYTHON:mac?'/usr/bin/python3':process.env.OBSERVATORY_PYTHON},encoding:'utf8',timeout:20000});
+          OBSERVATORY_PYTHON:process.env.OBSERVATORY_PYTHON},encoding:'utf8',timeout:20000});
       };
       completed=!phase.signal.aborted;
     })());

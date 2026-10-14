@@ -21,6 +21,7 @@ test('legacy cache refuses a linked cache directory',{skip:process.platform==='w
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-settings-link-')));
   try {
     await symlink(runtime,path.join(runtime,'private-codex'));
-    await assert.rejects(cachedSettingsScript(runtime,''),/Unsafe private/);
+    await assert.rejects(cachedSettingsScript(runtime,''),/Use a canonical private runtime directory/);
+    assert.ok((await lstat(path.join(runtime,'private-codex'))).isSymbolicLink());
   } finally {await rm(runtime,{recursive:true,force:true});}
 });

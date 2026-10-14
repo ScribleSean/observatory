@@ -67,6 +67,38 @@ test('Python is pinned to 3.13', () => {
   assert.match(workflow, /^          python-version: '3\.13'$/m);
 });
 
+test('Windows private-state fixtures use the account volume before Python export', () => {
+  const name = 'name: Use the account volume for private-state fixtures\n';
+  const matches = steps.filter((step) => step.startsWith(name));
+  assert.equal(matches.length, 1);
+  const step = matches[0];
+  assert.match(step, /^        if: runner\.os == 'Windows'$/m);
+  assert.match(step, /^        shell: pwsh$/m);
+  assert.equal(steps.indexOf(step), steps.findIndex((entry) => entry.startsWith('uses: actions/checkout@')) + 1);
+  assert.ok(steps.indexOf(step) < steps.findIndex((entry) => entry.startsWith('name: Export selected Python\n')));
+  assert.ok(step.includes("$temporary = Join-Path $env:LOCALAPPDATA ('WorkspaceObservatoryBuild/ci-script-suite-' + [guid]::NewGuid().ToString('N'))"));
+  assert.ok(step.includes('New-Item -ItemType Directory -Path $temporary | Out-Null'));
+  assert.match(step, /foreach \(\$name in @\('TEMP', 'TMP', 'TMPDIR'\)\) \{\n            "\$name=\$temporary" \| Out-File -FilePath \$env:GITHUB_ENV -Encoding utf8 -Append\n          \}/);
+  assert.equal([...step.matchAll(/GITHUB_ENV/g)].length, 1);
+  assert.doesNotMatch(step, /RUNNER_TEMP/);
+});
+
+test('Windows installs pinned time zone data through the selected Python before npm ci', () => {
+  const name = 'name: Install pinned time zone data on Windows\n';
+  const matches = steps.filter((step) => step.startsWith(name));
+  assert.equal(matches.length, 1);
+  const step = matches[0];
+  assert.match(step, /^        if: runner\.os == 'Windows'$/m);
+  assert.match(step, /^        shell: pwsh$/m);
+  assert.equal(steps.indexOf(step), steps.findIndex((entry) => entry.startsWith('name: Export selected Python\n')) + 1);
+  assert.equal(steps.indexOf(step) + 1, steps.findIndex((entry) => entry.startsWith('run: npm ci\n')));
+  assert.match(step, /^          \. \.\/native\/windows\/runtime-assets\.ps1$/m);
+  assert.ok(step.includes("$cache = Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild/cache'"));
+  assert.match(step, /^          \$timezone = Get-ObservatoryArchive -Name tzdata -CacheRoot \$cache$/m);
+  assert.match(step, /^          & \$env:OBSERVATORY_PYTHON -B -m pip install --no-index --no-deps \$timezone$/m);
+  assert.match(step, /^          if \(\$LASTEXITCODE -ne 0\) \{ throw 'Pinned timezone preparation failed\.' \}$/m);
+});
+
 test('suite job timeout is 50 minutes', () => {
   assert.match(workflow, /^    timeout-minutes: 50$/m);
 });
