@@ -193,3 +193,32 @@ func allowanceRefreshDue(_ quota: JSONObject?, now: Date) -> Bool {
     guard let deadline = parseDate(quota?["nextAttemptAt"]) else { return false }
     return deadline <= now
 }
+
+enum WebViewerPreferences {
+    static let skinKey = "observatorySkin"
+    static let appearanceKey = "observatoryAppearance"
+    static let skins: Set<String> = ["sage", "almanac", "amber-crt", "instrument"]
+
+    static func skin(_ defaults: UserDefaults = .standard) -> String { skin(stored: defaults.string(forKey: skinKey)) }
+    static func theme(_ defaults: UserDefaults = .standard) -> String? { theme(stored: defaults.string(forKey: appearanceKey)) }
+
+    static func skin(stored value: String?) -> String {
+        guard let value, skins.contains(value) else { return "sage" }
+        return value
+    }
+
+    static func theme(stored value: String?) -> String? {
+        guard let value, value == "light" || value == "dark" else { return nil }
+        return value
+    }
+
+    static func documentStartScript(skin: String, theme: String?) -> String {
+        let skin = skins.contains(skin) ? skin : "sage"
+        // Values come from fixed lists, never from free text.
+        var script = "document.documentElement.dataset.skin = \"\(skin)\";"
+        if let theme, theme == "light" || theme == "dark" {
+            script += "\ndocument.documentElement.dataset.theme = \"\(theme)\";"
+        }
+        return "(() => {\n\(script)\n})();"
+    }
+}

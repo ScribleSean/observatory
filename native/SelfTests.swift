@@ -527,26 +527,107 @@ func runSelfTests() {
     let unavailable = Snapshot(object: ["combined": ["status": "unavailable",
         "days": [["date": "2026-09-08", "seconds": 90]]]])
     precondition(unavailable.latest("activity", host: "All") == nil)
-    let resolver = AssetResolver(root: URL(fileURLWithPath: "/tmp/observatory-test-assets"))
-    precondition(resolver.resolve(URL(string: "observatory://app/index.html")!) != nil)
-    precondition(resolver.resolve(URL(string: "observatory://app/assets/app.js")!) != nil)
-    precondition(resolver.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil)
-    precondition(resolver.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil)
-    for url in ["https://app/index.html", "observatory://other/index.html", "observatory://app/../secret.json",
-                "observatory://app/%2e%2e/secret.json", "observatory://app/local/usage.json",
-                "observatory://app/.env", "observatory://app/native-runtime.json/../../secret.json",
-                "observatory://user@app/index.html", "observatory://app:80/index.html"] {
-        precondition(resolver.resolve(URL(string: url)!) == nil, "Unsafe asset URL accepted")
+    let assetRoot = URL(fileURLWithPath: "/tmp/observatory-test-assets")
+    let legacy = AssetResolver(root: assetRoot, pages: ["index.html"])
+    let panel = AssetResolver(root: assetRoot, pages: ["panel.html"])
+    let dashboard = AssetResolver(root: assetRoot, pages: ["dashboard.html"])
+    precondition(legacy.resolve(URL(string: "observatory://app/index.html")!) != nil, "Legacy page refused")
+    precondition(legacy.resolve(URL(string: "observatory://app/assets/app.js")!) != nil, "Legacy script refused")
+    precondition(legacy.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil, "Legacy font refused")
+    precondition(legacy.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil, "Unsafe font URL accepted")
+    let unsafeURLs = ["https://app/index.html", "observatory://other/index.html", "observatory://app/../secret.json",
+                      "observatory://app/%2e%2e/secret.json", "observatory://app/local/usage.json",
+                      "observatory://app/.env", "observatory://app/native-runtime.json/../../secret.json",
+                      "observatory://user@app/index.html", "observatory://app:80/index.html"]
+    for url in unsafeURLs {
+        precondition(legacy.resolve(URL(string: url)!) == nil, "Unsafe asset URL accepted")
     }
-    precondition(resolver.resolve(URL(string: "observatory://app/panel.html")!) == nil, "Panel page served without the flag")
-    let panelResolver = AssetResolver(root: URL(fileURLWithPath: "/tmp/observatory-test-assets"), allowPanel: true)
-    precondition(panelResolver.resolve(URL(string: "observatory://app/panel.html")!) != nil)
-    precondition(panelResolver.resolve(URL(string: "observatory://app/local/usage.json")!) == nil)
-    precondition(panelResolver.resolve(URL(string: "observatory://app/other.html")!) == nil)
+    for page in ["panel.html", "dashboard.html"] {
+        precondition(legacy.resolve(URL(string: "observatory://app/" + page)!) == nil, "Legacy served another host's page")
+    }
+    for (name, resolver) in [("panel", panel), ("dashboard", dashboard)] {
+        precondition(resolver.resolve(URL(string: "observatory://app/" + name + ".html")!) != nil, "Host page refused")
+        precondition(resolver.resolve(URL(string: "observatory://app/assets/app.js")!) != nil, "Host script refused")
+        for page in ["index.html", "panel.html", "dashboard.html", "other.html", "local/usage.json"] where page != name + ".html" {
+            precondition(resolver.resolve(URL(string: "observatory://app/" + page)!) == nil, "Host served an unlisted page")
+        }
+        for url in ["observatory://app/", "observatory://app"] {
+            precondition(resolver.resolve(URL(string: url)!) == nil, "Host served the root index page")
+        }
+        for url in unsafeURLs + ["observatory://app/assets/../panel.html", "observatory://app/assets/%2e%2e/dashboard.html",
+                                 "observatory://app/dashboard.html/../index.html", "observatory://app/assets/x.json"] {
+            precondition(resolver.resolve(URL(string: url)!) == nil, "Host accepted an unsafe asset URL")
+        }
+    }
+    for path in ["index.html/", "index.html?x", "%69ndex.html", "INDEX.html", "Dashboard.html",
+                 "assets%2F..%2Findex.html", "//index.html", "./index.html", "index.html%00", "panel.html;x", "assets/x.html"] {
+        precondition(dashboard.resolve(URL(string: "observatory://app/" + path)!) == nil,
+                     "Dashboard accepted a refused path: \(path)")
+    }
+    for resolver in [legacy, panel, dashboard] {
+        precondition(resolver.resolve(URL(string: "observatory://app/assets/x.html")!) == nil,
+                     "Host served HTML under assets")
+    }
+    let empty = AssetResolver(root: assetRoot, pages: [])
+    for page in ["index.html", "panel.html", "dashboard.html"] {
+        precondition(empty.resolve(URL(string: "observatory://app/" + page)!) == nil, "Empty page set served a page")
+    }
     precondition(PanelAction.allCases.map(\.rawValue) == ["refresh", "check-updates", "open-settings", "open-dashboard"])
     for name in PanelAction.allCases.map(\.rawValue) { precondition(PanelAction.parse(name)?.rawValue == name) }
     let refused: [Any] = ["", "Refresh", "refresh ", "quit", "open-dashboard:settings", ["refresh"], ["panelAction": "refresh"], 1, NSNull()]
     for value in refused { precondition(PanelAction.parse(value) == nil, "Unknown panel action accepted") }
+    do {
+        // Checked on plain values so the test writes no preferences file.
+        precondition(WebViewerPreferences.skin(stored: nil) == "sage", "Missing skin must use Sage")
+        precondition(WebViewerPreferences.theme(stored: nil) == nil, "Missing theme must follow the system")
+        for skin in ["almanac", "amber-crt"] {
+            precondition(WebViewerPreferences.skin(stored: skin) == skin, "Bundled skin must be retained")
+        }
+        for skin in ["Almanac", "", "sage\"", "../sage", "</script>"] {
+            precondition(WebViewerPreferences.skin(stored: skin) == "sage", "Invalid skin must use Sage")
+        }
+        for theme in ["light", "dark"] {
+            precondition(WebViewerPreferences.theme(stored: theme) == theme, "Explicit theme must be retained")
+        }
+        for theme in ["Light", "auto", ""] {
+            precondition(WebViewerPreferences.theme(stored: theme) == nil, "Invalid theme must follow the system")
+        }
+        let script = WebViewerPreferences.documentStartScript(skin: "almanac", theme: "dark")
+        precondition(script.contains("dataset.skin = \"almanac\""), "Script must set the selected skin")
+        precondition(script.contains("dataset.theme = \"dark\""), "Script must set the selected theme")
+        let invalid = WebViewerPreferences.documentStartScript(skin: "x\"; alert(1)", theme: "dark\"")
+        precondition(invalid.contains("dataset.skin = \"sage\""), "Invalid script skin must use Sage")
+        precondition(!invalid.contains("alert"), "Script must exclude free text")
+        precondition(!invalid.contains("dark\""), "Script must exclude the invalid theme")
+        precondition(!invalid.contains("dataset.theme"), "Invalid theme must not set an attribute")
+        precondition(!WebViewerPreferences.documentStartScript(skin: "sage", theme: nil).contains("dataset.theme"),
+                     "System theme must not set an attribute")
+    }
+    let dashboardURL = URL(string: "observatory://app/dashboard.html")!
+    precondition(DashboardNavigation.allows(dashboardURL, mainFrame: true), "Dashboard navigation refused its page")
+    for fragment in ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"] {
+        precondition(DashboardNavigation.allows(URL(string: "observatory://app/dashboard.html#" + fragment)!, mainFrame: true),
+                     "Dashboard navigation refused fragment: \(fragment)")
+    }
+    precondition(!DashboardNavigation.allows(dashboardURL, mainFrame: false), "Dashboard navigation accepted a subframe")
+    let refusedNavigation = [
+        "observatory://app/dashboard.html?demo", "observatory://app/dashboard.html?",
+        "observatory://app/dashboard.html?x#limits", "observatory://app/dashboard.html/",
+        "observatory://app/dashboard.html%2F", "observatory://app/%64ashboard.html",
+        "observatory://app/Dashboard.html", "observatory://app/DASHBOARD.HTML",
+        "observatory://APP/dashboard.html", "observatory://app//dashboard.html",
+        "observatory://app/./dashboard.html", "observatory://app/assets/../dashboard.html",
+        "observatory://app/dashboard.html#", "observatory://app/dashboard.html#Limits",
+        "observatory://app/dashboard.html#unknown", "observatory://app/dashboard.html#limits%00",
+        "observatory://app/index.html", "observatory://app/panel.html", "observatory://app/",
+        "observatory://app", "https://app/dashboard.html", "https://example.com/",
+        "observatory://other/dashboard.html", "observatory://user@app/dashboard.html",
+        "observatory://app:80/dashboard.html", "about:blank"
+    ]
+    for value in refusedNavigation {
+        precondition(!DashboardNavigation.allows(URL(string: value)!, mainFrame: true),
+                     "Dashboard navigation accepted a refused URL: \(value)")
+    }
     print("Native self-tests passed")
 }
 
