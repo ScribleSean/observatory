@@ -386,9 +386,9 @@ internal sealed class WebPanel : Form
             File.WriteAllText(Path.Combine(root, "assets", "app.js"), "void 0");
             File.WriteAllText(Path.Combine(root, "assets", "data.json"), "{}");
             File.WriteAllText(Path.Combine(root, "assets", "inner.html"), "<html>Fixture asset</html>");
-            Check(Resolve(runtime, Page, Page, root) == Path.Combine(root, Page), "fixture panel");
-            Check(Resolve(runtime, "assets/app.js", Page, root) == Path.Combine(root, "assets", "app.js"), "fixture script");
-            Check(Resolve(runtime, WebDashboard.Page, WebDashboard.Page, root) == Path.Combine(root, WebDashboard.Page), "fixture dashboard");
+            Check(Resolve(runtime, Page, Page, root) is { } panelFile && Path.GetFullPath(panelFile) == Path.GetFullPath(Path.Combine(root, Page)), "fixture panel");
+            Check(Resolve(runtime, "assets/app.js", Page, root) is { } scriptFile && Path.GetFullPath(scriptFile) == Path.GetFullPath(Path.Combine(root, "assets", "app.js")), "fixture script");
+            Check(Resolve(runtime, WebDashboard.Page, WebDashboard.Page, root) is { } dashboardFile && Path.GetFullPath(dashboardFile) == Path.GetFullPath(Path.Combine(root, WebDashboard.Page)), "fixture dashboard");
             foreach (var path in new[] { "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/inner.html", WebDashboard.Page })
                 Check(Resolve(runtime, path, Page, root) is null, "fixture refuses " + path);
             Check(trailing is not null && Resolve(runtime, trailing, Page, root) is null, "fixture encoded trailing slash refused");
