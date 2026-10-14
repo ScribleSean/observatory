@@ -72,9 +72,10 @@ void test('Windows source settings no longer read or describe WSL selectors', as
   );
 });
 
-for (const file of [
-  'DirectPairingWindow.swift',
-  'windows/DirectPairingWindow.cs',
+for (const [file, expectsRetiredKey] of [
+  ['DirectPairingWindow.swift', false],
+  // The C# entry flips in R2-4.
+  ['windows/DirectPairingWindow.cs', true],
 ]) {
   void test(`${file} does not offer or request retired collection scope`, async () => {
     const text = await source(file);
@@ -82,6 +83,11 @@ for (const file of [
       !/(?:Toggle|Text\s*=)\s*\(?\s*"Include Ubuntu/.test(text),
       'Retired pairing checkbox is still offered',
     );
+    if (!expectsRetiredKey) {
+      assert.ok(!text.includes('includeUbuntu'), 'Retired pairing key is still present');
+      assert.ok(!text.includes('Include Ubuntu'), 'Retired pairing control is still present');
+      return;
+    }
     const scopes = [
       ...text.matchAll(/"includeUbuntu"\]?\s*[:=]\s*([^,}\]\r\n]+)/g),
     ].map((match) => match[1].trim());
@@ -93,16 +99,18 @@ for (const file of [
   });
 }
 
-void test('SSH setup retains legacy retry scope without offering it for new pairing', async () => {
+void test('SSH setup omits retired scope from requests and controls', async () => {
   const text = await source('PairingSetupDialog.swift');
   assert.ok(
     !text.includes('checkboxWithTitle: "Include already-configured Ubuntu'),
     'Retired SSH pairing checkbox is still offered',
   );
-  assert.ok(
-    text.includes('includeUbuntu: saved.request?.includeUbuntu ?? false'),
-    'Saved pairing scope must remain immutable for retries',
-  );
+  for (const file of ['PairingSetupDialog.swift', 'PairingSetup.swift', 'PairingDetails.swift']) {
+    assert.ok(
+      !(await source(file)).includes('includeUbuntu'),
+      `${file} still contains the retired pairing key`,
+    );
+  }
 });
 
 void test('Mac Settings does not enable retired benchmark reads', async () => {
