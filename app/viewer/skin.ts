@@ -12,11 +12,14 @@ function isSkinId(id: unknown): id is string {
   return typeof id === 'string' && Object.hasOwn(SKINS, id);
 }
 
+export function skinIdFromAttribute(value: unknown): string {
+  return isSkinId(value) ? value : 'sage';
+}
+
 export function skinIdFrom(search: string, root: { dataset: { skin?: string } } | null): string {
   const query = new URLSearchParams(search).get('skin');
   if (isSkinId(query)) return query;
-  const id = root?.dataset.skin;
-  return isSkinId(id) ? id : 'sage';
+  return skinIdFromAttribute(root?.dataset.skin);
 }
 
 export function useSkin(initialSkin: string) {
@@ -29,8 +32,7 @@ export function useSkin(initialSkin: string) {
   useEffect(() => {
     const root = document.documentElement;
     const observer = new MutationObserver(() => {
-      const id = root.dataset.skin;
-      if (isSkinId(id)) setSkinId(id);
+      setSkinId(skinIdFromAttribute(root.dataset.skin));
     });
     observer.observe(root, { attributes: true, attributeFilter: ['data-skin'] });
     return () => observer.disconnect();

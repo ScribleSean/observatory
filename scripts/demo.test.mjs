@@ -8,7 +8,7 @@ import {selectTokenDays} from './token-periods.mjs';
 import {cleanDictation,summarizeDictation} from './dictation-aggregates.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {quotaPace} from './quota-pace.mjs';
-import {cleanPeerQuotaForDisplay} from './quota-display.mjs';
+import {cleanPeerQuotaForDisplay} from '../lib/view-limits.mjs';
 test('demo creation refuses existing snapshots without changing their bytes',async t=>{
   const dir=await mkdtemp(path.join(tmpdir(),'observatory-demo-test-'));
   t.after(()=>rm(dir,{recursive:true,force:true}));
