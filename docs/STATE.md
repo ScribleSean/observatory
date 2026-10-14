@@ -9,7 +9,7 @@ Updated on 2026-10-13 from the Mac, and again later that day from the Windows PC
 | Topic | State |
 | --- | --- |
 | `main` | Version 0.3.14 build 41 since pull request 88 (`3f70771` or later) |
-| Installed on Windows | Build 40 from `57518b7`, installed on 2026-10-13. Started outside a Claude desktop session, its first collection read 6 of 6 sources with state `ok`. |
+| Installed on Windows | Build 41 from `06e73c2`, installed on 2026-10-13 (local time). Started outside a Claude desktop session, its first collection read 6 of 6 sources with state `ok`. See "Build 41 install on Windows". |
 | Installed on Mac | Build 41 from `3f70771`, installed on 2026-10-13 (local time). Started with a clean environment, it read 10 of 10 sources with state `ok`. See "Build 41 install on the Mac". |
 | Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
 | Pull request 56 | Merged. It fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. |
@@ -226,10 +226,11 @@ Not verified: login startup of build 41, the web panel and dashboard flags in th
 
 | Topic | Windows | Mac |
 | --- | --- | --- |
-| Installed build | 0.3.14 build 40 from `57518b7` | 0.3.14 build 41 from `3f70771` |
+| Installed build | 0.3.14 build 41 from `06e73c2` | 0.3.14 build 41 from `3f70771` |
 | Build 39 produced by | CI package run | Local build with the macOS 26.5 SDK |
 | Build 40 produced by | CI package run `38443842036` | Local build with the macOS 26.5 SDK |
-| Collection | 6 of 6 sources under build 40 when started outside a Claude desktop session, including Mac records 2 minutes old. 3 of 6 when started from one. | 10 of 10 sources under build 40, including fresh Windows records |
+| Build 41 produced by | CI package run `38493681280` | See "Build 41 install on the Mac" |
+| Collection | 6 of 6 sources under build 41 when started outside a Claude desktop session, including Mac records 6 minutes old. Build 40 read 3 of 6 when started from a session. | 10 of 10 sources under build 40, including fresh Windows records |
 | Starting the app from a Claude desktop session | The app refuses its private folders. See issue 58. | Not examined |
 | Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
 | TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
@@ -308,6 +309,50 @@ This corrects three earlier statements in this document: the table row under "Wh
 
 - A collection under build 39 at 14:36 local time, before the first restart of the app by the session, reported `partial` with 5 of 6 sources. The source that was not read was not examined.
 - Why Windows shows the entry to processes started from the packaged app. File-system virtualization for packaged apps is the likely mechanism. It was not confirmed.
+
+## Build 41 install on Windows
+
+Recorded on 2026-10-13 (local time) on the Windows PC. The Mac was not touched. No permission was changed.
+
+### Package and checksum
+
+- Pull requests 87 and 88 were merged first, so `main` carried build 41 at `3f70771`.
+- The Clean Windows package run `38490553711` on `3f70771` failed after about 26 minutes on two test expectations. One read `Program.cs` for a line that pull request 87 had changed. The other expected backslashes in the Claude Code status line command, where the installer writes forward slashes on Windows. Both tests run only in the full suite inside that workflow. Pull request 91 corrected the two expectations and changed no application code.
+- Run `38493681280` then built `06e73c2` and succeeded on its first attempt.
+- The installer artifact matched the digest the run publishes, `e0a8028f36b6014ae7bc2c4c297473406e31c89758e6d515a002522e1a721726`. The setup file matched its sidecar, `a265243ec619bbad435fdfcfa7bb089b20fe90b5e396d2322cc4c762d261b45c`. `installer-build.json` records 0.3.14 build 41, source `06e73c2` and a clean tree.
+
+### Before the install
+
+- One install was registered and present: 0.3.14.40 from `57518b7`. No other install folder, registration or Start menu entry for the app existed.
+- All 3,082 files of that install matched its package manifest by size and SHA-256, and the manifest matched the one recorded with the build 40 installer.
+
+### Replacement
+
+- Build 40 was asked to quit with `--quit-for-update` and returned 0. No process from the install folder remained.
+- The data folder was copied with permissions to a new folder under `%LOCALAPPDATA%\WorkspaceObservatoryBackups`. All 331 files (59,511,256 bytes) matched by SHA-256, with none missing or extra. The dashboard registry key was exported beside them. The copy was taken without the peer state lock, as for build 40.
+- Build 40 was removed with a copy of its own `Uninstall.exe`, run with `/S _?=` and the install folder. It returned 0 and the folder and registration were gone.
+- The build 41 setup file was hashed again and run with `/S`. It returned 0. No Windows security prompt appeared. The file had no mark of the web.
+- Build 40 stays recoverable through its verified installer from run `38443842036` and the backup above. Reinstalling it was not exercised.
+
+### Installed target
+
+- File version 0.3.14.41 and revision `06e73c2`, read from the installed executable and `installer-owner.ini`.
+- All 3,084 installed files matched the package manifest, and the manifest matched the one recorded with the installer.
+- `--self-test` on the installed executable returned 0 with no error output.
+- All 331 saved files were identical to the backup after the install.
+
+### Collection
+
+- The app was started through `Win32_Process.Create`, so its parent was `WmiPrvSE.exe`. Its first collection, 12 seconds later, reported `ok` with 6 of 6 sources.
+- Windows activity, tokens, settings, dictation and Claude Code were `ok`. Mac activity, tokens, settings and dictation were `ok` and 6 minutes old. Account limits were `ok`. The All token total was `ok` and verified.
+- `claudeLimits` was `not-connected`. The Claude Code limits bridge is not installed on this PC.
+- The snapshot has no provider allowance rows, which follows the Antigravity removal in pull request 77.
+
+### Not exercised
+
+- The tray menu, the native popup, the dashboard windows and the `--web-panel` and `--web-dashboard` flags on the installed build.
+- Login startup, which is off, and sleep and wake.
+- Whether the Mac reads this PC's records after the change. Only this PC's view was read.
 
 ## Next decisions
 
