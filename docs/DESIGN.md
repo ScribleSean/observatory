@@ -281,40 +281,52 @@ The four actions map to things each shell already does. This is not a general co
 
 Designed on 2026-10-14 for issue 80, before any collector writes these fields. Nothing in this subsection exists in a collector, a saved snapshot or an installed app until [the parity table](PARITY.md) says so. Every addition is optional, so a saved snapshot without it still loads, and a missing field means Unknown, never zero.
 
-**Local-first rule.** A paired collector rebuilds the snapshot from a fixed key list in `mergePeerPayloads` (`scripts/peer-payload.mjs`), and both peer channels refuse fields they do not know (`parsePeerPayload` and `parseProviderTokenSource` compare the parsed record with its clean projection). So each addition is written on the device that observed it and attached to the snapshot after `finalizePeerCollection` runs. Every record a device sends to its peer leaves the addition out, on both channels:
+**Local-first rule.** A paired collector rebuilds the snapshot from a fixed key list in `mergePeerPayloads` (`scripts/peer-payload.mjs`), and both peer channels refuse fields they do not know (`parsePeerPayload` and `parseProviderTokenSource` compare the parsed record with its clean projection). So each addition is written on the device that observed it and kept out of every record a device sends to its peer, on both channels:
 
-- The core payload strips it in `createPeerPayload`.
+- The core payload carries the reader reports, not the snapshot rows. An addition is either a field the payload's projection already ignores, or it is stripped in `createPeerPayload`.
 - The Claude Code provider record strips it before `updateProviderTokenSource` in `collectProviderTokenSources` (`scripts/provider-token-sync.mjs`), because that function stores the same parsed object it returns as the dashboard row. The dashboard keeps the local row with the addition.
 
-An addition crosses to the paired device only in R2, the change that updates the exchange format in both apps together.
+On a paired device `mergePeerPayloads` rebuilds this device's own `activity`, `tokens`, `settings` and `dictation` rows from the payloads, so a local addition on those rows is lost in the merge. After `finalizePeerCollection` the collector re-applies its local additions to the merged rows of its own host. Each addition below says how. An addition crosses to the paired device only in R2, the change that updates the exchange format in both apps together.
 
 #### Hourly totals
 
 | Field | Shape |
 | --- | --- |
 | `tokens[].days[].hours` | Codex. An array of exactly 24 non-negative integers, the total tokens of that day per hour. |
-| `providerTokenSources[].days[].hours` | Claude Code, in the same shape, using the same deduplication identity the day totals use. A request's hour is the hour of its earliest retained timestamp, the same timestamp that sets its day in `scripts/read-claude-usage.py`, so a request that finishes after an hour boundary or after midnight stays in one hour of one day. |
-| `activity[].days[].hours` | Screen time. This array already exists and holds seconds per hour. It is listed here because Now reads it. |
+| `providerTokenSources[].days[].hours` | Claude Code, in the same shape, using the same deduplication identity the day totals use. A request's hour is the hour of its earliest retained timestamp, the same timestamp that sets its day in `scripts/read-claude-usage.py`, so a request that finishes after an hour boundary or after midnight stays in one hour of one day. The reader keeps only the earliest date today, so D1-2 keeps the earliest full timestamp. |
+| `activity[].days[].hours` | Screen time. This array already exists and holds seconds per hour, for both devices, because `mergePeerPayloads` recomputes the peer's activity from its intervals. It is listed here because Now reads it. |
 
 - Index 0 is the hour starting at midnight. The hour is the wall-clock hour in the zone that sets the day's date. Today that is the snapshot's `timezone` value, which both readers fix to `America/New_York`. When device time zones (T1) land, hours move with the days. On the day clocks go forward the skipped hour stays 0. On the day clocks go back both readings of the repeated hour add into the same index, so that index can hold two hours. Now is Unknown while either of its two buckets is a skipped or repeated hour, because the caveat sentence below would not be true then.
-- A Codex token's hour is the hour of the event that recorded it, which is the `token_count` event timestamp the reader already caches, so the cache format does not change.
-- The 24 values add up to the day's `totalTokens`. A test checks that on every fixture day.
-- `hours` is present only when the reader read that day's events. A day saved before this change, or a day received from a paired device, has no `hours`, and its hourly values are Unknown.
-- Within a day that was read, an hour with no events is a real 0 only when it ends at or before the row's reading time (`checkedAt`, or the snapshot's `collectedAt` for rows without one). A later hour is Unknown even though the array holds 0 there, because a stopped or late collector leaves those buckets untouched.
-- Every record sent to the peer leaves `hours` out (local-first rule).
-- On a paired device `mergePeerPayloads` rebuilds this device's own `tokens` row from the stripped payload, so the merged row has no `hours`. After `finalizePeerCollection` the collector re-applies its local `hours` to the merged row of its own host, matched by date, and only for a day whose merged `totalTokens` equals the sum of the 24 local values. Any other day keeps no `hours`.
+- **Codex route.** A Codex token's hour is the hour of the `token_count` event that recorded it, which the reader already caches, so the cache format does not change. `scripts/read-settings.py` reports the hours in a separate per-date field of its report, `hourTotals: [{date, hours}]`, not on `profiles` or `tokenProfiles`. `cleanSettings` (`scripts/collect-dashboard.mjs`) ignores that field, so it never reaches `settings[]` or the core payload's `codex` entries. The collector attaches it to the `tokens` row after `tokensFromSettings`, matched by date.
+- The 24 values add up to the day's `totalTokens`. A day whose values do not add up gets no `hours`. A test checks the sum on every fixture day.
+- For the two token fields, `hours` is present only when the reader read that day's events. A day saved before this change, or a token day received from a paired device, has no `hours`, and its hourly values are Unknown.
+- For the two token fields, re-applying after a merge means: the collector puts its local `hours` on the merged row of its own host, matched by date, and only for a day whose merged `totalTokens` equals the sum of the 24 local values. Any other day keeps no `hours`.
+- Every record sent to the peer leaves token `hours` out (local-first rule).
+- The `.observatory` export drops token `hours` in version 1, because a 0 after the reading time cannot be told apart from an observed 0 inside the file. This needs a change in `scripts/observatory-file.mjs`, which copies every day field today. Activity `hours` are exported as they are today.
 
-**Now.** The Now period is the trailing 60 minutes, approximated by adding the current hour bucket to the previous one. Across midnight the previous bucket is hour 23 of the day before. For a device, Now is Unknown when either of the two days it needs has no `hours`, when the reading time is before the start of the current hour, or during the daylight saving hours named above.
+**Reading time.** Each row has a reading time, the moment up to which its hours were observed:
+
+- A device row: its `checkedAt`, or the snapshot's `collectedAt` for a row without one.
+- The `Combined` activity row: the earlier of the two payloads' `collectedAt` values, which `mergePeerPayloads` already uses as `asOf` for the `Combined` history row. D1 records that time on the row as `checkedAt`. The same rule applies to any later aggregate that carries `hours`, including a verified `combinedTokens` row after R2.
+
+Within a day that was read, an hour that ends at or before the reading time holds a real value, and 0 there is a real 0. The hour that contains the reading time holds the events from its start up to the reading time, and 0 there is a real 0 for that span. An hour that starts after the reading time is Unknown, even though the array holds 0 there, because a stopped or late collector leaves those buckets untouched.
+
+**Now.** The Now period is the trailing 60 minutes, approximated by adding the current hour bucket, up to the reading time, to the previous one. Across midnight the previous bucket is hour 23 of the day before. Now ends at the reading time, not at the moment the view is drawn. For a device, Now is Unknown when:
+
+- either of the two days it needs has no `hours`,
+- the current hour starts after the reading time,
+- the reading time is more than 10 minutes old, the threshold the merge and the limits already use, or
+- either bucket is a skipped or repeated daylight saving hour.
 
 For All, Now reads only the collector's verified aggregates, as the other periods do. Device hours are never added together outside them:
 
 - Codex tokens for All come only from a `combinedTokens` row whose verification status is `verified`. They stay Unknown until that row carries `hours`, which needs R2, because the peer's days have no `hours` before then.
-- Screen time for All uses the `hours` of the `Combined` activity row, which the collector computes with its overlap sweep.
+- Screen time for All uses the `hours` of the `Combined` activity row, with the `Combined` reading time above.
 - Claude Code tokens for All stay "By device", as they are for the other periods.
 
 The panel and the dashboard show this one caveat sentence with every Now total:
 
-> Now adds the current clock hour to the hour before it, so it covers between 60 and 120 minutes.
+> Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.
 
 Screen time for Now uses the activity `hours` in the same way. Limits in Now keep their own observation times and are not approximated.
 
@@ -322,12 +334,13 @@ Screen time for Now uses the activity `hours` in the same way. Limits in Now kee
 
 | Field | Shape |
 | --- | --- |
-| `deviceNames` | An object with optional keys `Mac` and `Windows`. Each value is the trimmed name, 1 to 32 Unicode code points long. |
+| `deviceNames` | An object with optional keys `Mac` and `Windows`. Each value is the trimmed name, 1 to 32 UTF-16 code units long. |
 
 - The local name is read from `<runtime>/device.json`, a file holding exactly `{"name": "..."}`. It is a separate file because the Mac Settings save path rewrites `collector.config.json` from fixed switches and both native validators would refuse a new key there.
-- The reader refuses a linked file, a file over 1 KiB, a name that is empty after trimming, a name over 32 code points after trimming, and a name with control or format characters or with `/`, `\` or `:`. A refused or missing file leaves the key out, and the views show "macOS" or "Windows", as "Device names" above describes.
-- A device writes only its own key. The peer's name crosses only after R2 installs on both devices. Until then a paired device's entry is absent and shows its platform name.
-- The name replaces no identifier used for pairing, deduplication or the platform value. The limit is 32 rather than the 40 first planned because the export in `scripts/observatory-file.mjs` trims names and cuts them to 32 characters. With the same limit here the export carries the whole name and needs no change.
+- The reader refuses a linked file, a file over 1 KiB, a name that is empty after trimming, a name over 32 UTF-16 code units after trimming, and a name with control or format characters, an unpaired surrogate, or `/`, `\` or `:`. A refused or missing file leaves the key out, and the views show "macOS" or "Windows", as "Device names" above describes.
+- The limit counts UTF-16 code units because the export in `scripts/observatory-file.mjs` does: it trims names and cuts them with `.slice(0,32)`, and its import check uses `length`. JavaScript `length`, C# `string.Length` and Swift `utf16.count` all count the same way, so both native Settings screens can enforce one rule. With the same limit here the export carries the whole name and needs no change. The 40 first planned was cut to 32 for this reason.
+- A device writes only its own key. `deviceNames` is a top-level snapshot field that the merge does not rebuild, so the collector attaches it after `finalizePeerCollection`. The peer's name crosses only after R2 installs on both devices. Until then a paired device's entry is absent and shows its platform name.
+- The name replaces no identifier used for pairing, deduplication or the platform value.
 
 #### Claude Code session cost
 
@@ -336,27 +349,32 @@ Screen time for Now uses the activity `hours` in the same way. Limits in Now kee
 | `claudeLimits.sessionCost` | `{usd, observedAt}`. `usd` is a finite number from 0 to 10,000, rounded to the cent. `observedAt` is an ISO 8601 time. |
 
 - Only the status line bridge writes it, from Claude Code's `cost.total_cost_usd`. It is stored beside the windows in `claude-limits/limits.json` as `{usd, observedAt}` with `observedAt` in Unix seconds, like the windows. That file's 4 KiB read limit still holds.
-- The usage command never writes it. `scripts/claude-usage-command.mjs` accepts a result only when it reports zero cost, so a usage reading carries no cost, and a usage reading never removes or replaces a stored cost.
+- The usage command never writes it. `scripts/claude-usage-command.mjs` accepts a result only when it reports zero cost, so a usage reading carries no cost. A usage reading runs on every collection, and `cleanStored` and `mergeClaudeLimits` (`scripts/claude-limits.mjs`) rebuild the stored record from `observedAt` and `windows` only today. D1-4 changes both to carry a stored cost through unchanged when the new reading has none, so a usage reading never removes or replaces a stored cost. A test covers a usage reading after a bridge write.
 - The cost belongs to one session, while the windows are account-wide and merge by keeping the higher reading. So the cost has its own rule: the newest observation replaces the stored one, whichever session sent it. The session identifier is not kept, so the view cannot say which session it was.
 - It uses the same 10 minute threshold as the windows, with a different result. A window 10 minutes old or older is still shown, with status `stale`. A cost 10 minutes old or older is left out of the snapshot and the view shows Unknown. A cost is never carried forward as a current figure.
 - A status line input can carry a cost without `rate_limits`, for example for a person without a Pro or Max subscription. Today `extractClaudeLimits` returns nothing for that input and nothing is written. D1-4 changes this: the bridge stores a cost on its own, the stored record is valid with a cost and no windows, and `claudeLimitsSource` projects `sessionCost` whenever consent is given and the cost is current, including when `claudeLimits.status` is `unavailable`. Without consent (`not-connected`) there is no `sessionCost`.
+- `claudeLimits` is attached after the merge and is not exchanged, so nothing needs re-applying.
 - Label: "Session cost (estimate)". It stays separate from the API-equivalent estimate, as "Numbers that must stay separate" requires. Like the limits, it is observed on this device and is not sent to a paired device.
 
-#### Source refusal reasons
+#### Source refusal codes
 
 | Field | Shape |
 | --- | --- |
-| `reason` on a source status row | One code from a fixed list, present only when the row is not `ok` for one of these causes |
+| `refusal` on a device row of `activity`, `tokens`, `settings` or `dictation` | One code from a fixed list, present only when the row is not `ok` because a private folder was refused |
+
+The field is named `refusal`, not `reason`, because `agentSource` rows already carry a `reason` with their own codes (`access-denied`, `unsafe-directory`, `read-timeout` and others, in `scripts/agent-receipts.mjs` and `scripts/bounded-receipts.mjs`), and `native/ReceiptSourceStatus.swift` renders a fallback message for a `reason` it does not know. The two lists stay separate.
 
 | Code | Meaning |
 | --- | --- |
 | `private-folder-refused` | A private folder check failed, so the guarded source was not read |
-| `ancestor-refused` | On Windows, the private folder check failed at its ancestry stage (`private-sync-acl.ps1 -Diagnostic` reports `inspect-ancestry`). That stage covers every ancestor failure (a reparse point, an unexpected owner, an unknown access list or a writable ancestor), so the code names the stage and does not claim a cause. Used only when that stage is detected. Otherwise the code is `private-folder-refused`. |
+| `ancestor-refused` | On Windows, the private folder check failed at its ancestry stage. That stage covers every ancestor failure (a reparse point, an unexpected owner, an unknown access list or a writable ancestor), so the code names the stage and does not claim a cause. |
 
+- **Detection.** Today the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, runs `private-sync-acl.ps1` without `-Diagnostic` and discards its error output, so nothing can see the stage. D1-6 adds `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on.
 - The row carries the code and nothing else about the failure: no path, no stage text, no error message.
-- An unknown code is ignored by the views. A new code is added here first.
+- The views show a code they do not know as `private-folder-refused` would be shown, without its text. A new code is added here first.
+- After a merge the collector re-applies `refusal` to the merged row of its own host with the same name, as it does for `hours`.
 - The plan's name `packaged-app-start` is not used, because the script cannot yet tell the issue 58 pattern apart from a genuinely unsafe ancestor. If the script later reports a fixed stage value for an app-container owner, a `packaged-app-start` code can be added here for that case only.
-- It exists for issue 58 reporting and is local-only. The record published to the peer leaves it out.
+- It exists for issue 58 reporting and is local-only. Records sent to the peer leave it out.
 
 ### Claude Code limits bridge
 
