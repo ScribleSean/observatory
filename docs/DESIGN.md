@@ -276,36 +276,62 @@ The Settings view, the first-run steps and the pairing screens in the shared vie
 
 **The rule.** No action carries a path, a command or free text that reaches a shell. Every argument is a boolean, a bounded integer, a value from a fixed list, or a string with a fixed pattern and length, with one exception: the device name is bounded free text, and it is only ever JSON-encoded into one file (see `set-device-name`). Two strings are opaque to the page, the pairing invitation and the sharing confirmation token. They reach only the private stdin pipe of the pairing control process or the standard input of a sharing control script, never a command line, a file name, a URL or a log.
 
-#### Who may send
+**Consent stays native.** The owner decided on 2026-10-14 that a confirmation shown by the page is never enough for a change that needs consent or cannot be undone. The shell shows its own Yes/No dialog, with the wording the apps use today, before it turns a sharing channel on, before `pairing-identity-create`, before it turns `quota` off, and before `pairing-disconnect` and `pairing-repair-prepare`. It sends the command only on Yes and returns `cancelled` otherwise. `set-limits-consent` is new and has no native dialog today. The page shows the disclosure from "Claude Code limits bridge" before it sends `true`, and the shell also shows a native Yes/No with that disclosure's first sentence before it runs the consent script.
 
-- Only the dashboard page may use this bridge: `dashboard.html` at the shell's local origin (`observatory://app` on the Mac, `https://observatory.invalid` on Windows), in the main frame, with no query and with either no fragment or a fragment from the section list. `dashboard.html?demo` may not, because the demo answers from a fake bridge in the page.
-- The Mac shell checks the page path with `frameInfo.request.url`, because the origin alone does not tell pages apart. The Windows shell checks `e.Source` in the same way.
-- The panel contract above stays separate and unchanged on its own `panelAction` channel. The panel web view never accepts this bridge, and on Windows a `{"panelAction": ...}` message and a bridge message are never parsed by the same handler.
+#### What the dashboard web view may load
+
+The real boundary is which documents the dashboard web view loads, because only that web view registers the bridge handler.
+
+- **At navigation.** Before the bridge is enabled, the dashboard web view's navigation guard (`decidePolicyFor` on the Mac, `NavigationStarting` on Windows) accepts only `dashboard.html` at the shell's local origin (`observatory://app` on the Mac, `https://observatory.invalid` on Windows), in the main frame, with no query. A fragment is allowed only from this list: `limits`, `activity`, `tokens`, `dictation`, `sources`, `settings` and `setup`. `dashboard.html?demo` and `panel.html` are refused at navigation.
+- **What changes in the shells.** On Windows, `WebDashboard` stops falling back to `panel.html` once `dashboard.html` ships, and the guard it uses (`WebPanel.IsPage`, which today refuses every fragment and accepts `?demo`) gets a dashboard rule that allows the listed fragments and refuses any query. On the Mac, `LocalNavigation` allows any `observatory://app` URL today. The dashboard web view gets a guard with the same rule.
+- **Sender check, as a second layer.** Each message is also checked against the sending page: on the Mac `message.webView?.url` with `frameInfo.isMainFrame` and the existing `securityOrigin` check, on Windows `e.Source`. Only the path `/dashboard.html` and the absence of a query are checked. The fragment is not checked, because the page can change it with `history.replaceState`, and the page already does that.
+- **Content Security Policy.** The bridge relies on the policy both shells send today: `script-src 'self'` with no inline script or eval, `frame-src 'none'` and `object-src 'none'`. Changing that policy is a change to this contract and needs two reviews.
+- **Panel.** The panel contract above stays separate and unchanged on its own `panelAction` channel. The panel web view never registers this bridge, and on Windows a `{"panelAction": ...}` message and a bridge message are never parsed by the same handler.
+- **Shared storage.** On Windows the panel and dashboard web views share one profile and origin, so they share storage and `BroadcastChannel`. The dashboard page never turns a `storage` event, a `BroadcastChannel` message or a `window.postMessage` message into a bridge action.
 
 #### Messages
 
 - The page sends one string holding JSON text: `{"id": <id>, "action": "<name>", "args": {...}}`. On the Mac it goes through `webkit.messageHandlers.bridge.postMessage`, on Windows through `chrome.webview.postMessage`.
-- The shell reads the message as a string and ignores anything else: `message.body as? String` on the Mac, `TryGetWebMessageAsString()` on Windows (not `WebMessageAsJson`, which is the escaped form of the string).
+- The shell reads the message as a string and ignores anything else: `message.body as? String` on the Mac. On Windows it calls `TryGetWebMessageAsString()` (not `WebMessageAsJson`, which is the escaped form of the string), which throws `ArgumentException` for a message that is not a string, and the handler catches that and ignores the message.
 - The string is at most 4,096 bytes of UTF-8, measured before parsing (`utf8.count` on the Mac, `Encoding.UTF8.GetByteCount` on Windows). A longer one is ignored.
-- `id` is an integer from 1 to 2,147,483,647, chosen by the page and not reused within one page load. `action` is one of the names below. `args` is an object with exactly the listed keys, so `{}` for an action without arguments.
+- `id` is an integer from 1 to 2,147,483,647, chosen by the page and not reused within one page load. An `id` already in flight is refused. `action` is one of the names below. `args` is an object with exactly the listed keys, so `{}` for an action without arguments.
 - A missing key, an extra key, a duplicate key (at the top level or in `args`), a wrong type or a value out of bounds refuses the message. The Mac cannot use `JSONSerialization` for this, because it keeps one value of a duplicate key silently. It uses a strict tokenizer or an equivalent check. B1-1 tests a duplicate key at both levels on both platforms.
 - Types are strict JSON types. A boolean is the literal `true` or `false` only (checked with `CFBooleanGetTypeID` on the Mac, because `NSNumber` bridges `1` to a boolean). An integer is a JSON number with no fraction and no exponent. A string is a JSON string.
 - Every string argument is checked after JSON decoding, so escaped characters count. It is refused if it holds a control character (U+0000 to U+001F or U+007F to U+009F) or an unpaired surrogate, unless its own rule below is stricter.
 - A character count in this contract counts Unicode scalar values, except the device name, which counts UTF-16 code units (see `set-device-name`). Neither is Swift's `String.count`, which counts grapheme clusters.
 
+#### How many at once
+
+- At most one message per action name is in flight. A repeat of a name that is in flight gets `busy`.
+- At most four messages wait in a queue behind the one being handled. A message that does not fit gets `busy`.
+- While a native dialog or save panel is open, every action except `status` and `pairing-cancel` gets `busy`, so two native dialogs are never open at once.
+- `status` and `tailscale-check` never start a process per message. The shell refreshes the sharing and Tailscale parts of its own cache at most once every 5 seconds and answers from that cache.
+
 #### Results
 
-- The shell answers by dispatching `observatory:bridge-result` on `window` in the web view that sent the message, and only there. `detail` is `{id, ok, code}` and, for the actions that say so, `value`. The shell builds `detail` with a JSON encoder and never by inserting page text into script. It never logs `detail` or `value`, because a `value` can hold the invitation, which is a bearer secret.
-- `code` is one of `done`, `refused` (the message broke this contract), `busy` (a pairing step is already running), `cancelled` (the person declined or cancelled), or `unavailable` (anything else). `ok` is true only with `done`. The code carries no error text, path or stage name. `expired` is reserved for when a script reports an expired invitation or sharing token distinctly. Today both sharing scripts and the pairing control process report every failure the same way, so those cases return `unavailable`.
+- The shell answers in the web view that sent the message, and only while the same document is loaded. A result for a message from an earlier document (after a reload or navigation) is dropped, because the new page may reuse that `id` and a `pairing-host-start` result holds the invitation.
+- Delivery never builds script text. On Windows the shell calls `CoreWebView2.PostWebMessageAsJson` with `{"bridgeResult": detail}`, and the page's `message` listener turns it into the `observatory:bridge-result` event. On the Mac the shell calls `callAsyncJavaScript` with `detail` passed in `arguments`, and the fixed script dispatches `observatory:bridge-result` on `window` with that value. `detail` is `{id, ok, code}` and, for the actions that say so, `value`. The shell never logs `detail` or `value`, because a `value` can hold the invitation, which is a bearer secret.
+- `code` is one of `done`, `refused` (the message broke this contract), `busy` (see "How many at once" and "Pairing session"), `cancelled` (the person declined or cancelled), or `unavailable` (anything else). `ok` is true only with `done`. The code carries no error text, path or stage name. `expired` is reserved for when a script reports an expired invitation or sharing token distinctly. Today both sharing scripts and the pairing control process report every failure the same way, so those cases return `unavailable`.
 - A message with no readable `id` is ignored without a result. A refused message with a readable `id` gets `{id, ok: false, code: "refused"}`.
-- The page treats a missing result after 30 seconds as `unavailable` and reads pairing progress through `status`.
+- The page waits 60 seconds for a result, longer than the shells' 45 second limit for a pairing control command. A result that arrives later for the same document is still applied. Before it shows a failure for a pairing action, the page reads `status` again.
+
+#### Pairing session
+
+The native pairing window today owns the control process and a collection reservation together. The bridge keeps that lifecycle in the shell.
+
+- The shell owns at most one pairing session app-wide. A session begins on `pairing-host-start` or `pairing-join-claim` (and on `pairing-identity-create` if no session is open). Beginning one starts one pairing control process and pauses collection exactly as the native pairing window does today (`BeginDirectPairing` on Windows, `collectionPausedForPairing` on the Mac).
+- The session ends, the control process is stopped and the collection reservation is released on a finished pairing, on `pairing-cancel`, on a failure, when the dashboard window closes, when the dashboard document is replaced, and when the 10 minute limit of the control process (`peer-tls-control.mjs`) runs out.
+- While a session is open, `refresh`, `set-sharing`, `pairing-disconnect` and `pairing-repair-prepare` get `busy`. While any of those is running, or while the native direct pairing window or the SSH pairing item is open, a pairing action gets `busy`.
+- `pairing-cancel` and `status` never get `busy`.
+- The shell polls the control process itself, at the interval the native window uses today (2 seconds), and keeps the pairing state in its own cache. `status` reads that cache and never sends a command to the control process, so page polling cannot use up the control process's limit of 512 commands.
+- The shell numbers the commands it writes to the control pipe itself. It never forwards the page's `id`, because a reused id stops the control process.
 
 #### Addresses
 
 The shell checks every address argument with this grammar, which both shells can implement the same way:
 
 - IPv4: dotted decimal, exactly four parts, each 0 to 255 with no leading zeros, in 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 or the Tailscale range 100.64.0.0/10.
-- IPv6: groups of one to four hexadecimal digits separated by `:`, at most one `::`, the first group from `fc00` to `fdff` (unique local addresses), no `%` zone identifier and no embedded IPv4 part.
+- IPv6: groups of one to four hexadecimal digits in lowercase or uppercase, separated by `:`. Either exactly eight groups with no `::`, or two to seven groups with exactly one `::`. The first group is from `fc00` to `fdff` (unique local addresses). No `%` zone identifier and no embedded IPv4 part.
 - At most 39 characters.
 
 The pairing control process still checks the address with `isPairingAddress`, as the final check. That function accepts IPv6 zone identifiers through Node's `isIP`, which its own comment says are unsupported. That belongs in an issue for P1.
@@ -316,33 +342,38 @@ The pairing control process still checks the address with `isPairingAddress`, as
 | --- | --- | --- |
 | `refresh` | none | The panel's existing refresh |
 | `check-updates` | none | The existing update check |
-| `open-dashboard` | `section`: one of `limits`, `activity`, `tokens`, `dictation`, `sources`, `settings` | Opens the dashboard window at that section |
-| `open-settings` | none | Opens the dashboard at Settings |
-| `set-source` | `source`: one of `activity`, `codex`, `claude`, `wispr`, `quota`. `enabled`: boolean | Sets that switch in the local source settings, the same keys the native Settings writes today. Before turning `quota` off, the shell shows its own native confirmation with today's text (turning account monitoring off clears retained account readings on the next collection) and returns `cancelled` if the person declines. |
-| `set-skin` | `skin`: a bundled skin id (`sage`, `almanac`, `instrument`, `amber-crt`) or a custom skin name matching `^[A-Za-z0-9][A-Za-z0-9 -]{0,31}$` (the `lib/skins.mjs` name rule, at most 32 characters) | Selects that skin. A bundled id always means the bundled skin, and the shell does not list a custom skin whose name equals a bundled id in any letter case. A custom name must equal a name in the list the shell enumerated from its own skins folder. The shell never builds a file name from the string. |
+| `open-dashboard` | `section`: one of `limits`, `activity`, `tokens`, `dictation`, `sources`, `settings` | Opens the dashboard window at `dashboard.html#<section>` |
+| `open-settings` | none | Opens the dashboard at `dashboard.html#settings` |
+| `set-source` | `source`: one of `activity`, `codex`, `claude`, `wispr`, `quota`. `enabled`: boolean | Sets that switch in the local source settings, the same keys the native Settings writes today. Before turning `quota` off, the shell shows its native confirmation with today's text (turning account monitoring off clears retained account readings on the next collection). |
+| `set-skin` | `skin`: a bundled skin id (`sage`, `almanac`, `instrument`, `amber-crt`) or a custom skin name matching `^[A-Za-z0-9][A-Za-z0-9 -]{0,31}$` (the `lib/skins.mjs` name rule, at most 32 characters) | Selects that skin. A bundled id always means the bundled skin, and the shell does not list a custom skin whose name equals a bundled id in any letter case. A custom name must equal a name in the list the shell enumerated from its own skins folder. The shell never builds a file name from the string. The choice is stored as described under "Viewer settings". |
 | `set-device-name` | `name`: 1 to 32 UTF-16 code units (JavaScript `length`, C# `string.Length`, Swift `utf16.count`) after removing leading and trailing Unicode White_Space characters, with no control or format characters, no unpaired surrogate and no `/`, `\` or `:`. Or `null` to clear it. | Writes the trimmed name to `<runtime>/device.json` as `{"name": "..."}` with its own JSON encoder, with the guards D1-0 defines for that file (a 1 KiB cap and a linked file refused, see `docs/EXECUTION-PLAN.md` D1-0 and D1-3). The name never reaches a process argument, a standard input or a log. The limit and its unit match the export in `scripts/observatory-file.mjs`, which cuts names with `.slice(0,32)`. |
 | `set-startup` | `enabled`: boolean | Login Items on the Mac, start-at-login registration on Windows |
-| `set-appearance` | `mode`: one of `system`, `light`, `dark` | Sets `data-theme` on the shell's pages |
-| `set-limits-consent` | `enabled`: boolean | Runs the limits consent script (D1-5) with the fixed arguments `set --consent` or `clear`. The page shows the consent text from "Claude Code limits bridge" before it sends `true`. |
-| `set-sharing` | `channel`: one of `codex-limits`, `claude-code-tokens`. `enabled`: boolean. `token`: exactly 64 lowercase hexadecimal characters, required when `enabled` is true and absent when it is false. | Writes `{"action": "enable", "token": ...}` or `{"action": "disable"}` to the standard input of `quota-sharing-control.mjs` (`codex-limits`) or `provider-token-sharing-control.mjs` (`claude-code-tokens`). The token comes from `status` and only fences a stale confirmation view. |
-| `pairing-identity-create` | none | Sends `identity-create` with storage `restricted-file` to the pairing control process, after the page has shown what that storage means. The shell supplies the identity: `null` on the Mac, where the control process generates it, and a key and certificate the shell generates on Windows. The identity never comes from the page and never appears in a result. |
-| `pairing-host-start` | `address`: an address under "Addresses". `port`: integer from 1024 to 65535, the sync port. | Sends `host-start` with `address` and `port: 0`, so the invitation listener uses a temporary port, as both shells do today. The shell keeps `address` and `port` as this device's sync endpoint for `pairing-host-confirm`. `value` is `{invitation}`, which the page shows with the clipboard warning. |
+| `set-appearance` | `mode`: one of `system`, `light`, `dark` | Sets `data-theme` on the shell's pages. The choice is stored as described under "Viewer settings". |
+| `set-limits-consent` | `enabled`: boolean | For `true`, shows the native confirmation described under "Consent stays native". Then runs the limits consent script (D1-5) with the fixed arguments `set --consent` or `clear`. |
+| `set-sharing` | `channel`: one of `codex-limits`, `claude-code-tokens`. `enabled`: boolean. `token`: exactly 64 lowercase hexadecimal characters, required when `enabled` is true and absent when it is false. | For `true`, shows today's native confirmation ("Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device."). Then writes `{"action": "enable", "token": ...}` or `{"action": "disable"}` to the standard input of `quota-sharing-control.mjs` (`codex-limits`) or `provider-token-sharing-control.mjs` (`claude-code-tokens`). The token comes from `status` and only fences a stale confirmation view. It is not consent. |
+| `pairing-identity-create` | none | Shows a native confirmation with today's storage wording ("Allow a device identity stored in a permission-restricted file"). On Yes, sends `identity-create` with storage `restricted-file`. The shell supplies the identity: `null` on the Mac, where the control process generates it, and a key and certificate the shell generates on Windows. The identity never comes from the page and never appears in a result. |
+| `pairing-host-start` | `address`: an address under "Addresses". `port`: integer from 1024 to 65535, the sync port. | Sends `host-start` with `address` and `port: 0`, so the invitation listener uses a temporary port, as both shells do today. The shell keeps `address` and `port` as this device's sync endpoint for `pairing-host-confirm`, and keeps the invitation for `pairing-copy-invitation`. `value` is `{invitation}`, which the page shows with the clipboard warning. |
+| `pairing-copy-invitation` | none | Copies the invitation the shell kept from `pairing-host-start` to the system clipboard, as both native pairing windows do today. The page sends nothing secret. Returns `unavailable` when no invitation is kept. |
 | `pairing-host-confirm` | `fingerprint`: exactly 64 lowercase hexadecimal characters. `peerAddress`: an address under "Addresses". `peerPort`: integer from 1024 to 65535. | Sends `host-confirm` with `peerCertificateSha256` set to `fingerprint`, `localEndpoint` set to `{kind: "tls", address, port}` from the kept `pairing-host-start` values, `peerEndpoint` set to `{kind: "tls", address: peerAddress, port: peerPort}`, and `includeUbuntu: false`. |
 | `pairing-join-claim` | `invitation`: at most 2,048 characters, starting with `observatory-pair:v1:` and followed by one or more base64url characters (`A-Z`, `a-z`, `0-9`, `-`, `_`) | Sends `join-claim`. The control process decodes and validates it. |
 | `pairing-join-confirm` | none | Sends `join-confirm` with `includeUbuntu: false` |
-| `pairing-cancel` | none | Sends `cancel` |
-| `pairing-disconnect` | none | Shows the shell's own native confirmation, then runs `peer-revocation.mjs --runtime <runtime> --revoke`. Returns `cancelled` if the person declines. |
-| `pairing-repair-prepare` | none | Shows the shell's own native confirmation, then runs `peer-repair.mjs --runtime <runtime> --confirm-local-retirement`. Returns `cancelled` if the person declines. |
-| `tailscale-check` | none | Runs `tailscale-status.mjs`, which takes no arguments. `value` is `{status}`, one of `running`, `offline`, `needs-login`, `needs-device-approval`, `stopped`, `starting`, `other-user`, `not-installed`, `unsupported` or `unavailable`. |
-| `export-data` | none | Shows the shell's own save panel. If the person picks a file, it runs `observatory-file.mjs export --runtime <runtime> --out <file>`. The page never sees or sends the path. Cancelling the panel returns `cancelled`. |
-| `status` | none | The one query. `value` is described below. |
+| `pairing-cancel` | none | Sends `cancel` and ends the session. Never `busy`. |
+| `pairing-disconnect` | none | Shows the native confirmation, then runs `peer-revocation.mjs --runtime <runtime> --revoke`. |
+| `pairing-repair-prepare` | none | Shows the native confirmation, then runs `peer-repair.mjs --runtime <runtime> --confirm-local-retirement`. |
+| `tailscale-check` | none | Answers from the cache, refreshed by running `tailscale-status.mjs`, which takes no arguments. `value` is `{status}`, one of `running`, `offline`, `needs-login`, `needs-device-approval`, `stopped`, `starting`, `other-user`, `not-installed`, `unsupported` or `unavailable`. |
+| `export-data` | none | Shows the shell's own save panel, which requires the `.observatory` extension and does not offer to replace an existing file. If the person picks a file, it runs `observatory-file.mjs export --runtime <runtime> --out <file>`. The script refuses to replace a file that exists by then, and the result is `unavailable`. The page never sees or sends the path. Cancelling the panel returns `cancelled`. |
+| `status` | none | The one query, answered from the shell's cache. `value` is described below. Never `busy`. |
 | `complete-setup` | none | Reserved for O1, which records that first-run setup finished. A shell refuses it with `refused` until O1's reviewed amendment adds it to the generated contract. |
 
-**Starting processes.** Every script above is a bundled script at a fixed location, run by the bundled Node. The shell starts it directly with an argument array (`Process` with `arguments` on the Mac, `Process` with `ArgumentList` and `UseShellExecute = false` on Windows), never through `sh`, `cmd` or PowerShell. The arguments are fixed, apart from the runtime folder the shell already owns and the export file, which comes only from the shell's save panel. Nothing from the page joins the arguments. The shell does not forward a script's output or error text to the page: `observatory-file.mjs` prints the output path and its error messages, and the result carries only a code.
+**Starting processes.** Every script above is a bundled script at a fixed location, run by the bundled Node. The shell starts it directly with an argument array (`Process` with `arguments` on the Mac, `Process` with `ArgumentList` and `UseShellExecute = false` on Windows), never through `sh`, `cmd` or PowerShell. It removes `NODE_OPTIONS`, `NODE_PATH` and `NODE_EXTRA_CA_CERTS` from the child's environment, as both `TlsSetupProcess` implementations do today. The other launches in the shells do not yet, and they change to match when they move behind the bridge. The arguments are fixed, apart from the runtime folder the shell already owns and the export file, which comes only from the shell's save panel. Nothing from the page joins the arguments. The shell does not forward a script's output or error text to the page: `observatory-file.mjs` prints the output path and its error messages, and the result carries only a code.
+
+#### Viewer settings
+
+Neither shell stores a skin or appearance choice today. Both store them in `<runtime>/viewer.json`, holding exactly `{"skin": <skin>, "appearance": <mode>}`, written by the shell with its own JSON encoder and the same guards as `device.json` (a 1 KiB cap and a linked file refused). A missing or invalid file means `sage` and `system`. `status` reads the values back from that file.
 
 #### The `status` value
 
-One bounded object, at most 16 KiB as JSON, holding only:
+One bounded object, at most 16 KiB as JSON, built from the shell's cache, holding only:
 
 - `version`: 1
 - `app`: `{version, build}`, the version string (at most 32 characters) and build number
@@ -352,8 +383,8 @@ One bounded object, at most 16 KiB as JSON, holding only:
 - `startup`: boolean
 - `appearance`: `system`, `light` or `dark`
 - `limitsConsent`: boolean
-- `pairing`: `{state, peerFingerprint, transport}`. `state` is one of the statuses the pairing control process and its identity check report today (`idle`, `identity-ready`, `identity-required`, `identity-recovery-required`, `inactive`, `waiting`, `confirming`, `awaiting-confirmation`, `local-ready`, `acknowledged`, `configuration-ready`, `working`, `cancelled`) or `paired`, `unpaired` or `unavailable`. A new status is added here first. `peerFingerprint` is 64 lowercase hexadecimal characters while a host waits for confirmation and `null` otherwise. `transport` is `none`, `ssh` or `tls`.
-- `sharing`: one entry per channel, `{enabled, canEnable, reason, token}`, as the sharing control scripts return it. `token` is 64 lowercase hexadecimal characters or `null`.
+- `pairing`: `{state, peerFingerprint, transport, invitationKept}`. `state` is one of the statuses the pairing control process and its identity check report today (`idle`, `identity-ready`, `identity-required`, `identity-recovery-required`, `inactive`, `waiting`, `confirming`, `awaiting-confirmation`, `local-ready`, `acknowledged`, `configuration-ready`, `working`, `cancelled`) or `paired`, `unpaired` or `unavailable`. A new status is added here first. `peerFingerprint` is 64 lowercase hexadecimal characters while a host waits for confirmation and `null` otherwise. `transport` is `none`, `ssh` or `tls`. `invitationKept` is a boolean. The invitation itself is never in `status`.
+- `sharing`: one entry per channel, `{enabled, canEnable, reason, token}`. The shell validates each sharing script's output with exact keys, as `QuotaSharing.cs` does today, before it enters the cache. `reason` is one of `ready`, `pairing-unavailable`, `account-unavailable` (Codex limits) or `source-unavailable` (Claude Code tokens). `token` is 64 lowercase hexadecimal characters when `canEnable` is true and `null` otherwise.
 
 It holds no path, address, account identity, key, comparison salt or usage value.
 
@@ -365,11 +396,15 @@ It holds no path, address, account identity, key, comparison salt or usage value
 
 #### Pairing code
 
-The owner decided on 2026-10-14 that "pairing code" in this document and in the product direction means the existing invitation: the `observatory-pair:v1:` string made on the first device and pasted on the second. There is no separate short numeric code. The invitation is a bearer secret that expires after 10 minutes. The page shows it once with a warning that it should not be left on the clipboard or sent through a shared channel.
+The owner decided on 2026-10-14 that "pairing code" in this document and in the product direction means the existing invitation: the `observatory-pair:v1:` string made on the first device and pasted on the second. There is no separate short numeric code. The invitation is a bearer secret that expires after 10 minutes.
+
+- The page shows it with a warning that clipboard managers may keep copied invitations and that it should be shared privately, the wording both native windows use today.
+- Copying goes through `pairing-copy-invitation`, so the shell writes the clipboard itself.
+- The page never writes the invitation to `localStorage`, `sessionStorage`, IndexedDB, the URL or history state, and drops it on cancel, on a finished or failed session and on `pagehide`. On Windows the web view profile is kept on disk, which makes this rule matter.
 
 #### First-run setup
 
-The owner decided on 2026-10-14 that the first-run wizard lives in the shared viewer (O1). It writes through `set-source` and `set-limits-consent`, and finishes with `complete-setup`, reserved above.
+The owner decided on 2026-10-14 that the first-run wizard lives in the shared viewer (O1), at `dashboard.html#setup`. It writes through `set-source` and `set-limits-consent`, and finishes with `complete-setup`, reserved above.
 
 ### Snapshot fields the panel reads that no collector writes yet
 
