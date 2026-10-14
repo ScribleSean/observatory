@@ -177,7 +177,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
 | Price table | Missing | Missing | Add | The guide records the current rates as last checked on 2026-09-06 |
-| Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together |
+| Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together. R2 (issue 111): the pairing scripts and the Mac pairing requests no longer carry the Ubuntu slot, and saved pairings stay readable. The Windows pairing window (R2-4) and the snapshot `localModel` slot (R2-2) remain. |
 
 ## Shared web viewer (spike)
 
