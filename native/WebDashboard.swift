@@ -33,6 +33,9 @@ func makeWebDashboard(runtime: URL, resources: URL, page: String) -> WKWebView {
     config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: [page]), forURLScheme: "observatory")
     // The page can only read the snapshot until the settings bridge is added.
     config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
+    config.userContentController.addUserScript(WKUserScript(source: WebViewerPreferences.documentStartScript(
+        skin: WebViewerPreferences.skin(), theme: WebViewerPreferences.theme()),
+        injectionTime: .atDocumentStart, forMainFrameOnly: true))
     config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     let web = DashboardWebView(frame: .zero, configuration: config)
     web.underPageBackgroundColor = .windowBackgroundColor

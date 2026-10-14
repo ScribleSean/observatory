@@ -46,6 +46,9 @@ final class WebPanelController: NSViewController {
                                    forURLScheme: "observatory")
         config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
         config.userContentController.add(PanelActionBridge(perform: perform), contentWorld: .page, name: "panelAction")
+        config.userContentController.addUserScript(WKUserScript(source: WebViewerPreferences.documentStartScript(
+            skin: WebViewerPreferences.skin(), theme: WebViewerPreferences.theme()),
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: Self.width, height: 520), configuration: config)

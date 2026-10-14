@@ -567,6 +567,33 @@ func runSelfTests() {
     for name in PanelAction.allCases.map(\.rawValue) { precondition(PanelAction.parse(name)?.rawValue == name) }
     let refused: [Any] = ["", "Refresh", "refresh ", "quit", "open-dashboard:settings", ["refresh"], ["panelAction": "refresh"], 1, NSNull()]
     for value in refused { precondition(PanelAction.parse(value) == nil, "Unknown panel action accepted") }
+    do {
+        // Checked on plain values so the test writes no preferences file.
+        precondition(WebViewerPreferences.skin(stored: nil) == "sage", "Missing skin must use Sage")
+        precondition(WebViewerPreferences.theme(stored: nil) == nil, "Missing theme must follow the system")
+        for skin in ["almanac", "amber-crt"] {
+            precondition(WebViewerPreferences.skin(stored: skin) == skin, "Bundled skin must be retained")
+        }
+        for skin in ["Almanac", "", "sage\"", "../sage", "</script>"] {
+            precondition(WebViewerPreferences.skin(stored: skin) == "sage", "Invalid skin must use Sage")
+        }
+        for theme in ["light", "dark"] {
+            precondition(WebViewerPreferences.theme(stored: theme) == theme, "Explicit theme must be retained")
+        }
+        for theme in ["Light", "auto", ""] {
+            precondition(WebViewerPreferences.theme(stored: theme) == nil, "Invalid theme must follow the system")
+        }
+        let script = WebViewerPreferences.documentStartScript(skin: "almanac", theme: "dark")
+        precondition(script.contains("dataset.skin = \"almanac\""), "Script must set the selected skin")
+        precondition(script.contains("dataset.theme = \"dark\""), "Script must set the selected theme")
+        let invalid = WebViewerPreferences.documentStartScript(skin: "x\"; alert(1)", theme: "dark\"")
+        precondition(invalid.contains("dataset.skin = \"sage\""), "Invalid script skin must use Sage")
+        precondition(!invalid.contains("alert"), "Script must exclude free text")
+        precondition(!invalid.contains("dark\""), "Script must exclude the invalid theme")
+        precondition(!invalid.contains("dataset.theme"), "Invalid theme must not set an attribute")
+        precondition(!WebViewerPreferences.documentStartScript(skin: "sage", theme: nil).contains("dataset.theme"),
+                     "System theme must not set an attribute")
+    }
     print("Native self-tests passed")
 }
 
