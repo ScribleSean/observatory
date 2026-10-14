@@ -1,0 +1,87 @@
+name: Script suite
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'lib/**'
+      - 'app/**'
+      - 'native/web/**'
+      - 'native/tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/script-suite.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'lib/**'
+      - 'app/**'
+      - 'native/web/**'
+      - 'native/tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/script-suite.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: script-suite-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  suite:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Export selected Python
+        shell: node {0}
+        env:
+          OBSERVATORY_PYTHON: ${{ steps.python.outputs.python-path }}
+          OBSERVATORY_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          const { appendFileSync } = require('node:fs');
+          const path = require('node:path');
+          for (const key of ['OBSERVATORY_PYTHON', 'OBSERVATORY_TEST_PYTHON']) {
+            const python = process.env[key];
+            if (!python || !path.isAbsolute(python) || /[\r\n\0]/.test(python)) {
+              throw new Error('Source tests require an absolute Python executable');
+            }
+            appendFileSync(process.env.GITHUB_ENV, `${key}=${python}\n`);
+          }
+      - run: npm ci
+      - name: Run full script suite
+        shell: node {0}
+        run: |
+          const { readdirSync } = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+          const isolated = ['peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs'];
+          const files = readdirSync('scripts', { withFileTypes: true })
+            .filter((entry) => entry.isFile() && entry.name.endsWith('.test.mjs'))
+            .map((entry) => entry.name)
+            .sort();
+          const grouped = files.filter((name) => !isolated.includes(name));
+          const args = ['--import', './native/tests/test-source-runtime.mjs', '--test', '--test-timeout=300000'];
+          if (process.platform === 'darwin') args.push('--test-concurrency=1');
+          for (const batch of [grouped, ...isolated.map((name) => [name])]) {
+            const result = spawnSync(process.execPath, [...args, ...batch.map((name) => `scripts/${name}`)], { stdio: 'inherit' });
+            if (result.error) console.error(result.error);
+            if (result.status !== 0) process.exit(result.status ?? 1);
+          }
+      - run: npx tsc --noEmit
+      - name: oxlint (advisory until the earlier web dashboard is removed)
+        continue-on-error: true
+        run: npx oxlint
+      - run: node scripts/build-design-tokens.mjs --check
