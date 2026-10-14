@@ -38,7 +38,7 @@ void test('all six source groups retain supported rows and device names', () => 
   assert.deepEqual(groups.map(group => group.id), ['limits', 'activity', 'codexTokens', 'claudeTokens', 'settings', 'dictation']);
   assert.deepEqual(groups.map(group => group.rows.length), [3, 2, 1, 1, 1, 2]);
   assert.deepEqual(groups[0].rows.map(row => row.device), [null, null, 'Windows']);
-  assert.equal(groups[1].rows[0].device, 'Synthetic laptop');
+  assert.equal(groups[1].rows[0].device, 'Synthetic laptop (Mac)');
   assert.equal(groups[5].rows[1].name, 'Unknown');
   assert.equal(sourceGroups({ activity: [mac] }, now)[1].rows[0].device, 'macOS');
   assert.equal(sourceGroups({ peerQuota: other }, now)[0].rows.length, 0);
@@ -114,4 +114,14 @@ void test('tools devices and periods filter independent cards without summing', 
   assert.equal(dictationView(value, { tool: 'Synthetic B' }, now).cards.length, 1);
   assert.equal(dictationView(value, { host: 'Windows' }, now).cards.length, 1);
   assert.equal(dictationView(value, { host: 'Mac', tool: 'Synthetic A' }, now).cards.length, 1);
+});
+
+void test('a read row shows no refusal sentence, a refused row does', () => {
+  const snapshot = { activity: [
+    { host: 'Mac', status: 'ok', refusal: 'private-folder-refused' },
+    { host: 'Windows', status: 'unavailable', refusal: 'ancestor-refused' },
+  ] };
+  const [read, refused] = sourceGroups(snapshot, 0)[1].rows;
+  assert.equal(read.refusal, null);
+  assert.equal(refused.refusal, 'A private folder check failed at a parent folder, so this source was not read.');
 });

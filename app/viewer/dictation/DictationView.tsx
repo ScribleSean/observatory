@@ -23,7 +23,7 @@ export function DictationPanel({ snapshot, now, tool, host, period, onToolChange
     <FilterGroup label={STRINGS.devices.period} value={period} onChange={onPeriodChange}
       options={(['day', 'week', 'month', 'all'] as const).map(id => [id, STRINGS.periods[id]])} />
     <p className="ob-dictation-note">{STRINGS.dictation.caveat}{' '}<InfoControl label={STRINGS.dictation.info} detail={STRINGS.dictation.detail} /></p>
-    {view.cards.length === 0 && <EmptyState text={STRINGS.sources.noRecords} />}
+    {view.cards.length === 0 && <EmptyState text={STRINGS.dictation.noMatch} />}
     {view.cards.map(card => <Card key={card.key}>
       <h3>{card.tool}{STRINGS.formats.separator}{card.device}</h3>
       <Row><span>{card.statusWord}</span><time className="ob-meta" dateTime={card.check.iso ?? undefined} title={card.check.exact ?? undefined}>{card.check.label}</time></Row>

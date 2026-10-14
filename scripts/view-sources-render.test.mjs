@@ -13,7 +13,7 @@ const { createServer } = await load('vite');
 const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
-const { DashboardView } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+const { DashboardView, sectionFromHash } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
 const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const { SourcesView } = await server.ssrLoadModule('/app/viewer/sources/SourcesView.tsx');
 const { DictationPanel } = await server.ssrLoadModule('/app/viewer/dictation/DictationView.tsx');
@@ -64,7 +64,7 @@ for (const refusal of ['synthetic-private-code', 'ancestor-refused']) {
 void test('missing sources and missing values never render zero', () => {
   for (const snapshot of [{}, { dictation: [{ host: 'Mac', status: 'ok', source: 'Synthetic A', days: [{ date: '2026-10-14' }] }] }]) {
     for (const html of [render(SourcesView, { snapshot }), panel(snapshot)]) {
-      assert.match(html, /Unknown|No source records/);
+      assert.match(html, /Unknown|No source records|No dictation records match these filters/);
       assert.doesNotMatch(html, />0<|>0m</);
     }
   }
@@ -97,3 +97,9 @@ for (const tool of ['all', 'Synthetic A', 'Synthetic B']) {
     }
   }
 }
+
+void test('the address hash picks a known section and falls back to Limits', () => {
+  assert.equal(sectionFromHash('#sources'), 'sources');
+  assert.equal(sectionFromHash('#dictation'), 'dictation');
+  for (const hash of ['', '#', '#Sources', '#constructor', '#__proto__', '#sources/x']) assert.equal(sectionFromHash(hash), 'limits');
+});

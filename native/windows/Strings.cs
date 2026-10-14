@@ -137,6 +137,7 @@ internal static class ObservatoryStrings
         internal const string NoConnected = "No sources are connected";
         internal const string NoRecords = "No source records";
         internal const string StatusCount = "{word}: {count}";
+        internal const string NamedDevice = "{name} ({platform})";
     }
     internal static class Dictation
     {
@@ -151,5 +152,6 @@ internal static class ObservatoryStrings
         internal const string Caveat = "Device histories may overlap, so they are not added together.";
         internal const string Detail = "Missing dates are gaps, not zeros. Transcripts, recordings and credentials are not collected.";
         internal const string Info = "About dictation records";
+        internal const string NoMatch = "No dictation records match these filters";
     }
 }

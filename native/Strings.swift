@@ -123,6 +123,7 @@ enum ObservatoryStrings {
         static let `noConnected` = "No sources are connected"
         static let `noRecords` = "No source records"
         static let `statusCount` = "{word}: {count}"
+        static let `namedDevice` = "{name} ({platform})"
     }
     enum Dictation {
         static let `allTools` = "All tools"
@@ -136,5 +137,6 @@ enum ObservatoryStrings {
         static let `caveat` = "Device histories may overlap, so they are not added together."
         static let `detail` = "Missing dates are gaps, not zeros. Transcripts, recordings and credentials are not collected."
         static let `info` = "About dictation records"
+        static let `noMatch` = "No dictation records match these filters"
     }
 }

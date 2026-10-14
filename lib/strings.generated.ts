@@ -122,7 +122,8 @@ export const STRINGS = {
     "modelSettings": "Model settings",
     "noConnected": "No sources are connected",
     "noRecords": "No source records",
-    "statusCount": "{word}: {count}"
+    "statusCount": "{word}: {count}",
+    "namedDevice": "{name} ({platform})"
   },
   "dictation": {
     "allTools": "All tools",
@@ -135,7 +136,8 @@ export const STRINGS = {
     "partial": "{value} (partial)",
     "caveat": "Device histories may overlap, so they are not added together.",
     "detail": "Missing dates are gaps, not zeros. Transcripts, recordings and credentials are not collected.",
-    "info": "About dictation records"
+    "info": "About dictation records",
+    "noMatch": "No dictation records match these filters"
   }
 } as const;
 
