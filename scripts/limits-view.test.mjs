@@ -118,9 +118,10 @@ void test('dashboard selects Limits and preserves other empty sections', () => {
   const limits = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'limits' }));
   assert.match(limits, /class="ob-limits"/);
   assert.doesNotMatch(limits, /This section is not built yet/);
-  const tokens = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'tokens' }));
-  assert.match(tokens, /This section is not built yet/);
-  assert.doesNotMatch(tokens, /class="ob-limits"/);
+  // Settings has no view yet, so it still shows the empty state.
+  const settings = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'settings' }));
+  assert.match(settings, /This section is not built yet/);
+  assert.doesNotMatch(settings, /class="ob-limits"/);
 });
 
 void test('sample provider cards and Now agree on each window projection and span', () => {

@@ -169,7 +169,7 @@ Bundled skins, in `native/skins/`:
 
 `lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
 
-A shell chooses a skin by setting `data-skin` on the root element. The page reads it on load and follows a later change to it, so a shell can switch skins without reloading. A shell should not use `?skin=name`, because the Windows host refuses query strings. The query works only for the sample pages in a browser. An unknown name falls back to Sage. With sample data each page shows a skin picker so a person can compare them.
+A shell chooses a skin by setting `data-skin` on the root element. The page reads it on load and follows a later change to it, so a shell can switch skins without reloading. A shell should not use `?skin=name`, because the Windows host refuses query strings. The query works only for the sample pages in a browser. An unknown name falls back to Sage, whether it is set before the page loads or later. With sample data each page shows a skin picker so a person can compare them.
 
 Fonts: Almanac uses Fraunces and the two mono skins use JetBrains Mono. Both are bundled in `public/fonts/` under the SIL Open Font License, with their licence texts beside them and in the generated web notices. The app makes no font-service requests.
 
@@ -425,7 +425,7 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | --- | --- |
 | Page | `dashboard.html` in the bundled web files. It sets `window.observatoryDashboardReady` after its first render. |
 | Data | It requests `./local/usage.json` through the existing snapshot bridge, reloads on `observatory:snapshot-changed` and every 30 seconds while visible, and reads nothing else. |
-| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. |
+| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. A fragment naming a section, such as `dashboard.html#tokens`, opens that section on the first render. The page does not write the fragment. |
 | Actions | None. The page sends nothing to the shell. |
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |

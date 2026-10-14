@@ -44,6 +44,12 @@ function sectionNames(html) {
 
 void test('dashboard sections omit disconnected dictation and preserve their order', () => {
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [] } })), ['Limits', 'Activity', 'Tokens', 'Sources', 'Settings']);
+  const fallback = dashboard({ section: 'dictation', snapshot: { ...base.snapshot, dictation: [] } });
+  assert.ok(fallback.includes('<h2 id="ob-section-limits">'));
+  const navigation = fallback.match(/<nav aria-label="Sections">([\s\S]*?)<\/nav>/)?.[1];
+  assert.ok(navigation);
+  assert.match(navigation, /<button[^>]*aria-current="page"[^>]*>Limits<\/button>/);
+  assert.ok(!sectionNames(fallback).includes('Dictation'));
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [{ status: 'ok' }] } })), ['Limits', 'Activity', 'Tokens', 'Dictation', 'Sources', 'Settings']);
 });
 
@@ -204,4 +210,17 @@ void test('explicit bounds and known zero values remain finite and formatted', (
     assert.match(zero, /<td>0 units<\/td>/);
     assert.doesNotMatch(zero, /NaN|Infinity|Unknown/);
   }
+});
+
+void test('skin attributes accept bundled names and otherwise fall back to Sage', async () => {
+  const { skinIdFromAttribute } = await server.ssrLoadModule('/app/viewer/skin.ts');
+  for (const value of ['almanac', 'amber-crt']) assert.equal(skinIdFromAttribute(value), value);
+  for (const value of [undefined, '', 'bogus', 'constructor', '__proto__', 'Sage']) {
+    assert.equal(skinIdFromAttribute(value), 'sage');
+  }
+});
+
+void test('skin observer applies the attribute fallback to state', () => {
+  const source = readFileSync(`${root}/app/viewer/skin.ts`, 'utf8');
+  assert.match(source, /new MutationObserver\(\(\) => \{\s*setSkinId\(skinIdFromAttribute\(root\.dataset\.skin\)\);\s*\}\)/);
 });
