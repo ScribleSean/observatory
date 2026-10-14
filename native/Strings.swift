@@ -3,6 +3,9 @@ enum ObservatoryStrings {
     enum App {
         static let `title` = "Observatory"
     }
+    enum Limits {
+        static let `deviceNamed` = "{name} ({platform})"
+    }
     enum Sections {
         static let `limits` = "Limits"
         static let `activity` = "Activity"

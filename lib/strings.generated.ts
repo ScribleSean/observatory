@@ -3,6 +3,9 @@ export const STRINGS = {
   "app": {
     "title": "Observatory"
   },
+  "limits": {
+    "deviceNamed": "{name} ({platform})"
+  },
   "sections": {
     "limits": "Limits",
     "activity": "Activity",

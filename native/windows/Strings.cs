@@ -7,6 +7,10 @@ internal static class ObservatoryStrings
     {
         internal const string Title = "Observatory";
     }
+    internal static class Limits
+    {
+        internal const string DeviceNamed = "{name} ({platform})";
+    }
     internal static class Sections
     {
         internal const string Limits = "Limits";

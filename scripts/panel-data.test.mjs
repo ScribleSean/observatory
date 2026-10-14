@@ -73,6 +73,7 @@ test('limit rows mark old readings and low limits, and reject impossible values'
     { bucket: 'codex_spark', window: 'primary', durationMinutes: 300, remainingPercent: 50 }] };
   const rows = limits({ quota }, now).filter(row => row.provider === 'codex');
   assert.equal(rows.length, 3);
+  assert.deepEqual([rows[0].bucket, rows[0].windowId, ...limits({}, now).map(row => [row.bucket, row.windowId])], ['codex', 'primary', ['', ''], ['', '']]);
   assert.deepEqual([rows[0].window, rows[0].low, rows[0].stale, rows[0].remaining], ['5-hour', false, false, 81]);
   assert.deepEqual([rows[1].window, rows[1].low], ['weekly', true]);
   assert.equal(rows[2].remaining, null);
