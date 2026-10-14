@@ -29,7 +29,7 @@ export function loadPrices(raw) {
   }
   const models = {};
   for (const model of Reflect.ownKeys(raw.models)) {
-    if (typeof model !== 'string' || !/^[a-z0-9][a-z0-9.\-]*$/.test(model)) {
+    if (typeof model !== 'string' || !/^[a-z0-9][a-z0-9.-]*$/.test(model)) {
       throw new Error('Model id is invalid');
     }
     const entry = raw.models[model];

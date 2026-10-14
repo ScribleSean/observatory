@@ -56,7 +56,7 @@ const invalidCases = [
   ]),
 ];
 for (const [name, invalid] of invalidCases) {
-  test(`rejects ${name}`, () => {
+  test(`rejects ${String(name)}`, () => {
     assert.throws(() => loadPrices(invalid(fixture())), Error);
   });
 }
@@ -101,10 +101,10 @@ test('all fixture models are priced or deliberately unpriced', () => {
   const names = new Set();
   for (const file of fs.readdirSync(scripts).filter(name => name.endsWith('.test.mjs'))) {
     const text = fs.readFileSync(new URL(file, scripts), 'utf8');
-    for (const match of text.matchAll(/\b(?:gpt-[0-9][a-z0-9.\-]*|claude-(?:opus|sonnet|haiku|fable)-[a-z0-9.\-]*)/g)) {
+    for (const match of text.matchAll(/\b(?:gpt-[0-9][a-z0-9.-]*|claude-(?:opus|sonnet|haiku|fable)-[a-z0-9.-]*)/g)) {
       names.add(match[0].replace(/[-.]+$/, ''));
     }
   }
-  const missing = [...names].filter(name => rateFor(name) === null && !deliberatelyUnpriced.has(name)).sort();
+  const missing = [...names].filter(name => rateFor(name) === null && !deliberatelyUnpriced.has(name)).sort((a, b) => a.localeCompare(b));
   assert.deepEqual(missing, [], `Unpriced fixture models: ${missing.join(', ')}`);
 });

@@ -109,7 +109,7 @@ async function main() {
   }
   const { prices, skipped, dropped } = mapPrices(source, current, { today, sourceUrl: current.source });
   for (const line of diffPrices(current, prices)) console.log(line);
-  for (const [label, list] of [['Skipped', skipped], ['Dropped', dropped]]) {
+  for (const { label, list } of [{ label: 'Skipped', list: skipped }, { label: 'Dropped', list: dropped }]) {
     console.log(`${label}: ${list.length}`);
     for (const { id, reason } of list) console.log(`${id}: ${reason}`);
   }
