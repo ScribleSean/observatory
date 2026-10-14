@@ -1,6 +1,59 @@
 import AppKit
 import WebKit
 
+let viewerFactsScript = """
+const deadline = Date.now() + 5000;
+const ready = () => window.observatoryPanelReady === true || window.observatoryDashboardReady === true;
+while (!ready() && Date.now() < deadline) await new Promise(r => setTimeout(r, 50));
+await Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))), new Promise(r => setTimeout(r, 250))]);
+const limitRows = Object.create(null);
+for (const row of document.querySelectorAll('[data-provider][data-window]')) {
+    const provider = row.dataset.provider;
+    limitRows[provider] = (limitRows[provider] || 0) + 1;
+}
+return JSON.stringify({
+    ready: ready(), page: location.pathname.replace(/^\\//, ''),
+    skin: document.documentElement.dataset.skin || 'Unknown',
+    theme: document.documentElement.dataset.theme || 'system',
+    font: getComputedStyle(document.querySelector('main') || document.body).fontFamily,
+    dark: matchMedia('(prefers-color-scheme: dark)').matches,
+    sections: document.querySelectorAll('nav[aria-label="Sections"] a, nav[aria-label="Sections"] button').length,
+    limitRows, limitRowsTotal: document.querySelectorAll('.ob-limit').length,
+    buttons: document.querySelectorAll('.ob-actions button').length,
+    textLength: document.body.innerText.length, width: innerWidth, height: innerHeight
+});
+"""
+
+@MainActor
+func describeViewer(_ web: WKWebView, completion: @escaping (String) -> Void) {
+    let deadline = Date().addingTimeInterval(5)
+    func describeWhenLoaded() {
+        // Wait for navigation so the page commit does not discard the script.
+        if web.isLoading || web.url == nil {
+            guard Date() < deadline else { completion("{\"ready\":false}"); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { describeWhenLoaded() }
+            return
+        }
+        web.callAsyncJavaScript(viewerFactsScript, arguments: [:], in: nil, in: .page) { result in
+            guard case .success(let value) = result, let facts = value as? String else {
+                completion("{\"ready\":false}"); return
+            }
+            completion(facts)
+        }
+    }
+    describeWhenLoaded()
+}
+
+@MainActor
+func saveViewerPreview(_ web: WKWebView, to file: URL) {
+    web.takeSnapshot(with: nil) { image, error in
+        guard error == nil, let tiff = image?.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: file, options: .atomic)
+    }
+}
+
 enum WebDashboardPage {
     static let page = "dashboard.html"
     static let sections = [("limits", "Limits"), ("activity", "Activity"), ("tokens", "Tokens"),

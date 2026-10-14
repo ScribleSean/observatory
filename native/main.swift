@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var panelSize = NSSize.zero
     private var unreliableUsageAnchor: NSRect?
     private var previewRuntime: URL?
+    private var openedTimingDashboard = false
     private weak var lifecycleContent: NSView?
     private let nativeSelection = NativeDashboardSelection()
     private lazy var updateController = MacUpdateController { [weak self] in
@@ -305,6 +306,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let top = window.frame.maxY
                 window.setContentSize(size)
                 window.setFrameTopLeftPoint(NSPoint(x: window.frame.minX, y: top))
+            }
+            if self.reportsPanelTiming {
+                webPanel.describe { [weak self] facts in
+                    guard let self else { return }
+                    print("panel-facts \(facts)")
+                    fflush(stdout)
+                    if let runtime = self.previewRuntime {
+                        webPanel.savePreview(to: runtime.appendingPathComponent("panel-timing.png"))
+                        if self.usesWebPanel && self.usesWebDashboard && !self.openedTimingDashboard {
+                            self.openedTimingDashboard = true
+                            self.openDefault()
+                        }
+                    }
+                }
             }
         }
     }
@@ -785,6 +800,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if usesWebDashboard, let page = webDashboardPage {
             webDashboardSection = WebDashboardPage.section(for: tab)
             webView?.load(URLRequest(url: WebDashboardPage.url(page: page, section: webDashboardSection)))
+            if reportsPanelTiming, let web = webView {
+                describeViewer(web) { [weak self, weak web] facts in
+                    guard let self, let webView = self.webView, webView === web else { return }
+                    print("dashboard-facts \(facts)")
+                    fflush(stdout)
+                    if let runtime = self.previewRuntime {
+                        saveViewerPreview(webView, to: runtime.appendingPathComponent("dashboard-timing.png"))
+                    }
+                }
+            }
         } else {
             webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
         }

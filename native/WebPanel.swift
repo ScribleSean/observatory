@@ -74,6 +74,10 @@ final class WebPanelController: NSViewController {
         web.evaluateJavaScript("window.dispatchEvent(new Event('observatory:snapshot-changed'))")
     }
 
+    func describe(_ completion: @escaping (String) -> Void) { describeViewer(web, completion: completion) }
+
+    func savePreview(to file: URL) { saveViewerPreview(web, to: file) }
+
     // Reports the content height once the page says it has drawn. A page that
     // never becomes ready reports nil and keeps the previous height.
     func whenDrawn(deadline: Date = Date().addingTimeInterval(5), _ completion: @escaping (CGFloat?) -> Void) {
