@@ -1,0 +1,10 @@
+.ob-dictation { min-width: 0; overflow-wrap: anywhere; }
+.ob-dictation .ob-segments { flex-wrap: wrap; }
+.ob-dictation .ob-segments button { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+.ob-dictation .ob-row { flex-wrap: wrap; }
+.ob-dictation h3 { margin: 0 0 var(--ob-space-3); font-size: var(--ob-body-size); }
+.ob-dictation-note { color: var(--ob-muted); margin: var(--ob-space-3) 0; }
+.ob-dictation dl { display: grid; gap: var(--ob-space-3); grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
+.ob-dictation dd { margin: var(--ob-space-1) 0 0; font-variant-numeric: tabular-nums; }
+.ob-dictation dt { color: var(--ob-muted); }
+.ob-dictation .ob-chart { min-width: 0; max-width: 100%; }

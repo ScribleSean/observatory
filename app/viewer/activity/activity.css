@@ -1,0 +1,17 @@
+.ob-activity { min-width: 0; overflow-wrap: anywhere; }
+.ob-activity * { box-sizing: border-box; }
+.ob-activity .ob-activity-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ob-space-2); }
+.ob-activity .ob-segments { flex-wrap: wrap; max-width: 100%; }
+.ob-activity .ob-segments button { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
+.ob-activity select { max-width: 100%; font: inherit; color: var(--ob-text); background: var(--ob-surface); }
+.ob-activity .ob-activity-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
+.ob-activity .ob-card { min-width: 0; }
+.ob-activity h3 { margin: 0 0 var(--ob-space-2); font-size: var(--ob-body-size); }
+.ob-activity .ob-row { gap: var(--ob-space-2); }
+.ob-activity .ob-num { flex-shrink: 0; }
+.ob-activity details { margin: var(--ob-space-2) 0; }
+.ob-activity summary { cursor: pointer; }
+.ob-activity .ob-activity-now { margin-top: var(--ob-space-2); }
+@media (min-width: 720px) {
+  .ob-activity .ob-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
