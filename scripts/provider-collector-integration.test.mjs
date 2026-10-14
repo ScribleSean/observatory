@@ -6,6 +6,7 @@ import path from 'node:path';
 import {collectMac} from './collect-mac.mjs';
 import {collectWindows} from './collect-windows.mjs';
 import {execPython} from './test-python.mjs';
+import {prices} from './price-table.mjs';
 
 test('native collector publishes a separate Claude reading and counts its health once',
   {skip:!['darwin','win32'].includes(process.platform)},async t=>{
@@ -40,6 +41,10 @@ test('native collector publishes a separate Claude reading and counts its health
     const snapshot=JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
     assert.ok(!JSON.stringify(snapshot).includes('PRIVATE'));
     assert.equal(snapshot.providerTokenSources[0].days[0].requestCount,1);
+    assert.equal(snapshot.prices.checkedOn,prices.checkedOn);
+    for(const day of snapshot.providerTokenSources[0].days) {
+      assert.ok(day.apiEstimate && typeof day.apiEstimate==='object' && !Array.isArray(day.apiEstimate));
+    }
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({...config,claude:false}),{mode:0o600});
     await rm(claude,{recursive:true});
     const disabled=await collect();
