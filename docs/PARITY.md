@@ -80,12 +80,12 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Device filter | Done | Done | Keep | |
-| Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. |
+| Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. The shared dashboard's Activity view (V3, issue 97) offers Now, Day, Week, Month and All time. Its Now follows the rule under "Snapshot additions" in the design direction, reads only the `Combined` row for All, and shows Unknown until a collector stamps `checkedAt` on that row. Checked with synthetic tests and the sample in a browser, not inside either host. |
 | Date picker | Done | Done | Keep | |
 | Total and bar chart, up to 30 days | Done | Done | Keep | |
-| Tracking status and ActivityWatch help | Differs | Differs | Change | Collapsed on Mac. Always expanded on Windows. |
+| Tracking status and ActivityWatch help | Differs | Differs | Change | Collapsed on Mac. Always expanded on Windows. The shared dashboard's Activity view shows the status as a fixed word and keeps the detail and the help collapsed behind an information control. Neither app hosts the shared dashboard yet. The help wording moved to the `activity` group of `lib/strings.json`, with "Allowances" renamed to "Limits". `native/ActivityWatchHelp.swift` still holds its own copy until M2 retires the native view. |
 | Categories and recorded apps | Done | Done | Keep | |
-| Hourly breakdown | Done | Done | Change | Labelled as New York clock hours on both |
+| Hourly breakdown | Done | Done | Change | Labelled as New York clock hours on both. The shared dashboard's Activity view labels the hours with the snapshot's `timezone` value and says days follow that zone until device time zones land. An hour after the reading time shows as Unknown, not 0. |
 | "Show recorded values" table | Missing | Done | Keep | Decide whether Mac needs it |
 
 ## Tokens
@@ -96,17 +96,17 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Breakdown by model | Done | Done | Keep | |
 | Token classes | Done | Done | Keep | |
 | Recorded reasoning and speed settings | Done | Done | Keep | |
-| API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The dashboard's comparison note still names OpenAI's price page as the source and needs the viewer to name the table instead. |
-| Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health |
-| API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows. |
-| Claude Code session cost | Missing | Missing | Add | |
+| API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The native dashboards' comparison note still names OpenAI's price page as the source. The shared viewer's Tokens view refers to the shared price table and shows the date it was checked. |
+| Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health in the native apps. The shared viewer's Tokens view shows them by day, model and token class, per device, with All reading "By device". Neither app shows the shared dashboard by default. |
+| API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows, so the shared viewer's Tokens view shows Unknown for it until they do. |
+| Claude Code session cost | Missing | Missing | Add | The shared viewer's Tokens view shows `claudeLimits.sessionCost` as "Session cost (estimate)" when the device filter is All, because the snapshot does not say which device observed it. It reads Unknown when the cost is 10 minutes old or older. No collector writes the field yet. |
 
 ## Dictation
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section present | Done | Done | Change | Show only when a dictation source is enabled |
-| Tool, device and period filters | Done | Done | Keep | |
+| Section present | Done | Done | Change | Show only when a dictation source is enabled. The shared viewer does this since V1 and draws the view since V5 (issue 100). |
+| Tool, device and period filters | Done | Done | Keep | The shared viewer's Dictation view (V5, issue 100) has tool, device and period (Day, Week, Month, All time) filters and never adds devices or tools together. Checked in a browser from the built files with sample data, not inside either host. |
 | Layout | Differs | Differs | Change | Windows uses tables and a chart titled "Voice over time" |
 | ChatGPT voice placeholder row | Done | Done | Remove | "Not implemented" row on both |
 
@@ -120,9 +120,9 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section name | Differs | Differs | Change | Rename to Sources |
-| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. |
-| Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. |
+| Section name | Differs | Differs | Change | Rename to Sources. The shared viewer names it Sources (V1). |
+| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. The shared viewer's Sources view (V5, issue 100) shows the relative time with the exact time on hover, and a refusal code as a sentence that claims no cause. No collector writes `refusal` yet (D1-6). Checked in a browser from the built files with sample data, not inside either host. |
+| Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. Since V5 (issue 100) the nine labels are in `lib/strings.json` under `sources` and the shared viewer reads them. The native views still use their own copies. |
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
 | ChatGPT and Cursor placeholder rows | Done | Done | Remove | |
@@ -194,8 +194,10 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | Four panel actions accepted by the shell | Done | Done | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard`. On Mac a real click on each button reached the shell in preview mode. On Windows only `refresh` was run end to end. The other three were accepted and not run. |
 | Open time and memory measured | Done | Done | Add | Needed before the direction is confirmed. Mac numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-mac-october-13): first open 333 ms against 195 ms native, later opens 82 to 104 ms against 122 to 129 ms, and 97 MiB of footprint with the panel open against 49 MiB native. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 132 ms native, and about 390 MiB working set with the panel open against 65 MiB native. |
 | Shared dashboard page (`dashboard.html`) in the bundled web files | Done | Done | Add | Added for V1 (issue 79). Built by the shared web bundle beside `panel.html`, with the six sections as empty states and Dictation listed only when a dictation source is enabled. Checked in a browser from the built files, not inside either host. |
-| One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The charts are not used by a view yet. |
+| One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The line chart is used by the Limits view. |
 | Skin applied to the whole viewer | Done | Done | Add | One hook applies the skin to both pages and follows later changes to `data-skin`. Sage and Almanac checked in light and dark in a browser at 360 and 1280 pixels wide. |
+| Limits view in the shared dashboard | Done | Done | Add | Added for V2 (issue 96) from source on `shared/v2-limits` and a browser check of the built page with sample data. Claude Code and Codex side by side with the same layout, a Now card that leads with pace and the estimated time until each window runs out, the limit rows in the skin's limit style, the Claude Code session cost, a history chart per window for the five periods, and the paired device's shared Codex limits with their observation time. Rules live in `lib/view-limits.mjs`. Pace still comes from `scripts/quota-pace.mjs`, which the packaged collectors also use. Not run inside either host. History in a real snapshot covers about the latest 24 hours, and no collector writes `claudeLimits.history` yet, so Claude Code history and pace stay Unknown outside the sample. |
+| Tokens view in the shared dashboard | Done | Done | Add | Added for V4 (issue 98). Claude Code and Codex side by side with totals, token classes, models, a 30-day chart, the API-equivalent estimate with the price check date, Claude Code session cost and recorded reasoning and speed. Claude Code for All is shown per device. Codex for All reads only the verified combined row. A missing or unpriced value shows Unknown. Checked in a browser from the built files with sample data only, in Sage and Almanac, light and dark, at 360 and 1280 pixels wide. Not checked inside either host. |
 | One sample fixture for both pages | Done | Done | Add | `lib/sample-snapshot.mjs`, fictional. `scripts/demo.mjs` still keeps the older `demoData()` for the earlier web view and a Windows self-test. |
 | Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared viewer source. A shell selects one with `data-skin`. The shared viewer's Settings view has a skin picker that sends `set-skin` (B1-2). It works with sample data in a browser. No shell handles the action yet. |
 | Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. The shared viewer's Settings view has an "Export data" button that sends `export-data` (B1-2). No shell handles the action yet. |

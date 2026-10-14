@@ -2,7 +2,7 @@
 import {useEffect, useState} from 'react';
 import {quotaPace} from '../scripts/quota-pace.mjs';
 import {durationText} from '../scripts/display-format.mjs';
-import {cleanPeerQuotaForDisplay} from '../scripts/quota-display.mjs';
+import {cleanPeerQuotaForDisplay} from '../lib/view-limits.mjs';
 
 type Window = {bucket:string; window:string; remainingPercent:number; durationMinutes:number|null; resetsAt:string|null};
 export type Quota = {status:string; checkedAt?:string; windows?:Window[]; history?:{checkedAt:string; windows:Window[]}[]};
