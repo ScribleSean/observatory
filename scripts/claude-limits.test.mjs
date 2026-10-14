@@ -107,7 +107,9 @@ test('install needs consent, saves the earlier status line and uninstall restore
   assert.deepEqual(await installStatusline({...options,consent:true}),{installed:true,replacedStatusLine:true,settingsPath});
   const installed=JSON.parse(await readFile(settingsPath,'utf8'));
   assert.equal(installed.model,'synthetic');
-  assert.equal(installed.statusLine.command,`"/synthetic/node" "/synthetic/scripts/claude-statusline-bridge.mjs" --runtime "${runtime}"`);
+  // The installer writes forward slashes on Windows, so the command also runs in Git Bash.
+  const quoted=process.platform==='win32'?runtime.replaceAll('\\','/'):runtime;
+  assert.equal(installed.statusLine.command,`"/synthetic/node" "/synthetic/scripts/claude-statusline-bridge.mjs" --runtime "${quoted}"`);
   assert.deepEqual(JSON.parse(await readFile(settingsPath+'.observatory-backup','utf8')).statusLine,earlier);
   assert.equal((await statuslineStatus({runtime,settingsPath})).installed,true);
   await installStatusline({...options,consent:true});

@@ -41,7 +41,7 @@ test('Mac pause is visible in both surfaces and gear routes to Settings',async()
 test('Windows native tray Configure reuses the main dashboard route',async()=>{
   const program=await read('native/windows/Program.cs');
   const configure=program.slice(program.indexOf('private void Configure()'),program.indexOf('private void RefreshStatus()'));
-  const native=configure.slice(configure.indexOf('if (nativeDashboard)'),configure.indexOf('using var settings'));
+  const native=configure.slice(configure.indexOf('if (nativeDashboard'),configure.indexOf('using var settings'));
   assert.match(native,/Open\(\);[\s\S]*existing\.ShowSourceSettings\(\);[\s\S]*return;/);
   assert.doesNotMatch(native,/new NativeDashboard|ShowDialog/);
 });
