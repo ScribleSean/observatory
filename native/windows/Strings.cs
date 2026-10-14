@@ -106,4 +106,10 @@ internal static class ObservatoryStrings
         internal const string FilledBlock = "█";
         internal const string EmptyBlock = "░";
     }
+    internal static class Charts
+    {
+        internal const string Item = "Item";
+        internal const string Value = "Value";
+        internal const string ShowValues = "Show values";
+    }
 }

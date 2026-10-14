@@ -8,3 +8,5 @@ export { TextBar } from './TextBar';
 export { EmptyState } from './EmptyState';
 export { InfoControl } from './InfoControl';
 export { ActionBar } from './ActionBar';
+export { BarChart, StackedBarChart, LineChart } from './charts';
+export type { BarChartProps, StackedBarChartProps, LineChartProps, ChartColor, ChartPoint, ChartSeries } from './charts';

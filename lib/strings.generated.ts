@@ -93,6 +93,11 @@ export const STRINGS = {
     "separator": " · ",
     "filledBlock": "█",
     "emptyBlock": "░"
+  },
+  "charts": {
+    "item": "Item",
+    "value": "Value",
+    "showValues": "Show values"
   }
 } as const;
 

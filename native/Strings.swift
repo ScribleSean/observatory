@@ -94,4 +94,9 @@ enum ObservatoryStrings {
         static let `filledBlock` = "█"
         static let `emptyBlock` = "░"
     }
+    enum Charts {
+        static let `item` = "Item"
+        static let `value` = "Value"
+        static let `showValues` = "Show values"
+    }
 }
