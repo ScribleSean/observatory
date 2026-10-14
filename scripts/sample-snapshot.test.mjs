@@ -16,6 +16,7 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.equal(snapshot.demo, true);
     assert.equal(snapshot.timezone, 'UTC');
     const read = now - Math.min(120000, now - new Date(now).setUTCHours(0, 0, 0, 0));
+    const elapsed = (read - new Date(read).setUTCHours(0, 0, 0, 0)) / 1000;
     assert.equal(snapshot.collectedAt, new Date(read).toISOString());
     const serialized = JSON.stringify(snapshot);
     for (const forbidden of ['/Users/', '/home/', 'C:\\', '@', 'http://']) assert.ok(!serialized.includes(forbidden));
@@ -48,6 +49,17 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     const weekly = computedPace.find(row => row.window === 'secondary');
     assert.ok(weekly.status !== 'projected' || Date.parse(weekly.estimatedExhaustionAt) > Date.parse(primary.estimatedExhaustionAt));
     const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources, snapshot.combinedTokens];
+    for (const source of [...snapshot.activity, snapshot.combined, ...snapshot.activityHistory]) {
+      for (const day of source.days) assert.ok(day.hours.every(value => Number.isInteger(value) && value <= 3600));
+      const today = source.days[0];
+      assert.ok(today.seconds <= elapsed);
+      today.hours.forEach((value, hour) => {
+        const passed = Math.max(0, Math.min((hour + 1) * 3600, elapsed) - hour * 3600);
+        const share = elapsed === 0 ? 0 : today.seconds * passed / elapsed;
+        assert.ok(Math.abs(value - share) < 1);
+      });
+      if (stamp === '2026-10-14T00:30:00Z') assert.ok(today.hours[0] > 0 && today.hours[0] <= 1800);
+    }
     const readDate = new Date(read).toISOString().slice(0, 10);
     for (const source of [...tokenSources, ...snapshot.activity, snapshot.combined, ...snapshot.activityHistory]) {
       assert.equal(source.days[0].date, new Date(now).toISOString().slice(0, 10));
@@ -104,7 +116,8 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     for (const [source, scale] of [[snapshot.activity[0], 14000], [snapshot.activity[1], 9000], [snapshot.combined, 19000]]) {
       assert.deepEqual(snapshot.activityHistory.find(row => row.host === source.host).days, source.days);
       source.days.forEach((day, index) => {
-        assert.equal(day.seconds, Math.round(scale * (1 + (index * 3 % 4) / 5)));
+        const fullValue = Math.round(scale * (1 + (index * 3 % 4) / 5));
+        assert.equal(day.seconds, index === 0 ? Math.min(fullValue, Math.floor(elapsed / 2)) : fullValue);
         assert.equal(day.trackedSeconds, day.seconds);
         assert.equal(sum(Object.values(day.categories)), day.seconds);
         for (const [category, seconds] of Object.entries(day.categories)) assert.equal(sum(Object.values(day.apps[category])), seconds);

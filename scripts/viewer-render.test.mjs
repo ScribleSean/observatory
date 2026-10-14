@@ -44,6 +44,12 @@ function sectionNames(html) {
 
 void test('dashboard sections omit disconnected dictation and preserve their order', () => {
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [] } })), ['Limits', 'Activity', 'Tokens', 'Sources', 'Settings']);
+  const fallback = dashboard({ section: 'dictation', snapshot: { ...base.snapshot, dictation: [] } });
+  assert.ok(fallback.includes('<h2 id="ob-section-limits">'));
+  const navigation = fallback.match(/<nav aria-label="Sections">([\s\S]*?)<\/nav>/)?.[1];
+  assert.ok(navigation);
+  assert.match(navigation, /<button[^>]*aria-current="page"[^>]*>Limits<\/button>/);
+  assert.ok(!sectionNames(fallback).includes('Dictation'));
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [{ status: 'ok' }] } })), ['Limits', 'Activity', 'Tokens', 'Dictation', 'Sources', 'Settings']);
 });
 
