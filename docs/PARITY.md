@@ -134,7 +134,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section order | Differs | Differs | Change | Different order on each. The shared viewer's Settings view (B1-2, sample data only) uses the agreed order. Neither shell shows it yet. |
+| Section order | Differs | Differs | Change | Different order on each. The shared viewer's Settings view (B1-2, sample data only) uses the agreed order, with Appearance, Skin and Export data in About and updates as the design direction records. Neither shell shows it yet. |
 | Source switches | Differs | Differs | Change | Mac splits them across three groups. Windows lists six in one group. |
 | Save and reload settings | Differs | Differs | Change | "Save collection settings" on Mac. "Save source settings" on Windows. Windows asks for confirmation when limits monitoring is turned off. |
 | Agent receipts switch | Done | Missing | Remove | |
@@ -142,7 +142,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
 | Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. |
-| Usage sharing, two channels | Done | Done | Change | Becomes one choice at pairing time |
+| Usage sharing, two channels | Done | Done | Change | Becomes one choice at pairing time. The shared viewer's Settings view keeps the two switches, one per `set-sharing` channel, until P1 changes the contract. |
 | Startup switch | Differs | Differs | Change | "Launch at login" on Mac. "Start at login" on Windows. Wording should match within each platform's convention. |
 | Version and Check for updates | Done | Done | Keep | |
 | Footer note | Differs | Differs | Remove | Mac says account management is still being developed. Windows says "Native migration preview". |
