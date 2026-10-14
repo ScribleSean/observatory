@@ -114,7 +114,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section, receipts, local model runs, tool-call counts | Done | Done | Remove | |
+| Section, receipts, local model runs, tool-call counts | Done | Done | Remove | Since R1 (issue 82) the Mac collector no longer reads receipts or local model runs, and the Windows collector never did. Both snapshots carry an empty `agents` list. The native section goes in M2 and W2. |
 
 ## Sources (today named Source health)
 
@@ -126,8 +126,8 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
 | ChatGPT and Cursor placeholder rows | Done | Done | Remove | |
-| Local benchmarks row | Done | Done | Remove | |
-| Agent receipts rows and "View Agents" button | Done | Done | Remove | |
+| Local benchmarks row | Done | Done | Remove | Since R1 (issue 82) the shared collectors always report this source as not connected. |
+| Agent receipts rows and "View Agents" button | Done | Done | Remove | Since R1 (issue 82) the shared collectors always report this source as not connected. |
 | Clear message when the private-folder check fails | Missing | Missing | Add | See issue 58 for Windows and issue 60 for Mac |
 
 ## Settings
@@ -137,7 +137,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Section order | Differs | Differs | Change | Different order on each |
 | Source switches | Differs | Differs | Change | Mac splits them across three groups. Windows lists six in one group. |
 | Save and reload settings | Differs | Differs | Change | "Save collection settings" on Mac. "Save source settings" on Windows. Windows asks for confirmation when limits monitoring is turned off. |
-| Agent receipts switch | Done | Missing | Remove | |
+| Agent receipts switch | Done | Missing | Remove | Since R1 (issue 82) a saved `receipts` or `benchmarks` value still loads and the Mac collector ignores it. |
 | Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. |
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
