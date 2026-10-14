@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var setupWindow: NSWindow?
     private var directPairingWindow: DirectPairingWindowController?
     private var webView: WKWebView?
+    private var webDashboardPage: String?
+    private var webDashboardSection = "limits"
+    private var dashboardCollectionObserver: AnyCancellable?
     private let navigation = LocalNavigation()
     private var store: ObservatoryStore!
     private var terminationSignal: DispatchSourceSignal?
@@ -27,7 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
             !store.pairingMaintenance && !store.collectionPausedForPairing
     }
-    private var usesNativeDashboard: Bool { !CommandLine.arguments.contains("--legacy-dashboard") }
+    private var usesWebDashboard: Bool { CommandLine.arguments.contains("--web-dashboard") }
+    private var usesNativeDashboard: Bool { !usesWebDashboard && !CommandLine.arguments.contains("--legacy-dashboard") }
     // Spike only. Without this flag the native panel is shown as before.
     private var usesWebPanel: Bool { CommandLine.arguments.contains("--web-panel") }
     private var reportsPanelTiming: Bool { CommandLine.arguments.contains("--panel-timing") }
@@ -75,6 +79,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 .appendingPathComponent("Library/Application Support/Workspace Observatory")
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
+        if usesWebDashboard {
+            dashboardCollectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
+                .receive(on: DispatchQueue.main).sink { [weak self] _ in
+                    guard let self, self.usesWebDashboard, let webView = self.webView else { return }
+                    webView.evaluateJavaScript("window.dispatchEvent(new Event('observatory:snapshot-changed'))")
+                }
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
             let image = telescopeImage(template: true)
@@ -177,8 +188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         viewMenu.addItem(withTitle: "Show Usage Popup", action: #selector(showUsage), keyEquivalent: "u").target = self
         viewMenu.addItem(withTitle: "Refresh Sources", action: #selector(refresh), keyEquivalent: "r").target = self
         viewMenu.addItem(.separator())
-        if usesNativeDashboard {
-            for (index, section) in NativeDashboardSelection.sections.enumerated() {
+        if usesWebDashboard || usesNativeDashboard {
+            let sections = usesWebDashboard ? WebDashboardPage.sections : NativeDashboardSelection.sections.map { ($0.0, $0.1) }
+            for (index, section) in sections.enumerated() {
                 let item = viewMenu.addItem(withTitle: section.1, action: #selector(navigateSection(_:)), keyEquivalent: String(index + 1))
                 item.target = self
                 item.representedObject = section.0
@@ -442,6 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             openDashboard("settings")
             return
         }
+        // The web dashboard uses this alert until its settings bridge exists.
         let alert = NSAlert()
         alert.messageText = "Local source settings"
         let local: Bool
@@ -662,9 +675,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func openDefault() { openDashboard("allowances") }
 
     @objc private func navigateSection(_ sender: NSMenuItem) {
-        guard !store.shuttingDown, usesNativeDashboard,
-              let section = sender.representedObject as? String,
-              NativeDashboardSelection.sections.contains(where: { $0.0 == section }) else { return }
+        guard !store.shuttingDown, usesWebDashboard || usesNativeDashboard,
+              let section = sender.representedObject as? String else { return }
+        let sections = usesWebDashboard ? WebDashboardPage.sections : NativeDashboardSelection.sections.map { ($0.0, $0.1) }
+        guard sections.contains(where: { $0.0 == section }) else { return }
         openDashboard(section)
     }
 
@@ -690,9 +704,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let zoom: Double? = usesNativeDashboard ? (detail?.isVisible == true ? nativeSelection.textScale : nil) : webView.map { Double($0.pageZoom) }
         switch item.action {
         case #selector(navigateSection(_:)):
-            guard usesNativeDashboard, let section = item.representedObject as? String,
-                  NativeDashboardSelection.sections.contains(where: { $0.0 == section }) else { return false }
-            item.state = detail?.isVisible == true && nativeSelection.section == section ? .on : .off
+            guard usesWebDashboard || usesNativeDashboard, let section = item.representedObject as? String else { return false }
+            let sections = usesWebDashboard ? WebDashboardPage.sections : NativeDashboardSelection.sections.map { ($0.0, $0.1) }
+            guard sections.contains(where: { $0.0 == section }) else { return false }
+            let current = usesWebDashboard ? webDashboardSection : nativeSelection.section
+            item.state = detail?.isVisible == true && current == section ? .on : .off
             return true
         case #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
              #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil
@@ -742,13 +758,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         if detail == nil {
             guard let resources = Bundle.main.resourceURL else { return }
-            let web = makeDashboard(runtime: store.runtime, resources: resources)
+            let web: WKWebView
+            if usesWebDashboard {
+                let page = WebDashboardPage.shownPage(resources: resources)
+                webDashboardPage = page
+                web = makeWebDashboard(runtime: store.runtime, resources: resources, page: page)
+            } else {
+                web = makeDashboard(runtime: store.runtime, resources: resources)
+            }
             web.navigationDelegate = navigation
             web.uiDelegate = navigation
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1150, height: 770),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
-            window.title = "Observatory"
+            window.title = usesWebDashboard && previewRuntime != nil ? "Observatory web preview" : "Observatory"
             window.titlebarAppearsTransparent = true
             window.minSize = NSSize(width: 800, height: 550)
             window.contentView = web
@@ -759,7 +782,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             detail = window
             webView = web
         }
-        webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
+        if usesWebDashboard, let page = webDashboardPage {
+            webDashboardSection = WebDashboardPage.section(for: tab)
+            webView?.load(URLRequest(url: WebDashboardPage.url(page: page, section: webDashboardSection)))
+        } else {
+            webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
+        }
         if detail?.isMiniaturized == true { detail?.deminiaturize(nil) }
         detail?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -773,10 +801,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         guard let window = notification.object as? NSWindow, window === detail else { return }
+        // Closing the main window releases its web view, while the panel web view is kept.
         webView?.stopLoading()
         webView?.configuration.userContentController.removeAllScriptMessageHandlers()
         detail?.contentView = nil
         webView = nil
+        webDashboardPage = nil
         detail = nil
     }
 
