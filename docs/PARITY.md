@@ -80,12 +80,12 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Device filter | Done | Done | Keep | |
-| Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. |
+| Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. The shared dashboard's Activity view (V3, issue 97) offers Now, Day, Week, Month and All time. Its Now follows the rule under "Snapshot additions" in the design direction, reads only the `Combined` row for All, and shows Unknown until a collector stamps `checkedAt` on that row. Checked with synthetic tests and the sample in a browser, not inside either host. |
 | Date picker | Done | Done | Keep | |
 | Total and bar chart, up to 30 days | Done | Done | Keep | |
-| Tracking status and ActivityWatch help | Differs | Differs | Change | Collapsed on Mac. Always expanded on Windows. |
+| Tracking status and ActivityWatch help | Differs | Differs | Change | Collapsed on Mac. Always expanded on Windows. The shared dashboard's Activity view shows the status as a fixed word and keeps the detail and the help collapsed behind an information control on every platform. The help wording moved to the `activity` group of `lib/strings.json`, with "Allowances" renamed to "Limits". `native/ActivityWatchHelp.swift` still holds its own copy until M2 retires the native view. |
 | Categories and recorded apps | Done | Done | Keep | |
-| Hourly breakdown | Done | Done | Change | Labelled as New York clock hours on both |
+| Hourly breakdown | Done | Done | Change | Labelled as New York clock hours on both. The shared dashboard's Activity view labels the hours with the snapshot's `timezone` value and says days follow that zone until device time zones land. An hour after the reading time shows as Unknown, not 0. |
 | "Show recorded values" table | Missing | Done | Keep | Decide whether Mac needs it |
 
 ## Tokens
