@@ -22,7 +22,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Left click opens the panel | Done | Done | Keep | |
 | Name and freshness line | Differs | Differs | Change | Different freshness wording on each. Windows uses "Updated 4m ago". |
 | Codex limits | Differs | Differs | Change | Mac draws rings for up to two windows. Windows shows text and a bar for up to two windows. |
-| Claude Code limits | Missing | Missing | Add | The shared collector writes `claudeLimits` once the status line bridge is installed. No native view reads it. The shared web panel does. |
+| Claude Code limits | Missing | Missing | Add | The shared collector writes `claudeLimits` once limits consent is given, through the status line bridge or, since D1-5 on `shared/d1-limits`, the separate consent marker written by `scripts/claude-limits-consent.mjs`. Since D1-9 the row also carries `usageCommand`, a status word saying whether that collection's usage command gave a reading. No native view reads it. The shared web panel does. Tested from source with synthetic data only. Not in an installed build. |
 | Device filter (All, Mac, Windows) | Differs | Differs | Change | Mac opens on All. Windows opens on Windows. The list is fixed in code on both. |
 | Period filter | Differs | Missing | Change | Mac offers Today, Week, All time. Windows shows the latest recorded day only. |
 | Now period | Missing | Missing | Add | |
@@ -99,7 +99,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The native dashboards' comparison note still names OpenAI's price page as the source. The shared viewer's Tokens view refers to the shared price table and shows the date it was checked. |
 | Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health in the native apps. The shared viewer's Tokens view shows them by day, model and token class, per device, with All reading "By device". Neither app shows the shared dashboard by default. |
 | API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows, so the shared viewer's Tokens view shows Unknown for it until they do. |
-| Claude Code session cost | Missing | Missing | Add | The shared viewer's Tokens view shows `claudeLimits.sessionCost` as "Session cost (estimate)" when the device filter is All, because the snapshot does not say which device observed it. It reads Unknown when the cost is 10 minutes old or older. No collector writes the field yet. |
+| Claude Code session cost | Missing | Missing | Add | The shared viewer's Tokens view shows `claudeLimits.sessionCost` as "Session cost (estimate)" when the device filter is All, because the snapshot does not say which device observed it. It reads Unknown when the cost is 10 minutes old or older. Since D1-4 on `shared/d1-limits` the status line bridge stores the cost and both collectors project it through `claudeLimits`, tested from source with synthetic data only. Not in an installed build, and not observed from a real Claude Code session. |
 
 ## Dictation
 
@@ -138,7 +138,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Source switches | Differs | Differs | Change | Mac splits them across three groups. Windows lists six in one group. |
 | Save and reload settings | Differs | Differs | Change | "Save collection settings" on Mac. "Save source settings" on Windows. Windows asks for confirmation when limits monitoring is turned off. |
 | Agent receipts switch | Done | Missing | Remove | Since R1 (issue 82) a saved `receipts` or `benchmarks` value still loads and the Mac collector ignores it. |
-| Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. |
+| Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-limits-consent.mjs` (consent without changing Claude Code's settings, added in D1-5) or `scripts/claude-statusline-install.mjs` (the status line bridge, which now takes `--bridge` for a bundled script). See the bridge section of the design direction for the text a person must see first. |
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
 | Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. |
