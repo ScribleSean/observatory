@@ -288,7 +288,7 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
 
-The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. Their shapes follow the "Snapshot additions" section and the execution plan text for D2 and will be checked against those changes when they land. Until then no collector writes them.
+The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2 and will be checked against those changes when they land. Until then no collector writes them.
 
 ### Snapshot fields the panel reads that no collector writes yet
 

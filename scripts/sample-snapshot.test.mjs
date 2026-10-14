@@ -20,7 +20,8 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     assert.deepEqual([...new Set(serialized.match(/https:\/\/[^" ]+/g))], ['https://example.invalid/model-prices.json']);
     for (const name of Object.values(snapshot.deviceNames)) {
       assert.equal(typeof name, 'string');
-      assert.ok(name.length <= 40);
+      // 1 to 32 UTF-16 code units, as the Snapshot additions design sets.
+      assert.ok(name.length >= 1 && name.length <= 32);
     }
     assert.deepEqual(devices(snapshot).map(row => row.label), ['Studio', 'Desk']);
     assert.deepEqual(limits(snapshot, now).map(row => row.remaining), [64, 12, 81, 47]);
@@ -30,14 +31,19 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     assert.deepEqual(snapshot.quota.pace, [{ bucket: 'codex', window: 'primary', asOf: new Date(now - 90000).toISOString(),
       status: 'projected', estimatedExhaustionAt: new Date(now + 170 * 60000).toISOString() }]);
     const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources, snapshot.combinedTokens];
+    const read = now - 120000, readDate = new Date(read).toISOString().slice(0, 10);
     for (const source of [...tokenSources, ...snapshot.activity, snapshot.combined, ...snapshot.activityHistory]) {
       assert.equal(source.days.length, 40);
       assert.equal(new Set(source.days.map(day => day.date)).size, 40);
+      if (source === snapshot.combinedTokens) {
+        assert.ok(source.days.every(day => day.hours === undefined));
+        continue;
+      }
       for (const day of source.days) {
         assert.equal(day.hours.length, 24);
         assert.ok(day.hours.every(value => Number.isFinite(value) && value >= 0));
         assert.equal(sum(day.hours), day.totalTokens ?? day.seconds);
-        if (day.date === stamp.slice(0, 10)) assert.ok(day.hours.slice(new Date(now).getUTCHours() + 1).every(value => value === 0));
+        if (day.date === readDate) assert.ok(day.hours.slice(new Date(read).getUTCHours() + 1).every(value => value === 0));
       }
     }
     for (const source of tokenSources) for (const day of source.days) {
@@ -76,7 +82,6 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     for (const day of snapshot.combinedTokens.days) {
       const peers = snapshot.tokens.map(source => source.days.find(row => row.date === day.date));
       for (const field of fields) assert.equal(day[field], sum(peers.map(row => row[field])));
-      assert.deepEqual(day.hours, Array.from({ length: 24 }, (_, hour) => sum(peers.map(row => row.hours[hour]))));
     }
     for (const [source, scale] of [[snapshot.activity[0], 14000], [snapshot.activity[1], 9000], [snapshot.combined, 19000]]) {
       assert.deepEqual(snapshot.activityHistory.find(row => row.host === source.host).days, source.days);
