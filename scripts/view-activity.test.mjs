@@ -113,6 +113,23 @@ test('Combined live source without reading masks every date', () => {
   data.combined.days.push(day('2026-10-13'), day('2026-10-15'));
   for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value === null));
 });
+test('Combined hourly chart falls back to archive time while Now stays Unknown', () => {
+  const data = {
+    timezone: 'UTC', collectedAt: readingAt,
+    combined: { host: 'Combined', status: 'ok', days: [day()] },
+    activityHistory: [{
+      host: 'Combined', status: 'ok', latestReadStatus: 'ok', asOf: '2026-10-14T10:20:00Z', days: [day()],
+    }],
+  };
+  const options = { host: 'All', period: 'day', date: '2026-10-14' };
+  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(100), ...Array(13).fill(null)]);
+  assert.equal(activityNow(data, 'All', now).reason, 'noReading');
+  assert.equal(activityNow(data, 'All', now).value, null);
+  for (const asOf of [undefined, null, '', 'invalid']) {
+    data.activityHistory[0].asOf = asOf;
+    assert.deepEqual(view(data, options).hourly.map(point => point.value), hours(null));
+  }
+});
 test('Now hourly chart follows reading date instead of selected date', () => {
   const data = snapshot(); data.activity[0].days.push(day('2026-10-13', 4800));
   assert.equal(view(data, { period: 'now', date: '2026-10-13' }).hourly[12].value, 100);
