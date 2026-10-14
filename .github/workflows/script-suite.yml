@@ -10,6 +10,13 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/script-suite.yml'
+      - 'native/BridgeContract.swift'
+      - 'native/windows/BridgeContract.cs'
+      - 'native/Strings.swift'
+      - 'native/windows/Strings.cs'
+      - 'native/DesignTokens.swift'
+      - 'native/windows/DesignTokens.cs'
+      - 'native/prices.json'
   push:
     branches: [main]
     paths:
@@ -21,6 +28,13 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/script-suite.yml'
+      - 'native/BridgeContract.swift'
+      - 'native/windows/BridgeContract.cs'
+      - 'native/Strings.swift'
+      - 'native/windows/Strings.cs'
+      - 'native/DesignTokens.swift'
+      - 'native/windows/DesignTokens.cs'
+      - 'native/prices.json'
   workflow_dispatch:
 permissions:
   contents: read
