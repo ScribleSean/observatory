@@ -91,12 +91,11 @@ void test('partial estimate discloses covered tokens', () => {
   assert.ok(html.includes('Covers 5 of 10 tokens. Models without a price are left out.'));
 });
 
-void test('stale session cost is Unknown with a stale note', () => {
+void test('session cost 10 minutes old or older is Unknown', () => {
   const source = synthetic();
   source.claudeLimits = { sessionCost: { usd: 3.42, observedAt: new Date(now - 15 * 60000).toISOString() } };
   const claude = card(render(source, 'All'), 'Claude Code');
   assert.match(claude, /Session cost \(estimate\)<\/span><span>Unknown<\/span>/);
-  assert.ok(claude.includes('Last session cost is more than 10 minutes old'));
   assert.ok(!claude.includes('$3.42'));
 });
 

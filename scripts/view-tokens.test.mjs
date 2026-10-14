@@ -238,17 +238,18 @@ test('device session cost is All only', () => {
     { usd: null, observedAt: null, status: 'all-only' });
 });
 
-test('session cost observes freshness, validity and future tolerance', () => {
+test('session cost follows the shared Limits rule', () => {
   const cost = (usd, age, observedAt = new Date(now - age).toISOString()) =>
     view({ claudeLimits: { sessionCost: { usd, observedAt } } }, { host: 'All' }).claude.sessionCost;
   assert.deepEqual(cost(3, 360000), { usd: 3, observedAt: '2026-10-14T11:54:00.000Z', status: 'ok' });
-  assert.deepEqual(cost(3, 600000), { usd: null, observedAt: '2026-10-14T11:50:00.000Z', status: 'stale' });
   const unknown = { usd: null, observedAt: null, status: 'unknown' };
   assert.deepEqual(view({}, { host: 'All' }).claude.sessionCost, unknown);
   for (const usd of [-1, 10001, '3', null, NaN]) assert.deepEqual(cost(usd, 0), unknown);
   assert.deepEqual(cost(3, 0, 'not-a-date'), unknown);
-  assert.deepEqual(cost(3, -60001), unknown);
-  assert.equal(cost(0, -60000).status, 'ok');
+  // The shared rule refuses a cost 10 minutes old or older and any future observation.
+  assert.deepEqual(cost(3, 600000), unknown);
+  assert.deepEqual(cost(3, -1000), unknown);
+  assert.equal(cost(0, 0).status, 'ok');
   assert.equal(cost(10000, 599999).status, 'ok');
 });
 
