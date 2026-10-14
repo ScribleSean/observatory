@@ -596,7 +596,10 @@ internal sealed class ObservatoryContext : ApplicationContext
             webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
             webPanel.FormClosed += (closed, _) => { if (ReferenceEquals(webPanel, closed)) webPanel = null; panelReleased?.Invoke(); };
         }
-        return await webPanel.ShowNearTray();
+        var panel = webPanel;
+        var shown = await panel.ShowNearTray();
+        if (!shown && panel.FailedToStart) MessageBox.Show(WebPanel.RuntimeMessage, "Observatory");
+        return shown;
     }
 
     // Measurement harness for the spike, run only with --panel-timing. It opens

@@ -10,6 +10,7 @@ internal sealed class WebPanel : Form
 {
     internal const string Origin = "https://observatory.invalid";
     internal const string Page = "panel.html";
+    internal const string RuntimeMessage = "The panel could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window.";
     private const int PanelWidth = 388;
     internal static readonly string[] Actions = ["refresh", "check-updates", "open-settings", "open-dashboard"];
     private readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = DashboardPalette.Background(false) };
@@ -17,6 +18,7 @@ internal sealed class WebPanel : Form
     private readonly Action<string> act;
     private Task? started;
     private bool failed;
+    internal bool FailedToStart => failed;
     private readonly Func<Task>? startOverride;
 
     internal WebPanel(string runtime, Action<string> act, TimeSpan? releaseAfter = null, Func<Task>? startOverride = null)
@@ -111,6 +113,12 @@ internal sealed class WebPanel : Form
                     return true;
                 }
                 await Task.Delay(25);
+            }
+            if (!IsDisposed && Visible)
+            {
+                failed = true;
+                Hide();
+                Retire();
             }
         }
         catch
@@ -226,6 +234,7 @@ internal sealed class WebPanel : Form
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (_, e) => Respond(environment, e, runtime, Page);
         core.NavigationStarting += (_, e) => { if (!IsPanel(e.Uri)) e.Cancel = true; };
+        core.FrameNavigationStarting += (_, e) => e.Cancel = true;
         core.NewWindowRequested += (_, e) => e.Handled = true;
         core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
         core.DownloadStarting += (_, e) => e.Cancel = true;
@@ -278,7 +287,7 @@ internal sealed class WebPanel : Form
     internal static bool IsPanel(string value) => IsPage(value, Page);
 
     internal static bool IsPage(string value, string page) => IsLocal(value) && new Uri(value) is { } uri &&
-        uri.AbsolutePath == "/" + page && uri.Fragment.Length == 0 && uri.Query is "" or "?demo";
+        uri.AbsolutePath == "/" + page && uri.Fragment.Length == 0 && (uri.Query.Length == 0 || (page == Page && uri.Query == "?demo"));
 
     internal static string? RequestPath(string uri, string page)
     {
@@ -297,14 +306,16 @@ internal sealed class WebPanel : Form
     {
         if (page is not (Page or WebDashboard.Page)) return null;
         if (relative.EndsWith('/') || relative.Contains('\\') || relative.Contains(':') || relative.Contains('\0') ||
-            relative.Split('/').Any(part => part is "." or "..")) return null;
+            relative.Split('/').Any(part => part is "." or ".." || part.EndsWith('.') || part.EndsWith(' ') ||
+                part.Where((character, index) => character == '~' && index + 1 < part.Length &&
+                    part[index + 1] >= '0' && part[index + 1] <= '9').Any())) return null;
         if (relative == "local/usage.json") return Snapshot.DashboardFile(runtime, "usage.json");
         if (relative != page && !relative.StartsWith("assets/", StringComparison.Ordinal)) return null;
         var file = Snapshot.UnlinkedFile(webRoot ?? Path.Combine(AppContext.BaseDirectory, "Web"), relative);
         if (file is null) return null;
         var extension = Path.GetExtension(file);
-        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase) ||
-            (extension.Equals(".html", StringComparison.OrdinalIgnoreCase) && relative != page)) return null;
+        if (extension is not (".html" or ".js" or ".css" or ".svg" or ".png" or ".ico" or ".woff2" or ".woff" or ".ttf" or ".txt") ||
+            (extension == ".html" && relative != page)) return null;
         return file;
     }
 
@@ -319,6 +330,14 @@ internal sealed class WebPanel : Form
         return truncated ? clean + marker[..Math.Min(max, marker.Length)] : clean;
     }
 
+    internal static string? MimeType(string extension) => extension switch
+    {
+        ".html" => "text/html", ".js" => "text/javascript", ".css" => "text/css", ".json" => "application/json",
+        ".txt" => "text/plain; charset=utf-8", ".ico" => "image/x-icon", ".woff" => "font/woff",
+        ".svg" => "image/svg+xml", ".png" => "image/png", ".woff2" => "font/woff2", ".ttf" => "font/ttf",
+        _ => null
+    };
+
     internal static void Respond(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs e, string runtime, string page)
     {
         const string policy = "Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff";
@@ -329,13 +348,7 @@ internal sealed class WebPanel : Form
             var file = Resolve(runtime, relative, page) ?? throw new InvalidOperationException();
             var info = new FileInfo(file);
             if (!info.Exists || info.Length > Snapshot.MaxBytes || info.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException();
-            var mime = Path.GetExtension(file) switch
-            {
-                ".html" => "text/html", ".js" => "text/javascript", ".css" => "text/css", ".json" => "application/json",
-                ".txt" => "text/plain; charset=utf-8", ".ico" => "image/x-icon", ".woff" => "font/woff",
-                ".svg" => "image/svg+xml", ".png" => "image/png", ".woff2" => "font/woff2", ".ttf" => "font/ttf",
-                _ => throw new InvalidOperationException()
-            };
+            var mime = MimeType(Path.GetExtension(file)) ?? throw new InvalidOperationException();
             e.Response = environment.CreateWebResourceResponse(new MemoryStream(File.ReadAllBytes(file)), 200, "OK", "Content-Type: " + mime + "\r\n" + policy);
         }
         catch { e.Response = environment.CreateWebResourceResponse(new MemoryStream(), 404, "Unavailable", policy); }
@@ -362,14 +375,6 @@ internal sealed class WebPanel : Form
             "https://example.com/panel.html", "file:///C:/panel.html", "" })
             Check(!IsPanel(other), "other page " + other);
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-web-panel-" + Guid.NewGuid().ToString("N"));
-        foreach (var path in new[] { "index.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json", "assets/../panel.html",
-            "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/x.json/", "assets/./x.js", "assets/page.html", "assets\\x.js", "assets/c:x.js", "panel.html/", "Panel.html", "" })
-            Check(Resolve(runtime, path) is null, "refuses " + path);
-        Check(IsPage(Origin + "/dashboard.html", WebDashboard.Page) && !IsPage(Origin + "/panel.html", WebDashboard.Page) &&
-            !IsPage(Origin + "/dashboard.html", Page) && !IsPage(Origin + "/index.html", WebDashboard.Page), "dashboard page");
-        foreach (var path in new[] { "panel.html", "index.html", "local/collector.json", "private-sync/pairing.json", "assets/../dashboard.html", "Dashboard.html" })
-            Check(Resolve(runtime, path, WebDashboard.Page) is null, "dashboard refuses " + path);
-        Check(Resolve(runtime, "panel.html", "index.html") is null && Resolve(runtime, "index.html", "index.html") is null, "unknown page");
         foreach (var visible in new[] { false, true })
         foreach (var disposed in new[] { false, true })
         foreach (var hasStarted in new[] { false, true })
@@ -383,10 +388,6 @@ internal sealed class WebPanel : Form
             "http://observatory.invalid/panel.html", "https://observatory.invalid:444/panel.html", "https://user@observatory.invalid/panel.html",
             "https://example.com/panel.html", Origin + "/assets/x%00.js" })
             Check(RequestPath(uri, Page) is null, "request refused " + uri);
-        var trailing = RequestPath(Origin + "/assets/x.json%2F", Page);
-        Check(trailing == "assets/x.json/" && Resolve(runtime, trailing) is null, "encoded trailing slash refused");
-        var traversal = RequestPath(Origin + "/assets/..%2Fpanel.html", Page);
-        Check(traversal is not null && Resolve(runtime, traversal) is null, "encoded traversal refused");
         var root = Path.Combine(Path.GetTempPath(), "observatory-web-fixture-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -396,18 +397,51 @@ internal sealed class WebPanel : Form
             File.WriteAllText(Path.Combine(root, "assets", "app.js"), "void 0");
             File.WriteAllText(Path.Combine(root, "assets", "data.json"), "{}");
             File.WriteAllText(Path.Combine(root, "assets", "inner.html"), "<html>Fixture asset</html>");
+            Directory.CreateDirectory(Path.Combine(runtime, "public", "local"));
+            Directory.CreateDirectory(Path.Combine(root, "local"));
+            Directory.CreateDirectory(Path.Combine(root, "private-sync"));
+            foreach (var name in new[] { "usage.json", "collector.json" })
+                File.WriteAllText(Path.Combine(runtime, "public", "local", name), "{}");
+            foreach (var name in new[] { "index.html", "assets/x.json", "assets/app.exe", "assets/DATA.JSON",
+                "assets/x.js", "assets/page.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json",
+                "assets/X.JS", "assets/noextension", "assets/DATA~1.JSO", "assets/INNER~1.HTM" })
+                File.WriteAllText(Path.Combine(root, name), "{}");
+            foreach (var path in new[] { "index.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json", "assets/../panel.html",
+                "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/x.json/", "assets/./x.js", "assets/page.html", "assets\\x.js", "assets/c:x.js", "panel.html/", "Panel.html", "" })
+                Check(Resolve(runtime, path, Page, root) is null, "refuses " + path);
+            Check(IsPage(Origin + "/dashboard.html", WebDashboard.Page) && !IsPage(Origin + "/panel.html", WebDashboard.Page) &&
+                !IsPage(Origin + "/dashboard.html", Page) && !IsPage(Origin + "/index.html", WebDashboard.Page), "dashboard page");
+            foreach (var path in new[] { "panel.html", "index.html", "local/collector.json", "private-sync/pairing.json", "assets/../dashboard.html", "Dashboard.html" })
+                Check(Resolve(runtime, path, WebDashboard.Page, root) is null, "dashboard refuses " + path);
+            Check(Resolve(runtime, "panel.html", "index.html", root) is null && Resolve(runtime, "index.html", "index.html", root) is null, "unknown page");
+            var trailing = RequestPath(Origin + "/assets/x.json%2F", Page);
+            Check(trailing == "assets/x.json/" && Resolve(runtime, trailing, Page, root) is null, "encoded trailing slash refused");
+            var traversal = RequestPath(Origin + "/assets/..%2Fpanel.html", Page);
+            Check(traversal is not null && Resolve(runtime, traversal, Page, root) is null, "encoded traversal refused");
             Check(Resolve(runtime, Page, Page, root) is { } panelFile && Path.GetFullPath(panelFile) == Path.GetFullPath(Path.Combine(root, Page)), "fixture panel");
             Check(Resolve(runtime, "assets/app.js", Page, root) is { } scriptFile && Path.GetFullPath(scriptFile) == Path.GetFullPath(Path.Combine(root, "assets", "app.js")), "fixture script");
             Check(Resolve(runtime, WebDashboard.Page, WebDashboard.Page, root) is { } dashboardFile && Path.GetFullPath(dashboardFile) == Path.GetFullPath(Path.Combine(root, WebDashboard.Page)), "fixture dashboard");
-            foreach (var path in new[] { "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/inner.html", WebDashboard.Page })
+            foreach (var path in new[] { "assets/data.json", "assets/data.json/", "assets/data.json/.", "assets/inner.html", WebDashboard.Page,
+                "assets/data.json.", "assets/inner.html.", "assets/data.json ", "assets/DATA~1.JSO", "assets/INNER~1.HTM",
+                "assets/DATA.JSON", "assets/app.exe", "assets/app.js.", "index.html", "assets/X.JS", "assets/noextension" })
                 Check(Resolve(runtime, path, Page, root) is null, "fixture refuses " + path);
+            Check(Resolve(runtime, "local/usage.json", Page, root) is { } snapshotFile && Path.GetFullPath(snapshotFile) == Path.GetFullPath(Path.Combine(runtime, "public", "local", "usage.json")), "fixture snapshot");
+            foreach (var uri in new[] { Origin + "/assets/data.json%2F", Origin + "/assets/data.json%2F.",
+                Origin + "/assets/data.json%20", Origin + "/assets/data.json." })
+            {
+                var path = RequestPath(uri, Page);
+                Check(path is null || Resolve(runtime, path, Page, root) is null, "encoded fixture refusal " + uri);
+            }
             Check(trailing is not null && Resolve(runtime, trailing, Page, root) is null, "fixture encoded trailing slash refused");
             Check(traversal is not null && Resolve(runtime, traversal, Page, root) is null, "fixture encoded traversal refused");
         }
         finally
         {
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+            finally { if (Directory.Exists(runtime)) Directory.Delete(runtime, recursive: true); }
         }
+        Check(!IsPage(Origin + "/dashboard.html?demo", WebDashboard.Page), "dashboard demo page refused");
+        Check(MimeType(".js") == "text/javascript" && MimeType(".JS") is null && MimeType(".exe") is null, "MIME allowlist");
         Check(Untrusted(null) == "Unknown", "missing page text");
         var capped = Untrusted(new string('a', 5000));
         Check(capped.Length == 2048 && capped.EndsWith("...[truncated]", StringComparison.Ordinal), "page text capped");

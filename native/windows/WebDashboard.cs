@@ -83,6 +83,12 @@ internal sealed class WebDashboard : Form
         return await web.CoreWebView2.ExecuteScriptAsync(script);
     }
 
+    internal void NavigateForTest(string uri)
+    {
+        if (IsDisposed || web.IsDisposed || web.CoreWebView2 is null) return;
+        web.CoreWebView2.Navigate(uri);
+    }
+
     internal async void SnapshotChanged()
     {
         try
@@ -175,8 +181,19 @@ internal sealed class WebDashboard : Form
         Check(WebPanel.RequestPath(WebPanel.Origin + "/dashboard.html?demo", Page) is null, "refuses dashboard resource demo query");
         Check(WebPanel.RequestPath(WebPanel.Origin + "/assets/x.js?v=1", Page) is null, "refuses asset resource query");
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-web-dashboard-" + Guid.NewGuid().ToString("N"));
-        Check(WebPanel.Resolve(runtime, "assets/x.html", Page) is null, "refuses asset HTML resource");
-        Check(WebPanel.Resolve(runtime, "panel.html", Page) is null, "refuses panel resource");
+        var root = Path.Combine(Path.GetTempPath(), "observatory-dashboard-web-fixture-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "assets"));
+            File.WriteAllText(Path.Combine(root, "assets", "x.html"), "<html>Fixture asset</html>");
+            File.WriteAllText(Path.Combine(root, "panel.html"), "<html>Fixture panel</html>");
+            Check(WebPanel.Resolve(runtime, "assets/x.html", Page, root) is null, "refuses asset HTML resource");
+            Check(WebPanel.Resolve(runtime, "panel.html", Page, root) is null, "refuses panel resource");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
         Console.WriteLine("Web dashboard navigation contracts passed.");
     }
 

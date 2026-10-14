@@ -105,6 +105,7 @@ internal static class WebHostsTests
                     startOverride: () => Task.FromException(new InvalidOperationException("synthetic start failure"))) { KeepOpen = true };
                 forms.Add(failedPanel);
                 Require(!await failedPanel.ShowNearTray().WaitAsync(stop.Token));
+                Require(failedPanel.FailedToStart);
                 await Poll(() => Task.FromResult(failedPanel.IsDisposed), 3);
                 Passed();
 
@@ -122,6 +123,15 @@ internal static class WebHostsTests
                 await dashboard.RunScriptForTest("location.href = './panel.html'").WaitAsync(stop.Token);
                 await Task.Delay(1000, stop.Token);
                 Require(await dashboard.RunScriptForTest("location.pathname === '/dashboard.html'").WaitAsync(stop.Token) == "true");
+                await dashboard.RunScriptForTest("location.replace('./dashboard.html?x')").WaitAsync(stop.Token);
+                await Task.Delay(1000, stop.Token);
+                Require(await dashboard.RunScriptForTest("location.pathname === '/dashboard.html' && location.search === ''").WaitAsync(stop.Token) == "true");
+                // A host Navigate that only changes the fragment is a same-document change,
+                // so the cross-document case uses a query that the guard must refuse.
+                dashboard.NavigateForTest(WebPanel.Origin + "/dashboard.html?demo#unknown");
+                await Task.Delay(1000, stop.Token);
+                Require(await dashboard.RunScriptForTest("location.search === '' && location.hash !== '#unknown'").WaitAsync(stop.Token) == "true");
+                // This same-document change is not seen by NavigationStarting.
                 await dashboard.RunScriptForTest("location.hash = '#tokens'").WaitAsync(stop.Token);
                 await Poll(async () => await dashboard.RunScriptForTest("location.hash === '#tokens'") == "true", 3);
                 Passed();
@@ -156,23 +166,28 @@ internal static class WebHostsTests
 
         private async Task CheckBoundary(Func<string, Task<string>> script, bool dashboard)
         {
+            var asset = Path.GetFileName(Directory.EnumerateFiles(Path.Combine(AppContext.BaseDirectory, "Web", "assets"), "*.js").First());
+            var assetPath = "./assets/" + asset;
             var blocked = new List<string>
             {
-                "./local/collector.json", "./local/usage.json?x=1", "./assets/x.json/", "./assets/x.json%2F",
+                "./local/collector.json", "./local/usage.json?x=1", assetPath + "/", assetPath + "%2F",
+                assetPath + ".", assetPath + "%20", "./assets/" + asset.ToUpperInvariant(),
                 dashboard ? "./panel.html" : "./dashboard.html", "./index.html", "./private-sync/pairing.json"
             };
             if (dashboard) blocked.Add("./dashboard.html?demo");
             // ExecuteScriptAsync does not await promises. Poll the stored JSON result.
             await script("window.webHostsResult = null; void (async () => {\n" +
-                "const blocked = " + JsonSerializer.Serialize(blocked) + ";\n" + """
+                "const blocked = " + JsonSerializer.Serialize(blocked) + ";\n" +
+                "const asset = " + JsonSerializer.Serialize(asset) + ";\n" + """
                 try {
                     let denied = true;
                     for (const path of blocked) {
                         try { if ((await fetch(path)).ok) denied = false; } catch {}
                     }
+                    const assetResponse = await fetch('./assets/' + asset);
                     const response = await fetch('./local/usage.json');
                     const snapshot = await response.json();
-                    window.webHostsResult = JSON.stringify({passed: denied && response.ok && snapshot.smokeTest === true});
+                    window.webHostsResult = JSON.stringify({passed: denied && assetResponse.ok && response.ok && snapshot.smokeTest === true});
                 } catch {
                     window.webHostsResult = JSON.stringify({passed: false});
                 }
