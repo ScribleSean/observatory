@@ -105,8 +105,8 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section present | Done | Done | Change | Show only when a dictation source is enabled |
-| Tool, device and period filters | Done | Done | Keep | |
+| Section present | Done | Done | Change | Show only when a dictation source is enabled. The shared viewer does this since V1 and draws the view since V5 (issue 100). |
+| Tool, device and period filters | Done | Done | Keep | The shared viewer's Dictation view (V5, issue 100) has tool, device and period (Day, Week, Month, All time) filters and never adds devices or tools together. Checked in a browser from the built files with sample data, not inside either host. |
 | Layout | Differs | Differs | Change | Windows uses tables and a chart titled "Voice over time" |
 | ChatGPT voice placeholder row | Done | Done | Remove | "Not implemented" row on both |
 
@@ -120,9 +120,9 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section name | Differs | Differs | Change | Rename to Sources |
-| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. |
-| Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. |
+| Section name | Differs | Differs | Change | Rename to Sources. The shared viewer names it Sources (V1). |
+| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. The shared viewer's Sources view (V5, issue 100) shows the relative time with the exact time on hover, and a refusal code as a sentence that claims no cause. No collector writes `refusal` yet (D1-6). Checked in a browser from the built files with sample data, not inside either host. |
+| Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. Since V5 (issue 100) the nine labels are in `lib/strings.json` under `sources` and the shared viewer reads them. The native views still use their own copies. |
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
 | ChatGPT and Cursor placeholder rows | Done | Done | Remove | |

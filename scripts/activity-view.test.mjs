@@ -13,7 +13,7 @@ const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
 const { ActivityView } = await server.ssrLoadModule('/app/viewer/activity/ActivityView.tsx');
-const { DashboardView, default: Dashboard } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+const { DashboardView, default: Dashboard, sectionFromHash } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
 const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const now = Date.parse('2026-10-14T12:32:00Z');
 const noop = () => {};
@@ -38,19 +38,11 @@ test('Now displays its caveat and a distinct meter', () => {
   assert.doesNotMatch(empty, /class="ob-bar"/);
   assert.ok(empty.includes('Unknown'));
 });
-test('dashboard initial hash selects only listed sections and renders without location', () => {
-  const before = Object.getOwnPropertyDescriptor(globalThis, 'location');
-  try {
-    for (const [hash, active] of [['#activity', true], ['#unknown', false], ['', false]]) {
-      Object.defineProperty(globalThis, 'location', { value: { hash }, configurable: true });
-      assert.equal(render(Dashboard, {}).includes('class="ob-activity"'), active);
-    }
-    Reflect.deleteProperty(globalThis, 'location');
-    assert.doesNotThrow(() => render(Dashboard, {}));
-  } finally {
-    if (before) Object.defineProperty(globalThis, 'location', before);
-    else Reflect.deleteProperty(globalThis, 'location');
-  }
+test('the shared hash rule opens Activity and the dashboard renders it without a window', () => {
+  assert.equal(sectionFromHash('#activity'), 'activity');
+  for (const hash of ['#unknown', '', '#']) assert.equal(sectionFromHash(hash), 'limits');
+  assert.ok(render(DashboardView, { snapshot: sampleSnapshot(now), now, skinId: 'sage', skin: validateSkin(SKINS.sage), loaded: true, section: sectionFromHash('#activity'), onSectionChange: noop, onSkinChange: noop }).includes('class="ob-activity"'));
+  assert.doesNotThrow(() => render(Dashboard, {}));
 });
 
 test('tracking help names the snapshot time zone for both times', () => {
