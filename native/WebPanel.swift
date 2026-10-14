@@ -34,16 +34,21 @@ final class WebPanelController: NSViewController {
     static let width: CGFloat = 388
     private(set) var contentHeight: CGFloat = 520
     private let web: WKWebView
+    // Only the --test-web check uses this accessor.
+    var webViewForTesting: WKWebView { web }
     private let navigation = LocalNavigation()
     private var loaded = false
 
     init(runtime: URL, resources: URL, perform: @escaping (PanelAction) -> Void) {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
-        config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), allowPanel: true),
+        config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: ["panel.html"]),
                                    forURLScheme: "observatory")
         config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
         config.userContentController.add(PanelActionBridge(perform: perform), contentWorld: .page, name: "panelAction")
+        config.userContentController.addUserScript(WKUserScript(source: WebViewerPreferences.documentStartScript(
+            skin: WebViewerPreferences.skin(), theme: WebViewerPreferences.theme()),
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: Self.width, height: 520), configuration: config)
@@ -68,6 +73,10 @@ final class WebPanelController: NSViewController {
         guard loaded else { return }
         web.evaluateJavaScript("window.dispatchEvent(new Event('observatory:snapshot-changed'))")
     }
+
+    func describe(_ completion: @escaping (String) -> Void) { describeViewer(web, completion: completion) }
+
+    func savePreview(to file: URL) { saveViewerPreview(web, to: file) }
 
     // Reports the content height once the page says it has drawn. A page that
     // never becomes ready reports nil and keeps the previous height.
