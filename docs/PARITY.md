@@ -174,6 +174,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | --- | --- | --- | --- | --- |
 | Design tokens generated from one file | Done | Done | Change | Add meaning, provider and chart colours. CSS for the web viewer is already generated as `app/design-tokens.css` by `scripts/build-design-tokens.mjs`. |
 | Shared strings file | Missing | Missing | Add | |
+| Settings bridge message validator | Missing | Missing | Add | B1-1 (issue 101) generates it from `lib/bridge-contract.json` as `native/BridgeContract.swift` and `native/windows/BridgeContract.cs`, with types for the page. Neither shell calls it yet, which is M2 and W2. The Swift validator was compiled on the Mac and matched the page validator on every test message. The C# validator has not been compiled or run, because no .NET SDK is installed on the Mac. |
 | Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
 | Price table | Missing | Missing | Add | The guide records the current rates as last checked on 2026-09-06 |
