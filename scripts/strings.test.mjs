@@ -42,7 +42,7 @@ test('existing rendered wording remains unchanged', () => {
 });
 
 test('views read shared wording instead of literal labels', () => {
-  for (const path of ['app/panel.tsx', 'app/viewer/dashboard.tsx']) {
+  for (const path of ['app/viewer/panel/panel.tsx', 'app/viewer/dashboard.tsx', 'app/viewer/components/ActionBar.tsx', 'app/viewer/components/Card.tsx', 'app/viewer/components/EmptyState.tsx', 'app/viewer/components/FilterGroup.tsx', 'app/viewer/components/InfoControl.tsx', 'app/viewer/components/Meter.tsx', 'app/viewer/components/Numeral.tsx', 'app/viewer/components/ProviderDot.tsx', 'app/viewer/components/Row.tsx', 'app/viewer/components/TextBar.tsx']) {
     const source = read(path);
     for (const value of unchanged) {
       assert.ok(!source.includes(`'${value}'`) && !source.includes(`"${value}"`), `${path}: ${value}`);
