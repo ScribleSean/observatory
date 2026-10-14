@@ -38,22 +38,24 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
   const label = provider === 'claude' ? STRINGS.providers.claudeCode : STRINGS.providers.codex;
   const note = statusNote(block.status);
   const session = result.claude.sessionCost;
+  const checked = result.prices.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: result.prices.checkedOn }) : STRINGS.tokens.pricesUnknown;
   return <Card label={label}>
     <h3><ProviderDot provider={provider} />{label}</h3>
     <div className="ob-figure">{block.status === 'ok' ? count(block.totals.total) : statusWord(block.status)}</div>
     {note && <p className="ob-tokens-note">{note}</p>}
+    {block.status !== 'by-device' && <>
     <h4>{STRINGS.tokens.classes}</h4>
     <dl className="ob-tokens-classes">{classes.map(key => <div key={key}>
       <dt>{STRINGS.tokens[key]}</dt><dd>{count(block.totals[key])}</dd>
     </div>)}</dl>
     <div className="ob-tokens-estimate">
       <Row><span>{STRINGS.tokens.apiEstimate}</span><span>{dollars(block.estimate.usd)}</span></Row>
-      <p className="ob-tokens-note">{result.prices.checkedOn
-        ? format(STRINGS.tokens.pricesChecked, { date: result.prices.checkedOn }) : STRINGS.tokens.pricesUnknown}</p>
+      <p className="ob-tokens-note">{checked}</p>
       {block.estimate.partial && <p className="ob-tokens-note">{format(STRINGS.tokens.partial, {
         covered: count(block.estimate.coveredTokens), total: count(block.estimate.totalTokens),
       })}</p>}
     </div>
+    </>}
     {provider === 'claude' && <div className="ob-tokens-session">
       <Row><span>{STRINGS.tokens.sessionCost}</span><span>{dollars(session.usd)}</span></Row>
       {session.status === 'ok' && session.observedAt && <p className="ob-tokens-note">{format(STRINGS.formats.asOf, {
@@ -68,6 +70,7 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
           <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : statusWord(device.status)}</td><td>{dollars(device.usd)}</td>
         </tr>)}</tbody>
       </table>
+      <p className="ob-tokens-note">{checked}</p>
     </div>}
     {block.models.length > 0 && <div className="ob-tokens-table">
       <table>

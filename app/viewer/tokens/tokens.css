@@ -19,3 +19,6 @@
 @container (min-width: 720px) {
   .ob-tokens-providers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* The chart's hidden value table is absolutely positioned and can widen the page at 360px. */
+.ob-tokens .ob-chart { position: relative; overflow: hidden; }
+.ob-tokens td { white-space: nowrap; }

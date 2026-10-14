@@ -96,10 +96,10 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Breakdown by model | Done | Done | Keep | |
 | Token classes | Done | Done | Keep | |
 | Recorded reasoning and speed settings | Done | Done | Keep | |
-| API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The dashboard's comparison note still names OpenAI's price page as the source and needs the viewer to name the table instead. |
-| Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health |
-| API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows. |
-| Claude Code session cost | Missing | Missing | Add | |
+| API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The native dashboards' comparison note still names OpenAI's price page as the source. The shared viewer's Tokens view refers to the shared price table and shows the date it was checked. |
+| Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health in the native apps. The shared viewer's Tokens view shows them by day, model and token class, per device, with All reading "By device". Neither app shows the shared dashboard by default. |
+| API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows, so the shared viewer's Tokens view shows Unknown for it until they do. |
+| Claude Code session cost | Missing | Missing | Add | The shared viewer's Tokens view shows `claudeLimits.sessionCost` as "Session cost (estimate)" when it is under 10 minutes old, and Unknown otherwise. No collector writes the field yet. |
 
 ## Dictation
 
@@ -195,6 +195,7 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | Shared dashboard page (`dashboard.html`) in the bundled web files | Done | Done | Add | Added for V1 (issue 79). Built by the shared web bundle beside `panel.html`, with the six sections as empty states and Dictation listed only when a dictation source is enabled. Checked in a browser from the built files, not inside either host. |
 | One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The charts are not used by a view yet. |
 | Skin applied to the whole viewer | Done | Done | Add | One hook applies the skin to both pages and follows later changes to `data-skin`. Sage and Almanac checked in light and dark in a browser at 360 and 1280 pixels wide. |
+| Tokens view in the shared dashboard | Done | Done | Add | Added for V4 (issue 98). Claude Code and Codex side by side with totals, token classes, models, a 30-day chart, the API-equivalent estimate with the price check date, Claude Code session cost and recorded reasoning and speed. Claude Code for All is shown per device. Codex for All reads only the verified combined row. A missing or unpriced value shows Unknown. Checked in a browser from the built files with sample data only, in Sage and Almanac, light and dark, at 360 and 1280 pixels wide. Not checked inside either host. |
 | One sample fixture for both pages | Done | Done | Add | `lib/sample-snapshot.mjs`, fictional. `scripts/demo.mjs` still keeps the older `demoData()` for the earlier web view and a Windows self-test. |
 | Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared viewer source. A shell selects one with `data-skin`. No Settings control exists. |
 | Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. No Settings control calls it. |
