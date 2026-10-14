@@ -132,7 +132,9 @@ test('readClaudeUsage reports timed-out and force-stops a command that ignores a
 
 test('readClaudeUsage reports missing executables and relative working directories', async () => {
   assert.deepEqual(await readClaudeUsage({cwd:tmpdir(),find:async()=>null}),{status:'not-found',usage:null});
-  assert.deepEqual(await readClaudeUsage({cwd:'relative',find:async()=>{throw Error('must not run');}}),{status:'not-found',usage:null});
+  let finds=0;
+  for(const cwd of [undefined,'relative'])assert.deepEqual(await readClaudeUsage({cwd,find:async()=>{finds++;return null;}}),{status:'failed',usage:null});
+  assert.equal(finds,0);
 });
 
 test('readClaudeUsage reports only a status and sanitized reading from fake commands', {skip:process.platform==='win32'}, async t => {

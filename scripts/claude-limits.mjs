@@ -118,12 +118,20 @@ export async function recordClaudeLimits(runtime,input,now=Date.now()) {
   return merged;
 }
 
+async function plainLimitsFolder(runtime) {
+  if(typeof runtime!=='string' || !path.isAbsolute(runtime))return false;
+  try {const info=await lstat(folderOf(runtime));return info.isDirectory() && !info.isSymbolicLink();}
+  catch {return false;}
+}
+
 export async function claudeStatuslineInstalled(runtime) {
+  if(!await plainLimitsFolder(runtime))return false;
   try {return isObject(await plainFile(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384));}
   catch {return false;}
 }
 
 export async function claudeLimitsConsent(runtime) {
+  if(!await plainLimitsFolder(runtime))return {given:false,consentMarker:false,statusLine:false};
   let consentMarker=false;
   try {
     const marker=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096);
@@ -165,6 +173,7 @@ export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readCla
     if(isObject(result) && ['read','not-found','failed','timed-out','unrecognized'].includes(result.status)) {
       if(result.status==='read') {
         // A reading the store cannot use is reported like an output that was not recognized.
+        usageCommand='unrecognized';
         if(isObject(result.usage))usageCommand=await recordClaudeLimits(runtime,{rate_limits:result.usage.rate_limits},now)?'read':'unrecognized';
       } else if(result.usage===null)usageCommand=result.status;
     }

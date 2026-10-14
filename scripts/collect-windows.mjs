@@ -119,7 +119,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   await attachProviderTokenSync(runtime,result,claude);
   signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'})));
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),

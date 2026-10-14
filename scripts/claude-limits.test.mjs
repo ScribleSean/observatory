@@ -381,12 +381,12 @@ test('invalid usage results fail without exposing details or inventing a reading
   const runtime=await folder(t);
   await setLimitsConsent({runtime,consent:true,now:new Date(now)});
   for(const result of [null,undefined,'synthetic',[],{},input(),{status:'/synthetic/private',usage:null},
-    {status:'read',usage:null},{status:'not-found',usage:input()}]) {
+    {status:'not-found',usage:input()}]) {
     assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>result}),
       {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'failed'});
   }
   // A reading the store cannot use counts as not recognized.
-  assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status:'read',usage:{}})}),
+  for(const usage of [{},'synthetic',null])assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status:'read',usage})}),
     {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'unrecognized'});
   for(const status of ['not-found','failed','timed-out','unrecognized']) {
     assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status,usage:null})}),
@@ -400,4 +400,31 @@ test('a recording error reports failed without exposing the error or command det
   await mkdir(path.join(runtime,'claude-limits/limits.json'));
   assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status:'read',usage:input()})}),
     {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'failed'});
+});
+
+
+test('a linked limits folder cannot grant consent or run usage', {skip:process.platform==='win32'}, async t => {
+  const runtime=await folder(t),target=await folder(t);
+  await writeFile(path.join(target,'consent.json'),JSON.stringify({consent:true,givenAt:new Date(now).toISOString()}));
+  await writeFile(path.join(target,'statusline.json'),'{"previous":null}');
+  await symlink(target,path.join(runtime,'claude-limits'));
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+  assert.equal(await claudeStatuslineInstalled(runtime),false);
+  let runs=0;
+  const source=await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'read',usage:input()};}});
+  assert.deepEqual(source,{provider:'Claude Code',scope:'account',status:'not-connected',windows:[]});
+  assert.equal(runs,0);
+});
+
+test('invalid runtimes and missing or plain file limits folders cannot grant consent', async t => {
+  const missing=await folder(t),file=await folder(t);
+  await writeFile(path.join(file,'claude-limits'),'{}');
+  for(const runtime of [undefined,null,42,{},'',path.relative(process.cwd(),missing),missing,file]) {
+    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+    assert.equal(await claudeStatuslineInstalled(runtime),false);
+    let runs=0;
+    const source=await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'read',usage:input()};}});
+    assert.equal(source.status,'not-connected');
+    assert.equal(runs,0);
+  }
 });

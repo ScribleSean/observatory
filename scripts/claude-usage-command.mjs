@@ -104,7 +104,7 @@ function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
 }
 
 export async function readClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000,environment=usageEnvironment(),platform=process.platform}={}) {
-  if(!path.isAbsolute(cwd ?? ''))return {status:'not-found',usage:null};
+  if(typeof cwd!=='string' || !path.isAbsolute(cwd))return {status:'failed',usage:null};
   try {
     const executable=await find();
     if(!executable)return {status:'not-found',usage:null};

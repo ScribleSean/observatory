@@ -99,7 +99,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'})));
   const {data,status}=result;
   await atomic('usage.json',data,replacement.preserve);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
