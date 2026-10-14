@@ -149,6 +149,12 @@ internal sealed class WebPanel : Form
             Math.Clamp(bottom - Height, area.Top, Math.Max(area.Top, area.Bottom - Height)));
     }
 
+    internal async Task<string> RunScriptForTest(string script)
+    {
+        if (IsDisposed || web.IsDisposed || web.CoreWebView2 is null) return "unavailable";
+        return await web.CoreWebView2.ExecuteScriptAsync(script);
+    }
+
     internal async void SnapshotChanged()
     {
         try

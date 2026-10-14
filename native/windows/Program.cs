@@ -293,6 +293,7 @@ internal static class Program
                 WebPanel.SelfTest();
                 WebDashboard.SelfTest();
                 WebViewerPreferences.SelfTest();
+                Console.WriteLine("WebView2 runtime: " + WebHostsTests.RuntimeVersion());
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
@@ -368,6 +369,14 @@ internal static class Program
                 File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint)) { Environment.ExitCode = 1; return; }
             try { SetupWizardTests.Run(args[1]); }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
+            return;
+        }
+        if (args.Length == 2 && args[0] == "--test-web-hosts")
+        {
+            if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
+                File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint) || Directory.EnumerateFileSystemEntries(args[1]).Any())
+            { Environment.ExitCode = 1; return; }
+            WebHostsTests.Run(args[1]);
             return;
         }
         if (args.Length == 2 && args[0] == "--test-usage-popup")
