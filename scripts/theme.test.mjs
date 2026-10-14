@@ -2,11 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { generatedDesignTokens } from './build-design-tokens.mjs';
+import { generatedStrings } from './build-strings.mjs';
 
 const css = readFileSync(new URL('../app/observatory.css', import.meta.url), 'utf8');
 const nativeTokens = JSON.parse(readFileSync(new URL('../native/design-tokens.json', import.meta.url), 'utf8'));
 test('both native shells use the current shared design tokens', () => {
   for (const [path, expected] of generatedDesignTokens()) {
+    assert.equal(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n'), expected, path);
+  }
+});
+test('all platforms use the current shared strings', () => {
+  for (const [path, expected] of generatedStrings()) {
     assert.equal(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n'), expected, path);
   }
 });
