@@ -12,6 +12,7 @@ internal static class ObservatoryStrings
         internal const string DeviceNamed = "{name} ({platform})";
         internal const string NowCaption = "Pace over the last hour";
         internal const string PerHour = "{value}% per hour";
+        internal const string BelowTenth = "<0.1";
         internal const string ResetsFirst = "Resets before running out at this pace.";
         internal const string Exhausted = "No limit was left at the last reading.";
         internal const string Stale = "The reading is too old to estimate pace.";

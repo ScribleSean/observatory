@@ -1,6 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanPeerQuotaForDisplay} from '../lib/view-limits.mjs';
+import { cleanPeerQuotaForDisplay, limitRows, limitHistory, peerLimits, sessionCost } from '../lib/view-limits.mjs';
+import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
+import { span } from '../lib/panel-data.mjs';
 
 const legacyNow=Date.parse('2026-09-08T20:00:00.000Z');
 const sample={checkedAt:'2026-09-08T19:55:00.000Z',windows:[{bucket:'codex',window:'primary',remainingPercent:43,durationMinutes:300,resetsAt:'2026-09-09T00:00:00.000Z'}]};
@@ -24,8 +26,6 @@ test('peer allowance display rejects unsafe shapes and drops invalid observation
   assert.deepEqual(peer.history,[]);
 });
 
-import { limitRows, limitHistory, peerLimits, sessionCost } from '../lib/view-limits.mjs';
-import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 
 const now = Date.parse('2026-10-14T12:00:00Z');
 const iso = minutes => new Date(now + minutes * 60000).toISOString();
@@ -171,4 +171,46 @@ test('history uses local calendar dates with UTC fallback and caps all at 400 da
   assert.equal(limitHistory(data, 'codex', 'all', now).windows[0].points.length, 400);
   data.timezone = 'invalid';
   assert.equal(limitHistory(data, 'codex', 'day', now).windows[0].points[11].value, 40);
+});
+
+test('peer and session cost freshness ends exactly at ten minutes', () => {
+  for (const [age, stale] of [[600000, true], [599000, false]]) {
+    const observedAt = new Date(now - age).toISOString();
+    const peer = peerLimits({ peerQuota: { host: 'Mac', status: 'ok', checkedAt: observedAt,
+      windows: [reading('codex', 'primary')] } }, now);
+    assert.equal(peer.stale, stale);
+    const cost = sessionCost({ claudeLimits: { sessionCost: { usd: 3, observedAt } } }, now);
+    assert.deepEqual(cost, stale ? null : { usd: 3, observedAt });
+  }
+});
+
+test('peer without windows preserves a valid observation time and an Unknown row', () => {
+  const peerQuota = { host: 'Mac', status: 'ok', checkedAt: '2026-10-14T11:55:00+00:00', windows: [] };
+  const peer = peerLimits({ peerQuota }, now);
+  assert.equal(peer.observedAt, iso(-5));
+  assert.equal(peer.rows.length, 1);
+  assert.equal(peer.rows[0].remaining, null);
+  for (const checkedAt of ['invalid', iso(1)]) {
+    const invalid = peerLimits({ peerQuota: { ...peerQuota, checkedAt } }, now);
+    assert.equal(invalid.observedAt, null);
+    assert.equal(invalid.stale, true);
+  }
+});
+
+test('computed pace alone supplies every projected window note', () => {
+  const data = snapshot();
+  data.quota.pace = [{ bucket: 'codex', window: 'primary', status: 'projected',
+    asOf: data.quota.checkedAt, estimatedExhaustionAt: iso(170) }];
+  for (const fixture of [data, sampleSnapshot(now)]) {
+    for (const row of limitRows(fixture, now)) {
+      assert.doesNotMatch(row.note, /runs out in about 2h 50m/);
+      assert.equal(row.note.includes('runs out in about'), row.pace?.status === 'projected');
+      if (row.pace?.status === 'projected') {
+        assert.equal(row.note.split(' · ')[1], 'runs out in about ' + span(row.pace.runsOutInMinutes * 60000));
+      }
+    }
+  }
+  const rows = limitRows(data, now);
+  assert.equal(rows.find(row => row.provider === 'codex' && row.windowId === 'secondary').pace.status, 'projected');
+  assert.equal(rows.find(row => row.provider === 'claude').pace.status, 'projected');
 });

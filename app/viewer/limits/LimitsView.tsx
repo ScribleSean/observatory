@@ -48,7 +48,7 @@ export function LimitsView({ snapshot, now, limitStyle, initialPeriod = 'day' }:
             {rows.filter(row => row.provider === provider).map((row, index) => <div key={index}
               className={row.low ? 'ob-limits-pace warn' : 'ob-limits-pace'} data-provider={provider} data-window={row.window || 'unknown'}>
               {row.remaining === null ? <Row><span className="ob-num big">{STRINGS.status.unknown}</span><span className="ob-meta">{row.note}</span></Row> : <>
-                <span className="ob-num big">{typeof row.pace?.ratePerHour === 'number' ? format(STRINGS.limits.perHour, { value: row.pace.ratePerHour.toFixed(1) }) : STRINGS.status.unknown}</span>
+                <span className="ob-num big">{typeof row.pace?.ratePerHour === 'number' ? format(STRINGS.limits.perHour, { value: row.pace.ratePerHour > 0 && row.pace.ratePerHour < 0.05 ? STRINGS.limits.belowTenth : row.pace.ratePerHour.toFixed(1) }) : STRINGS.status.unknown}</span>
                 <div className="ob-meta">{row.window}</div>
                 <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{paceSentence(row.pace)}</div>
                 <div className={row.low ? 'ob-num warn' : 'ob-num'}>{percent(row.remaining)}</div>

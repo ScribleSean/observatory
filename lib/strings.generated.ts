@@ -7,6 +7,7 @@ export const STRINGS = {
     "deviceNamed": "{name} ({platform})",
     "nowCaption": "Pace over the last hour",
     "perHour": "{value}% per hour",
+    "belowTenth": "<0.1",
     "resetsFirst": "Resets before running out at this pace.",
     "exhausted": "No limit was left at the last reading.",
     "stale": "The reading is too old to estimate pace.",

@@ -94,3 +94,27 @@ test('the sample snapshot renders every row with a value', () => {
   const sums = totals(demo, 'All', 'month', new Date(now));
   assert.equal(sums.codexTokens > 0 && sums.seconds > 0 && sums.usd > 0, true);
 });
+
+test('limits readings become stale exactly at ten minutes', () => {
+  for (const [age, stale] of [[600000, true], [599000, false]]) {
+    const source = { status: 'ok', checkedAt: new Date(now - age).toISOString(),
+      windows: [{ bucket: 'codex', window: 'primary', remainingPercent: 40, durationMinutes: 300 }] };
+    for (const row of limits({ quota: source, claudeLimits: source }, now)) assert.equal(row.stale, stale);
+  }
+});
+
+test('stored pace remains the default and can be omitted without changing other row fields', () => {
+  const checkedAt = new Date(now - 60000).toISOString();
+  const quota = { status: 'ok', checkedAt,
+    windows: [{ bucket: 'codex', window: 'primary', remainingPercent: 40, durationMinutes: 300,
+      resetsAt: new Date(now + 3600000).toISOString() }],
+    pace: [{ bucket: 'codex', window: 'primary', status: 'projected', asOf: checkedAt,
+      estimatedExhaustionAt: new Date(now + 30 * 60000).toISOString() }] };
+  const data = { quota, claudeLimits: quota };
+  assert.deepEqual(limits(data, now), limits(data, now, { storedPace: true }));
+  const without = limits(data, now, { storedPace: false });
+  limits(data, now).forEach((row, index) => {
+    assert.equal(row.note, 'Resets in 1h 0m · runs out in about 30m');
+    assert.deepEqual(without[index], { ...row, note: 'Resets in 1h 0m' });
+  });
+});

@@ -7,6 +7,7 @@ enum ObservatoryStrings {
         static let `deviceNamed` = "{name} ({platform})"
         static let `nowCaption` = "Pace over the last hour"
         static let `perHour` = "{value}% per hour"
+        static let `belowTenth` = "<0.1"
         static let `resetsFirst` = "Resets before running out at this pace."
         static let `exhausted` = "No limit was left at the last reading."
         static let `stale` = "The reading is too old to estimate pace."

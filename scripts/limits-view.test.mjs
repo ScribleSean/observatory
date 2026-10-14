@@ -122,3 +122,47 @@ void test('dashboard selects Limits and preserves other empty sections', () => {
   assert.match(tokens, /This section is not built yet/);
   assert.doesNotMatch(tokens, /class="ob-limits"/);
 });
+
+void test('sample provider cards and Now agree on each window projection and span', () => {
+  const html = render(sampleSnapshot(now));
+  const current = nowCard(html);
+  const projection = text => text.match(/runs out in about ([^<]+)/)?.[0] ?? null;
+  for (const [provider, name] of [['claude', 'Claude Code'], ['codex', 'Codex']]) {
+    const card = html.split('<section class="ob-card" aria-label="' + name + '">')[1]?.split('</section>')[0];
+    assert.ok(card);
+    const rows = text => [...text.matchAll(new RegExp('data-provider="' + provider + '" data-window="([^"]+)">([\\s\\S]*?)(?=data-provider=|$)', 'g'))];
+    const currentRows = rows(current);
+    const providerRows = rows(card);
+    assert.equal(currentRows.length, 2);
+    assert.equal(providerRows.length, 2);
+    for (const [, window, body] of currentRows) {
+      const matching = providerRows.find(row => row[1] === window);
+      assert.ok(matching);
+      assert.equal(projection(body), projection(matching[2]), provider + ' ' + window);
+    }
+  }
+});
+
+void test('small positive rates render below a tenth instead of zero', () => {
+  const data = snapshot();
+  for (const source of [data.quota, data.claudeLimits]) {
+    source.history.forEach((sample, index) => {
+      sample.windows = source.windows.map(row => ({ ...row, remainingPercent: row.remainingPercent + (12 - index) * 0.04 / 12 }));
+    });
+  }
+  const html = render(data);
+  assert.equal(count(nowCard(html), /&lt;0\.1% per hour/g), 4);
+  assert.doesNotMatch(html, /0\.0% per hour/);
+});
+
+void test('peer without windows shows its observation time and Unknown value', () => {
+  const data = snapshot();
+  data.peerQuota = { host: 'Windows', status: 'ok', checkedAt: iso(-5), windows: [] };
+  const html = render(data);
+  const card = html.split('aria-label="Shared from Windows"')[1];
+  assert.ok(card);
+  assert.match(card, /Observed 5m ago/);
+  assert.doesNotMatch(card, /Observation time unknown/);
+  assert.match(card, /Unknown/);
+  assert.equal(count(card, /data-window="unknown"/g), 1);
+});
