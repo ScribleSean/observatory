@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleSnapshot, SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
-import { demoSnapshot, devices, limits, totals } from '../lib/panel-data.mjs';
+import { demoSnapshot, devices, limits, span, totals } from '../lib/panel-data.mjs';
+import { quotaPace } from './quota-pace.mjs';
 
 const sum = values => values.reduce((total, value) => total + value, 0);
 const fields = ['inputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'outputTokens', 'reasoningOutputTokens', 'totalTokens'];
@@ -29,8 +30,23 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.equal(snapshot.claudeLimits.status, 'stale');
     assert.deepEqual(snapshot.claudeLimits.windows.map(row => Date.parse(row.resetsAt) - now), [130 * 60000, 3 * 86400000]);
     assert.deepEqual(snapshot.quota.windows.map(row => Date.parse(row.resetsAt) - now), [225 * 60000, 5 * 86400000]);
-    assert.deepEqual(snapshot.quota.pace, [{ bucket: 'codex', window: 'primary', asOf: new Date(now - 90000).toISOString(),
-      status: 'projected', estimatedExhaustionAt: new Date(now + 170 * 60000).toISOString() }]);
+    const computedPace = quotaPace(snapshot.quota, now);
+    assert.equal(snapshot.quota.pace.length, snapshot.quota.windows.length);
+    for (const computed of computedPace) {
+      const stored = snapshot.quota.pace.find(row => row.bucket === computed.bucket && row.window === computed.window);
+      assert.ok(stored);
+      for (const field of ['bucket', 'window', 'asOf', 'status', 'observedMinutes', 'percentagePointsPerHour',
+        'remainingMinutes', 'estimatedExhaustionAt']) {
+        if (typeof computed[field] === 'number') close(stored[field], computed[field]);
+        else assert.equal(stored[field], computed[field]);
+      }
+    }
+    const primary = computedPace.find(row => row.window === 'primary');
+    assert.equal(primary.status, 'projected');
+    assert.ok(Date.parse(primary.estimatedExhaustionAt) < Date.parse(snapshot.quota.windows[0].resetsAt));
+    // The weekly window burns slower, so it never reads as running out before the 5-hour one.
+    const weekly = computedPace.find(row => row.window === 'secondary');
+    assert.ok(weekly.status !== 'projected' || Date.parse(weekly.estimatedExhaustionAt) > Date.parse(primary.estimatedExhaustionAt));
     const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources, snapshot.combinedTokens];
     const readDate = new Date(read).toISOString().slice(0, 10);
     for (const source of [...tokenSources, ...snapshot.activity, snapshot.combined, ...snapshot.activityHistory]) {
@@ -105,7 +121,14 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
       assert.ok(history.length >= (source === snapshot.peerQuota ? 2 : 12));
       assert.equal(history.at(-1).checkedAt, source.checkedAt);
       assert.deepEqual(history.at(-1).windows, source.windows);
-      history.slice(1).forEach((row, index) => assert.equal(Date.parse(row.checkedAt) - Date.parse(history[index].checkedAt), 300000));
+      history.slice(1).forEach((row, index) => assert.equal(Date.parse(row.checkedAt) - Date.parse(history[index].checkedAt), source === snapshot.quota ? 120000 : 300000));
+    }
+    for (const [index, reading] of snapshot.quota.history.entries()) {
+      reading.windows.forEach((window, w) => {
+        assert.ok(window.remainingPercent >= 0 && window.remainingPercent <= 100);
+        assert.equal(window.resetsAt, snapshot.quota.windows[w].resetsAt);
+        if (index > 0) assert.ok(window.remainingPercent <= snapshot.quota.history[index - 1].windows[w].remainingPercent);
+      });
     }
     assert.equal(snapshot.peerQuota.host, 'Windows');
     assert.equal(snapshot.peerQuota.provider, 'Codex');
@@ -191,4 +214,12 @@ test('sample fields for all six views are complete except declared Unknown paths
   const missingPriceDate = structuredClone(snapshot);
   delete missingPriceDate.prices.checkedOn;
   assert.deepEqual(incompletePaths(missingPriceDate), ['prices.checkedOn']);
+});
+
+test('sample panel shows the computed Codex exhaustion duration', () => {
+  const now = Date.parse('2026-10-14T18:45:00Z'), snapshot = sampleSnapshot(now);
+  const primary = quotaPace(snapshot.quota, now).find(row => row.window === 'primary');
+  const row = limits(snapshot, now)[2];
+  assert.ok(row.note.includes('runs out in about'));
+  assert.ok(row.note.includes(`runs out in about ${span(Date.parse(primary.estimatedExhaustionAt) - now)}`));
 });
