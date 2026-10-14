@@ -112,4 +112,43 @@ internal static class ObservatoryStrings
         internal const string Value = "Value";
         internal const string ShowValues = "Show values";
     }
+    internal static class Activity
+    {
+        internal const string NowCaveat = "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.";
+        internal const string ZoneCaveat = "Days and hours follow the {zone} clock until device time zones are supported.";
+        internal const string HourlyTitle = "Screen time by hour, {zone} clock";
+        internal const string DailyTitle = "Screen time by day";
+        internal const string Date = "Date";
+        internal const string CategoriesTitle = "Categories and recorded apps";
+        internal const string RecordedApps = "Recorded apps";
+        internal const string DeviceOverlap = "Device overlap";
+        internal const string NoCategories = "No category breakdown available";
+        internal const string NoTracking = "No tracking records for this date. Zero recorded activity does not establish inactivity.";
+        internal const string ForegroundNote = "Recorded foreground time, not attention. Combined activity counts device overlap once.";
+        internal const string MissingDates = "Missing dates are Unknown, not zero.";
+        internal const string WindowOf = "of the last {span}";
+        internal const string Details = "Details";
+        internal const string NowStale = "The last reading is more than 10 minutes old";
+        internal const string NowHourAfter = "No reading yet in the current clock hour";
+        internal const string NowNoHours = "Hourly totals are missing for this period";
+        internal const string NowDaylight = "Unavailable during a daylight saving change";
+        internal const string NowNoReading = "Reading time unknown";
+        internal const string NowZone = "Time zone unknown";
+        internal const string NowNoSource = "Not collected yet";
+        internal const string TrackingTitle = "Tracking";
+        internal const string TrackingRecent = "Recent tracking coverage";
+        internal const string TrackingStale = "Tracking is not current";
+        internal const string TrackingUnknown = "Tracking freshness unknown";
+        internal const string TrackingUnavailable = "Source unavailable";
+        internal const string TrackingRecentDetail = "Tracking coverage observed within 10 minutes of collection. This includes idle time, not just active use.";
+        internal const string TrackingRecentCombinedDetail = "At least one device had tracking coverage within 10 minutes of collection. This does not verify every device.";
+        internal const string TrackingStaleDetail = "No recent tracking coverage at collection. The device may be asleep, offline, or its watchers stopped. Saved history is retained.";
+        internal const string TrackingUnknownDetail = "Tracking freshness is unknown. A successful historical read does not prove that watchers are running.";
+        internal const string TrackingUnavailableDetail = "The source could not be read. Saved history is retained.";
+        internal const string LastCoverage = "Last tracking coverage: {time}";
+        internal const string LastCollection = "Last successful collection: {time}";
+        internal const string HelpTitle = "ActivityWatch help";
+        internal const string Help = "ActivityWatch is a separate application. Install and run it on the device you want to track, enable ActivityWatch in Observatory Settings, then refresh sources. If it is already running, check its local server on port 5600. Missing readings remain Unknown. Tokens and Limits can be used independently.";
+        internal const string HelpAddress = "activitywatch.net";
+    }
 }

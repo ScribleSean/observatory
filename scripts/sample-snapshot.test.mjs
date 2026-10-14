@@ -86,7 +86,7 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     for (const [source, scale] of [[snapshot.activity[0], 14000], [snapshot.activity[1], 9000], [snapshot.combined, 19000]]) {
       assert.deepEqual(snapshot.activityHistory.find(row => row.host === source.host).days, source.days);
       source.days.forEach((day, index) => {
-        assert.equal(day.seconds, Math.round(scale * (1 + (index * 3 % 4) / 5)));
+        assert.equal(day.seconds, Math.min((index === 0 ? new Date(read).getUTCHours() + 1 : 24) * 3600, Math.round(scale * (1 + (index * 3 % 4) / 5))));
         assert.equal(day.trackedSeconds, day.seconds);
         assert.equal(sum(Object.values(day.categories)), day.seconds);
         for (const [category, seconds] of Object.entries(day.categories)) assert.equal(sum(Object.values(day.apps[category])), seconds);
@@ -138,3 +138,19 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     }
   });
 }
+
+test('activity archives have separate tracking metadata and capped hours', () => {
+  for (const time of ['2026-10-14T00:03:00Z', '2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
+    const snapshot = sampleSnapshot(Date.parse(time));
+    for (const source of [snapshot.combined, ...snapshot.activity]) {
+      const archive = snapshot.activityHistory.find(row => row.host === source.host);
+      assert.notEqual(archive, source);
+      assert.equal(archive.latestReadStatus, 'ok');
+      assert.equal(archive.asOf, source.checkedAt);
+      assert.equal(archive.trackingStatus, 'recent');
+      assert.equal(Date.parse(archive.trackingThrough), Date.parse(source.checkedAt) - 60000);
+      for (const key of ['latestReadStatus', 'asOf', 'trackingStatus', 'trackingThrough']) assert.equal(source[key], undefined);
+      for (const day of source.days) assert.ok(day.hours.every(hour => hour <= 3600));
+    }
+  }
+});
