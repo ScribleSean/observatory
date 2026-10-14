@@ -6,7 +6,13 @@ import { Card, FilterGroup, InfoControl, Row, BarChart } from '../components';
 import './activity.css';
 
 type Props = { snapshot: Record<string, unknown> | null; now: number; initialHost?: string; initialPeriod?: string; initialDate?: string };
-const formatTime = (time: string | null) => time ? new Date(time).toLocaleString() : STRINGS.status.unknown;
+const formatTime = (time: string | null, zone: string | null) => {
+  if (!time) return STRINGS.status.unknown;
+  try {
+    if (zone) return new Date(time).toLocaleString(undefined, { timeZone: zone, timeZoneName: 'short' });
+  } catch { /* Fall back to the named local time zone. */ }
+  return new Date(time).toLocaleString(undefined, { timeZoneName: 'short' });
+};
 
 export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod = 'day', initialDate }: Props) {
   const [host, setHost] = useState(initialHost);
@@ -14,8 +20,8 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
   const [date, setDate] = useState(initialDate);
   const view = activityView(snapshot, { host, period, date, now });
   const help = [view.tracking.detail,
-    format(STRINGS.activity.lastCoverage, { time: formatTime(view.tracking.through) }),
-    format(STRINGS.activity.lastCollection, { time: formatTime(view.tracking.asOf) }),
+    format(STRINGS.activity.lastCoverage, { time: formatTime(view.tracking.through, view.timeZone) }),
+    format(STRINGS.activity.lastCollection, { time: formatTime(view.tracking.asOf, view.timeZone) }),
     STRINGS.activity.help, STRINGS.activity.helpAddress].join(' ');
   return <div className="ob-activity">
     <div className="ob-activity-filters">

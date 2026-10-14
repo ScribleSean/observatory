@@ -119,6 +119,7 @@ enum ObservatoryStrings {
         static let `nowNoHours` = "Hourly totals are missing for this period"
         static let `nowDaylight` = "Unavailable during a daylight saving change"
         static let `nowNoReading` = "Reading time unknown"
+        static let `nowAhead` = "The last reading is ahead of this device's clock"
         static let `nowZone` = "Time zone unknown"
         static let `nowNoSource` = "Not collected yet"
         static let `trackingTitle` = "Tracking"

@@ -119,6 +119,7 @@ export const STRINGS = {
     "nowNoHours": "Hourly totals are missing for this period",
     "nowDaylight": "Unavailable during a daylight saving change",
     "nowNoReading": "Reading time unknown",
+    "nowAhead": "The last reading is ahead of this device's clock",
     "nowZone": "Time zone unknown",
     "nowNoSource": "Not collected yet",
     "trackingTitle": "Tracking",

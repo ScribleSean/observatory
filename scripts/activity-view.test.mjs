@@ -52,3 +52,11 @@ test('dashboard initial hash selects only listed sections and renders without lo
     else Reflect.deleteProperty(globalThis, 'location');
   }
 });
+
+test('tracking help names the snapshot time zone for both times', () => {
+  const snapshot = sampleSnapshot(now);
+  snapshot.timezone = 'UTC';
+  const html = render(ActivityView, { snapshot, now });
+  assert.match(html, /Last tracking coverage: [^<]*?UTC/);
+  assert.match(html, /Last successful collection: [^<]*?UTC/);
+});

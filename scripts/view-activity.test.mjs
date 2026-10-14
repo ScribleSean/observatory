@@ -42,7 +42,7 @@ for (const [date, read, reason] of [
 for (const bad of [undefined, hours(1).slice(1), [...hours(1).slice(1), -1], [...hours(1).slice(1), Infinity], [...hours(1).slice(1), null]]) test(`invalid hours ${JSON.stringify(bad)}`, () => {
   assert.equal(run({ days: [{ ...day(), hours: bad }] }).reason, 'noHours');
 });
-for (const read of [null, '', 'invalid', '2026-10-14T13:00:00Z']) test(`invalid reading ${read}`, () => {
+for (const read of [null, '', 'invalid']) test(`invalid reading ${read}`, () => {
   assert.equal(run({ readingAt: read }).reason, 'noReading');
 });
 for (const zone of [null, '', 'Invalid/Zone']) test(`invalid zone ${zone}`, () => assert.equal(run({ timeZone: zone }).reason, 'timeZone'));
@@ -108,11 +108,10 @@ test('missing hours and dates after the reading are Unknown', () => {
   data.activity[0].days.push(day('2026-10-15'));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
 });
-test('Combined without reading masks collection date and later but keeps older hours', () => {
+test('Combined live source without reading masks every date', () => {
   const data = snapshot(); delete data.combined.checkedAt;
   data.combined.days.push(day('2026-10-13'), day('2026-10-15'));
-  for (const date of ['2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value === null));
-  assert.equal(view(data, { host: 'All', date: '2026-10-13' }).hourly[23].value, 100);
+  for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value === null));
 });
 test('Now hourly chart follows reading date instead of selected date', () => {
   const data = snapshot(); data.activity[0].days.push(day('2026-10-13', 4800));
@@ -187,4 +186,48 @@ test('categories do not include peer device or Combined records', () => {
   data.combined.days[0].categories = { Editors: 700 };
   assert.equal(view(data).categories[0].seconds, 100);
   assert.equal(view(data, { host: 'All' }).categories[0].seconds, 700);
+});
+
+test('a reading ahead of the clock has its own Now reason and note', () => {
+  const ahead = '2026-10-14T12:32:30Z';
+  assert.equal(run({ readingAt: ahead }).reason, 'ahead');
+  const data = snapshot();
+  data.activity[0].checkedAt = ahead;
+  const result = view(data, { period: 'now' });
+  assert.equal(result.total, null);
+  assert.equal(result.note, "The last reading is ahead of this device's clock");
+  assert.equal(run({ readingAt: undefined }).reason, 'noReading');
+});
+test('Combined archive masks hours after its reading despite a later collection', () => {
+  const data = {
+    timezone: 'UTC', collectedAt: readingAt,
+    combined: { host: 'Combined', status: 'unavailable' },
+    activityHistory: [{
+      host: 'Combined', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-13T14:10:00Z',
+      days: [{ date: '2026-10-13', seconds: 1500, hours: hours(100).map((value, hour) => hour <= 14 ? value : 0) }],
+    }],
+  };
+  const result = view(data, { host: 'All', date: '2026-10-13' });
+  assert.deepEqual(result.hourly.map(point => point.value), [...Array(15).fill(100), ...Array(9).fill(null)]);
+  assert.equal(view(data, { host: 'All', period: 'now' }).total, null);
+  delete data.combined;
+  for (const asOf of [undefined, null, '', 'invalid']) {
+    data.activityHistory[0].asOf = asOf;
+    assert.ok(view(data, { host: 'All', date: '2026-10-13' }).hourly.every(point => point.value === null));
+  }
+});
+test('unavailable device retains earlier hours and masks at the archive reading', () => {
+  const data = snapshot();
+  data.activity[0].status = 'unavailable';
+  data.activityHistory = [{
+    host: 'Mac', status: 'ok', latestReadStatus: 'unavailable', asOf: readingAt,
+    days: [day('2026-10-13'), day(), day('2026-10-15')],
+  }];
+  assert.deepEqual(view(data, { date: '2026-10-13' }).hourly.map(point => point.value), hours(100));
+  assert.deepEqual(view(data).hourly.map(point => point.value), [...Array(13).fill(100), ...Array(11).fill(null)]);
+  assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
+  assert.equal(view(data, { period: 'now' }).total, null);
+  assert.ok(view(data, { period: 'now' }).hourly.every(point => point.value === null));
+  data.activityHistory[0].days[0].hours = hours(null);
+  assert.ok(view(data, { date: '2026-10-13' }).hourly.every(point => point.value === null));
 });

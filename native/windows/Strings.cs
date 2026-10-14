@@ -133,6 +133,7 @@ internal static class ObservatoryStrings
         internal const string NowNoHours = "Hourly totals are missing for this period";
         internal const string NowDaylight = "Unavailable during a daylight saving change";
         internal const string NowNoReading = "Reading time unknown";
+        internal const string NowAhead = "The last reading is ahead of this device's clock";
         internal const string NowZone = "Time zone unknown";
         internal const string NowNoSource = "Not collected yet";
         internal const string TrackingTitle = "Tracking";
