@@ -1,11 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readdir} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readdir,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {collectQuota} from './collect-quota.mjs';
 import {readQuotaArchive,readQuotaState} from './quota-store.mjs';
 const now=Date.parse('2026-09-09T12:00:00Z');
+test('quota discovery ignores the legacy executable and preserves local configuration',async()=>fixture(async runtime=>{
+  const file=path.join(runtime,'local.config.json');
+  const original=Buffer.from('{"codexExecutable":"/synthetic/legacy/codex"}');
+  await writeFile(file,original);
+  const executables=[];
+  await collectQuota(runtime,{enabled:true,clock:()=>now,resolveExecutable:async()=>'/synthetic/discovered/codex',
+    readSnapshot:async executable=>{executables.push(executable);return {status:'unavailable'};}});
+  assert.deepEqual(executables,['/synthetic/discovered/codex']);
+  assert.equal(executables.includes('/synthetic/legacy/codex'),false);
+  assert.deepEqual(await readFile(file),original);
+}));
+test('Mac quota collection uses installed client discovery without the legacy adapter',async()=>{
+  const source=await readFile(new URL('./collect-mac.mjs',import.meta.url),'utf8');
+  assert.equal(source.includes('legacy-quota'),false);
+  assert.equal(source.includes('collectConfiguredMacQuota'),false);
+  assert.ok(source.includes('findCodexExecutable'));
+});
 test('collector opt-out preserves the archive without polling or fabricating records',async()=>fixture(async runtime=>{
   const scope='a'.repeat(64);
   let calls=0;

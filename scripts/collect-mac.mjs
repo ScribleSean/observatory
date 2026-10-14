@@ -12,8 +12,7 @@ import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
-import {attachQuota} from './collect-quota.mjs';
-import {collectConfiguredMacQuota} from './legacy-quota.mjs';
+import {collectQuota,attachQuota,findCodexExecutable} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {collectLegacyWorkflows,attachWorkflows} from './legacy-workflows.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
@@ -50,8 +49,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   const info=await lstat(configFile);
   if(!info.isFile() || info.isSymbolicLink() || info.size>4096)throw Error('Invalid local Mac configuration');
   const config=macCollectorConfig(JSON.parse(await readFile(configFile,'utf8')));
-  const readQuota=()=>collectConfiguredMacQuota(runtime,{enabled:config.quota,
-    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota});
+  const readQuota=()=>collectQuota(runtime,{enabled:config.quota,
+    isEnabled:async()=>macCollectorConfig(JSON.parse(await readFile(configFile,'utf8'))).quota,
+    resolveExecutable:findCodexExecutable});
   if(quotaOnly) return refreshAllowances(runtime,{enabled:config.quota,readQuota});
   let savedPairing=null,pairingFailed=false;
   if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
