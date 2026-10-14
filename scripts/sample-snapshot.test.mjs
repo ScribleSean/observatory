@@ -236,3 +236,19 @@ test('sample panel shows the computed Codex exhaustion duration', () => {
   assert.ok(row.note.includes('runs out in about'));
   assert.ok(row.note.includes(`runs out in about ${span(Date.parse(primary.estimatedExhaustionAt) - now)}`));
 });
+
+test('activity archives have separate tracking metadata and capped hours', () => {
+  for (const time of ['2026-10-14T00:03:00Z', '2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
+    const snapshot = sampleSnapshot(Date.parse(time));
+    for (const source of [snapshot.combined, ...snapshot.activity]) {
+      const archive = snapshot.activityHistory.find(row => row.host === source.host);
+      assert.notEqual(archive, source);
+      assert.equal(archive.latestReadStatus, 'ok');
+      assert.equal(archive.asOf, source.checkedAt);
+      assert.equal(archive.trackingStatus, 'recent');
+      assert.equal(Date.parse(archive.trackingThrough), Date.parse(source.checkedAt) - 60000);
+      for (const key of ['latestReadStatus', 'asOf', 'trackingStatus', 'trackingThrough']) assert.equal(source[key], undefined);
+      for (const day of source.days) assert.ok(day.hours.every(hour => hour <= 3600));
+    }
+  }
+});
