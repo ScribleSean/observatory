@@ -73,3 +73,16 @@ void test('the web view uses current-source projection and labels saved benchmar
   );
   assert.match(source, /Historical local model runs/);
 });
+void test('native snapshots preserve empty workflow slots without retired sources', () => {
+  const raw = {
+    ...report(),
+    agents: [],
+    agentSource: { host: 'Local', status: 'not-connected' },
+    localModel: { host: 'Ubuntu', status: 'not-connected' },
+  };
+  const current = projectCurrentSources(raw);
+  assert.deepEqual(current.agents, raw.agents);
+  assert.deepEqual(current.agentSource, raw.agentSource);
+  assert.deepEqual(current.localModel, raw.localModel);
+  assert.equal(current.hasRetiredSources, false);
+});
