@@ -1,19 +1,14 @@
 import { STRINGS, format } from '../../../lib/strings.generated';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActionBar, Card, FilterGroup, Meter, Numeral, ProviderDot, Row, TextBar } from '../components';
 import type { PanelAction } from '../components/ActionBar';
 export type { PanelAction } from '../components/ActionBar';
 import { compact, demoSnapshot, devices, duration, freshness, limits, sourceCounts, totals } from '../../../lib/panel-data.mjs';
 import { skinCss, validateSkin } from '../../../lib/skins.mjs';
-import sage from '../../../native/skins/sage.json';
-import almanac from '../../../native/skins/almanac.json';
-import instrument from '../../../native/skins/instrument.json';
-import amberCrt from '../../../native/skins/amber-crt.json';
+import { SKINS, useSkin } from '../skin';
+export { SKINS } from '../skin';
 
 type Snapshot = Record<string, unknown>;
-
-// Bundled skins. A person's own skin files will arrive through the shell later.
-export const SKINS: Record<string, unknown> = { sage, almanac, instrument, 'amber-crt': amberCrt };
 
 const PERIOD_LABELS: [string, string][] = [['now', STRINGS.periods.now], ['day', STRINGS.periods.day], ['week', STRINGS.periods.week], ['month', STRINGS.periods.month], ['all', STRINGS.periods.all]];
 
@@ -43,8 +38,7 @@ function LimitRows({ rows, style }: { rows: Limit[]; style: string }) {
 }
 
 export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
-  const [skinId, setSkinId] = useState(() => Object.hasOwn(SKINS, initialSkin) ? initialSkin : 'sage');
-  const skin = useMemo(() => validateSkin(SKINS[skinId]), [skinId]);
+  const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
   const [host, setHost] = useState('All');
@@ -71,7 +65,7 @@ export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: b
   }, [load]);
 
   const refresh = () => { setBusy(true); send('refresh'); setTimeout(() => setBusy(false), 20000); };
-  return <PanelView snapshot={snapshot} loaded={loaded} busy={busy} now={now} skinId={skinId} skin={skin}
+  return <PanelView snapshot={snapshot} loaded={loaded} busy={busy} now={now} skinId={skinId} skin={skin} css={css} className={className}
     host={host} period={period} onHostChange={setHost} onPeriodChange={setPeriod} onSkinChange={setSkinId}
     onAction={action => action === 'refresh' ? refresh() : send(action)} />;
 }
@@ -83,6 +77,8 @@ type PanelViewProps = {
   now: number;
   skinId: string;
   skin: ReturnType<typeof validateSkin>;
+  css?: string;
+  className?: string;
   host: string;
   period: string;
   onHostChange: (host: string) => void;
@@ -91,7 +87,7 @@ type PanelViewProps = {
   onAction: (action: PanelAction) => void;
 };
 
-export function PanelView({ snapshot, loaded, busy, now, skinId, skin, host, period, onHostChange, onPeriodChange, onSkinChange, onAction }: PanelViewProps) {
+export function PanelView({ snapshot, loaded, busy, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, host, period, onHostChange, onPeriodChange, onSkinChange, onAction }: PanelViewProps) {
   const deviceList = devices(snapshot);
   const selected = host === 'All' || deviceList.some(device => device.id === host) ? host : 'All';
   const rows = limits(snapshot, now);
@@ -99,8 +95,8 @@ export function PanelView({ snapshot, loaded, busy, now, skinId, skin, host, per
   const fresh = freshness(typeof snapshot?.collectedAt === 'string' ? snapshot.collectedAt : '', now);
   const counts = sourceCounts(snapshot);
   return (
-    <main className={`ob-panel ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`}>
-      <style>{skinCss(skin)}</style>
+    <main className={`ob-panel ${className}`}>
+      <style>{css}</style>
       <Row as="header">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : busy ? STRINGS.labels.refreshing : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>

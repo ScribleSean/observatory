@@ -1,8 +1,8 @@
 import { STRINGS } from '../../lib/strings.generated';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { demoSnapshot, freshness } from '../../lib/panel-data.mjs';
 import { skinCss, validateSkin } from '../../lib/skins.mjs';
-import { SKINS } from './panel/panel';
+import { SKINS, useSkin } from './skin';
 
 import { EmptyState, Row } from './components';
 
@@ -14,8 +14,7 @@ const SECTIONS = [
 type Section = typeof SECTIONS[number][0];
 
 export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
-  const [skinId, setSkinId] = useState(() => Object.hasOwn(SKINS, initialSkin) ? initialSkin : 'sage');
-  const skin = useMemo(() => validateSkin(SKINS[skinId]), [skinId]);
+  const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
   const [section, setSection] = useState<Section>('limits');
@@ -47,7 +46,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
     source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
   const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
   if (selected !== section) setSection(selected);
-  return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin}
+  return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={selected} onSectionChange={setSection} onSkinChange={setSkinId} />;
 }
 
@@ -58,12 +57,14 @@ type DashboardViewProps = {
   now: number;
   skinId: string;
   skin: ReturnType<typeof validateSkin>;
+  css?: string;
+  className?: string;
   section: Section;
   onSectionChange: (section: Section) => void;
   onSkinChange: (skin: string) => void;
 };
 
-export function DashboardView({ demo = false, snapshot, loaded, now, skinId, skin, section, onSectionChange, onSkinChange }: DashboardViewProps) {
+export function DashboardView({ demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange }: DashboardViewProps) {
   const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
     source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
   const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
@@ -72,8 +73,8 @@ export function DashboardView({ demo = false, snapshot, loaded, now, skinId, ski
   const fresh = freshness(typeof snapshot?.collectedAt === 'string' ? snapshot.collectedAt : '', now);
 
   return (
-    <div className={`ob-dashboard ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`}>
-      <style>{skinCss(skin)}</style>
+    <div className={`ob-dashboard ${className}`}>
+      <style>{css}</style>
       <Row as="header">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>

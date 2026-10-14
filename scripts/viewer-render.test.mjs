@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { demoSnapshot } from '../lib/panel-data.mjs';
-import { validateSkin } from '../lib/skins.mjs';
+import { skinCss, validateSkin } from '../lib/skins.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 // Vite is loaded by name at run time. A static import pulls its types into the
@@ -16,6 +16,7 @@ const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
 const { PanelView, SKINS } = await server.ssrLoadModule('/app/viewer/panel/panel.tsx');
+const { skinIdFrom, useSkin } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const { DashboardView } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
 const now = Date.parse('2026-10-14T12:00:00Z');
 const noop = () => {};
@@ -64,5 +65,51 @@ void test('viewer JSX has no literal user-visible English', () => {
     const source = readFileSync(path, 'utf8');
     assert.doesNotMatch(source, /(?<!=)>\s*[A-Za-z][^<>{}]*</, path);
     assert.doesNotMatch(source, /\b(?:aria-label|title|label|placeholder)\s*=\s*(?:["'][^"']*["']|\{\s*["'][^"']*["']\s*\})/, path);
+  }
+});
+
+void test('skin sources use valid query, root, then Sage', () => {
+  const rootSkin = skin => ({ dataset: { skin } });
+  assert.equal(skinIdFrom('?skin=almanac', rootSkin('instrument')), 'almanac');
+  assert.equal(skinIdFrom('', rootSkin('amber-crt')), 'amber-crt');
+  assert.equal(skinIdFrom('?demo', rootSkin('almanac')), 'almanac');
+  assert.equal(skinIdFrom('?skin=instrument', rootSkin('unknown')), 'instrument');
+  assert.equal(skinIdFrom('', null), 'sage');
+  assert.equal(skinIdFrom('', { dataset: {} }), 'sage');
+  for (const id of ['unknown', '', 'constructor', '__proto__', 'toString', ' sage', 'Sage', '%E0%A4%A', 'almanac/']) {
+    assert.equal(skinIdFrom(`?skin=${id}`, rootSkin('almanac')), 'almanac');
+    assert.equal(skinIdFrom('', rootSkin(id)), 'sage');
+    assert.equal(skinIdFrom(`?skin=${id}`, rootSkin(id)), 'sage');
+    assert.equal(skinIdFrom(`?skin=${id}`, null), 'sage');
+  }
+});
+
+for (const skinId of ['sage', 'almanac']) {
+  for (const { name, render, tag } of [{ name: 'panel', render: panel, tag: 'main' }, { name: 'dashboard', render: dashboard, tag: 'div' }]) {
+    void test(`${name} preserves skin styles and root classes for ${skinId}`, () => {
+      const skin = validateSkin(SKINS[skinId]);
+      const html = render({ skinId, skin });
+      const css = html.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+      assert.ok(css);
+      assert.equal(css, skinCss(skin));
+      assert.ok(css.includes(`--ob-background:#${skin.colors.background[0]}`));
+      assert.ok(css.includes('prefers-color-scheme: dark'));
+      assert.ok(css.includes(':root[data-theme="dark"]'));
+      const classes = skinId === 'almanac' ? 'ob-font-serif ob-rules' : 'ob-font-sans';
+      assert.ok(html.startsWith(`<${tag} class="ob-${name} ${classes}">`));
+    });
+  }
+}
+
+void test('skin hook renders on the server and falls back for unknown ids', () => {
+  function SkinProbe({ initialSkin }) {
+    const { skinId, skin, css, className } = useSkin(initialSkin);
+    assert.equal(css, skinCss(skin));
+    return createElement('div', { className, 'data-skin': skinId });
+  }
+  for (const initialSkin of ['sage', 'almanac', 'unknown', 'constructor', '__proto__']) {
+    const html = renderToStaticMarkup(createElement(SkinProbe, { initialSkin }));
+    const id = initialSkin === 'almanac' ? 'almanac' : 'sage';
+    assert.ok(html.includes(`data-skin="${id}"`));
   }
 });
