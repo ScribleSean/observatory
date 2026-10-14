@@ -106,7 +106,7 @@ Done on 2026-10-13 in source: limits for a third provider that the owner no long
 
 ## Pairing and sharing
 
-- Tailscale is the supported route for other people. The app uses the Tailscale client the person has installed for reachability. Trust still comes from a pairing code and the existing TLS pairing code. The app does not embed Tailscale.
+- Tailscale is the supported route for other people. The app uses the Tailscale client the person has installed for reachability. Trust comes from the existing TLS pairing: the person copies an invitation on the first device, pastes it on the second, and confirms the claimed device on the first. Earlier text called the invitation a "pairing code", and the owner confirmed on 2026-10-14 that this is what it means. The app does not embed Tailscale.
 - The existing SSH pairing keeps working until the new path is verified on both of the owner's devices.
 - Sharing becomes one choice made at pairing time, replacing the two separate sharing switches. Consent on both devices and revocation are preserved.
 
@@ -115,7 +115,7 @@ Done on 2026-10-13 in source: limits for a third provider that the owner no long
 - Builds stay unsigned. The install guides state the security warning each platform shows and why.
 - Mac and Windows each get a short install guide. A signed installer and automatic updates are later work.
 - Check for updates reports whether a newer release exists and links to it.
-- The web demo mirrors the native apps and doubles as the product page. It uses fictional data only. Publishing it, or publishing a release, needs the owner's approval each time.
+- The web demo mirrors the native apps and doubles as the product page. It uses fictional data only. One publication is approved in advance: when everything in the build plan's "What done means" is installed and verified on both devices, workstream F1 publishes one GitHub release and the demo page, with no further confirmation (decided by the owner on 2026-10-13 and confirmed on 2026-10-14). Any other publication of the demo or a release needs the owner's approval each time.
 
 ## Visual style
 
@@ -151,7 +151,7 @@ Decided in direction on 2026-10-13. Four skins and three limit styles exist as s
 
 A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
 
-- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer ignores unknown fields and rejects a skin with a missing or malformed field.
+- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer refuses a skin with an unknown, missing or malformed field.
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
 - **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
@@ -237,7 +237,7 @@ Open question: how a device is identified in a file made on an unpaired installa
 
 ## Architecture
 
-Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). Only the panel exists so far, behind a launch flag on each platform.
+Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). So far the shared panel exists behind `--web-panel` on both platforms. Windows also hosts the dashboard window behind `--web-dashboard`, which shows `panel.html` until the bundle has `dashboard.html`. The Mac has no dashboard flag or host yet. Workstream M1 adds them.
 
 The app has three parts.
 
@@ -267,6 +267,15 @@ The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.m
 | Sample data | `panel.html?demo` shows fictional data and labels it "Sample data". |
 
 The four actions map to things each shell already does. This is not a general command channel, and it must not become one.
+
+### Dashboard page decisions
+
+Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
+
+| Item | Decision |
+| --- | --- |
+| Ready flag | `dashboard.html` sets `window.observatoryDashboardReady` to `true` when it has drawn, as `panel.html` sets `window.observatoryPanelReady`. The Windows dashboard host already reads this name, and the Mac host and the test harnesses use the same one. |
+| Web view data folder on Windows | The panel host and the dashboard host share one WebView2 user data folder, `WebViewCache` in the app's data folder. Both hosts create their WebView2 environment with that folder (`WebPanel.cs` and `WebDashboard.cs`), so a second host does not start a separate browser profile. |
 
 ### Snapshot fields the panel reads that no collector writes yet
 

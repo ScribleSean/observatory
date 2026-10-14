@@ -2,49 +2,55 @@
 
 Assessed on 2026-10-12 from `main` at `93b856b` on the Windows PC. This is a read-only assessment. Nothing was merged, pushed, deleted or installed. A documentation change is not a new build or a verification result.
 
+That assessment is historical. The sections marked "historical" below describe `main` at `93b856b` and are kept as assessed. "Current status" and "What the app does today" were rewritten on 2026-10-14 for build 41. The dated install records keep their original dates and wording.
+
 ## Current status
 
-Updated on 2026-10-13 from the Mac, and again later that day from the Windows PC after the build 40 install. This summary is the starting point. The sections below keep their original dates and wording.
+Updated on 2026-10-14 from the Mac, by reading `main`, GitHub and the build 41 install records below. Nothing was installed or run on either device for this update. The sections below keep their original dates and wording.
 
 | Topic | State |
 | --- | --- |
-| `main` | Version 0.3.14 build 41 since pull request 88 (`3f70771` or later) |
+| `main` | Version 0.3.14 build 41. Since the build 41 installs, pull request 93 bounded the Claude usage command and repaired the Windows menu text, and pull request 95 recorded the execution plan. Neither change is in an installed build. |
 | Installed on Windows | Build 41 from `06e73c2`, installed on 2026-10-13 (local time). Started outside a Claude desktop session, its first collection read 6 of 6 sources with state `ok`. See "Build 41 install on Windows". |
 | Installed on Mac | Build 41 from `3f70771`, installed on 2026-10-13 (local time). Started with a clean environment, it read 10 of 10 sources with state `ok`. See "Build 41 install on the Mac". |
-| Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
-| Pull request 56 | Merged. It fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. |
-| Open issues | 39, which stays open for installed verification of the quota-refresh fix. 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. |
+| Shared viewer | The shared panel is in build 41 on both platforms behind `--web-panel`, and Windows hosts a dashboard window behind `--web-dashboard`. Neither is the default and neither was exercised on an installed build. |
+| Pairing | Re-paired on 2026-10-13 without the Ubuntu slot, over SSH. The Mac reads fresh Windows records and the All token total reports `ok`. |
+| Plan | [The build plan](BUILD-PLAN.md), corrected on 2026-10-14, and [the execution plan](EXECUTION-PLAN.md) approved that day. |
+| Open pull requests | 94, the script suite workflow (Q1-a). Its first run failed on both hosted runners. |
+| Open issues | 79 to 84 for workstreams V1, D1, D2, R1, M1 and W1. 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. 60, the same question on the Mac. 39, which R2 is expected to supersede. |
+| Script suite on the Mac | 925 tests, 816 passed, 4 failed and 105 skipped on `02b83ac`, run serially with the installed app's Python 3.13. The four failures are named in [the execution plan](EXECUTION-PLAN.md) under "Baselines" and also fail on the hosted macOS runner. |
 
-Work that is ready to pick up, in order:
+Work that is ready to pick up, in order (the execution plan, section 2, has the full order):
 
-1. Done on 2026-10-13. Build 40 is packaged by CI and installed on Windows. See "Build 40 install on Windows".
-2. Give Claude Code the same place in Tokens and Allowances that Codex has. Both screens show Codex only. The owner wants Claude Code and ChatGPT (Codex) presented with equal weight. Muse and Grok Bot come later. Other providers are not a priority.
-3. Remove the legacy pairing shape, the Ubuntu fields and the checkpoint code in one change for both apps. The re-pair that had to come first is done.
-4. Mac build environment: decide whether the build requires full Xcode or pins an SDK, and make the popup check independent of window focus.
-5. Unexplained results to look into: three script tests on the Mac, four TLS pairing tests on Windows, and two incomplete setup attempts during the re-pair.
+1. Finish and merge the plan corrections pull request.
+2. Open the missing workstream issues and post the corrected scope on issues 79 to 84.
+3. Unblock pull request 94: Python 3.13 on the Windows runner lacks `tzdata`, and the four failing tests on the Mac need a decision.
+4. Send the Windows session the W1 items from the last orchestrator comment on issue 84.
+5. Start R1, V1, M1 and the rest of Q1 in parallel. D1 and D2 follow R1. R2 can run at any time, with both apps installed from it together.
 
 ## What the app does today
 
-Observatory is a personal app that shows recorded app activity, Codex tokens, optional Claude Code counters, account allowances, agent receipts and dictation statistics. Collection and daily viewing happen in the native apps. Optional device pairing reuses an existing SSH connection.
+Rewritten on 2026-10-14 for `main` at build 41. Observatory shows recorded app activity, Codex and Claude Code tokens, Codex account limits, Claude Code limits where the limits bridge has consent, and dictation statistics. Agent receipts are still collected until workstream R1 removes them. Collection and daily viewing happen in the native apps. Optional device pairing reuses an existing SSH connection, and a TLS pairing path exists in source but has not completed a two-device test.
 
 | Area | Location | Notes |
 | --- | --- | --- |
-| Web dashboard | `app/`, `components/ui/`, `native/web/` | React and vinext. Also bundled into the native apps and used for the fictional demo. |
-| Windows native | `native/windows/` (116 files) | C# WinForms app and tray, NSIS installer, WinSparkle update code, packaging scripts. |
+| Shared viewer | `app/panel.tsx`, `lib/panel-data.mjs`, `lib/skins.mjs`, `native/skins/`, `native/web/panel.*` | React. The panel only, with four skins. Shown behind `--web-panel` on both platforms. |
+| Earlier web dashboard | `app/page.tsx` and the other `app/` files, `components/ui/`, `native/web/index.html` | React and vinext. Bundled into the native apps as the legacy fallback and used for the fictional demo. Workstream S1 removes it. |
+| Windows native | `native/windows/` (115 files) | C# WinForms app and tray, NSIS installer, WinSparkle update code, packaging scripts. |
 | Mac native | `native/*.swift`, `native/mac/` | Swift app and menu bar, Sparkle update code, packaging scripts. |
-| Shared scripts | `scripts/` (253 files) | Node and Python collectors, pairing, quota and archive code, with their tests. |
-| Tests | `scripts/*.test.mjs`, `native/tests/`, native self-tests | `npm test` runs 671 script tests. Native self-tests run inside the compiled apps. |
-| CI | `.github/workflows/` (7 workflows) | Windows package, native compilation, private-state contracts, update safety, peer contracts, Mac runtime, manual demo publication. |
-| Docs | `docs/` (38 files) | Guides plus dated release and audit records. |
+| Shared scripts | `scripts/` (246 files) | Node and Python collectors, pairing, quota and archive code, with their tests. |
+| Tests | `scripts/*.test.mjs`, `native/tests/`, native self-tests | `npm test` runs 925 script tests on the Mac. Native self-tests run inside the compiled apps. |
+| CI | `.github/workflows/` (7 workflows) | Windows package, native compilation, private-state contracts, update safety, peer contracts, Mac runtime, manual demo publication. Only native compilation, private-state contracts and update safety run on pull requests, each on a named subset. |
+| Docs | `docs/` (23 Markdown files) | Guides, plans, and dated release and audit records. |
 
-## What works
+## What works (historical, at `93b856b`)
 
 - CI on `main` passed for `2818295` (pull request 47), including the Clean Windows package run `37600647660`.
 - The installed Windows app is 0.3.14 build 37. Its installer came from that same CI run, so the installed build matches `main` except for the later README edit in `93b856b`.
 - The installed app was running on 2026-10-12 and wrote to its private folders that day.
 - Locally, `npx tsc --noEmit` passed, `native/tests/source-retirement.test.mjs` passed (11 of 11), and the Python packaging tests for Windows (3) and Mac (8, 1 skipped) passed.
 
-## What is broken or unverified
+## What is broken or unverified (historical, at `93b856b`)
 
 Local `npm test` on `main`: 671 tests, 545 passed, 87 failed, 39 skipped. A second run with temporary files under `%LOCALAPPDATA%` gave 544 passed and 88 failed.
 
@@ -63,7 +69,7 @@ Other gaps:
 - The live `collector.config.json` still contains `wslDistribution` and `quotaWslDistribution` set to Ubuntu. Ubuntu WSL was removed from this PC on 2026-10-12. Current code is tested to ignore these settings.
 - Stale references remain in tracked files: Hermes or HAPI in 11 files (including `AGENTS.md`, `README.md` and four docs), WSL in 29 files and Ubuntu in 73 files. Much of the Ubuntu code handles read-only archived history and retirement checkpoints, so removal needs a decision about that saved history.
 
-## Platform differences
+## Platform differences (historical, at `93b856b`)
 
 | Topic | Windows | Mac |
 | --- | --- | --- |
@@ -72,7 +78,7 @@ Other gaps:
 | Updates | WinSparkle code present. Automatic updates are not available. | Sparkle code present. Automatic updates are not available. |
 | Private folders | Windows access-control lists checked by `scripts/private-sync-acl.ps1` | POSIX modes and macOS ACLs checked by `scripts/private-path-acl.py` |
 
-## Branch classification
+## Branch classification (historical, at `93b856b`)
 
 All 47 non-main branches were compared file by file with `main` and with every earlier version of each file on `main`. Formatting-only differences were ignored. No branch holds work that `main` lacks. There is no "merge" group and no "needs decision" group.
 
@@ -216,7 +222,7 @@ Recorded on 2026-10-14 UTC from `main` at `3f70771`. Pull request 88 raised the 
 - `node native/build.mjs` and `node native/mac/package.mjs --zip-only` passed with `SDKROOT` set to the macOS 26.5 SDK. The ZIP has SHA-256 `eeb37f59533cc358667ead8f8f7eb856bcad7ddb25cbb55040c221bdcb1a7625`.
 - Build 40 was quit normally. The data folder (142 files) and preferences were copied to a recovery folder and matched by SHA-256. `native/mac/replace-app.mjs` replaced build 40 and strict deep signature verification passed.
 - The first two collections under build 41 failed. Each ran for the full 240 seconds. The collector was waiting on `claude -p /usage --output-format json --no-session-persistence`, which never exited. The app had been started with `open` from a shell inside a Claude desktop session, so the app and that command inherited the session's environment, including `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_SOCKET` and `ANTHROPIC_BASE_URL`. The same command run with only `HOME`, `USER` and `PATH` set returned in 1 second.
-- The 15 second limit in `scripts/claude-usage-command.mjs` did not end the command. One command from the first failed collection was still running after the collector had given up, and it ignored a normal termination signal.
+- The 15 second limit in `scripts/claude-usage-command.mjs` did not end the command. One command from the first failed collection was still running after the collector had given up, and it ignored a normal termination signal. (Added on 2026-10-14: pull request 93 fixed this in source. The command now starts with a small fixed environment, settles within its limit and force-stops the child, and both collectors guard the limits read. The fix is not in an installed build and was not verified on Windows.)
 - The app was quit and started again with `env -i` and a minimal environment. The next collection finished in 11 seconds with state `ok` and 10 of 10 sources read. `claudeLimits` reported `stale` with two windows.
 - At the owner's request the retained copies of builds 35, 39 and 40 beside the app were deleted. One app bundle remains on the Mac. The data recovery folders were kept.
 
@@ -234,17 +240,22 @@ Not verified: login startup of build 41, the web panel and dashboard flags in th
 | Starting the app from a Claude desktop session | The app refuses its private folders. See issue 58. | Not examined |
 | Script suite | 883 passed, 4 failed, 62 skipped | 819 passed, 21 failed, 110 skipped. 16 of the failures pass when run serially. |
 | TLS pairing tests | 4 fail and are not investigated | Pass when run serially |
-| CI coverage | Package and contract workflows run on pull requests | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
+| CI coverage | Native compilation, private-state contracts and update safety run on pull requests, each on a named subset. The full suite runs only inside the manually dispatched package workflow (corrected on 2026-10-14). | The full Mac suite and app build run only in the manually dispatched `Clean Mac runtime` workflow. Its last run was 2026-09-27 for build 36. |
 | Build tools | Pinned .NET SDK, Node and NSIS are downloaded by the build scripts | The Swift build depends on which Apple SDK is installed. See above. |
 
 ### Next steps for the Mac
 
-1. Install build 40 on Windows. The Mac runs it and reads Claude Code and Mac activity.
-2. Give Claude Code the same place in Tokens and Allowances that Codex has. Today both screens show Codex only.
-3. Check the items listed as not verified above.
-4. Decide whether the Mac build should require full Xcode or pin an SDK, and record the choice in [the Mac guide](MAC.md).
-5. Look into the three unexplained script test failures, the focus deadline in the popup check, and the two incomplete setup attempts during the re-pair.
-6. The devices are re-paired without the Ubuntu slot, so the legacy pairing shape described under "Remaining Ubuntu code" can now be removed in one change for both apps.
+Rewritten on 2026-10-14 for build 41. The workstream for each step is in [the build plan](BUILD-PLAN.md).
+
+1. Build 40 is installed on Windows and build 41 on both devices. Done.
+2. Claude Code beside Codex in Limits and Tokens comes with the shared viewer (V2, V4) and the price table (D2). The SwiftUI screens are not changed for it.
+3. Find why `claudeLimits` reported `stale` straight after a collection that ran the usage command (D1).
+4. Point the status line entry at the bridge script inside the installed app instead of the source checkout (H1, after D1 adds the installer option).
+5. Host the shared dashboard behind `--web-dashboard` and check the web panel's actions, light appearance and the hidden-icon fallback in preview mode (M1).
+6. Install a build that carries pull request 93's usage command fix, and check login startup and the web flags on the installed build (L1, or an earlier install under the standing approval).
+7. The SDK question is answered in practice: every Mac build sets `SDKROOT` to the macOS 26.5 SDK. Record it in [the Mac guide](MAC.md) (G1).
+8. Look into the four failing script tests named in [the execution plan](EXECUTION-PLAN.md), the focus deadline in the popup check, and the two incomplete setup attempts during the re-pair.
+9. Remove the legacy pairing shape described under "Remaining Ubuntu code" in one change for both apps (R2).
 
 ## Build 40 install on Windows
 
@@ -360,6 +371,6 @@ Updated on 2026-10-13.
 
 1. Resolved. The permission entry on the Windows `AppData` folder was no longer present when read on 2026-10-13. Later that day the entry was found to be visible only to processes started from a Claude desktop session. See "Build 40 install on Windows" and issue 58.
 2. Done. Windows and Mac were re-paired on 2026-10-13.
-3. Open. Decide whether the saved local-model benchmark view stays. It only ever showed records from the Ubuntu source.
+3. Decided. The design direction lists local benchmarks for removal from both apps ("Removals"). The saved records are kept, since removal from the interface does not authorize deleting them. Recorded on 2026-10-14.
 4. Done. Build 40 was installed on Windows on 2026-10-13 from CI run `38443842036`.
 5. Open. Decide what to do about issue 58: document how to start the Windows app, report the situation in Source health, or review the ancestry check.
