@@ -2,7 +2,7 @@
 
 First recorded on 2026-10-13 by reading source on `main` at `57518b7` (version 0.3.14 build 40). Rows changed since then describe `main` at build 41, where the shared web panel is merged behind launch flags on both platforms and is not what either installed app shows by default. This table describes source code. It was not checked against the installed apps, and no interaction was exercised to produce it.
 
-The coordinator session owns this file. Update it when a `mac/` or `win/` pull request changes a row, and when [the design direction](DESIGN.md) changes.
+No single workstream owns this file. Each pull request updates the rows that describe its own change, as the shared records rule in [the build plan](BUILD-PLAN.md) says, and the orchestrator resolves conflicts at merge. Update it also when [the design direction](DESIGN.md) changes.
 
 ## How to read it
 
@@ -96,9 +96,9 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Breakdown by model | Done | Done | Keep | |
 | Token classes | Done | Done | Keep | |
 | Recorded reasoning and speed settings | Done | Done | Keep | |
-| API-equivalent estimate for Codex | Done | Done | Change | Move to the shared price table |
+| API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The dashboard's comparison note still names OpenAI's price page as the source and needs the viewer to name the table instead. |
 | Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health |
-| API-equivalent estimate for Claude Code | Missing | Missing | Add | |
+| API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows. |
 | Claude Code session cost | Missing | Missing | Add | |
 
 ## Dictation
@@ -166,33 +166,37 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Package | Differs | Differs | Change | Mac is a ZIP with a guarded replace script. Windows is an NSIS installer. Both unsigned. |
 | Install guide for other people | Missing | Missing | Add | |
 | Web fallback (`--legacy-dashboard`) | Done | Done | Remove | WebKit on Mac, WebView2 on Windows |
-| Full test suite in CI on pull requests | Missing | Done | Add | The Mac suite runs only when dispatched by hand |
+| Full test suite in CI on pull requests | Missing | Missing | Add | Corrected on 2026-10-14. Only `native-compile.yml`, `native-private-state.yml` and `update-safety.yml` run on pull requests, each on a named subset. The full suite runs only inside the manually dispatched Windows package and Mac runtime workflows. Pull request 94 (Q1-a) adds a workflow for both and was not merged on 2026-10-14. |
 
 ## Shared code and data
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Design tokens generated from one file | Done | Done | Change | Add meaning, provider and chart colours. Generate CSS for the web demo as well. |
-| Shared strings file | Missing | Missing | Add | |
+| Design tokens generated from one file | Done | Done | Change | Add meaning, provider and chart colours. CSS for the web viewer is already generated as `app/design-tokens.css` by `scripts/build-design-tokens.mjs`. |
+| Shared strings file | Differs | Differs | Add | `lib/strings.json` exists since 2026-10-14 and generates `native/Strings.swift` and `native/windows/Strings.cs`, which compile but are not read by any native view. The shared viewer reads all its labels from it. |
 | Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
-| Price table | Missing | Missing | Add | The guide records the current rates as last checked on 2026-09-06 |
+| Price table | Done | Done | Keep | `native/prices.json`, taken from LiteLLM's open table and checked on 2026-10-14. The packaged collectors read its generated twin `scripts/price-data.mjs`. `scripts/price-refresh.mjs` refreshes both by hand. |
 | Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together |
 
 ## Shared web viewer (spike)
 
-Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The shared panel exists as source and is not shown by either installed app. The Windows column was updated the same day for the spike in issue 65, which is source on `win/web-panel-spike` and was run from a staged build. The Mac column was updated the same day for the spike in issue 64, which is source on `mac/web-panel-spike` and was run from a staged build.
+Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The shared panel is merged and is in build 41 on both platforms behind `--web-panel`. Neither installed app shows it by default. The Windows column was updated the same day for the spike in issue 65, merged in pull request 74. The Mac column was updated the same day for the spike in issue 64, merged in pull request 75. Both spikes were run from staged builds. Rows for the dashboard page, the shared components, the skin hook and the sample fixture were added on 2026-10-14 for V1 (issue 79) from source on `shared/v1-viewer` and a browser check of the built pages.
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Shared panel page (`panel.html`) in the bundled web files | Done | Done | Add | Built by the web bundle. On Windows a separate panel host serves the page, bundled assets and the snapshot. The dashboard host's guard is unchanged. On Mac the file guard serves `panel.html` only to the flagged panel. The dashboard still gets only the index page and `assets/`. |
 | Panel shown in the system web view behind a flag | Done | Done | Add | `--web-panel` on both. Default stays the native panel. The web view is created on the first opening and kept. On Windows, since issue 84, the web view is released after the panel has been hidden for 60 seconds. |
-| Web view released after the panel or window closes | Unknown | Done | Add | Windows only so far. Measured in [the measurements record](RESOURCE-MEASUREMENTS.md#web-view-release-on-windows-october-13): about 75 MiB five minutes after release, against 57 to 60 MiB never opened and about 400 MiB open. The next open takes 283 to 493 ms. |
-| Shared dashboard page in the main window behind a flag | Unknown | Differs | Add | `--web-dashboard` on Windows. The host exists and shows `panel.html` until the bundle has `dashboard.html`. No action reaches the app from that window. |
+| Web view released after the panel or window closes | Missing | Done | Add | Windows only so far. On Mac the panel's web view is kept after its first opening, and only the earlier dashboard's web view is released when its window closes (corrected on 2026-10-14 from source). Measured in [the measurements record](RESOURCE-MEASUREMENTS.md#web-view-release-on-windows-october-13): about 75 MiB five minutes after release, against 57 to 60 MiB never opened and about 400 MiB open. The next open takes 283 to 493 ms. |
+| Shared dashboard page in the main window behind a flag | Missing | Differs | Add | The Mac has no dashboard flag or host (corrected on 2026-10-14 from source). Workstream M1 adds them. `--web-dashboard` on Windows. The host exists and showed `panel.html` because the bundle had no `dashboard.html`. The bundle builds `dashboard.html` since V1 (issue 79). The Windows host was not run against it. No action reaches the app from that window. |
 | Panel closes when another window is clicked | Done | Differs | Add | On Mac the native panel and the web panel both close, checked with real clicks in preview mode. The Windows native popup does not. The Windows web panel stays above other windows and hides when another window holds the foreground. That was seen once during a harness run, when the owner clicked into another app. A tray click followed by a click elsewhere was not checked cleanly. |
 | Four panel actions accepted by the shell | Done | Done | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard`. On Mac a real click on each button reached the shell in preview mode. On Windows only `refresh` was run end to end. The other three were accepted and not run. |
 | Open time and memory measured | Done | Done | Add | Needed before the direction is confirmed. Mac numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-mac-october-13): first open 333 ms against 195 ms native, later opens 82 to 104 ms against 122 to 129 ms, and 97 MiB of footprint with the panel open against 49 MiB native. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 132 ms native, and about 390 MiB working set with the panel open against 65 MiB native. |
-| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared panel source. A shell selects one with `data-skin`. No Settings control exists. |
+| Shared dashboard page (`dashboard.html`) in the bundled web files | Done | Done | Add | Added for V1 (issue 79). Built by the shared web bundle beside `panel.html`, with the six sections as empty states and Dictation listed only when a dictation source is enabled. Checked in a browser from the built files, not inside either host. |
+| One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The charts are not used by a view yet. |
+| Skin applied to the whole viewer | Done | Done | Add | One hook applies the skin to both pages and follows later changes to `data-skin`. Sage and Almanac checked in light and dark in a browser at 360 and 1280 pixels wide. |
+| One sample fixture for both pages | Done | Done | Add | `lib/sample-snapshot.mjs`, fictional. `scripts/demo.mjs` still keeps the older `demoData()` for the earlier web view and a Windows self-test. |
+| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared viewer source. A shell selects one with `data-skin`. No Settings control exists. |
 | Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. No Settings control calls it. |
 | Import of a `.observatory` file | Missing | Missing | Add | Needs the working store first. See the design direction. |
 

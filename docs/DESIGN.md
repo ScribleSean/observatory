@@ -33,13 +33,13 @@ Dictation does not appear in the panel.
 
 Each device has a name the person can edit in Settings. With a custom name set, the app shows the name alone in the panel and the name with the platform in parentheses in the dashboard, for example "Studio (Mac)". Without one, it shows "macOS" or "Windows". Phrases such as "this Mac" and "this PC" are retired from views that show data.
 
-The name is stored in local settings and sent only to a paired device. It replaces no identifier used for pairing or deduplication. The snapshot keeps the platform value it has today, so saved history stays readable.
+The name is stored in local settings and will be sent only to a paired device, after R2 as "Snapshot additions" describes. It replaces no identifier used for pairing or deduplication. The snapshot keeps the platform value it has today, so saved history stays readable.
 
 ### Periods
 
 | Period | Meaning |
 | --- | --- |
-| Now | The last 60 minutes. A meter or small graph, visually distinct from the other four. It leads with pace and estimated time until a limit runs out. |
+| Now | The last 60 minutes, approximated from hourly buckets as "Snapshot additions" describes. A meter or small graph, visually distinct from the other four. It leads with pace and estimated time until a limit runs out. |
 | Day | One calendar day in the device's time zone |
 | Week | The seven calendar days ending on the selected day |
 | Month | The 30 calendar days ending on the selected day |
@@ -81,7 +81,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 | Claude Code limits | Read the documented `rate_limits` fields that Claude Code passes to a status line command. A small bridge script writes them to a private file that the collector reads. Installing the bridge needs explicit consent, must pass data through to any status line the person already has, and must be removable. |
 | Claude Code limits, not allowed | Do not call the undocumented OAuth usage endpoint. Do not read the Claude Code token from the Keychain or a credentials file. Do not read browser cookies. Anthropic's legal page says developers may not collect, store or intermediate Claude.ai credentials or session tokens. |
 | Codex limits | Keep the read through the Codex app-server (`account/rateLimits/read`). Handle the newer response that lists several named limits. |
-| Price table | One file in the repository, taken from a maintained open table. A script refreshes it. The app shows the date it was last checked. A test fails when a model in the fixtures has no price. No network request at runtime. |
+| Price table | One file in the repository, `native/prices.json`, taken from [LiteLLM's open price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json). It holds `source`, `checkedOn` and, per model, `input`, `cachedInput`, `cacheWrite` and `output` in USD per million tokens. The packaged apps ship only script files, so `scripts/price-data.mjs` carries the same data and a test fails when the two differ. `scripts/price-refresh.mjs` refreshes both by hand and is never imported by a collector. The app shows the date it was last checked. A test fails when a model in the fixtures has no price, apart from a short list of older models the source table does not carry under their direct names. No network request at runtime. |
 | Claude Code log scan | Replace the hard stop at 2,000 files or 128 MiB with an incremental cache keyed by file, as the Codex reader already has. |
 | Time zone | Days follow the device's time zone. Saved history needs a tested migration before this ships. |
 | Combined Claude Code total | Per device until cross-device overlap checks exist. |
@@ -93,7 +93,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 - The `rate_limits` fields appear only for Pro and Max subscribers. People have reported versions where the fields were missing. Both cases show Unknown.
 - The Codex app-server protocol is versioned with the installed Codex client and can change.
 - Collection runs every five minutes. Now can be fresher than that only for limits.
-- The snapshot stores tokens per day. Now needs an hourly token field added to the snapshot format.
+- The snapshot stores tokens per day. Now needs the hourly token field described under "Snapshot additions", which no collector writes yet.
 - Provider terms changed several times in 2026. Recheck the Claude Code legal page before each public release.
 
 ## Removals
@@ -106,7 +106,7 @@ Done on 2026-10-13 in source: limits for a third provider that the owner no long
 
 ## Pairing and sharing
 
-- Tailscale is the supported route for other people. The app uses the Tailscale client the person has installed for reachability. Trust still comes from a pairing code and the existing TLS pairing code. The app does not embed Tailscale.
+- Tailscale is the supported route for other people. The app uses the Tailscale client the person has installed for reachability. Trust comes from the existing TLS pairing: the person copies an invitation on the first device, pastes it on the second, and confirms the claimed device on the first. Earlier text called the invitation a "pairing code", and the owner confirmed on 2026-10-14 that this is what it means. The app does not embed Tailscale.
 - The existing SSH pairing keeps working until the new path is verified on both of the owner's devices.
 - Sharing becomes one choice made at pairing time, replacing the two separate sharing switches. Consent on both devices and revocation are preserved.
 
@@ -115,7 +115,7 @@ Done on 2026-10-13 in source: limits for a third provider that the owner no long
 - Builds stay unsigned. The install guides state the security warning each platform shows and why.
 - Mac and Windows each get a short install guide. A signed installer and automatic updates are later work.
 - Check for updates reports whether a newer release exists and links to it.
-- The web demo mirrors the native apps and doubles as the product page. It uses fictional data only. Publishing it, or publishing a release, needs the owner's approval each time.
+- The web demo mirrors the native apps and doubles as the product page. It uses fictional data only. One publication is approved in advance: when everything in the build plan's "What done means" is installed and verified on both devices, workstream F1 publishes one GitHub release and the demo page, with no further confirmation (decided by the owner on 2026-10-13 and confirmed on 2026-10-14). Any other publication of the demo or a release needs the owner's approval each time.
 
 ## Visual style
 
@@ -124,9 +124,9 @@ One source for values and one source for words. Each platform generates its cons
 | Shared file | Holds | Generated into |
 | --- | --- | --- |
 | `native/design-tokens.json` | Palette, meaning colours, provider colours, chart colours, type sizes, spacing, radii, shadows | Swift, C# and CSS |
-| A shared strings file (to be added) | Section names, period names, status words, button labels, time formats | Swift, C# and TypeScript |
+| `lib/strings.json` | Section names, period names, status words, button labels, time formats | Swift (`native/Strings.swift`), C# (`native/windows/Strings.cs`) and TypeScript (`lib/strings.generated.ts`) by `scripts/build-strings.mjs` |
 
-Tests fail when a generated file is stale. A later test should fail when a view uses a fixed colour or a local label where a shared one exists.
+Tests fail when a generated file is stale. Since 2026-10-14 the shared viewer reads every label from the strings file. The Swift and C# outputs are compiled but no native view reads them yet. A later test should fail when a view uses a fixed colour or a local label where a shared one exists.
 
 **Colour.** Keep the earthy sage palette in [brand guidance](BRAND.md). Four colours carry meaning and are used the same way on every surface.
 
@@ -147,11 +147,11 @@ The sage accent stays reserved for selected controls. Contrast of these four aga
 
 ## Skins
 
-Decided in direction on 2026-10-13. Four skins and three limit styles exist as source in the shared panel since that date. No installed app shows them, and there is no skin choice in Settings yet.
+Decided in direction on 2026-10-13. Four skins and three limit styles exist as source in the shared panel since that date, and since 2026-10-14 one hook applies the skin to the panel and the dashboard page alike. No installed app shows them, and there is no skin choice in Settings yet.
 
 A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
 
-- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer ignores unknown fields and rejects a skin with a missing or malformed field.
+- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer refuses a skin with an unknown, missing or malformed field.
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
 - **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
@@ -169,7 +169,7 @@ Bundled skins, in `native/skins/`:
 
 `lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
 
-A shell chooses a skin by setting `data-skin` on the root element or by loading `panel.html?skin=name`. With sample data the page shows a skin picker so a person can compare them.
+A shell chooses a skin by setting `data-skin` on the root element. The page reads it on load and follows a later change to it, so a shell can switch skins without reloading. A shell should not use `?skin=name`, because the Windows host refuses query strings. The query works only for the sample pages in a browser. An unknown name falls back to Sage. With sample data each page shows a skin picker so a person can compare them.
 
 Fonts: Almanac uses Fraunces and the two mono skins use JetBrains Mono. Both are bundled in `public/fonts/` under the SIL Open Font License, with their licence texts beside them and in the generated web notices. The app makes no font-service requests.
 
@@ -237,7 +237,7 @@ Open question: how a device is identified in a file made on an unpaired installa
 
 ## Architecture
 
-Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). Only the panel exists so far, behind a launch flag on each platform.
+Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). So far the shared panel exists behind `--web-panel` on both platforms. Since 2026-10-14 the bundle also builds `dashboard.html` with the six sections as empty states. Windows hosts the dashboard window behind `--web-dashboard`. The Mac has no dashboard flag or host yet. Workstream M1 adds them.
 
 The app has three parts.
 
@@ -264,9 +264,173 @@ The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.m
 | Actions | Four fixed names with no arguments: `refresh`, `check-updates`, `open-settings`, `open-dashboard`. Mac receives them on the `panelAction` message handler. Windows receives `{ "panelAction": name }` as a web message. A shell must ignore any other value. |
 | Reload | The shell may dispatch `observatory:snapshot-changed` on `window` after a collection. The page also reloads every 30 seconds while visible. |
 | Appearance | Follows the system setting. A shell may set `data-theme` to `light` or `dark` on the root element. |
-| Sample data | `panel.html?demo` shows fictional data and labels it "Sample data". |
+| Sample data | `panel.html?demo` shows fictional data and labels it "Sample data". The data comes from `lib/sample-snapshot.mjs`, the one fixture both viewer pages use. |
 
 The four actions map to things each shell already does. This is not a general command channel, and it must not become one.
+
+### Settings bridge contract
+
+Written on 2026-10-14 for B1, before any shell implements it. It needs two reviewer checks against the rule below before code starts. No shell implements it yet.
+
+The Settings view, the first-run steps and the pairing screens in the shared viewer change settings by sending named actions to the shell. This contract is the whole list. A shell accepts nothing else, and the list grows only by a reviewed change to this section.
+
+**The rule.** No action carries a path, a command or free text that reaches a shell. Every argument is a boolean, a bounded integer, a value from a fixed list, or a string with a fixed pattern and length, with one exception: the device name is bounded free text, and it is only ever JSON-encoded into one file (see `set-device-name`). Two strings are opaque to the page, the pairing invitation and the sharing confirmation token. They reach only the private stdin pipe of the pairing control process or the standard input of a sharing control script, never a command line, a file name, a URL or a log.
+
+**Consent stays native.** The owner decided on 2026-10-14 that a confirmation shown by the page is never enough for a change that needs consent or cannot be undone. The shell shows its own Yes/No dialog, with the wording the apps use today, before it turns a sharing channel on, before `pairing-identity-create`, before it turns `quota` off, and before `pairing-disconnect` and `pairing-repair-prepare`. It sends the command only on Yes and returns `cancelled` otherwise. `set-limits-consent` is new and has no native dialog today. The page shows the disclosure from "Claude Code limits bridge" before it sends `true`, and the shell also shows a native Yes/No with that disclosure's first sentence before it runs the consent script.
+
+#### What the dashboard web view may load
+
+The real boundary is which documents the dashboard web view loads, because only that web view registers the bridge handler.
+
+- **At navigation.** Before the bridge is enabled, the dashboard web view's navigation guard (`decidePolicyFor` on the Mac, `NavigationStarting` on Windows) accepts only `dashboard.html` at the shell's local origin (`observatory://app` on the Mac, `https://observatory.invalid` on Windows), in the main frame, with no query. A fragment is allowed only from this list: `limits`, `activity`, `tokens`, `dictation`, `sources`, `settings` and `setup`. `dashboard.html?demo` and `panel.html` are refused at navigation.
+- **What changes in the shells.** On Windows, `WebDashboard` stops falling back to `panel.html` once `dashboard.html` ships, and the guard it uses (`WebPanel.IsPage`, which today refuses every fragment and accepts `?demo`) gets a dashboard rule that allows the listed fragments and refuses any query. On the Mac, `LocalNavigation` allows any `observatory://app` URL today. The dashboard web view gets a guard with the same rule.
+- **Sender check, as a second layer.** Each message is also checked against the sending page: on the Mac `message.webView?.url` with `frameInfo.isMainFrame` and the existing `securityOrigin` check, on Windows `e.Source`. Only the path `/dashboard.html` and the absence of a query are checked. The fragment is not checked, because the page can change it with `history.replaceState`, and the page already does that.
+- **Content Security Policy.** The bridge relies on the policy both shells send today: `script-src 'self'` with no inline script or eval, `frame-src 'none'` and `object-src 'none'`. Changing that policy is a change to this contract and needs two reviews.
+- **Panel.** The panel contract above stays separate and unchanged on its own `panelAction` channel. The panel web view never registers this bridge, and on Windows a `{"panelAction": ...}` message and a bridge message are never parsed by the same handler.
+- **Shared storage.** On Windows the panel and dashboard web views share one profile and origin, so they share storage and `BroadcastChannel`. The dashboard page never turns a `storage` event, a `BroadcastChannel` message or a `window.postMessage` message into a bridge action.
+
+#### Messages
+
+- The page sends one string holding JSON text: `{"id": <id>, "action": "<name>", "args": {...}}`. On the Mac it goes through `webkit.messageHandlers.bridge.postMessage`, on Windows through `chrome.webview.postMessage`.
+- The shell reads the message as a string and ignores anything else: `message.body as? String` on the Mac. On Windows it calls `TryGetWebMessageAsString()` (not `WebMessageAsJson`, which is the escaped form of the string), which throws `ArgumentException` for a message that is not a string, and the handler catches that and ignores the message.
+- The string is at most 4,096 bytes of UTF-8, measured before parsing (`utf8.count` on the Mac, `Encoding.UTF8.GetByteCount` on Windows). A longer one is ignored.
+- `id` is an integer from 1 to 2,147,483,647, chosen by the page and not reused within one page load. An `id` already in flight is refused. `action` is one of the names below. `args` is an object with exactly the listed keys, so `{}` for an action without arguments.
+- A missing key, an extra key, a duplicate key (at the top level or in `args`), a wrong type or a value out of bounds refuses the message. The Mac cannot use `JSONSerialization` for this, because it keeps one value of a duplicate key silently. It uses a strict tokenizer or an equivalent check. B1-1 tests a duplicate key at both levels on both platforms.
+- Types are strict JSON types. A boolean is the literal `true` or `false` only (checked with `CFBooleanGetTypeID` on the Mac, because `NSNumber` bridges `1` to a boolean). An integer is a JSON number with no fraction and no exponent. A string is a JSON string.
+- Every string argument is checked after JSON decoding, so escaped characters count. It is refused if it holds a control character (U+0000 to U+001F or U+007F to U+009F) or an unpaired surrogate, unless its own rule below is stricter.
+- A character count in this contract counts Unicode scalar values, except the device name, which counts UTF-16 code units (see `set-device-name`). Neither is Swift's `String.count`, which counts grapheme clusters.
+
+#### How many at once
+
+- `status` and `pairing-cancel` skip both limits below and are handled at once. `status` is answered from the cache. `pairing-cancel` writes `cancel` to the control pipe even while another pairing command is waiting for its reply, which the control process accepts.
+- For every other action, at most one message per action name is in flight. A repeat of a name that is in flight gets `busy`.
+- At most four of those messages wait in a queue behind the one being handled. A message that does not fit gets `busy`.
+- While a native dialog or save panel is open, every action except `status` and `pairing-cancel` gets `busy`, so two native dialogs are never open at once.
+- `status` and `tailscale-check` never start a process per message. The shell refreshes the sharing and Tailscale parts of its own cache at most once every 5 seconds and answers from that cache.
+
+#### Results
+
+- The shell answers in the web view that sent the message, and only while the same document is loaded. A result for a message from an earlier document (after a reload or navigation) is dropped, because the new page may reuse that `id` and a `pairing-host-start` result holds the invitation.
+- Delivery never builds script text. On Windows the shell calls `CoreWebView2.PostWebMessageAsJson` with `{"bridgeResult": detail}`, and the page's `message` listener turns it into the `observatory:bridge-result` event. On the Mac the shell calls `callAsyncJavaScript` with `detail` passed in `arguments`, and the fixed script dispatches `observatory:bridge-result` on `window` with that value. `detail` is `{id, ok, code}` and, for the actions that say so, `value`. The shell never logs `detail` or `value`, because a `value` can hold the invitation, which is a bearer secret.
+- `code` is one of `done`, `refused` (the message broke this contract), `busy` (see "How many at once" and "Pairing session"), `cancelled` (the person declined or cancelled), or `unavailable` (anything else). `ok` is true only with `done`. The code carries no error text, path or stage name. `expired` is reserved for when a script reports an expired invitation or sharing token distinctly. Today both sharing scripts and the pairing control process report every failure the same way, so those cases return `unavailable`.
+- A message with no readable `id` is ignored without a result. A refused message with a readable `id` gets `{id, ok: false, code: "refused"}`.
+- The page waits 60 seconds for a result, longer than the shells' 45 second limit for a pairing control command. A result that arrives later for the same document is still applied. Before it shows a failure for a pairing action, the page reads `status` again.
+
+#### Pairing session
+
+The native pairing window today owns the control process and a collection reservation together. The bridge keeps that lifecycle in the shell.
+
+- The shell owns at most one pairing session app-wide. A session begins on `pairing-host-start` or `pairing-join-claim` (and on `pairing-identity-create` if no session is open). Beginning one starts one pairing control process and pauses collection exactly as the native pairing window does today (`BeginDirectPairing` on Windows, `collectionPausedForPairing` on the Mac).
+- A session that began on `pairing-identity-create` ends when that step returns. Hosting or joining then begins a new session.
+- The session ends, the control process is stopped and the collection reservation is released on a finished pairing, on `pairing-cancel`, on a failure, when the dashboard window closes, when the dashboard document is replaced, and when the 10 minute limit of the control process (`peer-tls-control.mjs`) runs out.
+- While a session is open, `refresh`, `set-sharing`, `pairing-disconnect` and `pairing-repair-prepare` get `busy`. While any of those is running, or while the native direct pairing window or the SSH pairing item is open, a pairing action gets `busy`.
+- `pairing-cancel` and `status` never get `busy`.
+- The shell polls the control process itself, at the interval the native window uses today (2 seconds), and keeps the pairing state in its own cache. `status` reads that cache and never sends a command to the control process, so page polling cannot use up the control process's limit of 512 commands.
+- The shell numbers the commands it writes to the control pipe itself. It never forwards the page's `id`, because a reused id stops the control process.
+
+#### Addresses
+
+The shell checks every address argument with this grammar, which both shells can implement the same way:
+
+- IPv4: dotted decimal, exactly four parts, each 0 to 255 with no leading zeros, in 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 or the Tailscale range 100.64.0.0/10.
+- IPv6: groups of one to four hexadecimal digits in lowercase or uppercase, separated by `:`. Either exactly eight groups with no `::`, or two to seven groups with exactly one `::`. The first group is from `fc00` to `fdff` (unique local addresses). No `%` zone identifier and no embedded IPv4 part.
+- At most 39 characters.
+
+The pairing control process still checks the address with `isPairingAddress`, as the final check. That function accepts IPv6 zone identifiers through Node's `isIP`, which its own comment says are unsupported. That belongs in an issue for P1.
+
+#### Actions
+
+| Action | Arguments | What the shell does |
+| --- | --- | --- |
+| `refresh` | none | The panel's existing refresh |
+| `check-updates` | none | The existing update check |
+| `open-dashboard` | `section`: one of `limits`, `activity`, `tokens`, `dictation`, `sources`, `settings` | Opens the dashboard window at `dashboard.html#<section>` |
+| `open-settings` | none | Opens the dashboard at `dashboard.html#settings` |
+| `set-source` | `source`: one of `activity`, `codex`, `claude`, `wispr`, `quota`. `enabled`: boolean | Sets that switch in the local source settings, the same keys the native Settings writes today. Before turning `quota` off, the shell shows its native confirmation with the text Windows uses today (`NativeSourceSettings.cs`), titled "Account history": "Turn account monitoring off and clear Observatory's retained account readings on the next collection? Saved log-token history remains." The Mac saves this switch without a confirmation today and adds the same dialog. |
+| `set-skin` | `skin`: a bundled skin id (`sage`, `almanac`, `instrument`, `amber-crt`) or a custom skin name matching `^[A-Za-z0-9][A-Za-z0-9 -]{0,31}$` (the `lib/skins.mjs` name rule, at most 32 characters) | Selects that skin. A bundled id always means the bundled skin, and the shell does not list a custom skin whose name equals a bundled id in any letter case. A custom name must equal a name in the list the shell enumerated from its own skins folder. The shell never builds a file name from the string. The choice is stored as described under "Viewer settings". |
+| `set-device-name` | `name`: 1 to 32 UTF-16 code units (JavaScript `length`, C# `string.Length`, Swift `utf16.count`) after removing leading and trailing Unicode White_Space characters, with no control or format characters, no unpaired surrogate and no `/`, `\` or `:`. Or `null` to clear it. | Writes the trimmed name to `<runtime>/device.json` as `{"name": "..."}` with its own JSON encoder, with the guards and name rules in "Snapshot additions", "Device names", in this document (a 1 KiB cap and a linked file refused). The name never reaches a process argument, a standard input or a log. The limit and its unit match the export in `scripts/observatory-file.mjs`, which cuts names with `.slice(0,32)`. |
+| `set-startup` | `enabled`: boolean | Login Items on the Mac, start-at-login registration on Windows |
+| `set-appearance` | `mode`: one of `system`, `light`, `dark` | Sets `data-theme` on the shell's pages. The choice is stored as described under "Viewer settings". |
+| `set-limits-consent` | `enabled`: boolean | For `true`, shows the native confirmation described under "Consent stays native". Then runs the limits consent script (D1-5) with the fixed arguments `set --consent` or `clear`. |
+| `set-sharing` | `channel`: one of `codex-limits`, `claude-code-tokens`. `enabled`: boolean. `token`: exactly 64 lowercase hexadecimal characters, required when `enabled` is true and absent when it is false. | For `true`, shows today's native confirmation ("Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device."). Then writes `{"action": "enable", "token": ...}` or `{"action": "disable"}` to the standard input of `quota-sharing-control.mjs` (`codex-limits`) or `provider-token-sharing-control.mjs` (`claude-code-tokens`). The token comes from `status` and only fences a stale confirmation view. It is not consent. |
+| `pairing-identity-create` | none | Shows a native confirmation with today's storage wording ("Allow a device identity stored in a permission-restricted file"). On Yes, sends `identity-create` with storage `restricted-file`. The shell supplies the identity: `null` on the Mac, where the control process generates it, and a key and certificate the shell generates on Windows. The identity never comes from the page and never appears in a result. |
+| `pairing-host-start` | `address`: an address under "Addresses". `port`: integer from 1024 to 65535, the sync port. | Sends `host-start` with `address` and `port: 0`, so the invitation listener uses a temporary port, as both shells do today. The shell keeps `address` and `port` as this device's sync endpoint for `pairing-host-confirm`, and keeps the invitation for `pairing-copy-invitation`. `value` is `{invitation}`, which the page shows with the clipboard warning. |
+| `pairing-copy-invitation` | none | Copies the invitation the shell kept from `pairing-host-start` to the system clipboard, as both native pairing windows do today. The page sends nothing secret. Returns `unavailable` when no invitation is kept. |
+| `pairing-host-confirm` | `fingerprint`: exactly 64 lowercase hexadecimal characters. `peerAddress`: an address under "Addresses". `peerPort`: integer from 1024 to 65535. | Sends `host-confirm` with `peerCertificateSha256` set to `fingerprint`, `localEndpoint` set to `{kind: "tls", address, port}` from the kept `pairing-host-start` values, `peerEndpoint` set to `{kind: "tls", address: peerAddress, port: peerPort}`, and `includeUbuntu: false`. |
+| `pairing-join-claim` | `invitation`: at most 2,048 characters, starting with `observatory-pair:v1:` and followed by one or more base64url characters (`A-Z`, `a-z`, `0-9`, `-`, `_`) | Sends `join-claim`. The control process decodes and validates it. |
+| `pairing-join-confirm` | none | Sends `join-confirm` with `includeUbuntu: false` |
+| `pairing-cancel` | none | Sends `cancel` and ends the session. Never `busy`. |
+| `pairing-disconnect` | none | Shows the native confirmation, then runs `peer-revocation.mjs --runtime <runtime> --revoke`, with today's Mac behaviour (see below the table). |
+| `pairing-repair-prepare` | none | Shows the native confirmation, then runs `peer-repair.mjs --runtime <runtime> --confirm-local-retirement`, with today's Mac behaviour (see below the table). |
+| `tailscale-check` | none | Answers from the cache, refreshed by running `tailscale-status.mjs`, which takes no arguments. `value` is `{status}`, one of `running`, `offline`, `needs-login`, `needs-device-approval`, `stopped`, `starting`, `other-user`, `not-installed`, `unsupported` or `unavailable`. |
+| `export-data` | none | Shows the shell's own save panel, which requires the `.observatory` extension and does not offer to replace an existing file. If the person picks a file, it runs `observatory-file.mjs export --runtime <runtime> --out <file>`. The script refuses to replace a file that exists by then, and the result is `unavailable`. The page never sees or sends the path. Cancelling the panel returns `cancelled`. |
+| `status` | none | The one query, answered from the shell's cache. `value` is described below. Never `busy`. |
+| `complete-setup` | none | Reserved for O1, which records that first-run setup finished. A shell refuses it with `refused` until O1's reviewed amendment adds it to the generated contract. |
+
+**Disconnect and repair.** Both actions keep what the Mac does today (`native/main.swift`). After the person confirms, the shell pauses collection before it runs the script. It then checks again for a running refresh or pairing step, because one may have started while the dialog was open, and if so returns `busy` with collection still paused for the session. When the script succeeds, collection resumes. When the result cannot be verified, the result is `unavailable` and collection stays paused for the session, because pairing may already be disabled. The Windows shell adopts the same behaviour.
+
+**Starting processes.** Every script above is a bundled script at a fixed location, run by the bundled Node. The shell starts it directly with an argument array (`Process` with `arguments` on the Mac, `Process` with `ArgumentList` and `UseShellExecute = false` on Windows), never through `sh`, `cmd` or PowerShell. It removes `NODE_OPTIONS`, `NODE_PATH` and `NODE_EXTRA_CA_CERTS` from the child's environment, as both `TlsSetupProcess` implementations do today. The other launches in the shells do not yet, and they change to match when they move behind the bridge. The arguments are fixed, apart from the runtime folder the shell already owns and the export file, which comes only from the shell's save panel. Nothing from the page joins the arguments. The shell does not forward a script's output or error text to the page: `observatory-file.mjs` prints the output path and its error messages, and the result carries only a code.
+
+#### Viewer settings
+
+Neither shell stores a skin or appearance choice today. Both store them in `<runtime>/viewer.json`, holding exactly `{"skin": <skin>, "appearance": <mode>}`, written by the shell with its own JSON encoder and the same guards as `device.json` in "Snapshot additions", "Device names" (a 1 KiB cap and a linked file refused). A missing or invalid file means `sage` and `system`. `status` reads the values back from that file.
+
+#### The `status` value
+
+One bounded object, at most 16 KiB as JSON, built from the shell's cache, holding only:
+
+- `version`: 1
+- `app`: `{version, build}`, the version string (at most 32 characters) and build number
+- `sources`: the five switches as booleans
+- `skin`: `{current, bundled, custom}`, the bundled ids and at most 32 custom names, each following the `set-skin` rule
+- `deviceName`: the stored name or `null`
+- `startup`: boolean
+- `appearance`: `system`, `light` or `dark`
+- `limitsConsent`: boolean
+- `pairing`: `{state, peerFingerprint, transport, invitationKept}`. `state` is one of the statuses the pairing control process and its identity check report today (`idle`, `identity-ready`, `identity-required`, `identity-recovery-required`, `inactive`, `waiting`, `confirming`, `awaiting-confirmation`, `local-ready`, `acknowledged`, `configuration-ready`, `working`, `cancelled`) or `paired`, `unpaired` or `unavailable`. A new status is added here first. `peerFingerprint` is 64 lowercase hexadecimal characters while a host waits for confirmation and `null` otherwise. `transport` is `none`, `ssh` or `tls`. `invitationKept` is a boolean. The invitation itself is never in `status`.
+- `sharing`: one entry per channel, `{enabled, canEnable, reason, token}`. The shell validates each sharing script's output with exact keys, as `QuotaSharing.cs` does today, before it enters the cache. `reason` is one of `ready`, `pairing-unavailable`, `account-unavailable` (Codex limits) or `source-unavailable` (Claude Code tokens). `token` is 64 lowercase hexadecimal characters when `canEnable` is true and `null` otherwise.
+
+It holds no path, address, account identity, key, comparison salt or usage value.
+
+#### Outside the contract
+
+- **SSH pairing.** Its request carries a host alias and three Windows paths that reach a PowerShell command, so it cannot be an action. It stays a native menu item in each shell until P1-7 removes it.
+- **Export location.** Only the shell's own save panel chooses where an export goes.
+- **Import.** Not built, as "The `.observatory` file" describes. When it is built, the file comes from the shell's own open panel in the same way.
+
+#### Pairing code
+
+The owner decided on 2026-10-14 that "pairing code" in this document and in the product direction means the existing invitation: the `observatory-pair:v1:` string made on the first device and pasted on the second. There is no separate short numeric code. The invitation is a bearer secret that expires after 10 minutes.
+
+- The page shows it with a warning that clipboard managers may keep copied invitations and that it should be shared privately, the wording both native windows use today.
+- Copying goes through `pairing-copy-invitation`, so the shell writes the clipboard itself.
+- The page never writes the invitation to `localStorage`, `sessionStorage`, IndexedDB, the URL or history state, and drops it on cancel, on a finished or failed session and on `pagehide`. On Windows the web view profile is kept on disk, which makes this rule matter.
+
+#### First-run setup
+
+The owner decided on 2026-10-14 that the first-run wizard lives in the shared viewer (O1), at `dashboard.html#setup`. It writes through `set-source` and `set-limits-consent`, and finishes with `complete-setup`, reserved above.
+
+### Dashboard page decisions
+
+Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
+
+| Item | Decision |
+| --- | --- |
+| Ready flag | `dashboard.html` sets `window.observatoryDashboardReady` to `true` when it has drawn, as `panel.html` sets `window.observatoryPanelReady`. The Windows dashboard host already reads this name, and the Mac host and the test harnesses use the same one. |
+| Web view data folder on Windows | The panel host and the dashboard host share one WebView2 user data folder, `WebViewCache` in the app's data folder. Both hosts create their WebView2 environment with that folder (`WebPanel.cs` and `WebDashboard.cs`), so a second host does not start a separate browser profile. |
+
+### Dashboard page contract
+
+| Item | Contract |
+| --- | --- |
+| Page | `dashboard.html` in the bundled web files. It sets `window.observatoryDashboardReady` after its first render. |
+| Data | It requests `./local/usage.json` through the existing snapshot bridge, reloads on `observatory:snapshot-changed` and every 30 seconds while visible, and reads nothing else. |
+| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. |
+| Actions | None. The page sends nothing to the shell. |
+| Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
+| Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
+
+The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2 and will be checked against those changes when they land. Until then no collector writes them.
 
 ### Snapshot fields the panel reads that no collector writes yet
 
@@ -274,8 +438,111 @@ The four actions map to things each shell already does. This is not a general co
 | --- | --- | --- |
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
 | `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
+| `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked | The dashboard reads `checked` from each estimate |
+| `apiEstimate` on Claude Code day rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table after the peer merge, on the device that shows it. It is never part of the exchanged record. A model with no price is excluded and leaves `usd` null. | Claude Code rows carry no estimate |
 
-`deviceNames` is still a proposal. It becomes part of the snapshot format only when the collector change is reviewed.
+`prices` and `apiEstimate` on Claude Code rows are written by the second part of the price table work (D2-4).
+
+`deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
+
+### Snapshot additions
+
+Designed on 2026-10-14 for issue 80, before any collector writes these fields. Nothing in this subsection exists in a collector, a saved snapshot or an installed app until [the parity table](PARITY.md) says so. Every addition is optional, so a saved snapshot without it still loads, and a missing field means Unknown, never zero.
+
+**Local-first rule.** A paired collector rebuilds the snapshot from a fixed key list in `mergePeerPayloads` (`scripts/peer-payload.mjs`), and both peer channels refuse fields they do not know (`parsePeerPayload` and `parseProviderTokenSource` compare the parsed record with its clean projection). So each addition is written on the device that observed it and kept out of every record a device sends to its peer, on both channels:
+
+- The core payload carries the reader reports, not the snapshot rows. An addition is either a field the payload's projection already ignores, or it is stripped in `createPeerPayload`.
+- The Claude Code provider record strips it before `updateProviderTokenSource` in `collectProviderTokenSources` (`scripts/provider-token-sync.mjs`), because that function stores the same parsed object it returns as the dashboard row. The dashboard keeps the local row with the addition.
+
+On a paired device `mergePeerPayloads` rebuilds this device's own `activity`, `tokens`, `settings` and `dictation` rows from the payloads, so a local addition on those rows is lost in the merge. After `finalizePeerCollection` the collector re-applies its local additions to the merged rows of its own host. Each addition below says how. An addition crosses to the paired device only in R2, the change that updates the exchange format in both apps together.
+
+#### Hourly totals
+
+| Field | Shape |
+| --- | --- |
+| `tokens[].days[].hours` | Codex. An array of exactly 24 non-negative integers, the total tokens of that day per hour. |
+| `providerTokenSources[].days[].hours` | Claude Code, in the same shape, using the same deduplication identity the day totals use. A request's hour is the hour of its earliest retained timestamp, the same timestamp that sets its day in `scripts/read-claude-usage.py`, so a request that finishes after an hour boundary or after midnight stays in one hour of one day. The reader keeps only the earliest date today, so D1-2 keeps the earliest full timestamp. |
+| `activity[].days[].hours` | Screen time. This array already exists and holds seconds per hour, for both devices, because `mergePeerPayloads` recomputes the peer's activity from its intervals. It is listed here because Now reads it. |
+
+- Index 0 is the hour starting at midnight. The hour is the wall-clock hour in the zone that sets the day's date. Today that is the snapshot's `timezone` value, which both readers fix to `America/New_York`. When device time zones (T1) land, hours move with the days. On the day clocks go forward the skipped hour stays 0. On the day clocks go back both readings of the repeated hour add into the same index, so that index can hold two hours. Now is Unknown while either of its two buckets is a skipped or repeated hour, because the caveat sentence below would not be true then.
+- **Codex route.** A Codex token's hour is the hour of the `token_count` event that recorded it, which the reader already caches, so the cache format does not change. `scripts/read-settings.py` reports the hours in a separate per-date field of its report, `hourTotals: [{date, hours}]`, not on `profiles` or `tokenProfiles`. `cleanSettings` (`scripts/collect-dashboard.mjs`) ignores that field, so it never reaches `settings[]` or the core payload's `codex` entries. The collector attaches it to the `tokens` row after `tokensFromSettings`, matched by date.
+- The 24 values add up to the day's `totalTokens`. A day whose values do not add up gets no `hours`. A test checks the sum on every fixture day.
+- For the two token fields, `hours` is present only when the reader read that day's events. A day saved before this change, or a token day received from a paired device, has no `hours`, and its hourly values are Unknown.
+- For the two token fields, re-applying after a merge means: the collector puts its local `hours` on the merged row of its own host, matched by date, and only for a day whose merged `totalTokens` equals the sum of the 24 local values. Any other day keeps no `hours`.
+- Every record sent to the peer leaves token `hours` out (local-first rule).
+- The `.observatory` export drops token `hours` in version 1, because a 0 after the reading time cannot be told apart from an observed 0 inside the file. This needs a change in `scripts/observatory-file.mjs`, which copies every day field today. Activity `hours` are exported as they are today.
+
+**Reading time.** Each row has a reading time, the moment up to which its hours were observed:
+
+- A device row: its `checkedAt`, or the snapshot's `collectedAt` for a row without one. A reader stamps `checkedAt` with the time its read started, not the time it finished, so events written during the read are never counted as an observed 0.
+- The `Combined` activity row: the earlier of the two payloads' `collectedAt` values, which `mergePeerPayloads` already uses as `asOf` for the `Combined` history row. D1 records that time on the row as `checkedAt`. The same rule applies to any later aggregate that carries `hours`, including a verified `combinedTokens` row after R2.
+
+Within a day that was read, an hour that ends at or before the reading time holds a real value, and 0 there is a real 0. The hour that contains the reading time holds the events from its start up to the reading time, and 0 there is a real 0 for that span. An hour that starts after the reading time is Unknown, even though the array holds 0 there, because a stopped or late collector leaves those buckets untouched.
+
+**Now.** The Now period is the trailing 60 minutes, approximated by adding the current hour bucket, up to the reading time, to the previous one. Across midnight the previous bucket is hour 23 of the day before. Now ends at the reading time, not at the moment the view is drawn. For a device, Now is Unknown when:
+
+- either of the two days it needs has no `hours`,
+- the current hour starts after the reading time,
+- the reading time is more than 10 minutes old, the threshold the merge and the limits already use, or
+- either bucket is a skipped or repeated daylight saving hour.
+
+For All, Now reads only the collector's verified aggregates, as the other periods do. Device hours are never added together outside them:
+
+- Codex tokens for All come only from a `combinedTokens` row whose verification status is `verified`. They stay Unknown until that row carries `hours`, which needs R2, because the peer's days have no `hours` before then.
+- Screen time for All uses the `hours` of the `Combined` activity row, with the `Combined` reading time above.
+- Claude Code tokens for All stay "By device", as they are for the other periods.
+
+The panel and the dashboard show this one caveat sentence with every Now total:
+
+> Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.
+
+Screen time for Now uses the activity `hours` in the same way. Limits in Now keep their own observation times and are not approximated.
+
+#### Device names
+
+| Field | Shape |
+| --- | --- |
+| `deviceNames` | An object with optional keys `Mac` and `Windows`. Each value is the trimmed name, 1 to 32 UTF-16 code units long. |
+
+- The local name is read from `<runtime>/device.json`, a file holding exactly `{"name": "..."}`. It is a separate file because the Mac Settings save path rewrites `collector.config.json` from fixed switches and both native validators would refuse a new key there.
+- The reader refuses a linked file, a file over 1 KiB, a name that is empty after trimming, a name over 32 UTF-16 code units after trimming, and a name with control or format characters, an unpaired surrogate, or `/`, `\` or `:`. A refused or missing file leaves the key out, and the views show "macOS" or "Windows", as "Device names" above describes.
+- The limit counts UTF-16 code units because the export in `scripts/observatory-file.mjs` does: it trims names and cuts them with `.slice(0,32)`, and its import check uses `length`. JavaScript `length`, C# `string.Length` and Swift `utf16.count` all count the same way, so both native Settings screens can enforce one rule. With the same limit here the export carries the whole name and needs no change. The 40 first planned was cut to 32 for this reason.
+- A device writes only its own key. `deviceNames` is a top-level snapshot field that the merge does not rebuild, so the collector attaches it after `finalizePeerCollection`. The peer's name crosses only after R2 installs on both devices. Until then a paired device's entry is absent and shows its platform name.
+- The name replaces no identifier used for pairing, deduplication or the platform value.
+
+#### Claude Code session cost
+
+| Field | Shape |
+| --- | --- |
+| `claudeLimits.sessionCost` | `{usd, observedAt}`. `usd` is a finite number from 0 to 10,000, rounded to the cent. `observedAt` is an ISO 8601 time. |
+
+- Only the status line bridge writes it, from Claude Code's `cost.total_cost_usd`. It is stored beside the windows in `claude-limits/limits.json` as `{usd, observedAt}` with `observedAt` in Unix seconds, like the windows. That file's 4 KiB read limit still holds.
+- The usage command never writes it. `scripts/claude-usage-command.mjs` accepts a result only when it reports zero cost, so a usage reading carries no cost. A usage reading runs on every collection, and `cleanStored` and `mergeClaudeLimits` (`scripts/claude-limits.mjs`) rebuild the stored record from `observedAt` and `windows` only today. D1-4 changes both to carry a stored cost through unchanged when the new reading has none, so a usage reading never removes or replaces a stored cost. A test covers a usage reading after a bridge write.
+- The cost belongs to one session, while the windows are account-wide and merge by keeping the higher reading. So the cost has its own rule: the newest observation replaces the stored one, whichever session sent it. The session identifier is not kept, so the view cannot say which session it was.
+- It uses the same 10 minute threshold as the windows, with a different result. A window 10 minutes old or older is still shown, with status `stale`. A cost 10 minutes old or older is left out of the snapshot and the view shows Unknown. A cost is never carried forward as a current figure.
+- A status line input can carry a cost without `rate_limits`, for example for a person without a Pro or Max subscription. Today `extractClaudeLimits` returns nothing for that input and nothing is written. D1-4 changes this: the bridge stores a cost on its own, the stored record is valid with a cost and no windows, and `claudeLimitsSource` projects `sessionCost` whenever consent is given and the cost is current, including when `claudeLimits.status` is `unavailable`. Without consent (`not-connected`) there is no `sessionCost`.
+- `claudeLimits` is attached after the merge and is not exchanged, so nothing needs re-applying.
+- Label: "Session cost (estimate)". It stays separate from the API-equivalent estimate, as "Numbers that must stay separate" requires. Like the limits, it is observed on this device and is not sent to a paired device.
+
+#### Source refusal codes
+
+| Field | Shape |
+| --- | --- |
+| `refusal` on a device row of `activity`, `tokens`, `settings` or `dictation` | One code from a fixed list, present only when the row is not `ok` because a private folder was refused |
+
+The field is named `refusal`, not `reason`, because `agentSource` rows already carry a `reason` with their own codes (`access-denied`, `unsafe-directory`, `read-timeout` and others, in `scripts/agent-receipts.mjs` and `scripts/bounded-receipts.mjs`), and `native/ReceiptSourceStatus.swift` renders a fallback message for a `reason` it does not know. The two lists stay separate.
+
+| Code | Meaning |
+| --- | --- |
+| `private-folder-refused` | A private folder check failed, so the guarded source was not read |
+| `ancestor-refused` | On Windows, the private folder check failed at its ancestry stage. That stage covers every ancestor failure (a reparse point, an unexpected owner, an unknown access list or a writable ancestor), so the code names the stage and does not claim a cause. |
+
+- **Detection.** Today the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, runs `private-sync-acl.ps1` without `-Diagnostic` and discards its error output, so nothing can see the stage. D1-6 adds `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on. `peer-directory.mjs` attaches the code to the error it throws, so the collector can tell a private-folder failure from any other reader failure. When an error carries no code, `refusal` is absent.
+- The row carries the code and nothing else about the failure: no path, no stage text, no error message.
+- The views show a code they do not know as `private-folder-refused` would be shown, without its text. A new code is added here first.
+- After a merge the collector re-applies `refusal` to the merged row of its own host with the same name, as it does for `hours`.
+- The plan's name `packaged-app-start` is not used, because the script cannot yet tell the issue 58 pattern apart from a genuinely unsafe ancestor. If the script later reports a fixed stage value for an app-container owner, a `packaged-app-start` code can be added here for that case only.
+- It exists for issue 58 reporting and is local-only. Records sent to the peer leave it out.
 
 ### Claude Code limits bridge
 
@@ -284,7 +551,7 @@ Added as source on 2026-10-13. The owner consented to installing it on the Mac t
 | Piece | File | What it does |
 | --- | --- | --- |
 | Bridge | `scripts/claude-statusline-bridge.mjs` | Claude Code runs it as the status line command. It saves the 5-hour and 7-day percentages and reset times, then prints what the person's earlier status line command prints. With no earlier command it prints one line such as "5h 77% left · 7d 59% left". |
-| Store | `claude-limits/limits.json` in the app's data folder | Two percentages, two reset times and the times they were observed. Nothing else from the status line input is kept. |
+| Store | `claude-limits/limits.json` in the app's data folder | Two percentages, two reset times and the times they were observed, plus the session cost and its observation time described under "Snapshot additions". Nothing else from the status line input is kept. |
 | Installer | `scripts/claude-statusline-install.mjs` | `status`, `install` and `uninstall` for the `statusLine` entry in Claude Code's `settings.json`. Install needs `--consent`, saves the earlier entry, writes a backup beside the settings file and refuses to overwrite a settings file that changed during the update. Uninstall restores the earlier entry. Nothing calls it automatically. |
 | Reader | `scripts/claude-limits.mjs` | Both collectors attach `claudeLimits` to the snapshot. |
 
