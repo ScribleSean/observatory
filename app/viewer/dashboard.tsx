@@ -1,3 +1,4 @@
+import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { demoSnapshot, freshness } from '../../lib/panel-data.mjs';
 import { skinCss, validateSkin } from '../../lib/skins.mjs';
@@ -5,13 +6,13 @@ import { SKINS } from '../panel';
 
 type Snapshot = Record<string, unknown>;
 const SECTIONS = [
-  ['limits', 'Limits'], ['activity', 'Activity'], ['tokens', 'Tokens'],
-  ['dictation', 'Dictation'], ['sources', 'Sources'], ['settings', 'Settings'],
+  ['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity], ['tokens', STRINGS.sections.tokens],
+  ['dictation', STRINGS.sections.dictation], ['sources', STRINGS.sections.sources], ['settings', STRINGS.sections.settings],
 ] as const;
 type Section = typeof SECTIONS[number][0];
 
 function EmptyState() {
-  return <div className="ob-card"><p>This section is not built yet.</p></div>;
+  return <div className="ob-card"><p>{STRINGS.sections.emptyState}</p></div>;
 }
 
 export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
@@ -56,12 +57,12 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
     <div className={`ob-dashboard ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`}>
       <style>{skinCss(skin)}</style>
       <header className="ob-row">
-        <h1><span className="ob-mark" aria-hidden="true" />Observatory</h1>
-        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? 'Loading' : snapshot ? fresh.label : 'No snapshot yet'}</span>
+        <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
+        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>
       </header>
 
       <div className="ob-dashboard-layout">
-        <nav aria-label="Sections">
+        <nav aria-label={STRINGS.sections.navigation}>
           {sections.map(([id, name]) => (
             <button key={id} type="button" aria-current={id === selected ? 'page' : undefined} className={id === selected ? 'on' : ''} onClick={() => setSection(id)}>{name}</button>
           ))}
@@ -76,7 +77,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
 
       {demo && snapshot?.demo === true && (
         <footer className="ob-row ob-meta ob-foot">
-          <label>Sample data · Skin{' '}
+          <label>{STRINGS.labels.sampleData}{STRINGS.formats.separator}{STRINGS.labels.skin}{' '}
             <select value={skinId} onChange={event => setSkinId(event.target.value)}>
               {Object.keys(SKINS).map(id => <option key={id} value={id}>{validateSkin(SKINS[id]).name}</option>)}
             </select>

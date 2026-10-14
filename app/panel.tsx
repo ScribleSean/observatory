@@ -1,3 +1,4 @@
+import { STRINGS, format } from '../lib/strings.generated';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, CircleArrowUp, RefreshCw, Settings } from 'lucide-react';
 import { compact, demoSnapshot, devices, duration, freshness, limits, sourceCounts, totals } from '../lib/panel-data.mjs';
@@ -13,7 +14,7 @@ export type PanelAction = 'refresh' | 'check-updates' | 'open-settings' | 'open-
 // Bundled skins. A person's own skin files will arrive through the shell later.
 export const SKINS: Record<string, unknown> = { sage, almanac, instrument, 'amber-crt': amberCrt };
 
-const PERIOD_LABELS: [string, string][] = [['now', 'Now'], ['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['all', 'All time']];
+const PERIOD_LABELS: [string, string][] = [['now', STRINGS.periods.now], ['day', STRINGS.periods.day], ['week', STRINGS.periods.week], ['month', STRINGS.periods.month], ['all', STRINGS.periods.all]];
 
 // The shell accepts these four names and nothing else. No arguments are sent.
 function send(action: PanelAction) {
@@ -39,7 +40,7 @@ function Segments({ label, options, value, onChange }: { label: string; options:
 type Limit = ReturnType<typeof limits>[number];
 
 function LimitRows({ rows, style }: { rows: Limit[]; style: string }) {
-  const value = (row: Limit) => row.remaining === null ? 'Unknown' : `${Math.round(row.remaining)}%`;
+  const value = (row: Limit) => row.remaining === null ? STRINGS.status.unknown : format(STRINGS.formats.percent, { value: Math.round(row.remaining) });
   if (style === 'numeral') return (
     <div className="ob-numerals">
       {rows.map((row, index) => (
@@ -62,7 +63,7 @@ function LimitRows({ rows, style }: { rows: Limit[]; style: string }) {
               <span className={row.low ? 'ob-num warn' : 'ob-num'}>{value(row)}</span>
             </div>
             <div className="ob-blocks" aria-hidden="true">{Array.from({ length: 20 }, (_, cell) => (
-              <span key={cell} className={cell < filled ? (row.low ? 'warn' : row.provider) : 'ob-meta'}>{cell < filled ? '█' : '░'}</span>
+              <span key={cell} className={cell < filled ? (row.low ? 'warn' : row.provider) : 'ob-meta'}>{cell < filled ? STRINGS.formats.filledBlock : STRINGS.formats.emptyBlock}</span>
             ))}</div>
             <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>
           </div>
@@ -128,34 +129,34 @@ export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: b
     <main className={`ob-panel ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`}>
       <style>{skinCss(skin)}</style>
       <header className="ob-row">
-        <h1><span className="ob-mark" aria-hidden="true" />Observatory</h1>
-        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? 'Loading' : busy ? 'Refreshing' : snapshot ? fresh.label : 'No snapshot yet'}</span>
+        <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
+        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : busy ? STRINGS.labels.refreshing : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>
       </header>
 
-      <section className="ob-card" aria-label="Limits">
-        <div className="ob-row ob-meta"><span>Limits</span><span>remaining</span></div>
+      <section className="ob-card" aria-label={STRINGS.labels.limits}>
+        <div className="ob-row ob-meta"><span>{STRINGS.labels.limits}</span><span>{STRINGS.labels.remaining}</span></div>
         <LimitRows rows={rows} style={skin.limitStyle} />
       </section>
 
-      <Segments label="Device" value={selected} onChange={setHost}
-        options={[['All', 'All'], ...deviceList.map(device => [device.id, device.label] as [string, string])]} />
-      <Segments label="Period" value={period} onChange={setPeriod} options={PERIOD_LABELS} />
+      <Segments label={STRINGS.devices.device} value={selected} onChange={setHost}
+        options={[['All', STRINGS.devices.all], ...deviceList.map(device => [device.id, device.label] as [string, string])]} />
+      <Segments label={STRINGS.devices.period} value={period} onChange={setPeriod} options={PERIOD_LABELS} />
 
-      <section className="ob-card" aria-label="Totals">
-        <div className="ob-row"><span>Tokens</span></div>
-        <div className="ob-row ob-sub"><span><i className="ob-dot claude" aria-hidden="true" />Claude Code</span>
+      <section className="ob-card" aria-label={STRINGS.labels.totals}>
+        <div className="ob-row"><span>{STRINGS.labels.tokens}</span></div>
+        <div className="ob-row ob-sub"><span><i className="ob-dot claude" aria-hidden="true" />{STRINGS.providers.claudeCode}</span>
           <span className="ob-num">{sums.claudeNote || compact(sums.claudeTokens)}</span></div>
-        <div className="ob-row ob-sub"><span><i className="ob-dot codex" aria-hidden="true" />Codex</span>
+        <div className="ob-row ob-sub"><span><i className="ob-dot codex" aria-hidden="true" />{STRINGS.providers.codex}</span>
           <span className="ob-num">{sums.codexNote || compact(sums.codexTokens)}</span></div>
-        <div className="ob-meta ob-gap">Codex API-equivalent (estimate) {sums.usd === null ? 'Unknown' : `$${sums.usd.toFixed(2)}`}</div>
-        <div className="ob-row"><span>Screen time</span><span className="ob-num big">{sums.timeNote || duration(sums.seconds)}</span></div>
+        <div className="ob-meta ob-gap">{STRINGS.labels.apiEstimate} {sums.usd === null ? STRINGS.status.unknown : format(STRINGS.formats.usd, { value: sums.usd.toFixed(2) })}</div>
+        <div className="ob-row"><span>{STRINGS.labels.screenTime}</span><span className="ob-num big">{sums.timeNote || duration(sums.seconds)}</span></div>
         {sums.note && <div className="ob-meta">{sums.note}</div>}
       </section>
 
       <div className="ob-row ob-meta ob-foot">
-        <span>{snapshot ? `${counts.read} of ${counts.total} sources read` : 'Waiting for the first collection'}</span>
+        <span>{snapshot ? format(STRINGS.formats.sourcesRead, counts) : STRINGS.labels.waiting}</span>
         {snapshot?.demo === true && (
-          <label>Sample data · Skin{' '}
+          <label>{STRINGS.labels.sampleData}{STRINGS.formats.separator}{STRINGS.labels.skin}{' '}
             <select value={skinId} onChange={event => setSkinId(event.target.value)}>
               {Object.keys(SKINS).map(id => <option key={id} value={id}>{validateSkin(SKINS[id]).name}</option>)}
             </select>
@@ -163,11 +164,11 @@ export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: b
         )}
       </div>
 
-      <nav className="ob-actions" aria-label="Actions">
-        <button type="button" aria-label="Refresh" title="Refresh" disabled={busy} onClick={refresh}><RefreshCw size={17} className={busy ? 'spin' : ''} aria-hidden="true" /></button>
-        <button type="button" aria-label="Check for updates" title="Check for updates" onClick={() => send('check-updates')}><CircleArrowUp size={17} aria-hidden="true" /></button>
-        <button type="button" aria-label="Settings" title="Settings" onClick={() => send('open-settings')}><Settings size={17} aria-hidden="true" /></button>
-        <button type="button" className="wide" onClick={() => send('open-dashboard')}>Open Observatory<ArrowUpRight size={15} aria-hidden="true" /></button>
+      <nav className="ob-actions" aria-label={STRINGS.actions.navigation}>
+        <button type="button" aria-label={STRINGS.actions.refresh} title={STRINGS.actions.refresh} disabled={busy} onClick={refresh}><RefreshCw size={17} className={busy ? 'spin' : ''} aria-hidden="true" /></button>
+        <button type="button" aria-label={STRINGS.actions.checkUpdates} title={STRINGS.actions.checkUpdates} onClick={() => send('check-updates')}><CircleArrowUp size={17} aria-hidden="true" /></button>
+        <button type="button" aria-label={STRINGS.actions.settings} title={STRINGS.actions.settings} onClick={() => send('open-settings')}><Settings size={17} aria-hidden="true" /></button>
+        <button type="button" className="wide" onClick={() => send('open-dashboard')}>{STRINGS.actions.openObservatory}<ArrowUpRight size={15} aria-hidden="true" /></button>
       </nav>
     </main>
   );
