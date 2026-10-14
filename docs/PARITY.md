@@ -134,11 +134,11 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section order | Differs | Differs | Change | Different order on each |
+| Section order | Differs | Differs | Change | Different order on each. The shared viewer's Settings view (B1-2, sample data only) uses the agreed order. Neither shell shows it yet. |
 | Source switches | Differs | Differs | Change | Mac splits them across three groups. Windows lists six in one group. |
 | Save and reload settings | Differs | Differs | Change | "Save collection settings" on Mac. "Save source settings" on Windows. Windows asks for confirmation when limits monitoring is turned off. |
 | Agent receipts switch | Done | Missing | Remove | |
-| Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. |
+| Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. The shared viewer's Settings view shows that text before it sends `set-limits-consent` (B1-2, sample data only). No shell handles the action yet. |
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
 | Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. |
@@ -197,8 +197,8 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The charts are not used by a view yet. |
 | Skin applied to the whole viewer | Done | Done | Add | One hook applies the skin to both pages and follows later changes to `data-skin`. Sage and Almanac checked in light and dark in a browser at 360 and 1280 pixels wide. |
 | One sample fixture for both pages | Done | Done | Add | `lib/sample-snapshot.mjs`, fictional. `scripts/demo.mjs` still keeps the older `demoData()` for the earlier web view and a Windows self-test. |
-| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared viewer source. A shell selects one with `data-skin`. No Settings control exists. |
-| Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. No Settings control calls it. |
+| Skins chosen in Settings | Missing | Missing | Add | Four skins exist in the shared viewer source. A shell selects one with `data-skin`. The shared viewer's Settings view has a skin picker that sends `set-skin` (B1-2). It works with sample data in a browser. No shell handles the action yet. |
+| Export of a `.observatory` file in Settings | Missing | Missing | Add | The shared script `scripts/observatory-file.mjs` exports and inspects. The shared viewer's Settings view has an "Export data" button that sends `export-data` (B1-2). No shell handles the action yet. |
 | Import of a `.observatory` file | Missing | Missing | Add | Needs the working store first. See the design direction. |
 
 ## Web demo
