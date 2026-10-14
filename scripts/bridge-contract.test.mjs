@@ -152,6 +152,20 @@ for (const size of [4096, 4097]) {
   assert.equal(Buffer.byteLength(text), size);
   add(`UTF8 ${size}`, text, size === 4096 ? 'refused' : 'ignore');
 }
+for (const [label, raw] of [['high', '\ud800'], ['low', '\udfff'], ['high followed by ASCII', '\ud800x']]) {
+  add(`raw ${label} argument`, message('set-device-name', { name: 'REPLACE' }).replace('REPLACE', raw), 'refused');
+  add(`raw ${label} argument key`, message('set-device-name', { REPLACE: 'Example' }).replace('REPLACE', raw), 'refused');
+  add(`raw ${label} top key`, message('status', {}).replace('action', 'action' + raw), 'refused');
+  add(`raw ${label} id key`, message('status', {}).replace('id', 'id' + raw), 'ignore');
+  add(`raw ${label} id value`, message('status', {}, 'REPLACE').replace('REPLACE', raw), 'ignore');
+}
+for (const raw of ['\ud800', '\udfff', '😀']) {
+  const base = message('set-device-name', { name: 'REPLACE' }).replace('REPLACE', raw);
+  for (const size of [4096, 4097]) {
+    const text = base + ' '.repeat(size - Buffer.byteLength(base));
+    add(`raw UTF8 ${raw.charCodeAt(0)} bytes ${size}`, text, size > 4096 ? 'ignore' : raw.isWellFormed() ? accepted('set-device-name', { name: raw }) : 'refused');
+  }
+}
 for (const depth of [16, 17]) {
   const text = '{"id":1,"action":"status","args":{"x":' + '['.repeat(depth - 2) + '0' + ']'.repeat(depth - 2) + '}}';
   add(`depth ${depth}`, text, depth === 16 ? 'refused' : 'ignore');
@@ -241,9 +255,7 @@ test('page helpers validate and round trip', () => {
 });
 
 const swiftHarness = String.raw`import Foundation
-while let line = readLine() {
-    let text = try JSONDecoder().decode(String.self, from: Data(line.utf8))
-    let result = BridgeContract.validate(text)
+func outputFor(_ result: BridgeValidation) throws -> Data {
     var output: [String: Any] = [:]
     switch result {
     case .ignore: output["outcome"] = "ignore"
@@ -261,6 +273,20 @@ while let line = readLine() {
         output = ["outcome": "accepted", "id": id, "action": action, "args": values]
     }
     let data = try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys])
+    return data
+}
+while let line = readLine() {
+    let bytes = Array(Data(base64Encoded: line)!)
+    var units: [UInt16] = []
+    for i in stride(from: 0, to: bytes.count, by: 2) {
+        let low = UInt16(bytes[i])
+        let high = UInt16(bytes[i + 1]) << 8
+        units.append(low | high)
+    }
+    let data = try outputFor(BridgeContract.validate(utf16: units))
+    let text = units.withUnsafeBufferPointer { NSString(characters: $0.baseAddress!, length: $0.count) }
+    let nsData = try outputFor(BridgeContract.validate(text))
+    precondition(nsData == data)
     print(String(decoding: data, as: UTF8.self))
 }
 `;
@@ -271,7 +297,10 @@ using WorkspaceObservatory;
 string? line;
 while ((line = Console.ReadLine()) is not null)
 {
-    var result = BridgeContract.Validate(System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(line)));
+    var bytes = Convert.FromBase64String(line);
+    var units = new char[bytes.Length / 2];
+    for (int i = 0; i < units.Length; i++) units[i] = (char)(bytes[2 * i] | bytes[2 * i + 1] << 8);
+    var result = BridgeContract.Validate(new string(units));
     var output = new Dictionary<string, object?> { ["outcome"] = result.Outcome };
     if (result.Id.HasValue) output["id"] = result.Id.Value;
     if (result.Outcome == "accepted")
@@ -295,7 +324,7 @@ function compare(run) {
   assert.equal(lines.length, vectors.length);
   for (let i = 0; i < vectors.length; i++) assert.deepEqual(JSON.parse(lines[i]), validateMessage(vectors[i].text), vectors[i].name);
 }
-const input = vectors.map(v => JSON.stringify(v.text)).join('\n') + '\n';
+const input = vectors.map(v => Buffer.from(v.text, 'utf16le').toString('base64')).join('\n') + '\n';
 test('Swift matches every shared vector', { timeout: 180000 }, t => {
   if (!swiftAvailable(t)) return;
   const temp = mkdtempSync(join(tmpdir(), 'bridge-swift-'));
@@ -303,6 +332,7 @@ test('Swift matches every shared vector', { timeout: 180000 }, t => {
   const compile = spawnSync('/usr/bin/xcrun', ['swiftc', '-swift-version', '5', '-module-cache-path', join(temp, 'cache'), join(root, 'native/BridgeContract.swift'), join(temp, 'main.swift'), '-o', join(temp, 'bridge')], { encoding: 'utf8', env: process.env, timeout: 150000 });
   assertRun(compile);
   compare(spawnSync(join(temp, 'bridge'), [], { input, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 30000 }));
+  t.diagnostic(`${vectors.length} vectors compared through both Swift entries, ${vectors.filter(v => !v.text.isWellFormed()).length} with raw lone surrogates`);
 });
 test('C# matches every shared vector', { timeout: 360000 }, t => {
   const executable = process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
@@ -416,4 +446,24 @@ test('status limits are required positive integers and generated for every langu
   const data = structuredClone(contract);
   delete data.status;
   assert.throws(() => validateContract(data), /Invalid bridge contract data/);
+});
+
+test('contract numbers anywhere stay within nonnegative Int32 bounds', () => {
+  const visit = (value, path = []) => {
+    for (const [key, child] of Object.entries(value)) {
+      const next = [...path, key];
+      if (typeof child === 'number') {
+        for (const invalid of [-1, 2147483648]) {
+          const data = structuredClone(contract);
+          const parent = next.slice(0, -1).reduce((node, part) => node[part], data);
+          parent[key] = invalid;
+          assert.throws(() => validateContract(data), /Invalid bridge contract data/, next.join('.'));
+        }
+      } else if (child !== null && typeof child === 'object') visit(child, next);
+    }
+  };
+  visit(contract);
+  const data = structuredClone(contract);
+  data.limits.queue = 2147483647;
+  assert.doesNotThrow(() => validateContract(data));
 });
