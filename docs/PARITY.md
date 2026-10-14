@@ -105,8 +105,8 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section present | Done | Done | Change | Show only when a dictation source is enabled |
-| Tool, device and period filters | Done | Done | Keep | |
+| Section present | Done | Done | Change | Show only when a dictation source is enabled. The shared viewer does this since V1 and draws the view since V5 (issue 100). |
+| Tool, device and period filters | Done | Done | Keep | The shared viewer's Dictation view (V5, issue 100) has tool, device and period (Day, Week, Month, All time) filters and never adds devices or tools together. Checked in a browser from the built files with sample data, not inside either host. |
 | Layout | Differs | Differs | Change | Windows uses tables and a chart titled "Voice over time" |
 | ChatGPT voice placeholder row | Done | Done | Remove | "Not implemented" row on both |
 
@@ -120,9 +120,9 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Section name | Differs | Differs | Change | Rename to Sources |
-| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. |
-| Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. |
+| Section name | Differs | Differs | Change | Rename to Sources. The shared viewer names it Sources (V1). |
+| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. The shared viewer's Sources view (V5, issue 100) shows the relative time with the exact time on hover, and a refusal code as a sentence that claims no cause. No collector writes `refusal` yet (D1-6). Checked in a browser from the built files with sample data, not inside either host. |
+| Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. Since V5 (issue 100) the nine labels are in `lib/strings.json` under `sources` and the shared viewer reads them. The native views still use their own copies. |
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
 | ChatGPT and Cursor placeholder rows | Done | Done | Remove | |
@@ -193,8 +193,9 @@ Added on 2026-10-13. See Architecture in [the design direction](DESIGN.md). The 
 | Four panel actions accepted by the shell | Done | Done | Add | `refresh`, `check-updates`, `open-settings`, `open-dashboard`. On Mac a real click on each button reached the shell in preview mode. On Windows only `refresh` was run end to end. The other three were accepted and not run. |
 | Open time and memory measured | Done | Done | Add | Needed before the direction is confirmed. Mac numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-mac-october-13): first open 333 ms against 195 ms native, later opens 82 to 104 ms against 122 to 129 ms, and 97 MiB of footprint with the panel open against 49 MiB native. Windows numbers are in [the measurements record](RESOURCE-MEASUREMENTS.md#web-panel-spike-on-windows-october-13): first open 256 ms against 132 ms native, and about 390 MiB working set with the panel open against 65 MiB native. |
 | Shared dashboard page (`dashboard.html`) in the bundled web files | Done | Done | Add | Added for V1 (issue 79). Built by the shared web bundle beside `panel.html`, with the six sections as empty states and Dictation listed only when a dictation source is enabled. Checked in a browser from the built files, not inside either host. |
-| One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The charts are not used by a view yet. |
+| One component set for the panel and the dashboard | Done | Done | Add | Card, filter group, meter, numeral, text bar, row, provider dot, empty state, information control, action bar and three chart primitives in `app/viewer/components`. The panel renders through them with the same markup as before, plus `data-provider` and `data-window` on each limit row. The line chart is used by the Limits view. |
 | Skin applied to the whole viewer | Done | Done | Add | One hook applies the skin to both pages and follows later changes to `data-skin`. Sage and Almanac checked in light and dark in a browser at 360 and 1280 pixels wide. |
+| Limits view in the shared dashboard | Done | Done | Add | Added for V2 (issue 96) from source on `shared/v2-limits` and a browser check of the built page with sample data. Claude Code and Codex side by side with the same layout, a Now card that leads with pace and the estimated time until each window runs out, the limit rows in the skin's limit style, the Claude Code session cost, a history chart per window for the five periods, and the paired device's shared Codex limits with their observation time. Rules live in `lib/view-limits.mjs`. Pace still comes from `scripts/quota-pace.mjs`, which the packaged collectors also use. Not run inside either host. History in a real snapshot covers about the latest 24 hours, and no collector writes `claudeLimits.history` yet, so Claude Code history and pace stay Unknown outside the sample. |
 | One sample fixture for both pages | Done | Done | Add | `lib/sample-snapshot.mjs`, fictional. `scripts/demo.mjs` still keeps the older `demoData()` for the earlier web view and a Windows self-test. |
 | Skin and theme set by the shell before the page loads | Done | Missing | Add | Mac since M1: a script at document start sets `data-skin` from the `observatorySkin` setting (one of the four bundled ids, Sage otherwise) and `data-theme` from the stored appearance (light or dark, otherwise the system setting), for the panel and the dashboard. Almanac checked in a preview run on both pages. |
 | Page facts printed with `--panel-timing` | Done | Done | Add | Structure only: ready flag, page, skin, theme, font, dark, section count, limit rows by provider, button count and text length. The Mac prints one line per page and, in preview mode only, writes a PNG of each page to the preview folder. |

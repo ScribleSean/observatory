@@ -5,6 +5,9 @@ import { skinCss, validateSkin } from '../../lib/skins.mjs';
 import { SKINS, useSkin } from './skin';
 
 import { EmptyState, Row } from './components';
+import LimitsView from './limits/LimitsView';
+import { SourcesView } from './sources/SourcesView';
+import { DictationView } from './dictation/DictationView';
 
 type Snapshot = Record<string, unknown>;
 const SECTIONS = [
@@ -12,12 +15,13 @@ const SECTIONS = [
   ['dictation', STRINGS.sections.dictation], ['sources', STRINGS.sections.sources], ['settings', STRINGS.sections.settings],
 ] as const;
 type Section = typeof SECTIONS[number][0];
+export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
 
 export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
   const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
-  const [section, setSection] = useState<Section>('limits');
+  const [section, setSection] = useState<Section>(() => sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash));
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -45,7 +49,8 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
     source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
   const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
-  if (selected !== section) setSection(selected);
+  // Keep a #dictation request until the first snapshot has loaded.
+  if (loaded && selected !== section) setSection(selected);
   return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={selected} onSectionChange={setSection} onSkinChange={setSkinId} />;
 }
@@ -89,7 +94,7 @@ export function DashboardView({ demo = false, snapshot, loaded, now, skinId, ski
         <main>
           <section aria-labelledby={`ob-section-${selected}`}>
             <h2 id={`ob-section-${selected}`}>{title}</h2>
-            <EmptyState text={STRINGS.sections.emptyState} />
+            {selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : <EmptyState text={STRINGS.sections.emptyState} />}
           </section>
         </main>
       </div>
