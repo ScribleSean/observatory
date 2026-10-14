@@ -13,6 +13,7 @@ export function setupConfigurationDigest(pairing) {
 }
 
 // Compatibility for receipts already saved by the previous pairing format.
+// Only for comparing a saved receipt. Never accept it from a peer.
 export function legacySetupConfigurationDigest(pairing) {
   const safe=validatePairing(pairing);
   if(safe.transport?.kind!=='tls' || !safe.peerCertificateSha256)throw Error('Bound TLS configuration required');
