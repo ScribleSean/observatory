@@ -112,4 +112,44 @@ internal static class ObservatoryStrings
         internal const string Value = "Value";
         internal const string ShowValues = "Show values";
     }
+    internal static class Sources
+    {
+        internal const string StatusOk = "Read";
+        internal const string StatusNotConnected = "Not connected";
+        internal const string StatusPartial = "Partial coverage";
+        internal const string StatusUnavailable = "Unavailable";
+        internal const string StatusNotFound = "Not found";
+        internal const string StatusStale = "Saved reading";
+        internal const string StatusNeedsAuth = "Sign in required";
+        internal const string StatusUnsupported = "Not supported";
+        internal const string StatusRateLimited = "Usage check rate-limited";
+        internal const string PrivateRefusal = "A private folder check failed, so this source was not read.";
+        internal const string AncestorRefusal = "A private folder check failed at a parent folder, so this source was not read.";
+        internal const string CheckedNow = "Checked just now";
+        internal const string CheckedAgo = "Checked {age} ago";
+        internal const string CheckAhead = "Check time is ahead of this device";
+        internal const string CheckUnknown = "Last check: Unknown";
+        internal const string ClaudeLimits = "Claude Code limits";
+        internal const string CodexLimits = "Codex limits";
+        internal const string CodexTokens = "Codex tokens";
+        internal const string ClaudeTokens = "Claude Code tokens";
+        internal const string ModelSettings = "Model settings";
+        internal const string NoConnected = "No sources are connected";
+        internal const string NoRecords = "No source records";
+        internal const string StatusCount = "{word}: {count}";
+    }
+    internal static class Dictation
+    {
+        internal const string AllTools = "All tools";
+        internal const string AllDevices = "All devices";
+        internal const string Tool = "Tool";
+        internal const string Records = "Records";
+        internal const string Words = "Words";
+        internal const string Audio = "Recorded audio time";
+        internal const string ChartTitle = "Recorded audio time by day";
+        internal const string Partial = "{value} (partial)";
+        internal const string Caveat = "Device histories may overlap, so they are not added together.";
+        internal const string Detail = "Missing dates are gaps, not zeros. Transcripts, recordings and credentials are not collected.";
+        internal const string Info = "About dictation records";
+    }
 }

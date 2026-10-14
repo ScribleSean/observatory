@@ -5,6 +5,8 @@ import { skinCss, validateSkin } from '../../lib/skins.mjs';
 import { SKINS, useSkin } from './skin';
 
 import { EmptyState, Row } from './components';
+import { SourcesView } from './sources/SourcesView';
+import { DictationView } from './dictation/DictationView';
 
 type Snapshot = Record<string, unknown>;
 const SECTIONS = [
@@ -17,7 +19,10 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
-  const [section, setSection] = useState<Section>('limits');
+  const [section, setSection] = useState<Section>(() => {
+    const hash = typeof window === 'undefined' ? '' : window.location.hash.slice(1);
+    return SECTIONS.find(([id]) => id === hash)?.[0] ?? 'limits';
+  });
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -89,7 +94,7 @@ export function DashboardView({ demo = false, snapshot, loaded, now, skinId, ski
         <main>
           <section aria-labelledby={`ob-section-${selected}`}>
             <h2 id={`ob-section-${selected}`}>{title}</h2>
-            <EmptyState text={STRINGS.sections.emptyState} />
+            {selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : <EmptyState text={STRINGS.sections.emptyState} />}
           </section>
         </main>
       </div>

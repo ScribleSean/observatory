@@ -1,0 +1,6 @@
+.ob-sources { min-width: 0; overflow-wrap: anywhere; }
+.ob-source-counts { display: flex; flex-wrap: wrap; gap: var(--ob-space-3); padding: 0; list-style: none; color: var(--ob-muted); }
+.ob-sources h3 { margin: 0 0 var(--ob-space-3); font-size: var(--ob-body-size); }
+.ob-source-record + .ob-source-record { margin-top: var(--ob-space-3); padding-top: var(--ob-space-3); border-top: 1px solid var(--ob-track); }
+.ob-sources .ob-row { flex-wrap: wrap; }
+.ob-source-record time { display: block; margin: var(--ob-space-1) 0; }
