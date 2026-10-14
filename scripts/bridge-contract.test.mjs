@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { contract, ACTIONS, validateMessage, validateArgs, encodeMessage } from '../lib/bridge-contract.mjs';
-import { generatedBridgeContract } from './build-bridge-contract.mjs';
+import { generatedBridgeContract, swiftLiteral, csLiteral, validateContract } from './build-bridge-contract.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const vectors = [];
@@ -271,7 +271,7 @@ using WorkspaceObservatory;
 string? line;
 while ((line = Console.ReadLine()) is not null)
 {
-    var result = BridgeContract.Validate(JsonSerializer.Deserialize<string>(line));
+    var result = BridgeContract.Validate(System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(line)));
     var output = new Dictionary<string, object?> { ["outcome"] = result.Outcome };
     if (result.Id.HasValue) output["id"] = result.Id.Value;
     if (result.Outcome == "accepted")
@@ -297,19 +297,30 @@ function compare(run) {
 }
 const input = vectors.map(v => JSON.stringify(v.text)).join('\n') + '\n';
 test('Swift matches every shared vector', { timeout: 180000 }, t => {
-  if (process.platform !== 'darwin' || !existsSync('/usr/bin/xcrun')) return t.skip('Swift requires darwin and /usr/bin/xcrun');
+  if (!swiftAvailable(t)) return;
   const temp = mkdtempSync(join(tmpdir(), 'bridge-swift-'));
   writeFileSync(join(temp, 'main.swift'), swiftHarness);
   const compile = spawnSync('/usr/bin/xcrun', ['swiftc', '-swift-version', '5', '-module-cache-path', join(temp, 'cache'), join(root, 'native/BridgeContract.swift'), join(temp, 'main.swift'), '-o', join(temp, 'bridge')], { encoding: 'utf8', env: process.env, timeout: 150000 });
   assertRun(compile);
   compare(spawnSync(join(temp, 'bridge'), [], { input, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 30000 }));
 });
-test('C# matches every shared vector', { timeout: 180000 }, t => {
+test('C# matches every shared vector', { timeout: 360000 }, t => {
   const executable = process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
-  const dotnet = (process.env.PATH ?? '').split(delimiter).map(dir => join(dir, executable)).find(path => existsSync(path));
-  if (!dotnet) return t.skip('dotnet not available');
+  const folders = [
+    process.env.DOTNET_ROOT, process.env.DOTNET_ROOT_X64,
+    ...(process.env.PATH ?? '').split(delimiter),
+    ...(process.platform === 'win32' ? [process.env.ProgramFiles && join(process.env.ProgramFiles, 'dotnet')] : []),
+    ...(process.platform === 'darwin' ? ['/usr/local/share/dotnet', '/opt/homebrew/opt/dotnet/libexec'] : []),
+    join(homedir(), '.dotnet')
+  ];
+  const dotnet = folders.filter(Boolean).map(dir => join(dir, executable)).find(path => existsSync(path));
+  if (!dotnet) {
+    assert.ok(!(process.env.CI === 'true' && process.platform === 'win32'), 'dotnet is required in CI on Windows');
+    return t.skip('dotnet not available');
+  }
   const temp = mkdtempSync(join(tmpdir(), 'bridge-csharp-'));
-  const sdk = spawnSync(dotnet, ['--version'], { encoding: 'utf8' });
+  const env = { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', DOTNET_CLI_HOME: temp };
+  const sdk = spawnSync(dotnet, ['--version'], { cwd: temp, encoding: 'utf8', env, timeout: 30000 });
   assertRun(sdk);
   const major = Number(sdk.stdout.trim().split('.')[0]);
   assert.ok(major >= 6, 'C# 10 requires .NET SDK 6 or newer');
@@ -317,7 +328,92 @@ test('C# matches every shared vector', { timeout: 180000 }, t => {
   writeFileSync(join(temp, 'NuGet.Config'), '<configuration><packageSources><clear /></packageSources></configuration>');
   writeFileSync(join(temp, 'BridgeContract.cs'), readFileSync(join(root, 'native/windows/BridgeContract.cs')));
   writeFileSync(join(temp, 'Program.cs'), csHarness);
-  const env = { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1', DOTNET_CLI_HOME: temp };
-  assertRun(spawnSync(dotnet, ['build', join(temp, 'Bridge.csproj'), '-o', join(temp, 'out'), '--nologo'], { encoding: 'utf8', env, timeout: 150000 }));
-  compare(spawnSync(dotnet, [join(temp, 'out/Bridge.dll')], { input, encoding: 'utf8', env, maxBuffer: 8 * 1024 * 1024, timeout: 30000 }));
+  assertRun(spawnSync(dotnet, ['build', join(temp, 'Bridge.csproj'), '-o', join(temp, 'out'), '--nologo'], { cwd: temp, encoding: 'utf8', env, timeout: 300000 }));
+  compare(spawnSync(dotnet, [join(temp, 'out/Bridge.dll')], { input: vectors.map(v => Buffer.from(v.text, 'utf16le').toString('base64')).join('\n') + '\n', encoding: 'utf8', env, maxBuffer: 8 * 1024 * 1024, timeout: 30000 }));
+});
+
+function swiftAvailable(t) {
+  if (process.platform === 'darwin' && existsSync('/usr/bin/xcrun')) return true;
+  assert.ok(!(process.env.CI === 'true' && process.platform === 'darwin'), 'xcrun is required in CI on macOS');
+  t.skip('Swift requires darwin and /usr/bin/xcrun');
+  return false;
+}
+
+const literalSamples = ['\\u0041', '"', '\\', '\u0001', '\u2028', '\u00e9', '😀'];
+function decodeCsLiteral(literal) {
+  assert.equal(literal[0], '"');
+  assert.equal(literal.at(-1), '"');
+  let result = '';
+  for (let i = 1; i < literal.length - 1; i++) {
+    if (literal[i] !== '\\') { result += literal[i]; continue; }
+    const escape = literal[++i];
+    if (escape === '"' || escape === '\\') result += escape;
+    else {
+      assert.equal(escape, 'u');
+      const hex = literal.slice(i + 1, i + 5);
+      assert.match(hex, /^[0-9a-f]{4}$/i);
+      result += String.fromCharCode(parseInt(hex, 16));
+      i += 4;
+    }
+  }
+  return result;
+}
+test('native literals escape each unit without rewriting literal backslashes', () => {
+  const swift = ['"\\\\u0041"', '"\\\""', '"\\\\"', '"\\u{0001}"', '"\\u{2028}"', '"\\u{00e9}"', '"\\u{1f600}"'];
+  literalSamples.forEach((value, i) => {
+    assert.equal(swiftLiteral(value), swift[i]);
+    assert.equal(decodeCsLiteral(csLiteral(value)), value);
+  });
+  for (let unit = 0; unit <= 0xffff; unit++) {
+    const value = String.fromCharCode(unit);
+    assert.equal(decodeCsLiteral(csLiteral(value)), value);
+    if (unit >= 0xd800 && unit <= 0xdfff) assert.throws(() => swiftLiteral(value), /Lone surrogate/);
+  }
+});
+test('Swift literal output matches original bytes', { timeout: 180000 }, t => {
+  if (!swiftAvailable(t)) return;
+  const temp = mkdtempSync(join(tmpdir(), 'bridge-literals-'));
+  writeFileSync(join(temp, 'main.swift'), literalSamples.map(value => `print(${swiftLiteral(value)})`).join('\n'));
+  assertRun(spawnSync('/usr/bin/xcrun', ['swiftc', '-module-cache-path', join(temp, 'cache'), join(temp, 'main.swift'), '-o', join(temp, 'literals')], { encoding: 'utf8', timeout: 150000 }));
+  const run = spawnSync(join(temp, 'literals'), [], { timeout: 30000 });
+  assertRun(run);
+  assert.deepEqual(run.stdout, Buffer.from(literalSamples.join('\n') + '\n'));
+});
+test('contract rejects controls and lone surrogates anywhere including keys', () => {
+  for (const value of ['\u0000', '\u001f', '\u007f', '\u0085', '\u009f', '\ud800', '\udfff', '\ud800x']) {
+    for (const mutate of [
+      data => { data.source = value; },
+      data => { data.values.appearance.push(value); },
+      data => { data.actions['set-device-name'].args.name.forbidden = [value]; },
+      data => { data.actions.status.args[value] = { type: 'boolean' }; }
+    ]) {
+      const data = structuredClone(contract);
+      mutate(data);
+      assert.throws(() => validateContract(data), /Invalid bridge contract data/);
+    }
+  }
+  const data = structuredClone(contract);
+  data.source = literalSamples.filter(value => value !== '\u0001').join('');
+  assert.doesNotThrow(() => validateContract(data));
+});
+test('status limits are required positive integers and generated for every language', () => {
+  const generated = generatedBridgeContract();
+  const swift = generated.get('native/BridgeContract.swift');
+  const cs = generated.get('native/windows/BridgeContract.cs');
+  assert.ok(swift.includes('static let status = data["status"]'));
+  for (const [key, value] of Object.entries(contract.status)) {
+    assert.ok(generated.get('lib/bridge-contract.generated.ts').includes(`"${key}": ${value}`));
+    assert.ok(swift.includes(`("${key}", BridgeNode("number", "${value}"))`));
+    assert.ok(cs.includes(`new KeyValuePair<string, BridgeNode>("${key}", new BridgeNode("number", "${value}"))`));
+    const name = 'Status' + key[0].toUpperCase() + key.slice(1);
+    assert.ok(cs.includes(`${name} = Data["status"]["${key}"].Number`));
+    for (const invalid of [0, -1, 1.5, '1', null, Number.MAX_SAFE_INTEGER + 1, undefined]) {
+      const data = structuredClone(contract);
+      data.status[key] = invalid;
+      assert.throws(() => validateContract(data), /Invalid bridge contract data/);
+    }
+  }
+  const data = structuredClone(contract);
+  delete data.status;
+  assert.throws(() => validateContract(data), /Invalid bridge contract data/);
 });

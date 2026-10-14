@@ -12,8 +12,13 @@
     "queue": 4,
     "resultTimeoutSeconds": 60,
     "cacheRefreshSeconds": 5,
-    "pairingPollSeconds": 2,
-    "statusMaxBytes": 16384
+    "pairingPollSeconds": 2
+  },
+  "status": {
+    "version": 1,
+    "maxBytes": 16384,
+    "appVersionMaxLength": 32,
+    "customSkinsMax": 32
   },
   "dashboardFragments": ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"],
   "whiteSpace": [9, 10, 11, 12, 13, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288],
