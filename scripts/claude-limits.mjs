@@ -144,3 +144,10 @@ export function attachClaudeLimits(result,source) {
   result.data.claudeLimits=source;
   return result;
 }
+
+// Rejects when the work has not settled in time, so the caller's fallback runs.
+export function withinTime(work,milliseconds) {
+  let timer;
+  const limit=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Timed out')),milliseconds);timer.unref?.();});
+  return Promise.race([Promise.resolve(work),limit]).finally(()=>clearTimeout(timer));
+}

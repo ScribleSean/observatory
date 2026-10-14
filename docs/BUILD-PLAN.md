@@ -13,7 +13,9 @@ The shared viewer goes ahead. Both spikes measured it on 2026-10-13.
 | Memory with the panel open | 97 MiB | 49 MiB | 396 MiB | 65 MiB |
 | Memory a minute after closing | 108 MiB | 51 MiB | 405 MiB | 68 MiB |
 
-Open time is acceptable on both. Memory is acceptable on the Mac. On Windows it is not acceptable while the web view is kept alive, so the Windows shell must release the web view after the panel or window has been closed for a short time. That rule is unmeasured and is the first Windows task below. If releasing does not bring memory back near the never-opened figure, stop and report before building more Windows screens.
+Open time is acceptable on both. Memory is acceptable on the Mac. On Windows it was not acceptable while the web view stayed alive, so the Windows shell now releases the web view a minute after the panel closes (pull request 87).
+
+Measured on the PC after that change, in four runs: 73.9 to 76.2 MiB five minutes after release, against 57.1 to 59.7 MiB with the panel never opened and 394 to 408 MiB with it open. The next open after a release took 283 to 493 ms. The owner's condition is met: memory returns near the never-opened figure, and the cost is a slower open after a long idle. The full record is in [the measurements record](RESOURCE-MEASUREMENTS.md).
 
 ## What done means
 
@@ -40,9 +42,21 @@ Approved in advance, with the condition beside each:
 | Replacing the installed app on the Mac or the PC with a build from `main` | The data folder is backed up and matches by checksum first, the previous build stays recoverable, and the result is recorded in the state record |
 | Installing the Claude Code limits bridge on the PC | It was approved on the Mac the same day. Record what changed. |
 
+Added on 2026-10-13 from the owner's answers before the autonomous build:
+
+| Decision | Detail |
+| --- | --- |
+| Where the build stops | After everything in "What done means" is installed and verified on both devices, publish a GitHub release with the install guides and publish the demo page. This is approved in advance, once, for that finished state. |
+| What a Mac session may touch | `~/Developer`, the installed Observatory app in `~/Applications`, its data folder for backups and installs, and the status line entry in Claude Code's settings. Nothing else on the Mac. |
+| How the PC is driven | The owner keeps the "Observatory Windows" session open with prompts skipped. The orchestrator sends it tasks by message and through issues. |
+| Windows build time | Fix both causes: run the full suite on pull requests, and reuse one PowerShell process for the permission checks. The second is security-sensitive and needs two reviews. |
+| Internal name | Rename "Workspace Observatory" to "Observatory" in this build, with a tested migration that copies saved data to the new location and keeps the old folder until the owner confirms. |
+| Old leftovers | Keep the newest data backup on each device and the build 40 installer on the PC. Move older installers, test builds and backups to the Trash or the Recycle Bin for the owner to empty. Never delete them outright. |
+| Tailscale | Installed and signed in on both devices, so pairing can be tested end to end. The owner types the pairing code. |
+| What he most wants fixed | The apps still show the old look, and Claude Code is not shown beside Codex. The shared viewer as the default fixes both. |
+
 Still needs the owner, because no session can do it or because it reaches outside his machines:
 
-- Publishing the demo page, a release, or anything else public beyond pull requests in this repository.
 - Anything that costs money.
 - Weakening a security rule, a file guard or the private-folder check. Issue 58 stays open until he decides.
 - Physical or account steps: signing in to Tailscale, typing a pairing code on the second device, a real click that a session cannot perform.
@@ -106,7 +120,7 @@ Paths are owned by one workstream at a time. "Machine" says where it can be done
 | D2 | Price table. One price file from a maintained open source, a refresh script, the checked-on date in the snapshot, Claude Code API-equivalent cost, and a test that fails when a fixture model has no price. | `scripts/price-*.mjs`, `native/prices.json`, their tests | Any | Nothing |
 | R1 | Removals in shared scripts: agent receipts, legacy workflows, legacy quota, the local benchmark slot, and the ChatGPT and Cursor placeholder rows in the earlier web view. Keep saved settings readable, as the Antigravity removal did in pull request 77. Open one `mac` and one `windows` issue for the native parts. | `scripts/agent-receipts*`, `scripts/bounded-receipts*`, `scripts/legacy-*`, the lines in the collectors that call them | Any | Nothing |
 | M1 | Mac shell hosts the shared dashboard. Show `dashboard.html` in the main window behind a launch flag, with the same file guard and snapshot bridge rules as the panel. Make the web panel the default panel once the owner has tried it. Decide and record when the web view is released. | `native/*.swift`, `native/mac/**` | Mac | V1 for the page, but the host can be built against `panel.html` first |
-| W1 | Windows shell hosts the shared dashboard. First task: release the web view after the panel has been closed for about a minute, and measure memory five minutes later and the next open time. Then show `dashboard.html` in the main window behind a launch flag. Confirm by hand that clicking away closes the web panel. | `native/windows/**` | Windows PC | V1 for the page, but the host can be built against `panel.html` first |
+| W1 | Windows shell hosts the shared dashboard. Done in pull request 87: the web view is released a minute after closing and measured, and `--web-dashboard` shows a page in the main window. Left: show `dashboard.html` once V1 provides it, a test for the release timer, release of a web view that failed to start, a real click-away check, and the second review that pull request 87 did not get. | `native/windows/**` | Windows PC | V1 for the page |
 
 ### Phase 2, after V1 merges
 
@@ -129,6 +143,15 @@ Each view is one workstream, built from V1's components and `lib/panel-data.mjs`
 | S1 | Demo and site. Remove the earlier web dashboard (`app/page.tsx`, `app/observatory.css`, `components/ui/**` and unused packages) once neither shell loads it. Build the demo from the shared viewer in sample-data mode with a short product page. Publishing needs the owner's approval. | `app/*.tsx` outside `app/viewer`, `components/**`, `.github/workflows/demo.yml`, `package.json` | Any | M2 and W2 no longer load the earlier dashboard |
 | G1 | Guides and checks. Install guides for both platforms that state the unsigned-build warning plainly, a README that matches the installed builds, and the Mac test suite running on pull requests. | `docs/MAC.md`, `docs/WINDOWS.md`, `docs/GUIDE.md`, `README.md`, `.github/workflows/**` except the demo workflow | Any | M2, W2 |
 
+### Added on 2026-10-13, to run alongside the phases
+
+| Id | Workstream | Owns | Machine | Depends on |
+| --- | --- | --- | --- | --- |
+| Q1 | Windows build time. Run the full script suite on pull requests so a failure shows before packaging. Reuse one PowerShell process for the private-folder permission checks, with the same checks and results. Record the run time before and after. | `.github/workflows/**`, `scripts/private-sync-acl.ps1`, `scripts/peer-directory.mjs`, their tests | Any for the workflow, Windows PC to verify the permission checks | Nothing |
+| H1 | Housekeeping. Point the Mac status line entry at the script inside the installed app. Move the old leftovers to the Trash or Recycle Bin as the owner decided. Bring `docs/STATE.md` and `docs/PARITY.md` up to build 41. Give pull request 87 its second review. | `docs/STATE.md`, `docs/PARITY.md` | Mac and Windows PC | Nothing |
+| N1 | Internal rename to "Observatory" with a data migration on both platforms: the app file and bundle identifier on Mac, the install entry and folders on Windows, and the data folder on both. Copy, verify by checksum, switch, and keep the old folder. Pairing, saved history and settings must survive. | The names in `native/**`, the packaging scripts, `docs/BRAND.md` | Mac and Windows PC | M2 and W2, so the rename is not done twice |
+| F1 | Finish. When every item in "What done means" is verified on both devices, write the install guides into a GitHub release with both builds and their checksums, and publish the demo page. | The release, `.github/workflows/demo.yml` | Any | Everything else |
+
 ### Phase 4, larger pieces with their own design step
 
 | Id | Workstream | Notes |
@@ -141,6 +164,15 @@ Each view is one workstream, built from V1's components and `lib/panel-data.mjs`
 ## Model choice
 
 The orchestrator and the reviewers are Claude sessions on the strongest model available. Code is written by Codex with `gpt-6-astra` at medium effort, as described under "Who does what". Security-sensitive pieces (B1, P1, K1, and the file guards and bridges in M1, W1, M2 and W2) get a Claude review and a second, independent review before they merge. A workstream that cannot be verified on the machine it runs on must not be started there.
+
+## How the autonomous run is started
+
+Checked against Claude Code's documentation on 2026-10-13.
+
+- Skipping permission prompts removes the prompts. It does not confine a session to a folder, and every subagent and workflow agent inherits it. The limits in "What a Mac session may touch" are therefore rules the sessions follow, backed by deny rules in the user's Claude Code settings for credential stores.
+- Plan mode comes first. The orchestrator reads the repository, writes its plan and waits. When the owner approves, a session started with prompts skipped offers to continue in that mode.
+- A long run is kept going with `/goal` and a condition, not with a loop. The condition is the "What done means" list.
+- Workflows fan work out to many agents at once. One workflow per phase of work, with the orchestrator reading each result before starting the next.
 
 ## How progress is tracked
 

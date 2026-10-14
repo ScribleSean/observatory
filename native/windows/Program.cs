@@ -471,11 +471,11 @@ internal sealed class ObservatoryContext : ApplicationContext
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
         menu.Items.Add("Refresh sources", null, async (_, _) => await collector.Refresh());
-        menu.Items.Add("Check for updatesâ€¦", null, async (_, _) => await CheckForUpdates());
+        menu.Items.Add("Check for updates…", null, async (_, _) => await CheckForUpdates());
         menu.Items.Add("Configure local collection", null, (_, _) => Configure());
-        menu.Items.Add("Pairing details for Macâ€¦", null, (_, _) => ShowPairingDetails());
-        menu.Items.Add("Disconnect paired deviceâ€¦", null, async (_, _) => await DisconnectPairing());
-        menu.Items.Add("Prepare pairing repairâ€¦", null, async (_, _) => await PreparePairingRepair());
+        menu.Items.Add("Pairing details for Mac…", null, (_, _) => ShowPairingDetails());
+        menu.Items.Add("Disconnect paired device…", null, async (_, _) => await DisconnectPairing());
+        menu.Items.Add("Prepare pairing repair…", null, async (_, _) => await PreparePairingRepair());
         var startup = new ToolStripMenuItem("Register start at login");
         menu.Items.Add(startup);
         menu.Opening += (_, _) =>
@@ -787,8 +787,8 @@ internal sealed class ObservatoryContext : ApplicationContext
         (dashboard as WebDashboard)?.SnapshotChanged();
         var stamp = Snapshot.Text(Data()?["collectedAt"], "");
         tray.Text = DateTimeOffset.TryParse(stamp, out var at)
-            ? $"Observatory Â· updated {Math.Max(0, (int)(DateTimeOffset.UtcNow - at).TotalMinutes)}m ago"
-            : "Observatory Â· waiting for first snapshot";
+            ? $"Observatory · updated {Math.Max(0, (int)(DateTimeOffset.UtcNow - at).TotalMinutes)}m ago"
+            : "Observatory · waiting for first snapshot";
     }
 
     private void ShowTotals(string host)
@@ -801,7 +801,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             $"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))}\n" +
             $"Recorded date: {Snapshot.Text(tokens?["date"])}";
         if (host == "All") message += "\n\nOnly verified combined totals are shown. Saved records retain their original source labels.";
-        MessageBox.Show(message, $"Observatory Â· {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void Open()
@@ -850,7 +850,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         quitting = true;
         try
         {
-            tray.Text = "Observatory Â· finishing collection before quitting";
+            tray.Text = "Observatory · finishing collection before quitting";
             if (directPairing is { } pairingWindow) { await pairingWindow.Shutdown(); if (!pairingWindow.IsDisposed) pairingWindow.Close(); }
             if (!await collector.StopGracefully(TimeSpan.FromSeconds(260)))
             {

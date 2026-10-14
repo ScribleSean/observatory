@@ -1,6 +1,6 @@
 # Platform parity
 
-Recorded on 2026-10-13 by reading source on `main` at `57518b7` (version 0.3.14 build 40). This table describes source code. It was not checked against the installed apps, and no interaction was exercised to produce it.
+First recorded on 2026-10-13 by reading source on `main` at `57518b7` (version 0.3.14 build 40). Rows changed since then describe `main` at build 41, where the shared web panel is merged behind launch flags on both platforms and is not what either installed app shows by default. This table describes source code. It was not checked against the installed apps, and no interaction was exercised to produce it.
 
 The coordinator session owns this file. Update it when a `mac/` or `win/` pull request changes a row, and when [the design direction](DESIGN.md) changes.
 

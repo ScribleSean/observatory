@@ -253,7 +253,7 @@ The SwiftUI and Windows Forms viewers stay the default until the shared viewer i
 
 ### Spike
 
-The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.md) and [the measurements record](RESOURCE-MEASUREMENTS.md). Open time was acceptable on both platforms. Memory was acceptable on the Mac. On Windows the web view must be released after the panel closes, and that is not measured yet.
+The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.md) and [the measurements record](RESOURCE-MEASUREMENTS.md). Open time was acceptable on both platforms. Memory was acceptable on the Mac. On Windows the web view is released a minute after the panel closes, which was then measured and brought memory back near the never-opened figure.
 
 ### Panel contract
 

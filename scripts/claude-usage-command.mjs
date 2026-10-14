@@ -1,7 +1,7 @@
 // Reads Claude Code limits by running the installed CLI's own usage command
 // in print mode. The command is local: it reports zero turns and zero cost.
 // Only the two limit lines are kept. The rest of the text is discarded.
-import {execFile} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
@@ -61,14 +61,52 @@ export async function findClaude(environment=process.env,platform=process.platfo
   return null;
 }
 
-export async function runClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000}={}) {
+const keep={
+  posix:['HOME','USER','LOGNAME','SHELL','PATH','TMPDIR','LANG','LC_ALL','CLAUDE_CONFIG_DIR'],
+  win32:['SystemRoot','SystemDrive','USERPROFILE','HOMEDRIVE','HOMEPATH','USERNAME','APPDATA','LOCALAPPDATA','TEMP','TMP','PATH','Path','PATHEXT','COMSPEC','CLAUDE_CONFIG_DIR'],
+};
+
+// The command gets a small fixed environment. A collector started from
+// another Claude session inherits that session's variables, and passing them
+// on made the command hang (issue 90).
+export function usageEnvironment(source=process.env,platform=process.platform) {
+  const result={};
+  for(const name of platform==='win32'?keep.win32:keep.posix)if(typeof source[name]==='string')result[name]=source[name];
+  return result;
+}
+
+function forceStop(child,platform) {
+  try {
+    if(platform==='win32' && child.pid)spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{stdio:'ignore',windowsHide:true}).on('error',()=>{}).unref();
+    else child.kill('SIGKILL');
+  } catch {}
+}
+
+// Always settles within the time limit, whatever the child does. A command
+// that ignores a polite stop or leaves a helper holding its output open
+// cannot hold up a collection.
+function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
+  return new Promise(resolve=>{
+    let output='',done=false,child;
+    const finish=value=>{
+      if(done)return;done=true;clearTimeout(timer);
+      if(value===null && child) {forceStop(child,platform);child.stdout?.destroy();child.unref();}
+      resolve(value);
+    };
+    const timer=setTimeout(()=>finish(null),timeoutMs);
+    try {child=spawn(executable,args,{cwd,env:environment,stdio:['ignore','pipe','ignore'],windowsHide:true});}
+    catch {finish(null);return;}
+    child.once('error',()=>finish(null));
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data',text=>{output+=text;if(output.length>1024*1024)finish(null);});
+    child.once('close',code=>finish(code===0?output:null));
+  });
+}
+
+export async function runClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000,environment=usageEnvironment(),platform=process.platform}={}) {
   const executable=await find();
   if(!executable || !path.isAbsolute(cwd ?? ''))return null;
-  const output=await new Promise(resolve=>{
-    const child=execFile(executable,['-p','/usage','--output-format','json','--no-session-persistence'],
-      {cwd,timeout:timeoutMs,maxBuffer:1024*1024,windowsHide:true},(error,stdout)=>resolve(error?null:stdout));
-    child.stdin?.end();
-  });
+  const output=await runBounded(executable,['-p','/usage','--output-format','json','--no-session-persistence'],{cwd,timeoutMs,environment,platform});
   if(!output)return null;
   try {return parseClaudeUsage(JSON.parse(output),now);}catch {return null;}
 }

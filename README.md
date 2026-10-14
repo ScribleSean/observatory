@@ -32,7 +32,7 @@ Observatory runs on your computer. It has no account and no hosted service. It r
 
 ## Status
 
-Observatory is under active development. The current build is 0.3.14 build 40.
+Observatory is under active development. The current build is 0.3.14 build 41.
 
 | Area | Current build | In progress |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Observatory is under active development. The current build is 0.3.14 build 40.
 | Codex tokens by day and model | Yes | |
 | Screen time from ActivityWatch | Yes | |
 | Claude Code tokens | Collected, shown only under Source health | Shown beside Codex |
-| Claude Code limits | No | Collector merged, not in a build yet |
+| Claude Code limits | Collected, with consent. Not shown on a screen yet. | Shown beside Codex |
 | Periods | Day, Week, All retained | Now, Day, Week, Month, All time |
 | Pairing two devices | Over an existing SSH connection | Tailscale with a pairing code |
 | Interface | Separate SwiftUI and Windows Forms interfaces | One shared interface for both platforms, with skins |
