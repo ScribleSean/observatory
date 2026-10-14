@@ -96,9 +96,9 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Breakdown by model | Done | Done | Keep | |
 | Token classes | Done | Done | Keep | |
 | Recorded reasoning and speed settings | Done | Done | Keep | |
-| API-equivalent estimate for Codex | Done | Done | Change | Move to the shared price table |
+| API-equivalent estimate for Codex | Done | Done | Keep | Rates come from the shared price table (`native/prices.json`). The dashboard's comparison note still names OpenAI's price page as the source and needs the viewer to name the table instead. |
 | Claude Code tokens | Missing | Missing | Add | Collected, but shown only in Source health |
-| API-equivalent estimate for Claude Code | Missing | Missing | Add | |
+| API-equivalent estimate for Claude Code | Missing | Missing | Add | The shared price table prices current Claude models. The collectors do not yet attach an estimate to Claude Code day rows. |
 | Claude Code session cost | Missing | Missing | Add | |
 
 ## Dictation
@@ -176,7 +176,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Shared strings file | Missing | Missing | Add | |
 | Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
-| Price table | Missing | Missing | Add | The guide records the current rates as last checked on 2026-09-06 |
+| Price table | Done | Done | Keep | `native/prices.json`, taken from LiteLLM's open table and checked on 2026-10-14. The packaged collectors read its generated twin `scripts/price-data.mjs`. `scripts/price-refresh.mjs` refreshes both by hand. |
 | Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together |
 
 ## Shared web viewer (spike)

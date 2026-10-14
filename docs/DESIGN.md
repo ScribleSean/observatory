@@ -81,7 +81,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 | Claude Code limits | Read the documented `rate_limits` fields that Claude Code passes to a status line command. A small bridge script writes them to a private file that the collector reads. Installing the bridge needs explicit consent, must pass data through to any status line the person already has, and must be removable. |
 | Claude Code limits, not allowed | Do not call the undocumented OAuth usage endpoint. Do not read the Claude Code token from the Keychain or a credentials file. Do not read browser cookies. Anthropic's legal page says developers may not collect, store or intermediate Claude.ai credentials or session tokens. |
 | Codex limits | Keep the read through the Codex app-server (`account/rateLimits/read`). Handle the newer response that lists several named limits. |
-| Price table | One file in the repository, taken from a maintained open table. A script refreshes it. The app shows the date it was last checked. A test fails when a model in the fixtures has no price. No network request at runtime. |
+| Price table | One file in the repository, `native/prices.json`, taken from [LiteLLM's open price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json). It holds `source`, `checkedOn` and, per model, `input`, `cachedInput`, `cacheWrite` and `output` in USD per million tokens. The packaged apps ship only script files, so `scripts/price-data.mjs` carries the same data and a test fails when the two differ. `scripts/price-refresh.mjs` refreshes both by hand and is never imported by a collector. The app shows the date it was last checked. A test fails when a model in the fixtures has no price, apart from a short list of older models the source table does not carry under their direct names. No network request at runtime. |
 | Claude Code log scan | Replace the hard stop at 2,000 files or 128 MiB with an incremental cache keyed by file, as the Codex reader already has. |
 | Time zone | Days follow the device's time zone. Saved history needs a tested migration before this ships. |
 | Combined Claude Code total | Per device until cross-device overlap checks exist. |
@@ -425,6 +425,10 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | --- | --- | --- |
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
 | `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
+| `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked | The dashboard reads `checked` from each estimate |
+| `apiEstimate` on Claude Code day rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table after the peer merge, on the device that shows it. It is never part of the exchanged record. A model with no price is excluded and leaves `usd` null. | Claude Code rows carry no estimate |
+
+`prices` and `apiEstimate` on Claude Code rows are written by the second part of the price table work (D2-4).
 
 `deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
 
