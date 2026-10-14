@@ -50,3 +50,18 @@ test('views read shared wording instead of literal labels', () => {
     }
   }
 });
+
+test('shared formatter refuses missing and inherited placeholders', async () => {
+  const { format: sharedFormat } = await import('../lib/format.mjs');
+  assert.equal(format, sharedFormat);
+  assert.throws(() => sharedFormat('{missing}', {}), /Missing placeholder: missing/);
+  assert.throws(() => sharedFormat('{constructor}', {}), /Missing placeholder: constructor/);
+});
+
+test('panel formatting preserves fixed synthetic outputs', async () => {
+  const { span, windowLabel, freshness } = await import('../lib/panel-data.mjs');
+  const now = Date.parse('2026-10-14T12:00:00Z');
+  assert.equal(span(3 * 3600000 + 5 * 60000), '3h 5m');
+  assert.equal(windowLabel(300), '5-hour');
+  assert.equal(freshness(new Date(now - 5 * 60000).toISOString(), now).label, 'Updated 5m ago');
+});

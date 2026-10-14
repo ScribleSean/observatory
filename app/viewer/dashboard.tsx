@@ -48,13 +48,9 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
     try { Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true }); } catch { /* The shell may already have defined the flag. */ }
   }, []);
 
-  const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
-    source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
-  const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
-  // Keep a #dictation request until the first snapshot has loaded.
-  if (loaded && selected !== section) setSection(selected);
+  // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
   return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
-    section={selected} onSectionChange={setSection} onSkinChange={setSkinId} />;
+    section={section} onSectionChange={setSection} onSkinChange={setSkinId} />;
 }
 
 type DashboardViewProps = {
