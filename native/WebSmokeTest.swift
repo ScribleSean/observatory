@@ -5,6 +5,9 @@ import WebKit
 @MainActor
 final class WebSmokeTest: NSObject, WKNavigationDelegate {
     private var web: WKWebView?
+    private var panel: WebPanelController?
+    private var panelActions: [String] = []
+    private var dashboardPage = "Unknown"
     private var timer: Timer?
     private let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-smoke-\(UUID().uuidString)")
     func start() {
@@ -29,15 +32,104 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
             try Data("// synthetic private canary".utf8).write(to: runtime.appendingPathComponent("private-sync/secret.js"))
             try FileManager.default.createSymbolicLink(at: testResources.appendingPathComponent("Web/assets/private-linked"),
                 withDestinationURL: runtime.appendingPathComponent("private-sync"))
-            let view = makeDashboard(runtime: runtime, resources: testResources)
-            view.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
-            view.navigationDelegate = self
-            web = view
-            timer = Timer.scheduledTimer(withTimeInterval: 25, repeats: false) { [weak self] _ in
+            timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.finish(false) }
             }
-            view.load(URLRequest(url: URL(string: "observatory://app/index.html")!))
+            Task {
+                do {
+                    guard try await checkPanel(resources: testResources) else { finish(false); return }
+                    guard try await checkDashboard(resources: testResources) else { finish(false); return }
+                    let view = makeDashboard(runtime: runtime, resources: testResources)
+                    view.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
+                    view.navigationDelegate = self
+                    web = view
+                    view.load(URLRequest(url: URL(string: "observatory://app/index.html")!))
+                } catch { finish(false) }
+            }
         } catch { finish(false) }
+    }
+    private func waitUntilReady(_ view: WKWebView, flag: String) async throws -> Bool {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if !view.isLoading, view.url != nil {
+                let ready = try await view.callAsyncJavaScript("return document.readyState === 'complete' && window[flag] === true;",
+                    arguments: ["flag": flag], in: nil, contentWorld: .page)
+                if ready as? Bool == true { return Date() < deadline }
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return false
+    }
+    private func waitForPanelAction(_ view: WKWebView) async throws -> Bool {
+        _ = try await view.callAsyncJavaScript("return true;", arguments: [:], in: nil, contentWorld: .page)
+        let deadline = Date().addingTimeInterval(2)
+        while panelActions.isEmpty && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return panelActions == ["refresh"]
+    }
+    private func checkHost(_ view: WKWebView, blockedPages: [String], panelHost: Bool) async throws -> Bool {
+        let value = try await view.callAsyncJavaScript("""
+        const response = await fetch('./local/usage.json');
+        const object = await response.json();
+        let privateDenied = true;
+        for (const path of [...blockedPages, './other.html',
+          './private-sync/pairing.json', './private-sync/setup.pending.json',
+          './assets/private-sync/pairing.json', './assets/private-sync/setup.pending.json',
+          './assets/private-linked/secret.js',
+          './assets/%2e%2e/private-sync/setup.pending.json', './local/../private-sync/pairing.json']) {
+          try { const r = await fetch(path); if (r.ok) privateDenied = false; } catch {}
+        }
+        for (const name of ['private-sync/pairing', '../private-sync/setup.pending', 'setup.pending', 'pairing']) {
+          try { await window.webkit.messageHandlers.snapshot.postMessage(name); privateDenied = false; } catch {}
+        }
+        const handlers = window.webkit.messageHandlers;
+        if (panelHost) return object.smokeTest === true && privateDenied && handlers.panelAction !== undefined;
+        let quitDenied = false;
+        try { await handlers.snapshot.postMessage('quit'); } catch { quitDenied = true; }
+        return object.smokeTest === true && privateDenied && handlers.panelAction === undefined && quitDenied;
+        """, arguments: ["blockedPages": blockedPages, "panelHost": panelHost], in: nil, contentWorld: .page)
+        return value as? Bool == true
+    }
+    private func checkPanel(resources: URL) async throws -> Bool {
+        panel = WebPanelController(runtime: runtime, resources: resources) { [weak self] action in
+            self?.panelActions.append(action.rawValue)
+        }
+        defer {
+            panel?.webViewForTesting.stopLoading()
+            panel?.webViewForTesting.configuration.userContentController.removeAllScriptMessageHandlers()
+            panel = nil
+        }
+        guard let panel else { return false }
+        panel.view.frame = NSRect(x: 0, y: 0, width: 388, height: 520)
+        panel.loadIfNeeded()
+        let view = panel.webViewForTesting
+        guard try await waitUntilReady(view, flag: "observatoryPanelReady"),
+              try await checkHost(view, blockedPages: ["./index.html", "./dashboard.html"], panelHost: true) else { return false }
+        _ = try await view.callAsyncJavaScript("""
+        for (const value of ['quit', 'Refresh', 'refresh ', 'open-dashboard:settings', {action: 'refresh'}, 42, 'refresh']) {
+          window.webkit.messageHandlers.panelAction.postMessage(value);
+        }
+        return true;
+        """, arguments: [:], in: nil, contentWorld: .page)
+        return try await waitForPanelAction(view)
+    }
+    private func checkDashboard(resources: URL) async throws -> Bool {
+        let page = WebDashboardPage.shownPage(resources: resources)
+        dashboardPage = page == "dashboard.html" ? page : "panel.html as the fallback"
+        let view = makeWebDashboard(runtime: runtime, resources: resources, page: page)
+        web = view
+        defer {
+            view.stopLoading()
+            view.configuration.userContentController.removeAllScriptMessageHandlers()
+            web = nil
+        }
+        view.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
+        view.load(URLRequest(url: WebDashboardPage.url(page: page, section: "activity")))
+        let flag = page == "dashboard.html" ? "observatoryDashboardReady" : "observatoryPanelReady"
+        let otherPage = page == "dashboard.html" ? "./panel.html" : "./dashboard.html"
+        guard try await waitUntilReady(view, flag: flag) else { return false }
+        return try await checkHost(view, blockedPages: ["./index.html", otherPage], panelHost: false)
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task {
@@ -98,8 +190,11 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         web?.stopLoading()
         web?.configuration.userContentController.removeAllScriptMessageHandlers()
         web = nil
+        panel?.webViewForTesting.stopLoading()
+        panel?.webViewForTesting.configuration.userContentController.removeAllScriptMessageHandlers()
+        panel = nil
         try? FileManager.default.removeItem(at: runtime)
-        print(passed ? "Native renderer and data bridge passed" : "Native renderer or data bridge failed")
+        print(passed ? "Native renderer and data bridge passed (panel host, dashboard host showing \(dashboardPage), legacy host)" : "Native renderer or data bridge failed")
         exit(passed ? 0 : 1)
     }
 }
