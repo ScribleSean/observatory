@@ -18,18 +18,18 @@ const keys = (value: unknown, names: string[]): value is Record<string, unknown>
 const hex = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 export function validateBridgeStatus(value: unknown): BridgeStatus | null {
   try {
-    if (new TextEncoder().encode(JSON.stringify(value)).length > contract.limits.statusMaxBytes ||
+    if (new TextEncoder().encode(JSON.stringify(value)).length > contract.status.maxBytes ||
       !keys(value, ['version', 'app', 'sources', 'skin', 'deviceName', 'startup', 'appearance', 'limitsConsent', 'pairing', 'sharing'])) return null;
     const { app, sources, skin, pairing, sharing } = value;
-    if (value.version !== 1 || !keys(app, ['version', 'build']) || typeof app.version !== 'string' ||
-      !/^[A-Za-z0-9][A-Za-z0-9 .+-]{0,31}$/.test(app.version) || !Number.isSafeInteger(app.build) || (app.build as number) < 0 ||
+    if (value.version !== contract.status.version || !keys(app, ['version', 'build']) || typeof app.version !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9 .+-]*$/.test(app.version) || Array.from(app.version).length > contract.status.appVersionMaxLength || !Number.isSafeInteger(app.build) || (app.build as number) < 0 ||
       !keys(sources, ['activity', 'codex', 'claude', 'wispr', 'quota']) || Object.values(sources).some(v => typeof v !== 'boolean') ||
       typeof value.startup !== 'boolean' || typeof value.limitsConsent !== 'boolean' ||
       !contract.values.appearance.includes(value.appearance as string) || !validateArgs('set-device-name', { name: value.deviceName }).ok) return null;
     const bundled = contract.actions['set-skin'].args.skin.bundled;
     if (!keys(skin, ['current', 'bundled', 'custom']) || !Array.isArray(skin.bundled) ||
       skin.bundled.length !== bundled.length || new Set(skin.bundled).size !== bundled.length || skin.bundled.some(id => !bundled.includes(id)) ||
-      !Array.isArray(skin.custom) || skin.custom.length > 32 || new Set(skin.custom).size !== skin.custom.length ||
+      !Array.isArray(skin.custom) || skin.custom.length > contract.status.customSkinsMax || new Set(skin.custom).size !== skin.custom.length ||
       skin.custom.some(name => typeof name !== 'string' || !validateArgs('set-skin', { skin: name }).ok || bundled.includes(name.toLowerCase())) ||
       ![...skin.bundled, ...skin.custom].includes(skin.current)) return null;
     if (!keys(pairing, ['state', 'peerFingerprint', 'transport', 'invitationKept']) ||

@@ -25,6 +25,6 @@
 .ob-settings-disclosure ul { padding-left: var(--ob-space-4); }
 .ob-settings output:empty { display: none; }
 
-.ob-settings .ob-settings-toggle { flex-wrap: nowrap; }
+.ob-settings .ob-settings-toggle { flex-wrap: nowrap; align-items: center; }
 .ob-settings-toggle .ob-settings-switch { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .ob-settings-toggle .ob-meta { flex-shrink: 0; }
