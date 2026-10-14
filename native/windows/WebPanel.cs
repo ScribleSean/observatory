@@ -230,6 +230,10 @@ internal sealed class WebPanel : Form
         };
         // The control forwards accelerator keys pressed inside the page.
         web.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { e.Handled = true; Hide(); } };
+        // Read once per web view. Changes apply when the next panel is created.
+        var (skin, theme) = WebViewerPreferences.Read();
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
+        if (IsDisposed) return;
         core.Navigate(Origin + "/" + Page);
     }
 

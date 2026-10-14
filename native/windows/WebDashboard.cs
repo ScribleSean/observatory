@@ -56,6 +56,10 @@ internal sealed class WebDashboard : Form
             core.NewWindowRequested += (_, e) => e.Handled = true;
             core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
             core.DownloadStarting += (_, e) => e.Cancel = true;
+            // Read once per web view. Changes apply when the next window is created.
+            var (skin, theme) = WebViewerPreferences.Read();
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
+            if (IsDisposed || web.IsDisposed) return;
             core.Navigate(WebPanel.Origin + "/" + Page);
         }
         catch

@@ -292,6 +292,7 @@ internal static class Program
                 SourceRetirementTests.Run();
                 WebPanel.SelfTest();
                 WebDashboard.SelfTest();
+                WebViewerPreferences.SelfTest();
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
