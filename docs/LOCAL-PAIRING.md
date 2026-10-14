@@ -83,6 +83,11 @@ Mac and one Windows device. Pairing files saved by earlier builds stay readable 
 own device. A saved pairing that still lists Ubuntu is refused and needs a new pairing. Both apps must be
 installed from the same change before any new pairing is made, because the setup message no longer includes
 the old field.
+If a direct (TLS) pairing is tried anyway with an updated device joining a host on an earlier build, the
+joining device saves its side of the pairing and then reports "local-ready", because the earlier host refuses
+the new acknowledgement. Both sides then hold a pairing that was never acknowledged. Update both apps, then
+repair the pairing on both devices. An earlier joiner with an updated host is refused before either side saves
+anything.
 
 The Mac `--test-direct-pairing-model` check uses a fake bridge to test consent,
 confirmation, cancellation and cleanup without keys or network access. Full
