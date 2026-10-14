@@ -105,7 +105,7 @@ test('lost reply retains an inactive pending generation and retry does not chang
 test('retry rejects extra fields and target changes, and revocation stops setup',async t=>{
   const mac=await fixture(t),input=request();let calls=0;
   const offline=async()=>{calls++;throw Error('Offline');};
-  await assert.rejects(setupPairing(mac,input,offline,'darwin'));
+  await assert.rejects(setupPairing(mac,input,offline,'darwin'),/Offline/);
   const before=await readFile(path.join(mac,'private-sync/setup.pending.json'));
   await assert.rejects(setupPairing(mac,{...input,includeUbuntu:true},offline,'darwin'));
   await assert.rejects(setupPairing(mac,{...input,transport:{...input.transport,hostAlias:'different-host'}},offline,'darwin'));

@@ -5,7 +5,8 @@ import {execFileSync} from 'node:child_process';
 import {mkdtemp,realpath,rm,writeFile,readFile,stat,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {privateSyncDirectory} from './peer-directory.mjs';
+import {privateSyncDirectory,privateCollectorDirectory} from './peer-directory.mjs';
+import {writeRepairConsent} from './peer-repair-consent.mjs';
 import {readPairing,readPendingPairing,initializePairing,activatePendingPairing} from './peer-pairing.mjs';
 import {setupStatus,setupPairing,complementaryWindowsPairing} from './peer-setup.mjs';
 import {ensureWindowsPairing} from './peer-setup-endpoint.mjs';
@@ -89,6 +90,33 @@ test('legacy SSH pairings preserve files, revisions and quota sharing without re
   await setupPairing(mac,{transport},async(_,pair)=>ensureWindowsPairing(windows,{version:1,pairing:pair},'win32'),'darwin');
   assert.deepEqual((await snapshot(mac))[activeFile],activeBefore);
   assert.equal(await readPendingPairing(mac),null);
+});
+
+test('legacy repaired SSH pairings preserve files and require matching local consent',async t=>{
+  const mac=await fixture(t),windows=await fixture(t),repair={mac:hex('1'),windows:hex('2')};
+  for(const [runtime,nonce] of [[mac,repair.mac],[windows,repair.windows]]) {
+    await privateCollectorDirectory(runtime,'private-repair',true);
+    await writeRepairConsent(runtime,nonce);
+  }
+  const raw={...oldPair(),transport,repair},remote={...oldPair('Windows'),repair},safe=normalized(raw);
+  await write(mac,'pairing.json',raw);await write(windows,'pairing.json',remote);
+  assert.deepEqual(await unchanged(mac,()=>readPairing(mac)),safe);
+  assert.deepEqual(await unchanged(windows,()=>readPairing(windows)),normalized(remote));
+  assert.deepEqual(await unchanged(mac,()=>setupStatus(mac,'darwin')),{status:'paired',request:{transport}});
+  const complementary=complementaryWindowsPairing(safe);
+  assert.deepEqual(complementary,normalized(remote));
+  assert.deepEqual(await unchanged(windows,()=>ensureWindowsPairing(windows,
+    {version:1,pairing:complementary},'win32')),{version:1,status:'ready'});
+  assert.deepEqual(await unchanged(mac,()=>unchanged(windows,()=>setupPairing(mac,{transport},async(target,pair)=>{
+    assert.deepEqual(target,transport);assert.deepEqual(pair,complementary);
+    return ensureWindowsPairing(windows,{version:1,pairing:pair},'win32');
+  },'darwin'))),{status:'paired'});
+  await write(mac,'setup.pending.json',raw);
+  assert.deepEqual(await unchanged(mac,()=>readPendingPairing(mac)),safe);
+  assert.deepEqual(await unchanged(mac,()=>setupStatus(mac,'darwin')),{status:'pending',request:{transport}});
+  await writeRepairConsent(windows,hex('3'));
+  await unchanged(windows,()=>assert.rejects(ensureWindowsPairing(windows,
+    {version:1,pairing:complementary},'win32'),/Fresh confirmation on both devices required/));
 });
 
 test('retired two-slot files are refused and new pairing files omit legacy keys',async t=>{
