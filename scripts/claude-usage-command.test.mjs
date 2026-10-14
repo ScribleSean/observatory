@@ -5,7 +5,7 @@ import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {chmod} from 'node:fs/promises';
-import {parseClaudeUsage,parseResetTime,runClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
+import {parseClaudeUsage,parseResetTime,readClaudeUsage,runClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
 import {readClaudeLimits,withinTime} from './claude-limits.mjs';
 
 import {setLimitsConsent,clearLimitsConsent} from './claude-limits-consent.mjs';
@@ -45,8 +45,10 @@ test('a collection with consent stores the command reading and one without conse
   const runtime=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-usage-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   let runs=0;
-  const readUsage=async({cwd})=>{runs++;assert.equal(cwd,path.join(runtime,'claude-limits'));return parseClaudeUsage(envelope(),now);};
-  assert.equal((await readClaudeLimits(runtime,{now,readUsage})).status,'not-connected');
+  const readUsage=async({cwd})=>{runs++;assert.equal(cwd,path.join(runtime,'claude-limits'));return {status:'read',usage:parseClaudeUsage(envelope(),now)};};
+  const disconnected=await readClaudeLimits(runtime,{now,readUsage});
+  assert.equal(disconnected.status,'not-connected');
+  assert.equal(Object.hasOwn(disconnected,'usageCommand'),false);
   assert.equal(runs,0);
   await mkdir(path.join(runtime,'claude-limits'));
   await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
@@ -57,7 +59,7 @@ test('a collection with consent stores the command reading and one without conse
   assert.doesNotMatch(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'),/synthetic|subscription/);
   const failing=await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>{throw Error('synthetic failure');}});
   assert.equal(failing.status,'ok');
-  assert.equal((await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>null})).windows.length,2);
+  assert.equal((await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>({status:'unrecognized',usage:null})})).windows.length,2);
 });
 
 test('the command gets a fixed small environment and never a parent session\'s variables', () => {
@@ -102,10 +104,56 @@ test('consent alone runs usage and clearing it stops collection', async t => {
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   await setLimitsConsent({runtime,consent:true});
   let runs=0;
-  const readUsage=async()=>{runs++;return parseClaudeUsage(envelope(),now);};
+  const readUsage=async()=>{runs++;return {status:'read',usage:parseClaudeUsage(envelope(),now)};};
   assert.equal((await readClaudeLimits(runtime,{now,readUsage})).status,'ok');
   assert.equal(runs,1);
   await clearLimitsConsent({runtime});
-  assert.equal((await readClaudeLimits(runtime,{now,readUsage})).status,'not-connected');
+  const disconnected=await readClaudeLimits(runtime,{now,readUsage});
+  assert.equal(disconnected.status,'not-connected');
+  assert.equal(Object.hasOwn(disconnected,'usageCommand'),false);
   assert.equal(runs,1);
+});
+
+test('readClaudeUsage reports timed-out and force-stops a command that ignores a stop request', {skip:process.platform==='win32'}, async t => {
+  const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-hang-')));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const fake=path.join(folder,'claude'),pidFile=path.join(folder,'pid');
+  await writeFile(fake,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));process.on('SIGTERM',()=>{});process.on('SIGINT',()=>{});setInterval(()=>{},1000);\n`);
+  await chmod(fake,0o700);
+  const started=Date.now();
+  assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>fake,timeoutMs:400}),{status:'timed-out',usage:null});
+  assert.ok(Date.now()-started<3000,'the reader must settle near its limit');
+  const pid=Number(await readFile(pidFile,'utf8'));
+  let alive=true;
+  for(let attempt=0;attempt<100 && alive;attempt++) {try {process.kill(pid,0);await new Promise(resolve=>setTimeout(resolve,20));}catch {alive=false;}}
+  assert.equal(alive,false,'the stuck command must be gone');
+});
+
+
+test('readClaudeUsage reports missing executables and relative working directories', async () => {
+  assert.deepEqual(await readClaudeUsage({cwd:tmpdir(),find:async()=>null}),{status:'not-found',usage:null});
+  assert.deepEqual(await readClaudeUsage({cwd:'relative',find:async()=>{throw Error('must not run');}}),{status:'not-found',usage:null});
+});
+
+test('readClaudeUsage reports only a status and sanitized reading from fake commands', {skip:process.platform==='win32'}, async t => {
+  const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-outcomes-')));
+  t.after(()=>rm(folder,{recursive:true,force:true}));
+  const fake=path.join(folder,'claude');
+  const cases=[
+    ["process.stdout.write("+JSON.stringify(JSON.stringify(envelope()))+")",'read'],
+    ['process.exit(3)','failed'],
+    ["process.kill(process.pid,'SIGKILL')",'failed'],
+    ["process.stdout.write('synthetic non-JSON output')",'unrecognized'],
+    ["process.stdout.write("+JSON.stringify(JSON.stringify(envelope('No limit lines')))+")",'unrecognized'],
+    ["process.stdout.write("+JSON.stringify(JSON.stringify(envelope(text(),{num_turns:1})))+")",'unrecognized'],
+    ["process.stdout.write('é'.repeat(600000))",'failed'],
+  ];
+  for(const [body,status] of cases) {
+    await writeFile(fake,`#!${process.execPath}\n${body}\n`);
+    await chmod(fake,0o700);
+    assert.deepEqual(await readClaudeUsage({cwd:folder,now,find:async()=>fake}),
+      {status,usage:status==='read'?parseClaudeUsage(envelope(),now):null});
+  }
+  assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>path.join(folder,'missing')}),{status:'failed',usage:null});
+  assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>{throw Error('synthetic');}}),{status:'failed',usage:null});
 });

@@ -87,7 +87,7 @@ test('recording writes one small private file and reading needs the install mark
   assert.equal((await readClaudeLimits(runtime,{now})).status,'not-connected');
   await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
   // Tests never start the real Claude Code command.
-  const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>null});
+  const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({status:'unrecognized',usage:null})});
   assert.equal(source.status,'ok');
   const result={data:{}};attachClaudeLimits(result,source);
   assert.equal(result.data.claudeLimits.windows.length,2);
@@ -251,7 +251,7 @@ test('usage readings after bridge storage preserve cost and cannot inject a repl
     const runtime=await folder(t);
     const saved=await recordClaudeLimits(runtime,{...input(),cost:{total_cost_usd:1.23}},now);
     await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
-    const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({...usage,...extra})});
+    const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({status:'read',usage:{...usage,...extra}})});
     const stored=JSON.parse(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'));
     assert.deepEqual(stored.sessionCost,saved.sessionCost);
     assert.equal(stored.windows.five_hour.usedPercentage,30);
@@ -357,4 +357,47 @@ test('consent CLI requires consent and supports set status and clear', async t =
   await assert.rejects(invoke('clear'),error=>error.code===1 && !error.stderr.includes(runtime));
   for(const args of [['unknown'],['set','--consent','--runtime','relative'],['status','--unknown'],['status','--runtime']])
     await assert.rejects(invoke(...args),error=>error.code===2);
+});
+
+
+test('reproduces the stale reading after the usage command from build 41', async t => {
+  const earlier=now-40*60000;
+  for(const outcome of ['read','not-found','failed','timed-out','unrecognized','throws']) {
+    const runtime=await folder(t);
+    const saved=await recordClaudeLimits(runtime,input(),earlier);
+    await setLimitsConsent({runtime,consent:true,now:new Date(earlier)});
+    const readUsage=async()=>{
+      if(outcome==='throws')throw Error('synthetic private failure');
+      return {status:outcome,usage:outcome==='read'?input():null};
+    };
+    const source=await readClaudeLimits(runtime,{now,readUsage});
+    assert.deepEqual(source,{...claudeLimitsSource(saved,{enabled:true,now}),
+      status:outcome==='read'?'ok':'stale',checkedAt:new Date(outcome==='read'?now:earlier).toISOString(),
+      usageCommand:outcome==='throws'?'failed':outcome});
+  }
+});
+
+test('invalid usage results fail without exposing details or inventing a reading', async t => {
+  const runtime=await folder(t);
+  await setLimitsConsent({runtime,consent:true,now:new Date(now)});
+  for(const result of [null,undefined,'synthetic',[],{},input(),{status:'/synthetic/private',usage:null},
+    {status:'read',usage:null},{status:'not-found',usage:input()}]) {
+    assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>result}),
+      {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'failed'});
+  }
+  // A reading the store cannot use counts as not recognized.
+  assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status:'read',usage:{}})}),
+    {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'unrecognized'});
+  for(const status of ['not-found','failed','timed-out','unrecognized']) {
+    assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status,usage:null})}),
+      {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:status});
+  }
+});
+
+test('a recording error reports failed without exposing the error or command details', async t => {
+  const runtime=await folder(t);
+  await setLimitsConsent({runtime,consent:true,now:new Date(now)});
+  await mkdir(path.join(runtime,'claude-limits/limits.json'));
+  assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status:'read',usage:input()})}),
+    {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'failed'});
 });

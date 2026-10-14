@@ -1,7 +1,7 @@
 import {lstat,mkdir,readFile,rename,unlink,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
-import {runClaudeUsage} from './claude-usage-command.mjs';
+import {readClaudeUsage} from './claude-usage-command.mjs';
 
 // Claude Code passes rate_limits to a status line command for Pro and Max
 // subscribers after the first response of a session. This module keeps only
@@ -155,17 +155,23 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
 
 // With consent given, each collection also asks the installed CLI for the
 // current figures, so limits stay current when no terminal session is open.
-// A failed or unexpected command result changes nothing.
-export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=runClaudeUsage}={}) {
+// A failed or unexpected command result preserves the older reading.
+export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage}={}) {
   const {given:enabled}=await claudeLimitsConsent(runtime);
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
+  let usageCommand='failed';
   try {
-    const usage=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
-    if(usage)await recordClaudeLimits(runtime,{rate_limits:usage.rate_limits},now);
-  } catch {}
+    const result=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
+    if(isObject(result) && ['read','not-found','failed','timed-out','unrecognized'].includes(result.status)) {
+      if(result.status==='read') {
+        // A reading the store cannot use is reported like an output that was not recognized.
+        if(isObject(result.usage))usageCommand=await recordClaudeLimits(runtime,{rate_limits:result.usage.rate_limits},now)?'read':'unrecognized';
+      } else if(result.usage===null)usageCommand=result.status;
+    }
+  } catch {usageCommand='failed';}
   let stored=null;
   try {stored=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_FILE),4096);}catch{}
-  return claudeLimitsSource(stored,{enabled:true,now});
+  return {...claudeLimitsSource(stored,{enabled:true,now}),usageCommand};
 }
 
 export function attachClaudeLimits(result,source) {
