@@ -19,7 +19,7 @@ internal static class LaunchArguments
                 "--test-tls-setup-bridge" or "--test-tls-identity-bridge" or "--test-device-identity-bridge" or
                 "--test-direct-pairing-window" or "--test-trusted-sync-owner" or "--test-archive-window" or
                 "--test-native-dashboard" or "--test-setup-wizard" or "--test-usage-popup" or
-                "--test-pairing-details" or "--test-web" or "--test-first-run" => 2,
+                "--test-pairing-details" or "--test-web" or "--test-first-run" or "--test-web-hosts" => 2,
             "--test-update-extraction" => 3,
             "--test-installed-update-state" or "--test-update-candidate" => 5,
             "--apply-update" or "--test-update-staging" => 6,

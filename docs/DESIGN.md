@@ -425,7 +425,7 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | --- | --- |
 | Page | `dashboard.html` in the bundled web files. It sets `window.observatoryDashboardReady` after its first render. |
 | Data | It requests `./local/usage.json` through the existing snapshot bridge, reloads on `observatory:snapshot-changed` and every 30 seconds while visible, and reads nothing else. |
-| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. A fragment naming a section, such as `dashboard.html#tokens`, opens that section on the first render. The page does not write the fragment. |
+| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. A fragment naming a section, such as `dashboard.html#tokens`, opens that section on the first render, and a later change of the fragment switches to it. When the person picks a section, the page writes its id to the fragment with `history.replaceState`, so history does not grow and a query such as `?demo` is kept. An unknown fragment shows Limits. |
 | Actions | None. The page sends nothing to the shell. |
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
