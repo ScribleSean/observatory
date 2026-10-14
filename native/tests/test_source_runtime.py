@@ -91,11 +91,11 @@ class SourceRuntimeTests(unittest.TestCase):
         self.assertEqual(status['sourcesRead'], 1)
         self.assertNotIn(self.selected, json.dumps(status))
 
-    def test_default_source_entry_supplies_running_python_before_child_launch(self):
+    def test_collect_mac_source_entry_supplies_running_python_before_child_launch(self):
         result = self.runner.run_collection(self.source, self.node)
         self.assertEqual(result, 'ok')
-        self.assert_launch(self.source, self.source / 'scripts' / 'collect-dashboard.mjs',
-                           self.selected, None)
+        self.assert_launch(self.source, self.source / 'scripts' / 'collect-mac.mjs',
+                           self.selected, str(self.source))
 
     def test_explicit_packaged_entry_preserves_selected_python_and_separate_runtime(self):
         collector = self.resources / 'Collector' / 'scripts' / 'collect-mac.mjs'
@@ -106,18 +106,18 @@ class SourceRuntimeTests(unittest.TestCase):
         self.assertFalse((self.resources / 'public').exists())
         self.assertFalse((self.source / 'public').exists())
 
-    def test_source_without_inherited_python_supplies_running_interpreter(self):
+    def test_collect_mac_without_inherited_python_supplies_running_interpreter(self):
         del self.runner.os.environ['OBSERVATORY_PYTHON']
         self.assertEqual(self.runner.run_collection(self.source, self.node), 'ok')
-        self.assert_launch(self.source, self.source / 'scripts' / 'collect-dashboard.mjs',
-                           self.selected, None)
+        self.assert_launch(self.source, self.source / 'scripts' / 'collect-mac.mjs',
+                           self.selected, str(self.source))
 
-    def test_source_explicit_python_overrides_running_and_inherited_interpreters(self):
+    def test_collect_mac_explicit_python_overrides_running_and_inherited_interpreters(self):
         self.runner.sys.executable = str(self.fixture / 'unselected-python')
         self.assertEqual(self.runner.run_collection(self.source, self.node,
                                                     python=self.selected), 'ok')
-        self.assert_launch(self.source, self.source / 'scripts' / 'collect-dashboard.mjs',
-                           self.selected, None)
+        self.assert_launch(self.source, self.source / 'scripts' / 'collect-mac.mjs',
+                           self.selected, str(self.source))
 
     def assert_refused(self, value, collector=None):
         self.runner.subprocess.Popen.reset_mock()
@@ -167,11 +167,11 @@ class SourceRuntimeTests(unittest.TestCase):
         self.assertEqual((folder / 'collector.json').read_text(), 'preserved running status')
         self.assertEqual((folder / 'usage.json').read_text(), 'preserved snapshot')
 
-    def test_explicit_dashboard_entry_preserves_bundled_source_selection(self):
+    def test_explicit_bundled_dashboard_entry_is_refused(self):
         collector = self.resources / 'Collector' / 'scripts' / 'collect-dashboard.mjs'
         self.assertEqual(self.runner.run_collection(self.runtime, self.node,
-                                                    collector=collector), 'ok')
-        self.assert_launch(self.runtime, collector, self.selected, str(self.runtime))
+                                                    collector=collector), 'failed')
+        self.runner.subprocess.Popen.assert_not_called()
         self.assertFalse((self.resources / 'public').exists())
 
 
