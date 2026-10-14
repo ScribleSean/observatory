@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { STRINGS } from '../../../lib/strings.generated';
 import { contract, validateArgs } from '../../../lib/bridge-contract.mjs';
 import { sampleBridgeStatus } from '../../../lib/sample-snapshot.mjs';
@@ -55,17 +56,17 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
   const running = useRef(false);
   useEffect(() => {
     const transport = bridge ?? (demo ? createFakeBridge() : createBridge());
-    const next = createSettingsController(transport);
+    const next = createSettingsController(transport, () => generation.current);
     const unsubscribe = next.subscribe(value => {
       setController(next);
       setAvailable(transport.available);
       setStatus(value);
-      if (!value || terminal.has(value.pairing.state)) setInvitation('');
+      if (value && terminal.has(value.pairing.state)) setInvitation('');
     });
     const stopResults = next.onLateResult((result, action) => {
       const presented = presentResult(result, action, next.getStatus());
-      setMessage(presented.message);
-      if (action.startsWith('pairing-') && !result.ok) setInvitation('');
+      if (!running.current) setMessage(presented.message);
+      if (action.startsWith('pairing-') && ['unavailable', 'expired'].includes(result.code)) setInvitation('');
       if (presented.invitation !== undefined) setInvitation(presented.invitation);
       if (presented.tailscale !== undefined) setTailscale(presented.tailscale);
       if (action === 'pairing-join-claim') setJoinText('');
@@ -79,10 +80,11 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
         void next.status().finally(() => { polling = false; });
       }
     }, contract.limits.pairingPollSeconds * 1000);
-    const hide = () => { generation.current++; running.current = false; setBusy(false); setInvitation(''); setJoinText(''); };
+    const clear = () => { generation.current++; running.current = false; setBusy(false); setInvitation(''); setJoinText(''); };
+    const hide = () => flushSync(clear);
     window.addEventListener('pagehide', hide);
     return () => {
-      hide();
+      clear();
       clearInterval(poll); window.removeEventListener('pagehide', hide);
       unsubscribe(); stopResults(); next.dispose();
       if (!bridge) transport.dispose();
@@ -96,13 +98,13 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
     void task().then(result => {
       if (ticket !== generation.current) return;
       setMessage(result.timedOut ? S.timedOut : result.local && result.code === 'refused' ? (options.name ? S.nameError : S.fieldError) : S[result.code]);
-      if (options.pairing && !result.ok) setInvitation('');
+      if (options.pairing && ['unavailable', 'expired'].includes(result.code)) setInvitation('');
       const presented = presentResult(result, options.host ? 'pairing-host-start' : options.tailscale ? 'tailscale-check' : '', controller?.getStatus() ?? null);
       if (presented.invitation !== undefined) setInvitation(presented.invitation);
       if (presented.tailscale !== undefined) setTailscale(presented.tailscale);
       if (result.ok && options.skin && Object.hasOwn(skinNames, options.skin)) onSkinChange(options.skin);
     }).catch(() => {
-      if (ticket === generation.current) { setMessage(S.unavailable); if (options.pairing) setInvitation(''); }
+      if (ticket === generation.current) setMessage(S.unavailable);
     }).finally(() => {
       if (ticket === generation.current) { running.current = false; setBusy(false); }
     });
@@ -159,7 +161,7 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       {toggle(S.codexLimits, status?.sources.quota, enabled => action(c => c.setSource('quota', enabled)))}
       {toggle(S.claudeLimits, status?.limitsConsent, enabled => enabled ? setDisclosure(consent?.request() ?? false) : action(c => c.setLimitsConsent(false)))}
       {disclosure && <div className="ob-settings-disclosure"><ul><li>{S.disclosureHints}</li><li>{S.disclosureReadings}</li><li>{S.disclosureSharing}</li></ul>
-        {button(S.turnOn, () => { setDisclosure(false); const task = consent?.confirm(); if (task) run(() => task); })}
+        {button(S.turnOn, () => run(() => { setDisclosure(false); return consent?.confirm() ?? Promise.resolve({ id: 0, ok: false, code: 'refused', local: true }); }))}
         {button(S.cancel, () => setDisclosure(consent?.cancel() ?? false))}</div>}
     </>)}
     {group(S.devices, <>
@@ -173,9 +175,9 @@ export function SettingsContent({ status: raw, controller, available = true, bus
         {state === 'identity-required' ? button(S.identity, () => pairingAction(c => c.pairingIdentityCreate())) :
           !['waiting', 'awaiting-confirmation', 'paired'].includes(state ?? '') && <>{field(S.address, address, setAddress)}{field(S.port, port, setPort, true)}{button(S.start, () => pairingAction(c => c.pairingHostStart(address, port), true))}</>}
       </>}
-      {invitation && status?.pairing.invitationKept && <>
-        <label className="ob-settings-field">{S.invitation}<textarea readOnly spellCheck={false} value={invitation} /></label>
-        <p>{S.invitationWarning}</p>{button(S.copyInvitation, () => pairingAction(c => c.pairingCopyInvitation()))}
+      {invitation && <label className="ob-settings-field">{S.invitation}<textarea readOnly spellCheck={false} value={invitation} /></label>}
+      {status?.pairing.invitationKept && <>
+        <p>{S.invitationWarning}</p>{button(S.copyInvitation, () => action(c => c.pairingCopyInvitation(), { pairing: true }))}
       </>}
       {state === 'awaiting-confirmation' && status?.pairing.peerFingerprint && <>
         <label className="ob-settings-field">{S.fingerprint}<input readOnly value={status.pairing.peerFingerprint} /></label>

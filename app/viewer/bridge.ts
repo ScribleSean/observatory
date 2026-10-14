@@ -10,6 +10,7 @@ export interface Bridge {
 }
 type WebView = EventTarget & { postMessage(text: string): void };
 export type BridgeWindow = EventTarget & {
+  location: { pathname: string; search: string };
   webkit?: { messageHandlers?: { bridge?: { postMessage(text: string): void } } };
   chrome?: { webview?: WebView };
 };
@@ -17,7 +18,7 @@ const nextIds = new WeakMap<BridgeWindow, number>();
 export function createBridge(win: BridgeWindow = window, timeoutMs = contract.limits.resultTimeoutSeconds * 1000): Bridge {
   const mac = win.webkit?.messageHandlers?.bridge;
   const windows = win.chrome?.webview;
-  const transport = mac ?? windows;
+  const transport = win.location?.pathname.endsWith('/dashboard.html') && win.location.search === '' ? mac ?? windows : undefined;
   const pending = new Map<number, { resolve: (result: BridgeOutcome) => void; timer: ReturnType<typeof setTimeout> }>();
   const late = new Map<number, string>();
   const listeners = new Set<(result: BridgeOutcome, action: string) => void>();

@@ -17,6 +17,7 @@ const dispatch = (target, type, field, value) => {
 };
 function fixture(kind) {
   const win = new EventTarget();
+  win.location = new URL('https://synthetic.test/dashboard.html');
   const posted = [];
   if (kind === 'mac') win.webkit = { messageHandlers: { bridge: { postMessage: text => posted.push(text) } } };
   if (kind === 'windows') {
@@ -57,7 +58,7 @@ void test('invalid messages never post and absent transports are unavailable', a
   }
   assert.equal(posted.length, 0);
   bridge.dispose();
-  const absent = createBridge(new EventTarget());
+  const absent = createBridge(fixture('absent').win);
   assert.equal(absent.available, false);
   assert.equal((await absent.send('status', {})).code, 'unavailable');
   absent.dispose();
@@ -181,3 +182,20 @@ void test('fake sharing requires the channel token and supports disabling withou
   }
   bridge.dispose();
 });
+
+for (const platform of ['mac', 'windows']) {
+  for (const page of ['panel.html', 'index.html', 'dashboard.html?demo', 'dashboard.html?x=1', 'dashboard.html', 'dashboard.html#settings']) {
+    void test(`${platform} restricts bridge transport on ${page}`, async () => {
+      const { win, posted } = fixture(platform);
+      win.location = new URL(`https://synthetic.test/${page}`);
+      const allowed = page === 'dashboard.html' || page === 'dashboard.html#settings';
+      const bridge = createBridge(win);
+      assert.equal(bridge.available, allowed);
+      const pending = bridge.send('status', {});
+      assert.equal(posted.length, allowed ? 1 : 0);
+      if (allowed) result(win, 1);
+      assert.equal((await pending).code, allowed ? 'done' : 'unavailable');
+      bridge.dispose();
+    });
+  }
+}

@@ -2,14 +2,21 @@ import { contract, validateArgs } from '../../../lib/bridge-contract.mjs';
 import type { Bridge, BridgeOutcome } from '../bridge';
 import { validateBridgeStatus, type BridgeStatus } from './status';
 
-export function createSettingsController(bridge: Bridge) {
+export function createSettingsController(bridge: Bridge, getGeneration: () => number = () => 0) {
   let current: BridgeStatus | null = null;
   let disposed = false;
   let refreshSequence = 0;
+  const requestGenerations = new Map<number, number>();
+  const request = async (action: string, args: Record<string, unknown>) => {
+    const ticket = getGeneration();
+    const result = await bridge.send(action, args);
+    if (!disposed && result.timedOut) requestGenerations.set(result.id, ticket);
+    return result;
+  };
   const listeners = new Set<(status: BridgeStatus | null) => void>();
   const status = async (): Promise<BridgeOutcome> => {
     const sequence = ++refreshSequence;
-    const result = await bridge.send('status', {});
+    const result = await request('status', {});
     if (!disposed && sequence === refreshSequence) {
       current = result.ok ? validateBridgeStatus(result.value) : null;
       for (const listener of listeners) listener(current);
@@ -18,15 +25,17 @@ export function createSettingsController(bridge: Bridge) {
   };
   const lateListeners = new Set<(result: BridgeOutcome, action: string) => void>();
   const stopLate = bridge.onLateResult((result, action) => {
-    if (disposed) return;
+    const ticket = requestGenerations.get(result.id);
+    requestGenerations.delete(result.id);
+    if (disposed || ticket !== getGeneration()) return;
     void status().catch(() => {}).then(() => {
-      if (!disposed) for (const listener of lateListeners) listener(result, action);
+      if (!disposed && ticket === getGeneration()) for (const listener of lateListeners) listener(result, action);
     });
   });
   const send = async (action: string, args: Record<string, unknown> = {}): Promise<BridgeOutcome> => {
     const validated = validateArgs(action, args);
     if (!validated.ok || !('args' in validated)) return { id: 0, ok: false, code: 'refused', local: true };
-    const result = await bridge.send(action, validated.args as Record<string, unknown>);
+    const result = await request(action, validated.args as Record<string, unknown>);
     if (result.timedOut) void status().catch(() => {});
     else if (result.code === 'done' || action.startsWith('pairing-')) await status();
     return result;
@@ -63,7 +72,7 @@ export function createSettingsController(bridge: Bridge) {
     tailscaleCheck: () => send('tailscale-check'),
     checkUpdates: () => send('check-updates'),
     exportData: () => send('export-data'),
-    dispose() { disposed = true; stopLate(); listeners.clear(); lateListeners.clear(); },
+    dispose() { disposed = true; stopLate(); listeners.clear(); lateListeners.clear(); requestGenerations.clear(); },
   };
 }
 export type SettingsController = ReturnType<typeof createSettingsController>;

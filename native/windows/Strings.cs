@@ -263,9 +263,9 @@ internal static class ObservatoryStrings
         internal const string On = "On";
         internal const string Off = "Off";
         internal const string Working = "Working";
-        internal const string DisclosureHints = "Claude Code hides most footer keyboard hints while a custom status line is configured.";
+        internal const string DisclosureHints = "Claude Code hides most of its footer keyboard hints while any custom status line is configured.";
         internal const string DisclosureReadings = "Readings arrive only while a Claude Code session is responding, and only for Pro and Max subscriptions.";
-        internal const string DisclosureSharing = "These limits apply to the whole account. They are observed on this device and are not sent to a paired device.";
+        internal const string DisclosureSharing = "The limits are account-wide. They are observed on this device and are not sent to a paired device.";
         internal const string TurnOn = "Turn on";
         internal const string Cancel = "Cancel";
         internal const string DeviceName = "Device name";

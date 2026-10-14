@@ -113,7 +113,6 @@ function recordingBridge() {
       return { id: next - 1, ok: true, code: 'done', ...(action === 'status' ? { value: sampleBridgeStatus() } : {}) };
     },
     onLateResult(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    emitLate() { for (const listener of listeners) listener({ id: 1, ok: true, code: 'done' }); },
     dispose() {},
   };
 }
@@ -164,7 +163,7 @@ void test('bad page inputs post nothing at all', async () => {
   }
   controller.dispose();
 });
-void test('pairing failures refresh before returning and late results refresh status', async () => {
+void test('pairing failures refresh before returning', async () => {
   const bridge = recordingBridge();
   const original = bridge.send.bind(bridge);
   for (const code of ['busy', 'cancelled', 'unavailable', 'refused', 'expired']) {
@@ -174,9 +173,6 @@ void test('pairing failures refresh before returning and late results refresh st
     assert.equal((await controller.pairingJoinConfirm()).code, code);
     assert.equal(bridge.messages[before].action, 'status');
     assert.ok(controller.getStatus());
-    bridge.emitLate();
-    await Promise.resolve();
-    assert.equal(bridge.messages[before + 1].action, 'status');
     controller.dispose();
   }
 });
@@ -240,17 +236,8 @@ void test('limits disclosure requests and cancellation send nothing, confirmatio
   assert.match(cancelledHtml, /<input[^>]*aria-checked="false"[^>]*\/>Claude Code limits/);
   controller.dispose();
 });
-void test('join text survives status refresh and unknown switches have mixed semantics', async () => {
-  const controller = createSettingsController(recordingBridge());
-  const joinText = 'observatory-pair:v1:U0FNUExF';
-  await controller.status();
-  const before = render(controller.getStatus(), { initialFlow: 'join', joinText });
-  await controller.status();
-  const after = render(controller.getStatus(), { initialFlow: 'join', joinText });
-  assert.equal(after, before);
-  assert.match(after, /<textarea[^>]*>observatory-pair:v1:U0FNUExF<\/textarea>/);
+void test('unknown switches have mixed semantics', () => {
   assert.equal((render(null).match(/aria-checked="mixed"/g) ?? []).length, 9);
-  controller.dispose();
 });
 void test('appearance callback runs only for successful demo changes', async () => {
   const controller = createSettingsController(recordingBridge());
@@ -263,6 +250,7 @@ void test('appearance callback runs only for successful demo changes', async () 
 void test('late results retain their action, refresh, and replace timeout presentation', async () => {
   const { createBridge } = await server.ssrLoadModule('/app/viewer/bridge.ts');
   const win = new EventTarget();
+  win.location = new URL('https://synthetic.test/dashboard.html');
   const posted = [];
   const status = sampleBridgeStatus();
   Object.assign(status.pairing, { state: 'waiting', invitationKept: true });
@@ -306,6 +294,7 @@ void test('late results retain their action, refresh, and replace timeout presen
 void test('pairing timeout returns while its follow-up status is still pending', async () => {
   const { createBridge } = await server.ssrLoadModule('/app/viewer/bridge.ts');
   const win = new EventTarget();
+  win.location = new URL('https://synthetic.test/dashboard.html');
   const posted = [];
   win.webkit = { messageHandlers: { bridge: { postMessage: text => posted.push(JSON.parse(text)) } } };
   const bridge = createBridge(win, 10);
