@@ -527,22 +527,42 @@ func runSelfTests() {
     let unavailable = Snapshot(object: ["combined": ["status": "unavailable",
         "days": [["date": "2026-09-08", "seconds": 90]]]])
     precondition(unavailable.latest("activity", host: "All") == nil)
-    let resolver = AssetResolver(root: URL(fileURLWithPath: "/tmp/observatory-test-assets"))
-    precondition(resolver.resolve(URL(string: "observatory://app/index.html")!) != nil)
-    precondition(resolver.resolve(URL(string: "observatory://app/assets/app.js")!) != nil)
-    precondition(resolver.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil)
-    precondition(resolver.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil)
-    for url in ["https://app/index.html", "observatory://other/index.html", "observatory://app/../secret.json",
-                "observatory://app/%2e%2e/secret.json", "observatory://app/local/usage.json",
-                "observatory://app/.env", "observatory://app/native-runtime.json/../../secret.json",
-                "observatory://user@app/index.html", "observatory://app:80/index.html"] {
-        precondition(resolver.resolve(URL(string: url)!) == nil, "Unsafe asset URL accepted")
+    let assetRoot = URL(fileURLWithPath: "/tmp/observatory-test-assets")
+    let legacy = AssetResolver(root: assetRoot, pages: ["index.html"])
+    let panel = AssetResolver(root: assetRoot, pages: ["panel.html"])
+    let dashboard = AssetResolver(root: assetRoot, pages: ["dashboard.html"])
+    precondition(legacy.resolve(URL(string: "observatory://app/index.html")!) != nil, "Legacy page refused")
+    precondition(legacy.resolve(URL(string: "observatory://app/assets/app.js")!) != nil, "Legacy script refused")
+    precondition(legacy.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil, "Legacy font refused")
+    precondition(legacy.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil, "Unsafe font URL accepted")
+    let unsafeURLs = ["https://app/index.html", "observatory://other/index.html", "observatory://app/../secret.json",
+                      "observatory://app/%2e%2e/secret.json", "observatory://app/local/usage.json",
+                      "observatory://app/.env", "observatory://app/native-runtime.json/../../secret.json",
+                      "observatory://user@app/index.html", "observatory://app:80/index.html"]
+    for url in unsafeURLs {
+        precondition(legacy.resolve(URL(string: url)!) == nil, "Unsafe asset URL accepted")
     }
-    precondition(resolver.resolve(URL(string: "observatory://app/panel.html")!) == nil, "Panel page served without the flag")
-    let panelResolver = AssetResolver(root: URL(fileURLWithPath: "/tmp/observatory-test-assets"), allowPanel: true)
-    precondition(panelResolver.resolve(URL(string: "observatory://app/panel.html")!) != nil)
-    precondition(panelResolver.resolve(URL(string: "observatory://app/local/usage.json")!) == nil)
-    precondition(panelResolver.resolve(URL(string: "observatory://app/other.html")!) == nil)
+    for page in ["panel.html", "dashboard.html"] {
+        precondition(legacy.resolve(URL(string: "observatory://app/" + page)!) == nil, "Legacy served another host's page")
+    }
+    for (name, resolver) in [("panel", panel), ("dashboard", dashboard)] {
+        precondition(resolver.resolve(URL(string: "observatory://app/" + name + ".html")!) != nil, "Host page refused")
+        precondition(resolver.resolve(URL(string: "observatory://app/assets/app.js")!) != nil, "Host script refused")
+        for page in ["index.html", "panel.html", "dashboard.html", "other.html", "local/usage.json"] where page != name + ".html" {
+            precondition(resolver.resolve(URL(string: "observatory://app/" + page)!) == nil, "Host served an unlisted page")
+        }
+        for url in ["observatory://app/", "observatory://app"] {
+            precondition(resolver.resolve(URL(string: url)!) == nil, "Host served the root index page")
+        }
+        for url in unsafeURLs + ["observatory://app/assets/../panel.html", "observatory://app/assets/%2e%2e/dashboard.html",
+                                 "observatory://app/dashboard.html/../index.html", "observatory://app/assets/x.json"] {
+            precondition(resolver.resolve(URL(string: url)!) == nil, "Host accepted an unsafe asset URL")
+        }
+    }
+    let empty = AssetResolver(root: assetRoot, pages: [])
+    for page in ["index.html", "panel.html", "dashboard.html"] {
+        precondition(empty.resolve(URL(string: "observatory://app/" + page)!) == nil, "Empty page set served a page")
+    }
     precondition(PanelAction.allCases.map(\.rawValue) == ["refresh", "check-updates", "open-settings", "open-dashboard"])
     for name in PanelAction.allCases.map(\.rawValue) { precondition(PanelAction.parse(name)?.rawValue == name) }
     let refused: [Any] = ["", "Refresh", "refresh ", "quit", "open-dashboard:settings", ["refresh"], ["panelAction": "refresh"], 1, NSNull()]

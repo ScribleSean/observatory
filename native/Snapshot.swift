@@ -143,13 +143,13 @@ struct Snapshot {
 
 struct AssetResolver {
     let root: URL
-    // The shared panel page is served only to the flagged web panel.
-    var allowPanel = false
+    // Each host serves only its own page or pages.
+    let pages: Set<String>
     func resolve(_ url: URL) -> URL? {
         guard url.scheme == "observatory", url.host == "app", url.user == nil, url.password == nil,
               url.port == nil else { return nil }
         let path = url.path == "/" || url.path.isEmpty ? "index.html" : String(url.path.dropFirst())
-        guard path == "index.html" || path.hasPrefix("assets/") || (allowPanel && path == "panel.html") else { return nil }
+        guard pages.contains(path) || path.hasPrefix("assets/") else { return nil }
         guard !path.split(separator: "/").contains(".."), !path.contains("\\"),
               !path.contains("\0"), !path.hasPrefix("local/"), !path.hasPrefix(".") else { return nil }
         let base = root.standardizedFileURL.resolvingSymlinksInPath()

@@ -15,7 +15,7 @@ final class DashboardWebView: WKWebView {
 
 final class BundledAssets: NSObject, WKURLSchemeHandler {
     private let resolver: AssetResolver
-    init(root: URL, allowPanel: Bool = false) { resolver = AssetResolver(root: root, allowPanel: allowPanel) }
+    init(root: URL, pages: Set<String>) { resolver = AssetResolver(root: root, pages: pages) }
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard task.request.httpMethod == "GET", let url = task.request.url,
               let file = resolver.resolve(url),
@@ -96,7 +96,7 @@ let snapshotFetchScript = """
 func makeDashboard(runtime: URL, resources: URL) -> WKWebView {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .nonPersistent()
-    config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web")), forURLScheme: "observatory")
+    config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: ["index.html"]), forURLScheme: "observatory")
     config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
     config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     let web = DashboardWebView(frame: .zero, configuration: config)

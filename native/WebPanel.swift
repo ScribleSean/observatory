@@ -40,7 +40,7 @@ final class WebPanelController: NSViewController {
     init(runtime: URL, resources: URL, perform: @escaping (PanelAction) -> Void) {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
-        config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), allowPanel: true),
+        config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: ["panel.html"]),
                                    forURLScheme: "observatory")
         config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
         config.userContentController.add(PanelActionBridge(perform: perform), contentWorld: .page, name: "panelAction")
