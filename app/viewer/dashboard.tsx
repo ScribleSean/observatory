@@ -45,12 +45,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
     try { Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true }); } catch { /* The shell may already have defined the flag. */ }
   }, []);
 
-  const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
-    source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
-  // Keep a #dictation request until the first snapshot has loaded, then fall back in an effect, not during render.
-  useEffect(() => {
-    if (loaded && section === 'dictation' && !hasDictation) setSection('limits');
-  }, [loaded, section, hasDictation]);
+  // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
   return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={section} onSectionChange={setSection} onSkinChange={setSkinId} />;
 }
