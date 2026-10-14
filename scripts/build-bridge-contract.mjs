@@ -13,18 +13,20 @@ export function validateContract(data) {
   const positive = v => { if (!Number.isSafeInteger(v) || v < 1) fail(); };
   const strings = v => { if (!Array.isArray(v) || !v.length || v.some(s => typeof s !== 'string' || !s.length) || new Set(v).size !== v.length) fail(); };
   const bounds = v => { keys(v, ['min', 'max']); positive(v.min); positive(v.max); if (v.min > v.max) fail(); };
-  const checkStrings = value => {
+  const checkData = value => {
     if (typeof value === 'string') {
       if (!value.isWellFormed()) fail();
       for (let i = 0; i < value.length; i++) {
         const unit = value.charCodeAt(i);
         if (unit < 32 || (unit >= 127 && unit <= 159)) fail();
       }
+    } else if (typeof value === 'number') {
+      if (!Number.isSafeInteger(value) || value < 0 || value > 2147483647) fail();
     } else if (value !== null && typeof value === 'object') {
-      for (const [key, child] of Object.entries(value)) { checkStrings(key); checkStrings(child); }
+      for (const [key, child] of Object.entries(value)) { checkData(key); checkData(child); }
     }
   };
-  checkStrings(data);
+  checkData(data);
   keys(data, ['status', 'version', 'source', 'message', 'codes', 'limits', 'dashboardFragments', 'whiteSpace', 'address', 'values', 'actions']);
   positive(data.version); if (typeof data.source !== 'string') fail();
   keys(data.message, ['maxBytes', 'maxDepth', 'id', 'keys']);
@@ -197,7 +199,7 @@ final class BridgeParser {
     let maxDepth: Int
     var at = 0
     var duplicate = false
-    init(_ text: String, maxDepth: Int) { units = Array(text.utf16); self.maxDepth = maxDepth }
+    init(_ units: [UInt16], maxDepth: Int) { self.units = units; self.maxDepth = maxDepth }
     var current: UInt16 { at < units.count ? units[at] : 0xffff }
     func take(_ c: UInt16) -> Bool {
         guard current == c else { return false }
@@ -433,8 +435,30 @@ enum BridgeContract {
         return .string(text)
     }
     static func validate(_ text: String) -> BridgeValidation {
-        guard text.utf8.count <= message["maxBytes"].number else { return .ignore }
-        let parser = BridgeParser(text, maxDepth: message["maxDepth"].number)
+        validate(utf16: Array(text.utf16))
+    }
+    /// The Mac shell casts WKScriptMessage.body with message.body as? NSString and never bridges it to String first.
+    static func validate(_ text: NSString) -> BridgeValidation {
+        // Every UTF-16 unit is at least one UTF-8 byte, so a longer string is ignored before it is copied.
+        guard text.length <= message["maxBytes"].number else { return .ignore }
+        let units = (0..<text.length).map { text.character(at: $0) }
+        return validate(utf16: units)
+    }
+    static func validate(utf16 units: [UInt16]) -> BridgeValidation {
+        var bytes = 0
+        var at = 0
+        while at < units.count {
+            let unit = units[at]
+            if unit < 0x80 { bytes += 1 }
+            else if unit < 0x800 { bytes += 2 }
+            else if unit >= 0xd800 && unit <= 0xdbff && at + 1 < units.count && units[at + 1] >= 0xdc00 && units[at + 1] <= 0xdfff {
+                bytes += 4
+                at += 1
+            } else { bytes += 3 }
+            guard bytes <= message["maxBytes"].number else { return .ignore }
+            at += 1
+        }
+        let parser = BridgeParser(units, maxDepth: message["maxDepth"].number)
         guard let node = try? parser.parse(), node.kind == "object" else { return .ignore }
         let ids = node.entries.filter { same($0.0, "id") }
         guard ids.count == 1, let id = integer(ids[0].1, message["id"]["min"].number, message["id"]["max"].number) else { return .ignore }
