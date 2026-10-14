@@ -98,6 +98,31 @@ export const STRINGS = {
     "item": "Item",
     "value": "Value",
     "showValues": "Show values"
+  },
+  "tokens": {
+    "input": "Input",
+    "cached": "Cached input",
+    "cacheWrite": "Cache writes",
+    "output": "Output",
+    "total": "Total",
+    "classes": "Token classes",
+    "byModel": "By model",
+    "model": "Model",
+    "chartTitle": "{provider} tokens by day, last 30 days",
+    "apiEstimate": "API-equivalent (estimate)",
+    "sessionCost": "Session cost (estimate)",
+    "pricesChecked": "Prices checked {date}",
+    "pricesUnknown": "Price check date Unknown",
+    "partial": "Covers {covered} of {total} tokens. Models without a price are left out.",
+    "sessionStale": "Last session cost is more than 10 minutes old",
+    "settingsTitle": "Recorded reasoning and speed",
+    "effort": "Reasoning",
+    "speed": "Speed",
+    "noSettings": "No settings recorded",
+    "caveat": "Dollar figures are estimates at list price. A subscription is not billed per token.",
+    "caveatLabel": "About these figures",
+    "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free. Session cost is the figure Claude Code reported for its latest session on this device.",
+    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked."
   }
 } as const;
 

@@ -112,4 +112,30 @@ internal static class ObservatoryStrings
         internal const string Value = "Value";
         internal const string ShowValues = "Show values";
     }
+    internal static class Tokens
+    {
+        internal const string Input = "Input";
+        internal const string Cached = "Cached input";
+        internal const string CacheWrite = "Cache writes";
+        internal const string Output = "Output";
+        internal const string Total = "Total";
+        internal const string Classes = "Token classes";
+        internal const string ByModel = "By model";
+        internal const string Model = "Model";
+        internal const string ChartTitle = "{provider} tokens by day, last 30 days";
+        internal const string ApiEstimate = "API-equivalent (estimate)";
+        internal const string SessionCost = "Session cost (estimate)";
+        internal const string PricesChecked = "Prices checked {date}";
+        internal const string PricesUnknown = "Price check date Unknown";
+        internal const string Partial = "Covers {covered} of {total} tokens. Models without a price are left out.";
+        internal const string SessionStale = "Last session cost is more than 10 minutes old";
+        internal const string SettingsTitle = "Recorded reasoning and speed";
+        internal const string Effort = "Reasoning";
+        internal const string Speed = "Speed";
+        internal const string NoSettings = "No settings recorded";
+        internal const string Caveat = "Dollar figures are estimates at list price. A subscription is not billed per token.";
+        internal const string CaveatLabel = "About these figures";
+        internal const string CaveatDetail = "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free. Session cost is the figure Claude Code reported for its latest session on this device.";
+        internal const string DeviceNote = "Claude Code totals are shown per device until overlap between devices can be checked.";
+    }
 }
