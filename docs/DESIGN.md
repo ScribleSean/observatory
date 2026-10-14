@@ -306,7 +306,7 @@ On a paired device `mergePeerPayloads` rebuilds this device's own `activity`, `t
 
 **Reading time.** Each row has a reading time, the moment up to which its hours were observed:
 
-- A device row: its `checkedAt`, or the snapshot's `collectedAt` for a row without one.
+- A device row: its `checkedAt`, or the snapshot's `collectedAt` for a row without one. A reader stamps `checkedAt` with the time its read started, not the time it finished, so events written during the read are never counted as an observed 0.
 - The `Combined` activity row: the earlier of the two payloads' `collectedAt` values, which `mergePeerPayloads` already uses as `asOf` for the `Combined` history row. D1 records that time on the row as `checkedAt`. The same rule applies to any later aggregate that carries `hours`, including a verified `combinedTokens` row after R2.
 
 Within a day that was read, an hour that ends at or before the reading time holds a real value, and 0 there is a real 0. The hour that contains the reading time holds the events from its start up to the reading time, and 0 there is a real 0 for that span. An hour that starts after the reading time is Unknown, even though the array holds 0 there, because a stopped or late collector leaves those buckets untouched.
@@ -369,7 +369,7 @@ The field is named `refusal`, not `reason`, because `agentSource` rows already c
 | `private-folder-refused` | A private folder check failed, so the guarded source was not read |
 | `ancestor-refused` | On Windows, the private folder check failed at its ancestry stage. That stage covers every ancestor failure (a reparse point, an unexpected owner, an unknown access list or a writable ancestor), so the code names the stage and does not claim a cause. |
 
-- **Detection.** Today the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, runs `private-sync-acl.ps1` without `-Diagnostic` and discards its error output, so nothing can see the stage. D1-6 adds `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on.
+- **Detection.** Today the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, runs `private-sync-acl.ps1` without `-Diagnostic` and discards its error output, so nothing can see the stage. D1-6 adds `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on. `peer-directory.mjs` attaches the code to the error it throws, so the collector can tell a private-folder failure from any other reader failure. When an error carries no code, `refusal` is absent.
 - The row carries the code and nothing else about the failure: no path, no stage text, no error message.
 - The views show a code they do not know as `private-folder-refused` would be shown, without its text. A new code is added here first.
 - After a merge the collector re-applies `refusal` to the merged row of its own host with the same name, as it does for `hours`.
