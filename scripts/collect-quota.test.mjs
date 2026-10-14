@@ -21,12 +21,21 @@ test('quota discovery uses a validated configured executable without changing co
   assert.equal(await findCodexExecutable({runtime,...emptyCandidates}),await realpath(target));
   assert.deepEqual(await readFile(file),original);
 }));
-for(const kind of ['app','tool'])test(`quota discovery prefers the ${kind} candidate over configuration`,macOnly,async()=>fixture(async runtime=>{
+for(const kind of ['app','tool'])test(`quota discovery prefers configuration over the ${kind} candidate`,macOnly,async()=>fixture(async runtime=>{
   const configured=await executable(runtime),preferred=await executable(runtime,kind),other=await executable(runtime,'other');
   await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:configured}));
   const options=kind==='app'?{appCandidates:[preferred,other],toolCandidates:[other]}:
     {appCandidates:[path.join(runtime,'missing-app')],toolCandidates:[preferred,other]};
-  assert.equal(await findCodexExecutable({runtime,...options}),await realpath(preferred));
+  assert.equal(await findCodexExecutable({runtime,...options}),await realpath(configured));
+}));
+test('quota discovery prefers app candidates over tools without configuration',macOnly,async()=>fixture(async runtime=>{
+  const app=await executable(runtime,'app'),tool=await executable(runtime,'tool');
+  assert.equal(await findCodexExecutable({runtime,appCandidates:[app],toolCandidates:[tool]}),await realpath(app));
+}));
+test('quota discovery falls through to app candidates after refusing configuration',macOnly,async()=>fixture(async runtime=>{
+  const app=await executable(runtime,'app');
+  await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:'relative/codex'}));
+  assert.equal(await findCodexExecutable({runtime,appCandidates:[app],toolCandidates:[]}),await realpath(app));
 }));
 const refusedValues={
   relative:async()=> 'relative/codex',
