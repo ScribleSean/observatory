@@ -114,7 +114,7 @@ for (const stamp of ['2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     assert.equal(snapshot.dictation[0].days.length, 40);
     assert.ok(snapshot.dictation[0].days.every(day => ['transcriptions', 'words', 'audioSeconds'].every(key => Number.isFinite(day[key]))));
     assert.equal(snapshot.dictation[1].status, 'unavailable');
-    assert.equal(snapshot.dictation[1].reason, 'private-folder-refused');
+    assert.equal(snapshot.dictation[1].refusal, 'private-folder-refused');
     assert.equal(snapshot.dictation[1].days, undefined);
     // Now is exempt until D1-7 implements hourly totals in the panel.
     // All Claude tokens remain intentionally per device, with the By device label.

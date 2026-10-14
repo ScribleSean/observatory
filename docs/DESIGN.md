@@ -33,13 +33,13 @@ Dictation does not appear in the panel.
 
 Each device has a name the person can edit in Settings. With a custom name set, the app shows the name alone in the panel and the name with the platform in parentheses in the dashboard, for example "Studio (Mac)". Without one, it shows "macOS" or "Windows". Phrases such as "this Mac" and "this PC" are retired from views that show data.
 
-The name is stored in local settings and sent only to a paired device. It replaces no identifier used for pairing or deduplication. The snapshot keeps the platform value it has today, so saved history stays readable.
+The name is stored in local settings and will be sent only to a paired device, after R2 as "Snapshot additions" describes. It replaces no identifier used for pairing or deduplication. The snapshot keeps the platform value it has today, so saved history stays readable.
 
 ### Periods
 
 | Period | Meaning |
 | --- | --- |
-| Now | The last 60 minutes. A meter or small graph, visually distinct from the other four. It leads with pace and estimated time until a limit runs out. |
+| Now | The last 60 minutes, approximated from hourly buckets as "Snapshot additions" describes. A meter or small graph, visually distinct from the other four. It leads with pace and estimated time until a limit runs out. |
 | Day | One calendar day in the device's time zone |
 | Week | The seven calendar days ending on the selected day |
 | Month | The 30 calendar days ending on the selected day |
@@ -93,7 +93,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 - The `rate_limits` fields appear only for Pro and Max subscribers. People have reported versions where the fields were missing. Both cases show Unknown.
 - The Codex app-server protocol is versioned with the installed Codex client and can change.
 - Collection runs every five minutes. Now can be fresher than that only for limits.
-- The snapshot stores tokens per day. Now needs an hourly token field added to the snapshot format.
+- The snapshot stores tokens per day. Now needs the hourly token field described under "Snapshot additions", which no collector writes yet.
 - Provider terms changed several times in 2026. Recheck the Claude Code legal page before each public release.
 
 ## Removals
@@ -106,7 +106,7 @@ Done on 2026-10-13 in source: limits for a third provider that the owner no long
 
 ## Pairing and sharing
 
-- Tailscale is the supported route for other people. The app uses the Tailscale client the person has installed for reachability. Trust still comes from a pairing code and the existing TLS pairing code. The app does not embed Tailscale.
+- Tailscale is the supported route for other people. The app uses the Tailscale client the person has installed for reachability. Trust comes from the existing TLS pairing: the person copies an invitation on the first device, pastes it on the second, and confirms the claimed device on the first. Earlier text called the invitation a "pairing code", and the owner confirmed on 2026-10-14 that this is what it means. The app does not embed Tailscale.
 - The existing SSH pairing keeps working until the new path is verified on both of the owner's devices.
 - Sharing becomes one choice made at pairing time, replacing the two separate sharing switches. Consent on both devices and revocation are preserved.
 
@@ -115,7 +115,7 @@ Done on 2026-10-13 in source: limits for a third provider that the owner no long
 - Builds stay unsigned. The install guides state the security warning each platform shows and why.
 - Mac and Windows each get a short install guide. A signed installer and automatic updates are later work.
 - Check for updates reports whether a newer release exists and links to it.
-- The web demo mirrors the native apps and doubles as the product page. It uses fictional data only. Publishing it, or publishing a release, needs the owner's approval each time.
+- The web demo mirrors the native apps and doubles as the product page. It uses fictional data only. One publication is approved in advance: when everything in the build plan's "What done means" is installed and verified on both devices, workstream F1 publishes one GitHub release and the demo page, with no further confirmation (decided by the owner on 2026-10-13 and confirmed on 2026-10-14). Any other publication of the demo or a release needs the owner's approval each time.
 
 ## Visual style
 
@@ -151,7 +151,7 @@ Decided in direction on 2026-10-13. Four skins and three limit styles exist as s
 
 A skin changes how the shared viewer looks. It never changes what a number means, which values are shown or how they are computed.
 
-- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer ignores unknown fields and rejects a skin with a missing or malformed field.
+- **A skin is data, not code.** It is one JSON file with a fixed set of fields. A skin cannot contain CSS, script, markup or a link to a remote file. The viewer refuses a skin with an unknown, missing or malformed field.
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
 - **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
@@ -237,7 +237,7 @@ Open question: how a device is identified in a file made on an unpaired installa
 
 ## Architecture
 
-Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). The panel exists behind a launch flag on each platform. Since 2026-10-14 the bundle also builds `dashboard.html` with the six sections as empty states. No host shows it yet.
+Decided on 2026-10-13. Both spikes measured it that day and the owner chose to go ahead. The measurements, the one open condition for Windows and the order of work are in [the build plan](BUILD-PLAN.md). So far the shared panel exists behind `--web-panel` on both platforms. Since 2026-10-14 the bundle also builds `dashboard.html` with the six sections as empty states. Windows hosts the dashboard window behind `--web-dashboard`. The Mac has no dashboard flag or host yet. Workstream M1 adds them.
 
 The app has three parts.
 
@@ -268,6 +268,15 @@ The spike built the panel only. Its numbers are in [the build plan](BUILD-PLAN.m
 
 The four actions map to things each shell already does. This is not a general command channel, and it must not become one.
 
+### Dashboard page decisions
+
+Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
+
+| Item | Decision |
+| --- | --- |
+| Ready flag | `dashboard.html` sets `window.observatoryDashboardReady` to `true` when it has drawn, as `panel.html` sets `window.observatoryPanelReady`. The Windows dashboard host already reads this name, and the Mac host and the test harnesses use the same one. |
+| Web view data folder on Windows | The panel host and the dashboard host share one WebView2 user data folder, `WebViewCache` in the app's data folder. Both hosts create their WebView2 environment with that folder (`WebPanel.cs` and `WebDashboard.cs`), so a second host does not start a separate browser profile. |
+
 ### Dashboard page contract
 
 | Item | Contract |
@@ -279,7 +288,7 @@ The four actions map to things each shell already does. This is not a general co
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
 
-The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `reason: 'private-folder-refused'`. Their shapes follow the execution plan text for D1 and D2 and will be checked against those changes when they land. Until then no collector writes them.
+The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. Their shapes follow the "Snapshot additions" section and the execution plan text for D2 and will be checked against those changes when they land. Until then no collector writes them.
 
 ### Snapshot fields the panel reads that no collector writes yet
 
@@ -288,7 +297,106 @@ The sample fixture also carries fields that later snapshot changes will add: `ho
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
 | `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
 
-`deviceNames` is still a proposal. It becomes part of the snapshot format only when the collector change is reviewed.
+`deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
+
+### Snapshot additions
+
+Designed on 2026-10-14 for issue 80, before any collector writes these fields. Nothing in this subsection exists in a collector, a saved snapshot or an installed app until [the parity table](PARITY.md) says so. Every addition is optional, so a saved snapshot without it still loads, and a missing field means Unknown, never zero.
+
+**Local-first rule.** A paired collector rebuilds the snapshot from a fixed key list in `mergePeerPayloads` (`scripts/peer-payload.mjs`), and both peer channels refuse fields they do not know (`parsePeerPayload` and `parseProviderTokenSource` compare the parsed record with its clean projection). So each addition is written on the device that observed it and kept out of every record a device sends to its peer, on both channels:
+
+- The core payload carries the reader reports, not the snapshot rows. An addition is either a field the payload's projection already ignores, or it is stripped in `createPeerPayload`.
+- The Claude Code provider record strips it before `updateProviderTokenSource` in `collectProviderTokenSources` (`scripts/provider-token-sync.mjs`), because that function stores the same parsed object it returns as the dashboard row. The dashboard keeps the local row with the addition.
+
+On a paired device `mergePeerPayloads` rebuilds this device's own `activity`, `tokens`, `settings` and `dictation` rows from the payloads, so a local addition on those rows is lost in the merge. After `finalizePeerCollection` the collector re-applies its local additions to the merged rows of its own host. Each addition below says how. An addition crosses to the paired device only in R2, the change that updates the exchange format in both apps together.
+
+#### Hourly totals
+
+| Field | Shape |
+| --- | --- |
+| `tokens[].days[].hours` | Codex. An array of exactly 24 non-negative integers, the total tokens of that day per hour. |
+| `providerTokenSources[].days[].hours` | Claude Code, in the same shape, using the same deduplication identity the day totals use. A request's hour is the hour of its earliest retained timestamp, the same timestamp that sets its day in `scripts/read-claude-usage.py`, so a request that finishes after an hour boundary or after midnight stays in one hour of one day. The reader keeps only the earliest date today, so D1-2 keeps the earliest full timestamp. |
+| `activity[].days[].hours` | Screen time. This array already exists and holds seconds per hour, for both devices, because `mergePeerPayloads` recomputes the peer's activity from its intervals. It is listed here because Now reads it. |
+
+- Index 0 is the hour starting at midnight. The hour is the wall-clock hour in the zone that sets the day's date. Today that is the snapshot's `timezone` value, which both readers fix to `America/New_York`. When device time zones (T1) land, hours move with the days. On the day clocks go forward the skipped hour stays 0. On the day clocks go back both readings of the repeated hour add into the same index, so that index can hold two hours. Now is Unknown while either of its two buckets is a skipped or repeated hour, because the caveat sentence below would not be true then.
+- **Codex route.** A Codex token's hour is the hour of the `token_count` event that recorded it, which the reader already caches, so the cache format does not change. `scripts/read-settings.py` reports the hours in a separate per-date field of its report, `hourTotals: [{date, hours}]`, not on `profiles` or `tokenProfiles`. `cleanSettings` (`scripts/collect-dashboard.mjs`) ignores that field, so it never reaches `settings[]` or the core payload's `codex` entries. The collector attaches it to the `tokens` row after `tokensFromSettings`, matched by date.
+- The 24 values add up to the day's `totalTokens`. A day whose values do not add up gets no `hours`. A test checks the sum on every fixture day.
+- For the two token fields, `hours` is present only when the reader read that day's events. A day saved before this change, or a token day received from a paired device, has no `hours`, and its hourly values are Unknown.
+- For the two token fields, re-applying after a merge means: the collector puts its local `hours` on the merged row of its own host, matched by date, and only for a day whose merged `totalTokens` equals the sum of the 24 local values. Any other day keeps no `hours`.
+- Every record sent to the peer leaves token `hours` out (local-first rule).
+- The `.observatory` export drops token `hours` in version 1, because a 0 after the reading time cannot be told apart from an observed 0 inside the file. This needs a change in `scripts/observatory-file.mjs`, which copies every day field today. Activity `hours` are exported as they are today.
+
+**Reading time.** Each row has a reading time, the moment up to which its hours were observed:
+
+- A device row: its `checkedAt`, or the snapshot's `collectedAt` for a row without one. A reader stamps `checkedAt` with the time its read started, not the time it finished, so events written during the read are never counted as an observed 0.
+- The `Combined` activity row: the earlier of the two payloads' `collectedAt` values, which `mergePeerPayloads` already uses as `asOf` for the `Combined` history row. D1 records that time on the row as `checkedAt`. The same rule applies to any later aggregate that carries `hours`, including a verified `combinedTokens` row after R2.
+
+Within a day that was read, an hour that ends at or before the reading time holds a real value, and 0 there is a real 0. The hour that contains the reading time holds the events from its start up to the reading time, and 0 there is a real 0 for that span. An hour that starts after the reading time is Unknown, even though the array holds 0 there, because a stopped or late collector leaves those buckets untouched.
+
+**Now.** The Now period is the trailing 60 minutes, approximated by adding the current hour bucket, up to the reading time, to the previous one. Across midnight the previous bucket is hour 23 of the day before. Now ends at the reading time, not at the moment the view is drawn. For a device, Now is Unknown when:
+
+- either of the two days it needs has no `hours`,
+- the current hour starts after the reading time,
+- the reading time is more than 10 minutes old, the threshold the merge and the limits already use, or
+- either bucket is a skipped or repeated daylight saving hour.
+
+For All, Now reads only the collector's verified aggregates, as the other periods do. Device hours are never added together outside them:
+
+- Codex tokens for All come only from a `combinedTokens` row whose verification status is `verified`. They stay Unknown until that row carries `hours`, which needs R2, because the peer's days have no `hours` before then.
+- Screen time for All uses the `hours` of the `Combined` activity row, with the `Combined` reading time above.
+- Claude Code tokens for All stay "By device", as they are for the other periods.
+
+The panel and the dashboard show this one caveat sentence with every Now total:
+
+> Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.
+
+Screen time for Now uses the activity `hours` in the same way. Limits in Now keep their own observation times and are not approximated.
+
+#### Device names
+
+| Field | Shape |
+| --- | --- |
+| `deviceNames` | An object with optional keys `Mac` and `Windows`. Each value is the trimmed name, 1 to 32 UTF-16 code units long. |
+
+- The local name is read from `<runtime>/device.json`, a file holding exactly `{"name": "..."}`. It is a separate file because the Mac Settings save path rewrites `collector.config.json` from fixed switches and both native validators would refuse a new key there.
+- The reader refuses a linked file, a file over 1 KiB, a name that is empty after trimming, a name over 32 UTF-16 code units after trimming, and a name with control or format characters, an unpaired surrogate, or `/`, `\` or `:`. A refused or missing file leaves the key out, and the views show "macOS" or "Windows", as "Device names" above describes.
+- The limit counts UTF-16 code units because the export in `scripts/observatory-file.mjs` does: it trims names and cuts them with `.slice(0,32)`, and its import check uses `length`. JavaScript `length`, C# `string.Length` and Swift `utf16.count` all count the same way, so both native Settings screens can enforce one rule. With the same limit here the export carries the whole name and needs no change. The 40 first planned was cut to 32 for this reason.
+- A device writes only its own key. `deviceNames` is a top-level snapshot field that the merge does not rebuild, so the collector attaches it after `finalizePeerCollection`. The peer's name crosses only after R2 installs on both devices. Until then a paired device's entry is absent and shows its platform name.
+- The name replaces no identifier used for pairing, deduplication or the platform value.
+
+#### Claude Code session cost
+
+| Field | Shape |
+| --- | --- |
+| `claudeLimits.sessionCost` | `{usd, observedAt}`. `usd` is a finite number from 0 to 10,000, rounded to the cent. `observedAt` is an ISO 8601 time. |
+
+- Only the status line bridge writes it, from Claude Code's `cost.total_cost_usd`. It is stored beside the windows in `claude-limits/limits.json` as `{usd, observedAt}` with `observedAt` in Unix seconds, like the windows. That file's 4 KiB read limit still holds.
+- The usage command never writes it. `scripts/claude-usage-command.mjs` accepts a result only when it reports zero cost, so a usage reading carries no cost. A usage reading runs on every collection, and `cleanStored` and `mergeClaudeLimits` (`scripts/claude-limits.mjs`) rebuild the stored record from `observedAt` and `windows` only today. D1-4 changes both to carry a stored cost through unchanged when the new reading has none, so a usage reading never removes or replaces a stored cost. A test covers a usage reading after a bridge write.
+- The cost belongs to one session, while the windows are account-wide and merge by keeping the higher reading. So the cost has its own rule: the newest observation replaces the stored one, whichever session sent it. The session identifier is not kept, so the view cannot say which session it was.
+- It uses the same 10 minute threshold as the windows, with a different result. A window 10 minutes old or older is still shown, with status `stale`. A cost 10 minutes old or older is left out of the snapshot and the view shows Unknown. A cost is never carried forward as a current figure.
+- A status line input can carry a cost without `rate_limits`, for example for a person without a Pro or Max subscription. Today `extractClaudeLimits` returns nothing for that input and nothing is written. D1-4 changes this: the bridge stores a cost on its own, the stored record is valid with a cost and no windows, and `claudeLimitsSource` projects `sessionCost` whenever consent is given and the cost is current, including when `claudeLimits.status` is `unavailable`. Without consent (`not-connected`) there is no `sessionCost`.
+- `claudeLimits` is attached after the merge and is not exchanged, so nothing needs re-applying.
+- Label: "Session cost (estimate)". It stays separate from the API-equivalent estimate, as "Numbers that must stay separate" requires. Like the limits, it is observed on this device and is not sent to a paired device.
+
+#### Source refusal codes
+
+| Field | Shape |
+| --- | --- |
+| `refusal` on a device row of `activity`, `tokens`, `settings` or `dictation` | One code from a fixed list, present only when the row is not `ok` because a private folder was refused |
+
+The field is named `refusal`, not `reason`, because `agentSource` rows already carry a `reason` with their own codes (`access-denied`, `unsafe-directory`, `read-timeout` and others, in `scripts/agent-receipts.mjs` and `scripts/bounded-receipts.mjs`), and `native/ReceiptSourceStatus.swift` renders a fallback message for a `reason` it does not know. The two lists stay separate.
+
+| Code | Meaning |
+| --- | --- |
+| `private-folder-refused` | A private folder check failed, so the guarded source was not read |
+| `ancestor-refused` | On Windows, the private folder check failed at its ancestry stage. That stage covers every ancestor failure (a reparse point, an unexpected owner, an unknown access list or a writable ancestor), so the code names the stage and does not claim a cause. |
+
+- **Detection.** Today the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, runs `private-sync-acl.ps1` without `-Diagnostic` and discards its error output, so nothing can see the stage. D1-6 adds `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on. `peer-directory.mjs` attaches the code to the error it throws, so the collector can tell a private-folder failure from any other reader failure. When an error carries no code, `refusal` is absent.
+- The row carries the code and nothing else about the failure: no path, no stage text, no error message.
+- The views show a code they do not know as `private-folder-refused` would be shown, without its text. A new code is added here first.
+- After a merge the collector re-applies `refusal` to the merged row of its own host with the same name, as it does for `hours`.
+- The plan's name `packaged-app-start` is not used, because the script cannot yet tell the issue 58 pattern apart from a genuinely unsafe ancestor. If the script later reports a fixed stage value for an app-container owner, a `packaged-app-start` code can be added here for that case only.
+- It exists for issue 58 reporting and is local-only. Records sent to the peer leave it out.
 
 ### Claude Code limits bridge
 
@@ -297,7 +405,7 @@ Added as source on 2026-10-13. The owner consented to installing it on the Mac t
 | Piece | File | What it does |
 | --- | --- | --- |
 | Bridge | `scripts/claude-statusline-bridge.mjs` | Claude Code runs it as the status line command. It saves the 5-hour and 7-day percentages and reset times, then prints what the person's earlier status line command prints. With no earlier command it prints one line such as "5h 77% left · 7d 59% left". |
-| Store | `claude-limits/limits.json` in the app's data folder | Two percentages, two reset times and the times they were observed. Nothing else from the status line input is kept. |
+| Store | `claude-limits/limits.json` in the app's data folder | Two percentages, two reset times and the times they were observed, plus the session cost and its observation time described under "Snapshot additions". Nothing else from the status line input is kept. |
 | Installer | `scripts/claude-statusline-install.mjs` | `status`, `install` and `uninstall` for the `statusLine` entry in Claude Code's `settings.json`. Install needs `--consent`, saves the earlier entry, writes a backup beside the settings file and refuses to overwrite a settings file that changed during the update. Uninstall restores the earlier entry. Nothing calls it automatically. |
 | Reader | `scripts/claude-limits.mjs` | Both collectors attach `claudeLimits` to the snapshot. |
 
