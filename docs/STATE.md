@@ -8,9 +8,9 @@ Updated on 2026-10-13 from the Mac, and again later that day from the Windows PC
 
 | Topic | State |
 | --- | --- |
-| `main` | Version 0.3.14 build 40 since pull request 56 (`719f3f4` or later) |
+| `main` | Version 0.3.14 build 41 since pull request 88 (`3f70771` or later) |
 | Installed on Windows | Build 40 from `57518b7`, installed on 2026-10-13. Started outside a Claude desktop session, its first collection read 6 of 6 sources with state `ok`. |
-| Installed on Mac | Build 40 from `ee29f31`, installed on 2026-10-13. Its first collection read 10 of 10 sources with state `ok`. |
+| Installed on Mac | Build 41 from `3f70771`, installed on 2026-10-13 (local time). Started with a clean environment, it read 10 of 10 sources with state `ok`. See "Build 41 install on the Mac". |
 | Pairing | Re-paired on 2026-10-13 without the Ubuntu slot. The Mac reads fresh Windows records and the All token total reports `ok`. |
 | Pull request 56 | Merged. It fixes Claude Code and Mac activity collection in shared scripts and prepares build 40. |
 | Open issues | 39, which stays open for installed verification of the quota-refresh fix. 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. |
@@ -209,11 +209,24 @@ Recorded on 2026-10-13 from `main` at `ee29f31`.
 - Build 39 was quit normally. The data folder (140 files) and preferences were copied to a new recovery folder and matched by SHA-256. `native/mac/replace-app.mjs` reached `payload-verified` and retained build 39 beside the app.
 - The first scheduled collection under build 40 reported state `ok` with 10 of 10 sources read. Claude Code on the Mac reported `ok` with 8 recorded days. Mac activity tracked through the current minute. Windows records were about three minutes old, and the All token total and combined settings reported `ok`.
 
+### Build 41 install on the Mac
+
+Recorded on 2026-10-14 UTC from `main` at `3f70771`. Pull request 88 raised the build number because `main` had moved 20 commits past the installed build 40 without a new number, and the replacement helper refuses a build number that does not advance.
+
+- `node native/build.mjs` and `node native/mac/package.mjs --zip-only` passed with `SDKROOT` set to the macOS 26.5 SDK. The ZIP has SHA-256 `eeb37f59533cc358667ead8f8f7eb856bcad7ddb25cbb55040c221bdcb1a7625`.
+- Build 40 was quit normally. The data folder (142 files) and preferences were copied to a recovery folder and matched by SHA-256. `native/mac/replace-app.mjs` replaced build 40 and strict deep signature verification passed.
+- The first two collections under build 41 failed. Each ran for the full 240 seconds. The collector was waiting on `claude -p /usage --output-format json --no-session-persistence`, which never exited. The app had been started with `open` from a shell inside a Claude desktop session, so the app and that command inherited the session's environment, including `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_MESSAGING_SOCKET` and `ANTHROPIC_BASE_URL`. The same command run with only `HOME`, `USER` and `PATH` set returned in 1 second.
+- The 15 second limit in `scripts/claude-usage-command.mjs` did not end the command. One command from the first failed collection was still running after the collector had given up, and it ignored a normal termination signal.
+- The app was quit and started again with `env -i` and a minimal environment. The next collection finished in 11 seconds with state `ok` and 10 of 10 sources read. `claudeLimits` reported `stale` with two windows.
+- At the owner's request the retained copies of builds 35, 39 and 40 beside the app were deleted. One app bundle remains on the Mac. The data recovery folders were kept.
+
+Not verified: login startup of build 41, the web panel and dashboard flags in the installed build, and why `claudeLimits` reported `stale` straight after a collection that ran the usage command.
+
 ### Differences from Windows
 
 | Topic | Windows | Mac |
 | --- | --- | --- |
-| Installed build | 0.3.14 build 40 from `57518b7` | 0.3.14 build 40 from `ee29f31` |
+| Installed build | 0.3.14 build 40 from `57518b7` | 0.3.14 build 41 from `3f70771` |
 | Build 39 produced by | CI package run | Local build with the macOS 26.5 SDK |
 | Build 40 produced by | CI package run `38443842036` | Local build with the macOS 26.5 SDK |
 | Collection | 6 of 6 sources under build 40 when started outside a Claude desktop session, including Mac records 2 minutes old. 3 of 6 when started from one. | 10 of 10 sources under build 40, including fresh Windows records |
