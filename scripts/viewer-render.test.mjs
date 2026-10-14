@@ -141,7 +141,7 @@ for (const Component of [BarChart, StackedBarChart, LineChart]) {
     assert.ok(title);
     assert.ok(html.includes(`role="img" aria-labelledby="${title[1]}"`));
     assert.match(html, /<figcaption>/);
-    assert.match(html, /<table class="ob-visually-hidden">/);
+    assert.match(html, /<div class="ob-visually-hidden"><table>/);
     assert.match(html, /<label[^>]*><input type="checkbox"\/>Show values<\/label>/);
     const body = html.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1];
     assert.ok(body);
@@ -195,6 +195,10 @@ void test('charts use skin styles, scalable frames and thinned labels', () => {
   const css = readFileSync(`${root}/app/viewer/panel/panel.css`, 'utf8');
   assert.match(css, /\.ob-chart-unknown\s*\{[^}]*stroke-dasharray:/);
   assert.match(css, /figcaption:has\(input:checked\)/);
+  assert.doesNotMatch(source, /<table\b[^>]*\bstyle\s*=[^>]*\bdisplay\s*:/);
+  assert.doesNotMatch(source, /<table\b[^>]*\bclassName=["']ob-visually-hidden["']/);
+  assert.doesNotMatch(css, /[^{}]*\btable\b[^{}]*\{[^}]*\bdisplay\s*:/);
+  assert.doesNotMatch(css, /[^{}]*\.ob-visually-hidden[^{}]*\{[^}]*\bdisplay\s*:/);
   const html = renderChart(BarChart, Array.from({ length: 40 }, (_, index) => ({ label: `Item ${index}`, value: index })));
   assert.match(html, /viewBox="0 0 320 180" width="100%"/);
   assert.ok((html.match(/text-anchor="start"/g) ?? []).length <= 12);
