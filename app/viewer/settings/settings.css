@@ -1,0 +1,26 @@
+.ob-settings { min-width: 0; }
+.ob-settings h3, .ob-settings h4 { margin: var(--ob-space-3) 0; font-size: inherit; }
+.ob-settings .ob-card { padding: var(--ob-space-4); }
+.ob-settings .ob-row { flex-wrap: wrap; gap: var(--ob-space-2); margin: var(--ob-space-2) 0; }
+.ob-settings button, .ob-settings input, .ob-settings textarea, .ob-settings select {
+  color: var(--ob-text);
+  background: var(--ob-surface);
+  border: 1px solid var(--ob-muted);
+  border-radius: var(--ob-radius, 12px);
+  font: inherit;
+  padding: var(--ob-space-2);
+  max-width: 100%;
+  min-height: 36px;
+}
+.ob-settings button { cursor: pointer; margin: var(--ob-space-2) var(--ob-space-2) var(--ob-space-2) 0; }
+.ob-settings :disabled { opacity: 0.65; cursor: default; }
+.ob-settings :is(input, textarea, select, button):focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.ob-settings-field { display: grid; gap: var(--ob-space-2); margin: var(--ob-space-3) 0; min-width: 0; }
+.ob-settings-field :is(input, textarea, select) { width: 100%; min-width: 0; }
+.ob-settings textarea { min-height: 96px; font-family: monospace; overflow-wrap: anywhere; resize: vertical; }
+.ob-settings input[readonly] { font-family: monospace; }
+.ob-settings-switch { display: flex; align-items: center; gap: var(--ob-space-2); }
+.ob-settings-switch input { accent-color: var(--ob-accent); flex-shrink: 0; }
+.ob-settings-disclosure { border-left: 2px solid var(--ob-accent); padding-left: var(--ob-space-3); }
+.ob-settings-disclosure ul { padding-left: var(--ob-space-4); }
+.ob-settings output:empty { display: none; }
