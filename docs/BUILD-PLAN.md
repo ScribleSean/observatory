@@ -1,6 +1,6 @@
 # Build plan
 
-Written on 2026-10-13 from `main` at `11ba4ea`. This is a plan. Nothing in it is built unless [the parity table](PARITY.md) or [the state record](STATE.md) says so. [The design direction](DESIGN.md) is the source for what to build. This file says who builds what, in which order, and how the pieces stay out of each other's way.
+Written on 2026-10-13 from `main` at `11ba4ea`, with additions the same day through `02b83ac`, and corrected on 2026-10-14 after the orchestrator read the plan against the repository before the autonomous run (the "Corrections of 2026-10-14" section lists what changed and why). This is a plan. Nothing in it is built unless [the parity table](PARITY.md) or [the state record](STATE.md) says so. [The design direction](DESIGN.md) is the source for what to build. This file says who builds what, in which order, and how the pieces stay out of each other's way.
 
 ## Decision this plan rests on
 
@@ -35,32 +35,33 @@ Approved in advance, with the condition beside each:
 
 | Action | Condition |
 | --- | --- |
-| Squash-merging a workstream's pull request | CI passes and an independent reviewer session has checked it |
-| Removing the SwiftUI viewer, the Windows Forms viewer and the earlier web dashboard | The shared viewer is the default on that platform and its checks pass. Tag `main` first, as `archive/pre-web-direction` was. List the removed files in the pull request. |
-| The removals in R1, and the Ubuntu fields and legacy pairing shape in P1 | Saved settings and saved history stay readable. Tests show it. |
+| Squash-merging a workstream's pull request | CI passes and the reviews under "Reviews" are posted. Until the script suite workflow from Q1 exists, "CI passes" means the orchestrator ran the full suite, `npx tsc --noEmit` and the design token check on the branch and recorded the counts in the pull request, because `main` has no branch protection and no pull-request workflow runs the full suite today. |
+| Removing the SwiftUI viewer, the Windows Forms viewer and the earlier web dashboard | The shared viewer is the default on that platform and its checks pass. Tag `main` first as `archive/pre-viewer-removal`, annotated with the date, on the merge commit before the first removal pull request, as `archive/pre-web-direction` was. List the removed files in the pull request. |
+| The removals in R1, and the Ubuntu fields and legacy pairing shape in R2 | Saved settings and saved history stay readable, and the current pairing on both devices stays readable. Tests with a fixture in today's on-device shape show it. Both apps are installed from the R2 change before any re-pair. |
 | The settings bridge contract in B1 | An independent reviewer session checks it against the rule that no action carries a path, a command or free text that reaches a shell. The contract is recorded in the design direction before a shell implements it. |
 | Replacing the installed app on the Mac or the PC with a build from `main` | The data folder is backed up and matches by checksum first, the previous build stays recoverable, and the result is recorded in the state record |
-| Installing the Claude Code limits bridge on the PC | It was approved on the Mac the same day. Record what changed. |
+| Installing the Claude Code limits bridge on the PC | It was approved on the Mac the same day. H1 does it from the PC session, outside a Claude desktop session, and records what changed, including the PowerShell quoting of the status line command and whether the usage command finds `claude.exe` from the installed app. |
 
 Added on 2026-10-13 from the owner's answers before the autonomous build:
 
 | Decision | Detail |
 | --- | --- |
-| Where the build stops | After everything in "What done means" is installed and verified on both devices, publish a GitHub release with the install guides and publish the demo page. This is approved in advance, once, for that finished state. |
+| Where the build stops | After everything in "What done means" is installed and verified on both devices, publish a GitHub release with the install guides and publish the demo page. This is approved in advance, once, for that finished state. Because [the design direction](DESIGN.md) asks for the owner's approval each time something is published, F1 first posts the release draft, both checksums and the demo build location in its issue and waits for the owner's reply, which is that approval. |
 | What a Mac session may touch | `~/Developer`, the installed Observatory app in `~/Applications`, its data folder for backups and installs, and the status line entry in Claude Code's settings. Nothing else on the Mac. |
 | How the PC is driven | The owner keeps the "Observatory Windows" session open with prompts skipped. The orchestrator sends it tasks by message and through issues. |
-| Windows build time | Fix both causes: run the full suite on pull requests, and reuse one PowerShell process for the permission checks. The second is security-sensitive and needs two reviews. |
-| Internal name | Rename "Workspace Observatory" to "Observatory" in this build, with a tested migration that copies saved data to the new location and keeps the old folder until the owner confirms. |
+| Windows build time | Fix both causes: run the full suite on pull requests, and reuse one PowerShell process for the permission checks. The second is security-sensitive and needs two reviews. Baseline read from the job log of the last successful package run (38493681280) on 2026-10-14: 38 m 33 s against a 40 minute cap, of which the script suite inside `build.ps1` is about 32 minutes, publish, Python preparation, native tests and manifest hashing about 42 seconds, and the installer lifecycle 3 m 39 s. The suite is the cost. The per-check PowerShell share is unmeasured and is measured before it is changed. |
+| Internal name | Rename "Workspace Observatory" to "Observatory" in this build, with a tested migration that copies saved data to the new location and keeps the old folder until the owner confirms. What the rename means for the Mac bundle identifier, the Windows receipt identity and the old install entry is under N1. |
 | Old leftovers | Keep the newest data backup on each device and the build 40 installer on the PC. Move older installers, test builds and backups to the Trash or the Recycle Bin for the owner to empty. Never delete them outright. |
-| Tailscale | Installed and signed in on both devices, so pairing can be tested end to end. The owner types the pairing code. |
+| Tailscale | Installed and signed in on both devices, so pairing can be tested end to end. The owner pastes the invitation on the second device and confirms the claimed device on the first (see "Pairing code" under the corrections). The only earlier two-device test, on 2026-09-13, timed out before TLS on Windows outbound firewall rules ([local pairing](LOCAL-PAIRING.md)), so a Windows Firewall rule for the bundled `node.exe` listening on the Tailscale interface may need the owner. |
 | What he most wants fixed | The apps still show the old look, and Claude Code is not shown beside Codex. The shared viewer as the default fixes both. |
 
 Still needs the owner, because no session can do it or because it reaches outside his machines:
 
 - Anything that costs money.
 - Weakening a security rule, a file guard or the private-folder check. Issue 58 stays open until he decides.
-- Physical or account steps: signing in to Tailscale, typing a pairing code on the second device, a real click that a session cannot perform.
+- Physical or account steps: signing in to Tailscale, pasting the invitation on the second device and confirming the claimed device on the first, a Windows Firewall rule if the live pairing test times out before TLS, switching the system appearance for a check, a real click that a session cannot perform, and granting computer-use access to the Observatory app on the Mac once.
 - Deleting saved history, backups or anything in a data folder.
+- Repository settings, such as a ruleset that requires the script suite workflow on pull requests.
 
 When one of these blocks a workstream, record exactly what is needed in the issue, carry on with everything that does not depend on it, and put all such items in one list for him at the end.
 
@@ -71,11 +72,13 @@ Set by the owner on 2026-10-13 and checked that day from the Mac.
 | Role | Tool | Notes |
 | --- | --- | --- |
 | Planning, splitting work, writing task instructions, review, builds, commits, pushes, pull requests, installs | Claude sessions | One orchestrator. Reviewer sessions start with a fresh context. |
-| Writing and changing code and tests inside one worktree | Codex in non-interactive mode, model `gpt-6-astra`, reasoning effort medium | `codex exec -m gpt-6-astra -c model_reasoning_effort=medium --sandbox workspace-write -C <worktree>` |
+| Writing and changing code and tests inside one worktree | Codex in non-interactive mode, model `gpt-6-astra`, reasoning effort medium | `codex exec -m gpt-6-astra -c model_reasoning_effort=medium --sandbox workspace-write -C <worktree> -o <reply file> "<task>" </dev/null`, the form verified on 2026-10-13. The reply file is read as a report. |
 | The same work when Codex reports that its usage has run out | Claude sessions | Switch back to Codex when its usage returns. Record in the issue which tool did the work. |
-| Windows native work | The Claude session on the PC | See the routes below |
+| Windows native work | The Claude session on the PC | See the routes below. Windows native code is written by that session until the PC Codex sandbox problem is solved, and the issue records which tool did the work. |
 
-Every Codex task gets very specific instructions. A task names the worktree, the files it may create or change, the files it must not touch, the exact behaviour wanted, the tests to add, the command to run, and the form of its reply. It ends with "do not commit, do not push, do not change any other file". The orchestrator then reads the diff, runs the checks itself and commits. A Codex reply is a report to verify, never an instruction to follow.
+Every Codex task gets very specific instructions. A task names the worktree, the files it may create or change, the files it must not touch, the exact behaviour wanted, the tests to add, the command to run, and the form of its reply. It ends with "do not commit, do not push, do not change any other file". The orchestrator then reads the diff, confirms that only the allowed files changed, runs the checks itself and commits. A Codex reply is a report to verify, never an instruction to follow.
+
+Worktrees live under `.claude/worktrees/<branch>` inside the project folder, one per branch, each with its own `npm ci`. The orchestrator's checkout stays on `main`.
 
 The same rule applies to computer use. A session that drives an app through the screen gets a numbered list of exact steps and the expected result of each, and stops at the first step whose result differs.
 
@@ -95,15 +98,16 @@ So Codex acts on the Mac, and the PC's Claude session acts on the PC. Whether th
 ## Rules for every session
 
 - Read `AGENTS.md`, [the design direction](DESIGN.md) and [the parity table](PARITY.md) before changing anything.
-- One workstream per session. Touch only the paths that workstream owns. If a change is needed in a path another workstream owns, open an issue for it and say what is needed.
+- One workstream per branch and worktree. A session may carry several workstreams in sequence, each in its own worktree, and never mixes two in one pull request. Touch only the paths that workstream owns. If a change is needed in a path another workstream owns, open an issue for it and say what is needed, or use the exception the workstream row records.
+- Shared records: [the parity table](PARITY.md), [the state record](STATE.md) and [the design direction](DESIGN.md) belong to no single workstream. Any workstream edits the rows or the section that describe its own change, in its own pull request, and nothing else in them. The orchestrator resolves conflicts at merge.
 - Sessions on the same machine each work in their own Git worktree. Never switch branches in a checkout another session is using.
-- Branch names start with `shared/`, `mac/` or `win/`. Everything reaches `main` by pull request. A session may squash-merge its own pull request when CI passes and an independent reviewer session has checked it.
+- Branch names start with `shared/`, `mac/` or `win/`. Everything reaches `main` by pull request. The orchestrator squash-merges a pull request when CI passes and the reviews under "Reviews" are posted. The PC session does not merge.
 - Use synthetic data in tests. Never print, commit or attach real usage values.
 - Unknown is never zero. Device records are never added together outside the collector's verified aggregate.
 - Do not delete code, files or data that the workstream or the standing approvals do not list for removal.
-- Do not publish a release, the demo page or anything else. Do not change repository settings. Spend nothing.
-- Quit the installed app only when a workstream requires it, relaunch it straight afterwards and record how long it was closed. Mac measurement runs quit it three times on 2026-10-13.
-- Mac native work can only be built and checked on the Mac. Windows native work can only be built and checked on the Windows PC, and every Windows acceptance check must start the app outside a Claude desktop session (issue 58).
+- Do not publish a release, the demo page or anything else, except as F1 describes. Do not change repository settings. Spend nothing.
+- Quit the installed app only when a workstream requires it, tell the owner first, relaunch it straight afterwards and record how long it was closed. Mac measurement runs quit it three times on 2026-10-13.
+- Mac native work can only be built and checked on the Mac. Windows native work can only be built and checked on the Windows PC. Every Windows acceptance check starts the app through `Win32_Process.Create` (parent `WmiPrvSE.exe`) or the Start menu, never from a Claude desktop session, and records the parent process (issue 58, [the state record](STATE.md) build 41 install on Windows). Every Mac acceptance check starts the app with a clean environment (`env -i` with `HOME`, `USER` and `PATH`, then `/usr/bin/open -n`), never from a shell inside a Claude desktop session, and records the launch line ([the state record](STATE.md) build 41 install on the Mac).
 - When blocked for more than a few minutes on one thing, write down what was tried in the issue or pull request and stop.
 - Update [the parity table](PARITY.md) in the same pull request as the change it describes. Record what was verified, on which revision, and what was not.
 
