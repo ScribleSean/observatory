@@ -559,6 +559,15 @@ func runSelfTests() {
             precondition(resolver.resolve(URL(string: url)!) == nil, "Host accepted an unsafe asset URL")
         }
     }
+    for path in ["index.html/", "index.html?x", "%69ndex.html", "INDEX.html", "Dashboard.html",
+                 "assets%2F..%2Findex.html", "//index.html", "./index.html", "index.html%00", "panel.html;x", "assets/x.html"] {
+        precondition(dashboard.resolve(URL(string: "observatory://app/" + path)!) == nil,
+                     "Dashboard accepted a refused path: \(path)")
+    }
+    for resolver in [legacy, panel, dashboard] {
+        precondition(resolver.resolve(URL(string: "observatory://app/assets/x.html")!) == nil,
+                     "Host served HTML under assets")
+    }
     let empty = AssetResolver(root: assetRoot, pages: [])
     for page in ["index.html", "panel.html", "dashboard.html"] {
         precondition(empty.resolve(URL(string: "observatory://app/" + page)!) == nil, "Empty page set served a page")
@@ -593,6 +602,31 @@ func runSelfTests() {
         precondition(!invalid.contains("dataset.theme"), "Invalid theme must not set an attribute")
         precondition(!WebViewerPreferences.documentStartScript(skin: "sage", theme: nil).contains("dataset.theme"),
                      "System theme must not set an attribute")
+    }
+    let dashboardURL = URL(string: "observatory://app/dashboard.html")!
+    precondition(DashboardNavigation.allows(dashboardURL, mainFrame: true), "Dashboard navigation refused its page")
+    for fragment in ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"] {
+        precondition(DashboardNavigation.allows(URL(string: "observatory://app/dashboard.html#" + fragment)!, mainFrame: true),
+                     "Dashboard navigation refused fragment: \(fragment)")
+    }
+    precondition(!DashboardNavigation.allows(dashboardURL, mainFrame: false), "Dashboard navigation accepted a subframe")
+    let refusedNavigation = [
+        "observatory://app/dashboard.html?demo", "observatory://app/dashboard.html?",
+        "observatory://app/dashboard.html?x#limits", "observatory://app/dashboard.html/",
+        "observatory://app/dashboard.html%2F", "observatory://app/%64ashboard.html",
+        "observatory://app/Dashboard.html", "observatory://app/DASHBOARD.HTML",
+        "observatory://APP/dashboard.html", "observatory://app//dashboard.html",
+        "observatory://app/./dashboard.html", "observatory://app/assets/../dashboard.html",
+        "observatory://app/dashboard.html#", "observatory://app/dashboard.html#Limits",
+        "observatory://app/dashboard.html#unknown", "observatory://app/dashboard.html#limits%00",
+        "observatory://app/index.html", "observatory://app/panel.html", "observatory://app/",
+        "observatory://app", "https://app/dashboard.html", "https://example.com/",
+        "observatory://other/dashboard.html", "observatory://user@app/dashboard.html",
+        "observatory://app:80/dashboard.html", "about:blank"
+    ]
+    for value in refusedNavigation {
+        precondition(!DashboardNavigation.allows(URL(string: value)!, mainFrame: true),
+                     "Dashboard navigation accepted a refused URL: \(value)")
     }
     print("Native self-tests passed")
 }

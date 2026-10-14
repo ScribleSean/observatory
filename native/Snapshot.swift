@@ -156,6 +156,7 @@ struct AssetResolver {
         let file = base.appendingPathComponent(path).standardizedFileURL.resolvingSymlinksInPath()
         guard file.path.hasPrefix(base.path + "/"),
               ["html", "js", "css", "svg", "png", "ico", "woff2", "woff", "ttf", "txt"].contains(file.pathExtension) else { return nil }
+        guard file.pathExtension != "html" || pages.contains(path) else { return nil }
         return file
     }
 }

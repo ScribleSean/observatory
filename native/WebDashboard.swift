@@ -12,7 +12,7 @@ for (const row of document.querySelectorAll('[data-provider][data-window]')) {
     limitRows[provider] = (limitRows[provider] || 0) + 1;
 }
 return JSON.stringify({
-    ready: ready(), page: location.pathname.replace(/^\\//, ''),
+    kind: "web", ready: ready(), page: location.pathname,
     skin: document.documentElement.dataset.skin || 'Unknown',
     theme: document.documentElement.dataset.theme || 'system',
     font: getComputedStyle(document.querySelector('main') || document.body).fontFamily,
@@ -59,12 +59,10 @@ enum WebDashboardPage {
     static let sections = [("limits", "Limits"), ("activity", "Activity"), ("tokens", "Tokens"),
                            ("dictation", "Dictation"), ("sources", "Sources"), ("settings", "Settings")]
 
-    static func shownPage(resources: URL) -> String {
-        // The viewer workstream adds the dashboard page. Until the bundle has it,
-        // show the panel page through the same host, as WebDashboard.cs does.
+    static func isBundled(resources: URL) -> Bool {
         let file = resources.appendingPathComponent("Web").appendingPathComponent(page)
         let attributes = try? file.resourceValues(forKeys: [.isRegularFileKey])
-        return attributes?.isRegularFile == true ? page : "panel.html"
+        return attributes?.isRegularFile == true
     }
 
     static func section(for tab: String) -> String {
@@ -72,18 +70,17 @@ enum WebDashboardPage {
         return sections.contains(where: { $0.0 == tab }) ? tab : "limits"
     }
 
-    static func url(page: String, section: String) -> URL {
+    static func url(section: String) -> URL {
         precondition(sections.contains(where: { $0.0 == section }))
-        return URL(string: page == Self.page ? "observatory://app/dashboard.html#\(section)" : "observatory://app/panel.html")!
+        return URL(string: "observatory://app/dashboard.html#\(section)")!
     }
 }
 
 @MainActor
-func makeWebDashboard(runtime: URL, resources: URL, page: String) -> WKWebView {
-    precondition(page == WebDashboardPage.page || page == "panel.html")
+func makeWebDashboard(runtime: URL, resources: URL) -> WKWebView {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .nonPersistent()
-    config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: [page]), forURLScheme: "observatory")
+    config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: ["dashboard.html"]), forURLScheme: "observatory")
     // The page can only read the snapshot until the settings bridge is added.
     config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
     config.userContentController.addUserScript(WKUserScript(source: WebViewerPreferences.documentStartScript(
@@ -91,7 +88,41 @@ func makeWebDashboard(runtime: URL, resources: URL, page: String) -> WKWebView {
         injectionTime: .atDocumentStart, forMainFrameOnly: true))
     config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     let web = DashboardWebView(frame: .zero, configuration: config)
+    let navigation = DashboardNavigation()
+    web.navigationGuard = navigation
+    web.navigationDelegate = navigation
+    web.uiDelegate = navigation
     web.underPageBackgroundColor = .windowBackgroundColor
     web.allowsBackForwardNavigationGestures = false
     return web
+}
+
+// This is the contract's navigation rule. The file guard stays as a second layer.
+final class DashboardNavigation: NSObject, WKNavigationDelegate, WKUIDelegate {
+    static let fragments: Set<String> = ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"]
+
+    static func allows(_ url: URL, mainFrame: Bool) -> Bool {
+        mainFrame && url.scheme == "observatory" && url.host == "app" &&
+            url.user == nil && url.password == nil && url.port == nil &&
+            url.path(percentEncoded: true) == "/dashboard.html" && url.query == nil &&
+            (url.fragment == nil || fragments.contains(url.fragment!)) &&
+            !url.absoluteString.contains("%00") && !url.absoluteString.contains("\\")
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = action.request.url else { decisionHandler(.cancel); return }
+        if Self.allows(url, mainFrame: action.targetFrame?.isMainFrame == true) { decisionHandler(.allow); return }
+        if action.navigationType == .linkActivated, url.scheme == "https",
+           ["developers.openai.com", "github.com"].contains(url.host ?? "") {
+            NSWorkspace.shared.open(url)
+        }
+        decisionHandler(.cancel)
+    }
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if action.navigationType == .linkActivated, let url = action.request.url, url.scheme == "https",
+           ["developers.openai.com", "github.com"].contains(url.host ?? "") { NSWorkspace.shared.open(url) }
+        return nil
+    }
 }

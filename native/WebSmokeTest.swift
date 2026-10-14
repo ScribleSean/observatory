@@ -7,7 +7,6 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
     private var web: WKWebView?
     private var panel: WebPanelController?
     private var panelActions: [String] = []
-    private var dashboardPage = "Unknown"
     private var timer: Timer?
     private let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-smoke-\(UUID().uuidString)")
     func start() {
@@ -115,9 +114,8 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         return try await waitForPanelAction(view)
     }
     private func checkDashboard(resources: URL) async throws -> Bool {
-        let page = WebDashboardPage.shownPage(resources: resources)
-        dashboardPage = page == "dashboard.html" ? page : "panel.html as the fallback"
-        let view = makeWebDashboard(runtime: runtime, resources: resources, page: page)
+        guard WebDashboardPage.isBundled(resources: resources) else { return false }
+        let view = makeWebDashboard(runtime: runtime, resources: resources)
         web = view
         defer {
             view.stopLoading()
@@ -125,12 +123,23 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
             web = nil
         }
         view.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
-        view.load(URLRequest(url: WebDashboardPage.url(page: page, section: "activity")))
-        let flag = page == "dashboard.html" ? "observatoryDashboardReady" : "observatoryPanelReady"
-        let otherPage = page == "dashboard.html" ? "./panel.html" : "./dashboard.html"
-        guard try await waitUntilReady(view, flag: flag) else { return false }
-        return try await checkHost(view, blockedPages: ["./index.html", otherPage], panelHost: false)
+        view.load(URLRequest(url: WebDashboardPage.url(section: "activity")))
+        guard try await waitUntilReady(view, flag: "observatoryDashboardReady"),
+              try await checkHost(view, blockedPages: ["./index.html", "./panel.html"], panelHost: false) else { return false }
+        for url in ["https://example.com/", "observatory://app/index.html", "observatory://app/panel.html",
+                    "observatory://app/dashboard.html?demo", "observatory://other/dashboard.html"] {
+            _ = try await view.callAsyncJavaScript("location.href = url;", arguments: ["url": url], in: nil, contentWorld: .page)
+            try await Task.sleep(nanoseconds: 300_000_000)
+            guard view.url?.path == "/dashboard.html", view.url?.query == nil, view.url?.host == "app" else { return false }
+            let ready = try await view.callAsyncJavaScript("return window.observatoryDashboardReady === true;",
+                arguments: [:], in: nil, contentWorld: .page)
+            guard ready as? Bool == true else { return false }
+        }
+        _ = try await view.callAsyncJavaScript("location.hash = 'setup';", arguments: [:], in: nil, contentWorld: .page)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        return view.url?.fragment == "setup"
     }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task {
           do {
@@ -194,7 +203,7 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         panel?.webViewForTesting.configuration.userContentController.removeAllScriptMessageHandlers()
         panel = nil
         try? FileManager.default.removeItem(at: runtime)
-        print(passed ? "Native renderer and data bridge passed (panel host, dashboard host showing \(dashboardPage), legacy host)" : "Native renderer or data bridge failed")
+        print(passed ? "Native renderer and data bridge passed (panel host, dashboard host, legacy host)" : "Native renderer or data bridge failed")
         exit(passed ? 0 : 1)
     }
 }

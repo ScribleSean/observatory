@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var setupWindow: NSWindow?
     private var directPairingWindow: DirectPairingWindowController?
     private var webView: WKWebView?
-    private var webDashboardPage: String?
     private var webDashboardSection = "limits"
     private var dashboardCollectionObserver: AnyCancellable?
     private let navigation = LocalNavigation()
@@ -773,23 +772,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         if detail == nil {
             guard let resources = Bundle.main.resourceURL else { return }
-            let web: WKWebView
+            let web: WKWebView?
             if usesWebDashboard {
-                let page = WebDashboardPage.shownPage(resources: resources)
-                webDashboardPage = page
-                web = makeWebDashboard(runtime: store.runtime, resources: resources, page: page)
+                web = WebDashboardPage.isBundled(resources: resources) ? makeWebDashboard(runtime: store.runtime, resources: resources) : nil
             } else {
                 web = makeDashboard(runtime: store.runtime, resources: resources)
+                web?.navigationDelegate = navigation
+                web?.uiDelegate = navigation
             }
-            web.navigationDelegate = navigation
-            web.uiDelegate = navigation
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1150, height: 770),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
             window.title = usesWebDashboard && previewRuntime != nil ? "Observatory web preview" : "Observatory"
             window.titlebarAppearsTransparent = true
             window.minSize = NSSize(width: 800, height: 550)
-            window.contentView = web
+            if let web {
+                window.contentView = web
+            } else {
+                let container = NSView()
+                let label = NSTextField(wrappingLabelWithString: "The dashboard could not start. This build is missing its dashboard page. Collection is separate from this window.")
+                label.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(label)
+                NSLayoutConstraint.activate([
+                    label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 30),
+                    label.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -30),
+                    label.topAnchor.constraint(equalTo: container.topAnchor, constant: 30),
+                    label.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -30)
+                ])
+                window.contentView = container
+            }
             window.delegate = self
             window.isReleasedWhenClosed = false
             if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryDetail") }
@@ -797,9 +808,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             detail = window
             webView = web
         }
-        if usesWebDashboard, let page = webDashboardPage {
+        if usesWebDashboard {
             webDashboardSection = WebDashboardPage.section(for: tab)
-            webView?.load(URLRequest(url: WebDashboardPage.url(page: page, section: webDashboardSection)))
+            webView?.load(URLRequest(url: WebDashboardPage.url(section: webDashboardSection)))
             if reportsPanelTiming, let web = webView {
                 describeViewer(web) { [weak self, weak web] facts in
                     guard let self, let webView = self.webView, webView === web else { return }
@@ -831,7 +842,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         webView?.configuration.userContentController.removeAllScriptMessageHandlers()
         detail?.contentView = nil
         webView = nil
-        webDashboardPage = nil
         detail = nil
     }
 
@@ -950,16 +960,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
-            detail?.performClose(nil)
-            // Allow AppKit's close notification and autorelease pool to drain.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
-                guard detail == nil, webView == nil, lifecycleContent == nil,
-                      statusItem.button != nil, NSApp.isRunning else {
-                    print("Native lifecycle failed: closed dashboard retained state or menu-bar app stopped")
-                    exit(1)
+            let deadline = Date().addingTimeInterval(5)
+            @MainActor func closeWhenLoaded() {
+                if usesWebDashboard {
+                    if webView?.isLoading == true || webView?.url == nil {
+                        precondition(Date() < deadline, "Dashboard loading timed out")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { closeWhenLoaded() }
+                        return
+                    }
+                    precondition(webView?.url?.path == "/dashboard.html", "Dashboard page did not load")
+                    precondition(webView?.url?.fragment == "activity", "Dashboard activity section did not load")
+                    let invalid = NSMenuItem(title: "Invalid", action: #selector(navigateSection(_:)), keyEquivalent: "")
+                    invalid.representedObject = "unrecognized"
+                    precondition(!validateMenuItem(invalid), "Invalid dashboard section accepted")
+                    let section = webDashboardSection
+                    let url = webView?.url
+                    navigateSection(invalid)
+                    precondition(webDashboardSection == section && webView?.url == url, "Invalid item changed the web section")
                 }
-                checkDashboardLifecycle(remaining: remaining - 1)
+                detail?.performClose(nil)
+                // Allow AppKit's close notification and autorelease pool to drain.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+                    guard detail == nil, webView == nil, lifecycleContent == nil,
+                          statusItem.button != nil, NSApp.isRunning else {
+                        print("Native lifecycle failed: closed dashboard retained state or menu-bar app stopped")
+                        exit(1)
+                    }
+                    checkDashboardLifecycle(remaining: remaining - 1)
+                }
             }
+            closeWhenLoaded()
         }
     }
 

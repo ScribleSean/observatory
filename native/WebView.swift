@@ -2,6 +2,9 @@ import AppKit
 import WebKit
 
 final class DashboardWebView: WKWebView {
+    // WKWebView holds its delegates weakly.
+    var navigationGuard: AnyObject?
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection([.command, .control, .option]) == .command,
            let key = event.charactersIgnoringModifiers,
