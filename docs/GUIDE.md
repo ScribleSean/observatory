@@ -42,7 +42,7 @@ Configured agent receipt files are a separate source from allowance monitoring. 
 
 ## Fictional UI fixture
 
-The [interactive demo](https://scriblesean.github.io/observatory/) uses the web interface with 14 days of fictional records. It is a development fixture, not the main app or a place to connect devices. No personal activity or account data is included. Use a separate checkout for a local fixture.
+The [interactive demo](https://scriblesean.github.io/observatory/) is the shared viewer that both apps show, with fictional sample data from `lib/sample-snapshot.mjs`. The copy published today still shows the earlier web interface until the next release. The demo is not the main app or a place to connect devices. No personal activity or account data is included.
 
 Select Activity to explore recorded screen time. Day has previous/next controls. Week shows seven dated rows ending on the selected date, with three-hour bands and daily totals. Hover or select a band for details. Select a date to open that day. Missing tracking records are muted, distinct from recorded idle time. All time totals retained daily summaries and lets you open a retained date. Retention starts with the available rolling window and keeps up to 3,650 dates per view, not the complete ActivityWatch archive. Broader reads replace partial days without adding duplicate totals. Failed source reads preserve prior summaries and show their last successful timestamp. Combined history is retained independently, never reconstructed by adding device totals.
 
@@ -54,18 +54,17 @@ You need Node.js 22.13 or later. Check `node --version` before running `npm ci`.
 git clone https://github.com/ScribleSean/observatory.git
 cd observatory
 npm ci
-npm run demo
-npm run build
+npm run build:web
 npm run serve:local
 ```
 
-Open [localhost:5601](http://127.0.0.1:5601). The demo uses made-up records and labels them as sample data. It refuses to overwrite an existing snapshot with a one-line explanation and exit code 1. Use a separate checkout if this one already contains records you want to preserve. You do not need an AI account, ActivityWatch or an SSH connection to try it.
+Open [localhost:5601/?demo](http://127.0.0.1:5601/?demo) for the dashboard and [localhost:5601/panel.html?demo](http://127.0.0.1:5601/panel.html?demo) for the panel. With `?demo` both pages show made-up records and label them as sample data. You do not need an AI account, ActivityWatch or an SSH connection to try it. `npm run build:demo` builds the site version in `dist/pages`, with the base path `/observatory/`.
 
 ## Browser dashboard
 
-The browser dashboard in this repository shows the fictional demo records described above. It is a development fixture. The legacy SSH hub collector that once filled it from private records was removed on 2026-10-14 (issue 82). A snapshot it wrote earlier is not deleted by this change, and existing private settings are preserved.
+The earlier browser dashboard was removed in S1 (issue 104). `npm run serve:local` now serves the built shared viewer from `.native-build/web`. The legacy SSH hub collector that once filled it from private records was removed on 2026-10-14 (issue 82). A snapshot it wrote earlier is not deleted by this change, and existing private settings are preserved.
 
-The default appearance is black and neutral. The top-bar sun and moon button switches between dark and light themes and saves that choice in this browser. [Brand guidance](BRAND.md) defines the shared telescope mark and visual language.
+[Brand guidance](BRAND.md) defines the shared telescope mark and visual language.
 
 The browser checks for a newer snapshot every 30 seconds while visible, and when it becomes visible again. **Reload snapshot** checks immediately. None of these browser actions starts collection or model tasks. You do not need to rebuild after collecting new records. ActivityWatch records independently of this viewer.
 
@@ -118,14 +117,15 @@ Right-click the icon to change Launch at login or quit. This is a locally ad-hoc
 ```sh
 npm test
 npx tsc --noEmit
-npm run build
+npm run build:web
+npm run build:demo
 ```
 
-Collector tests use synthetic records to check filtering, invalid values and repeated conversation counters. The interface uses React and Vinext with a static export. The local server uses Node's built-in HTTP module.
+Collector tests use synthetic records to check filtering, invalid values and repeated conversation counters. The shared viewer uses React and is built with Vite. The local server uses Node's built-in HTTP module.
 
-The synthetic-demo workflow runs tests, type checking, and a fresh build before publishing to GitHub Pages. It never uploads a workstation build. [ci/check.yml.example](../ci/check.yml.example) is a separate example workflow.
+The synthetic-demo workflow runs tests, type checking and a fresh demo build, and checks `dist/pages/build-info.json`, before publishing to GitHub Pages. It never uploads a workstation build. [ci/check.yml.example](../ci/check.yml.example) is a separate example workflow.
 
-The current web dashboard drew on [lnkiai/m3e-canvas](https://github.com/lnkiai/m3e-canvas), including its Material 3 Expressive navigation, connected controls and tonal surfaces. [The design direction](DESIGN.md) replaces that approach, and the web demo is to mirror the native apps.
+The earlier web dashboard, removed in S1, drew on [lnkiai/m3e-canvas](https://github.com/lnkiai/m3e-canvas), including its Material 3 Expressive navigation, connected controls and tonal surfaces. [The design direction](DESIGN.md) replaces that approach, and the web demo is to mirror the native apps.
 
 ## Contributing
 
