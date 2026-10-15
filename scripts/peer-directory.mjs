@@ -13,7 +13,7 @@ const execute=promisify(execFile);
 let powershellStarts=0;
 const countFile=process.env.OBSERVATORY_COUNT_POWERSHELL;
 if(countFile && path.isAbsolute(countFile))process.once('exit',()=>{
-  try {appendFileSync(countFile,`private-sync-acl ${powershellStarts} ${path.basename(process.argv[1] ?? 'node')}\n`);} catch {}
+  try {appendFileSync(countFile,`private-sync-acl ${powershellStarts}\n`);} catch {}
 });
 async function windowsPermissions(directory,initialize=false,ancestor=false) {
   const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');

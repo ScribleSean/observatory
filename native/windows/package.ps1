@@ -27,27 +27,29 @@ if ($PSBoundParameters.ContainsKey('UpdatePublicKey')) {
 . (Join-Path $PSScriptRoot 'runtime-assets.ps1')
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $assets = Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json
-if (-not $SkipWebBuild) {
-    Write-PackagePhase 'development build'
-    & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot
-}
-if (-not (Test-Path (Join-Path $sourceRoot '.native-build\web\dashboard.html'))) { throw 'Build the shared viewer first.' }
-if (Test-Path (Join-Path $sourceRoot '.native-build\web\local')) { throw 'Private snapshots must never enter a package.' }
-
-Write-PackagePhase 'runtime archives'
-$nodeArchive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
-$pythonArchive = Get-ObservatoryArchive -Name python -CacheRoot $CacheRoot
-$pythonFullArchive = Get-ObservatoryArchive -Name pythonFull -CacheRoot $CacheRoot
-$timezoneArchive = Get-ObservatoryArchive -Name tzdata -CacheRoot $CacheRoot
-$updaterArchive = Get-ObservatoryArchive -Name updater -CacheRoot $CacheRoot
-$candidateName = 'candidate-' + [guid]::NewGuid().ToString('N')
-$candidate = Join-Path $PSScriptRoot "release\$candidateName"
-$app = Join-Path $candidate 'Workspace Observatory'
-New-Item -ItemType Directory -Path $app -Force | Out-Null
 $priorTelemetry = $env:DOTNET_CLI_TELEMETRY_OPTOUT
 $priorCertificateOption = $env:DOTNET_GENERATE_ASPNET_CERTIFICATE
+# Every path below is absolute, so starting the try here only lets the finally
+# close an open phase line when an early step throws.
 Push-Location $sourceRoot
 try {
+    if (-not $SkipWebBuild) {
+        Write-PackagePhase 'development build'
+        & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot
+    }
+    if (-not (Test-Path (Join-Path $sourceRoot '.native-build\web\dashboard.html'))) { throw 'Build the shared viewer first.' }
+    if (Test-Path (Join-Path $sourceRoot '.native-build\web\local')) { throw 'Private snapshots must never enter a package.' }
+
+    Write-PackagePhase 'runtime archives'
+    $nodeArchive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
+    $pythonArchive = Get-ObservatoryArchive -Name python -CacheRoot $CacheRoot
+    $pythonFullArchive = Get-ObservatoryArchive -Name pythonFull -CacheRoot $CacheRoot
+    $timezoneArchive = Get-ObservatoryArchive -Name tzdata -CacheRoot $CacheRoot
+    $updaterArchive = Get-ObservatoryArchive -Name updater -CacheRoot $CacheRoot
+    $candidateName = 'candidate-' + [guid]::NewGuid().ToString('N')
+    $candidate = Join-Path $PSScriptRoot "release\$candidateName"
+    $app = Join-Path $candidate 'Workspace Observatory'
+    New-Item -ItemType Directory -Path $app -Force | Out-Null
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
     $trustArguments = @()

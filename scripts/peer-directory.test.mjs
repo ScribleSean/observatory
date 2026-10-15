@@ -210,5 +210,5 @@ test('the PowerShell start counter is off unless its file is named, then appends
     assert.equal(run({OBSERVATORY_COUNT_POWERSHELL:countFile}).status,0);
     const lines=(await readFile(countFile,'utf8')).trim().split('\n');
     assert.equal(lines.length,1);
-    assert.match(lines[0],/^private-sync-acl [1-9]\d* \S+$/);
+    assert.match(lines[0],/^private-sync-acl [1-9]\d*$/);
   });
