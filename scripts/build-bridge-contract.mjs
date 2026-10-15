@@ -35,8 +35,10 @@ export function validateContract(data) {
   strings(data.codes); strings(data.dashboardFragments);
   keys(data.limits, ['queue', 'resultTimeoutSeconds', 'cacheRefreshSeconds', 'pairingPollSeconds']);
   Object.values(data.limits).forEach(positive);
-  keys(data.status, ['version', 'maxBytes', 'appVersionMaxLength', 'customSkinsMax']);
-  Object.values(data.status).forEach(positive);
+  keys(data.status, ['version', 'maxBytes', 'appVersionMaxLength', 'customSkinsMax', 'fields']);
+  Object.entries(data.status).filter(([key]) => key !== 'fields').forEach(([, value]) => positive(value));
+  strings(data.status.fields);
+  if (data.status.fields.some(field => !/^[a-z][A-Za-z]*$/.test(field))) fail();
   if (!Array.isArray(data.whiteSpace) || !data.whiteSpace.length || new Set(data.whiteSpace).size !== data.whiteSpace.length || data.whiteSpace.some(c => !Number.isInteger(c) || c < 0 || c > 0x10ffff || (c >= 0xd800 && c <= 0xdfff))) fail();
   keys(data.address, ['maxLength', 'ipv4', 'ipv6FirstGroup']); positive(data.address.maxLength); bounds(data.address.ipv6FirstGroup);
   if (data.address.ipv6FirstGroup.max > 65535 || !Array.isArray(data.address.ipv4) || !data.address.ipv4.length) fail();
