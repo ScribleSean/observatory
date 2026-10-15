@@ -277,6 +277,7 @@ struct BridgeStatusInput {
     var startup: Bool
     var appearance: String
     var limitsConsent: Bool
+    var collectionPaused: Bool
     var pairingState: String
     var peerFingerprint: String?
     var transport: String
@@ -315,7 +316,7 @@ struct BridgeStatusInput {
         let result: [String: Any] = ["version": 1, "app": ["version": input.appVersion, "build": input.appBuild],
             "sources": input.sources, "skin": ["current": input.skin, "bundled": ViewerSettingsFile.bundled, "custom": input.customSkins],
             "deviceName": input.deviceName as Any? ?? NSNull(), "startup": input.startup, "appearance": input.appearance,
-            "limitsConsent": input.limitsConsent, "pairing": ["state": input.pairingState,
+            "limitsConsent": input.limitsConsent, "collectionPaused": input.collectionPaused, "pairing": ["state": input.pairingState,
                 "peerFingerprint": input.peerFingerprint as Any? ?? NSNull(), "transport": input.transport, "invitationKept": input.invitationKept],
             "sharing": sharing]
         guard let data = try? JSONSerialization.data(withJSONObject: result), data.count <= BridgeContract.status["maxBytes"].number else { return nil }
@@ -494,11 +495,12 @@ func runBridgeSelfTests() {
     let unavailable = QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "pairing-unavailable", token: nil)
     let input = BridgeStatusInput(appVersion: "1.0-test", appBuild: 1,
         sources: ["activity": true, "codex": true, "claude": false, "wispr": false, "quota": false],
-        skin: "sage", customSkins: [], deviceName: nil, startup: false, appearance: "system", limitsConsent: false,
+        skin: "sage", customSkins: [], deviceName: nil, startup: false, appearance: "system", limitsConsent: false, collectionPaused: false,
         pairingState: "idle", peerFingerprint: nil, transport: "none", invitationKept: false,
         sharing: ["codex-limits": unavailable, "claude-code-tokens": unavailable])
     let status = BridgeStatusInput.bridgeStatusValue(input)!
-    precondition(Set(status.keys) == ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "pairing", "sharing"])
+    precondition(Set(status.keys) == Set(BridgeContract.status["fields"].strings) && status.count == BridgeContract.status["fields"].items.count)
+    precondition(status["collectionPaused"] as? Bool == false)
     precondition(status["deviceName"] is NSNull)
     func keys(_ object: Any?, _ expected: Set<String>) { precondition(Set((object as! [String: Any]).keys) == expected) }
     keys(status["app"], ["version", "build"])
@@ -541,7 +543,7 @@ func runBridgeSelfTests() {
     for text in ["{\"id\":1,\"id\":2,\"action\":\"status\",\"args\":{}}", String(repeating: " ", count: 4097), "not JSON"] {
         guard case .ignore = BridgeContract.validate(text as NSString) else { preconditionFailure("Invalid message was not ignored") }
     }
-    for action in ["unknown", "complete-setup"] {
+    for action in ["unknown"] {
         let text = "{\"id\":3,\"action\":\"\(action)\",\"args\":{}}" as NSString
         guard case .refused(let id) = BridgeContract.validate(text), id == 3 else { preconditionFailure("Reserved action accepted") }
     }

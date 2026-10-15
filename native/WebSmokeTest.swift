@@ -198,19 +198,19 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
     private func bridgeCheck(_ view: WKWebView, script: String) async throws -> Bool {
+        // The page sends its own status messages with small ids, so these checks use ids from 9001 and match results by id.
         let value = try await view.callAsyncJavaScript("""
         const results = window.smokeBridgeResults;
         const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
         const post = (id, action = 'status') => window.webkit.messageHandlers.bridge.postMessage(JSON.stringify({id, action, args: {}}));
-        const none = async () => {
-          const count = results.length;
+        const none = async (...ids) => {
           await pause(600);
-          return results.length === count;
+          return !results.some(result => ids.includes(result.id));
         };
         const expect = async (id, code = 'done') => {
           const deadline = Date.now() + 2000;
           while (!results.some(result => result.id === id) && Date.now() < deadline) await pause(20);
-          if (Date.now() >= deadline || !results.some(result => result.id === id)) return false;
+          if (!results.some(result => result.id === id)) return false;
           await pause(600);
           const matches = results.filter(result => result.id === id);
           if (matches.length !== 1) return false;
@@ -224,40 +224,42 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         return value as? Bool == true
     }
     private func checkBridge(_ view: WKWebView, host: SmokeBridgeHost, bridge: BridgeHandler, resources: URL) async throws -> Bool {
+        // Only actions other than status are compared, because the page also reads status on its own.
+        func others() -> [String] { host.actions.filter { $0 != "status" } }
         guard try await bridgeCheck(view, script: """
-        post(1);
-        if (!await expect(1)) return false;
-        post(2, 'unknown-action');
-        if (!await expect(2, 'refused')) return false;
-        post(3, 'complete-setup');
-        if (!await expect(3, 'refused')) return false;
-        window.webkit.messageHandlers.bridge.postMessage({id: 4, action: 'status', args: {}});
+        post(9001);
+        if (!await expect(9001)) return false;
+        post(9002, 'unknown-action');
+        if (!await expect(9002, 'refused')) return false;
+        post(9003, 'complete-setup');
+        if (!await expect(9003, 'unavailable')) return false;
+        window.webkit.messageHandlers.bridge.postMessage({id: 9004, action: 'refresh', args: {}});
         window.webkit.messageHandlers.bridge.postMessage('not json');
-        window.webkit.messageHandlers.bridge.postMessage('{"id":5,"id":6,"action":"status","args":{}}');
-        return await none() && results.length === 3;
-        """), host.actions == ["status"] else { return false }
+        window.webkit.messageHandlers.bridge.postMessage('{"id":9005,"id":9006,"action":"refresh","args":{}}');
+        return await none(9004, 9005, 9006);
+        """), others() == ["complete-setup"] else { return false }
         guard try await bridgeCheck(view, script: """
         const frame = document.createElement('iframe');
         document.body.append(frame);
         try {
           const handler = frame.contentWindow.webkit?.messageHandlers?.bridge;
-          if (handler) handler.postMessage(JSON.stringify({id: 10, action: 'status', args: {}}));
-          return await none() && !results.some(result => result.id === 10);
+          if (handler) handler.postMessage(JSON.stringify({id: 9010, action: 'refresh', args: {}}));
+          return await none(9010);
         } finally { frame.remove(); }
-        """), host.actions == ["status"] else { return false }
-        for (path, id) in [("/other.html", 11), ("/dashboard.html?demo", 12)] {
+        """), others() == ["complete-setup"] else { return false }
+        for (path, id) in [("/other.html", 9011), ("/dashboard.html?demo", 9012)] {
             _ = try await view.callAsyncJavaScript("history.pushState(null, '', path);", arguments: ["path": path], in: nil, contentWorld: .page)
-            guard try await bridgeCheck(view, script: "post(\(id)); return await none() && !results.some(result => result.id === \(id));"),
-                  host.actions == ["status"] else { return false }
+            guard try await bridgeCheck(view, script: "post(\(id), 'refresh'); return await none(\(id));"),
+                  others() == ["complete-setup"] else { return false }
             _ = try await view.callAsyncJavaScript("history.replaceState(null, '', '/dashboard.html#activity');",
                 arguments: [:], in: nil, contentWorld: .page)
         }
-        guard try await bridgeCheck(view, script: "post(13); return await expect(13);"),
-              host.actions == ["status", "status"], let dashboard = view as? DashboardWebView else { return false }
+        guard try await bridgeCheck(view, script: "post(9013); return await expect(9013);"),
+              others() == ["complete-setup"], let dashboard = view as? DashboardWebView else { return false }
         let generation = dashboard.documentGeneration
         _ = try await view.callAsyncJavaScript("""
         setTimeout(() => {
-          window.webkit.messageHandlers.bridge.postMessage(JSON.stringify({id: 14, action: 'refresh', args: {}}));
+          window.webkit.messageHandlers.bridge.postMessage(JSON.stringify({id: 9014, action: 'refresh', args: {}}));
           location.reload();
         }, 0);
         return true;
@@ -269,8 +271,8 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         guard dashboard.documentGeneration != generation,
               try await waitUntilReady(view, flag: "observatoryDashboardReady") else { return false }
         try await Task.sleep(nanoseconds: 1_000_000_000)
-        guard try await bridgeCheck(view, script: "return !results.some(result => result.id === 14);"),
-              host.actions == ["status", "status", "refresh"] else { return false }
+        guard try await bridgeCheck(view, script: "return !results.some(result => result.id === 9014);"),
+              others() == ["complete-setup", "refresh"] else { return false }
         let second = makeWebDashboard(runtime: runtime, resources: resources, bridge: bridge)
         installBridgeListener(second)
         defer {
@@ -280,9 +282,9 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         second.frame = view.frame
         second.load(URLRequest(url: WebDashboardPage.url(section: "activity")))
         guard try await waitUntilReady(second, flag: "observatoryDashboardReady"),
-              try await bridgeCheck(view, script: "post(20); return await expect(20);"),
-              try await bridgeCheck(second, script: "return await none() && !results.some(result => result.id === 20);") else { return false }
-        return host.actions == ["status", "status", "refresh", "status"]
+              try await bridgeCheck(view, script: "post(9020); return await expect(9020);"),
+              try await bridgeCheck(second, script: "return await none(9020);") else { return false }
+        return others() == ["complete-setup", "refresh"]
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

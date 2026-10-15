@@ -415,12 +415,15 @@ final class MacBridgeHost: BridgeHost {
                     sources: sources.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
                     startup: SMAppService.mainApp.status == .enabled, appearance: viewer.appearance, limitsConsent: limits,
+                    collectionPaused: store.collectionPausedForPairing || store.pairingMaintenance,
                     pairingState: session?.state ?? paired.state, peerFingerprint: session?.fingerprint,
                     transport: paired.transport, invitationKept: session?.invitation != nil, sharing: shared)
                 let value = BridgeStatusInput.bridgeStatusValue(input)
                 completion(value == nil ? .unavailable : .done, value)
             }
         case "export-data": export(completion: completion)
+        // O1-2 implements first-run completion on the removal branch.
+        case "complete-setup": completion(.unavailable, nil)
         default: completion(.refused, nil)
         }
     }
