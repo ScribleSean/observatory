@@ -8,7 +8,7 @@ import {selectTokenDays} from './token-periods.mjs';
 import {cleanDictation,summarizeDictation} from './dictation-aggregates.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {quotaPace} from './quota-pace.mjs';
-import {cleanPeerQuotaForDisplay} from './quota-display.mjs';
+import {cleanPeerQuotaForDisplay} from '../lib/view-limits.mjs';
 test('demo creation refuses existing snapshots without changing their bytes',async t=>{
   const dir=await mkdtemp(path.join(tmpdir(),'observatory-demo-test-'));
   t.after(()=>rm(dir,{recursive:true,force:true}));
@@ -62,4 +62,10 @@ test('demo is deterministic and covers every delivered view without live reads',
   assert.equal(history.find(r=>r.date==='2026-09-03').seconds,0);
   assert.ok(!JSON.stringify(d).includes('/Users/'));
   assert.ok(!JSON.stringify(d).includes('/home/'));
+});
+
+test('demo re-exports the shared sample function', async () => {
+  const demo = await import('./demo.mjs');
+  const sample = await import('../lib/sample-snapshot.mjs');
+  assert.equal(demo.sampleSnapshot, sample.sampleSnapshot);
 });

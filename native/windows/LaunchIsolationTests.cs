@@ -37,6 +37,7 @@ internal static class LaunchIsolationTests
             ["--panel-timing", "--background"], ["--web-dashboard"], ["--web-dashboard", "--web-panel"] })
             Check(LaunchArguments.Valid(args) && LaunchArguments.ValidForTestInstallation(args));
         foreach (var args in new string[][] { ["--test-native-dashboard"], ["--test-native-dashboard", "x", "extra"],
+            ["--test-web-hosts"], ["--test-web-hosts", "x", "extra"], ["--test-web-hosts", "--background"],
             ["--self-test", "extra"], ["--background", "--self-test"], ["--test-first-run", "--background"],
             ["--test-unknown"], ["--test-identity"], ["--SELF-TEST"], ["--self-test=1"], ["--test-web", ""],
             ["--background", "--background"], ["--collect-once"], ["--apply-update"], ["unknown"], ["--web-panel", "--web-panel"],
@@ -44,6 +45,7 @@ internal static class LaunchIsolationTests
             ["--web-dashboard", "dashboard.html"] })
             Check(!LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));
         foreach (var args in new string[][] { ["--collect-once", "fixture-runtime"], ["--test-web", "fixture-runtime"],
+            ["--test-web-hosts", "fixture-runtime"],
             ["--apply-update", "installed", "staged", "receipt", "envelope", "7"],
             ["--test-update-install", "installed", "staged", "receipt", "envelope", "key", "7"] })
             Check(LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));

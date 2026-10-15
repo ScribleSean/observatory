@@ -45,7 +45,7 @@ test('a missing parent session cannot establish native disjointness',()=>{
   assert.equal(JSON.stringify({readings,rows}),before);
 });
 
-test('ancestry-only evidence bridges native hosts without a retired token source',()=>{
+test('three-host evidence is refused even when it connects native hosts',()=>{
   const cases=[
     ['Mac to Ubuntu to Windows',rows=>{rows[2].parents=rows[0].keys;rows[1].parents=rows[2].keys;}],
     ['Windows to Ubuntu to Mac',rows=>{rows[2].parents=rows[1].keys;rows[0].parents=rows[2].keys;}],
@@ -58,7 +58,7 @@ test('ancestry-only evidence bridges native hosts without a retired token source
     const rows=retiredEvidence(),readings=sources();mutate(rows);
     const before=JSON.stringify({rows,readings,hosts,evidenceHosts});
     const result=combinePeerTokens(readings,rows,comparisonId,hosts,evidenceHosts);
-    assert.equal(result.status,'overlap',name);
+    assert.equal(result.status,'unverified',name);
     assert.equal(result.days,undefined,name);
     assert.deepEqual(combinePeerTokens([...readings].reverse(),[...rows].reverse(),comparisonId,
       [...hosts].reverse(),[...evidenceHosts].reverse()),result,name);
@@ -68,13 +68,12 @@ test('ancestry-only evidence bridges native hosts without a retired token source
   }
 });
 
-test('complete retired evidence touching only one native permits only native counters',()=>{
+test('three-host evidence is refused even without overlap',()=>{
   for(const mutate of [()=>{},rows=>{rows[2].parents=rows[0].keys;},rows=>{rows[1].parents=rows[2].keys;},
     rows=>{rows[0].keys.push('3'.repeat(64));rows[0].parents=['3'.repeat(64)];},rows=>{rows[2].keys=[];}]) {
     const rows=retiredEvidence();mutate(rows);
     const result=combinePeerTokens(sources(),rows,comparisonId,hosts,evidenceHosts);
-    assert.equal(result.status,'ok');assert.equal(result.verification.status,'verified');
-    assert.equal(result.days[0].totalTokens,24);
+    assert.equal(result.status,'unverified');assert.equal(result.days,undefined);
   }
 });
 
@@ -86,7 +85,7 @@ test('ancestry coverage comes from configuration and never from the evidence tha
   for(const scope of [null,[],['Mac','Ubuntu'],['Mac','Windows','Windows'],['Mac','Windows','Other']])
     assert.equal(combinePeerTokens(sources(),retiredEvidence(),comparisonId,hosts,scope).status,'unverified');
   const extra=[...sources(),{...sources()[0],host:'Ubuntu'}];
-  assert.equal(combinePeerTokens(extra,retiredEvidence(),comparisonId,hosts,evidenceHosts).status,'unavailable');
+  assert.equal(combinePeerTokens(extra,retiredEvidence(),comparisonId,hosts,evidenceHosts).status,'unverified');
 });
 
 test('retired evidence remains strict about completeness, identity and salt generation',()=>{

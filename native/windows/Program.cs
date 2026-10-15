@@ -291,7 +291,10 @@ internal static class Program
                 LaunchIsolationTests.Run();
                 SourceRetirementTests.Run();
                 WebPanel.SelfTest();
-                Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
+                WebDashboard.SelfTest();
+                WebViewerPreferences.SelfTest();
+                Console.WriteLine("WebView2 runtime: " + WebHostsTests.RuntimeVersion());
+                Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); DirectPairingWindow.CommandShapeSelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
                 InstallationGate.SelfTest();
@@ -366,6 +369,14 @@ internal static class Program
                 File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint)) { Environment.ExitCode = 1; return; }
             try { SetupWizardTests.Run(args[1]); }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
+            return;
+        }
+        if (args.Length == 2 && args[0] == "--test-web-hosts")
+        {
+            if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
+                File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint) || Directory.EnumerateFileSystemEntries(args[1]).Any())
+            { Environment.ExitCode = 1; return; }
+            WebHostsTests.Run(args[1]);
             return;
         }
         if (args.Length == 2 && args[0] == "--test-usage-popup")
@@ -583,9 +594,24 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (webPanel is null || webPanel.IsDisposed)
         {
             webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
+            webPanel.Failed += () =>
+            {
+                if (WebPanel.ShowsFailure(true, panelTiming)) MessageBox.Show(WebPanel.RuntimeMessage, "Observatory");
+                else
+                {
+                    try
+                    {
+                        File.AppendAllText(Path.Combine(runtime, "panel-timing.log"),
+                            DateTimeOffset.UtcNow.ToString("O") + " failed web-panel" + Environment.NewLine);
+                    }
+                    catch { }
+                }
+            };
             webPanel.FormClosed += (closed, _) => { if (ReferenceEquals(webPanel, closed)) webPanel = null; panelReleased?.Invoke(); };
         }
-        return await webPanel.ShowNearTray();
+        var panel = webPanel;
+        var shown = await panel.ShowNearTray();
+        return shown;
     }
 
     // Measurement harness for the spike, run only with --panel-timing. It opens
@@ -633,7 +659,8 @@ internal sealed class ObservatoryContext : ApplicationContext
                 Open();
                 if (dashboard is WebDashboard web)
                 {
-                    Write("dashboard " + await web.Describe());
+                    // The value comes from the page and is untrusted.
+                    Write("dashboard untrusted-page=" + WebPanel.Untrusted(await web.Describe()));
                     await web.SavePreview(Path.Combine(runtime, "dashboard-timing.png"));
                     Write("phase=dashboard-open");
                     await Task.Delay(20000);
@@ -666,7 +693,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             }
             if (useWebPanel && await ShowWebPanel() && webPanel is { } panel)
             {
-                Write("page " + await panel.Describe());
+                Write("untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
                 await panel.SavePreview(Path.Combine(runtime, "panel-timing.png"));
                 panelProbe = action => Write("accepted action=" + action);
                 for (var button = 0; button < 4; button++) { await panel.Press(button); await Task.Delay(1500); }
@@ -674,7 +701,7 @@ internal sealed class ObservatoryContext : ApplicationContext
                 var before = Snapshot.Text(Data()?["collectedAt"], "");
                 for (var wait = 0; wait < 120 && (collector.Busy || Snapshot.Text(Data()?["collectedAt"], "") == before); wait++) await Task.Delay(500);
                 await Task.Delay(1500);
-                Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " page " + await panel.Describe());
+                Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
                 panel.Hide();
             }
             // Dismissal check. The measuring script brings the open panel to the

@@ -13,6 +13,8 @@
     "serve:local": "node serve-local.mjs",
     "dev": "vinext dev",
     "build": "vinext build",
+    "build:web": "vite build --config native/vite.config.mts",
+    "preview:web": "vite preview --config native/vite.config.mts",
     "prebuild": "node scripts/build-brand.mjs",
     "prebuild:native": "node scripts/build-brand.mjs",
     "build:native": "node native/build.mjs",

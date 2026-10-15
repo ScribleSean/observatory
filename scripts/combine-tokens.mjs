@@ -6,12 +6,12 @@ const valid = n => Number.isSafeInteger(n) && n >= 0;
 const empty = () => Object.fromEntries(fields.map(k=>[k,0]));
 const add = (target, row) => fields.forEach(k=>{target[k]+=row[k];});
 
-export function verifyHostInventory(sources, inventories, expectedHosts=['Mac','Ubuntu','Windows']) {
+export function verifyHostInventory(sources, inventories, expectedHosts=['Mac','Windows']) {
   // Pair configuration defines coverage. Never infer it from whichever peers responded.
-  if (!Array.isArray(expectedHosts) || ![2,3].includes(expectedHosts.length) ||
+  if (!Array.isArray(expectedHosts) || expectedHosts.length!==2 ||
       new Set(expectedHosts).size!==expectedHosts.length ||
       !['Mac','Windows'].every(host=>expectedHosts.includes(host)) ||
-      expectedHosts.some(host=>!['Mac','Windows','Ubuntu'].includes(host)) ||
+      expectedHosts.some(host=>!['Mac','Windows'].includes(host)) ||
       !Array.isArray(sources) || sources.length!==expectedHosts.length ||
       expectedHosts.some(host=>sources.filter(s=>s?.host===host).length!==1) ||
       sources.some(s=>s?.status!=='ok' || !Array.isArray(s.days))) return {status:'unavailable'};

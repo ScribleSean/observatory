@@ -1,0 +1,44 @@
+.ob-dashboard {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--ob-space-4);
+  color: var(--ob-text);
+  font: 400 var(--ob-body-size)/1.35 var(--ob-font, 'Inter Tight', system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+.ob-dashboard * { box-sizing: border-box; }
+.ob-dashboard header { flex-wrap: wrap; }
+.ob-dashboard h1, .ob-dashboard h2 { margin: 0; font-size: var(--ob-section-size); font-weight: 600; letter-spacing: var(--ob-section-tracking); }
+.ob-dashboard h1 { display: flex; align-items: center; gap: var(--ob-space-2); }
+.ob-dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-5); margin-top: var(--ob-space-5); }
+.ob-dashboard nav { display: flex; flex-wrap: wrap; align-content: start; gap: var(--ob-space-2); min-width: 0; }
+.ob-dashboard nav button {
+  max-width: 100%;
+  padding: var(--ob-space-2) var(--ob-space-3);
+  font: inherit;
+  color: var(--ob-muted);
+  background: var(--ob-surface);
+  border: 0;
+  border-radius: calc(var(--ob-radius, 12px) * 99);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 120ms ease-out;
+}
+.ob-dashboard nav button.on { background: var(--ob-accent); color: var(--ob-background); }
+.ob-dashboard nav button:hover:not(.on) { background: var(--ob-track); }
+.ob-dashboard button:focus-visible, .ob-dashboard select:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.ob-dashboard main { min-width: 0; overflow-wrap: anywhere; }
+.ob-dashboard .ob-card { margin-top: var(--ob-space-3); }
+.ob-dashboard .ob-card p { margin: 0; }
+.ob-dashboard .ob-foot { margin-top: var(--ob-space-5); padding: 0; }
+.ob-dashboard .ob-foot select { max-width: 100%; }
+
+@media (min-width: 720px) {
+  .ob-dashboard-layout { grid-template-columns: 200px minmax(0, 1fr); }
+  .ob-dashboard nav { flex-direction: column; flex-wrap: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ob-dashboard nav button { transition: none; }
+}
