@@ -130,3 +130,36 @@ test('repair consent reaches the claim but never controller or pipe replies',asy
   for(const command of [{action:'host-start',address:'10.0.0.2',port:0},{action:'status'},{action:'cancel'}])
     assert.equal(JSON.stringify(await controller.run(command)).includes(nonce),false);
 });
+
+for(const mode of ['host','join'])test(`${mode} confirmation records only explicit sharing after success without changing replies`,async()=>{
+  for(const sharing of [undefined,false,true,'true'])for(const broken of [false,true]) {
+    let confirmed=0,chosen=0;
+    const controller=createTLSSetupController('/fixture',{
+      startHost:async()=>({invitation:invite(),pending:()=>({claimId:'synthetic',peerCertificateSha256:'b'.repeat(64)}),
+        confirm:async()=>{confirmed++;},cancel:async()=>{}}),
+      readRepair:async()=>null,readIdentity:async()=>({}),claim:async()=>({status:'awaiting-confirmation'}),
+      receive:async()=>{confirmed++;return {status:'local-ready'};},
+      choose:async(runtime,choice)=>{
+        assert.equal(runtime,'/fixture');assert.deepEqual(choice,{enabled:true});assert.equal(confirmed,1);chosen++;
+        if(broken)throw Error('Synthetic choice failure');
+      }});
+    if(mode==='host')await controller.run({action:'host-start',address:'10.0.0.2',port:0});
+    else await controller.run({action:'join-claim',invitation:encodeInvitation(invite())});
+    const command=mode==='host'?{action:'host-confirm',peerCertificateSha256:'b'.repeat(64),localEndpoint:{},peerEndpoint:{}}:{action:'join-confirm'};
+    if(sharing!==undefined)command.sharing=sharing;
+    if(typeof sharing==='string') {
+      await assert.rejects(controller.run(command));assert.equal(confirmed,0);
+    } else assert.deepEqual(await controller.run(command),{status:mode==='host'?'configuration-ready':'local-ready'});
+    assert.equal(chosen,sharing===true?1:0);
+  }
+});
+test('join sharing waits for a ready pairing and also records acknowledged success',async()=>{
+  for(const status of ['awaiting-confirmation','acknowledged']) {
+    let chosen=0;
+    const controller=createTLSSetupController('/fixture',{readRepair:async()=>null,readIdentity:async()=>({}),
+      claim:async()=>({status:'awaiting-confirmation'}),receive:async()=>({status}),choose:async()=>{chosen++;}});
+    await controller.run({action:'join-claim',invitation:encodeInvitation(invite())});
+    assert.deepEqual(await controller.run({action:'join-confirm',sharing:true}),{status});
+    assert.equal(chosen,status==='acknowledged'?1:0);
+  }
+});

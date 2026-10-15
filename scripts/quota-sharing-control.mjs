@@ -8,7 +8,7 @@ import {withPeerStateLock} from './peer-lock.mjs';
 import {readQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 
 const empty=()=>({version:1,enabled:false,canEnable:false,reason:'account-unavailable',token:null});
-const recent=(state,now)=>state?.history?.latestReadStatus==='ok' &&
+export const recent=(state,now)=>state?.history?.latestReadStatus==='ok' &&
   ['ok','stale'].includes(state.history.status) && Number.isFinite(Date.parse(state.history.asOf)) &&
   now-Date.parse(state.history.asOf)>=0 && now-Date.parse(state.history.asOf)<=600000;
 const token=(state,pair)=>createHash('sha256').update(JSON.stringify([state.salt,state.revision,pair.local.pairId])).digest('hex');

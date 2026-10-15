@@ -1,3 +1,4 @@
+import {applySharingChoice} from './sharing-choice.mjs';
 import {lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {readPairing} from './peer-pairing.mjs';
@@ -22,8 +23,8 @@ export function projectPeerQuota(state,pair,now=Date.now()) {
   return {...projected,pace:quotaPace(projected,now)};
 }
 
-// No caller may supply pairing identity or enable sharing implicitly. All
-// decisions come from owner-local state and the active authenticated pairing.
+// Sharing is enabled only from an explicit local choice, through the control
+// scripts or the recorded sharing choice, never by a peer.
 export async function syncQuota(runtime,{request,clock=Date.now}={}) {
   try {await lstat(path.join(runtime,'private-quota'));}
   catch(error) {if(error.code==='ENOENT')return {status:'disabled',peer:null};throw error;}
@@ -83,6 +84,7 @@ export async function syncQuota(runtime,{request,clock=Date.now}={}) {
 export async function attachQuotaSync(runtime,result,{enabled=false,...options}={}) {
   result.data.peerQuota=null;
   if(enabled!==true || !['ok','stale'].includes(result.data.quota?.status))return result;
+  try {await applySharingChoice(runtime,'codex-limits');}catch {}
   try {
     const synced=await syncQuota(runtime,options);
     result.data.peerQuota=synced.peer;

@@ -6,6 +6,9 @@ import {privateSyncDirectory} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {revokeQuotaSharing} from './quota-store.mjs';
 
+import {disableProviderTokenSharing} from './provider-token-store.mjs';
+import {clearSharingChoice} from './sharing-choice.mjs';
+
 const marker='revoked';
 
 // Any entry at this name disables pairing, including an incomplete write or
@@ -46,6 +49,11 @@ async function revokePairingLocked(runtime) {
   // Write the pairing fence first. If quota storage needs repair, transfers
   // remain disabled and the caller reports incomplete cleanup, not success.
   await revokeQuotaSharing(runtime);
+  let providerStore=false;
+  try {await lstat(path.join(directory,'provider-tokens.sqlite'));providerStore=true;}
+  catch(error) {if(error.code!=='ENOENT')throw error;}
+  if(providerStore)await disableProviderTokenSharing(runtime);
+  await clearSharingChoice(runtime);
   return {status:'revoked'};
 }
 

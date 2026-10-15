@@ -1,3 +1,4 @@
+import {chooseSharing} from './sharing-choice.mjs';
 import {realpathSync} from 'node:fs';
 import {realpath} from 'node:fs/promises';
 import path from 'node:path';
@@ -37,7 +38,7 @@ export function checkSyncPort(address,port) {
 // keys, pairing configurations, comparison salts or internal claim handles.
 export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,readIdentity=readDeviceIdentity,
   claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent,
-  selfAddresses=tailscaleSelfAddresses,checkPort=checkSyncPort}={}) {
+  selfAddresses=tailscaleSelfAddresses,checkPort=checkSyncPort,choose=chooseSharing}={}) {
   let host=null,invitation=null,joining='idle',epoch=0,busy=null,abort=new AbortController();
   async function cancel() {
     epoch++;busy=null;abort.abort();abort=new AbortController();invitation=null;joining='idle';
@@ -85,11 +86,13 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         host=created;
         return {status:'hosting',invitation:encodeInvitation(host.invitation)};
       }
-      if(exact(request,['action','peerCertificateSha256','localEndpoint','peerEndpoint']) && request.action==='host-confirm') {
+      if((exact(request,['action','peerCertificateSha256','localEndpoint','peerEndpoint']) ||
+        (exact(request,['action','peerCertificateSha256','localEndpoint','peerEndpoint','sharing']) && typeof request.sharing==='boolean')) && request.action==='host-confirm') {
         const pending=host?.pending();
         if(!pending || pending.peerCertificateSha256!==request.peerCertificateSha256)throw fail();
         await host.confirm(pending.claimId,{localEndpoint:request.localEndpoint,
           peerEndpoint:request.peerEndpoint});
+        if(token===epoch && request.sharing===true)try {await choose(runtime,{enabled:true});}catch {}
         return {status:token===epoch?'configuration-ready':'cancelled'};
       }
       if(exact(request,['action','invitation']) && request.action==='join-claim') {
@@ -105,12 +108,14 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         invitation=proposed;joining=result.status;
         return {status:joining};
       }
-      if(exact(request,['action']) && request.action==='join-confirm') {
+      if((exact(request,['action']) || (exact(request,['action','sharing']) && typeof request.sharing==='boolean')) && request.action==='join-confirm') {
         if(!invitation || host)throw fail();
         const result=await receive(runtime,invitation,{signal:abort.signal});
         if(token!==epoch)return {status:'cancelled'};
         if(!['awaiting-confirmation','local-ready','acknowledged'].includes(result.status))throw fail();
-        joining=result.status;return {status:joining};
+        joining=result.status;
+        if(['local-ready','acknowledged'].includes(joining) && request.sharing===true)try {await choose(runtime,{enabled:true});}catch {}
+        return {status:token===epoch?joining:'cancelled'};
       }
       throw fail();
     } finally {if(busy===token)busy=null;}

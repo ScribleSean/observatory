@@ -93,8 +93,9 @@ test('linked revocation marker is never followed or overwritten',{skip:process.p
   await initializePairing(runtime,createPairingConfigurations().Mac);
   const target=path.join(other,'sentinel');await writeFile(target,'preserve');
   await symlink(target,path.join(runtime,'private-sync/revoked'));
-  await assert.rejects(readPairing(runtime),/revoked/);
-  await assert.rejects(revokePairing(runtime),/Unsafe/);
+  // macOS can reject the link during directory verification before the marker check.
+  await assert.rejects(readPairing(runtime),/revoked|Private path access-control verification failed/);
+  await assert.rejects(revokePairing(runtime),/Unsafe|Private path access-control verification failed/);
   assert.equal(await readFile(target,'utf8'),'preserve');
 });
 
