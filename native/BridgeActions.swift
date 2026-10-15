@@ -301,6 +301,11 @@ final class MacBridgeHost: BridgeHost {
     }
 
     func perform(action: String, args: [String: BridgeValue], completion: @escaping (BridgeCode, Any?) -> Void) {
+        if ["set-source", "set-skin", "set-appearance", "set-device-name", "complete-setup", "export-data"].contains(action),
+           store.runtimeIdentityValid?() == false {
+            completion(.unavailable, nil)
+            return
+        }
         if isolatedRuntime && ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm",
             "pairing-join-claim", "pairing-join-confirm", "pairing-copy-invitation", "pairing-cancel",
             "set-sharing", "set-limits-consent", "pairing-disconnect", "pairing-repair-prepare"].contains(action) {

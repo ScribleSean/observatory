@@ -85,16 +85,31 @@ enum RuntimeOption: Equatable {
         return .runtime(folder, candidateIdentity)
     }
 
-    static func createAndLock(_ folder: URL) throws -> (descriptor: Int32, createdIdentity: FileIdentity?) {
+    static func createAndLock(_ folder: URL, realDataFolder: URL) throws -> (descriptor: Int32, createdIdentity: FileIdentity?) {
         var createdIdentity: FileIdentity?
+        var created = false
         var info = stat()
         if lstat(folder.path, &info) != 0 {
             guard errno == ENOENT, mkdir(folder.path, 0o700) == 0 else { throw CocoaError(.fileWriteNoPermission) }
-            let directory = open(folder.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            guard directory >= 0 else { throw CocoaError(.fileWriteNoPermission) }
-            defer { close(directory) }
-            guard fstat(directory, &info) == 0 else { throw CocoaError(.fileWriteNoPermission) }
-            createdIdentity = FileIdentity(info)
+            created = true
+        }
+        let directory = open(folder.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard directory >= 0 else { throw CocoaError(.fileWriteNoPermission) }
+        defer { close(directory) }
+        guard fstat(directory, &info) == 0 else { throw CocoaError(.fileWriteNoPermission) }
+        let identity = FileIdentity(info)
+        if created { createdIdentity = identity }
+        var realIdentities = [FileIdentity.at(realDataFolder.path)]
+        if let parent = realpath(realDataFolder.deletingLastPathComponent().path, nil) {
+            let resolved = URL(fileURLWithPath: String(cString: parent)).appendingPathComponent(realDataFolder.lastPathComponent)
+            free(parent)
+            realIdentities.append(FileIdentity.at(resolved.path))
+        }
+        if realIdentities.contains(identity) {
+            if createdIdentity == identity, FileIdentity.at(folder.path) == identity {
+                _ = rmdir(folder.path)
+            }
+            throw LockError.realDataFolder
         }
         let descriptor = open(folder.appendingPathComponent(".observatory.lock").path,
                               O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -110,7 +125,7 @@ enum RuntimeOption: Equatable {
         }
         return (descriptor, createdIdentity)
     }
-    enum LockError: Error { case inUse }
+    enum LockError: Error { case inUse, realDataFolder }
 }
 
 struct FileIdentity: Equatable {

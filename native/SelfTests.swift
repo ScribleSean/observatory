@@ -458,6 +458,24 @@ func runRuntimeSetupSelfTests() {
         refused(["--runtime", folded.path])
         refused(["--runtime", folded.path + "/child"])
     }
+    let absentReal = root.appendingPathComponent("absent-assets")
+    var aliases = ["/System/Volumes/Data" + absentReal.path, "/.nofollow" + absentReal.path]
+    if stat(root.path.uppercased(), &uppercaseRoot) == 0 {
+        aliases.append(root.appendingPathComponent("absent-a\u{017F}sets").path)
+    }
+    for alias in aliases {
+        guard case .runtime(let folder, _) = RuntimeOption.parse(arguments: ["--runtime", alias],
+            realDataFolder: absentReal, userID: getuid()) else { continue }
+        do {
+            let locked = try RuntimeOption.createAndLock(folder, realDataFolder: absentReal)
+            close(locked.descriptor)
+            preconditionFailure("Real data alias created and locked")
+        } catch RuntimeOption.LockError.realDataFolder {} catch { preconditionFailure("Unexpected alias failure") }
+        precondition(!files.fileExists(atPath: absentReal.path))
+    }
+    throwsError { _ = try RuntimeOption.createAndLock(real, realDataFolder: real) }
+    precondition(files.fileExists(atPath: real.path))
+    precondition(!files.fileExists(atPath: real.appendingPathComponent(".observatory.lock").path))
     refused(["--runtime", "--preview"])
     refused(["--runtime", "relative/path"])
     refused(["--runtime", root.path + "/./fresh"])
@@ -500,7 +518,7 @@ func runRuntimeSetupSelfTests() {
     let fresh = root.appendingPathComponent("fresh")
     func accepted(_ path: String) -> String? { if case .runtime(let url, _) = parse(["--runtime", path]) { return url.path } else { return nil } }
     precondition(accepted(fresh.path) == fresh.path)
-    let lock = try! RuntimeOption.createAndLock(fresh)
+    let lock = try! RuntimeOption.createAndLock(fresh, realDataFolder: real)
     // An existing folder keeps its /private path. Standardizing would rewrite it to the /tmp or /var link.
     precondition(accepted(fresh.path) == fresh.path && accepted(fresh.path + "/") == fresh.path)
     defer { close(lock.descriptor) }
@@ -508,7 +526,7 @@ func runRuntimeSetupSelfTests() {
     precondition(accepted(fresh.path) == fresh.path)
     precondition(chmod(fresh.path, 0o700) == 0)
     do {
-        let second = try RuntimeOption.createAndLock(fresh)
+        let second = try RuntimeOption.createAndLock(fresh, realDataFolder: real)
         close(second.descriptor)
         preconditionFailure("Second runtime lock accepted")
     } catch RuntimeOption.LockError.inUse {} catch { preconditionFailure("Unexpected lock failure") }
@@ -570,16 +588,44 @@ func runRuntimeSetupSelfTests() {
             }
             precondition(replied && !isolatedHost.sessionOpen && hookCalls == 0)
         }
+        let writeFiles = ["viewer.json", "device.json", "setup-state.json", "collector.config.json"]
+        let beforeWrites = writeFiles.map { try? Data(contentsOf: blockedStore.runtime.appendingPathComponent($0)) }
+        let writeActions: [(String, [String: BridgeValue])] = [
+            ("set-source", ["source": .string("codex"), "enabled": .bool(true)]),
+            ("set-skin", ["skin": .string("sage")]),
+            ("set-appearance", ["mode": .string("dark")]),
+            ("set-device-name", ["name": .string("Synthetic Mac")]),
+            ("complete-setup", [:]), ("export-data", [:])]
+        for (action, args) in writeActions {
+            var replied = false
+            isolatedHost.perform(action: action, args: args) { code, value in
+                precondition(code == .unavailable && value == nil)
+                replied = true
+            }
+            precondition(replied && hookCalls == 0)
+            precondition(writeFiles.map { try? Data(contentsOf: blockedStore.runtime.appendingPathComponent($0)) } == beforeWrites)
+        }
+        let resources = root.appendingPathComponent("resources")
+        for path in ["Collector/scripts/claude-limits-consent.mjs", "Runtime/node/bin/node"] {
+            let file = resources.appendingPathComponent(path)
+            try! files.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try! Data().write(to: file)
+            if path.hasSuffix("/node") { precondition(chmod(file.path, 0o700) == 0) }
+        }
         for isolated in [false, true] {
             let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { false },
                 directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
-            let host = MacBridgeHost(store: blockedStore, resources: nil, preview: !isolated,
+            let host = MacBridgeHost(store: blockedStore, resources: resources, preview: !isolated,
                 handler: BridgeHandler(), hooks: hooks, isolatedRuntime: isolated)
             for action in ["set-limits-consent", "set-sharing", "pairing-identity-create", "pairing-host-start",
                            "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"] {
-                host.perform(action: action, args: [:]) { code, value in
+                var replied = false
+                host.perform(action: action, args: ["enabled": .bool(false)]) { code, value in
                     precondition(code == .unavailable && value == nil)
+                    replied = true
                 }
+                // Refuse synchronously before any queued script task can run.
+                precondition(replied)
             }
         }
         for paused in [false, true] {

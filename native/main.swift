@@ -1012,11 +1012,14 @@ if CommandLine.arguments.dropFirst().contains(where: { removedArguments.contains
 
 if let selectedRuntime {
     do {
-        let locked = try RuntimeOption.createAndLock(selectedRuntime)
+        let locked = try RuntimeOption.createAndLock(selectedRuntime, realDataFolder: realDataFolder)
         runtimeLockDescriptor = locked.descriptor
         if selectedRuntimeIdentity == nil { selectedRuntimeIdentity = locked.createdIdentity }
     }
-    catch RuntimeOption.LockError.inUse {
+    catch RuntimeOption.LockError.realDataFolder {
+        fputs("--runtime cannot use the real Observatory data folder or a folder inside it.\n", stderr)
+        exit(64)
+    } catch RuntimeOption.LockError.inUse {
         fputs("Another Observatory is already using this folder.\n", stderr)
         exit(64)
     } catch {
