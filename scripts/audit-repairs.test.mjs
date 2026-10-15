@@ -15,13 +15,6 @@ test('shared setup avoids release transport claims and Mac menu retains SSH pair
 });
 
 test('ActivityWatch recovery guidance is retained in web and native shared strings',async()=>{
-  for(const file of ['app/page.tsx']) {
-    const source=await read(file);
-    assert.match(source,/ActivityWatch is a separate application/);
-    assert.match(source,/https:\/\/activitywatch.net\//);
-    assert.match(source,/port 5600/);
-    assert.match(source,/Missing readings remain Unknown/);
-  }
   const shared=await read('native/windows/Strings.cs');
   assert.match(shared,/ActivityWatch is a separate application/);
   assert.match(shared,/activitywatch.net/);

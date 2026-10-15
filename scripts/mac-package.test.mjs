@@ -19,7 +19,7 @@ function fixture(run) {
   const bundle=path.join(folder,'Workspace Observatory.app'),revision='a'.repeat(40);
   const files=['Contents/MacOS/WorkspaceObservatory','Contents/Info.plist',
     'Contents/Resources/LICENSE','Contents/Resources/THIRD-PARTY-NOTICES.md',
-    'Contents/Resources/Web/index.html','Contents/Resources/Web/assets/third-party-licenses.txt',
+    'Contents/Resources/Web/dashboard.html','Contents/Resources/Web/assets/third-party-licenses.txt',
     'Contents/Resources/Runtime/node/bin/node','Contents/Resources/Runtime/node/LICENSE',
     'Contents/Resources/Runtime/python/bin/python3.13','Contents/Resources/Runtime/python/licenses/LICENSE.cpython.txt',
     'Contents/Resources/Collector/scripts/run-collector.py','Contents/Resources/Collector/scripts/collect-mac.mjs',

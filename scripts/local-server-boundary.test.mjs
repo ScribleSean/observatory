@@ -9,19 +9,15 @@ import {createLocalServer} from '../serve-local.mjs';
 async function fixture(t) {
   const root=await mkdtemp(path.join(tmpdir(),'observatory-server-boundary-'));
   const files={
-    'dist/client/index.html':'<html>synthetic-public</html>',
-    'dist/client/assets/test.js':'// public asset',
-    'dist/client/_next/static/chunks/test.js':'// public chunk',
-    'dist/client/observatory/_next/static/chunks/test.js':'// prefixed public chunk',
-    'dist/client/brand/telescope.svg':'<svg/>',
-    'dist/client/favicon.svg':'<svg/>',
-    'dist/client/vinext-client-entry-manifest.json':'{}',
+    '.native-build/web/dashboard.html':'<html>synthetic-public</html>',
+    '.native-build/web/panel.html':'<html>synthetic-panel</html>',
+    '.native-build/web/assets/test.js':'// public asset',
     'public/local/usage.json':'{"schema":2,"demo":true}',
     'public/local/collector.json':'{"state":"ok"}',
   };
-  for(const base of ['private-sync','dist/client/private-sync','dist/client/assets/private-sync','public/local'])
+  for(const base of ['private-sync','.native-build/web/private-sync','.native-build/web/assets/private-sync','public/local'])
     for(const name of ['pairing.json','setup.pending.json'])files[`${base}/${name}`]='{"privateCanary":true}';
-  for(const base of ['private-quota','dist/client/private-quota','dist/client/assets/private-quota','public/local'])
+  for(const base of ['private-quota','.native-build/web/private-quota','.native-build/web/assets/private-quota','public/local'])
     for(const name of ['state.sqlite','state.sqlite-journal','state.sqlite-wal','state.sqlite-shm','account.json'])
       files[`${base}/${name}`]='{"privateCanary":true}';
   for(const [relative,contents] of Object.entries(files)) {
@@ -47,10 +43,9 @@ test('private pairing files are unavailable even if accidentally copied into sta
     const response=await request(route);
     assert.equal(response.status,404,route);assert.equal(response.body.includes('privateCanary'),false);
   }
-  for(const route of ['/','/assets/test.js','/_next/static/chunks/test.js',
-    '/observatory/_next/static/chunks/test.js','/brand/telescope.svg','/favicon.svg',
-    '/vinext-client-entry-manifest.json','/local/usage.json','/local/collector.json'])
+  for(const route of ['/','/dashboard.html','/panel.html','/assets/test.js','/local/usage.json','/local/collector.json'])
     assert.equal((await request(route)).status,200,route);
+  assert.equal((await request('/index.html')).status,404);
   assert.equal((await request('/local/usage.json',{'Sec-Fetch-Site':'cross-site'})).status,403);
   assert.equal((await request('/',{Host:'foreign.example'})).status,403);
 });
@@ -64,7 +59,7 @@ test('public snapshot routes reject a linked file and a linked parent directory'
   await rm(local,{recursive:true});
   const privateDirectory=path.join(root,'private-sync');
   await writeFile(path.join(privateDirectory,'secret.js'),'// synthetic private canary');
-  await symlink(privateDirectory,path.join(root,'dist/client/assets/private-linked'));
+  await symlink(privateDirectory,path.join(root,'.native-build/web/assets/private-linked'));
   assert.equal((await request('/assets/private-linked/secret.js')).status,404);
   await writeFile(path.join(privateDirectory,'usage.json'),'{"privateCanary":true}');
   await symlink(privateDirectory,local);
