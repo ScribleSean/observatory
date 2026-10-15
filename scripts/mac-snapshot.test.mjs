@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {macCollectorConfig,macSnapshot} from './mac-snapshot.mjs';
-import {macActivity,cleanActivity} from './collect-dashboard.mjs';
+import {macActivity} from './mac-activity.mjs';
+import {cleanActivity} from './snapshot-clean.mjs';
 import {hostname} from 'node:os';
 const at='2026-09-09T04:00:00Z';
 const settings={profiles:[{date:'2026-09-08',model:'gpt-6-astra',effort:'medium',speed:'standard',inputTokens:5,

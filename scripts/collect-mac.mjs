@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {macActivity} from './collect-dashboard.mjs';
+import {macActivity} from './mac-activity.mjs';
 import {macSnapshot,macCollectorConfig} from './mac-snapshot.mjs';
 import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
@@ -15,7 +15,7 @@ import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota,findCodexExecutable} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
-import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
 import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,withinTime} from './claude-limits.mjs';
 
@@ -98,6 +98,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     claude=cleanClaudeTokenSource(raw,'Mac');
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
+  attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
   // Account-wide limits observed on this device. They are not shared with a paired device.
   attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
   const {data,status}=result;
