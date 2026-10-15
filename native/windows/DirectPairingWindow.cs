@@ -41,7 +41,7 @@ internal sealed class DirectPairingWindow : Form
         });
         Note("Share invitations privately. They expire within ten minutes. Clipboard managers may retain copied invitations.");
         ActionButton("Join with invitation", Join);
-        ActionButton("Finish joining", () => joining ? Send(new() { ["action"] = "join-confirm", ["includeUbuntu"] = false }) : Task.CompletedTask);
+        ActionButton("Finish joining", () => joining ? Send(JoinConfirmCommand()) : Task.CompletedTask);
         content.Controls.Add(fingerprint); content.Controls.Add(status);
         var cancel = new Button { Text = "Cancel setup", AutoSize = true };
         cancel.Click += async (_, _) =>
@@ -121,10 +121,25 @@ internal sealed class DirectPairingWindow : Form
     private Task ConfirmHost()
     {
         if (!hosting || pendingFingerprint is null) { status.Text = "Wait for the other device to claim this invitation."; return Task.CompletedTask; }
-        return Send(new() { ["action"] = "host-confirm", ["peerCertificateSha256"] = pendingFingerprint,
-            ["localEndpoint"] = new JsonObject { ["kind"] = "tls", ["address"] = address.Text.Trim(), ["port"] = ReadPort(port) },
-            ["peerEndpoint"] = new JsonObject { ["kind"] = "tls", ["address"] = peerAddress.Text.Trim(), ["port"] = ReadPort(peerPort) },
-            ["includeUbuntu"] = false });
+        return Send(HostConfirmCommand(pendingFingerprint,
+            new JsonObject { ["kind"] = "tls", ["address"] = address.Text.Trim(), ["port"] = ReadPort(port) },
+            new JsonObject { ["kind"] = "tls", ["address"] = peerAddress.Text.Trim(), ["port"] = ReadPort(peerPort) }));
+    }
+    internal static JsonObject HostConfirmCommand(string peerCertificateSha256, JsonObject localEndpoint, JsonObject peerEndpoint) =>
+        new() { ["action"] = "host-confirm", ["peerCertificateSha256"] = peerCertificateSha256, ["localEndpoint"] = localEndpoint, ["peerEndpoint"] = peerEndpoint };
+    internal static JsonObject JoinConfirmCommand() => new() { ["action"] = "join-confirm" };
+
+    internal static void CommandShapeSelfTest()
+    {
+        var host = HostConfirmCommand(new string('a', 64),
+            new JsonObject { ["kind"] = "tls", ["address"] = "192.168.1.2", ["port"] = 43128 },
+            new JsonObject { ["kind"] = "tls", ["address"] = "192.168.1.3", ["port"] = 43128 });
+        if (host.Count != 4 || !host.ContainsKey("action") || !host.ContainsKey("peerCertificateSha256") ||
+            !host.ContainsKey("localEndpoint") || !host.ContainsKey("peerEndpoint") || host["action"]?.GetValue<string>() != "host-confirm")
+            throw new Exception("Host confirmation command has unexpected keys or action.");
+        var join = JoinConfirmCommand();
+        if (join.Count != 1 || !join.ContainsKey("action") || join["action"]?.GetValue<string>() != "join-confirm")
+            throw new Exception("Join confirmation command has unexpected keys or action.");
     }
     private Task Join()
     {
@@ -152,6 +167,7 @@ internal sealed class DirectPairingWindow : Form
 
     internal static void SelfTest(string node)
     {
+        CommandShapeSelfTest();
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-pairing-window-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(runtime);
         Exception? failure = null;

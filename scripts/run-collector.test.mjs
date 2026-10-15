@@ -36,11 +36,17 @@ test('failure preserves the preceding snapshot and records no error text',async 
   assert.equal(run(root),'failed');assert.equal(await readFile(path.join(root,'public/local/usage.json'),'utf8'),'previous snapshot');
   assert.equal((await status(root)).state,'failed');
 });
-test('partial agent receipt coverage prevents an all-sources-success status',async t=>{
+test('a partial optional source prevents an all-sources-success status',async t=>{
   const root=await fixture(t,success.replace("settings:[]","settings:[],agentSource:{status:'partial'}"));
   assert.equal(run(root),'partial');
   const s=await status(root);
   assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,2);
+});
+test('empty workflow slots do not count as configured sources',async t=>{
+  const root=await fixture(t,success.replace('settings:[]',"settings:[],agents:[],agentSource:{host:'Local',status:'not-connected'},localModel:{host:'Ubuntu',status:'not-connected'}"));
+  assert.equal(run(root),'ok');
+  const s=await status(root);
+  assert.equal(s.state,'ok');assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,1);
 });
 test('wrapper health includes configured provider token sources and excludes disabled ones',async t=>{
   for(const [sourceState,read,configured,state] of [['ok',2,2,'ok'],['unavailable',1,2,'partial'],['not-connected',1,1,'ok']]) {

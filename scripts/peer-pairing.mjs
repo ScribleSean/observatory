@@ -12,16 +12,14 @@ import {validRepairNonce,readRepairConsent} from './peer-repair-consent.mjs';
 
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
   Object.keys(value).length===keys.length && Object.keys(value).every(key=>keys.includes(key));
-const hosts=host=>host==='Mac'?['Mac']:['Windows'];
 export function validatePairing(value) {
   if(!value || typeof value!=='object' || Array.isArray(value) ||
     !['version','local','peer'].every(key=>Object.hasOwn(value,key)) ||
     Object.keys(value).some(key=>!['version','local','peer','transport','localEndpoint','repair','peerCertificateSha256'].includes(key)) || value.version!==1 ||
-    !exact(value.peer,['pairId','deviceId','comparisonId','host','codexHosts']))throw Error('Invalid private pairing');
+    !exact(value.peer,['pairId','deviceId','comparisonId','host',...(Object.hasOwn(value.peer??{},'codexHosts')?['codexHosts']:[])]))throw Error('Invalid private pairing');
   const local=value.local,peer=value.peer;
-  const configured=source=>source.host==='Windows' && source.codexHosts?.length===2?['Windows','Ubuntu']:hosts(source.host);
-  const safe=preparePeerCollection(local,local?.host,configured(local));
-  const remote=preparePeerCollection({...peer,comparisonSalt:local.comparisonSalt},peer.host,configured(peer));
+  const safe=preparePeerCollection(local,local?.host);
+  const remote=preparePeerCollection({...peer,comparisonSalt:local.comparisonSalt},peer.host);
   if(local.host===peer.host || local.deviceId===peer.deviceId || local.pairId!==peer.pairId ||
     local.comparisonId!==peer.comparisonId)throw Error('Mismatched private pairing');
   const result={version:1,local:{...safe.config,comparisonSalt:local.comparisonSalt},peer:remote.config};
@@ -50,12 +48,12 @@ export function validatePairing(value) {
 
 // Returns private configuration in memory only. Delivery requires authenticated
 // transport and explicit device setup. Never print this return value to logs.
-export function createPairingConfigurations(includeUbuntu=false) {
-  if(includeUbuntu!==false)throw Error('Ubuntu source retired. New pairings support native Windows and Mac only.');
+export function createPairingConfigurations(...options) {
+  if(options.some(value=>value!==undefined))throw Error('Pairing options are not supported.');
   const id=()=>randomBytes(32).toString('hex');
   const shared={pairId:id(),comparisonId:id()},comparisonSalt=id();
-  const mac={...shared,deviceId:id(),host:'Mac',codexHosts:['Mac']};
-  const windows={...shared,deviceId:id(),host:'Windows',codexHosts:['Windows']};
+  const mac={...shared,deviceId:id(),host:'Mac'};
+  const windows={...shared,deviceId:id(),host:'Windows'};
   return {Mac:validatePairing({version:1,local:{...mac,comparisonSalt},peer:windows}),
     Windows:validatePairing({version:1,local:{...windows,comparisonSalt},peer:mac})};
 }

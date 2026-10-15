@@ -44,6 +44,12 @@ function sectionNames(html) {
 
 void test('dashboard sections omit disconnected dictation and preserve their order', () => {
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [] } })), ['Limits', 'Activity', 'Tokens', 'Sources', 'Settings']);
+  const fallback = dashboard({ section: 'dictation', snapshot: { ...base.snapshot, dictation: [] } });
+  assert.ok(fallback.includes('<h2 id="ob-section-limits">'));
+  const navigation = fallback.match(/<nav aria-label="Sections">([\s\S]*?)<\/nav>/)?.[1];
+  assert.ok(navigation);
+  assert.match(navigation, /<button[^>]*aria-current="page"[^>]*>Limits<\/button>/);
+  assert.ok(!sectionNames(fallback).includes('Dictation'));
   assert.deepEqual(sectionNames(dashboard({ snapshot: { ...base.snapshot, dictation: [{ status: 'ok' }] } })), ['Limits', 'Activity', 'Tokens', 'Dictation', 'Sources', 'Settings']);
 });
 
@@ -135,7 +141,7 @@ for (const Component of [BarChart, StackedBarChart, LineChart]) {
     assert.ok(title);
     assert.ok(html.includes(`role="img" aria-labelledby="${title[1]}"`));
     assert.match(html, /<figcaption>/);
-    assert.match(html, /<table class="ob-visually-hidden">/);
+    assert.match(html, /<div class="ob-visually-hidden"><table>/);
     assert.match(html, /<label[^>]*><input type="checkbox"\/>Show values<\/label>/);
     const body = html.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1];
     assert.ok(body);
@@ -189,6 +195,10 @@ void test('charts use skin styles, scalable frames and thinned labels', () => {
   const css = readFileSync(`${root}/app/viewer/panel/panel.css`, 'utf8');
   assert.match(css, /\.ob-chart-unknown\s*\{[^}]*stroke-dasharray:/);
   assert.match(css, /figcaption:has\(input:checked\)/);
+  assert.doesNotMatch(source, /<table\b[^>]*\bstyle\s*=[^>]*\bdisplay\s*:/);
+  assert.doesNotMatch(source, /<table\b[^>]*\bclassName=["']ob-visually-hidden["']/);
+  assert.doesNotMatch(css, /[^{}]*\btable\b[^{}]*\{[^}]*\bdisplay\s*:/);
+  assert.doesNotMatch(css, /[^{}]*\.ob-visually-hidden[^{}]*\{[^}]*\bdisplay\s*:/);
   const html = renderChart(BarChart, Array.from({ length: 40 }, (_, index) => ({ label: `Item ${index}`, value: index })));
   assert.match(html, /viewBox="0 0 320 180" width="100%"/);
   assert.ok((html.match(/text-anchor="start"/g) ?? []).length <= 12);
@@ -204,4 +214,70 @@ void test('explicit bounds and known zero values remain finite and formatted', (
     assert.match(zero, /<td>0 units<\/td>/);
     assert.doesNotMatch(zero, /NaN|Infinity|Unknown/);
   }
+});
+
+void test('skin attributes accept bundled names and otherwise fall back to Sage', async () => {
+  const { skinIdFromAttribute } = await server.ssrLoadModule('/app/viewer/skin.ts');
+  for (const value of ['almanac', 'amber-crt']) assert.equal(skinIdFromAttribute(value), value);
+  for (const value of [undefined, '', 'bogus', 'constructor', '__proto__', 'Sage']) {
+    assert.equal(skinIdFromAttribute(value), 'sage');
+  }
+});
+
+void test('skin observer applies the attribute fallback to state', () => {
+  const source = readFileSync(`${root}/app/viewer/skin.ts`, 'utf8');
+  assert.match(source, /new MutationObserver\(\(\) => \{\s*setSkinId\(skinIdFromAttribute\(root\.dataset\.skin\)\);\s*\}\)/);
+});
+
+void test('dashboard follows hash changes and removes its listener on cleanup', async () => {
+  const { followSectionHash } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+  const listeners = new Map();
+  const target = {
+    location: { hash: '#dictation' },
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    removeEventListener: (name, listener) => {
+      assert.equal(listeners.get(name), listener);
+      listeners.delete(name);
+    },
+  };
+  const sections = [];
+  const cleanup = followSectionHash(target, section => sections.push(section));
+  assert.deepEqual(sections, []);
+  for (const hash of ['#tokens', '#bogus', '#setup']) {
+    target.location.hash = hash;
+    listeners.get('hashchange')?.();
+  }
+  assert.deepEqual(sections, ['tokens', 'limits', 'limits']);
+  cleanup();
+  target.location.hash = '#activity';
+  listeners.get('hashchange')?.();
+  assert.deepEqual(sections, ['tokens', 'limits', 'limits']);
+  assert.equal(listeners.size, 0);
+});
+
+void test('dashboard writes section hashes preserving query and history state', async () => {
+  const { writeSectionHash } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+  const calls = [];
+  const state = { entry: 'existing' };
+  const target = {
+    location: { pathname: '/dashboard.html', search: '?demo', hash: '#limits' },
+    history: {
+      state,
+      replaceState: (...args) => calls.push(args),
+    },
+  };
+  writeSectionHash(target, 'activity');
+  assert.deepEqual(calls, [[state, '', '/dashboard.html?demo#activity']]);
+  assert.equal(calls[0][0], state);
+  target.location.hash = '#activity';
+  writeSectionHash(target, 'activity');
+  assert.equal(calls.length, 1);
+});
+
+void test('Dashboard follows hashes in an effect and writes them from navigation', () => {
+  const source = readFileSync(`${root}/app/viewer/dashboard.tsx`, 'utf8');
+  const stateful = source.slice(source.indexOf('export default function Dashboard('), source.indexOf('type DashboardViewProps'));
+  assert.match(stateful, /useEffect\(\(\) => followSectionHash\(window, setSection\), \[\]\)/);
+  assert.match(stateful, /onSectionChange=\{id => \{\s*setSection\(id\)\s*\W+\s*writeSectionHash\(window, id\)/);
+  assert.equal((stateful.match(/writeSectionHash\(/g) ?? []).length, 1);
 });

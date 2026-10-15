@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { format } from '../lib/format.mjs';
+export { format } from '../lib/format.mjs';
 
 const root = new URL('../', import.meta.url);
 const notice = '// Generated from lib/strings.json by scripts/build-strings.mjs.\n';
@@ -21,13 +23,6 @@ export function validateStrings(raw) {
     }
   }
   return raw;
-}
-
-export function format(template, values) {
-  return template.replace(/\{([a-z][A-Za-z0-9]*)\}/g, (_, name) => {
-    if (!Object.hasOwn(values, name)) throw new Error(`Missing placeholder: ${name}`);
-    return String(values[name]);
-  });
 }
 
 export function generatedStrings() {

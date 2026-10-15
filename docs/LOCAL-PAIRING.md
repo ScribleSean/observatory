@@ -77,12 +77,17 @@ after cancellation cannot start another operation. Window close stops the
 timer and child process. Pairing maintenance remains active until child exit
 is verified, with collection paused if exit cannot be verified.
 
-The Ubuntu option on Mac applies to a Windows peer when this Mac hosts setup.
-When this Mac joins an invitation, it requests its own Mac-only configuration.
-Ubuntu scope is selected on the Windows host. Both the client and join receiver
-reject Ubuntu scope for a joining Mac. The Mac view disables its host-only option
-while joining and explains this distinction. The fake-bridge regression covers a
-join after an earlier Ubuntu host selection without changing the protocol.
+Historical note: earlier builds let a Windows host add an Ubuntu source to a pairing. That option is retired.
+Pairing requests and setup commands no longer carry a source scope, and a pairing always covers exactly one
+Mac and one Windows device. Pairing files saved by earlier builds stay readable when each side lists only its
+own device. A saved pairing that still lists Ubuntu is refused and needs a new pairing. Both apps must be
+installed from the same change before any new pairing is made, because the setup message no longer includes
+the old field.
+If a direct (TLS) pairing is tried anyway with an updated device joining a host on an earlier build, the
+joining device saves its side of the pairing and then reports "local-ready", because the earlier host refuses
+the new acknowledgement. Both sides then hold a pairing that was never acknowledged. Update both apps, then
+repair the pairing on both devices. An earlier joiner with an updated host is refused before either side saves
+anything.
 
 The Mac `--test-direct-pairing-model` check uses a fake bridge to test consent,
 confirmation, cancellation and cleanup without keys or network access. Full

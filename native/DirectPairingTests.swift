@@ -37,7 +37,9 @@ func testDirectPairingModel() async {
     precondition(subject.hosting && bridge.prepared == 1)
     subject.poll(); await settle(); precondition(subject.peerFingerprint != nil)
     subject.confirmHost(); await settle(); precondition(subject.peerFingerprint == nil)
-    precondition(bridge.requests.last?["includeUbuntu"] as? Bool == false)
+    precondition(bridge.requests.last?["action"] as? String == "host-confirm")
+    precondition(Set((bridge.requests.last ?? [:]).keys) ==
+        Set(["action", "peerCertificateSha256", "localEndpoint", "peerEndpoint"]))
     subject.shutdown(); subject.shutdown(); precondition(bridge.closed == 1)
     // New pairing requests include only native devices on either side.
     let joinBridge = PairingTestBridge()
@@ -47,7 +49,7 @@ func testDirectPairingModel() async {
     joining.join(); await settle(); precondition(joining.joining)
     joining.finishJoining(); await settle()
     precondition(joinBridge.requests.last?["action"] as? String == "join-confirm")
-    precondition(joinBridge.requests.last?["includeUbuntu"] as? Bool == false)
+    precondition(Set((joinBridge.requests.last ?? [:]).keys) == Set(["action"]))
     joining.shutdown()
     let late = PairingTestBridge(); late.holdIdentity = true
     let cancelled = DirectPairingModel(bridge: late, polling: false)

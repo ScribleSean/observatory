@@ -61,10 +61,10 @@ function ChartFrame({ title, labels, columns, rows, maximum, children, formatVal
         <span>{title}</span>
         {maximum === null && <span>{STRINGS.formats.separator}{STRINGS.status.unknown}</span>}
         <label className="ob-chart-reveal"><input type="checkbox" />{STRINGS.charts.showValues}</label>
-        <table className="ob-visually-hidden">
+        <div className="ob-visually-hidden"><table>
           <thead><tr><th scope="col">{STRINGS.charts.item}</th>{columns.map((column, index) => <th scope="col" key={index}>{column}</th>)}</tr></thead>
           <tbody>{rows.map((row, index) => <tr key={index}><th scope="row">{labels[index]}</th>{row.map((value, column) => <td key={column}>{value === null ? STRINGS.status.unknown : formatValue(value)}</td>)}</tr>)}</tbody>
-        </table>
+        </table></div>
       </figcaption>
     </figure>
   );
