@@ -55,7 +55,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Text zoom | Done | Missing | Keep | Mac has View menu zoom. Windows relies on system scaling. Platform convention. |
 | Section keyboard shortcuts | Done | Missing | Keep | Mac app menu. Platform convention. |
 | Layout at large text sizes | Done | Unknown | Keep | Mac switches the sidebar to a picker above 125 percent |
-| Collection paused banner during pairing work | Done | Missing | Add | Not found in the Windows dashboard source |
+| Collection paused banner during pairing work | Done | Missing | Add | Not found in the Windows dashboard source. Since O1's contract amendment (issue 112) the bridge `status` value carries `collectionPaused`, and the shared Settings view and dashboard header show "Collection paused" while it is true (sample data only). Neither shell sets it yet. M2 and W2 add it. |
 | Fixed colours outside the tokens | Differs | Differs | Change | About 60 fixed colours in Windows source. Mac uses system orange and secondary colours in many views. |
 
 ## Limits (today named Allowances)

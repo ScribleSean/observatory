@@ -379,7 +379,7 @@ Neither shell stores a skin or appearance choice today. Both store them in `<run
 
 #### The `status` value
 
-One bounded object, at most 16 KiB as JSON, built from the shell's cache, holding only:
+One bounded object, at most 16 KiB as JSON, built from the shell's cache, holding only the keys below, in the order `status.fields` lists them in `lib/bridge-contract.json`:
 
 - `version`: 1
 - `app`: `{version, build}`, the version string (at most 32 characters) and build number
@@ -389,7 +389,8 @@ One bounded object, at most 16 KiB as JSON, built from the shell's cache, holdin
 - `startup`: boolean
 - `appearance`: `system`, `light` or `dark`
 - `limitsConsent`: boolean
-- `pairing`: `{state, peerFingerprint, transport, invitationKept}`. `state` is one of the statuses the pairing control process and its identity check report today (`idle`, `identity-ready`, `identity-required`, `identity-recovery-required`, `inactive`, `waiting`, `confirming`, `awaiting-confirmation`, `local-ready`, `acknowledged`, `configuration-ready`, `working`, `cancelled`) or `paired`, `unpaired` or `unavailable`. A new status is added here first. `peerFingerprint` is 64 lowercase hexadecimal characters while a host waits for confirmation and `null` otherwise. `transport` is `none`, `ssh` or `tls`. `invitationKept` is a boolean. The invitation itself is never in `status`.
+- `collectionPaused`: boolean. True while the shell holds collection paused for a pairing session, a disconnect or a repair, or after a result it could not verify (see "Disconnect and repair"). The Settings view and the dashboard header show "Collection paused" while it is true. Added on 2026-10-14 with O1's amendment.
+- `pairing`: `{state, peerFingerprint, transport, invitationKept}`. `state` is one of the statuses the pairing control process and its identity check report today (`idle`, `identity-ready`, `identity-required`, `identity-recovery-required`, `inactive`, `waiting`, `confirming`, `awaiting-confirmation`, `local-ready`, `acknowledged`, `configuration-ready`, `working`, `cancelled`) or `paired`, `unpaired` or `unavailable`. A new status is added here first. `peerFingerprint` is 64 lowercase hexadecimal characters while the state is `confirming`, which is the hosting device waiting for the person to confirm the claimed device, and `null` in every other state. A joining device reports `awaiting-confirmation` after its claim, with no fingerprint, and confirms with `pairing-join-confirm` from that state. `transport` is `none`, `ssh` or `tls`. `invitationKept` is a boolean. The invitation itself is never in `status`.
 - `sharing`: one entry per channel, `{enabled, canEnable, reason, token}`. The shell validates each sharing script's output with exact keys, as `QuotaSharing.cs` does today, before it enters the cache. `reason` is one of `ready`, `pairing-unavailable`, `account-unavailable` (Codex limits) or `source-unavailable` (Claude Code tokens). `token` is 64 lowercase hexadecimal characters when `canEnable` is true and `null` otherwise.
 
 It holds no path, address, account identity, key, comparison salt or usage value.
@@ -434,7 +435,7 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | Page | `dashboard.html` in the bundled web files. It sets `window.observatoryDashboardReady` after its first render. |
 | Data | It requests `./local/usage.json` through the existing snapshot bridge, reloads on `observatory:snapshot-changed` and every 30 seconds while visible, and reads nothing else. |
 | Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. A section without a view shows an empty state. A fragment naming a section, such as `dashboard.html#tokens`, opens that section on the first render, and a later change of the fragment switches to it. When the person picks a section, the page writes its id to the fragment with `history.replaceState`, so history does not grow and a query such as `?demo` is kept. An unknown fragment shows Limits. |
-| Actions | Only the actions in "Settings bridge contract", sent only from the Settings view, and only when the page is `dashboard.html` without `?demo`. With `?demo` the Settings view answers from sample data and sends nothing to the shell. No other section sends anything. |
+| Actions | Only the actions in "Settings bridge contract", and only when the page is `dashboard.html` without `?demo`. The Settings view sends them, the first-run wizard at `#setup` sends `status`, `set-source`, `set-limits-consent` and `complete-setup`, and the dashboard header sends `status` to show "Collection paused". With `?demo` the Settings view and the wizard answer from sample data and nothing is sent to the shell. No other section sends anything. |
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
 
