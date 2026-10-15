@@ -194,6 +194,32 @@ test('TLS shards contain exactly the specified files in order', () => {
   assert.deepEqual(workflowShards, Object.entries(shards));
 });
 
+test('TLS selection pins the patterns and sends unlisted matches to tls-3', () => {
+  const patterns = suite.match(/const tlsPatterns = \[\n([\s\S]*?)\n          \];/)?.[1];
+  assert.deepEqual(patterns?.trim().split('\n').map((line) => line.trim()), [
+    String.raw`/^peer-tls-.*\.test\.mjs$/,`,
+    String.raw`/^peer-(pairing|repair|setup)\.test\.mjs$/,`,
+    String.raw`/^provider-token-(sync|tls)\.test\.mjs$/,`,
+    String.raw`/^quota-(sync|tls)\.test\.mjs$/,`,
+  ]);
+  assert.ok(suite.includes('const isTls = (name) => tlsPatterns.some((pattern) => pattern.test(name));'));
+  assert.ok(suite.includes("shards['tls-3'].push(...files.filter((name) => isTls(name) && !tls.includes(name)));"));
+});
+
+test('new TLS files run only in tls-3 while tls-1 keeps provider-token-sync alone', (t) => {
+  const newFiles = ['peer-tls-new.test.mjs', 'peer-tls-repair.test.mjs'];
+  for (const platform of ['win32', 'darwin']) {
+    for (const part of parts) {
+      const result = runSuite(t, part, platform, [...newFiles.toReversed(), ...tls, ...general]);
+      assert.equal(result.status, 0, result.stderr);
+      const selected = result.calls.flatMap((call) => call.args.filter((arg) => arg.startsWith('scripts/')));
+      const expected = part === 'general' ? general.toSorted()
+        : part === 'tls-3' ? [...shards[part], ...newFiles] : shards[part];
+      assert.deepEqual(selected, expected.map((name) => `scripts/${name}`));
+    }
+  }
+});
+
 test('no TLS file is listed in two shards in the workflow', () => {
   const files = workflowShards.flatMap(([, names]) => names);
   assert.equal(new Set(files).size, files.length);

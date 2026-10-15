@@ -121,6 +121,13 @@ jobs:
             'tls-3': ['peer-tls-client.test.mjs', 'peer-tls-sync.test.mjs', 'provider-token-tls.test.mjs', 'quota-sync.test.mjs', 'quota-tls.test.mjs'],
           };
           const tls = Object.values(shards).flat();
+          const tlsPatterns = [
+            /^peer-tls-.*\.test\.mjs$/,
+            /^peer-(pairing|repair|setup)\.test\.mjs$/,
+            /^provider-token-(sync|tls)\.test\.mjs$/,
+            /^quota-(sync|tls)\.test\.mjs$/,
+          ];
+          const isTls = (name) => tlsPatterns.some((pattern) => pattern.test(name));
           if (new Set(tls).size !== tls.length) {
             console.error('Duplicate TLS test file across shards');
             process.exit(1);
@@ -139,7 +146,8 @@ jobs:
               process.exit(1);
             }
           }
-          const batches = part !== 'general' ? shards[part].map((name) => [name]) : [files.filter((name) => !tls.includes(name))];
+          shards['tls-3'].push(...files.filter((name) => isTls(name) && !tls.includes(name)));
+          const batches = part !== 'general' ? shards[part].map((name) => [name]) : [files.filter((name) => !isTls(name))];
           const args = ['--import', './native/tests/test-source-runtime.mjs', '--test'];
           args.push(part !== 'general' ? '--test-timeout=900000' : '--test-timeout=300000');
           if (part !== 'general' || process.platform === 'darwin') args.push('--test-concurrency=1');
