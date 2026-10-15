@@ -12,6 +12,7 @@ async function fixture(t) {
     '.native-build/web/dashboard.html':'<html>synthetic-public</html>',
     '.native-build/web/panel.html':'<html>synthetic-panel</html>',
     '.native-build/web/assets/test.js':'// public asset',
+    '.native-build/web/assets/font.ttf':'synthetic font bytes',
     'public/local/usage.json':'{"schema":2,"demo":true}',
     'public/local/collector.json':'{"state":"ok"}',
   };
@@ -46,6 +47,8 @@ test('private pairing files are unavailable even if accidentally copied into sta
   for(const route of ['/','/dashboard.html','/panel.html','/assets/test.js','/local/usage.json','/local/collector.json'])
     assert.equal((await request(route)).status,200,route);
   assert.equal((await request('/index.html')).status,404);
+  const font=await request('/assets/font.ttf');
+  assert.equal(font.status,200);assert.equal(font.headers['content-type'],'font/ttf');
   assert.equal((await request('/local/usage.json',{'Sec-Fetch-Site':'cross-site'})).status,403);
   assert.equal((await request('/',{Host:'foreign.example'})).status,403);
 });
@@ -61,6 +64,12 @@ test('public snapshot routes reject a linked file and a linked parent directory'
   await writeFile(path.join(privateDirectory,'secret.js'),'// synthetic private canary');
   await symlink(privateDirectory,path.join(root,'.native-build/web/assets/private-linked'));
   assert.equal((await request('/assets/private-linked/secret.js')).status,404);
+  await symlink(path.join(root,'.native-build/web/dashboard.html'),path.join(root,'.native-build/web/assets/alias.js'));
+  assert.equal((await request('/assets/alias.js')).status,404);
+  await writeFile(path.join(root,'.native-build/web/assets/data.json'),'{"privateCanary":true}');
+  await symlink(path.join(root,'.native-build/web/assets/data.json'),path.join(root,'.native-build/web/assets/data.js'));
+  const linkedJson=await request('/assets/data.js');
+  assert.equal(linkedJson.status,404);assert.equal(linkedJson.body.includes('privateCanary'),false);
   await writeFile(path.join(privateDirectory,'usage.json'),'{"privateCanary":true}');
   await symlink(privateDirectory,local);
   const result=await request('/local/usage.json');

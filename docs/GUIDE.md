@@ -44,10 +44,6 @@ Configured agent receipt files are a separate source from allowance monitoring. 
 
 The [interactive demo](https://scriblesean.github.io/observatory/) is the shared viewer that both apps show, with fictional sample data from `lib/sample-snapshot.mjs`. The copy published today still shows the earlier web interface until the next release. The demo is not the main app or a place to connect devices. No personal activity or account data is included.
 
-Select Activity to explore recorded screen time. Day has previous/next controls. Week shows seven dated rows ending on the selected date, with three-hour bands and daily totals. Hover or select a band for details. Select a date to open that day. Missing tracking records are muted, distinct from recorded idle time. All time totals retained daily summaries and lets you open a retained date. Retention starts with the available rolling window and keeps up to 3,650 dates per view, not the complete ActivityWatch archive. Broader reads replace partial days without adding duplicate totals. Failed source reads preserve prior summaries and show their last successful timestamp. Combined history is retained independently, never reconstructed by adding device totals.
-
-Tokens shows model-level counts and shares. Expand a model for its token categories and supported API-equivalent estimate. The recorded-day selector lets you review older days. Research notes (archived) describe the open-source patterns behind the accounting.
-
 You need Node.js 22.13 or later. Check `node --version` before running `npm ci`. If Node is missing or older, install a supported version first using your operating system's installation method or your existing Node version manager. Node 20 is not supported.
 
 ```sh

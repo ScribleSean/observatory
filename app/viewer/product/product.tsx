@@ -22,7 +22,7 @@ const COPY = {
   "windows": "Windows: a tray app for Windows x64.",
   "sameViewer": "Both show this same viewer.",
   "unsignedHeading": "Unsigned builds",
-  "unsignedDescription": "Observatory builds are not signed. macOS and Windows show a security warning before the app first opens, because the app is not signed by an identified developer. The install guides describe the warning on each platform. There is no installer download yet, so you build the app from source.",
+  "unsignedDescription": "Observatory builds are not signed by an identified developer, so macOS and Windows may show a security warning before the app first opens. There is no installer download yet. You build the app from source with the install guide for your platform.",
   "installHeading": "Install",
   "macGuide": "Mac install guide",
   "windowsGuide": "Windows install guide",

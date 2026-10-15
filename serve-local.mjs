@@ -13,6 +13,7 @@ const types = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
   '.txt': 'text/plain; charset=utf-8',
 };
 export function createLocalServer(root = path.dirname(fileURLToPath(import.meta.url))) {
@@ -45,10 +46,10 @@ return http.createServer(async (req, res) => {
       const asset = ['/assets/'].some(prefix => requested.startsWith(prefix));
       if ((!entry && !asset) || requested.includes('\\') || requested.split('/').includes('..') ||
           path.extname(requested) === '.json') throw Error('Unavailable static route');
-      file = await realpath(
-        path.join(assets, requested === '/' ? 'dashboard.html' : requested),
-      );
-      if (!file.startsWith(assets + path.sep)) throw Error();
+      const target = path.join(assets, requested === '/' ? 'dashboard.html' : requested);
+      file = await realpath(target);
+      // Refuse any link inside the build folder too, and judge JSON by the resolved name.
+      if (file !== target || !file.startsWith(assets + path.sep) || path.extname(file) === '.json') throw Error('Linked or unavailable static path');
     }
     const mime = types[path.extname(file)];
     if (!mime) throw Error();

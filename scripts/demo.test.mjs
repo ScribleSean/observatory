@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {demoData,writeDemo} from './demo.mjs';
+import {demoData,demoFixture,writeDemo} from './demo.mjs';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -14,6 +14,7 @@ test('demo creation refuses existing snapshots without changing their bytes',asy
   t.after(()=>rm(dir,{recursive:true,force:true}));
   assert.equal((await writeDemo(dir)).code,0);
   assert.equal(JSON.parse(await readFile(path.join(dir,'usage.json'),'utf8')).demo,true);
+  assert.equal(await readFile(path.join(dir,'usage.json'),'utf8'),JSON.stringify(demoFixture()));
   const marker='fictional existing snapshot, do not replace';
   await writeFile(path.join(dir,'usage.json'),marker);
   const result=await writeDemo(dir);
