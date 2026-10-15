@@ -26,11 +26,11 @@ internal sealed class ShellBridgeHost(
         using var dialog = new SaveFileDialog
         {
             Filter = "Observatory export (*.observatory)|*.observatory", DefaultExt = "observatory",
-            AddExtension = true, OverwritePrompt = false, CheckPathExists = true
+            RestoreDirectory = true, AddExtension = true, OverwritePrompt = false, CheckPathExists = true
         };
         if (dialog.ShowDialog(Owner) != DialogResult.OK) return null;
         var path = dialog.FileName;
-        return !path.EndsWith(".observatory", StringComparison.OrdinalIgnoreCase) ||
+        return !path.EndsWith(".observatory", StringComparison.Ordinal) ||
             BridgeSettingsStore.Attributes(path) is not null ? null : path;
     }
 

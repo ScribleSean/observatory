@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -131,6 +133,26 @@ internal sealed class BridgeSettingsStore(string runtime)
             throw new IOException("Settings folder unavailable.");
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileInformation
+    {
+        internal uint Attributes;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME CreationTime, AccessTime, WriteTime;
+        internal uint VolumeSerialNumber, SizeHigh, SizeLow, NumberOfLinks, IndexHigh, IndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FileInformation information);
+
+    private static void RefuseHardLink(string path)
+    {
+        using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete, FileOptions.None);
+        if (!GetFileInformationByHandle(handle, out var information) || information.NumberOfLinks > 1)
+            throw new IOException("Settings file unavailable.");
+    }
+
     internal bool ViewerExists => Attributes(Path.Combine(runtime, "viewer.json")) is not null;
 
     private JsonObject ReadObject(string name, int cap)
@@ -141,6 +163,7 @@ internal sealed class BridgeSettingsStore(string runtime)
         var attributes = Attributes(path);
         if (attributes is null || (attributes.Value & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
             throw new IOException("Settings file unavailable.");
+        RefuseHardLink(path);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (stream.Length > cap) throw new IOException("Settings file too large.");
         var bytes = new byte[cap + 1];
@@ -155,17 +178,19 @@ internal sealed class BridgeSettingsStore(string runtime)
         return JsonNode.Parse(doc.RootElement.GetRawText())!.AsObject();
     }
 
-    internal (string Skin, string Appearance) ReadViewer()
+    internal (string Skin, string Appearance) ReadViewer(bool strict = false)
     {
         try
         {
+            if (Attributes(Path.Combine(runtime, "viewer.json")) is null) return ("sage", "system");
             var value = ReadObject("viewer.json", 1024);
             var skin = value["skin"]?.GetValue<string>();
             var appearance = value["appearance"]?.GetValue<string>();
             if (value.Count == 2 && skin is not null && Bundled.Contains(skin, StringComparer.Ordinal) &&
                 appearance is "system" or "light" or "dark") return (skin, appearance);
+            if (strict) throw new IOException("Invalid viewer settings.");
         }
-        catch { }
+        catch when (!strict) { }
         return ("sage", "system");
     }
 
@@ -182,6 +207,7 @@ internal sealed class BridgeSettingsStore(string runtime)
         var attributes = Attributes(path);
         if (attributes is not null && ((attributes.Value & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0 || (!allowOversized && new FileInfo(path).Length > 1024)))
             throw new IOException("Settings file unavailable.");
+        if (attributes is not null) RefuseHardLink(path);
     }
 
     private void Write(string name, JsonObject value, bool replace = true)
@@ -200,8 +226,7 @@ internal sealed class BridgeSettingsStore(string runtime)
             {
                 var backup = path + ".bak";
                 GuardWrite(backup, allowOversized: true);
-                File.Copy(path, backup, overwrite: true);
-                GuardWrite(path, allowOversized: true);
+                File.Move(path, backup, overwrite: true);
             }
             File.Move(temporary, path, replace);
         }
@@ -217,6 +242,7 @@ internal sealed class BridgeSettingsStore(string runtime)
             var attributes = Attributes(path);
             if (attributes is not null && (attributes.Value & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0)
                 throw new IOException("Settings file unavailable.");
+            if (attributes is not null) RefuseHardLink(path);
             File.Delete(path);
             return;
         }
@@ -226,25 +252,32 @@ internal sealed class BridgeSettingsStore(string runtime)
         Write("device.json", new JsonObject { ["name"] = checkedName.Args!["name"].Text });
     }
 
-    internal string? ReadDevice()
+    internal string? ReadDevice(bool strict = false)
     {
         try
         {
+            if (Attributes(Path.Combine(runtime, "device.json")) is null) return null;
             var value = ReadObject("device.json", 1024);
-            if (value.Count != 1 || value["name"] is null) return null;
+            if (value.Count != 1 || value["name"] is null) throw new IOException("Invalid device settings.");
             var check = BridgeContract.Validate(new JsonObject { ["id"] = 1, ["action"] = "set-device-name", ["args"] = value }.ToJsonString());
-            return check.Outcome == "accepted" ? check.Args!["name"].Text : null;
+            if (check.Outcome != "accepted") throw new IOException("Invalid device settings.");
+            return check.Args!["name"].Text;
         }
-        catch { return null; }
+        catch when (!strict) { return null; }
     }
 
-    internal bool ReadLimitsConsent()
+    internal bool ReadLimitsConsent(bool strict = false)
     {
-        try { return ReadObject(Path.Combine("claude-limits", "consent.json"), 4096)["consent"]?.GetValue<bool>() == true; }
-        catch { return false; }
+        try
+        {
+            if (Attributes(Path.Combine(runtime, "claude-limits", "consent.json")) is null) return false;
+            return ReadObject(Path.Combine("claude-limits", "consent.json"), 4096)["consent"]?.GetValue<bool>()
+                ?? throw new IOException("Invalid consent settings.");
+        }
+        catch when (!strict) { return false; }
     }
 
-    internal (string State, string Transport) ReadPairing()
+    internal (string State, string Transport) ReadPairing(bool strict = false)
     {
         try
         {
@@ -261,7 +294,6 @@ internal sealed class BridgeSettingsStore(string runtime)
                 var attributes = Attributes(path);
                 if (attributes is null) continue;
                 if ((attributes.Value & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0) throw new IOException();
-                using var read = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 present[i] = true;
             }
             if (present[0]) return ("unpaired", "none");
@@ -269,7 +301,7 @@ internal sealed class BridgeSettingsStore(string runtime)
             if (present[2]) return ("paired", "ssh");
             return ("unpaired", "none");
         }
-        catch { return ("unavailable", "none"); }
+        catch when (!strict) { return ("unavailable", "none"); }
     }
 }
 
@@ -310,13 +342,20 @@ internal sealed class BridgeHandler : IDisposable
     // This is the not yet read state. The contract has no unknown sharing value.
     private readonly QuotaSharingStatus[] sharing = [new(false, false, "pairing-unavailable", null), new(false, false, "pairing-unavailable", null)];
 
+    private sealed record FileStatus((string Skin, string Appearance) Viewer, string? Device,
+        bool LimitsConsent, JsonObject Sources, bool Startup, (string State, string Transport) Pairing);
+    private FileStatus files = new(("sage", "system"), null, false, Sources(new()), false, ("unavailable", "none"));
+    private DateTimeOffset? filesRead;
+    private bool filesReading;
+    private long filesRevision;
+
     private readonly Action<string>? probe;
     internal event Action<string, string>? ViewerChanged;
     internal int ReceivedCount { get; private set; }
     internal static bool PairingOpen { get { lock (ownerGate) return pairingOwner is not null; } }
 
     internal BridgeHandler(IBridgeHost host, string runtime, Action<string>? probe = null)
-    { this.host = host; this.runtime = runtime; this.probe = probe; }
+    { this.host = host; this.runtime = runtime; this.probe = probe; RefreshFilesNow(); }
 
     private static bool Sender(string? source) => Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
         uri.Scheme == "https" && uri.Host == "observatory.invalid" && uri.IsDefaultPort && uri.UserInfo.Length == 0 &&
@@ -409,7 +448,15 @@ internal sealed class BridgeHandler : IDisposable
                 {
                     if (closed || request.Epoch != epoch) { Finish(request); continue; }
                 }
-                result = await Execute(request);
+                bool refreshFiles = false;
+                try { result = await Execute(request); refreshFiles = result.Code is "done" or "unavailable"; }
+                catch { refreshFiles = true; throw; }
+                finally
+                {
+                    if (refreshFiles && request.Action is ("set-source" or "set-skin" or "set-appearance" or "set-device-name" or
+                        "set-startup" or "set-limits-consent" or "pairing-disconnect" or "pairing-repair-prepare"))
+                        RefreshFilesNow();
+                }
             }
             catch
             {
@@ -421,10 +468,13 @@ internal sealed class BridgeHandler : IDisposable
     }
 
     private void Finish(Request request) { ids.Remove((request.Epoch, request.Id)); actions.Remove(request.Action); activeAction = null; }
-    private bool Confirm(string title, string text)
+    private bool Current(Request request)
+    { lock (gate) return !closed && request.Epoch == epoch && request.Document == document; }
+
+    private bool Confirm(Request request, string title, string text)
     {
         lock (gate) dialog = true;
-        try { return host.Confirm(title, text); }
+        try { var accepted = host.Confirm(title, text); return Current(request) && accepted; }
         finally { lock (gate) dialog = false; }
     }
 
@@ -453,7 +503,7 @@ internal sealed class BridgeHandler : IDisposable
                 var expected = host.ReadConfiguration();
                 var desired = Sources(expected);
                 if (Text("source") == "quota" && desired["quota"]!.GetValue<bool>() && !Enabled() &&
-                    !Confirm("Account history", "Turn account monitoring off and clear Observatory's retained account readings on the next collection? Saved log-token history remains.")) return new("cancelled");
+                    !Confirm(request, "Account history", "Turn account monitoring off and clear Observatory's retained account readings on the next collection? Saved log-token history remains.")) return new("cancelled");
                 desired[Text("source")] = Enabled();
                 host.UpdateConfiguration(expected, desired); host.StartCollector(); break;
             case "set-skin":
@@ -463,13 +513,13 @@ internal sealed class BridgeHandler : IDisposable
             case "set-device-name": host.Settings.WriteDevice(request.Args["name"].Text); break;
             case "set-startup": host.SetStartup(Enabled()); break;
             case "set-limits-consent":
-                if (Enabled() && !Confirm("Claude Code limits", "Claude Code hides most of its footer keyboard hints while any custom status line is configured. Turn on Claude Code limits?")) return new("cancelled");
+                if (Enabled() && !Confirm(request, "Claude Code limits", "Claude Code hides most of its footer keyboard hints while any custom status line is configured. Turn on Claude Code limits?")) return new("cancelled");
                 var consentArgs = Enabled() ? new[] { "set", "--runtime", runtime, "--consent" } : new[] { "clear", "--runtime", runtime };
                 return await Script("claude-limits-consent.mjs", consentArgs);
             case "set-sharing":
                 var index = Text("channel") == "codex-limits" ? 0 : 1;
                 var title = index == 0 ? "Codex limits" : "Claude Code tokens";
-                if (Enabled() && !Confirm("Share " + title + "?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.")) return new("cancelled");
+                if (Enabled() && !Confirm(request, "Share " + title + "?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.")) return new("cancelled");
                 var status = await host.Sharing(Enabled() ? "enable" : "disable", Enabled() ? Text("token") : null, Channel(index));
                 lock (gate) { sharing[index] = CheckedSharing(status, index); sharingRead[index] = host.Now; sharingRevision[index]++; }
                 break;
@@ -482,11 +532,12 @@ internal sealed class BridgeHandler : IDisposable
                 lock (gate) dialog = true;
                 try { file = host.ChooseExportFile(); }
                 finally { lock (gate) dialog = false; }
+                if (!Current(request)) return new("cancelled");
                 return file is null ? new("cancelled") : await Script("observatory-file.mjs", "export", "--runtime", runtime, "--out", file);
             case "pairing-disconnect": case "pairing-repair-prepare":
                 if (host.CollectorBusy) return new("busy");
                 var repair = request.Action == "pairing-repair-prepare";
-                if (!Confirm(repair ? "Prepare pairing repair" : "Disconnect paired device", repair
+                if (!Confirm(request, repair ? "Prepare pairing repair" : "Disconnect paired device", repair
                     ? "If this PC has pairing state, disable it and retain a private backup? Otherwise, confirm this PC is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on the Mac separately, then use Pair with Windows there to create fresh credentials. Retirement cannot be undone by this action."
                     : "Disable pairing on this Windows PC only? Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac.")) return new("cancelled");
                 lock (gate) working = true;
@@ -529,19 +580,17 @@ internal sealed class BridgeHandler : IDisposable
             if (version is null || version.Build < 0 || version.Revision < 0) return new("unavailable");
             var versionText = $"{version.Major}.{version.Minor}.{version.Build}";
             if (versionText.Length > 32) return new("unavailable");
-            var viewer = host.Settings.ReadViewer();
-            bool startup;
-            try { startup = host.ReadStartup(); } catch { startup = false; }
-            var pair = host.Settings.ReadPairing();
+            var viewer = files.Viewer;
+            var pair = files.Pairing;
             var state = working ? "working" : session is not null ? pairingState : identityState is not null ? identityState : host.CollectionPaused ? "unavailable" : pair.State;
             var value = new JsonObject
             {
                 ["version"] = 1, ["app"] = new JsonObject { ["version"] = versionText, ["build"] = version.Revision },
-                ["sources"] = Sources(host.ReadConfiguration()),
+                ["sources"] = files.Sources.DeepClone(),
                 ["skin"] = new JsonObject { ["current"] = viewer.Skin,
                     ["bundled"] = new JsonArray(BridgeSettingsStore.Bundled.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()), ["custom"] = new JsonArray() },
-                ["deviceName"] = host.Settings.ReadDevice(), ["startup"] = startup, ["appearance"] = viewer.Appearance,
-                ["limitsConsent"] = host.Settings.ReadLimitsConsent(),
+                ["deviceName"] = files.Device, ["startup"] = files.Startup, ["appearance"] = viewer.Appearance,
+                ["limitsConsent"] = files.LimitsConsent,
                 ["pairing"] = new JsonObject { ["state"] = state, ["peerFingerprint"] = state == "confirming" ? fingerprint : null,
                     ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
                 ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) }
@@ -560,6 +609,37 @@ internal sealed class BridgeHandler : IDisposable
         return QuotaSharing.Parse(json.ToJsonString(), Channel(index));
     }
 
+    private FileStatus ReadFiles(FileStatus previous)
+    {
+        var value = previous;
+        try { value = value with { Viewer = host.Settings.ReadViewer(strict: true) }; } catch { }
+        try { value = value with { Device = host.Settings.ReadDevice(strict: true) }; } catch { }
+        try { value = value with { LimitsConsent = host.Settings.ReadLimitsConsent(strict: true) }; } catch { }
+        try { value = value with { Sources = Sources(host.ReadConfiguration()) }; } catch { }
+        try { value = value with { Startup = host.ReadStartup() }; } catch { }
+        try { value = value with { Pairing = host.Settings.ReadPairing(strict: true) }; } catch { }
+        return value;
+    }
+
+    private void RefreshFilesNow()
+    {
+        FileStatus previous;
+        long revision;
+        lock (gate) { previous = files; revision = ++filesRevision; filesRead = host.Now; }
+        var value = ReadFiles(previous);
+        lock (gate) if (revision == filesRevision) files = value;
+    }
+
+    private async Task RefreshFiles(FileStatus previous, long revision)
+    {
+        try
+        {
+            var value = await Task.Run(() => ReadFiles(previous));
+            lock (gate) if (!closed && revision == filesRevision) files = value;
+        }
+        finally { lock (gate) filesReading = false; }
+    }
+
     private void ScheduleCache()
     {
         lock (gate)
@@ -567,6 +647,11 @@ internal sealed class BridgeHandler : IDisposable
             if (closed) return;
             var pending = new List<Task>();
             if (!cacheWork.IsCompleted) pending.Add(cacheWork);
+            if (!filesReading && Due(filesRead))
+            {
+                filesReading = true; filesRead = host.Now;
+                pending.Add(RefreshFiles(files, filesRevision));
+            }
             var channels = new List<int>();
             if (!tailscaleReading && Due(tailscaleRead))
             { tailscaleReading = true; tailscaleRead = host.Now; pending.Add(RefreshTailscale()); }
@@ -671,7 +756,7 @@ internal sealed class BridgeHandler : IDisposable
         bool temporary = false;
         if (action == "pairing-identity-create")
         {
-            if (!Confirm("Device identity", "Allow a device identity stored in a permission-restricted file? The key is not stored using DPAPI or encrypted separately by Observatory. A valid existing identity is reused.")) return new("cancelled");
+            if (!Confirm(request, "Device identity", "Allow a device identity stored in a permission-restricted file? The key is not stored using DPAPI or encrypted separately by Observatory. A valid existing identity is reused.")) return new("cancelled");
             lock (gate) temporary = session is null;
         }
         if (action is "pairing-host-start" or "pairing-join-claim" or "pairing-identity-create")
@@ -754,17 +839,24 @@ internal sealed class BridgeHandler : IDisposable
         }
         try
         {
-            if (host.Now - began >= TimeSpan.FromMinutes(10)) { await EndSession(current); return; }
+            if (host.Now - began >= TimeSpan.FromMinutes(10)) { await EndPolledSession(current); return; }
             var reply = await current.Send(new JsonObject { ["action"] = "status" });
             lock (gate)
             {
                 if (current != session || generation != sessionGeneration) return;
                 Apply(reply);
             }
-            if (reply.Status is "acknowledged" or "configuration-ready" or "unavailable" or "cancelled" || pairingState == "unavailable") await EndSession(current);
+            if (reply.Status is "acknowledged" or "configuration-ready" or "unavailable" or "cancelled" || pairingState == "unavailable") await EndPolledSession(current);
         }
-        catch { await EndSession(current); }
+        catch { await EndPolledSession(current); }
         finally { lock (gate) polling = false; }
+    }
+
+    private Task EndPolledSession(IBridgePairingSession current)
+    {
+        lock (gate)
+            return activeAction?.StartsWith("pairing-", StringComparison.Ordinal) == true
+                ? Task.CompletedTask : EndSession(current);
     }
 
     private async Task Cancel(Request request)
@@ -802,7 +894,11 @@ internal sealed class BridgeHandler : IDisposable
         finally
         {
             try { callback?.Invoke(current.ExitVerified); }
-            finally { lock (ownerGate) if (pairingOwner == this) pairingOwner = null; }
+            finally
+            {
+                lock (ownerGate) if (pairingOwner == this) pairingOwner = null;
+                RefreshFilesNow();
+            }
         }
     }
 
@@ -832,6 +928,7 @@ internal sealed class BridgeHandler : IDisposable
         internal readonly List<JsonObject> Commands = new();
         internal string PollState = "hosting", JoinState = "acknowledged", IdentityState = "identity-ready";
         internal bool VerifyExit = true;
+        internal TaskCompletionSource<TlsSetupReply>? HeldConfirm;
         internal TaskCompletionSource<TlsSetupReply>? HeldStatus;
         internal TaskCompletionSource<TlsSetupReply>? Held;
         internal bool Disposed;
@@ -841,6 +938,7 @@ internal sealed class BridgeHandler : IDisposable
             Commands.Add(command.DeepClone().AsObject());
             Check(!command.ContainsKey("id"), "Page id entered control command");
             var action = command["action"]!.GetValue<string>();
+            if (action == "host-confirm" && HeldConfirm is not null) return HeldConfirm.Task;
             if (action == "host-start" && Held is not null) return Held.Task;
             if (action == "status" && HeldStatus is not null) return HeldStatus.Task;
             var state = action switch
@@ -867,7 +965,7 @@ internal sealed class BridgeHandler : IDisposable
         internal readonly System.Collections.Concurrent.ConcurrentQueue<string> Calls = new();
         internal readonly List<ProcessStartInfo> Scripts = new();
         internal JsonObject Configuration = new() { ["activity"] = true, ["codex"] = true, ["claude"] = false, ["wispr"] = false, ["quota"] = true };
-        internal bool Consent = true, Startup, Reserved;
+        internal bool Consent = true, Startup, Reserved, FailReads;
         internal int Dialogs, Releases;
         internal Action? InDialog;
         internal string? ExportFile;
@@ -890,14 +988,14 @@ internal sealed class BridgeHandler : IDisposable
         public Task Refresh() { Calls.Enqueue("refresh"); return Task.CompletedTask; }
         public Task CheckUpdates() { Calls.Enqueue("updates"); InDialog?.Invoke(); return (Task?)UpdateWait?.Task ?? Task.CompletedTask; }
         public void OpenDashboard(string section) => Calls.Enqueue("open:" + section);
-        public JsonObject ReadConfiguration() { Calls.Enqueue("config-read"); return Configuration.DeepClone().AsObject(); }
+        public JsonObject ReadConfiguration() { Calls.Enqueue("config-read"); if (FailReads) throw new IOException("Synthetic read failure"); return Configuration.DeepClone().AsObject(); }
         public void UpdateConfiguration(JsonObject expected, JsonObject desired)
         {
             Check(JsonNode.DeepEquals(expected, Configuration) && desired.Count == 5, "Configuration fence");
             Configuration = desired.DeepClone().AsObject(); Calls.Enqueue("config-write");
         }
         public void StartCollector() => Calls.Enqueue("start");
-        public bool ReadStartup() { Calls.Enqueue("startup-read"); return Startup; }
+        public bool ReadStartup() { Calls.Enqueue("startup-read"); if (FailReads) throw new IOException("Synthetic read failure"); return Startup; }
         public void SetStartup(bool enabled) { Startup = enabled; Calls.Enqueue("startup-write"); }
         public Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel)
         {
@@ -953,6 +1051,7 @@ internal sealed class BridgeHandler : IDisposable
             var posts = new List<string>();
             using (var probeHandler = new BridgeHandler(probeHost, runtime, lines.Add))
             {
+                probeHost.Calls.Clear();
                 probeHandler.DocumentReplaced(1);
                 probeHandler.Receive("{\"id\":1,\"action\":\"refresh\",\"args\":{}}", TestDriver.Origin, 1, posts.Add);
                 Check(probeHost.Calls.IsEmpty && posts.Single().Contains("\"code\":\"cancelled\"") &&
@@ -967,6 +1066,7 @@ internal sealed class BridgeHandler : IDisposable
             await TestCache(runtime);
             await TestQueue(runtime);
             await TestConsent(runtime);
+            await TestDialogReload(runtime);
             await TestPairing(runtime);
             await TestStorageAndProcesses(runtime);
             Check(BridgeContract.Actions.Entries.Where(a => a.Key != "complete-setup").All(a => TestedActions.Contains(a.Key)), "Missing action coverage");
@@ -1096,6 +1196,60 @@ internal sealed class BridgeHandler : IDisposable
         var cached = await test.Run("status");
         Check(cached["value"]!["sharing"]!["codex-limits"]!["canEnable"]!.GetValue<bool>(), "Sharing cache success");
         Check(test.Host.Calls.Count(c => c == "tailscale") == 1 && test.Host.Calls.Count(c => c.StartsWith("sharing:status:", StringComparison.Ordinal)) == 2, "Cache single refresh");
+        var root = Path.Combine(runtime, "cache");
+        Directory.CreateDirectory(Path.Combine(root, "claude-limits"));
+        Directory.CreateDirectory(Path.Combine(root, "private-sync"));
+        var store = new BridgeSettingsStore(root);
+        store.WriteViewer("instrument", "dark");
+        store.WriteDevice("Fictional PC");
+        var consent = Path.Combine(root, "claude-limits", "consent.json");
+        var pairing = Path.Combine(root, "private-sync", "pairing.json");
+        File.WriteAllText(consent, "{\"consent\":true}");
+        File.WriteAllText(pairing, "{}");
+        using var local = new TestDriver(root);
+        var initial = (await local.Run("status"))["value"]!;
+        await local.Handler.cacheWork;
+        Check(initial["skin"]!["current"]!.GetValue<string>() == "instrument" &&
+            initial["deviceName"]!.GetValue<string>() == "Fictional PC" && initial["limitsConsent"]!.GetValue<bool>() &&
+            initial["pairing"]!["transport"]!.GetValue<string>() == "ssh", "Initial file cache");
+        local.Host.Calls.Clear();
+        store.WriteViewer("almanac", "light");
+        store.WriteDevice("Updated PC");
+        File.WriteAllText(consent, "{\"consent\":false}");
+        File.WriteAllText(Path.Combine(root, "private-sync", "revoked"), "");
+        local.Host.Startup = true;
+        local.Host.Configuration["claude"] = true;
+        var old = (await local.Run("status"))["value"]!;
+        Check(local.Host.Calls.IsEmpty && JsonNode.DeepEquals(old, (await local.Run("status"))["value"]),
+            "Status performed file or registry reads");
+        Check(old["deviceName"]!.GetValue<string>() == "Fictional PC", "File cache throttle");
+        local.Host.Now += TimeSpan.FromSeconds(5);
+        await local.Run("status"); await local.Handler.cacheWork;
+        var updated = (await local.Run("status"))["value"]!;
+        Check(updated["skin"]!["current"]!.GetValue<string>() == "almanac" &&
+            updated["appearance"]!.GetValue<string>() == "light" && updated["deviceName"]!.GetValue<string>() == "Updated PC" &&
+            !updated["limitsConsent"]!.GetValue<bool>() && updated["startup"]!.GetValue<bool>() &&
+            updated["sources"]!["claude"]!.GetValue<bool>() && updated["pairing"]!["state"]!.GetValue<string>() == "unpaired",
+            "Background file cache refresh");
+        File.WriteAllText(Path.Combine(root, "viewer.json"), "{");
+        File.WriteAllText(Path.Combine(root, "device.json"), "{");
+        File.WriteAllText(consent, "{");
+        File.Delete(pairing); Directory.CreateDirectory(pairing);
+        local.Host.FailReads = true;
+        local.Host.Now += TimeSpan.FromSeconds(5);
+        await local.Run("status"); await local.Handler.cacheWork;
+        Check(JsonNode.DeepEquals(updated, (await local.Run("status"))["value"]), "Failed refresh lost cached values");
+        local.Host.FailReads = false;
+        await local.Run("set-device-name", new() { ["name"] = "Immediate PC" });
+        await local.Run("set-startup", new() { ["enabled"] = false });
+        await local.Run("set-source", new() { ["source"] = "claude", ["enabled"] = false });
+        await local.Run("set-skin", new() { ["skin"] = "amber-crt" });
+        await local.Run("set-appearance", new() { ["mode"] = "dark" });
+        var immediate = (await local.Run("status"))["value"]!;
+        Check(immediate["deviceName"]!.GetValue<string>() == "Immediate PC" && !immediate["startup"]!.GetValue<bool>() &&
+            !immediate["sources"]!["claude"]!.GetValue<bool>() && immediate["skin"]!["current"]!.GetValue<string>() == "amber-crt" &&
+            immediate["appearance"]!.GetValue<string>() == "dark", "Action did not refresh file cache");
+
     }
 
     private static async Task TestQueue(string runtime)
@@ -1189,6 +1343,30 @@ internal sealed class BridgeHandler : IDisposable
         Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "unavailable", "Pause status");
     }
 
+    private static async Task TestDialogReload(string runtime)
+    {
+        foreach (var action in new[] { "set-source", "set-sharing", "pairing-disconnect", "export-data",
+            "set-limits-consent", "pairing-repair-prepare", "pairing-identity-create" })
+        {
+            using var test = new TestDriver(runtime);
+            test.Host.ExportFile = Path.Combine(runtime, "synthetic.observatory");
+            test.Host.InDialog = () => test.Handler.DocumentReplaced(2);
+            test.Send(action, action switch
+            {
+                "set-source" => new JsonObject { ["source"] = "quota", ["enabled"] = false },
+                "set-sharing" => ShareArgs(true),
+                "set-limits-consent" => new JsonObject { ["enabled"] = true },
+                _ => null
+            });
+            await test.Handler.drain;
+            Check(test.Host.Dialogs == 1 || action == "export-data", "Reload dialog not exercised");
+            Check(!test.Host.Calls.Any(c => c is "config-write" or "start" or "disconnect" or "repair" or "reserve" ||
+                c.StartsWith("sharing:", StringComparison.Ordinal) || c.StartsWith("script:", StringComparison.Ordinal)),
+                "Reloaded dialog changed state: " + action);
+            Check(test.Posts.Count == 0, "Reloaded dialog posted to stale document");
+        }
+    }
+
     private static async Task TestPairing(string runtime)
     {
         using var test = new TestDriver(runtime);
@@ -1212,7 +1390,14 @@ internal sealed class BridgeHandler : IDisposable
             await test.Run(action, action == "set-sharing" ? ShareArgs(false) : null, "busy");
         session.PollState = "confirming"; await test.Handler.PollAsync();
         Check((await test.Run("status"))["value"]!["pairing"]!["peerFingerprint"]!.GetValue<string>() == new string('a', 64), "Poll fingerprint");
-        await test.Run("pairing-host-confirm", new() { ["fingerprint"] = new string('a', 64), ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 });
+        session.HeldConfirm = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int confirming = test.Send("pairing-host-confirm", new() { ["fingerprint"] = new string('a', 64), ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 });
+        session.PollState = "configuration-ready";
+        await test.Handler.PollAsync();
+        Check(!session.Disposed && test.Host.Reserved, "Poll ended active confirmation");
+        session.HeldConfirm.SetResult(new(1, "configuration-ready", null, null));
+        await test.Handler.drain;
+        Check(test.Result(confirming)["code"]!.GetValue<string>() == "done", "Active confirmation result");
         var command = session.Commands.Last(c => c["action"]!.GetValue<string>() == "host-confirm");
         Check(command.Count == 4 && command["localEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"192.168.1.2\",\"port\":43128}" && session.Disposed && !test.Host.Reserved, "Host confirmation endpoint");
         await test.Run("pairing-join-claim", new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" });
@@ -1287,8 +1472,58 @@ internal sealed class BridgeHandler : IDisposable
         }
     }
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLink(string fileName, string existingFileName, IntPtr securityAttributes);
+
+    private static bool TryHardLink(string path, string target)
+    {
+        if (CreateHardLink(path, target, IntPtr.Zero)) return true;
+        Console.WriteLine("Settings bridge hard-link checks skipped: this filesystem cannot create hard links.");
+        return false;
+    }
+
+    private static void TestHardLinks(string runtime)
+    {
+        var root = Path.Combine(runtime, "hard-links");
+        Directory.CreateDirectory(root);
+        var store = new BridgeSettingsStore(root);
+        var target = Path.Combine(root, "target.json");
+        var viewer = Path.Combine(root, "viewer.json");
+        var device = Path.Combine(root, "device.json");
+        var backup = viewer + ".bak";
+        File.WriteAllText(target, "known synthetic bytes");
+        if (!TryHardLink(backup, target)) return;
+        void Refused(Action write)
+        {
+            bool refused = false;
+            try { write(); } catch (IOException) { refused = true; }
+            Check(refused, "Hard-linked settings write allowed");
+        }
+        var bytes = File.ReadAllBytes(target);
+        File.WriteAllText(viewer, new string(' ', 2048));
+        Refused(() => store.WriteViewer("almanac", "dark"));
+        Check(File.ReadAllBytes(target).SequenceEqual(bytes) && new FileInfo(viewer).Length == 2048,
+            "Hard-linked backup changed target");
+        File.Delete(backup);
+        File.Delete(viewer);
+        File.WriteAllText(target, "{\"skin\":\"almanac\",\"appearance\":\"dark\"}");
+        bytes = File.ReadAllBytes(target);
+        if (!TryHardLink(viewer, target)) return;
+        Refused(() => store.WriteViewer("instrument", "light"));
+        Check(store.ReadViewer() == ("sage", "system") && File.ReadAllBytes(target).SequenceEqual(bytes), "Hard-linked viewer read or mutation");
+        File.Delete(viewer);
+        File.WriteAllText(target, "{\"name\":\"Fictional PC\"}");
+        bytes = File.ReadAllBytes(target);
+        if (!TryHardLink(device, target)) return;
+        Refused(() => store.WriteDevice("Synthetic"));
+        Refused(() => store.WriteDevice(null));
+        Check(store.ReadDevice() is null && File.ReadAllBytes(target).SequenceEqual(bytes), "Hard-linked device read or mutation");
+    }
+
     private static async Task TestStorageAndProcesses(string runtime)
     {
+        TestHardLinks(runtime);
         var store = new BridgeSettingsStore(runtime);
         store.WriteViewer("instrument", "light"); Check(store.ReadViewer() == ("instrument", "light"), "Viewer round trip");
         var viewer = Path.Combine(runtime, "viewer.json");
@@ -1357,6 +1592,8 @@ internal sealed class BridgeHandler : IDisposable
         var sync = Path.Combine(runtime, "private-sync"); Directory.CreateDirectory(sync);
         File.WriteAllText(Path.Combine(sync, "pairing.json"), "{}"); Check(store.ReadPairing() == ("paired", "ssh"), "SSH status");
         File.WriteAllText(Path.Combine(sync, "tls-trust.json"), "{}"); Check(store.ReadPairing() == ("paired", "tls"), "TLS status");
+        using (var locked = new FileStream(Path.Combine(sync, "tls-trust.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            Check(store.ReadPairing() == ("paired", "tls"), "Pairing status opened file contents");
         File.WriteAllText(Path.Combine(sync, "revoked"), ""); Check(store.ReadPairing() == ("unpaired", "none"), "Revoked status");
         File.Delete(Path.Combine(sync, "revoked"));
         if (TryLink(Path.Combine(sync, "revoked"), target))

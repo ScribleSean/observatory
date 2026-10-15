@@ -318,6 +318,7 @@ internal static class Program
                 UpdateActivation.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
+                Collector.LaunchSelfTest();
                 Collector.ShutdownSelfTest();
                 PowerResumeWindow.SelfTest();
                 TailscaleReadiness.SelfTest();
