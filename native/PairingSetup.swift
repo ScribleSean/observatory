@@ -81,6 +81,7 @@ enum PairingSetup {
         let input = try request.map { try JSONEncoder().encode($0) } ?? Data()
         guard input.count <= 8192 else { throw CocoaError(.fileReadTooLarge) }
         let process = Process(), stdin = Pipe(), stdout = Pipe()
+        process.environment = collectorChildEnvironment()
         process.executableURL = node
         process.arguments = [script.path, "--runtime", String(cString: resolved), request == nil ? "--status" : "--setup"]
         process.currentDirectoryURL = runtime

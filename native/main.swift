@@ -11,14 +11,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private let popover = NSPopover()
     private var usageWindow: NSPanel?
     private var detail: NSWindow?
-    private var setupWindow: NSWindow?
     private var directPairingWindow: DirectPairingWindowController?
     private var webView: WKWebView?
     private var bridgeHandler: BridgeHandler?
     private var bridgeHost: MacBridgeHost?
     private var webDashboardSection = "limits"
     private var dashboardCollectionObserver: AnyCancellable?
-    private let navigation = LocalNavigation()
     private var store: ObservatoryStore!
     private var terminationSignal: DispatchSourceSignal?
     private var panelSize = NSSize.zero
@@ -26,24 +24,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var previewRuntime: URL?
     private var openedTimingDashboard = false
     private weak var lifecycleContent: NSView?
-    private let nativeSelection = NativeDashboardSelection()
     private lazy var updateController = MacUpdateController { [weak self] in
         guard let self, let store = self.store else { return false }
-        return self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
+        return selectedRuntime == nil && self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
             !store.pairingMaintenance && !store.collectionPausedForPairing
     }
-    // Keeps the SwiftUI panel and dashboard for one build and is removed with them.
-    private var usesNativeViewer: Bool { CommandLine.arguments.contains("--native-viewer") }
-    private var usesWebDashboard: Bool { !usesNativeViewer && !CommandLine.arguments.contains("--legacy-dashboard") }
-    private var usesNativeDashboard: Bool { usesNativeViewer && !CommandLine.arguments.contains("--legacy-dashboard") }
-    private var usesWebPanel: Bool { !usesNativeViewer }
     private var reportsPanelTiming: Bool { CommandLine.arguments.contains("--panel-timing") }
     private var webPanel: WebPanelController?
     private var collectionObserver: AnyCancellable?
     private var dismissMonitors: [Any] = []
-    private var expectedDashboardPresent: Bool {
-        usesNativeDashboard ? detail?.contentView is NSHostingView<NativeDashboard> && webView == nil : webView != nil
-    }
+    private var expectedDashboardPresent: Bool { webView != nil }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if MacUpdateGate.isBlocked(bundle: Bundle.main.bundleURL) {
@@ -67,7 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let runtime: URL
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
         let popupTest = CommandLine.arguments.contains("--test-popup") || CommandLine.arguments.contains("--preview-pace")
-        if CommandLine.arguments.contains("--preview") || lifecycleTest || popupTest {
+        if let selectedRuntime {
+            runtime = selectedRuntime
+        } else if CommandLine.arguments.contains("--preview") || CommandLine.arguments.contains("--preview-setup") || lifecycleTest || popupTest {
             // An isolated, empty UI preview never changes installed settings or login state.
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-ui-preview-\(UUID().uuidString)")
             do {
@@ -82,28 +74,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 .appendingPathComponent("Library/Application Support/Workspace Observatory")
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
-        if previewRuntime == nil { WebViewerPreferences.migrateIfNeeded(runtime: store.runtime) }
-        if usesWebDashboard {
-            let handler = BridgeHandler()
-            let hooks = MacBridgeHooks(openDashboard: { [weak self] in self?.openDashboard($0) },
-                checkForUpdates: { [weak self] in
-                    guard let self, self.previewRuntime == nil else { return false }
-                    do { try self.updateController.check(); return true } catch { return false }
-                }, directPairingOpen: { [weak self] in self?.directPairingWindow != nil },
-                applyViewerPreferences: { [weak self] skin, theme in
-                    self?.webPanel?.applyPreferences(skin: skin, theme: theme)
-                    if let web = self?.webView { applyViewerPreferences(web, skin: skin, theme: theme) }
-                })
-            let host = MacBridgeHost(store: store, resources: Bundle.main.resourceURL,
-                                     preview: previewRuntime != nil, handler: handler, hooks: hooks)
-            handler.host = host
-            bridgeHandler = handler; bridgeHost = host
-            dashboardCollectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
-                .receive(on: DispatchQueue.main).sink { [weak self] _ in
-                    guard let self, self.usesWebDashboard, let webView = self.webView else { return }
-                    webView.evaluateJavaScript("window.dispatchEvent(new Event('observatory:snapshot-changed'))")
-                }
+        if let identity = selectedRuntimeIdentity, let selectedRuntime {
+            store.runtimeIdentityValid = {
+                FileIdentity.matches(descriptor: runtimeDirectoryDescriptor, path: selectedRuntime.path, expected: identity)
+            }
         }
+        if previewRuntime == nil && selectedRuntime == nil { WebViewerPreferences.migrateIfNeeded(runtime: store.runtime) }
+        let handler = BridgeHandler()
+        let hooks = MacBridgeHooks(openDashboard: { [weak self] in self?.openDashboard($0) },
+            checkForUpdates: { [weak self] in
+                guard let self, self.previewRuntime == nil, selectedRuntime == nil else { return false }
+                do { try self.updateController.check(); return true } catch { return false }
+            }, directPairingOpen: { [weak self] in self?.directPairingWindow != nil },
+            applyViewerPreferences: { [weak self] skin, theme in
+                self?.webPanel?.applyPreferences(skin: skin, theme: theme)
+                if let web = self?.webView { applyViewerPreferences(web, skin: skin, theme: theme) }
+            })
+        let host = MacBridgeHost(store: store, resources: Bundle.main.resourceURL,
+                                 preview: previewRuntime != nil, handler: handler, hooks: hooks, isolatedRuntime: selectedRuntime != nil)
+        handler.host = host
+        bridgeHandler = handler; bridgeHost = host
+        dashboardCollectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
+            .receive(on: DispatchQueue.main).sink { [weak self] _ in
+                guard let self, let webView = self.webView else { return }
+                webView.evaluateJavaScript("window.dispatchEvent(new Event('observatory:snapshot-changed'))")
+            }
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
             let image = telescopeImage(template: true)
@@ -128,38 +124,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         terminationSignal = termination
         // Lifecycle tests use empty private settings and never start collection.
         if lifecycleTest {
-            if CommandLine.arguments.contains("--capture-dashboard") { captureDashboardScreenshots(); return }
             checkDashboardLifecycle(remaining: 3); return
         }
         if popupTest { DispatchQueue.main.async { [self] in checkUsagePopup() }; return }
         store.start()
-        if store.setupRequired { DispatchQueue.main.async { [self] in showSetup() }; return }
+        if store.setupRequired { DispatchQueue.main.async { [self] in openDashboard("setup") }; return }
         if CommandLine.arguments.contains("--show") {
             DispatchQueue.main.async { [self] in togglePanel() }
         } else if !CommandLine.arguments.contains("--background") {
             DispatchQueue.main.async { [self] in openDashboard("allowances") }
         }
-    }
-
-    private func showSetup() {
-        if setupWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
-                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "Set up Observatory"
-            window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SetupWizard(runtime: store.runtime, pairingAllowed: previewRuntime == nil) { [weak self] pair in
-                guard let self else { return }
-                self.setupWindow?.close()
-                self.setupWindow = nil
-                self.openDashboard("allowances")
-                if pair && self.previewRuntime == nil { self.setupPairing() }
-                self.store.refresh()
-            })
-            window.center()
-            setupWindow = window
-        }
-        setupWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func makeMenu() {
@@ -206,15 +180,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         viewMenu.addItem(withTitle: "Show Usage Popup", action: #selector(showUsage), keyEquivalent: "u").target = self
         viewMenu.addItem(withTitle: "Refresh Sources", action: #selector(refresh), keyEquivalent: "r").target = self
         viewMenu.addItem(.separator())
-        if usesWebDashboard || usesNativeDashboard {
-            let sections = usesWebDashboard ? WebDashboardPage.sections : NativeDashboardSelection.sections.map { ($0.0, $0.1) }
-            for (index, section) in sections.enumerated() {
-                let item = viewMenu.addItem(withTitle: section.1, action: #selector(navigateSection(_:)), keyEquivalent: String(index + 1))
-                item.target = self
-                item.representedObject = section.0
-            }
-            viewMenu.addItem(.separator())
+        let sections = WebDashboardPage.sections
+        for (index, section) in sections.enumerated() {
+            let item = viewMenu.addItem(withTitle: section.1, action: #selector(navigateSection(_:)), keyEquivalent: String(index + 1))
+            item.target = self
+            item.representedObject = section.0
         }
+        viewMenu.addItem(.separator())
+
         viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn), keyEquivalent: "=").target = self
         viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-").target = self
         viewMenu.addItem(withTitle: "Actual Size", action: #selector(actualSize), keyEquivalent: "0").target = self
@@ -273,7 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func webPanelContent(size: NSSize) -> NSViewController? {
-        guard usesWebPanel, let resources = Bundle.main.resourceURL else { return nil }
+        guard let resources = Bundle.main.resourceURL else { return nil }
         if webPanel == nil {
             webPanel = WebPanelController(runtime: store.runtime, resources: resources) { [weak self] action in
                 guard let self else { return }
@@ -303,15 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             print("panel-open kind=\(kind) ms=\(Int(((CFAbsoluteTimeGetCurrent() - start) * 1000).rounded()))")
             fflush(stdout)
         }
-        guard usesWebPanel, let webPanel else {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.popover.isShown || self.usageWindow?.isVisible == true else { return }
-                (self.popover.contentViewController?.view ?? self.usageWindow?.contentView)?.displayIfNeeded()
-                CATransaction.flush()
-                report("native")
-            }
-            return
-        }
+        guard let webPanel else { return }
         webPanel.whenDrawn { [weak self] height in
             report(height == nil ? "web-not-ready" : "web")
             guard let self, let height else { return }
@@ -331,7 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     fflush(stdout)
                     if let runtime = self.previewRuntime {
                         webPanel.savePreview(to: runtime.appendingPathComponent("panel-timing.png"))
-                        if self.usesWebPanel && self.usesWebDashboard && !self.openedTimingDashboard {
+                        if !self.openedTimingDashboard {
                             self.openedTimingDashboard = true
                             self.openDefault()
                         }
@@ -342,17 +307,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func usageContent(size: NSSize) -> NSViewController {
-        if let web = webPanelContent(size: size) { return web }
-        let panel = ScrollView(.vertical) { ObservatoryPanel(store: store,
-                open: { [weak self] tab in self?.openDashboard(tab) },
-                settings: { [weak self] in self?.openPanelSettings() }, panelWidth: size.width) }
-        .frame(width: size.width, height: size.height, alignment: .top)
-        .background(ObservatoryBackdrop())
-        .preferredColorScheme(.dark)
-        let controller = NSHostingController(rootView: panel)
-        controller.preferredContentSize = size
-        controller.view.setFrameSize(size)
-        return controller
+        guard let web = webPanelContent(size: size) else {
+            preconditionFailure("Bundled web panel resources unavailable")
+        }
+        return web
     }
 
     private func openPanelSettings() { openDashboard("settings") }
@@ -361,8 +319,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
         window.title = "Observatory usage"
-        // The native panel is always dark. The web panel follows the system.
-        if !usesWebPanel { window.appearance = NSAppearance(named: .darkAqua) }
         window.isFloatingPanel = true
         window.hidesOnDeactivate = true
         window.isReleasedWhenClosed = false
@@ -391,7 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let start = CFAbsoluteTimeGetCurrent()
         presentUsage()
         installDismissMonitors()
-        if !alreadyOpen, usesWebPanel || reportsPanelTiming { panelOpened(since: start) }
+        if !alreadyOpen { panelOpened(since: start) }
     }
 
     private func presentUsage() {
@@ -402,14 +358,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let usageWindow { usageWindow.makeKeyAndOrderFront(nil); return }
         guard let button = statusItem.button else { return }
         let visible = button.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 800, height: 600)
-        let width = min(usesWebPanel ? WebPanelController.width : 370, max(240, visible.width - 32))
-        let size: NSSize
-        if usesWebPanel {
-            size = NSSize(width: width, height: min(webPanel?.contentHeight ?? 520, max(240, visible.height - 48)))
-        } else {
-            let measurement = NSHostingView(rootView: ObservatoryPanel(store: store, open: { _ in }, settings: {}, panelWidth: width))
-            size = NSSize(width: width, height: min(ceil(measurement.fittingSize.height), max(240, visible.height - 48)))
-        }
+        let width = min(WebPanelController.width, max(240, visible.width - 32))
+        let size = NSSize(width: width, height: min(webPanel?.contentHeight ?? 520, max(240, visible.height - 48)))
         // A hidden or overflowed menu-bar item cannot anchor an NSPopover.
         // Keep the same usage view available to the explicit menu/keyboard action.
         if button.visibleRect.isEmpty || button.window?.isVisible != true {
@@ -424,7 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         unreliableUsageAnchor = nil
-        // Every opening starts at all sources and all retained history.
+        // Every opening starts at all devices and Day.
         panelSize = size
         popover.contentViewController = usageContent(size: size)
         popover.contentSize = size
@@ -458,7 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(.separator())
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
-        login.isEnabled = previewRuntime == nil
+        login.isEnabled = previewRuntime == nil && selectedRuntime == nil
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(withTitle: "Login settings…", action: #selector(loginSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
@@ -469,7 +419,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func toggleLogin() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         do {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
             else { try SMAppService.mainApp.register() }
@@ -481,72 +431,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func loginSettings() {
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         SMAppService.openSystemSettingsLoginItems()
     }
     @objc private func sourceSettings() {
         guard !store.shuttingDown else { return }
         closeUsage()
-        if usesWebDashboard || usesNativeDashboard {
-            openDashboard("settings")
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Local source settings"
-        do { _ = try CollectorConfiguration.prepare(runtime: store.runtime) }
-        catch {
-            alert.informativeText = "The local configuration could not be read. Existing settings have been preserved."
-            alert.runModal()
-            return
-        }
-        guard !store.refreshing else {
-            alert.informativeText = "A collection is running. Try again when it finishes so source changes apply to the next complete snapshot."
-            alert.runModal()
-            return
-        }
-        do {
-            let config = try CollectorConfiguration.read(runtime: store.runtime)
-            let sources = [("activity", "ActivityWatch screen time (must be running)"),
-                           ("codex", "Saved Codex usage and settings"),
-                           ("quota", "Codex account limits and token history (online)"),
-                           ("wispr", "Wispr Flow statistics")]
-            let buttons = sources.map { key, title in
-                let button = NSButton(checkboxWithTitle: title, target: nil, action: nil)
-                button.state = config[key] == true ? .on : .off
-                return button
-            }
-            let stack = NSStackView(views: buttons)
-            stack.orientation = .vertical
-            stack.alignment = .leading
-            stack.spacing = 10
-            stack.frame = NSRect(x: 0, y: 0, width: 390, height: 145)
-            alert.accessoryView = stack
-            alert.informativeText = "Read usage metadata without prompts, window titles, transcripts or audio. Optional account monitoring uses the installed Codex sign-in to read online limits and daily tokens. Turning it off clears its retained readings, not your Codex login."
-            alert.addButton(withTitle: "Save")
-            alert.addButton(withTitle: "Cancel")
-            if alert.runModal() == .alertFirstButtonReturn {
-                guard !store.shuttingDown else { return }
-                guard !store.refreshing else {
-                    let busy = NSAlert()
-                    busy.messageText = "Collection started while settings were open"
-                    busy.informativeText = "Try again after it finishes. Source settings have not changed."
-                    busy.runModal()
-                    return
-                }
-                let updated = Dictionary(uniqueKeysWithValues: zip(sources, buttons).map { ($0.0.0, $0.1.state == .on) })
-                try CollectorConfiguration.save(updated, runtime: store.runtime)
-                store.refresh()
-            }
-        } catch {
-            let failure = NSAlert()
-            failure.messageText = "Source settings unavailable"
-            failure.informativeText = "The local settings file could not be read or saved. Existing settings were not intentionally replaced."
-            failure.runModal()
-        }
+        openDashboard("settings")
     }
     @objc private func refresh() { store.refreshLimitsFirst() }
     @objc private func setupDirectPairing() {
-        guard !store.shuttingDown, previewRuntime == nil else { return }
+        guard !store.shuttingDown, previewRuntime == nil, selectedRuntime == nil else { return }
         if let directPairingWindow { directPairingWindow.showWindow(nil); directPairingWindow.window?.makeKeyAndOrderFront(nil); return }
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else { return }
         closeUsage()
@@ -571,7 +466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func setupPairing() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         closeUsage()
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else {
             let busy = NSAlert()
@@ -618,7 +513,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func disconnectPairing() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         closeUsage()
         let alert = NSAlert()
         alert.messageText = "Disconnect paired device?"
@@ -664,7 +559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func preparePairingRepair() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         closeUsage()
         let alert = NSAlert()
         alert.messageText = "Prepare pairing repair on this Mac?"
@@ -705,43 +600,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func openDefault() { openDashboard("allowances") }
 
     @objc private func navigateSection(_ sender: NSMenuItem) {
-        guard !store.shuttingDown, usesWebDashboard || usesNativeDashboard,
+        guard !store.shuttingDown,
               let section = sender.representedObject as? String else { return }
-        let sections = usesWebDashboard ? WebDashboardPage.sections : NativeDashboardSelection.sections.map { ($0.0, $0.1) }
+        let sections = WebDashboardPage.sections
         guard sections.contains(where: { $0.0 == section }) else { return }
         openDashboard(section)
     }
 
     @objc private func zoomIn() {
-        if usesNativeDashboard { nativeSelection.textScale = DashboardZoom.step(from: nativeSelection.textScale, increasing: true); return }
         guard let webView else { return }
         webView.pageZoom = CGFloat(DashboardZoom.step(from: Double(webView.pageZoom), increasing: true))
     }
     @objc private func zoomOut() {
-        if usesNativeDashboard { nativeSelection.textScale = DashboardZoom.step(from: nativeSelection.textScale, increasing: false); return }
         guard let webView else { return }
         webView.pageZoom = CGFloat(DashboardZoom.step(from: Double(webView.pageZoom), increasing: false))
     }
     @objc private func actualSize() {
-        if usesNativeDashboard { nativeSelection.textScale = 1 } else { webView?.pageZoom = 1 }
+        webView?.pageZoom = 1
     }
     @objc private func doubleSize() {
-        if usesNativeDashboard { nativeSelection.textScale = 2 } else { webView?.pageZoom = 2 }
+        webView?.pageZoom = 2
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if store.shuttingDown { return false }
-        let zoom: Double? = usesNativeDashboard ? (detail?.isVisible == true ? nativeSelection.textScale : nil) : webView.map { Double($0.pageZoom) }
+        let zoom: Double? = webView.map { Double($0.pageZoom) }
         switch item.action {
         case #selector(navigateSection(_:)):
-            guard usesWebDashboard || usesNativeDashboard, let section = item.representedObject as? String else { return false }
-            let sections = usesWebDashboard ? WebDashboardPage.sections : NativeDashboardSelection.sections.map { ($0.0, $0.1) }
+            guard let section = item.representedObject as? String else { return false }
+            let sections = WebDashboardPage.sections
             guard sections.contains(where: { $0.0 == section }) else { return false }
-            let current = usesWebDashboard ? webDashboardSection : nativeSelection.section
+            let current = webDashboardSection
             item.state = detail?.isVisible == true && current == section ? .on : .off
             return true
-        case #selector(setupDirectPairing), #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
-             #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil
+        case #selector(setupDirectPairing): return previewRuntime == nil && selectedRuntime == nil
+        case #selector(checkForUpdates), #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
+             #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil && selectedRuntime == nil
         case #selector(zoomIn): return zoom.map { $0 < 2 } ?? false
         case #selector(zoomOut): return zoom.map { $0 > 0.75 } ?? false
         case #selector(actualSize):
@@ -755,51 +649,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func openDashboard(_ tab: String) {
-        let safeTab = NativeDashboardSelection.sections.contains(where: { $0.0 == tab }) ? tab : "allowances"
         closeUsage()
-        if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
-        if usesNativeDashboard {
-            nativeSelection.section = safeTab
-            nativeSelection.navigationRequest += 1
-            if detail == nil {
-                let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
-                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: min(1280, visible.width - 48), height: min(800, visible.height - 80)),
-                                      styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-                window.title = previewRuntime == nil ? "Observatory" : "Observatory native preview"
-                window.minSize = NSSize(width: 800, height: 560)
-                window.contentView = NSHostingView(rootView: NativeDashboard(store: store, selection: nativeSelection,
-                    settingsActions: NativeSettingsActions(pair: { [weak self] in self?.setupPairing() },
-                        disconnect: { [weak self] in self?.disconnectPairing() }, repair: { [weak self] in self?.preparePairingRepair() },
-                        toggleLogin: { [weak self] in self?.toggleLogin() }, loginSettings: { [weak self] in self?.loginSettings() },
-                        preview: previewRuntime != nil, directPair: { [weak self] in self?.setupDirectPairing() },
-                        checkUpdates: { [weak self] in self?.checkForUpdates() })))
-                window.delegate = self
-                window.isReleasedWhenClosed = false
-                window.center()
-                if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryNativeDetail") }
-                detail = window
-            }
-            // An unconditional request is answered later by the window manager
-            // and can bring back a dashboard that was hidden in the meantime.
-            if detail?.isMiniaturized == true { detail?.deminiaturize(nil) }
-            detail?.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
+        let needsSetup = (try? FirstRunSetup.required(runtime: store.runtime)) != false
         if detail == nil {
             guard let resources = Bundle.main.resourceURL else { return }
-            let web: WKWebView?
-            if usesWebDashboard {
-                web = WebDashboardPage.isBundled(resources: resources) ? makeWebDashboard(runtime: store.runtime, resources: resources, bridge: bridgeHandler) : nil
-            } else {
-                web = makeDashboard(runtime: store.runtime, resources: resources)
-                web?.navigationDelegate = navigation
-                web?.uiDelegate = navigation
-            }
+            let web = WebDashboardPage.isBundled(resources: resources) ? makeWebDashboard(runtime: store.runtime, resources: resources, bridge: bridgeHandler) : nil
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1150, height: 770),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                   backing: .buffered, defer: false)
-            window.title = usesWebDashboard && previewRuntime != nil ? "Observatory web preview" : "Observatory"
+            window.title = previewRuntime != nil ? "Observatory web preview" : "Observatory"
             window.titlebarAppearsTransparent = true
             window.minSize = NSSize(width: 800, height: 550)
             if let web {
@@ -819,27 +677,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
             window.delegate = self
             window.isReleasedWhenClosed = false
-            if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryDetail") }
+            if previewRuntime == nil && selectedRuntime == nil { window.setFrameAutosaveName("ObservatoryDetail") }
             window.center()
             detail = window
             webView = web
         }
-        if usesWebDashboard {
-            webDashboardSection = WebDashboardPage.section(for: tab)
-            webView?.load(URLRequest(url: WebDashboardPage.url(section: webDashboardSection)))
-            if reportsPanelTiming, let web = webView {
-                describeViewer(web) { [weak self, weak web] facts in
-                    guard let self, let webView = self.webView, webView === web else { return }
-                    print("dashboard-facts \(facts)")
-                    fflush(stdout)
-                    if let runtime = self.previewRuntime {
-                        saveViewerPreview(webView, to: runtime.appendingPathComponent("dashboard-timing.png"))
-                    }
+        webDashboardSection = needsSetup ? "setup" : WebDashboardPage.section(for: tab == "setup" ? "limits" : tab)
+        webView?.load(URLRequest(url: WebDashboardPage.url(section: webDashboardSection)))
+        if reportsPanelTiming, let web = webView {
+            describeViewer(web) { [weak self, weak web] facts in
+                guard let self, let webView = self.webView, webView === web else { return }
+                print("dashboard-facts \(facts)")
+                fflush(stdout)
+                if let runtime = self.previewRuntime {
+                    saveViewerPreview(webView, to: runtime.appendingPathComponent("dashboard-timing.png"))
                 }
             }
-        } else {
-            webView?.load(URLRequest(url: URL(string: "observatory://app/index.html#\(safeTab)")!))
         }
+
         if detail?.isMiniaturized == true { detail?.deminiaturize(nil) }
         detail?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -862,49 +717,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         detail = nil
     }
 
-    private func captureDashboardScreenshots() {
-        guard previewRuntime != nil else { NSApp.terminate(nil); return }
-        let output = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-synthetic-screenshots-\(UUID().uuidString)")
-        let dates = ["2026-09-01", "2026-09-06", "2026-09-12"]
-        let days: [JSONObject] = dates.enumerated().map { index, date in ["date": date, "seconds": (index + 1) * 600] }
-        let sampleStart = Date().addingTimeInterval(-3 * 3600)
-        let formatter = ISO8601DateFormatter()
-        let reset = formatter.string(from: Date().addingTimeInterval(2 * 3600))
-        let history: [JSONObject] = (0...36).map { index in
-            ["checkedAt": formatter.string(from: sampleStart.addingTimeInterval(Double(index) * 300)),
-             "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 95 - Double(index) * 0.8, "resetsAt": reset]]]
-        }
-        store.snapshot = Snapshot(object: ["schema": 2, "collectedAt": "2026-09-12T12:00:00Z",
-            "activityHistory": [["host": "Mac", "status": "ok", "latestReadStatus": "ok", "days": days]],
-            "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-12", "totalTokens": 1200]]]],
-            "dictation": [["host": "Mac", "source": "Wispr Flow", "status": "ok", "days": [["date": "2026-09-12", "transcriptions": 4, "audioRecords": 4, "audioSeconds": 120, "wordRecords": 4, "words": 100]]]],
-            "agentSource": ["status": "not-connected"], "agents": [], "settings": [],
-            "quota": ["status": "ok", "checkedAt": formatter.string(from: Date()),
-                "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 66.2, "resetsAt": reset]],
-                "history": history, "dailyUsageBuckets": [["startDate": "2026-09-12", "tokens": 3_300_000_000]]]])
-        Task { @MainActor in
-            do {
-                try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
-                for appearance in ["dark", "light"] {
-                  nativeSelection.previewAppearance = appearance
-                  for section in NativeDashboardSelection.sections {
-                    openDashboard(section.0)
-                    detail?.setContentSize(NSSize(width: 1280, height: 860))
-                    try await Task.sleep(nanoseconds: 400_000_000)
-                    guard let view = detail?.contentView else { throw CocoaError(.fileWriteUnknown) }
-                    view.layoutSubtreeIfNeeded()
-                    guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
-                    view.cacheDisplay(in: view.bounds, to: bitmap)
-                    guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
-                    try png.write(to: output.appendingPathComponent(appearance + "-" + section.0 + ".png"), options: .withoutOverwriting)
-                  }
-                }
-                print("Synthetic dashboard screenshots: \(output.path)")
-            } catch { print("Synthetic dashboard screenshots failed"); exit(1) }
-            NSApp.terminate(nil)
-        }
-    }
-
     private func checkDashboardLifecycle(remaining: Int) {
         let menus = NSApp.mainMenu?.items.compactMap(\.submenu) ?? []
         precondition(menus.map(\.title) == ["Observatory", "File", "Edit", "View", "Window"])
@@ -925,76 +737,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             print("Native lifecycle failed: dashboard did not open")
             exit(1)
         }
-        if usesNativeDashboard {
-            let activityWindow = detail
-            if remaining == 3 { checkTypographyControls() }
-            actualSize()
-            let increase = NSMenuItem(title: "Zoom In", action: #selector(zoomIn), keyEquivalent: "=")
-            let decrease = NSMenuItem(title: "Zoom Out", action: #selector(zoomOut), keyEquivalent: "-")
-            let double = NSMenuItem(title: "200%", action: #selector(doubleSize), keyEquivalent: "")
-            for level in DashboardZoom.levels.dropFirst(2) {
-                precondition(validateMenuItem(increase))
-                zoomIn()
-                precondition(nativeSelection.textScale == level && detail === activityWindow)
-            }
-            precondition(!validateMenuItem(increase) && validateMenuItem(double) && double.state == .on)
-            zoomIn()
-            precondition(nativeSelection.textScale == 2)
-            for level in DashboardZoom.levels.dropLast().reversed() {
-                precondition(validateMenuItem(decrease))
-                zoomOut()
-                precondition(nativeSelection.textScale == level)
-            }
-            precondition(!validateMenuItem(decrease))
-            zoomOut()
-            precondition(nativeSelection.textScale == 0.75)
-            doubleSize()
-            precondition(nativeSelection.textScale == 2)
-            actualSize()
-            precondition(nativeSelection.textScale == 1)
-            let sectionItems = menus[3].items.filter { $0.action == #selector(navigateSection(_:)) }
-            precondition(sectionItems.map(\.title) == NativeDashboardSelection.sections.map(\.1))
-            precondition(sectionItems.map(\.keyEquivalent) == ["1", "2", "3", "4", "5", "6", "7"])
-            for item in sectionItems {
-                precondition(item.keyEquivalentModifierMask == .command && validateMenuItem(item))
-                precondition(NSApp.sendAction(item.action!, to: item.target, from: item))
-                precondition(detail === activityWindow && nativeSelection.section == item.representedObject as? String)
-                precondition(validateMenuItem(item) && item.state == .on)
-                for other in sectionItems where other !== item {
-                    precondition(validateMenuItem(other) && other.state == .off)
-                }
-            }
-            let invalid = NSMenuItem(title: "Invalid", action: #selector(navigateSection(_:)), keyEquivalent: "")
-            invalid.representedObject = "unrecognized"
-            precondition(!validateMenuItem(invalid))
-            navigateSection(invalid)
-            precondition(nativeSelection.section == "settings")
-            sourceSettings()
-            precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
-            openDashboard("tokens")
-            precondition(detail === activityWindow && nativeSelection.section == "tokens" && expectedDashboardPresent)
-            openPanelSettings()
-            precondition(detail === activityWindow && nativeSelection.section == "settings" && expectedDashboardPresent)
-        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
             let deadline = Date().addingTimeInterval(5)
             @MainActor func closeWhenLoaded() {
-                if usesWebDashboard {
-                    if webView?.isLoading == true || webView?.url == nil {
-                        precondition(Date() < deadline, "Dashboard loading timed out")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { closeWhenLoaded() }
-                        return
-                    }
-                    precondition(webView?.url?.path == "/dashboard.html", "Dashboard page did not load")
-                    precondition(webView?.url?.fragment == "activity", "Dashboard activity section did not load")
-                    let invalid = NSMenuItem(title: "Invalid", action: #selector(navigateSection(_:)), keyEquivalent: "")
-                    invalid.representedObject = "unrecognized"
-                    precondition(!validateMenuItem(invalid), "Invalid dashboard section accepted")
-                    let section = webDashboardSection
-                    let url = webView?.url
-                    navigateSection(invalid)
-                    precondition(webDashboardSection == section && webView?.url == url, "Invalid item changed the web section")
+                if webView?.isLoading == true || webView?.url == nil {
+                    precondition(Date() < deadline, "Dashboard loading timed out")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { closeWhenLoaded() }
+                    return
                 }
+                precondition(webView?.url?.path == "/dashboard.html", "Dashboard page did not load")
+                precondition(webView?.url?.fragment == "activity", "Dashboard activity section did not load")
+                let invalid = NSMenuItem(title: "Invalid", action: #selector(navigateSection(_:)), keyEquivalent: "")
+                invalid.representedObject = "unrecognized"
+                precondition(!validateMenuItem(invalid), "Invalid dashboard section accepted")
+                let section = webDashboardSection
+                let url = webView?.url
+                navigateSection(invalid)
+                precondition(webDashboardSection == section && webView?.url == url, "Invalid item changed the web section")
+
                 detail?.performClose(nil)
                 // Allow AppKit's close notification and autorelease pool to drain.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
@@ -1055,14 +815,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             precondition(usageWindow?.isVisible == true && !popover.isShown)
         }
         Task { @MainActor [self] in
-            if usesWebPanel {
-                guard let webPanel else { preconditionFailure("Web usage panel was not created") }
-                let height: CGFloat? = await withCheckedContinuation { continuation in
-                    webPanel.whenDrawn { continuation.resume(returning: $0) }
-                }
-                precondition(height != nil, "Web usage panel did not draw")
+            guard let webPanel else { preconditionFailure("Web usage panel was not created") }
+            let height: CGFloat? = await withCheckedContinuation { continuation in
+                webPanel.whenDrawn { continuation.resume(returning: $0) }
             }
-            // Materialize SwiftUI's AX tree through a client request while the
+            precondition(height != nil, "Web usage panel did not draw")
+
+            // Request the accessibility tree through a client while the
             // main thread remains available to service AppKit.
             let accessibilityResult = await Task.detached {
                 let app = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
@@ -1084,59 +843,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 print("Native usage popup failed: shown=\(popover.isShown) visible=\(window?.isVisible ?? false) active=\(NSApp.isActive) anchorVisible=\(button?.window?.isVisible ?? false) anchorHidden=\(button?.isHiddenOrHasHiddenAncestor ?? true) screenCount=\(NSScreen.screens.count) window=\(String(describing: window?.frame)) view=\(String(describing: view?.bounds)) screens=\(NSScreen.screens.map(\.visibleFrame))")
                 exit(1)
             }
-            var visited = Set<ObjectIdentifier>()
-            @MainActor func attribute(_ object: NSObject, _ selector: Selector) -> Any? {
-                object.responds(to: selector) ? object.perform(selector)?.takeUnretainedValue() : nil
-            }
-            @MainActor func identifier(_ object: NSObject) -> String? { attribute(object, #selector(NSAccessibilityProtocol.accessibilityIdentifier)) as? String }
-            @MainActor func elements(in node: Any, depth: Int = 0) -> [NSObject] {
-                guard depth < 30, let object = node as? NSObject,
-                      visited.insert(ObjectIdentifier(object)).inserted else { return [] }
-                let children = (attribute(object, #selector(NSAccessibilityProtocol.accessibilityChildren)) as? [Any] ?? []) + ((object as? NSView)?.subviews ?? [])
-                return [object] + children.flatMap { elements(in: $0, depth: depth + 1) }
-            }
-            let tree = elements(in: view)
             guard detail == nil else {
                 print("Native usage popup failed: opening the menu-bar popup opened the dashboard")
                 exit(1)
             }
-            if usesWebPanel {
-                guard let web = webPanel?.view as? WKWebView else { preconditionFailure("Web usage view missing") }
-                let script = """
-                const groups = [...document.querySelectorAll('fieldset.ob-segments')]
-                const labels = groups.map(group => group.getAttribute('aria-label'))
-                const buttons = groups.map(group => [...group.querySelectorAll('button')])
-                const selected = buttons.map(group => group.filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent))
-                return window.observatoryPanelReady === true && labels.join('|') === 'Device|Period' &&
-                    buttons[0].some(button => button.textContent === 'All') &&
-                    !buttons[0].some(button => button.textContent === 'Ubuntu') &&
-                    buttons[1].map(button => button.textContent).join('|') === 'Now|Day|Week|Month|All time' &&
-                    selected[0].join('|') === 'All' && selected[1].join('|') === 'Day'
-                """
-                let valid = try? await web.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
-                precondition(NSApp.activationPolicy() == .regular && valid as? Bool == true,
-                             "Web usage filter inventory or default selection differs")
-                print("Web usage popup passed: production panel visible on screen, accessible filters default to all devices and Day, regular app activation")
-            } else {
-                let filters = tree.filter { identifier($0)?.hasPrefix("observatory-filter-") == true }
-                let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Period-day", "Period-week", "Period-all"]
-                precondition(!filters.contains { identifier($0) == "observatory-filter-Source host-Ubuntu" })
-                guard NSApp.activationPolicy() == .regular, expected.allSatisfy({ suffix in
-                    let matches = filters.filter { identifier($0) == "observatory-filter-" + suffix }
-                    let selected = suffix == "Source host-All" || suffix == "Period-all"
-                    return matches.count == 1 && attribute(matches[0], #selector(NSAccessibilityProtocol.accessibilityValue)) as? String == (selected ? "Selected" : "Not selected")
-                }) else {
-                    print("Native usage popup failed: accessible filter inventory or default selection differs (found \(filters.count) controls)")
-                    let labels = tree.prefix(30).map { [String(describing: type(of: $0)), identifier($0) ?? "none", attribute($0, #selector(NSAccessibilityProtocol.accessibilityLabel)) as? String ?? "none"] }
-                    print("Synthetic accessibility tree: \(labels)")
-                    exit(1)
-                }
-                print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen; accessible filters default to all sources and all time; regular app activation")
-            }
+            guard let web = webPanel.view as? WKWebView else { preconditionFailure("Web usage view missing") }
+            let script = """
+            const groups = [...document.querySelectorAll('fieldset.ob-segments')]
+            const labels = groups.map(group => group.getAttribute('aria-label'))
+            const buttons = groups.map(group => [...group.querySelectorAll('button')])
+            const selected = buttons.map(group => group.filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent))
+            return window.observatoryPanelReady === true && labels.join('|') === 'Device|Period' &&
+                buttons[0].some(button => button.textContent === 'All') &&
+                !buttons[0].some(button => button.textContent === 'Ubuntu') &&
+                buttons[1].map(button => button.textContent).join('|') === 'Now|Day|Week|Month|All time' &&
+                selected[0].join('|') === 'All' && selected[1].join('|') === 'Day'
+            """
+            let valid = try? await web.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
+            precondition(NSApp.activationPolicy() == .regular && valid as? Bool == true,
+                         "Web usage filter inventory or default selection differs")
+            print("Web usage popup passed: production panel visible on screen, accessible filters default to all devices and Day, regular app activation")
+
             if CommandLine.arguments.contains("--preview-pace") { return }
             openDefault()
-            if usesNativeDashboard { precondition(nativeSelection.section == "allowances") }
-            if usesWebDashboard { precondition(webDashboardSection == "limits") }
+            precondition(webDashboardSection == "limits")
             // AppKit can hide the window before its closing animation updates
             // isShown. Wait for the closed state with a bounded deadline.
             afterUsageClosed { [self] in
@@ -1164,8 +894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     let previousDashboard = detail
                     openPanelSettings()
                     precondition(detail === previousDashboard)
-                    if usesNativeDashboard { precondition(nativeSelection.section == "settings") }
-                    if usesWebDashboard { precondition(webDashboardSection == "settings") }
+                    precondition(webDashboardSection == "settings")
                     afterUsageClosed { [self] in
                         guard usageWindow == nil, !popover.isShown, detail?.isVisible == true, expectedDashboardPresent else {
                             print("Native usage popup failed after close: usageRetained=\(usageWindow != nil) anchoredShown=\(popover.isShown) dashboardPresent=\(detail != nil) dashboardVisible=\(detail?.isVisible ?? false) webRetained=\(webView != nil)")
@@ -1203,7 +932,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func checkForUpdates() {
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         do { try updateController.check() }
         catch {
             let alert = NSAlert()
@@ -1231,7 +960,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if popover.isShown || usageWindow?.isVisible == true { return false }
-        openDashboard(usesWebDashboard ? webDashboardSection : nativeSelection.section)
+        openDashboard(webDashboardSection)
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {
@@ -1250,40 +979,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 // Preview-only builds must never fall through to the installed data runtime.
 let previewArguments = Array(CommandLine.arguments.dropFirst())
 let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
-    ["--test-popup"], ["--test-popup", "--force-offscreen-popup"], ["--test-popup", "--legacy-dashboard"],
-    ["--test-quota-archive"],
-    ["--preview-quota-archive"], ["--preview-quota-archive", "--preview-light"],
-    ["--test-lifecycle", "--capture-dashboard"]]
-let archiveRenderArguments = previewArguments.count == 2 && ["--render-archive-style", "--render-style"].contains(previewArguments[0]) && previewArguments[1].hasPrefix("/")
-guard allowedPreviewArguments.contains(previewArguments) || archiveRenderArguments else {
+    ["--test-popup"], ["--test-popup", "--force-offscreen-popup"], ["--test-quota-archive"]]
+guard allowedPreviewArguments.contains(previewArguments) else {
     print("Preview-only build requires an explicit isolated preview mode")
     exit(64)
 }
 #endif
 
-if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-archive-style" {
-    MainActor.assumeIsolated {
-        NSApplication.shared.setActivationPolicy(.prohibited)
-        ObservatoryTheme.registerFont()
-        do { try renderArchiveChartPreview(output: URL(fileURLWithPath: CommandLine.arguments[2])) }
-        catch { print("Archive chart preview failed"); exit(1) }
+let realDataFolder = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent("Library/Application Support/Workspace Observatory")
+let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments, realDataFolder: realDataFolder, userID: getuid())
+let selectedRuntime: URL?
+var runtimeLockDescriptor: Int32 = -1
+var runtimeDirectoryDescriptor: Int32 = -1
+var selectedRuntimeIdentity: FileIdentity?
+switch runtimeOption {
+case .none: selectedRuntime = nil
+case .refused(let reason):
+    fputs(reason + "\n", stderr)
+    exit(64)
+case .runtime(let folder, let identity):
+    selectedRuntime = folder
+    selectedRuntimeIdentity = identity
+}
+
+let removedArguments: Set<String> = ["--legacy-dashboard", "--native-viewer", "--render-style",
+    "--render-archive-style", "--preview-quota-archive"]
+if CommandLine.arguments.dropFirst().contains(where: { removedArguments.contains($0) }) {
+    fputs("This option was removed.\n", stderr)
+    exit(64)
+}
+
+if let selectedRuntime {
+    do {
+        let locked = try RuntimeOption.createAndLock(selectedRuntime, realDataFolder: realDataFolder)
+        runtimeLockDescriptor = locked.descriptor
+        if selectedRuntimeIdentity == nil { selectedRuntimeIdentity = locked.createdIdentity }
     }
-} else if Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive"] ||
-   Array(CommandLine.arguments.dropFirst()) == ["--preview-quota-archive", "--preview-light"] {
-    MainActor.assumeIsolated {
-        let application = NSApplication.shared
-        let delegate = QuotaArchivePreview()
-        application.delegate = delegate
-        withExtendedLifetime(delegate) { application.run() }
+    catch RuntimeOption.LockError.realDataFolder {
+        fputs("--runtime cannot use the real Observatory data folder or a folder inside it.\n", stderr)
+        exit(64)
+    } catch RuntimeOption.LockError.inUse {
+        fputs("Another Observatory is already using this folder.\n", stderr)
+        exit(64)
+    } catch {
+        fputs("The runtime folder could not be created or locked.\n", stderr)
+        exit(64)
     }
-} else if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-style" {
-    MainActor.assumeIsolated {
-        NSApplication.shared.setActivationPolicy(.prohibited)
-        ObservatoryTheme.registerFont()
-        do { try renderStylePreview(output: URL(fileURLWithPath: CommandLine.arguments[2])) }
-        catch { print("Style preview failed: \(error)"); exit(1) }
+    runtimeDirectoryDescriptor = open(selectedRuntime.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    guard let identity = selectedRuntimeIdentity,
+          FileIdentity.matches(descriptor: runtimeDirectoryDescriptor, path: selectedRuntime.path, expected: identity),
+          FileIdentity.at(realDataFolder.path) != identity else {
+        fputs("The runtime folder changed while it was being checked.\n", stderr)
+        exit(64)
     }
-} else if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trusted-sync-owner" {
+}
+
+if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trusted-sync-owner" {
     Task { @MainActor in
         do {
             try await TrustedSyncProcess.selfTest(node: URL(fileURLWithPath: CommandLine.arguments[2]),
@@ -1332,7 +1084,7 @@ if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--render-arc
         withExtendedLifetime(test) { application.run() }
     }
 } else if CommandLine.arguments.contains("--enable-login") {
-    if CommandLine.arguments.contains("--preview") {
+    if CommandLine.arguments.contains("--preview") || selectedRuntime != nil {
         print("Login registration is disabled for previews")
         exit(1)
     }

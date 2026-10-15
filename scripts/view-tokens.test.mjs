@@ -219,11 +219,14 @@ test('invalid day dates make the whole source unknown', () => {
   }
 });
 
-test('Claude-only hosts populate devices, byDevice and settings', () => {
+test('Claude-only hosts populate devices, sole-host totals and settings', () => {
   const source = { providerTokenSources: snapshot().providerTokenSources };
   const result = view(source, { host: 'All' });
   assert.deepEqual(result.devices, [{ id: 'Mac', label: 'macOS' }]);
-  assert.deepEqual(result.claude.byDevice, [{ host: 'Mac', label: 'macOS', status: 'ok', total: 10, usd: 1 }]);
+  assert.deepEqual(result.claude.byDevice, []);
+  assert.equal(result.claude.status, 'ok');
+  assert.equal(result.claude.totals.total, 10);
+  assert.equal(result.claude.estimate.usd, 1);
   assert.deepEqual(result.settings, [{ host: 'Mac', label: 'macOS', status: 'unknown', rows: [] }]);
   source.providerTokenSources.unshift({ provider: 'claude-code', host: 'Windows', status: 'unavailable' });
   source.providerTokenSources.push({ provider: 'claude-code', host: 'Ubuntu', status: 'ok' });

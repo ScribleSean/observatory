@@ -54,6 +54,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
       const response = await fetch('./local/usage.json', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
       setSnapshot(response.ok ? await response.json() as Snapshot : null);
     } catch { setSnapshot(null); }
+    setNow(Date.now());
     setLoaded(true);
   }, [demo]);
 
