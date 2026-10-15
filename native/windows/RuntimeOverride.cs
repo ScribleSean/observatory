@@ -175,7 +175,7 @@ internal static class RuntimeOverride
         var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
         var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
         var creator = new SecurityIdentifier(WellKnownSidType.CreatorOwnerSid, null);
-        if (!user.Equals(owner) && !(administrators.Equals(owner) && administrators.Equals(tokenOwner)))
+        if (!user.Equals(owner) && !(administrators.Equals(owner) && tokenOwner is not null && administrators.Equals(tokenOwner)))
             throw new IOException();
         const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
             FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
