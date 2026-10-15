@@ -6,6 +6,16 @@ param(
     [switch]$SkipWebBuild
 )
 $ErrorActionPreference = 'Stop'
+# Timestamped phase markers for build timing (issue 106). They only write to the host.
+$packagePhase = @{ Name = $null; Start = $null }
+function Write-PackagePhase([string]$Name) {
+    $now = Get-Date
+    $stamp = $now.ToString('yyyy-MM-ddTHH:mm:ss.fffzzz')
+    if ($packagePhase.Name) { Write-Host ('{0} package phase end {1} after {2:N1} s' -f $stamp, $packagePhase.Name, ($now - $packagePhase.Start).TotalSeconds) }
+    if ($Name) { Write-Host ('{0} package phase start {1}' -f $stamp, $Name) }
+    $packagePhase.Name = $Name
+    $packagePhase.Start = $now
+}
 $updateTrust = $null
 if ($PSBoundParameters.ContainsKey('UpdatePublicKey')) {
     try { $keyBytes = [Convert]::FromBase64String($UpdatePublicKey) } catch { throw 'Invalid update public key.' }
@@ -17,10 +27,14 @@ if ($PSBoundParameters.ContainsKey('UpdatePublicKey')) {
 . (Join-Path $PSScriptRoot 'runtime-assets.ps1')
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $assets = Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json
-if (-not $SkipWebBuild) { & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot }
+if (-not $SkipWebBuild) {
+    Write-PackagePhase 'development build'
+    & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot
+}
 if (-not (Test-Path (Join-Path $sourceRoot '.native-build\web\dashboard.html'))) { throw 'Build the shared viewer first.' }
 if (Test-Path (Join-Path $sourceRoot '.native-build\web\local')) { throw 'Private snapshots must never enter a package.' }
 
+Write-PackagePhase 'runtime archives'
 $nodeArchive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
 $pythonArchive = Get-ObservatoryArchive -Name python -CacheRoot $CacheRoot
 $pythonFullArchive = Get-ObservatoryArchive -Name pythonFull -CacheRoot $CacheRoot
@@ -42,11 +56,13 @@ try {
         [IO.File]::WriteAllText($trustFile, $updateTrust, [Text.UTF8Encoding]::new($false))
         $trustArguments = @("-p:ObservatoryUpdateTrustFile=$trustFile")
     }
+    Write-PackagePhase 'publish'
     & $Dotnet publish native/windows/WorkspaceObservatory.csproj @trustArguments -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true -o $app
     if ($LASTEXITCODE -ne 0) { throw 'Self-contained Windows publish failed.' }
     $expectedTrust = if ($null -ne $updateTrust) { $UpdatePublicKey } else { 'none' }
     $trustCheck = Start-Process -FilePath (Join-Path $app 'WorkspaceObservatory.exe') -ArgumentList @('--test-update-trust', $expectedTrust) -Wait -PassThru -WindowStyle Hidden
     if ($trustCheck.ExitCode -ne 0) { throw 'Published application update trust verification failed.' }
+    Write-PackagePhase 'updater and Node runtime'
     $updaterStage = Join-Path $candidate 'updater-runtime'
     & (Join-Path $PSScriptRoot 'prepare-updater-runtime.ps1') -Archive $updaterArchive -Destination $updaterStage
     foreach ($name in @('WinSparkle.dll', 'COPYING', 'COPYING.expat')) {
@@ -64,11 +80,13 @@ try {
         [IO.Compression.ZipFileExtensions]::ExtractToFile($nodeZip.GetEntry("$nodeFolder/node.exe"), (Join-Path $runtime 'node.exe'))
         [IO.Compression.ZipFileExtensions]::ExtractToFile($nodeZip.GetEntry("$nodeFolder/LICENSE"), (Join-Path $notices 'Node-LICENSE.txt'))
     } finally { $nodeZip.Dispose() }
+    Write-PackagePhase 'Python preparation'
     $python = Join-Path $runtime 'python'
     $pythonBuilder = @('-B', (Join-Path $PSScriptRoot 'prepare-python.py'), '--cache', $CacheRoot, '--output', $python, '--assets', (Join-Path $PSScriptRoot 'runtime-assets.json'))
     if ([IO.Path]::GetFileName($BuildPython) -ieq 'py.exe') { $pythonBuilder = @('-3') + $pythonBuilder }
     & $BuildPython @pythonBuilder
     if ($LASTEXITCODE -ne 0) { throw 'Verified Python runtime preparation failed.' }
+    Write-PackagePhase 'notices and private data checks'
     Copy-Item -LiteralPath (Join-Path $python 'LICENSE.txt') -Destination (Join-Path $notices 'Python-LICENSE.txt')
     Copy-Item -LiteralPath (Join-Path $python 'licenses') -Destination (Join-Path $notices 'Python-dependencies') -Recurse
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'LICENSE') -Destination $app
@@ -100,6 +118,7 @@ try {
     if (Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object { $_.Name -in @('usage.json', 'collector.json', 'collector.config.json', 'local.config.json', '.env') }) {
         throw 'Private runtime configuration or snapshots detected.'
     }
+    Write-PackagePhase 'native tests'
     & (Join-Path $runtime 'node.exe') (Join-Path $PSScriptRoot 'check-update-verifier.mjs') (Join-Path $app 'WorkspaceObservatory.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Packaged native update verifier failed.' }
     & (Join-Path $PSScriptRoot 'check-update-startup.ps1') -Executable (Join-Path $app 'WorkspaceObservatory.exe')
@@ -124,17 +143,22 @@ try {
         $testError.GetAwaiter().GetResult() | Out-Null
     } finally { $nativeTest.Dispose() }
     }
+    Write-PackagePhase 'runtime checks'
     & (Join-Path $python 'python.exe') -B -X utf8 -c "import sqlite3, zoneinfo, sys; assert sys.flags.isolated; assert sys.dont_write_bytecode; assert zoneinfo.ZoneInfo('America/New_York'); print('Packaged Python SQLite and timezone checks passed')"
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Python check failed.' }
     & (Join-Path $runtime 'node.exe') --version
     if ($LASTEXITCODE -ne 0) { throw 'Packaged Node check failed.' }
+    Write-PackagePhase 'package inspection'
     & (Join-Path $runtime 'node.exe') (Join-Path $PSScriptRoot 'inspect-package.mjs') $app
     if ($LASTEXITCODE -ne 0) { throw 'Package content verification failed.' }
+    Write-PackagePhase 'manifest verification'
     & (Join-Path $runtime 'node.exe') (Join-Path $PSScriptRoot 'verify-manifest.mjs') $app --allow-dirty
     if ($LASTEXITCODE -ne 0) { throw 'Package manifest verification failed.' }
+    Write-PackagePhase $null
     Write-Output "Candidate prepared at $app"
     Write-Output 'Not a release yet. Complete license, packaged-collector and desktop checks before distributing.'
 } finally {
+    Write-PackagePhase $null
     Pop-Location
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = $priorTelemetry
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = $priorCertificateOption
