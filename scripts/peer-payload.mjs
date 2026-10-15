@@ -102,7 +102,7 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
       row.tokenProfiles?.some(profile=>profile.totalTokens>0))
       ?'incomplete':row.inventory.status})));
   const fresh=payloads.every(p=>now-Date.parse(p.collectedAt)<=600000);
-  const combined=fresh?combineActivity(normalized):absent('Combined');
+  const combined=fresh?{...combineActivity(normalized),checkedAt:payloads.map(p=>p.collectedAt).sort((a,b)=>a<b?-1:a>b?1:0)[0]}:absent('Combined');
   const combinedTokens=fresh?combinePeerTokens(tokens,evidence,localConfig.comparisonId,expectedHosts,evidenceHosts):absent('All');
   const combinedSettings=combinedTokens.status==='ok'?combineSettings(tokens,settings):absent('All');
   const collectedAt=new Date(now).toISOString();

@@ -12,6 +12,20 @@ import {pythonTestCommand} from './test-python.mjs';
 const counters={inputTokens:5,cacheReadTokens:2,cacheCreationTokens:0,outputTokens:3,totalTokens:10,requestCount:1};
 const report={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...counters,models:[{model:'claude-sonnet-4-20250514',...counters,privateId:'PRIVATE'}]}]};
 
+test('hourly totals are opt-in and retained only when complete and reconciled',()=>{
+  const hours=[10,...Array(23).fill(0)],checkedAt='2026-09-25T00:00:00Z';
+  const raw={...report,days:[{...report.days[0],hours}]};
+  assert.deepEqual(cleanClaudeTokenSource(raw,'Mac',checkedAt),cleanClaudeTokenSource(report,'Mac',checkedAt));
+  const local=cleanClaudeTokenSource(raw,'Mac',checkedAt,{hours:true});
+  assert.deepEqual(local.days[0].hours,hours);assert.notEqual(local.days[0].hours,hours);
+  for(const invalid of [undefined,null,Array(24).fill(0),hours.slice(1),[...hours,0],
+    [11,-1,...Array(22).fill(0)],[9.5,0.5,...Array(22).fill(0)],
+    [Number.MAX_SAFE_INTEGER+1,...Array(23).fill(0)],Array(24)]) {
+    const result=cleanClaudeTokenSource({...raw,days:[{...raw.days[0],hours:invalid}]},'Mac',checkedAt,{hours:true});
+    assert.equal(Object.hasOwn(result.days[0],'hours'),false);
+  }
+});
+
 test('estimates copy local and peer Claude rows without changing exchanged inputs',()=>{
   const sources=['Mac','Windows'].map(host=>({provider:'claude-code',host,status:'ok',days:[{
     date:'2026-09-24',

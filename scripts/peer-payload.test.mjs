@@ -143,3 +143,12 @@ test('native wire evidence rejects malformed and extra private fields',()=>{
     assert.throws(()=>mergePeerPayloads(packet('Mac'),windows,config('Mac'),config('Windows'),[],now));
   }
 });
+
+test('Combined activity reading time is the earlier payload collection time',()=>{
+  for(const host of ['Mac','Windows']) {
+    const mac=packet('Mac'),windows=packet('Windows');
+    (host==='Mac'?mac:windows).collectedAt='2026-09-09T12:58:00.000Z';
+    const result=mergePeerPayloads(mac,windows,config('Mac'),config('Windows'),[],now);
+    assert.equal(result.combined.checkedAt,'2026-09-09T12:58:00.000Z');
+  }
+});

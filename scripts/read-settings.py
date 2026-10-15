@@ -34,7 +34,7 @@ def inventory_metadata(meta, salt):
     parents = keys([payload.get('forked_from_id'), payload.get('parent_thread_id')])
     return dict(keys=owned, parents=parents) if owned else None
 
-def summarize(events, cutoff, retained=None, seen=None):
+def summarize(events, cutoff, retained=None, seen=None, hour_totals=None):
     model, effort, speed = 'unknown', 'unknown', 'unknown'
     context_model = None
     selected_model = 'unknown'
@@ -82,7 +82,8 @@ def summarize(events, cutoff, retained=None, seen=None):
                 speed = TIERS.get(p['service_tier'], 'unknown')
         try:
             stamp = dt.datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00'))
-            date = stamp.astimezone(ZoneInfo('America/New_York')).date().isoformat()
+            local = stamp.astimezone(ZoneInfo('America/New_York'))
+            date = local.date().isoformat()
         except (ValueError, KeyError, TypeError):
             continue
         if event.get('type') == 'response_item' and p.get('type') in ('function_call', 'custom_tool_call'):
@@ -132,6 +133,8 @@ def summarize(events, cutoff, retained=None, seen=None):
             if identity in seen:
                 continue
             seen.add(identity)
+        if hour_totals is not None:
+            hour_totals.setdefault(date, [0]*24)[local.hour] += delta['total_tokens']
         key = (date,model,effort,speed)
         destinations = ([retained] if retained is not None else []) + ([profiles] if stamp >= cutoff else [])
         for destination in destinations:
@@ -141,7 +144,7 @@ def summarize(events, cutoff, retained=None, seen=None):
     return list(profiles.values()), [dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in tools.items()]
 
 def summarize_sessions(sessions, cutoff, cache, lineages):
-    profiles, tools, retained, seen = {}, {}, {}, {}
+    profiles, tools, retained, seen, hour_totals = {}, {}, {}, {}, {}
     for identity, (file, info) in sorted(sessions.items()):
         def events():
             with file.open(encoding='utf-8') as stream:
@@ -154,7 +157,7 @@ def summarize_sessions(sessions, cutoff, cache, lineages):
                             yield row
                     except ValueError:
                         pass
-        rows, calls = summarize(cache.events(file, info) if cache else events(), cutoff, retained, seen.setdefault(lineages[identity], set()))
+        rows, calls = summarize(cache.events(file, info) if cache else events(), cutoff, retained, seen.setdefault(lineages[identity], set()), hour_totals)
         for row in rows:
             key = (row['date'], row['model'], row['effort'], row['speed'])
             if key not in profiles:
@@ -165,7 +168,7 @@ def summarize_sessions(sessions, cutoff, cache, lineages):
         for row in calls:
             key = (row['date'], row['category'], row['tool'], row['namespace'])
             tools[key] = tools.get(key, 0) + row['count']
-    return profiles, tools, retained
+    return profiles, tools, retained, hour_totals
 
 
 def collect(folder, *, retry_cache=True, cache_budget=None):
@@ -221,7 +224,7 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
     if not cache and sum(info.st_size for _,info in sessions.values()) > 1_000_000_000:
         raise ValueError('Report exceeds scan budget')
     try:
-        profiles, tools, retained = summarize_sessions(sessions, cutoff, cache, {identity: lineage(identity) for identity in sessions})
+        profiles, tools, retained, hour_totals = summarize_sessions(sessions, cutoff, cache, {identity: lineage(identity) for identity in sessions})
     finally:
         if cache:
             cache.close()
@@ -233,7 +236,7 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
             if retry_cache and cache.remaining > 0:
                 return collect(folder, retry_cache=False, cache_budget=cache.remaining)
             raise ValueError('Private Codex cache warming; complete report unavailable')
-    result = dict(status='ok',profiles=list(profiles.values()),tokenProfiles=list(retained.values()),tools=[dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in sorted(tools.items())],scope='Recent saved Codex logs only')
+    result = dict(status='ok',profiles=list(profiles.values()),tokenProfiles=list(retained.values()),hourTotals=[dict(date=date,hours=hours) for date,hours in sorted(hour_totals.items())],tools=[dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in sorted(tools.items())],scope='Recent saved Codex logs only')
     if salt:
         result['inventory'] = {k:sorted(v) if isinstance(v,set) else v for k,v in inventory.items()}
     return result

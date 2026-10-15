@@ -93,7 +93,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 - The `rate_limits` fields appear only for Pro and Max subscribers. People have reported versions where the fields were missing. Both cases show Unknown.
 - The Codex app-server protocol is versioned with the installed Codex client and can change.
 - Collection runs every five minutes. Now can be fresher than that only for limits.
-- The snapshot stores tokens per day. Now needs the hourly token field described under "Snapshot additions", which no collector writes yet.
+- The snapshot stores tokens per day. Now needs the hourly token field described under "Snapshot additions". Since D1 the collectors write it for the device that read the tokens, and token hours from a paired device wait for R2.
 - Provider terms changed several times in 2026. Recheck the Claude Code legal page before each public release.
 
 ## Removals
@@ -443,16 +443,16 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
 
-The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2. The collectors now write top-level `prices` and `apiEstimate` on Claude Code day and model rows in those shapes. No collector writes the other fields yet.
+The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2. The collectors now write top-level `prices` and `apiEstimate` on Claude Code day and model rows in those shapes, and since D1 `hours` on this device's Codex and Claude Code token days and `refusal` on a refused Codex row. No collector writes `claudeLimits.history` yet.
 
 ### Snapshot fields the panel reads that no collector writes yet
 
 | Field | Meaning | Until it exists |
 | --- | --- | --- |
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
-| `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
+| `deviceNames` | Custom names keyed by `Mac` and `Windows`. Since D1-3 each collector writes its own key from `device.json`, but nothing writes that file until the Settings action exists. | The panel shows "macOS" and "Windows" |
 
-`deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
+`deviceNames` is designed under "Snapshot additions" below.
 
 ### Price fields in the snapshot
 
@@ -479,11 +479,11 @@ On a paired device `mergePeerPayloads` rebuilds this device's own `activity`, `t
 | Field | Shape |
 | --- | --- |
 | `tokens[].days[].hours` | Codex. An array of exactly 24 non-negative integers, the total tokens of that day per hour. |
-| `providerTokenSources[].days[].hours` | Claude Code, in the same shape, using the same deduplication identity the day totals use. A request's hour is the hour of its earliest retained timestamp, the same timestamp that sets its day in `scripts/read-claude-usage.py`, so a request that finishes after an hour boundary or after midnight stays in one hour of one day. The reader keeps only the earliest date today, so D1-2 keeps the earliest full timestamp. |
+| `providerTokenSources[].days[].hours` | Claude Code, in the same shape, using the same deduplication identity the day totals use. A request's hour is the hour of its earliest retained timestamp, the same timestamp that sets its day in `scripts/read-claude-usage.py`, so a request that finishes after an hour boundary or after midnight stays in one hour of one day. Before D1 the reader kept only the earliest date. Since D1-2 it keeps the earliest full timestamp. |
 | `activity[].days[].hours` | Screen time. This array already exists and holds seconds per hour, for both devices, because `mergePeerPayloads` recomputes the peer's activity from its intervals. It is listed here because Now reads it. |
 
 - Index 0 is the hour starting at midnight. The hour is the wall-clock hour in the zone that sets the day's date. Today that is the snapshot's `timezone` value, which both readers fix to `America/New_York`. When device time zones (T1) land, hours move with the days. On the day clocks go forward the skipped hour stays 0. On the day clocks go back both readings of the repeated hour add into the same index, so that index can hold two hours. Now is Unknown while either of its two buckets is a skipped or repeated hour, because the caveat sentence below would not be true then.
-- **Codex route.** A Codex token's hour is the hour of the `token_count` event that recorded it, which the reader already caches, so the cache format does not change. `scripts/read-settings.py` reports the hours in a separate per-date field of its report, `hourTotals: [{date, hours}]`, not on `profiles` or `tokenProfiles`. `cleanSettings` (`scripts/collect-dashboard.mjs`) ignores that field, so it never reaches `settings[]` or the core payload's `codex` entries. The collector attaches it to the `tokens` row after `tokensFromSettings`, matched by date.
+- **Codex route.** A Codex token's hour is the hour of the `token_count` event that recorded it, which the reader already caches, so the cache format does not change. `scripts/read-settings.py` reports the hours in a separate per-date field of its report, `hourTotals: [{date, hours}]`, not on `profiles` or `tokenProfiles`. `cleanSettings` (`scripts/snapshot-clean.mjs`) ignores that field, so it never reaches `settings[]` or the core payload's `codex` entries. The collector attaches it to the `tokens` row after `tokensFromSettings`, matched by date.
 - The 24 values add up to the day's `totalTokens`. A day whose values do not add up gets no `hours`. A test checks the sum on every fixture day.
 - For the two token fields, `hours` is present only when the reader read that day's events. A day saved before this change, or a token day received from a paired device, has no `hours`, and its hourly values are Unknown.
 - For the two token fields, re-applying after a merge means: the collector puts its local `hours` on the merged row of its own host, matched by date, and only for a day whose merged `totalTokens` equals the sum of the 24 local values. Any other day keeps no `hours`.
@@ -525,7 +525,7 @@ Screen time for Now uses the activity `hours` in the same way. Limits in Now kee
 | `deviceNames` | An object with optional keys `Mac` and `Windows`. Each value is the trimmed name, 1 to 32 UTF-16 code units long. |
 
 - The local name is read from `<runtime>/device.json`, a file holding exactly `{"name": "..."}`. It is a separate file because the Mac Settings save path rewrites `collector.config.json` from fixed switches and both native validators would refuse a new key there.
-- The reader refuses a linked file, a file over 1 KiB, a name that is empty after trimming, a name over 32 UTF-16 code units after trimming, and a name with control or format characters, an unpaired surrogate, or `/`, `\` or `:`. A refused or missing file leaves the key out, and the views show "macOS" or "Windows", as "Device names" above describes.
+- The reader refuses a linked file, a file over 1 KiB, a name that is empty after trimming, a name over 32 UTF-16 code units after trimming, and a name with control or format characters, a line or paragraph separator (U+2028, U+2029) inside it, an unpaired surrogate, or `/`, `\` or `:`. A hard-linked file is refused like a symbolic link. A refused or missing file leaves the key out, and the views show "macOS" or "Windows", as "Device names" above describes.
 - The limit counts UTF-16 code units because the export in `scripts/observatory-file.mjs` does: it trims names and cuts them with `.slice(0,32)`, and its import check uses `length`. JavaScript `length`, C# `string.Length` and Swift `utf16.count` all count the same way, so both native Settings screens can enforce one rule. With the same limit here the export carries the whole name and needs no change. The 40 first planned was cut to 32 for this reason.
 - A device writes only its own key. `deviceNames` is a top-level snapshot field that the merge does not rebuild, so the collector attaches it after `finalizePeerCollection`. The peer's name crosses only after R2 installs on both devices. Until then a paired device's entry is absent and shows its platform name.
 - The name replaces no identifier used for pairing, deduplication or the platform value.
@@ -557,7 +557,7 @@ The field is named `refusal`, not `reason`, because `agentSource` rows already c
 | `private-folder-refused` | A private folder check failed, so the guarded source was not read |
 | `ancestor-refused` | On Windows, the private folder check failed at its ancestry stage. That stage covers every ancestor failure (a reparse point, an unexpected owner, an unknown access list or a writable ancestor), so the code names the stage and does not claim a cause. |
 
-- **Detection.** Today the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, runs `private-sync-acl.ps1` without `-Diagnostic` and discards its error output, so nothing can see the stage. D1-6 adds `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on. `peer-directory.mjs` attaches the code to the error it throws, so the collector can tell a private-folder failure from any other reader failure. When an error carries no code, `refusal` is absent.
+- **Detection.** Before D1 the only caller, `windowsPermissions` in `scripts/peer-directory.mjs`, ran `private-sync-acl.ps1` without `-Diagnostic` and discarded its error output, so nothing could see the stage. Since D1-6 `peer-directory.mjs` passes `-Diagnostic` to that call, maps only the exact line `Verification stage: inspect-ancestry` to `ancestor-refused`, and maps every other failure to `private-folder-refused`. No error output is kept or passed on. `peer-directory.mjs` attaches the code to the error it throws, so the collector can tell a private-folder failure from any other reader failure. When an error carries no code, `refusal` is absent.
 - The row carries the code and nothing else about the failure: no path, no stage text, no error message.
 - The views show a code they do not know as `private-folder-refused` would be shown, without its text. A new code is added here first.
 - After a merge the collector re-applies `refusal` to the merged row of its own host with the same name, as it does for `hours`.
