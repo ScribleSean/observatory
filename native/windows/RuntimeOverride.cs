@@ -222,16 +222,25 @@ internal static class RuntimeOverride
                 var security = new DirectorySecurity();
                 security.SetAccessRuleProtection(true, false);
                 security.SetOwner(identity.Owner is not null && rootAdministrators.Equals(identity.Owner) ? rootAdministrators : currentUser);
-                foreach (var principal in new[] { currentUser,
-                    new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), rootAdministrators })
+                var principals = new[] { currentUser,
+                    new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), rootAdministrators };
+                foreach (var principal in principals)
                     security.AddAccessRule(new FileSystemAccessRule(principal, FileSystemRights.FullControl,
                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                         PropagationFlags.None, AccessControlType.Allow));
                 new DirectoryInfo(root).SetAccessControl(security);
+                CheckAccess(root);
+                CheckInherited(root);
+                var applied = new DirectoryInfo(root).GetAccessControl();
+                var rules = applied.GetAccessRules(true, true, typeof(SecurityIdentifier))
+                    .Cast<FileSystemAccessRule>().ToArray();
+                if (!applied.AreAccessRulesProtected || rules.Length != principals.Length ||
+                    principals.Any(principal => !rules.Any(rule => principal.Equals(rule.IdentityReference))))
+                    throw new IOException();
             }
             catch (Exception error)
             {
-                throw new IOException("Runtime self-test could not set a protected ACL on its temporary root.", error);
+                throw new IOException("Runtime self-test setup failed: the temporary root ACL was not applied.", error);
             }
             Refused(@"\\?\" + real); Refused(@"\\.\" + real); Refused(@"\\localhost\C$\synthetic");
             Refused(real + "::$INDEX_ALLOCATION"); Refused(Path.Combine(root, "SHORT~1"));

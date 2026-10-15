@@ -532,10 +532,19 @@ internal sealed class ObservatoryContext : ApplicationContext
         activationTimer.Start();
         if (show || setupPending)
         {
-            void OpenOnIdle(object? sender, EventArgs args)
+            async void OpenOnIdle(object? sender, EventArgs args)
             {
                 Application.Idle -= OpenOnIdle;
-                Open();
+                try { Open(); }
+                catch
+                {
+                    try
+                    {
+                        WithNativeDialog(() => MessageBox.Show(WebDashboard.RuntimeMessage, "Observatory",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning));
+                    }
+                    finally { await RequestQuit(); }
+                }
             }
             Application.Idle += OpenOnIdle;
         }
@@ -864,9 +873,15 @@ internal sealed class ObservatoryContext : ApplicationContext
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
         if (foregroundSetup) dashboard.TopMost = true;
-        dashboard.Activate();
-        dashboard.BringToFront();
-        if (foregroundSetup) dashboard.TopMost = false;
+        try
+        {
+            dashboard.Activate();
+            dashboard.BringToFront();
+        }
+        finally
+        {
+            if (foregroundSetup) dashboard.TopMost = false;
+        }
         dashboardOpened = true;
     }
 
