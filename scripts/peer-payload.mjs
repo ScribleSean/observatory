@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from 'node:util';
-import {cleanActivity,cleanSettings} from './collect-dashboard.mjs';
+import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {validatePeerInventory,combinePeerTokens} from './peer-inventory.mjs';
@@ -108,7 +108,7 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   const collectedAt=new Date(now).toISOString();
   const data={schema:2,timezone:'America/New_York',collectedAt,activity,combined,tokens,combinedTokens,settings,combinedSettings,
     dictation:payloads.flatMap(p=>p.dictation.map(checked)),agents:[],agentSource:absent('Local','not-connected'),
-    quota:absent('Codex account','not-connected'),localModel:absent('Ubuntu','not-connected')};
+    quota:absent('Codex account','not-connected')};
   data.activityHistory=['Combined','Mac','Windows'].map(host=>{
     const source=host==='Combined'?combined:activity.find(row=>row.host===host);
     const asOf=host==='Combined'?payloads.map(p=>p.collectedAt).sort()[0]:source.checkedAt;

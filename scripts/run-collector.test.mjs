@@ -17,7 +17,7 @@ async function fixture(t,script) {
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'dashboard-runner-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   await mkdir(path.join(root,'scripts'));
-  await writeFile(path.join(root,'scripts/collect-dashboard.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${script}`);
+  await writeFile(path.join(root,'scripts/collect-mac.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${script}`);
   return root;
 }
 const run=(root,timeout=5)=>execFileSync('python3',['-c',code,reader,root,process.execPath,String(timeout)],{encoding:'utf8'}).trim();
@@ -42,11 +42,17 @@ test('a partial optional source prevents an all-sources-success status',async t=
   const s=await status(root);
   assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,2);
 });
-test('empty workflow slots do not count as configured sources',async t=>{
-  const root=await fixture(t,success.replace('settings:[]',"settings:[],agents:[],agentSource:{host:'Local',status:'not-connected'},localModel:{host:'Ubuntu',status:'not-connected'}"));
+test('runner loads saved localModel without counting it as a source',async t=>{
+  const root=await fixture(t,`const fs=require('fs');const saved=JSON.parse(fs.readFileSync('public/local/usage.json'));saved.collectedAt=new Date().toISOString();fs.writeFileSync('public/local/usage.json',JSON.stringify(saved));`);
+  await mkdir(path.join(root,'public/local'),{recursive:true});
+  const saved={collectedAt:'2026-09-09T12:00:00Z',activity:[{status:'ok'}],tokens:[],settings:[],
+    agents:[],agentSource:{host:'Local',status:'not-connected'},quota:{status:'ok'},
+    localModel:{host:'Ubuntu',status:'unavailable',records:[{model:'fixture',output:2}]}};
+  await writeFile(path.join(root,'public/local/usage.json'),JSON.stringify(saved));
   assert.equal(run(root),'ok');
   const s=await status(root);
-  assert.equal(s.state,'ok');assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,1);
+  assert.equal(s.sourcesRead,2);assert.equal(s.sourcesConfigured,2);
+  assert.deepEqual(JSON.parse(await readFile(path.join(root,'public/local/usage.json'),'utf8')).localModel,saved.localModel);
 });
 test('wrapper health includes configured provider token sources and excludes disabled ones',async t=>{
   for(const [sourceState,read,configured,state] of [['ok',2,2,'ok'],['unavailable',1,2,'partial'],['not-connected',1,1,'ok']]) {
@@ -60,7 +66,7 @@ test('wrapper health includes configured provider token sources and excludes dis
 test('a timed-out reader is stopped and the operating-system lock is released',async t=>{
   const root=await fixture(t,`setInterval(()=>{},1000);`);
   assert.equal(run(root,0.1),'failed');
-  await writeFile(path.join(root,'scripts/collect-dashboard.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${success}`);
+  await writeFile(path.join(root,'scripts/collect-mac.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${success}`);
   assert.equal(run(root),'ok');
 });
 test('overlapping collection is skipped without replacing running status',async t=>{
@@ -136,4 +142,21 @@ test('real native allowance-only entry runs under the lock without rescanning sa
   assert.deepEqual(after,saved);
   assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'saved full collection status');
   assert.equal(JSON.parse(await readFile(path.join(root,'public/local/allowance-collector.json'),'utf8')).sourcesRead,1);
+});
+test('runner refuses an explicit absolute collect-dashboard.mjs entry without launching it',async t=>{
+  const root=await fixture(t,'');
+  await mkdir(path.join(root,'public/local'),{recursive:true});
+  const snapshot=path.join(root,'public/local/usage.json');
+  await writeFile(snapshot,'preserved fictional snapshot');
+  const entry=path.join(root,'scripts/collect-dashboard.mjs');
+  const marker=path.join(root,'child-ran');
+  await writeFile(entry,"import fs from 'node:fs';fs.writeFileSync('child-ran','unexpected');");
+  assert.throws(()=>execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,'--collector',entry],{encoding:'utf8'}),error=>{
+    assert.equal(error.status,1);
+    assert.equal(JSON.parse(error.stdout).collection,'failed');
+    return true;
+  });
+  assert.equal((await status(root)).state,'failed');
+  await assert.rejects(readFile(marker),{code:'ENOENT'});
+  assert.equal(await readFile(snapshot,'utf8'),'preserved fictional snapshot');
 });

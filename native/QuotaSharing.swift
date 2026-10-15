@@ -66,6 +66,7 @@ enum QuotaSharing {
             var request: [String: Any] = ["action": action]
             if let token { request["token"] = token }
             let process = Process(), input = Pipe(), output = Pipe()
+            process.environment = bridgeChildEnvironment()
             process.executableURL = node
             process.arguments = [script.path, "--runtime", String(cString: resolved)]
             process.currentDirectoryURL = runtime

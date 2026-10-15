@@ -6,6 +6,7 @@ import path from 'node:path';
 import {collectMac} from './collect-mac.mjs';
 import {collectWindows} from './collect-windows.mjs';
 import {execPython} from './test-python.mjs';
+import {prices} from './price-table.mjs';
 
 test('native collector publishes a separate Claude reading and counts its health once',
   {skip:!['darwin','win32'].includes(process.platform)},async t=>{
@@ -40,6 +41,21 @@ test('native collector publishes a separate Claude reading and counts its health
     const snapshot=JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
     assert.ok(!JSON.stringify(snapshot).includes('PRIVATE'));
     assert.equal(snapshot.providerTokenSources[0].days[0].requestCount,1);
+    assert.equal(snapshot.prices.checkedOn,prices.checkedOn);
+    for(const day of snapshot.providerTokenSources[0].days) {
+      assert.equal(day.apiEstimate.checked,prices.checkedOn);
+      if(day.apiEstimate.usd===null) {
+        assert.strictEqual(day.apiEstimate.usd,null);
+        assert.equal(day.apiEstimate.coveredTokens,0);
+      } else {
+        assert.ok(Number.isFinite(day.apiEstimate.usd) && day.apiEstimate.usd>0);
+      }
+    }
+    const unpriced=snapshot.providerTokenSources[0].days.find(day=>day.models.some(model=>model.model==='claude-sonnet-4-20250514'));
+    assert.ok(unpriced);
+    assert.strictEqual(unpriced.apiEstimate.usd,null);
+    assert.equal(unpriced.apiEstimate.coveredTokens,0);
+    assert.equal(unpriced.apiEstimate.excluded,1);
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({...config,claude:false}),{mode:0o600});
     await rm(claude,{recursive:true});
     const disabled=await collect();
@@ -64,7 +80,6 @@ test('Mac collection ignores saved receipt and benchmark settings',
     const result=await collectMac(runtime,python);
     assert.deepEqual(result.data.agents,[]);
     assert.deepEqual(result.data.agentSource,{host:'Local',status:'not-connected'});
-    assert.deepEqual(result.data.localModel,{host:'Ubuntu',status:'not-connected'});
     assert.equal(result.status.sourcesConfigured,0);
     const published=await readFile(path.join(runtime,'public/local/usage.json'),'utf8');
     assert.ok(!published.includes(receipts));

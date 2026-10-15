@@ -17,7 +17,7 @@ import {attachQuotaSync} from './quota-sync.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
-import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
 import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,withinTime} from './claude-limits.mjs';
 import {windowsCollectorLease} from './windows-collector-lease.mjs';
@@ -117,6 +117,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     claude=cleanClaudeTokenSource(raw,'Windows');
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   await attachProviderTokenSync(runtime,result,claude);
+  attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
   signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
   attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));

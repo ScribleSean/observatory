@@ -11,12 +11,14 @@ import {
   readFile,
   rm,
   realpath,
+  readdir,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-test('bundled legacy dashboard honors its private runtime without reading Ubuntu', async (t) => {
+test('bundled Mac collector honors its private runtime and ignores legacy hub settings',
+  { skip: process.platform !== 'darwin' }, async (t) => {
   const runtime = await realpath(
     await mkdtemp(path.join(tmpdir(), 'observatory-legacy-scope-')),
   );
@@ -29,12 +31,10 @@ test('bundled legacy dashboard honors its private runtime without reading Ubuntu
   await cp(new URL('./', import.meta.url), path.join(bundle, 'scripts'), {
     recursive: true,
   });
-  const previousRuntime = process.env.OBSERVATORY_RUNTIME;
-  process.env.OBSERVATORY_RUNTIME = runtime;
-  t.after(() => {
-    if (previousRuntime === undefined) delete process.env.OBSERVATORY_RUNTIME;
-    else process.env.OBSERVATORY_RUNTIME = previousRuntime;
-  });
+  await writeFile(path.join(runtime, 'collector.config.json'), JSON.stringify({
+    activity: true, codex: false, claude: false, wispr: false, quota: false,
+    receipts: true, benchmarks: true,
+  }));
   const receipts = path.join(runtime, 'receipts');
   await mkdir(receipts);
   const config = JSON.stringify({
@@ -46,7 +46,6 @@ test('bundled legacy dashboard honors its private runtime without reading Ubuntu
     ubuntuCodexHome: '/home/fixture/.codex',
     windowsCodexHome: '/mnt/c/Users/fixture/.codex',
     receiptDirectory: receipts,
-    localModelResults: '/home/fixture/results',
     dictation: { mac: false, windows: false },
   });
   await writeFile(path.join(runtime, 'local.config.json'), config);
@@ -58,15 +57,8 @@ test('bundled legacy dashboard honors its private runtime without reading Ubuntu
     calls = [];
   const command = async (file, args) => {
     calls.push({ file, args });
-    if (args.some((arg) => String(arg).includes('private-sync-acl.ps1')))
-      return { stdout: 'private-sync-acl: ok' };
-    return {
-      stdout: JSON.stringify(
-        file === '/fixture/ccusage'
-          ? { daily: [] }
-          : { categories: { Coding: 0, Terminal: 0, Browser: 0, Other: 0 } },
-      ),
-    };
+    if (file === '/usr/sbin/scutil') return { stdout: 'fixture-host\n' };
+    throw Error('Unexpected fixture command');
   };
   childProcess.execFile = () => {
     throw Error('Unexpected callback command');
@@ -76,39 +68,41 @@ test('bundled legacy dashboard honors its private runtime without reading Ubuntu
     calls.push({ file, args });
     throw Error('Synthetic reader unavailable');
   };
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (...args) => {
+    calls.push({ file: 'fetch', args });
+    if (String(args[0]).endsWith('/api/0/buckets/'))
+      return new Response(JSON.stringify({}), {
+        headers: { 'Content-Type': 'application/json' },
+      });
     throw Error('Synthetic activity unavailable');
   };
   syncBuiltinESMExports();
   try {
-    const { collect } = await import(
-      pathToFileURL(path.join(bundle, 'scripts/collect-dashboard.mjs'))
+    const { collectMac } = await import(
+      pathToFileURL(path.join(bundle, 'scripts/collect-mac.mjs'))
     );
-    await collect();
-    assert.equal(
-      calls.some((call) => call.args.includes('retired-host')),
-      false,
-    );
-    assert.equal(
-      calls.some((call) => call.file === '/fixture/ccusage'),
-      true,
-    );
-    assert.equal(
-      calls.some((call) => call.args.includes('windows-host')),
-      true,
-    );
+    await collectMac(runtime, '/fixture/python3');
+    assert.ok(calls.some((call) => call.file === 'fetch'));
+    const recorded = JSON.stringify(calls);
+    for (const value of [
+      '/fixture/ccusage', 'retired-host', 'windows-host',
+      '/fictional/.codex', '/home/fixture/.codex', '/mnt/c/Users/fixture/.codex',
+      '/home/fixture/results', receipts,
+    ])
+      assert.equal(recorded.includes(value), false);
+    assert.deepEqual(await readdir(bundle), ['scripts']);
     const data = JSON.parse(
       await readFile(path.join(runtime, 'public/local/usage.json'), 'utf8'),
     );
+    const activity = data.activity.find((source) => source.host === 'Mac');
+    assert.ok(activity);
+    assert.ok(['ok', 'unavailable'].includes(activity.status));
     assert.equal(
       data.tokens.some((source) => source.host === 'Ubuntu'),
       false,
     );
-    assert.equal(
-      data.tokens.find((source) => source.host === 'Windows').status,
-      'not-connected',
-    );
-    assert.equal(data.localModel.status, 'not-connected');
+    assert.deepEqual(data.agents, []);
+    assert.equal(data.agentSource.status, 'not-connected');
     assert.equal(
       await readFile(path.join(runtime, 'local.config.json'), 'utf8'),
       config,
@@ -121,18 +115,25 @@ test('bundled legacy dashboard honors its private runtime without reading Ubuntu
   }
 });
 
-test('bundled legacy dashboard rejects a relative runtime before collection', async () => {
-  const previousRuntime = process.env.OBSERVATORY_RUNTIME;
-  process.env.OBSERVATORY_RUNTIME = 'relative-runtime';
-  try {
-    await assert.rejects(
-      import(
-        new URL('./collect-dashboard.mjs?relative-runtime', import.meta.url)
-      ),
-      /Absolute runtime path required/,
-    );
-  } finally {
-    if (previousRuntime === undefined) delete process.env.OBSERVATORY_RUNTIME;
-    else process.env.OBSERVATORY_RUNTIME = previousRuntime;
-  }
+test('Mac collector refuses a relative runtime before collection',
+  { skip: process.platform !== 'darwin' }, async (t) => {
+  const cwd = await realpath(
+    await mkdtemp(path.join(tmpdir(), 'observatory-relative-runtime-')),
+  );
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  await assert.rejects(
+    promisify(childProcess.execFile)(process.execPath, [
+      fileURLToPath(new URL('./collect-mac.mjs', import.meta.url)),
+    ], {
+      cwd,
+      env: { ...process.env, OBSERVATORY_RUNTIME: 'relative-runtime',
+        OBSERVATORY_PYTHON: '/fixture/python3' },
+    }),
+    (error) => {
+      assert.notEqual(error.code, 0);
+      assert.match(error.stderr, /Mac collection unavailable/);
+      return true;
+    },
+  );
+  assert.equal((await readdir(cwd)).includes('relative-runtime'), false);
 });

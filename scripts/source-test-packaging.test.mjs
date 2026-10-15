@@ -19,7 +19,6 @@ const testSetup = [
   'scripts/test-file-symlink.mjs',
   'scripts/test-python.mjs',
   'scripts/peer-live-controller.mjs',
-  'native/tests/archive-retirement-fixture.mjs',
 ];
 
 test('Mac Collector/scripts excludes source-test support', () => {
