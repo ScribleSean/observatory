@@ -221,7 +221,7 @@ internal static class RuntimeOverride
                 var rootAdministrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
                 var security = new DirectorySecurity();
                 security.SetAccessRuleProtection(true, false);
-                security.SetOwner(rootAdministrators.Equals(identity.Owner) ? rootAdministrators : currentUser);
+                security.SetOwner(identity.Owner is not null && rootAdministrators.Equals(identity.Owner) ? rootAdministrators : currentUser);
                 foreach (var principal in new[] { currentUser,
                     new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), rootAdministrators })
                     security.AddAccessRule(new FileSystemAccessRule(principal, FileSystemRights.FullControl,
