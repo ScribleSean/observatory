@@ -60,7 +60,7 @@ In order: Limits, Activity, Tokens, Dictation, Sources, Settings.
 - **Sources** replaces Source health.
 - **Agents** is removed.
 
-Each section uses the same card order and grouping on both platforms. Settings sections appear in the same order on both: Sources to collect, Accounts, Devices and sharing, Startup, About and updates.
+Each section uses the same card order and grouping on both platforms. Settings sections appear in the same order on both: Sources to collect, Accounts, Devices and sharing, Startup, About and updates. About and updates also holds Appearance, Skin and Export data, in that order, and Import data when it is built.
 
 ## Numbers that must stay separate
 
@@ -272,6 +272,8 @@ The four actions map to things each shell already does. This is not a general co
 
 Written on 2026-10-14 for B1, before any shell implements it. It needs two reviewer checks against the rule below before code starts. No shell implements it yet.
 
+The action list, the argument rules and the limits below are also kept as data in `lib/bridge-contract.json`. `scripts/build-bridge-contract.mjs` generates the TypeScript types (`lib/bridge-contract.generated.ts`) and a message validator for each shell (`native/BridgeContract.swift` and `native/windows/BridgeContract.cs`), and its `--check` fails when a generated file is stale. `lib/bridge-contract.mjs` is the same validator for the page. This section stays the authority, and a change here and in the data file go in one reviewed pull request. The validators read "no readable `id`" as: the text is not valid JSON, nests deeper than 16 levels, is not an object, or has no `id`, more than one `id` or an `id` that is not an integer in range. Each such message is ignored without a result. Whether a custom skin name is in the shell's own list is checked by the shell, not by the validator.
+
 The Settings view, the first-run steps and the pairing screens in the shared viewer change settings by sending named actions to the shell. This contract is the whole list. A shell accepts nothing else, and the list grows only by a reviewed change to this section.
 
 **The rule.** No action carries a path, a command or free text that reaches a shell. Every argument is a boolean, a bounded integer, a value from a fixed list, or a string with a fixed pattern and length, with one exception: the device name is bounded free text, and it is only ever JSON-encoded into one file (see `set-device-name`). Two strings are opaque to the page, the pairing invitation and the sharing confirmation token. They reach only the private stdin pipe of the pairing control process or the standard input of a sharing control script, never a command line, a file name, a URL or a log.
@@ -425,8 +427,8 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | --- | --- |
 | Page | `dashboard.html` in the bundled web files. It sets `window.observatoryDashboardReady` after its first render. |
 | Data | It requests `./local/usage.json` through the existing snapshot bridge, reloads on `observatory:snapshot-changed` and every 30 seconds while visible, and reads nothing else. |
-| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. Each section is an empty state until its view is built. A fragment naming a section, such as `dashboard.html#tokens`, opens that section on the first render, and a later change of the fragment switches to it. When the person picks a section, the page writes its id to the fragment with `history.replaceState`, so history does not grow and a query such as `?demo` is kept. An unknown fragment shows Limits. |
-| Actions | None. The page sends nothing to the shell. |
+| Sections | Limits, Activity, Tokens, Dictation, Sources, Settings, in a navigation labelled "Sections". Dictation is listed only when the snapshot has a dictation source whose status is not `not-connected`. A section without a view shows an empty state. A fragment naming a section, such as `dashboard.html#tokens`, opens that section on the first render, and a later change of the fragment switches to it. When the person picks a section, the page writes its id to the fragment with `history.replaceState`, so history does not grow and a query such as `?demo` is kept. An unknown fragment shows Limits. |
+| Actions | Only the actions in "Settings bridge contract", sent only from the Settings view, and only when the page is `dashboard.html` without `?demo`. With `?demo` the Settings view answers from sample data and sends nothing to the shell. No other section sends anything. |
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
 
