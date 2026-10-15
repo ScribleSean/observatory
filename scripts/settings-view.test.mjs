@@ -51,7 +51,7 @@ void test('missing status renders Unknown and disables every setting', () => {
   assert.match(view, /Unknown/);
 });
 void test('paired, confirming, identity and awaiting-confirmation variants show the right controls', () => {
-  for (const [state, labels] of /** @type {Array<[string, string[]]>} */ ([['paired', ['Disconnect', 'Repair']], ['awaiting-confirmation', ['Confirm', 'Cancel', 'Confirm the invitation']], ['identity-required', ['Create device identity', 'Cancel']], ['identity-ready', ['device&#x27;s address', 'device&#x27;s sync port', 'Start']]])) {
+  for (const [state, labels] of /** @type {Array<[string, string[]]>} */ ([['paired', ['Disconnect', 'Prepare pairing repair']], ['awaiting-confirmation', ['Confirm', 'Cancel', 'Confirm the invitation']], ['identity-required', ['Create device identity', 'Cancel']], ['identity-ready', ['device&#x27;s address', 'device&#x27;s sync port', 'Start']]])) {
     const status = sampleBridgeStatus(); status.pairing.state = state;
     const html = render(status);
     for (const label of labels) assert.ok(html.includes(label), `${state}: ${label}`);
@@ -76,8 +76,12 @@ void test('host invitation is read-only with private sharing and clipboard warni
 });
 void test('sharing-ready controls are enabled and unavailable reasons are readable', () => {
   const status = sampleBridgeStatus();
+  status.sharingChoice = { chosen: false, channels: { 'codex-limits': 'unavailable', 'claude-code-tokens': 'unavailable' } };
   const unavailable = render(status);
-  assert.ok(unavailable.includes('Share usage records with the paired device'));
+  assert.ok(unavailable.includes('Share Codex limits'));
+  assert.ok(unavailable.includes('Share Claude Code tokens'));
+  assert.ok(unavailable.includes('Pair a device before enabling sharing'));
+  assert.ok(!unavailable.includes('Share usage records with the paired device'));
   for (const channel of Object.values(status.sharing)) Object.assign(channel, { canEnable: true, reason: 'ready', token: 'cd'.repeat(32) });
   const ready = render(status);
   assert.doesNotMatch(ready, /type="checkbox"[^>]*disabled/);
@@ -253,7 +257,7 @@ void test('limits disclosure requests and cancellation send nothing, confirmatio
   controller.dispose();
 });
 void test('unknown switches have mixed semantics', () => {
-  assert.equal((render(null).match(/aria-checked="mixed"/g) ?? []).length, 8);
+  assert.equal((render(null).match(/aria-checked="mixed"/g) ?? []).length, 9);
 });
 void test('appearance callback runs only for successful demo changes', async () => {
   const controller = createSettingsController(recordingBridge());

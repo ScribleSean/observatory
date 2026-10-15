@@ -25,6 +25,7 @@ const tailscaleWords: Record<string, string> = {
   'needs-device-approval': S.tailscaleNeedsDeviceApproval, stopped: S.tailscaleStopped, starting: S.tailscaleStarting,
   'other-user': S.tailscaleOtherUser, 'not-installed': S.tailscaleNotInstalled, unsupported: S.tailscaleUnsupported, unavailable: S.tailscaleUnavailable,
 };
+const reasons: Record<string, string> = { ready: S.ready, 'pairing-unavailable': S.pairingUnavailable, 'account-unavailable': S.accountUnavailable, 'source-unavailable': S.sourceUnavailable };
 const sharingWords: Record<string, string> = { on: S.on, 'waiting-for-reading': S.sharingWaiting, off: S.off, unavailable: S.unknown };
 const skinNames: Record<string, string> = { sage: S.sage, almanac: S.almanac, instrument: S.instrument, 'amber-crt': S.amberCrt };
 const pairedStates = new Set(['paired', 'establishing-trust', 'active-sync', 'sync-stale']);
@@ -151,9 +152,10 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   const [peerAddress, setPeerAddress] = useState('');
   const [peerPort, setPeerPort] = useState('43128');
   const [sharing, setSharing] = useState(false);
-  const [portAvailable, setPortAvailable] = useState<boolean | null>(null);
+  const [hostDefaults, setHostDefaults] = useState<ReturnType<typeof pairingDefaults>>(null);
   const hostRequested = useRef(false);
-  const peerRequested = useRef(new Set<string>());
+  const peerRequested = useRef(new Map<string, { attempts: number; pending: boolean; found: boolean }>());
+  const activeFingerprint = useRef<string | null>(null);
   const [savedName, setSavedName] = useState(status?.deviceName);
   if (savedName !== status?.deviceName) { setSavedName(status?.deviceName); setName(status?.deviceName ?? ''); }
   const state = status?.pairing.state;
@@ -161,9 +163,9 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   if (previousState !== state) {
     setPreviousState(state); if (state && terminal.has(state)) setFlow(null);
     // A new pairing step starts with sharing off and no pre-filled peer.
-    setSharing(false); setPeerAddress(''); setPeerPort('43128'); setPortAvailable(null);
+    setSharing(false); setPeerAddress(''); setPeerPort('43128');
   }
-  const hostOpen = (flow === 'host' || state === 'identity-ready') && !['waiting', 'confirming'].includes(state ?? '') && !pairedStates.has(state ?? '') && state !== 'revoked';
+  const hostOpen = flow === 'host' && !['waiting', 'confirming'].includes(state ?? '') && !pairedStates.has(state ?? '') && state !== 'revoked';
   useEffect(() => {
     if (!hostOpen) { hostRequested.current = false; return; }
     if (!controller || hostRequested.current) return;
@@ -174,22 +176,37 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       // Pre-fill only fields the person has not filled in.
       if (active && defaults) {
         setAddress(current => current || (defaults.address ?? '')); setPort(current => current || String(defaults.port));
-        setPortAvailable(defaults.portAvailable);
+        setHostDefaults(defaults);
       }
     }).catch(() => {});
     return () => { active = false; };
   }, [controller, hostOpen]);
-  const fingerprint = state === 'confirming' ? status?.pairing.peerFingerprint : null;
+  const fingerprint = status?.pairing.peerFingerprint ?? null;
+  const [previousFingerprint, setPreviousFingerprint] = useState(fingerprint);
+  if (previousFingerprint !== fingerprint) {
+    setPreviousFingerprint(fingerprint);
+    setSharing(false); setPeerAddress(''); setPeerPort('43128');
+  }
   useEffect(() => {
-    if (!controller || !fingerprint || peerRequested.current.has(fingerprint)) return;
-    peerRequested.current.add(fingerprint);
-    let active = true;
+    activeFingerprint.current = fingerprint;
+    return () => { activeFingerprint.current = null; };
+  }, [controller, fingerprint]);
+  useEffect(() => {
+    if (!controller || state !== 'confirming' || !fingerprint) return;
+    const progress = peerRequested.current.get(fingerprint) ?? { attempts: 0, pending: false, found: false };
+    if (progress.pending || progress.found || progress.attempts >= 3) return;
+    peerRequested.current.set(fingerprint, progress);
+    progress.attempts++; progress.pending = true;
     void controller.pairingPeerAddress().then(result => {
       const defaults = result.ok ? pairingDefaults(result.value, true) : null;
-      if (active && defaults) setPeerAddress(current => current || (defaults.address ?? ''));
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [controller, fingerprint, state]);
+      if (activeFingerprint.current === fingerprint && defaults?.address) {
+        progress.found = true;
+        setPeerAddress(current => current || defaults.address!);
+      }
+    }).catch(() => {}).finally(() => { progress.pending = false; });
+  }, [controller, fingerprint, state, raw]);
+  const choiceKnown = !!status && Object.values(status.sharingChoice.channels).some(channel => channel !== 'unavailable');
+  const sharingPaired = pairedStates.has(state ?? '');
   const action = (task: (c: SettingsController) => Promise<BridgeOutcome>, options?: Parameters<Run>[1]) => {
     if (controller) run(() => task(controller), options);
   };
@@ -221,36 +238,40 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       {button(S.save, () => action(c => c.setDeviceName(name), { name: true }))}
       <Row>{button(S.tailscale, () => action(c => c.tailscaleCheck(), { tailscale: true }))}<span>{tailscale}</span></Row>
       <h4>{S.pairing}</h4><p>{state ? pairingWords[state] : S.unknown}</p>
-      {(!state || (terminal.has(state) && !pairedStates.has(state))) && !flow && button(S.pairDevice, () => setFlow('choose'))}
+      {(!state || state === 'identity-ready' || (terminal.has(state) && !pairedStates.has(state) && state !== 'revoked')) && !flow && button(S.pairDevice, () => setFlow('choose'))}
       {flow === 'choose' && <Row>{button(S.host, () => setFlow('host'))}{button(S.join, () => setFlow('join'))}</Row>}
       {(flow === 'host' || state === 'identity-required' || state === 'identity-ready') && <>
         {state === 'identity-required' ? button(S.identity, () => pairingAction(c => c.pairingIdentityCreate())) :
-          !['waiting', 'confirming', 'paired'].includes(state ?? '') && <>{field(S.address, address, setAddress)}{field(S.port, port, value => { setPort(value); setPortAvailable(null); }, true)}{portAvailable === false && <p>{S.portInUse}</p>}{button(S.start, () => pairingAction(c => c.pairingHostStart(address, port), true))}</>}
+          !['waiting', 'confirming', 'paired'].includes(state ?? '') && <>{field(S.address, address, setAddress)}{field(S.port, port, setPort, true)}{hostDefaults?.portAvailable === false && address === hostDefaults.address && port === String(hostDefaults.port) && <p>{S.portInUse}</p>}{button(S.start, () => pairingAction(c => c.pairingHostStart(address, port), true))}</>}
       </>}
       {invitation && <label className="ob-settings-field">{S.invitation}<textarea readOnly spellCheck={false} value={invitation} /></label>}
       {(invitation || status?.pairing.invitationKept) && <p>{S.invitationWarning}</p>}
       {status?.pairing.invitationKept && button(S.copyInvitation, () => action(c => c.pairingCopyInvitation(), { pairing: true }))}
-      {(state === 'confirming' || state === 'awaiting-confirmation') && <label><input type="checkbox" checked={sharing} disabled={disabled} onChange={event => setSharing(event.target.checked)} />{S.shareUsage}</label>}
+      {choiceKnown && (state === 'confirming' || state === 'awaiting-confirmation') && <label><input type="checkbox" checked={sharing} disabled={disabled} onChange={event => setSharing(event.target.checked)} />{S.shareUsage}</label>}
       {state === 'confirming' && status?.pairing.peerFingerprint && <>
         <label className="ob-settings-field">{S.fingerprint}<input readOnly value={status.pairing.peerFingerprint} /></label>
         {field(S.peerAddress, peerAddress, setPeerAddress)}{field(S.peerPort, peerPort, setPeerPort, true)}
-        {button(S.confirm, () => pairingAction(c => c.pairingHostConfirm(status.pairing.peerFingerprint!, peerAddress, peerPort, sharing)))}
+        {button(S.confirm, () => pairingAction(c => c.pairingHostConfirm(status.pairing.peerFingerprint!, peerAddress, peerPort, choiceKnown && sharing)))}
       </>}
       {flow === 'join' && !['awaiting-confirmation', 'local-ready', 'acknowledged', 'paired'].includes(state ?? '') && <>
         <label className="ob-settings-field">{S.invitation}<textarea value={joinText} autoComplete="off" spellCheck={false} disabled={disabled} onChange={event => onJoinTextChange(event.target.value)} /></label>
         {button(S.claim, () => pairingAction(async c => { try { return await c.pairingJoinClaim(joinText); } finally { onJoinTextChange(''); } }))}
       </>}
-      {state === 'awaiting-confirmation' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm(sharing)))}
+      {state === 'awaiting-confirmation' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm(choiceKnown && sharing)))}
       {state && pairedStates.has(state) && <Row>{button(S.disconnect, () => pairingAction(c => c.pairingDisconnect()))}{button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}</Row>}
+      {state === 'revoked' && button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}
       {(flow || (state && !terminal.has(state))) && button(S.cancel, () => {
         onJoinTextChange(''); setFlow(null); action(c => c.pairingCancel(), { pairing: true, cancel: true });
       }, !available || !status)}
       <h4>{S.sharing}</h4>
-      {toggle(S.shareUsage, status?.sharingChoice.chosen, enabled => action(c => c.setSharingChoice(enabled)))}
-      {(['codex-limits', 'claude-code-tokens'] as SharingChannel[]).map(channel => <Row key={channel}>
+      {choiceKnown && <>{toggle(S.shareUsage, status!.sharingChoice.chosen || Object.values(status!.sharingChoice.channels).includes('on'), enabled => action(c => c.setSharingChoice(enabled)), !sharingPaired)}
+        {!sharingPaired && <p className="ob-meta">{S.pairingUnavailable}</p>}</>}
+      {(['codex-limits', 'claude-code-tokens'] as SharingChannel[]).map(channel => choiceKnown ? <Row key={channel}>
         <span>{channel === 'codex-limits' ? S.shareCodexLimits : S.shareClaudeTokens}</span>
         <span>{sharingWords[status?.sharingChoice.channels[channel] ?? 'unavailable']}</span>
-      </Row>)}
+      </Row> : <div key={channel}>{toggle(channel === 'codex-limits' ? S.shareCodexLimits : S.shareClaudeTokens, status?.sharing[channel].enabled,
+        enabled => action(c => c.setSharing(channel, enabled, status?.sharing[channel].token)), !!status && !status.sharing[channel].enabled && !status.sharing[channel].canEnable)}
+        {status && !status.sharing[channel].enabled && !status.sharing[channel].canEnable && <p className="ob-meta">{reasons[status.sharing[channel].reason]}</p>}</div>)}
     </>)}
     {group(S.startup, toggle(S.startAtLogin, status?.startup, enabled => action(c => c.setStartup(enabled))))}
     {group(S.about, <>

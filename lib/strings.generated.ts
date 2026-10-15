@@ -273,7 +273,7 @@ export const STRINGS = {
     "confirm": "Confirm",
     "claim": "Claim",
     "disconnect": "Disconnect",
-    "repair": "Repair",
+    "repair": "Prepare pairing repair",
     "sharing": "Sharing",
     "startAtLogin": "Start at login",
     "version": "Version",

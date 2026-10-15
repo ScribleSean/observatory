@@ -292,7 +292,7 @@ internal static class ObservatoryStrings
         internal const string Confirm = "Confirm";
         internal const string Claim = "Claim";
         internal const string Disconnect = "Disconnect";
-        internal const string Repair = "Repair";
+        internal const string Repair = "Prepare pairing repair";
         internal const string Sharing = "Sharing";
         internal const string StartAtLogin = "Start at login";
         internal const string Version = "Version";

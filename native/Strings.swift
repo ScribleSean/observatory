@@ -273,7 +273,7 @@ enum ObservatoryStrings {
         static let `confirm` = "Confirm"
         static let `claim` = "Claim"
         static let `disconnect` = "Disconnect"
-        static let `repair` = "Repair"
+        static let `repair` = "Prepare pairing repair"
         static let `sharing` = "Sharing"
         static let `startAtLogin` = "Start at login"
         static let `version` = "Version"
