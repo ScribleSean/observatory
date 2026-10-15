@@ -105,7 +105,7 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
             dt.datetime.fromisoformat(snapshot_at.replace('Z', '+00:00'))
             sources = snapshot.get('activity', []) + snapshot.get('tokens', []) + snapshot.get('settings', []) + snapshot.get('dictation', [])
             sources += snapshot.get('providerTokenSources', [])
-            sources += [snapshot[k] for k in ('quota', 'localModel', 'agentSource') if isinstance(snapshot.get(k), dict)]
+            sources += [snapshot[k] for k in ('quota', 'agentSource') if isinstance(snapshot.get(k), dict)]
             if quota_only:
                 if not isinstance(snapshot.get('quota'), dict):
                     raise ValueError('Missing allowance result')
