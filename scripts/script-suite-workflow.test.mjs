@@ -79,6 +79,7 @@ test('workflow has exactly the existing if lines in order', () => {
   assert.deepEqual(workflow.match(/^\s*if:.*$/gm), [
     "        if: runner.os == 'Windows'",
     "        if: runner.os == 'Windows'",
+    "        if: runner.os == 'Windows'",
     "        if: matrix.part == 'general'",
     "        if: matrix.part == 'general'",
     "        if: matrix.part == 'general'",
@@ -127,6 +128,21 @@ test('Windows installs pinned time zone data through the selected Python before 
   assert.match(step, /^          \$timezone = Get-ObservatoryArchive -Name tzdata -CacheRoot \$cache$/m);
   assert.match(step, /^          & \$env:OBSERVATORY_PYTHON -B -m pip install --no-index --no-deps \$timezone$/m);
   assert.match(step, /^          if \(\$LASTEXITCODE -ne 0\) \{ throw 'Pinned timezone preparation failed\.' \}$/m);
+});
+
+test('Windows warms the selected Python immediately before the suite and propagates failure', () => {
+  const matches = steps.filter((step) => step.startsWith('name: Warm the selected Python\n'));
+  assert.equal(matches.length, 1);
+  const step = matches[0];
+  assert.equal(steps.indexOf(step), steps.findIndex((entry) => entry.startsWith('run: npm ci\n')) + 1);
+  assert.equal(steps.indexOf(step) + 1, steps.indexOf(suite));
+  assert.equal(step, `name: Warm the selected Python
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+`);
 });
 
 test('suite job timeout is 50 minutes', () => {

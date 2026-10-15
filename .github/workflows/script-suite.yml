@@ -107,6 +107,12 @@ jobs:
           & $env:OBSERVATORY_PYTHON -B -m pip install --no-index --no-deps $timezone
           if ($LASTEXITCODE -ne 0) { throw 'Pinned timezone preparation failed.' }
       - run: npm ci
+      - name: Warm the selected Python
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run full script suite
         shell: node {0}
         env:

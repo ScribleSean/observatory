@@ -67,7 +67,7 @@ jobs:
     steps:
 `,
   );
-  assert.equal(steps.length, 5, 'Only runtime setup, isolation and tests');
+  assert.equal(steps.length, 6, 'Only runtime setup, isolation, warm-up and tests');
   assert.equal(
     steps[0],
     `uses: actions/checkout@v4
@@ -171,6 +171,18 @@ jobs:
   }
   assert.equal(
     steps[4],
+    `name: Warm the selected Python
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OBSERVATORY_PYTHON: \${{ steps.python.outputs.python-path }}
+        run: |
+          & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+`,
+  );
+  assert.equal(
+    steps[5],
     `name: Verify fictional native private-state contracts
         timeout-minutes: 12
         shell: bash

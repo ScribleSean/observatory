@@ -57,6 +57,14 @@ jobs:
             mkdirSync(directory, {recursive: true, mode: 0o700});
             appendFileSync(process.env.GITHUB_ENV, `${key}=${directory}\n`);
           }
+      - name: Warm the selected Python
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OBSERVATORY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # The preload and test-python receive this selected Python explicitly.
       # run-collector.test.mjs still uses PATH python3 on Mac, not a child pin.
       # Windows skips POSIX runner cases, Mac skips Windows DACL models.
