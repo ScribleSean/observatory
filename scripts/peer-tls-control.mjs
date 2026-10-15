@@ -1,12 +1,14 @@
 import {realpathSync} from 'node:fs';
 import {realpath} from 'node:fs/promises';
 import path from 'node:path';
+import net from 'node:net';
 import {fileURLToPath} from 'node:url';
 import {startHostTLSSetup} from './peer-tls-host.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {claimFromInvitation} from './peer-tls-client.mjs';
 import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
-import {encodeInvitation,decodeInvitation} from './peer-invitation.mjs';
+import {encodeInvitation,decodeInvitation,isPairingAddress,defaultSyncPort} from './peer-invitation.mjs';
+import {tailscaleSelfAddresses} from './tailscale-status.mjs';
 import {deviceIdentitySetupStatus,prepareDeviceIdentity} from './peer-identity-setup.mjs';
 import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
@@ -15,10 +17,27 @@ const fail=()=>Error('Setup command unavailable');
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
   Object.keys(value).length===keys.length && keys.every(key=>Object.hasOwn(value,key));
 
+export function checkSyncPort(address,port) {
+  return new Promise(resolve=>{
+    const server=net.createServer(),abort=new AbortController();
+    let done=false;
+    const finish=available=>{
+      if(done)return;done=true;clearTimeout(timeout);
+      abort.abort();server.close(()=>resolve(available));
+    };
+    const timeout=setTimeout(()=>finish(false),2000);
+    server.on('connection',socket=>socket.destroy());
+    server.on('error',()=>finish(false));
+    try {server.listen({host:address,port,exclusive:true,signal:abort.signal},()=>finish(true));}
+    catch {finish(false);}
+  });
+}
+
 // One controller belongs to one native setup child process. It never returns
 // keys, pairing configurations, comparison salts or internal claim handles.
 export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,readIdentity=readDeviceIdentity,
-  claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent}={}) {
+  claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent,
+  selfAddresses=tailscaleSelfAddresses,checkPort=checkSyncPort}={}) {
   let host=null,invitation=null,joining='idle',epoch=0,busy=null,abort=new AbortController();
   async function cancel() {
     epoch++;busy=null;abort.abort();abort=new AbortController();invitation=null;joining='idle';
@@ -33,9 +52,22 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
       return {status:busy!==null?'working':host?.status()??joining,
         peerCertificateSha256:pending?.peerCertificateSha256??null};
     }
+    if(exact(request,['action']) && request.action==='pending-peer') {
+      return {status:busy!==null?'working':host?.status()??joining,peerAddress:host?.pending()?.peerAddress??null};
+    }
     if(busy!==null)throw fail();
     const token=epoch;busy=token;
     try {
+      if(exact(request,['action']) && request.action==='host-defaults') {
+        if(host || invitation)throw fail();
+        let address=null,portAvailable=null;
+        try {const result=await selfAddresses();if(isPairingAddress(result?.ipv4))address=result.ipv4;}catch {}
+        if(token!==epoch)return {status:'cancelled'};
+        if(address!==null) {
+          try {portAvailable=await checkPort(address,defaultSyncPort);}catch {portAvailable=false;}
+        }
+        return token===epoch?{status:'ready',address,port:defaultSyncPort,portAvailable}:{status:'cancelled'};
+      }
       if(exact(request,['action']) && request.action==='identity-status') {
         const result=await deviceIdentitySetupStatus(runtime);
         return token===epoch?result:{status:'cancelled'};
