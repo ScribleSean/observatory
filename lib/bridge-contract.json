@@ -19,7 +19,7 @@
     "maxBytes": 16384,
     "appVersionMaxLength": 32,
     "customSkinsMax": 32,
-    "fields": ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing"]
+    "fields": ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharingChoice", "sharing"]
   },
   "dashboardFragments": ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"],
   "whiteSpace": [9, 10, 11, 12, 13, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288],
@@ -30,8 +30,9 @@
   },
   "values": {
     "tailscaleStatus": ["running", "offline", "needs-login", "needs-device-approval", "stopped", "starting", "other-user", "not-installed", "unsupported", "unavailable"],
-    "pairingState": ["idle", "identity-ready", "identity-required", "identity-recovery-required", "inactive", "waiting", "confirming", "awaiting-confirmation", "local-ready", "acknowledged", "configuration-ready", "working", "cancelled", "paired", "unpaired", "unavailable"],
+    "pairingState": ["idle", "identity-ready", "identity-required", "identity-recovery-required", "inactive", "waiting", "confirming", "awaiting-confirmation", "local-ready", "acknowledged", "configuration-ready", "working", "cancelled", "paired", "unpaired", "unavailable", "establishing-trust", "active-sync", "sync-stale", "revoked"],
     "transport": ["none", "ssh", "tls"],
+    "sharingChoiceState": ["on", "waiting-for-reading", "off", "unavailable"],
     "sharingReason": ["ready", "pairing-unavailable", "account-unavailable", "source-unavailable"],
     "appearance": ["system", "light", "dark"]
   },
@@ -75,6 +76,7 @@
         "enabled": { "type": "boolean" }
       }
     },
+    "set-sharing-choice": { "args": { "enabled": { "type": "boolean" } } },
     "set-sharing": {
       "args": {
         "channel": { "type": "enum", "values": ["codex-limits", "claude-code-tokens"] },
@@ -90,12 +92,15 @@
       },
       "value": true
     },
+    "pairing-host-defaults": { "args": {}, "value": true },
+    "pairing-peer-address": { "args": {}, "immediate": true, "value": true },
     "pairing-copy-invitation": { "args": {} },
     "pairing-host-confirm": {
       "args": {
         "fingerprint": { "type": "hex64" },
         "peerAddress": { "type": "address" },
-        "peerPort": { "type": "integer", "min": 1024, "max": 65535 }
+        "peerPort": { "type": "integer", "min": 1024, "max": 65535 },
+        "sharing": { "type": "boolean" }
       }
     },
     "pairing-join-claim": {
@@ -103,7 +108,7 @@
         "invitation": { "type": "invitation", "prefix": "observatory-pair:v1:", "maxLength": 2048 }
       }
     },
-    "pairing-join-confirm": { "args": {} },
+    "pairing-join-confirm": { "args": { "sharing": { "type": "boolean" } } },
     "pairing-cancel": { "args": {}, "immediate": true },
     "pairing-disconnect": { "args": {} },
     "pairing-repair-prepare": { "args": {} },

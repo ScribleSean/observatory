@@ -12,7 +12,7 @@ const { createServer } = await load('vite');
 const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
-const { SettingsContent, SettingsView, presentResult } = await server.ssrLoadModule('/app/viewer/settings/settings.tsx');
+const { SettingsContent, SettingsView, presentResult, pairingDefaults } = await server.ssrLoadModule('/app/viewer/settings/settings.tsx');
 const { createSettingsController, limitsConsentFlow, changeAppearance } = await server.ssrLoadModule('/app/viewer/settings/controller.ts');
 const { createFakeBridge } = await server.ssrLoadModule('/app/viewer/settings/fake-bridge.ts');
 const { validateBridgeStatus } = await server.ssrLoadModule('/app/viewer/settings/status.ts');
@@ -29,7 +29,7 @@ for (const skinId of ['sage', 'almanac']) {
       const at = html.indexOf(`<h3>${heading}</h3>`); assert.ok(at > last); last = at;
     }
     for (const label of ['ActivityWatch', 'Codex', 'Claude Code', 'Wispr Flow', 'Codex limits', 'Claude Code limits', 'Device name', 'Save', 'Check Tailscale', 'Pair a device', 'Share Codex limits', 'Share Claude Code tokens', 'Start at login', 'Version', 'Build', 'Check for updates', 'Appearance', 'System', 'Light', 'Dark', 'Skin', 'Sage', 'Almanac', 'Instrument', 'Amber CRT', 'Studio Night', 'Export data']) assert.ok(html.includes(label), label);
-    assert.equal((html.match(/type="checkbox"/g) ?? []).length, 9);
+    assert.equal((html.match(/type="checkbox"/g) ?? []).length, 8);
     assert.match(html, /Up to 32 characters/);
     const dashboard = renderToStaticMarkup(createElement(DashboardView, {
       demo: true, snapshot: null, loaded: true, now: 0, skinId, skin: validateSkin(SKINS[skinId]),
@@ -51,7 +51,7 @@ void test('missing status renders Unknown and disables every setting', () => {
   assert.match(view, /Unknown/);
 });
 void test('paired, confirming, identity and awaiting-confirmation variants show the right controls', () => {
-  for (const [state, labels] of /** @type {Array<[string, string[]]>} */ ([['paired', ['Disconnect', 'Repair']], ['awaiting-confirmation', ['Confirm', 'Cancel', 'Confirm the invitation']], ['identity-required', ['Create device identity', 'Cancel']], ['identity-ready', ['device&#x27;s address', 'device&#x27;s sync port', 'Start']]])) {
+  for (const [state, labels] of /** @type {Array<[string, string[]]>} */ ([['paired', ['Disconnect', 'Prepare pairing repair']], ['awaiting-confirmation', ['Confirm', 'Cancel', 'Confirm the invitation']], ['identity-required', ['Create device identity', 'Cancel']], ['identity-ready', ['device&#x27;s address', 'device&#x27;s sync port', 'Start']]])) {
     const status = sampleBridgeStatus(); status.pairing.state = state;
     const html = render(status);
     for (const label of labels) assert.ok(html.includes(label), `${state}: ${label}`);
@@ -76,8 +76,12 @@ void test('host invitation is read-only with private sharing and clipboard warni
 });
 void test('sharing-ready controls are enabled and unavailable reasons are readable', () => {
   const status = sampleBridgeStatus();
+  status.sharingChoice = { chosen: false, channels: { 'codex-limits': 'unavailable', 'claude-code-tokens': 'unavailable' } };
   const unavailable = render(status);
-  assert.ok(unavailable.includes('Pair a device before enabling sharing.'));
+  assert.ok(unavailable.includes('Share Codex limits'));
+  assert.ok(unavailable.includes('Share Claude Code tokens'));
+  assert.ok(unavailable.includes('Pair a device before enabling sharing'));
+  assert.ok(!unavailable.includes('Share usage records with the paired device'));
   for (const channel of Object.values(status.sharing)) Object.assign(channel, { canEnable: true, reason: 'ready', token: 'cd'.repeat(32) });
   const ready = render(status);
   assert.doesNotMatch(ready, /type="checkbox"[^>]*disabled/);
@@ -138,8 +142,8 @@ const validCalls = [
   ['setStartup', [false]], ['setAppearance', ['dark']], ['setLimitsConsent', [true]],
   ['setSharing', ['codex-limits', true, 'ab'.repeat(32)]], ['setSharing', ['claude-code-tokens', false]],
   ['pairingIdentityCreate', []], ['pairingHostStart', ['100.64.0.1', '9090']], ['pairingCopyInvitation', []],
-  ['pairingHostConfirm', ['ab'.repeat(32), '192.168.1.2', '9090']],
-  ['pairingJoinClaim', ['observatory-pair:v1:U0FNUExF']], ['pairingJoinConfirm', []], ['pairingCancel', []],
+  ['pairingHostConfirm', ['ab'.repeat(32), '100.101.102.103', '9090', true]],
+  ['pairingJoinClaim', ['observatory-pair:v1:U0FNUExF']], ['pairingJoinConfirm', [false]], ['pairingCancel', []],
   ['pairingDisconnect', []], ['pairingRepairPrepare', []], ['tailscaleCheck', []], ['checkUpdates', []], ['exportData', []],
 ];
 for (const mode of ['recording', 'fake']) {
@@ -186,7 +190,7 @@ void test('pairing failures refresh before returning', async () => {
     bridge.send = async (action, args) => action === 'pairing-join-confirm' ? { id: 1, ok: false, code } : original(action, args);
     const controller = createSettingsController(bridge);
     const before = bridge.messages.length;
-    assert.equal((await controller.pairingJoinConfirm()).code, code);
+    assert.equal((await controller.pairingJoinConfirm(false)).code, code);
     assert.equal(bridge.messages[before].action, 'status');
     assert.ok(controller.getStatus());
     controller.dispose();
@@ -318,7 +322,7 @@ void test('pairing timeout returns while its follow-up status is still pending',
   let statusSettled = false;
   const send = bridge.send.bind(bridge);
   bridge.send = (action, args) => send(action, args).then(result => { if (action === 'status') statusSettled = true; return result; });
-  assert.equal((await controller.pairingJoinConfirm()).timedOut, true);
+  assert.equal((await controller.pairingJoinConfirm(false)).timedOut, true);
   assert.deepEqual(posted.map(m => m.action), ['pairing-join-confirm', 'status']);
   assert.equal(statusSettled, false);
   controller.dispose(); bridge.dispose();
@@ -350,4 +354,56 @@ void test('fake bridge preserves collectionPaused through setting changes', asyn
     await controller.setStartup(false);
     assert.equal(controller.getStatus().collectionPaused, true);
   } finally { controller.dispose(); bridge.dispose(); }
+});
+
+void test('sharing choice requires exact keys and known channel states', () => {
+  for (const state of ['on', 'waiting-for-reading', 'off', 'unavailable']) {
+    const value = sampleBridgeStatus();
+    value.sharingChoice = { chosen: true, channels: { 'codex-limits': state, 'claude-code-tokens': state } };
+    assert.ok(validateBridgeStatus(value));
+  }
+  for (const mutate of [
+    value => { delete value.sharingChoice; },
+    value => { value.sharingChoice.extra = true; },
+    value => { value.sharingChoice.chosen = 1; },
+    value => { value.sharingChoice.channels.extra = 'off'; },
+    value => { delete value.sharingChoice.channels['codex-limits']; },
+    value => { value.sharingChoice.channels['claude-code-tokens'] = 'unknown'; },
+  ]) {
+    const value = sampleBridgeStatus();
+    mutate(value);
+    assert.equal(validateBridgeStatus(value), null);
+  }
+});
+
+void test('new pairing states have distinct words and accept only null fingerprints', () => {
+  for (const [state, words] of [
+    ['establishing-trust', 'Establishing trust'], ['active-sync', 'Active sync'],
+    ['sync-stale', 'No recent record from the other device'], ['revoked', 'Revoked'],
+  ]) {
+    const value = sampleBridgeStatus();
+    value.pairing.state = state;
+    assert.ok(validateBridgeStatus(value));
+    assert.ok(render(value).includes(words));
+    if (state !== 'active-sync') assert.ok(!render(value).includes('Active sync'));
+    value.pairing.peerFingerprint = 'ab'.repeat(32);
+    assert.equal(validateBridgeStatus(value), null);
+  }
+});
+
+void test('pairing pre-fill results require exact shapes, bounded ports and contract addresses', () => {
+  for (const address of [null, '100.101.102.103', 'fd7a:115c:a1e0::1234']) {
+    for (const portAvailable of [null, true, false]) {
+      assert.ok(pairingDefaults({ address, port: 43128, portAvailable }));
+    }
+    assert.ok(pairingDefaults({ peerAddress: address }, true));
+  }
+  const valid = { address: '100.101.102.103', port: 43128, portAvailable: false };
+  for (const value of [null, [], {}, { ...valid, extra: true }, { ...valid, port: '43128' },
+    { ...valid, port: 1023 }, { ...valid, port: 65536 }, { ...valid, port: 43128.5 },
+    { ...valid, portAvailable: 1 }, { ...valid, address: 'example.test' },
+    { address: valid.address, port: 43128 }]) assert.equal(pairingDefaults(value), null);
+  for (const value of [{}, [], { peerAddress: 'example.test' }, { peerAddress: null, extra: true }]) {
+    assert.equal(pairingDefaults(value, true), null);
+  }
 });

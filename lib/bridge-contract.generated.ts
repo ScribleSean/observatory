@@ -45,6 +45,7 @@ export const BRIDGE_CONTRACT = {
       "limitsConsent",
       "collectionPaused",
       "pairing",
+      "sharingChoice",
       "sharing"
     ]
   },
@@ -138,12 +139,22 @@ export const BRIDGE_CONTRACT = {
       "cancelled",
       "paired",
       "unpaired",
-      "unavailable"
+      "unavailable",
+      "establishing-trust",
+      "active-sync",
+      "sync-stale",
+      "revoked"
     ],
     "transport": [
       "none",
       "ssh",
       "tls"
+    ],
+    "sharingChoiceState": [
+      "on",
+      "waiting-for-reading",
+      "off",
+      "unavailable"
     ],
     "sharingReason": [
       "ready",
@@ -254,6 +265,13 @@ export const BRIDGE_CONTRACT = {
         }
       }
     },
+    "set-sharing-choice": {
+      "args": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
     "set-sharing": {
       "args": {
         "channel": {
@@ -291,6 +309,15 @@ export const BRIDGE_CONTRACT = {
       },
       "value": true
     },
+    "pairing-host-defaults": {
+      "args": {},
+      "value": true
+    },
+    "pairing-peer-address": {
+      "args": {},
+      "immediate": true,
+      "value": true
+    },
     "pairing-copy-invitation": {
       "args": {}
     },
@@ -306,6 +333,9 @@ export const BRIDGE_CONTRACT = {
           "type": "integer",
           "min": 1024,
           "max": 65535
+        },
+        "sharing": {
+          "type": "boolean"
         }
       }
     },
@@ -319,7 +349,11 @@ export const BRIDGE_CONTRACT = {
       }
     },
     "pairing-join-confirm": {
-      "args": {}
+      "args": {
+        "sharing": {
+          "type": "boolean"
+        }
+      }
     },
     "pairing-cancel": {
       "args": {},
@@ -349,7 +383,7 @@ export const BRIDGE_CONTRACT = {
   }
 } as const;
 
-export type BridgeAction = "refresh" | "check-updates" | "open-dashboard" | "open-settings" | "set-source" | "set-skin" | "set-device-name" | "set-startup" | "set-appearance" | "set-limits-consent" | "set-sharing" | "pairing-identity-create" | "pairing-host-start" | "pairing-copy-invitation" | "pairing-host-confirm" | "pairing-join-claim" | "pairing-join-confirm" | "pairing-cancel" | "pairing-disconnect" | "pairing-repair-prepare" | "tailscale-check" | "export-data" | "status" | "complete-setup";
+export type BridgeAction = "refresh" | "check-updates" | "open-dashboard" | "open-settings" | "set-source" | "set-skin" | "set-device-name" | "set-startup" | "set-appearance" | "set-limits-consent" | "set-sharing-choice" | "set-sharing" | "pairing-identity-create" | "pairing-host-start" | "pairing-host-defaults" | "pairing-peer-address" | "pairing-copy-invitation" | "pairing-host-confirm" | "pairing-join-claim" | "pairing-join-confirm" | "pairing-cancel" | "pairing-disconnect" | "pairing-repair-prepare" | "tailscale-check" | "export-data" | "status" | "complete-setup";
 export type BridgeArgs = {
   "refresh": Record<string, never>;
   "check-updates": Record<string, never>;
@@ -361,13 +395,16 @@ export type BridgeArgs = {
   "set-startup": { "enabled": boolean };
   "set-appearance": { "mode": "system" | "light" | "dark" };
   "set-limits-consent": { "enabled": boolean };
+  "set-sharing-choice": { "enabled": boolean };
   "set-sharing": { "channel": "codex-limits" | "claude-code-tokens"; "enabled": boolean; "token"?: string };
   "pairing-identity-create": Record<string, never>;
   "pairing-host-start": { "address": string; "port": number };
+  "pairing-host-defaults": Record<string, never>;
+  "pairing-peer-address": Record<string, never>;
   "pairing-copy-invitation": Record<string, never>;
-  "pairing-host-confirm": { "fingerprint": string; "peerAddress": string; "peerPort": number };
+  "pairing-host-confirm": { "fingerprint": string; "peerAddress": string; "peerPort": number; "sharing": boolean };
   "pairing-join-claim": { "invitation": string };
-  "pairing-join-confirm": Record<string, never>;
+  "pairing-join-confirm": { "sharing": boolean };
   "pairing-cancel": Record<string, never>;
   "pairing-disconnect": Record<string, never>;
   "pairing-repair-prepare": Record<string, never>;

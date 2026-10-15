@@ -46,6 +46,13 @@
         "reason": "pairing-unavailable",
         "token": null
       }
+    },
+    "sharingChoice": {
+      "channels": {
+        "claude-code-tokens": "unavailable",
+        "codex-limits": "unavailable"
+      },
+      "chosen": false
     }
   },
   {
@@ -95,6 +102,13 @@
         "reason": "pairing-unavailable",
         "token": null
       }
+    },
+    "sharingChoice": {
+      "channels": {
+        "claude-code-tokens": "unavailable",
+        "codex-limits": "unavailable"
+      },
+      "chosen": false
     }
   },
   {
@@ -144,6 +158,13 @@
         "reason": "pairing-unavailable",
         "token": null
       }
+    },
+    "sharingChoice": {
+      "channels": {
+        "claude-code-tokens": "unavailable",
+        "codex-limits": "unavailable"
+      },
+      "chosen": false
     }
   },
   {
@@ -193,6 +214,13 @@
         "reason": "pairing-unavailable",
         "token": null
       }
+    },
+    "sharingChoice": {
+      "channels": {
+        "claude-code-tokens": "unavailable",
+        "codex-limits": "unavailable"
+      },
+      "chosen": false
     }
   }
 ]
