@@ -42,6 +42,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
   const [collectionPaused, setCollectionPaused] = useState(false);
+  const [actionsAvailable, setActionsAvailable] = useState(demo);
   const [section, setSection] = useState<DashboardSection>(() => sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash));
   const [now, setNow] = useState(() => Date.now());
 
@@ -62,7 +63,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
     controller?.subscribe(status => setCollectionPaused(status?.collectionPaused === true));
     const readStatus = () => { void controller?.status(); };
     readStatus();
-    const first = setTimeout(() => { void load(); if (!controller) setCollectionPaused(false); }, 0);
+    const first = setTimeout(() => { setActionsAvailable(demo || bridge?.available === true); void load(); if (!controller) setCollectionPaused(false); }, 0);
     const reload = () => { void load(); readStatus(); };
     const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) reload(); }, 30000);
     window.addEventListener('observatory:snapshot-changed', reload);
@@ -75,11 +76,12 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   }, []);
 
   // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
-  return <DashboardView collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
+  return <DashboardView actionsAvailable={actionsAvailable} collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={section} onSectionChange={id => { setSection(id); writeSectionHash(window, id); }} onSkinChange={setSkinId} onSetupFinished={() => { setSection('limits'); writeSectionHash(window, 'limits'); }} />;
 }
 
 type DashboardViewProps = {
+  actionsAvailable?: boolean;
   collectionPaused?: boolean;
   onSetupFinished?: () => void;
   demo?: boolean;
@@ -95,7 +97,7 @@ type DashboardViewProps = {
   onSkinChange: (skin: string) => void;
 };
 
-export function DashboardView({ collectionPaused = false, demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange, onSetupFinished = () => {} }: DashboardViewProps) {
+export function DashboardView({ actionsAvailable = true, collectionPaused = false, demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange, onSetupFinished = () => {} }: DashboardViewProps) {
   const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
     source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
   const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
@@ -108,12 +110,13 @@ export function DashboardView({ collectionPaused = false, demo = false, snapshot
       <style>{css}</style>
       <Row as="header">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
-        {collectionPaused && <span className="ob-meta warn">{STRINGS.settings.collectionPaused}</span>}
+        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The paused note uses the requested span status markup. */}
+        {collectionPaused && <span role="status" className="ob-meta warn">{STRINGS.settings.collectionPaused}</span>}
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>
       </Row>
 
       <div className="ob-dashboard-layout">
-        {selected !== 'setup' && <nav aria-label={STRINGS.sections.navigation}>
+        {(selected !== 'setup' || !actionsAvailable) && <nav aria-label={STRINGS.sections.navigation}>
           {sections.map(([id, name]) => (
             <button key={id} type="button" aria-current={id === selected ? 'page' : undefined} className={id === selected ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>
           ))}

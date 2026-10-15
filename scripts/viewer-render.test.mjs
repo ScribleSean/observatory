@@ -287,7 +287,7 @@ void test('dashboard paused note is in the header including setup', () => {
   for (const section of ['limits', 'setup']) {
     const html = dashboard({ section, collectionPaused: true });
     assert.equal((html.match(/Collection paused/g) ?? []).length, 1);
-    assert.match(html, /<header[^>]*>[\s\S]*<span class="ob-meta warn">Collection paused<\/span>[\s\S]*<\/header>/);
+    assert.match(html, /<header[^>]*>[\s\S]*<span role="status" class="ob-meta warn">Collection paused<\/span>[\s\S]*<\/header>/);
     assert.doesNotMatch(dashboard({ section, collectionPaused: false }), /Collection paused/);
   }
 });

@@ -54,3 +54,26 @@ void test('missing status and unavailable transport keep controls disabled', () 
 void test('setup is an exact fragment and settings remains supported', () => {
   for (const [hash, section] of [['#setup', 'setup'], ['#Setup', 'limits'], ['#setup/x', 'limits'], ['#settings', 'settings']]) assert.equal(sectionFromHash(hash), section);
 });
+
+void test('step 1 with missing status shows six disabled Unknown source choices', () => {
+  const html = render(0, { status: null });
+  const inputs = [...html.matchAll(/<input[^>]*type="checkbox"[^>]*>/g)];
+  assert.equal(inputs.length, 6);
+  for (const [input] of inputs) {
+    assert.match(input, /aria-checked="mixed"/);
+    assert.match(input, /disabled=""/);
+  }
+  assert.equal((html.match(/>Unknown</g) ?? []).length, 6);
+  assert.equal((html.match(/<label[^>]*><input[^>]*>[^<]*<\/label><span class="ob-meta">Unknown<\/span>/g) ?? []).length, 6);
+  assert.doesNotMatch(html, /\bOff\b/);
+});
+void test('setup navigation depends on action availability and defaults to hidden', () => {
+  for (const actionsAvailable of [false, true, undefined]) {
+    const html = renderToStaticMarkup(createElement(DashboardView, {
+      snapshot: null, loaded: true, now: 0, skinId: 'sage', skin: validateSkin(SKINS.sage),
+      section: 'setup', onSectionChange: noop, onSkinChange: noop,
+      ...(actionsAvailable === undefined ? {} : { actionsAvailable }),
+    }));
+    assert.equal(html.includes('<nav'), actionsAvailable === false);
+  }
+});

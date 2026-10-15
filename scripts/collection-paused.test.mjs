@@ -35,7 +35,7 @@ for (const mode of ['native', 'demo', 'unavailable']) {
       if (mode === 'native') {
         assert.equal(posts[0].action, 'status');
         await answer(true);
-        assert.match(container.querySelector('header').textContent, /Collection paused/);
+        assert.equal(container.querySelector('header span[role="status"]').textContent, 'Collection paused');
         await act(async () => win.dispatchEvent(new win.Event('observatory:snapshot-changed')));
         assert.equal(posts.length, 2);
         await answer(false);
@@ -52,6 +52,42 @@ for (const mode of ['native', 'demo', 'unavailable']) {
       const count = posts.length;
       win.dispatchEvent(new win.Event('observatory:snapshot-changed'));
       assert.equal(posts.length, count);
+    } finally {
+      await act(async () => root.unmount());
+      await win.happyDOM.close();
+      for (const [key, descriptor] of saved) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    }
+  });
+}
+
+for (const mode of ['unavailable', 'native', 'demo']) {
+  void test(`setup navigation with ${mode} actions`, async () => {
+    const win = new Window({ url: 'https://synthetic.test/dashboard.html#setup' });
+    const posts = [];
+    if (mode === 'native') win.webkit = { messageHandlers: { bridge: { postMessage: text => posts.push(JSON.parse(text)) } } };
+    else assert.equal(win.webkit, undefined);
+    assert.equal(win.chrome?.webview, undefined);
+    const globals = { window: win, document: win.document, navigator: win.navigator, HTMLElement: win.HTMLElement, Node: win.Node, MutationObserver: win.MutationObserver, IS_REACT_ACT_ENVIRONMENT: true,
+      fetch: async () => ({ ok: false }) };
+    const saved = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+    for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+    const { createRoot } = await import('react-dom/client');
+    const { default: Dashboard } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+    const container = win.document.createElement('div');
+    win.document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => { root.render(createElement(Dashboard, { demo: mode === 'demo' })); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+      assert.ok(container.querySelector('.ob-setup'));
+      assert.equal(container.querySelector('nav') !== null, mode === 'unavailable');
+      if (mode === 'native') {
+        assert.equal(posts.length, 2);
+        assert.ok(posts.every(post => post.action === 'status'));
+      } else assert.equal(posts.length, 0);
     } finally {
       await act(async () => root.unmount());
       await win.happyDOM.close();
