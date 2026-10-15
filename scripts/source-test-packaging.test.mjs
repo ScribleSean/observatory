@@ -18,6 +18,7 @@ const testSetup = [
   'scripts/test-source-runtime.mjs',
   'scripts/test-file-symlink.mjs',
   'scripts/test-python.mjs',
+  'scripts/peer-live-controller.mjs',
   'native/tests/archive-retirement-fixture.mjs',
 ];
 
