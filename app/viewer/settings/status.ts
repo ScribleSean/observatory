@@ -36,7 +36,7 @@ export function validateBridgeStatus(value: unknown): BridgeStatus | null {
     if (!keys(pairing, ['state', 'peerFingerprint', 'transport', 'invitationKept']) ||
       !contract.values.pairingState.includes(pairing.state as string) || !contract.values.transport.includes(pairing.transport as string) ||
       typeof pairing.invitationKept !== 'boolean' ||
-      (pairing.state === 'awaiting-confirmation' ? !hex(pairing.peerFingerprint) : pairing.peerFingerprint !== null)) return null;
+      (pairing.state === 'confirming' ? !hex(pairing.peerFingerprint) : pairing.peerFingerprint !== null)) return null;
     if (!keys(sharing, ['codex-limits', 'claude-code-tokens'])) return null;
     for (const [channel, item] of Object.entries(sharing)) {
       if (!keys(item, ['enabled', 'canEnable', 'reason', 'token']) || typeof item.enabled !== 'boolean' || typeof item.canEnable !== 'boolean' ||

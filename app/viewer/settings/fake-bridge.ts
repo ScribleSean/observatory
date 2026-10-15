@@ -37,7 +37,7 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
             case 'complete-setup': break;
             case 'status':
               if (state.pairing.state === 'waiting' && ++hostPolls > 1) {
-                state.pairing.state = 'awaiting-confirmation';
+                state.pairing.state = 'confirming';
                 state.pairing.peerFingerprint = 'ab'.repeat(32);
               }
               result.value = structuredClone(state); break;
@@ -62,11 +62,11 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
               result.value = { invitation: 'observatory-pair:v1:U0FNUExFLURBVEEtTk9ULUEtUkVBTC1JTlZJVEFUSU9O' }; break;
             case 'pairing-copy-invitation': if (!state.pairing.invitationKept) unavailable(); break;
             case 'pairing-host-confirm':
-              if (state.pairing.state !== 'awaiting-confirmation' || input.fingerprint !== state.pairing.peerFingerprint) unavailable();
+              if (state.pairing.state !== 'confirming' || input.fingerprint !== state.pairing.peerFingerprint) unavailable();
               else end('paired');
               break;
-            case 'pairing-join-claim': end('confirming'); break;
-            case 'pairing-join-confirm': if (state.pairing.state !== 'confirming') unavailable(); else end('paired'); break;
+            case 'pairing-join-claim': end('awaiting-confirmation'); break;
+            case 'pairing-join-confirm': if (state.pairing.state !== 'awaiting-confirmation') unavailable(); else end('paired'); break;
             case 'pairing-cancel': end('idle'); break;
             case 'pairing-disconnect': end('unpaired'); break;
             case 'pairing-repair-prepare': end('idle'); break;
