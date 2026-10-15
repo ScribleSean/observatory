@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
+import {X509Certificate} from 'node:crypto';
 import {existsSync} from 'node:fs';
 import {mkdtemp,realpath,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -10,9 +11,10 @@ import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
-import {startHostTLSSetup,readHostTLSSetup,prepareHostTLSSetup} from './peer-tls-host.mjs';
+import {startHostTLSSetup,readHostTLSSetup,prepareHostTLSSetup,recordHostTLSAcknowledgement} from './peer-tls-host.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
-import {requestPeerClaim,claimFromInvitation,requestPeerSetup,acknowledgePeerSetup} from './peer-tls-client.mjs';
+import {requestPeerClaim,claimFromInvitation,requestPeerSetup} from './peer-tls-client.mjs';
+import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
 
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
@@ -71,7 +73,11 @@ test('TLS repair consent',{skip:!existsSync(openssl) || !['darwin','win32'].incl
       const request={...endpoints,peerCertificate:pending.peerCertificate,peerCertificateSha256:pending.peerCertificateSha256,peerRepairNonce:peerNonce};
       assert.deepEqual(await prepareHostTLSSetup(local,request),response.pairing);
       await assert.rejects(prepareHostTLSSetup(local,{...request,peerRepairNonce:'c'.repeat(64)}),{message:'Confirmed host setup unavailable'});
-      await acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,response.pairing,{connect});
+      // Network acknowledgement is covered by scripts/peer-tls-client.test.mjs and is done directly here so a slow private-folder check on Windows cannot outlast the 8 second connection deadlines.
+      assert.deepEqual(await recordHostTLSAcknowledgement(local,{
+        peerCertificateSha256:new X509Certificate(clientIdentity.cert).fingerprint256.replaceAll(':','').toLowerCase(),
+        digest:setupConfigurationDigest(response.pairing)
+      }),{version:1,status:'acknowledged'});
       assert.deepEqual(await readHostTLSSetup(local),{pairing:response.pairing,acknowledged:true});
       assert.deepEqual(await retiredBytes(local),before);
     } finally {await listener.cancel();}
