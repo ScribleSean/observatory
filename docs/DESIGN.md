@@ -367,7 +367,7 @@ The pairing control process still checks the address with `isPairingAddress`, as
 | `tailscale-check` | none | Answers from the cache, refreshed by running `tailscale-status.mjs`, which takes no arguments. `value` is `{status}`, one of `running`, `offline`, `needs-login`, `needs-device-approval`, `stopped`, `starting`, `other-user`, `not-installed`, `unsupported` or `unavailable`. |
 | `export-data` | none | Shows the shell's own save panel, which requires the `.observatory` extension and does not offer to replace an existing file. If the person picks a file, it runs `observatory-file.mjs export --runtime <runtime> --out <file>`. The script refuses to replace a file that exists by then, and the result is `unavailable`. The page never sees or sends the path. Cancelling the panel returns `cancelled`. |
 | `status` | none | The one query, answered from the shell's cache. `value` is described below. Never `busy`. |
-| `complete-setup` | none | Reserved for O1, which records that first-run setup finished. A shell refuses it with `refused` until O1's reviewed amendment adds it to the generated contract. |
+| `complete-setup` | none | Records that first-run setup finished. Added by O1's amendment on 2026-10-14. The shell writes `{"version": 1, "completed": true}` to `<runtime>/setup-state.json` with its own JSON encoder and the guards `FirstRunSetup` uses today (a 4 KiB cap and a linked file refused), and nothing from the page reaches that file beyond the action name. It does not change the source settings, which the page has already set through `set-source`, so finishing with every source off is allowed. When setup is already complete it changes nothing and returns `done`. After the write, collection is allowed and the shell starts the first collection, as finishing the native wizard does today. It starts no process and returns no `value`. |
 
 **Disconnect and repair.** Both actions keep what the Mac does today (`native/main.swift`). After the person confirms, the shell pauses collection before it runs the script. It then checks again for a running refresh or pairing step, because one may have started while the dialog was open, and if so returns `busy` with collection still paused for the session. When the script succeeds, collection resumes. When the result cannot be verified, the result is `unavailable` and collection stays paused for the session, because pairing may already be disabled. The Windows shell adopts the same behaviour.
 
@@ -410,7 +410,13 @@ The owner decided on 2026-10-14 that "pairing code" in this document and in the 
 
 #### First-run setup
 
-The owner decided on 2026-10-14 that the first-run wizard lives in the shared viewer (O1), at `dashboard.html#setup`. It writes through `set-source` and `set-limits-consent`, and finishes with `complete-setup`, reserved above.
+The owner decided on 2026-10-14 that the first-run wizard lives in the shared viewer (O1), at `dashboard.html#setup`. It writes through `set-source` and `set-limits-consent`, and finishes with `complete-setup`. It sends no other action except `status`.
+
+- **Opening it.** A shell opens the dashboard at `#setup` while `setup-state.json` says setup is incomplete (O1-2). The page treats `setup` as a section that is not in the section list: the navigation is hidden while the wizard shows, and every other unknown fragment still shows Limits.
+- **Step 1, sources.** The five `set-source` switches in the order ActivityWatch, Codex, Claude Code, Wispr Flow and Codex limits, each with one line saying what it reads, then Claude Code limits. Each switch is sent when it changes and shows the value `status` reports, or Unknown while `status` is not known. Turning Claude Code limits on first shows the disclosure from "Claude Code limits bridge" (the same three lines Settings shows), and only "Turn on" sends `set-limits-consent`. The step names no SSH connection and links nowhere.
+- **Step 2, other devices.** Text only: pairing a second device is optional and happens later, in Settings, with an invitation made on one device and pasted on the other. There is no pairing control in the wizard.
+- **Step 3, finish.** A summary of the six switches as On, Off or Unknown, a note when none is on, and "Finish", which sends `complete-setup`. Finishing with ActivityWatch alone, or with nothing on, is allowed. On `done` the page shows Limits and writes `#limits` to the address. Any other result keeps the wizard open with the message for its code.
+- **Demo.** `dashboard.html?demo#setup` runs the same wizard against the page's fake bridge, starting with every switch off. Nothing leaves the page.
 
 ### Dashboard page decisions
 
