@@ -39,8 +39,11 @@ export async function finalizePeerCollection(runtime,result,pairing,previous=[],
     await assertPairingActive(runtime);
     await assertCurrentPeerConfig(runtime,pairing.local);
     if(peer)result.data=mergePeerPayloads(local.payload,peer.payload,pairing.local,pairing.peer,previous,now);
-    else if(transport==='unavailable')unavailableConfiguredPeerSources(result,pairing);
+    else unavailableConfiguredPeerSources(result,pairing);
     result.peer={status:peer?'merged':'waiting',sequence:local.revision.sequence,transport};
-  } catch {result.peer={status:'unavailable'};}
+  } catch {
+    result.peer={status:'unavailable'};
+    try {unavailableConfiguredPeerSources(result,pairing);} catch {}
+  }
   return result;
 }

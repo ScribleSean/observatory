@@ -510,6 +510,8 @@ For All, Now reads only the collector's verified aggregates, as the other period
 - Screen time for All uses the `hours` of the `Combined` activity row, with the `Combined` reading time above.
 - Claude Code tokens for All stay "By device", as they are for the other periods.
 
+The rule reads the snapshot rows, not the pairing state. When the snapshot shows exactly one native host and no sign of a paired device (the other host appears only as `not-connected` placeholders, no retired host carries data, and there is no `Combined` or `combinedTokens` data and no peer limits), All reads that host's own rows in every view and in the panel, because one device has nothing to add together (`soleHost` in `lib/panel-data.mjs`, issue 112). A paired device whose peer has not been merged yet marks the peer's rows `unavailable` (`finalizePeerCollection` in `scripts/peer-finalize.mjs`), so it keeps the rules above. While a device is paired but has not yet merged any record from the other device, the collector marks the other device's rows `unavailable`, so the one-device rule does not apply, the other device's sources count as configured, and the run state reads Partial until the first merge. If the saved pairing cannot be read safely, the collection stops before that marking step, so such a device still reads as one device.
+
 The panel and the dashboard show this one caveat sentence with every Now total:
 
 > Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.

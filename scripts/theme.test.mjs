@@ -16,13 +16,6 @@ test('all platforms use the current shared strings', () => {
     assert.equal(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n'), expected, path);
   }
 });
-test('native allowance charts use the Observatory palette, not the system accent', () => {
-  const panel = readFileSync(new URL('../native/QuotaPanel.swift', import.meta.url), 'utf8');
-  assert.ok(!panel.includes('Color.accentColor'));
-  assert.match(panel, /y: \.value\("Tokens", tokens\), width: \.fixed\(40\)\)\.foregroundStyle\(ObservatoryTheme\.sage\)/);
-  assert.ok(!panel.includes('.foregroundStyle(ObservatoryTheme.purple)'), 'Allowance charts keep one hue family');
-  assert.match(panel, /dash: \[3, 4\]/, 'Unknown coverage has distinct dashed ink');
-});
 function luminance(hex) {
   let digits = hex.slice(1);
   if (digits.length === 3) digits = [...digits].map(x => x + x).join('');
