@@ -324,5 +324,30 @@
     "tailscaleNotInstalled": "Tailscale is not installed.",
     "tailscaleUnsupported": "Tailscale is unsupported.",
     "tailscaleUnavailable": "Tailscale status is unavailable."
+  },
+  "setup": {
+    "title": "Set up Observatory",
+    "stepLabel": "Step {step} of {count}",
+    "sourcesTitle": "Choose what to collect",
+    "sourcesIntro": "Turn on the sources this device should read. Everything starts off, and you can change it later in Settings.",
+    "sourcesNote": "ActivityWatch is installed separately and must be running. Each other source needs its own application and local records. Turning a source on does not prove it is available, and a source that cannot be read shows Unknown.",
+    "privacyNote": "Snapshots leave out prompts, window titles, transcripts, audio and credentials. Provider sign-ins stay on the device that owns them.",
+    "activityHint": "Screen time from ActivityWatch on this device.",
+    "codexHint": "Token use from saved Codex sessions.",
+    "claudeHint": "Token use from saved Claude Code sessions.",
+    "wisprHint": "Dictation statistics from Wispr Flow.",
+    "quotaHint": "Codex account limits, read online through the installed Codex sign-in without making model requests.",
+    "claudeLimitsHint": "Claude Code account limits, read from a status line that Observatory adds to Claude Code. Read the notes before turning it on.",
+    "pairingTitle": "Other devices",
+    "pairingIntro": "Pairing a second device is optional. You can pair later, in Settings.",
+    "pairingHow": "One device creates an invitation in Settings, and the other device pastes it. Observatory works on this device alone until then.",
+    "pairingNoAccount": "There is no Observatory account or hosted sync service.",
+    "finishTitle": "Finish",
+    "finishIntro": "Observatory collects from the sources that are on. You can change them later in Settings.",
+    "finishNone": "No source is on. Each section shows Unknown until a source is turned on in Settings.",
+    "back": "Back",
+    "next": "Continue",
+    "finish": "Finish",
+    "appOnly": "Open Observatory to finish setup."
   }
 }
