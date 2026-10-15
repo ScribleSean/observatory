@@ -39,6 +39,7 @@ export default function Panel({ demo = false, initialSkin = 'sage' }: { demo?: b
       const response = await fetch('./local/usage.json', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
       setSnapshot(response.ok ? await response.json() as Snapshot : null);
     } catch { setSnapshot(null); }
+    setNow(Date.now());
     setLoaded(true);
   }, [demo]);
 

@@ -453,6 +453,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private int nativeDialogCount;
     private bool setupWarningShown;
     private bool dashboardOpened;
+    private bool firstOpenFailed;
 
     private void ShowSetupWarning()
     {
@@ -532,10 +533,27 @@ internal sealed class ObservatoryContext : ApplicationContext
         activationTimer.Start();
         if (show || setupPending)
         {
-            void OpenOnIdle(object? sender, EventArgs args)
+            const string setupOpenFailureMessage = "The Observatory window could not open, so setup cannot continue. Observatory will close. Try opening it again, and reinstall Observatory if this keeps happening.";
+            const string openFailureMessage = "The Observatory window could not open. Collection continues in the background. Open Observatory again from the tray icon.";
+            async void OpenOnIdle(object? sender, EventArgs args)
             {
                 Application.Idle -= OpenOnIdle;
-                Open();
+                try { Open(); }
+                catch
+                {
+                    firstOpenFailed = true;
+                    try
+                    {
+                        WithNativeDialog(() => MessageBox.Show(setupPending ? setupOpenFailureMessage : openFailureMessage, "Observatory",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning));
+                    }
+                    finally
+                    {
+                        // If quitting is refused because work is still running, the tray stays usable.
+                        if (setupPending) await RequestQuit();
+                        firstOpenFailed = false;
+                    }
+                }
             }
             Application.Idle += OpenOnIdle;
         }
@@ -831,7 +849,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void Open(string? section)
     {
-        if (quitting) return;
+        if (quitting || firstOpenFailed) return;
         webPanel?.Hide();
         try { if (FirstRunSetup.Required(runtime)) section = "setup"; }
         catch { section ??= "settings"; ShowSetupWarning(); }
@@ -843,15 +861,23 @@ internal sealed class ObservatoryContext : ApplicationContext
                 () => pairingDetailsOpen,
                 () => nativeDialogCount > 0, () => quitting, CheckForUpdates, value => Open(value));
             var handler = new BridgeHandler(host, runtime);
-            handler.RefreshFilesNow();
-            window = new WebDashboard(runtime, handler, section);
-            handler.ViewerChanged += (skin, appearance) =>
+            try
             {
-                window.ApplyViewer(skin, appearance);
-                webPanel?.ApplyViewer(skin, appearance);
-            };
-            dashboardBridge = handler;
-            dashboard = window;
+                handler.RefreshFilesNow();
+                window = new WebDashboard(runtime, handler, section);
+                handler.ViewerChanged += (skin, appearance) =>
+                {
+                    window.ApplyViewer(skin, appearance);
+                    webPanel?.ApplyViewer(skin, appearance);
+                };
+                dashboardBridge = handler;
+                dashboard = window;
+            }
+            catch
+            {
+                handler.Dispose();
+                throw;
+            }
             window.FormClosed += (_, _) =>
             {
                 handler.Dispose();
@@ -864,9 +890,15 @@ internal sealed class ObservatoryContext : ApplicationContext
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
         if (foregroundSetup) dashboard.TopMost = true;
-        dashboard.Activate();
-        dashboard.BringToFront();
-        if (foregroundSetup) dashboard.TopMost = false;
+        try
+        {
+            dashboard.Activate();
+            dashboard.BringToFront();
+        }
+        finally
+        {
+            if (foregroundSetup) dashboard.TopMost = false;
+        }
         dashboardOpened = true;
     }
 

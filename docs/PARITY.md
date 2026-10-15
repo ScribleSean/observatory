@@ -22,10 +22,10 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Left click opens the panel | Done | Done | Keep | |
-| Name and freshness line | Differs | Differs | Change | Different freshness wording on each. Windows uses "Updated 4m ago". |
+| Name and freshness line | Differs | Differs | Change | Different freshness wording on each. Windows uses "Updated 4m ago". Since issue 112 (`shared/o1-one-device`) the shared panel and dashboard measure the age against the time the snapshot arrived, and allow 2 minutes of clock difference before they say "Update time is ahead of this device". A missing time reads "Updated: Unknown". Checked by unit tests and in a desktop browser with synthetic data only. |
 | Codex limits | Differs | Differs | Change | Mac draws rings for up to two windows. Windows shows text and a bar for up to two windows. |
 | Claude Code limits | Missing | Missing | Add | The shared collector writes `claudeLimits` once limits consent is given, through the status line bridge or, since D1-5 on `shared/d1-limits`, the separate consent marker written by `scripts/claude-limits-consent.mjs`. Since D1-9 the row also carries `usageCommand`, a status word saying whether that collection's usage command gave a reading. No native view reads it. The shared web panel does. Tested from source with synthetic data only. Not in an installed build. |
-| Device filter (All, Mac, Windows) | Differs | Differs | Change | Mac opens on All. Windows opens on Windows. The list is fixed in code on both. |
+| Device filter (All, Mac, Windows) | Differs | Differs | Change | Mac opens on All. Windows opens on Windows. The list is fixed in code on both. In the shared panel, since issue 112 (`shared/o1-one-device`), All on a snapshot with exactly one device and no paired device shows that device's own totals instead of Unknown. Checked by unit and render tests and in a desktop browser with synthetic data only, not on either installed app. |
 | Period filter | Differs | Missing | Change | Mac offers Today, Week, All time. Windows shows the latest recorded day only. |
 | Now period | Missing | Missing | Add | |
 | Month period | Missing | Missing | Add | |
@@ -81,7 +81,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Device filter | Done | Done | Keep | |
+| Device filter | Done | Done | Keep | In the shared viewer, since issue 112 (`shared/o1-one-device`), All on a snapshot with exactly one device and no paired device reads that device's own rows in Activity and Tokens, as "Snapshot additions" in the design direction now says. With two devices All still reads only the verified aggregates. Checked by unit tests and in a desktop browser with synthetic data only. |
 | Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. The shared dashboard's Activity view (V3, issue 97) offers Now, Day, Week, Month and All time. Its Now follows the rule under "Snapshot additions" in the design direction, reads only the `Combined` row for All, and shows Unknown until a collector stamps `checkedAt` on that row. Checked with synthetic tests and the sample in a browser, not inside either host. |
 | Date picker | Done | Done | Keep | |
 | Total and bar chart, up to 30 days | Done | Done | Keep | |
