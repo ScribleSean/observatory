@@ -1,4 +1,4 @@
-import {constants} from 'node:fs';
+import {constants,appendFileSync} from 'node:fs';
 import {lstat,realpath,mkdir,access} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -10,11 +10,20 @@ import {REFUSAL_CODES} from './refusal-codes.mjs';
 export {REFUSAL_CODES};
 const refused=error=>{if(!error || typeof error!=='object')error=Error('Private directory verification failed');if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
 const execute=promisify(execFile);
+// Measurement only (issue 106). Off unless OBSERVATORY_COUNT_POWERSHELL names an
+// absolute file. At exit this process appends how many PowerShell checks it started.
+// A file is used because the app reads and discards the collector's error output.
+let powershellStarts=0;
+const countFile=process.env.OBSERVATORY_COUNT_POWERSHELL;
+if(countFile && path.isAbsolute(countFile))process.once('exit',()=>{
+  try {appendFileSync(countFile,`private-sync-acl ${powershellStarts}\n`);} catch {}
+});
 export async function windowsPermissions(directory,initialize=false,ancestor=false,run=execute) {
   const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
   const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
   for(let attempt=0;attempt<2;attempt++) {
     try {
+      powershellStarts++;
       const {stdout}=await run(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,'-Diagnostic',
         ...(ancestor?['-Ancestor']:[]),...(initialize && attempt===0?['-Initialize']:[])],
       {windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
