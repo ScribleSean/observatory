@@ -161,7 +161,7 @@ internal static class Program
             {
                 var result = UpdateInstall.ApplyAndRelaunch(args[1], args[2], args[3], args[4], args[5], previousBuild).GetAwaiter().GetResult();
                 if (!result.LaunchConfirmed) throw new IOException("Updated application launch was not confirmed.");
-                if (UpdateQuit.Request(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, TimeSpan.FromSeconds(30)) != UpdateQuit.Result.Stopped)
+                if (UpdateQuit.Request(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, AppIdentity.Current.InUseName, TimeSpan.FromSeconds(30)) != UpdateQuit.Result.Stopped)
                     throw new IOException("Updated application did not quit normally.");
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = "installed-relaunched-and-stopped", result.SourceRevision, result.Recovery }));
             }
@@ -254,7 +254,7 @@ internal static class Program
             if (args.Length != 1) { Environment.ExitCode = 64; return; }
             try
             {
-                var result = UpdateQuit.Request(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, TimeSpan.FromSeconds(270));
+                var result = UpdateQuit.Request(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, AppIdentity.Current.InUseName, TimeSpan.FromSeconds(270));
                 Environment.ExitCode = result == UpdateQuit.Result.Stopped ? 0 : result == UpdateQuit.Result.Unsupported ? 2 : 3;
             }
             catch { Environment.ExitCode = 1; }
@@ -395,26 +395,33 @@ internal static class Program
             return;
         }
         using var singleton = new Mutex(true, AppIdentity.Current.SingletonName, out var first);
-        // The singleton now prevents an installer from modifying this process's
-        // files. Release the startup gate so existing-instance activation works.
-        installationGate.Dispose();
-        using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.ActivationName);
-        if (!first)
+        using var inUse = AppIdentity.RuntimeOverride is null ? null :
+            new Semaphore(int.MaxValue, int.MaxValue, AppIdentity.Current.InUseName);
+        if (inUse is not null && !inUse.WaitOne(0)) { Environment.ExitCode = 1; return; }
+        try
         {
-            if (!args.Contains("--background")) activation.Set();
-            return;
+            // The singleton or runtime semaphore protects the installation files.
+            // Release the startup gate so existing-instance activation works.
+            installationGate.Dispose();
+            using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.ActivationName);
+            if (!first)
+            {
+                if (!args.Contains("--background")) activation.Set();
+                return;
+            }
+            using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
+            var context = new ObservatoryContext(activation, !args.Contains("--background"), updateQuit,
+                panelTiming: args.Contains("--panel-timing"));
+            EventHandler? readyHandler = null;
+            if (updateReady is not null)
+            {
+                readyHandler = (_, _) => { Application.Idle -= readyHandler; UpdateReady.Signal(updateReady); };
+                Application.Idle += readyHandler;
+            }
+            try { Application.Run(context); }
+            finally { if (readyHandler is not null) Application.Idle -= readyHandler; }
         }
-        using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
-        var context = new ObservatoryContext(activation, !args.Contains("--background"), updateQuit,
-            panelTiming: args.Contains("--panel-timing"));
-        EventHandler? readyHandler = null;
-        if (updateReady is not null)
-        {
-            readyHandler = (_, _) => { Application.Idle -= readyHandler; UpdateReady.Signal(updateReady); };
-            Application.Idle += readyHandler;
-        }
-        try { Application.Run(context); }
-        finally { if (readyHandler is not null) Application.Idle -= readyHandler; }
+        finally { inUse?.Release(); }
     }
 
     private static InstallationGate? TryEnterInstallation()
@@ -444,6 +451,14 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly UpdateController updater;
     private int updateShutdownRequested;
     private int nativeDialogCount;
+    private bool setupWarningShown;
+
+    private void ShowSetupWarning()
+    {
+        if (setupWarningShown) return;
+        setupWarningShown = true;
+        WithNativeDialog(() => MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"));
+    }
 
     private T WithNativeDialog<T>(Func<T> show)
     {
@@ -463,7 +478,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         powerNotifications = new PowerResumeWindow(collector.RequestResumeRefresh);
         var setupPending = true;
         try { setupPending = FirstRunSetup.Prepare(runtime); }
-        catch { WithNativeDialog(() => MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup")); }
+        catch { ShowSetupWarning(); }
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
@@ -810,7 +825,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (quitting) return;
         webPanel?.Hide();
         try { if (FirstRunSetup.Required(runtime)) section = "setup"; }
-        catch { section = "setup"; }
+        catch { section ??= "settings"; ShowSetupWarning(); }
         dashboardBridge?.RefreshFilesNow();
         if (dashboard is null || dashboard.IsDisposed)
         {

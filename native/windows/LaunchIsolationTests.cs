@@ -63,11 +63,9 @@ internal static class LaunchIsolationTests
             ["--apply-update", "installed", "staged", "receipt", "envelope", "7"],
             ["--test-update-install", "installed", "staged", "receipt", "envelope", "key", "7"] })
             Check(LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));
-        var fixturePath = Path.Combine(Path.GetTempPath(), "observatory-runtime-identity");
-        var suffix = AppIdentity.RuntimeSuffix(fixturePath);
-        Check(suffix.Length == 17 && suffix[0] == '.' && suffix[1..].All(Uri.IsHexDigit));
-        Check(suffix == AppIdentity.RuntimeSuffix(fixturePath.ToUpperInvariant() + Path.DirectorySeparatorChar));
-        Check(suffix != AppIdentity.RuntimeSuffix(fixturePath + "-other"));
+        Check(ordinary.InUseName == @"Local\WorkspaceObservatory.InUse");
+        Check(test.InUseName == @"Local\WorkspaceObservatoryInstallerTest.App.InUse");
+        Check(ordinary.InUseName == ordinary.SingletonName + ".InUse" && test.InUseName == test.SingletonName + ".InUse");
         var current = AppIdentity.Current;
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schema = 1, status = "launch-isolation-passed",
             testIdentity = current.IsTest, dataName = current.DataName, startupName = current.StartupName,

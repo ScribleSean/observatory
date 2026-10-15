@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace WorkspaceObservatory;
 
 // Installed identity comes from the installer's owned marker, never a launch
@@ -14,6 +11,7 @@ internal sealed record AppIdentity(bool IsTest)
     internal string DataName => IsTest ? TestName : "Workspace Observatory";
     internal string StartupName => IsTest ? TestId : "WorkspaceObservatory";
     internal string SingletonName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + OverrideSuffix;
+    internal string InUseName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + ".InUse";
     internal string SetupName => IsTest ? "Local\\" + TestId : InstallationGate.Name;
     internal string ActivationName => SingletonName + ".Open";
     internal string QuitName => SingletonName + ".QuitForUpdate";
@@ -29,11 +27,7 @@ internal sealed record AppIdentity(bool IsTest)
         }
     }
     private static string OverrideSuffix => runtimeOverride is null ? "" : RuntimeSuffix(runtimeOverride);
-    internal static string RuntimeSuffix(string folder)
-    {
-        var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant();
-        return "." + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..16];
-    }
+    internal static string RuntimeSuffix(string folder) => "." + WorkspaceObservatory.RuntimeOverride.FolderId(folder);
     internal string Runtime => runtimeOverride ?? DefaultRuntime;
     internal string DefaultRuntime => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DataName);
 

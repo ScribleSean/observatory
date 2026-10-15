@@ -385,6 +385,12 @@ internal sealed class BridgeHandler : IDisposable
             if (this.document != document) return;
             var request = new Request(id, validation.Action ?? "", validation.Args ?? new(), document, epoch, post);
             if (validation.Outcome == "refused" || ids.Contains((epoch, id))) { Post(request, new("refused")); return; }
+            if (host.RuntimeOverride && (request.Action.StartsWith("pairing-", StringComparison.Ordinal) ||
+                request.Action is "set-sharing" or "set-limits-consent"))
+            {
+                Post(request, new(request.Action == "pairing-cancel" ? "done" : "unavailable"));
+                return;
+            }
             if (probe is not null)
             {
                 Post(request, request.Action == "status" ? Status() : request.Action == "tailscale-check"
@@ -1210,7 +1216,7 @@ internal sealed class BridgeHandler : IDisposable
 
     private static async Task TestSetup(string parent)
     {
-        foreach (var scenario in new[] { "success", "all-off", "paused", "folder", "readonly", "linked", "linked-config", "oversized", "missing-config", "invalid-config", "oversized-config", "unreadable", "unreadable-config" })
+        foreach (var scenario in new[] { "success", "all-off", "paused", "corrupt", "folder", "readonly", "linked", "linked-config", "oversized", "missing-config", "invalid-config", "oversized-config", "unreadable", "unreadable-config" })
         {
             var root = Path.Combine(parent, "setup-" + scenario);
             FirstRunSetup.Prepare(root);
@@ -1243,6 +1249,7 @@ internal sealed class BridgeHandler : IDisposable
             if (scenario == "paused") test.Host.CollectionPaused = true;
             if (scenario == "folder") { File.Delete(marker); Directory.CreateDirectory(marker); }
             if (scenario == "readonly") File.SetAttributes(marker, FileAttributes.ReadOnly);
+            if (scenario == "corrupt") { File.WriteAllText(marker, "invalid"); pending = File.ReadAllBytes(marker); }
             if (scenario == "oversized") File.WriteAllText(marker, new string(' ', 4097));
             if (scenario == "missing-config") File.Delete(config);
             if (scenario == "invalid-config") File.WriteAllText(config, "{}");
@@ -1277,7 +1284,7 @@ internal sealed class BridgeHandler : IDisposable
                         starts, "Repeated completion changed state");
                 }
                 else if (linkedBytes is not null) Check(linkedBytes.SequenceEqual(File.ReadAllBytes(Path.Combine(root, "target.json"))), "Linked target changed");
-                else if (scenario is "readonly" or "missing-config" or "invalid-config" or "oversized-config")
+                else if (scenario is "corrupt" or "readonly" or "missing-config" or "invalid-config" or "oversized-config")
                     Check(pending.SequenceEqual(File.ReadAllBytes(marker)), "Failed completion changed marker");
             }
             finally
@@ -1291,6 +1298,29 @@ internal sealed class BridgeHandler : IDisposable
         isolated.Host.RuntimeOverride = true;
         await isolated.Run("set-startup", new() { ["enabled"] = true }, "unavailable");
         await isolated.Run("check-updates", code: "unavailable");
+        var calls = isolated.Host.Calls.ToArray();
+        var scripts = isolated.Host.Scripts.Count;
+        foreach (var blocked in new[] { false, true })
+        {
+            isolated.Host.CollectorBusy = blocked;
+            isolated.Host.NativeDialogOpen = blocked;
+            isolated.Host.NativePairingOpen = blocked;
+            foreach (var enabled in new[] { false, true })
+            {
+                await isolated.Run("set-sharing", ShareArgs(enabled), "unavailable");
+                await isolated.Run("set-limits-consent", new() { ["enabled"] = enabled }, "unavailable");
+            }
+            foreach (var action in new[] { "pairing-disconnect", "pairing-repair-prepare", "pairing-identity-create",
+                "pairing-copy-invitation", "pairing-join-confirm" })
+                await isolated.Run(action, code: "unavailable");
+            await isolated.Run("pairing-host-start", HostArgs(), "unavailable");
+            await isolated.Run("pairing-join-claim", new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" }, "unavailable");
+            await isolated.Run("pairing-host-confirm", new() { ["fingerprint"] = new string('a', 64),
+                ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 }, "unavailable");
+            await isolated.Run("pairing-cancel");
+        }
+        Check(calls.SequenceEqual(isolated.Host.Calls) && scripts == isolated.Host.Scripts.Count && isolated.Host.Session is null,
+            "Runtime override called a host or started pairing");
         Check(!isolated.Host.Calls.Contains("startup-write") && !isolated.Host.Calls.Contains("updates"), "Runtime override changed installation");
     }
 
