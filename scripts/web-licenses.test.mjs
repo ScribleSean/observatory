@@ -8,7 +8,7 @@ import {packageRoot,licenseText} from '../native/web-licenses.mjs';
 test('bundled package attribution handles Windows, nested packages and virtual module wrappers',()=>{
   assert.equal(packageRoot('C:\\build\\node_modules\\react\\index.js'),'C:/build/node_modules/react');
   assert.equal(packageRoot('\0C:/build/node_modules/outer/node_modules/@scope/pkg/index.js?commonjs'),'C:/build/node_modules/outer/node_modules/@scope/pkg');
-  assert.equal(packageRoot('/build/app/page.tsx'),null);
+  assert.equal(packageRoot('/build/app/viewer/dashboard.tsx'),null);
 });
 test('notices include license text without leaking build-machine paths',()=>{
   const temp=mkdtempSync(path.join(tmpdir(),'observatory-license-test-'));
