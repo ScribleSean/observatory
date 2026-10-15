@@ -11,6 +11,7 @@ final class ObservatoryStore: ObservableObject {
     @Published var now = Date()
     let runtime: URL
     let collectionAllowed: Bool
+    var runtimeIdentityValid: (() -> Bool)?
     private(set) var setupRequired = false
     @Published var pairingMaintenance = false
     @Published var collectionPausedForPairing = false
@@ -80,6 +81,7 @@ final class ObservatoryStore: ObservableObject {
     }
 
     func refreshAllowancesIfDue() {
+        guard runtimeIdentityValid?() != false else { lastAttempt = "runtime-unavailable"; return }
         guard collectionAllowed, !shuttingDown, process == nil, !pairingMaintenance, !collectionPausedForPairing,
               ProcessInfo.processInfo.systemUptime >= nextAllowanceAttemptUptime,
               (try? CollectorConfiguration.read(runtime: runtime)["quota"]) == true,
@@ -99,6 +101,7 @@ final class ObservatoryStore: ObservableObject {
     }
 
     func refresh(quotaOnly: Bool = false) {
+        guard runtimeIdentityValid?() != false else { lastAttempt = "runtime-unavailable"; return }
         guard !shuttingDown else { return }
         guard !collectionPausedForPairing else { lastAttempt = "pairing-paused"; return }
         guard collectionAllowed else { lastAttempt = "preview-collection-disabled"; return }
@@ -120,6 +123,7 @@ final class ObservatoryStore: ObservableObject {
     }
 
     private func ensureTrustedSync() {
+        guard runtimeIdentityValid?() != false else { lastAttempt = "runtime-unavailable"; trustedSync?.requestStop(); return }
         guard !shuttingDown else { return }
         guard collectionAllowed, !pairingMaintenance, !collectionPausedForPairing,
               (try? FirstRunSetup.required(runtime: runtime)) == false,

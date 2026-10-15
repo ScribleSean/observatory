@@ -318,7 +318,7 @@ final class MacBridgeHost: BridgeHost {
             return
         }
         if ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action) {
-            guard !preview, !store.shuttingDown else { completion(.unavailable, nil); return }
+            guard !isolatedRuntime, !preview, !store.shuttingDown else { completion(.unavailable, nil); return }
             guard !pairingBlocked else { completion(.busy, nil); return }
             if action == "pairing-identity-create" {
                 let code = confirm("Create device identity?", "Allow a device identity stored in a permission-restricted file. The key is not stored in Keychain or encrypted separately by Observatory.", ["Allow", "Cancel"])
@@ -374,6 +374,7 @@ final class MacBridgeHost: BridgeHost {
                 completion(status != .requiresApproval && (status == .enabled) == enabled ? .done : .unavailable, nil)
             } catch { completion(.unavailable, nil) }
         case "set-limits-consent":
+            guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             guard hasConsentScript else { completion(.unavailable, nil); return }
             if enabled {
                 let code = confirm("Turn on Claude Code limits?", "Claude Code hides most of its footer keyboard hints while any custom status line is configured.", ["Turn on", "Cancel"])
@@ -386,7 +387,7 @@ final class MacBridgeHost: BridgeHost {
                 } catch { consent.set(nil); completion(.unavailable, nil) }
             }
         case "set-sharing":
-            guard !preview, let resources else { completion(.unavailable, nil); return }
+            guard !isolatedRuntime, !preview, let resources else { completion(.unavailable, nil); return }
             guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
             if enabled {
                 let code = confirm("Share usage records?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.", ["Enable sharing", "Cancel"])

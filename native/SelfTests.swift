@@ -449,6 +449,14 @@ func runRuntimeSetupSelfTests() {
     refused(["--runtime", "relative/path"])
     refused(["--runtime", root.path + "/./fresh"])
     refused(["--runtime", root.path + "/../fresh"])
+    refused(["--runtime", root.path])
+    var dataVolume = stat()
+    var temporaryVolume = stat()
+    if stat("/System/Volumes/Data", &dataVolume) == 0, stat(root.path, &temporaryVolume) == 0,
+       dataVolume.st_dev == temporaryVolume.st_dev {
+        refused(["--runtime", "/System/Volumes/Data" + real.path])
+        refused(["--runtime", "/System/Volumes/Data" + real.path + "/child"])
+    }
     refused(["--runtime", real.path])
     refused(["--runtime", real.path + "/child"])
     refused(["--runtime", real.path.uppercased() + "/child"])
@@ -466,16 +474,29 @@ func runRuntimeSetupSelfTests() {
     for flag in ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace"] {
         refused(["--runtime", root.path + "/fresh", flag])
     }
+    let swapped = root.appendingPathComponent("swapped")
+    try! files.createDirectory(at: swapped, withIntermediateDirectories: false)
+    let directory = open(swapped.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    precondition(directory >= 0)
+    defer { close(directory) }
+    let identity = FileIdentity.at(swapped.path)!
+    precondition(FileIdentity.matches(descriptor: directory, path: swapped.path, expected: identity))
+    try! files.moveItem(at: swapped, to: root.appendingPathComponent("original"))
+    try! files.createDirectory(at: swapped, withIntermediateDirectories: false)
+    precondition(!FileIdentity.matches(descriptor: directory, path: swapped.path, expected: identity))
     let fresh = root.appendingPathComponent("fresh")
-    func accepted(_ path: String) -> String? { if case .runtime(let url) = parse(["--runtime", path]) { return url.path } else { return nil } }
+    func accepted(_ path: String) -> String? { if case .runtime(let url, _) = parse(["--runtime", path]) { return url.path } else { return nil } }
     precondition(accepted(fresh.path) == fresh.path)
     let lock = try! RuntimeOption.createAndLock(fresh)
     // An existing folder keeps its /private path. Standardizing would rewrite it to the /tmp or /var link.
     precondition(accepted(fresh.path) == fresh.path && accepted(fresh.path + "/") == fresh.path)
-    defer { close(lock) }
+    defer { close(lock.descriptor) }
+    precondition(chmod(fresh.path, 0o755) == 0)
+    precondition(accepted(fresh.path) == fresh.path)
+    precondition(chmod(fresh.path, 0o700) == 0)
     do {
         let second = try RuntimeOption.createAndLock(fresh)
-        close(second)
+        close(second.descriptor)
         preconditionFailure("Second runtime lock accepted")
     } catch RuntimeOption.LockError.inUse {} catch { preconditionFailure("Unexpected lock failure") }
     precondition((try! files.attributesOfItem(atPath: fresh.path))[.posixPermissions] as? Int == 0o700)
@@ -512,6 +533,25 @@ func runRuntimeSetupSelfTests() {
     precondition(WebDashboardPage.url(section: "setup").fragment == "setup")
     precondition(!WebDashboardPage.sections.contains { $0.0 == "setup" })
     MainActor.assumeIsolated {
+        let blockedStore = ObservatoryStore(runtime: root.appendingPathComponent("blocked"), collectionAllowed: false)
+        blockedStore.runtimeIdentityValid = { false }
+        blockedStore.refresh()
+        precondition(blockedStore.lastAttempt == "runtime-unavailable" && !blockedStore.refreshing)
+        blockedStore.lastAttempt = "synthetic"
+        blockedStore.refreshAllowancesIfDue()
+        precondition(blockedStore.lastAttempt == "runtime-unavailable" && !blockedStore.refreshing)
+        for isolated in [false, true] {
+            let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { false },
+                directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
+            let host = MacBridgeHost(store: blockedStore, resources: nil, preview: !isolated,
+                handler: BridgeHandler(), hooks: hooks, isolatedRuntime: isolated)
+            for action in ["set-limits-consent", "set-sharing", "pairing-identity-create", "pairing-host-start",
+                           "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"] {
+                host.perform(action: action, args: [:]) { code, value in
+                    precondition(code == .unavailable && value == nil)
+                }
+            }
+        }
         for paused in [false, true] {
             let store = ObservatoryStore(runtime: root.appendingPathComponent(UUID().uuidString), collectionAllowed: false)
             store.collectionPausedForPairing = paused
@@ -519,7 +559,8 @@ func runRuntimeSetupSelfTests() {
             let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { preconditionFailure("Isolated update invoked") },
                 directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
             let host = MacBridgeHost(store: store, resources: nil, preview: true, handler: handler, hooks: hooks, isolatedRuntime: true)
-            for action in ["set-startup", "check-updates"] {
+            for action in ["set-startup", "check-updates", "set-limits-consent", "set-sharing",
+                           "pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"] {
                 host.perform(action: action, args: [:]) { code, value in
                     precondition(code == .unavailable && value == nil)
                 }

@@ -74,6 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 .appendingPathComponent("Library/Application Support/Workspace Observatory")
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
+        if let identity = selectedRuntimeIdentity, let selectedRuntime {
+            store.runtimeIdentityValid = {
+                FileIdentity.matches(descriptor: runtimeDirectoryDescriptor, path: selectedRuntime.path, expected: identity)
+            }
+        }
         if previewRuntime == nil && selectedRuntime == nil { WebViewerPreferences.migrateIfNeeded(runtime: store.runtime) }
         let handler = BridgeHandler()
         let hooks = MacBridgeHooks(openDashboard: { [weak self] in self?.openDashboard($0) },
@@ -436,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func refresh() { store.refreshLimitsFirst() }
     @objc private func setupDirectPairing() {
-        guard !store.shuttingDown, previewRuntime == nil else { return }
+        guard !store.shuttingDown, previewRuntime == nil, selectedRuntime == nil else { return }
         if let directPairingWindow { directPairingWindow.showWindow(nil); directPairingWindow.window?.makeKeyAndOrderFront(nil); return }
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else { return }
         closeUsage()
@@ -628,7 +633,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let current = webDashboardSection
             item.state = detail?.isVisible == true && current == section ? .on : .off
             return true
-        case #selector(setupDirectPairing): return previewRuntime == nil
+        case #selector(setupDirectPairing): return previewRuntime == nil && selectedRuntime == nil
         case #selector(checkForUpdates), #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
              #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil && selectedRuntime == nil
         case #selector(zoomIn): return zoom.map { $0 < 2 } ?? false
@@ -672,7 +677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
             window.delegate = self
             window.isReleasedWhenClosed = false
-            if previewRuntime == nil { window.setFrameAutosaveName("ObservatoryDetail") }
+            if previewRuntime == nil && selectedRuntime == nil { window.setFrameAutosaveName("ObservatoryDetail") }
             window.center()
             detail = window
             webView = web
@@ -981,17 +986,21 @@ guard allowedPreviewArguments.contains(previewArguments) else {
 }
 #endif
 
-let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments,
-    realDataFolder: FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Workspace Observatory"), userID: getuid())
+let realDataFolder = FileManager.default.homeDirectoryForCurrentUser
+    .appendingPathComponent("Library/Application Support/Workspace Observatory")
+let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments, realDataFolder: realDataFolder, userID: getuid())
 let selectedRuntime: URL?
 var runtimeLockDescriptor: Int32 = -1
+var runtimeDirectoryDescriptor: Int32 = -1
+var selectedRuntimeIdentity: FileIdentity?
 switch runtimeOption {
 case .none: selectedRuntime = nil
 case .refused(let reason):
     fputs(reason + "\n", stderr)
     exit(64)
-case .runtime(let folder): selectedRuntime = folder
+case .runtime(let folder, let identity):
+    selectedRuntime = folder
+    selectedRuntimeIdentity = identity
 }
 
 let removedArguments: Set<String> = ["--legacy-dashboard", "--native-viewer", "--render-style",
@@ -1002,12 +1011,23 @@ if CommandLine.arguments.dropFirst().contains(where: { removedArguments.contains
 }
 
 if let selectedRuntime {
-    do { runtimeLockDescriptor = try RuntimeOption.createAndLock(selectedRuntime) }
+    do {
+        let locked = try RuntimeOption.createAndLock(selectedRuntime)
+        runtimeLockDescriptor = locked.descriptor
+        if selectedRuntimeIdentity == nil { selectedRuntimeIdentity = locked.createdIdentity }
+    }
     catch RuntimeOption.LockError.inUse {
         fputs("Another Observatory is already using this folder.\n", stderr)
         exit(64)
     } catch {
         fputs("The runtime folder could not be created or locked.\n", stderr)
+        exit(64)
+    }
+    runtimeDirectoryDescriptor = open(selectedRuntime.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    guard let identity = selectedRuntimeIdentity,
+          FileIdentity.matches(descriptor: runtimeDirectoryDescriptor, path: selectedRuntime.path, expected: identity),
+          FileIdentity.at(realDataFolder.path) != identity else {
+        fputs("The runtime folder changed while it was being checked.\n", stderr)
         exit(64)
     }
 }
