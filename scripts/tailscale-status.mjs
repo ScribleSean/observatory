@@ -4,6 +4,7 @@ import {constants,realpathSync} from 'node:fs';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {isPairingAddress} from './peer-invitation.mjs';
 
 const execute=promisify(execFile);
 const limit=1024*1024;
@@ -30,8 +31,8 @@ export function tailscaleCandidates(platform=process.platform,programFiles=proce
   return [];
 }
 
-export async function inspectTailscale({platform=process.platform,programFiles=process.env.ProgramFiles,
-  available=async file=>{await access(file,constants.X_OK);},run=execute}={}) {
+async function runTailscale({platform=process.platform,programFiles=process.env.ProgramFiles,
+  available=async file=>{await access(file,constants.X_OK);},run=execute}={},summarize=summarizeTailscale) {
   if(!['darwin','win32'].includes(platform))return result('unsupported');
   const candidates=tailscaleCandidates(platform,programFiles);
   if(!candidates.length)return result('unavailable');
@@ -43,10 +44,32 @@ export async function inspectTailscale({platform=process.platform,programFiles=p
     try {
       const {stdout}=await run(candidate,['status','--json','--peers=false'],
         {timeout:8000,maxBuffer:limit,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8'});
-      return summarizeTailscale(stdout);
+      return summarize(stdout);
     }catch{return result('unavailable');}
   }
   return result('not-installed');
+}
+
+export async function inspectTailscale(options) {
+  return runTailscale(options);
+}
+
+export async function tailscaleSelfAddresses(options) {
+  const value=await runTailscale(options,raw=>{
+    const {status}=summarizeTailscale(raw);
+    let ipv4=null,ipv6=null;
+    if(status==='running') {
+      const entries=JSON.parse(raw).Self?.TailscaleIPs;
+      if(Array.isArray(entries))for(const address of entries.slice(0,8)) {
+        if(!isPairingAddress(address))continue;
+        const [a,b]=address.split('.').map(Number);
+        if(ipv4===null && a===100 && b>=64 && b<=127)ipv4=address;
+        if(ipv6===null && address.toLowerCase().startsWith('fd7a:115c:a1e0:'))ipv6=address;
+      }
+    }
+    return {version:1,status,ipv4,ipv6};
+  });
+  return {version:1,status:value.status,ipv4:value.ipv4??null,ipv6:value.ipv6??null};
 }
 
 if(process.argv[1] && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))) {

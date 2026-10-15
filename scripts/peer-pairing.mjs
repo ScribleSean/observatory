@@ -34,9 +34,11 @@ export function validatePairing(value) {
     result.localEndpoint=endpoint;
   }
   if(Object.hasOwn(value,'repair')) {
-    if(!exact(value.repair,['mac','windows']) || !validRepairNonce(value.repair.mac) ||
-      !validRepairNonce(value.repair.windows) || value.repair.mac===value.repair.windows)throw Error('Invalid repair confirmations');
-    result.repair={mac:value.repair.mac,windows:value.repair.windows};
+    if(!value.repair || typeof value.repair!=='object' || Array.isArray(value.repair) ||
+      !Object.keys(value.repair).length || Object.entries(value.repair).some(([key,nonce])=>
+        !['mac','windows'].includes(key) || !validRepairNonce(nonce)) ||
+      value.repair.mac===value.repair.windows)throw Error('Invalid repair confirmations');
+    result.repair={...value.repair};
   }
   if(Object.hasOwn(value,'peerCertificateSha256')) {
     if(result.transport?.kind!=='tls' || typeof value.peerCertificateSha256!=='string' ||
@@ -73,7 +75,8 @@ async function initializePairingLocked(runtime,value) {
 
 async function checkLocalRepairConsent(runtime,pairing) {
   const nonce=await readRepairConsent(runtime);
-  if((nonce || pairing.repair) && (!nonce || pairing.repair?.[pairing.local.host==='Mac'?'mac':'windows']!==nonce))
+  const localKey=pairing.local.host==='Mac'?'mac':'windows';
+  if(nonce?pairing.repair?.[localKey]!==nonce:pairing.repair?.[localKey]!==undefined)
     throw Error('Current local repair confirmation required');
 }
 
