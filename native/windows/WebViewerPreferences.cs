@@ -56,25 +56,35 @@ internal static class WebViewerPreferences
         else script += "\n      delete root.dataset.theme;";
         return "(() => {\n" +
             "  try {\n" +
+            "    let done = false;\n" +
+            "    let observer;\n" +
+            "    const finish = () => {\n" +
+            "      done = true;\n" +
+            "      try { if (observer) observer.disconnect(); } catch { }\n" +
+            "      try { document.removeEventListener(\"readystatechange\", retry); } catch { }\n" +
+            "      try { document.removeEventListener(\"DOMContentLoaded\", retry); } catch { }\n" +
+            "    };\n" +
             "    const apply = () => {\n" +
             "      const root = document.documentElement;\n" +
             "      if (!root) return false;\n" +
             script + "\n" +
             "      return true;\n" +
             "    };\n" +
-            "    if (apply()) return;\n" +
-            "    const observer = new MutationObserver(() => {\n" +
-            "      try { if (apply()) observer.disconnect(); } catch { }\n" +
+            "    const retry = () => {\n" +
+            "      try { if (done) return; if (apply()) finish(); } catch { }\n" +
+            "    };\n" +
+            "    if (apply()) { finish(); return; }\n" +
+            "    observer = new MutationObserver(() => {\n" +
+            "      try { if (done) return; if (apply()) finish(); } catch { }\n" +
             "    });\n" +
             "    observer.observe(document, {childList: true});\n" +
-            "    const retry = () => {\n" +
-            "      try { if (apply()) observer.disconnect(); } catch { }\n" +
-            "    };\n" +
             "    document.addEventListener(\"readystatechange\", retry);\n" +
             "    document.addEventListener(\"DOMContentLoaded\", retry);\n" +
             "  } catch { }\n" +
             "})();";
     }
+
+    private static string WithoutWhitespace(string script) => string.Concat(script.Where(c => !char.IsWhiteSpace(c)));
 
     internal static void SelfTest()
     {
@@ -94,22 +104,25 @@ internal static class WebViewerPreferences
         foreach (var theme in new object[] { "", "Dark", "system", "auto", "dark\"", 0 })
             Check(Theme(theme) is null, "Invalid theme must follow the system");
 
-        var script = DocumentStartScript("almanac", "dark");
-        Check(script.Contains("dataset.skin = \"almanac\""), "Script must set the selected skin");
-        Check(script.Contains("dataset.theme = \"dark\""), "Script must set the selected theme");
-        var invalid = DocumentStartScript("x\"; alert(1)", "dark\"");
-        Check(invalid.Contains("dataset.skin = \"sage\""), "Invalid script skin must use Sage");
+        var script = WithoutWhitespace(DocumentStartScript("almanac", "dark"));
+        Check(script.Contains("dataset.skin=\"almanac\""), "Script must set the selected skin");
+        Check(script.Contains("dataset.theme=\"dark\""), "Script must set the selected theme");
+        var invalid = WithoutWhitespace(DocumentStartScript("x\"; alert(1)", "dark\""));
+        Check(invalid.Contains("dataset.skin=\"sage\""), "Invalid script skin must use Sage");
         Check(!invalid.Contains("alert"), "Script must exclude stored text");
-        Check(invalid.Contains("delete root.dataset.theme"), "Invalid theme removes the attribute");
-        Check(DocumentStartScript("sage", "system").Contains("delete root.dataset.theme"), "System theme removes the attribute");
-        Check(DocumentStartScript("sage", null).Contains("delete root.dataset.theme"), "Missing theme removes the attribute");
-        Check(script.Contains("const root = document.documentElement;") && script.Contains("if (!root) return false;"), "Script must wait for the document element");
-        Check(script.Contains("new MutationObserver(") && script.Contains("observer.observe(document, {childList: true})"), "Script must observe document insertion");
-        Check(script.Contains("document.addEventListener(\"readystatechange\", retry)") &&
-            script.Contains("document.addEventListener(\"DOMContentLoaded\", retry)"), "Script must retry on document events");
-        Check(script.StartsWith("(() => {\n  try {\n") && script.EndsWith("  } catch { }\n})();"), "Script must catch startup errors");
-        Check(script.Contains("new MutationObserver(() => {\n      try { if (apply()) observer.disconnect(); } catch { }") &&
-            script.Contains("const retry = () => {\n      try { if (apply()) observer.disconnect(); } catch { }"), "Callbacks must catch errors and disconnect after success");
+        Check(invalid.Contains("deleteroot.dataset.theme"), "Invalid theme removes the attribute");
+        Check(WithoutWhitespace(DocumentStartScript("sage", "system")).Contains("deleteroot.dataset.theme"), "System theme removes the attribute");
+        Check(WithoutWhitespace(DocumentStartScript("sage", null)).Contains("deleteroot.dataset.theme"), "Missing theme removes the attribute");
+        Check(script.Contains("constroot=document.documentElement;") && script.Contains("if(!root)returnfalse;"), "Script must wait for the document element");
+        Check(script.Contains("newMutationObserver(") && script.Contains("observe(document,{childList:true})"), "Script must observe document insertion");
+        Check(script.Contains("document.addEventListener(\"readystatechange\",retry)") &&
+            script.Contains("document.addEventListener(\"DOMContentLoaded\",retry)"), "Script must retry on document events");
+        Check(script.Contains("document.removeEventListener(\"readystatechange\",retry)") &&
+            script.Contains("document.removeEventListener(\"DOMContentLoaded\",retry)"), "Script must remove both document listeners");
+        Check(script.Contains("done=true;") && script.Contains("observer.disconnect()"), "Script must finish and disconnect after success");
+        Check(script.StartsWith("(()=>{try{") && script.EndsWith("}catch{}})();"), "Script must catch startup errors");
+        Check(script.Contains("newMutationObserver(()=>{try{if(done)return;if(apply())finish();}catch{}") &&
+            script.Contains("constretry=()=>{try{if(done)return;if(apply())finish();}catch{}"), "Callbacks must catch errors and stop after success");
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-viewer-test-" + Guid.NewGuid().ToString("N"));
         var registryKey = @"Software\WorkspaceObservatoryTests\Viewer-" + Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(runtime);

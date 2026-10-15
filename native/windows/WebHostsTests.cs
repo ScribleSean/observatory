@@ -119,7 +119,7 @@ internal static class WebHostsTests
                 Passed();
 
                 step = "snapshot";
-                new BridgeSettingsStore(folder).WriteViewer("sage", "system");
+                new BridgeSettingsStore(folder).WriteViewer("almanac", "dark");
                 var local = Path.Combine(folder, "public", "local");
                 Directory.CreateDirectory(local);
                 File.WriteAllText(Path.Combine(local, "usage.json"), """
@@ -171,7 +171,7 @@ internal static class WebHostsTests
                 await Poll(() => dashboard.RunScriptForTest("window.observatoryDashboardReady === true").WaitAsync(stop.Token),
                     value => value == "true", 15, "dashboard ready flag, expected true");
                 await RequireScript(dashboard.RunScriptForTest, "location.pathname", "dashboard path after initial navigation", "\"/dashboard.html\"");
-                await CheckSkin(dashboard.RunScriptForTest);
+                await CheckPreferences(dashboard.RunScriptForTest);
                 Passed();
 
                 step = "dashboard-boundary";
@@ -286,11 +286,10 @@ internal static class WebHostsTests
             }
         }
 
-        private async Task CheckSkin(Func<string, Task<string>> script)
+        private async Task CheckPreferences(Func<string, Task<string>> script)
         {
-            var skin = await script("document.documentElement.dataset.skin").WaitAsync(stop.Token);
-            Require(WebViewerPreferences.Skins.Contains(JsonSerializer.Deserialize<string>(skin)),
-                "skin was " + WebPanel.Untrusted(skin, 2048) + ", expected one of [" + string.Join(",", WebViewerPreferences.Skins) + "]");
+            await RequireScript(script, "document.documentElement.dataset.skin", "skin", "\"almanac\"");
+            await RequireScript(script, "document.documentElement.dataset.theme", "theme", "\"dark\"");
         }
 
         private async Task CheckBoundary(Func<string, Task<string>> script, bool dashboard)
@@ -308,8 +307,8 @@ internal static class WebHostsTests
             await script("window.webHostsResult = null; void (async () => {\n" +
                 "const blocked = " + JsonSerializer.Serialize(blocked) + ";\n" +
                 "const asset = " + JsonSerializer.Serialize(asset) + ";\n" + """
+                const requests = []
                 try {
-                    const requests = []
                     const failures = []
                     async function request(path) {
                         try {
@@ -347,10 +346,10 @@ internal static class WebHostsTests
                     snapshotEntry.smokeTest = smokeTest
                     if (!parsed || !smokeTest) failures.push({path: snapshotPath,
                         received: {parsed, smokeTest}, expected: {parsed: true, smokeTest: true}})
-                    window.webHostsResult = JSON.stringify({passed: failures.length === 0, failures})
+                    window.webHostsResult = JSON.stringify({passed: failures.length === 0, failures, requests})
                 } catch (e) {
                     window.webHostsResult = JSON.stringify({passed: false,
-                        failures: [{path: 'script', received: 'error: ' + e.name, expected: 'no error'}]})
+                        failures: [{path: 'script', received: 'error: ' + e.name, expected: 'no error'}], requests})
                 }
                 })()
                 """).WaitAsync(stop.Token);
@@ -365,9 +364,11 @@ internal static class WebHostsTests
                 var failures = result.RootElement.GetProperty("failures").EnumerateArray().Select(failure =>
                     failure.GetProperty("path").GetString() + " returned " + failure.GetProperty("received") +
                     ", expected " + failure.GetProperty("expected"));
-                throw new FixtureCheckFailed(string.Join(" | ", failures));
+                var requests = result.RootElement.GetProperty("requests").EnumerateArray().Select(request =>
+                    request.GetProperty("path").GetString() + " " + request.GetProperty("status"));
+                throw new FixtureCheckFailed(string.Join(" | ", failures) + " | requests: " + string.Join(", ", requests));
             }
-            await CheckSkin(script);
+            await CheckPreferences(script);
         }
 
         private void Finish(string? failure)
