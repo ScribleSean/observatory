@@ -2,6 +2,7 @@ import Foundation
 
 func runSelfTests() {
     runBridgeSelfTests()
+    runBridgeActionSelfTests()
     runNativeHistoryRetirementTests()
     runNativeSourceHealthTests()
     MacUpdateTrust.selfTest()

@@ -31,6 +31,7 @@ final class ObservatoryStore: ObservableObject {
         let counts = snapshot.sourceCounts
         return counts.total > 0 && counts.read == counts.total
     }
+    private var refreshAfterLimits = false
     private var process: Process?
     private var trustedSync: TrustedSyncProcess?
     private var pollTimer: Timer?
@@ -97,6 +98,14 @@ final class ObservatoryStore: ObservableObject {
         refresh(quotaOnly: true)
     }
 
+    func refreshLimitsFirst() {
+        guard !refreshing else { return }
+        if (try? CollectorConfiguration.read(runtime: runtime)["quota"]) == true {
+            refresh(quotaOnly: true)
+            refreshAfterLimits = refreshing
+        } else { refresh() }
+    }
+
     func refresh(quotaOnly: Bool = false) {
         guard !shuttingDown else { return }
         guard !collectionPausedForPairing else { lastAttempt = "pairing-paused"; return }
@@ -140,6 +149,10 @@ final class ObservatoryStore: ObservableObject {
                     self.process = nil
                     self.refreshing = false
                     self.reload()
+                    if self.refreshAfterLimits {
+                        self.refreshAfterLimits = false
+                        self.refresh()
+                    }
                 }
             }
         }

@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private var setupWindow: NSWindow?
     private var directPairingWindow: DirectPairingWindowController?
     private var webView: WKWebView?
+    private var bridgeHandler: BridgeHandler?
+    private var bridgeHost: MacBridgeHost?
     private var webDashboardSection = "limits"
     private var dashboardCollectionObserver: AnyCancellable?
     private let navigation = LocalNavigation()
@@ -79,7 +81,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 .appendingPathComponent("Library/Application Support/Workspace Observatory")
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
+        if previewRuntime == nil { WebViewerPreferences.migrateIfNeeded(runtime: store.runtime) }
         if usesWebDashboard {
+            let handler = BridgeHandler()
+            let hooks = MacBridgeHooks(openDashboard: { [weak self] in self?.openDashboard($0) },
+                checkForUpdates: { [weak self] in
+                    guard let self, self.previewRuntime == nil else { return false }
+                    do { try self.updateController.check(); return true } catch { return false }
+                }, directPairingOpen: { [weak self] in self?.directPairingWindow != nil },
+                applyViewerPreferences: { [weak self] skin, theme in
+                    self?.webPanel?.applyPreferences(skin: skin, theme: theme)
+                    if let web = self?.webView { applyViewerPreferences(web, skin: skin, theme: theme) }
+                })
+            let host = MacBridgeHost(store: store, resources: Bundle.main.resourceURL,
+                                     preview: previewRuntime != nil, handler: handler, hooks: hooks)
+            handler.host = host
+            bridgeHandler = handler; bridgeHost = host
             dashboardCollectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
                 .receive(on: DispatchQueue.main).sink { [weak self] _ in
                     guard let self, self.usesWebDashboard, let webView = self.webView else { return }
@@ -774,7 +791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             guard let resources = Bundle.main.resourceURL else { return }
             let web: WKWebView?
             if usesWebDashboard {
-                web = WebDashboardPage.isBundled(resources: resources) ? makeWebDashboard(runtime: store.runtime, resources: resources) : nil
+                web = WebDashboardPage.isBundled(resources: resources) ? makeWebDashboard(runtime: store.runtime, resources: resources, bridge: bridgeHandler) : nil
             } else {
                 web = makeDashboard(runtime: store.runtime, resources: resources)
                 web?.navigationDelegate = navigation
@@ -837,6 +854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         guard let window = notification.object as? NSWindow, window === detail else { return }
+        bridgeHandler?.dashboardClosed()
         // Closing the main window releases its web view, while the panel web view is kept.
         webView?.stopLoading()
         webView?.configuration.userContentController.removeAllScriptMessageHandlers()
@@ -1172,6 +1190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let store else { return .terminateNow }
         if store.shuttingDown { return .terminateLater }
+        bridgeHost?.documentEnded()
         store.drainForQuit { completed in
             sender.reply(toApplicationShouldTerminate: completed)
             if !completed {
