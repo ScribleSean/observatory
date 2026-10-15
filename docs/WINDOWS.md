@@ -1,76 +1,111 @@
-# Windows development preview
+# Observatory on Windows
 
-The Windows application and tray panel are part of Sean's personal native app, built in public. Current work is reliable local collection and unresolved UI and lifecycle checks, not a consumer installer launch. WSL and Ubuntu tracking are out of scope. Current source no longer offers them. Older builds may still expose those choices, but they are not setup recommendations. See the [roadmap](ROADMAP.md).
+This guide installs a downloaded release on a Windows PC. Building the app from source is described [further down](#build-from-source).
 
-The native Windows tray app collects on Windows without a running Mac or open terminal. Source builds use a .NET Windows Forms main window by default. The legacy dashboard remains available through the installed Microsoft Edge WebView2 Runtime, with no HTTP server or network listener.
+## Install a release
 
-Windows x64 is the documented build target. Other Windows architectures are not verified. Keep the package integrity, isolated installer tests and recoverable replacement procedures below for personal builds. No public binary release is claimed.
+### What you need
 
-## Historical package evidence
+- Windows on an x64 PC. Other architectures are not supported.
+- Microsoft Edge WebView2 Runtime. Windows 11 includes it, and most Windows 10 PCs already have it. The installer does not add it.
+- [ActivityWatch](https://activitywatch.net/), installed and running, if you want screen time. Observatory does not install it.
+- Codex or Claude Code installed and used on this PC, if you want their tokens and limits.
+- [Tailscale](https://tailscale.com/), installed and signed in, only if you want to pair this PC with a Mac. It is not needed on a single device.
 
-The dated checks in this guide apply only to the named revisions and environments. They are not new results or a statement of today's installed version. The native-default build was installed on the development machine on September 12, 2026. Later evidence is retained in the release record (archived).
+No administrator rights are needed. The installer installs for the current user only.
 
-The [September 15 clean package and installer run for 5907e8a](https://github.com/ScribleSean/observatory/actions/runs/34967825472) passed. All 522 source tests ran across the main suite and a separate ACL-heavy allowance TLS test, with 483 passes, 39 skips and zero failures. The clean package contained 3,051 verified files totaling 258,580,858 unpacked bytes. The unsigned 0.3.12 TEST-identity installer passed installation, payload hashes, shortcut and registration checks, running-app and overwrite refusal, linked-directory rejection, uninstall/reinstall and saved-data preservation. No ordinary app registration was changed and no downloadable artifact was retained. Signing, interactive first launch, login and sleep/wake verification remain separate release gates.
+### Download and check the file
 
-The [clean Windows package run for f980326](https://github.com/ScribleSean/observatory/actions/runs/34738823435) passed on September 13, 2026 UTC. It recorded 345 passing source tests and 26 explicit skips, then verified packaged native checks and all 3,027 manifest files, totaling 257,766,732 bytes. That run did not install the application or publish a release.
+Each release has two assets and one checksum file:
 
-The manual clean-package workflow now also offers isolated installer verification, enabled by default. It compiles a TEST-identity installer and runs the existing installation, overwrite refusal, linked-directory rejection, uninstall and saved-data preservation checks. This uses synthetic data on the disposable runner, not the ordinary application registration. A successful package-only run does not establish installer or desktop first-launch coverage.
+| File | What it is |
+| --- | --- |
+| `Observatory-<version>-windows-x64-setup.exe` | The Windows installer |
+| `Observatory-<version>-macos-arm64.zip` | The Mac app |
+| `SHA256SUMS.txt` | The SHA-256 checksum of each asset |
 
-The [full installer run for 04b6fa6](https://github.com/ScribleSean/workspace-observatory/actions/runs/34740480607) passed on September 13, 2026 UTC. After 345 passing source tests, 26 explicit skips and full manifest verification, it compiled and exercised the 0.3.3 TEST-identity installer. Checks covered running-app refusal, per-user installation, payload hashes, the Start-menu shortcut, quoted registration, native self-tests, overwrite refusal, linked-directory rejection, uninstall/reinstall, and preservation of saved data and unrelated files and registry values. No ordinary app registration was changed and no artifact was published. This does not prove interactive first-run, login or sleep/wake behavior, or a later candidate's installation.
+Download the installer and `SHA256SUMS.txt` into the same folder. In PowerShell, from that folder, compare the installer with its listed checksum:
 
-## Open the app
+```powershell
+$installer = Get-ChildItem .\Observatory-*-windows-x64-setup.exe
+$expected = ((Select-String -Path .\SHA256SUMS.txt -SimpleMatch $installer.Name).Line -split '\s+')[0]
+(Get-FileHash $installer.FullName -Algorithm SHA256).Hash -eq $expected
+```
 
-Installed builds appear as **Workspace Observatory** in the Start menu. Launching the app opens its main window. Launching it again requests the existing window instead of starting another collector in the same Windows session.
+The last line prints `True` when the two match. If it prints `False`, or the first line finds more than one installer, delete the extra downloads and start again. Do not run an installer whose checksum does not match. A matching checksum shows that the file arrived intact. It does not prove who built it, because the checksum file comes from the same release page.
 
-The telescope icon lives in the **system tray**, possibly under the hidden-icons arrow. Click it for a compact usage overview, then choose **Open Observatory** for the full window. Closing the main window leaves the tray app running. Use **Quit Observatory** in the tray menu to stop it.
+### Run an unsigned installer
 
-The compact overview does not embed full history charts or require scrolling on the tested desktop. Retired Spark / Bengal-fox allowance windows are excluded. This does not remove historical model-token records. The installed main window uses native controls, with the legacy dashboard available as a fallback.
+Observatory builds are not signed with a code-signing certificate. Your browser may warn that the file is not commonly downloaded, and Microsoft Defender SmartScreen usually stops the installer the first time with a message that it prevented an unrecognized app from starting. This is expected for an unsigned app.
 
-## Native main-window preview
+The supported way through:
 
-Current source builds open Allowances in the native dashboard. The section order is Allowances, Activity, Tokens, Dictation, Agents, Source health and Settings. Agents shows saved execution records and collection status, not a live monitor. Use `--legacy-dashboard` for the previous embedded dashboard. The older `--native-dashboard` argument remains accepted but is no longer needed. Quit any running Observatory instance before changing modes. The single-instance activation mechanism opens the existing instance and does not change its display mode.
+1. In the browser, choose to keep the download if it asks.
+2. When SmartScreen shows its message, choose More info.
+3. Check that the app name matches the installer file name and that the publisher reads Unknown publisher.
+4. Choose Run anyway.
 
-Activity and Tokens offer Day, Week and All retained periods. A week ends on the selected recorded date. Missing dates are not filled with zeros, and all-device token totals require a collector-verified deduplication result. Allowances reuse the saved account-history charts and exclude retired Spark windows. Refresh sources invokes the existing collector without changing its configuration. The view reads sanitized snapshots, not raw logs.
+Do not turn off SmartScreen or Microsoft Defender to avoid the warning. If your organization's policy blocks unsigned apps, there is no supported way to install Observatory on that PC. The exact wording of the warnings for this release is added here after the release assets exist.
 
-Activity also offers a recorded-date detail selector with hourly activity, category totals and recognized app labels. Hours use New York clock time, including the collector's shared cell for repeated daylight-saving hours. Missing hourly arrays remain unavailable. Device overlap stays separate from app attribution, and foreground AI-app time is not presented as model execution time.
+### Install
 
-Tokens offers a model/date detail selector with token classes, saved API-cost comparisons and recorded reasoning/speed profiles. Every selected date reconciles separately against its model counters. Inferred models, unstable settings and profiles exceeding any reported counter are withheld. Partial profile coverage shows the remaining unreconciled tokens. Saved comparisons are hypothetical API pricing, not subscription bills, and this view does not fetch new prices.
+Run the installer and follow its steps. It installs into `%LOCALAPPDATA%\Programs\Observatory`, adds Observatory to the Start menu and registers an uninstall entry for the current user. It does not change system runtimes, and it does not install ActivityWatch, Tailscale or WebView2.
 
-Dictation opens across tools and devices, with Day, Week and All retained periods. Sources share one selected date range. Wispr word and audio coverage remain explicit. ChatGPT tracking is unverified. Device totals are not summed because imported or synchronized records may overlap. Only sanitized recording metadata is read. More local speech detection is planned.
+### Start the app
 
-Agents separates saved handoff receipts, local benchmarks and per-device tool requests. Failed handoff token counters remain unknown. Local timing and GPU-memory fields preserve missing values, and tool rows retain exact names and namespaces. The view does not sum cumulative receipt counters or claim that requests succeeded. Synthetic desktop checks cover failed and successful reported counters, missing local timing, exact tool labels and unavailable hosts.
+Start Observatory from the Start menu. Its telescope icon appears in the system tray, possibly under the hidden-icons arrow. Click the icon for the panel. Choose Open Observatory for the full window. Closing the window leaves the tray app running and collecting. To stop it, right-click the tray icon and choose Quit Observatory.
 
-Source settings are editable in the native Settings section. The system-tray configuration command uses the same editor in current source builds. It loads existing choices, saves only on request, preserves unrelated configuration fields and rejects stale edits or saves during collection. Disabling account monitoring requires confirmation before its retained readings are cleared by collection.
+Do not start Observatory from inside a packaged app such as Claude desktop, for example from a terminal running in a Claude desktop session. Windows can show such a process a different set of folder permissions, and Observatory then refuses its private folders and reads fewer sources. Issue 58 records what was observed. Start it from the Start menu instead. If you must start it from a terminal inside such an app, start it as an independent process through Windows Management Instrumentation:
 
-Unsaved source choices survive section changes, Settings-page navigation and refreshes within the same window. Reload saved settings asks before discarding a changed draft and provides recovery after a stale-save conflict. Drafts are not persisted after the window closes. Temporary-configuration desktop tests cover draft retention and simulated cancel/confirm paths for reload and account-monitoring opt-out. These tests do not delete real account history or automate the production confirmation dialog.
+```powershell
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='"' + $env:LOCALAPPDATA + '\Programs\Observatory\WorkspaceObservatory.exe" --background'}
+```
 
-Settings also has a This device page for login registration, pairing details, disconnection and repair preparation. These controls reuse the tray handlers, including the disconnect and repair confirmations. The view rejects overlapping device operations. Synthetic desktop checks verified startup-state rereading and callback dispatch without touching real startup or pairing state. Actual login launch and real pairing operations remain separate verification gates. Provider sign-in management is not implemented.
+`--background` starts the tray app without opening the window. The executable keeps its earlier internal name, `WorkspaceObservatory.exe`.
 
-The native default is installed on the development machine, not a published release. Full accessibility review and feature parity remain unfinished. Empty history is explained separately from recorded zero usage, and an unknown quota observation time is identified. It does not add account-history synchronization or provider sign-ins.
+### First run
 
-The Windows native dashboard does not currently offer the Mac's Command-1 through Command-7 navigation shortcuts or its in-app 75% to 200% text-size control. Enlarged chart fixtures test chart labels, not whole-window zoom. Keyboard focus order, Windows scaling and spoken screen-reader output still require direct acceptance checks. These limitations are documented rather than silently treated as completed parity.
+On first launch the window opens on a setup screen with three steps:
 
-For an isolated desktop check, run `WorkspaceObservatory.exe --test-native-dashboard C:\absolute\path\to\empty-test-directory`. The directory must already exist, be empty and not be linked. The test uses in-memory fictional records, an inert refresh callback and captures only its own form. It does not start a collector or modify installed settings. On September 12 the Windows build and desktop test passed period totals, missing-data handling, unverified combined-token suppression, retired-allowance filtering, source rows, refresh and repeated reload checks. Activity and Allowances captures were visually inspected. These checks do not establish installed native-window behavior or complete native feature parity.
+1. Choose what to collect. Every source starts off. Turn on the ones this PC should read: screen time from ActivityWatch, Codex tokens, Claude Code tokens, Wispr Flow dictation, Codex limits and Claude Code limits. Claude Code limits show notes about how they are read, and you must accept them first.
+2. Other devices. Pairing is optional and is done later in Settings.
+3. Finish. Collection starts with the sources you turned on.
 
-## First collection
+Nothing is collected before you finish. If you close the window early, collection stays paused, including after a restart, until you finish setup. You can change sources later in Settings. Each section shows Unknown until a source it needs has been read.
 
-Fresh installations show a native first-run wizard before collection. All sources remain off until setup is completed. Review privacy, choose sources and optionally inspect device-pairing details. Closing incomplete setup leaves collection paused, including after restart. Existing configured installations keep their settings and skip the wizard.
+### Where data lives
 
-Later, right-click the Observatory system-tray icon and choose **Configure local collection** for native Windows sources. Neither optional sources nor Mac pairing are required for Windows data.
+Settings, snapshots and history live in `%LOCALAPPDATA%\Observatory`. The app keeps them outside the install folder, so replacing or uninstalling the app leaves them in place. The folder holds private folders with restricted permissions. Do not move it, link it elsewhere or share it.
 
-In the native dashboard, choose **Refresh sources** to start collection using the saved source choices. When the attempt finishes, the dashboard reloads the saved snapshot. Refresh does not enable sources or complete setup for you. If collection fails, the previous saved records remain available.
+Original records stay with the tools that wrote them: ActivityWatch, Codex, Claude Code and Wispr Flow. Observatory only reads them.
 
-The browser dashboard and explicit legacy fallback instead offer **Reload snapshot**. That action only rereads saved data and does not start collection. New fallback builds show setup instructions when Windows confirms that collection is unconfigured. Older previews can instead show a reload error with an empty dashboard. A configured installation with no readable snapshot still shows a load error rather than being labelled unconfigured.
+### Replace with a newer release
 
-For renderer verification, `WorkspaceObservatory.exe --test-first-run C:\absolute\path\to\empty-test-runtime` checks the setup instructions. A separate synthetic runtime containing `collector.config.json` but no snapshot checks the load-error state. Both cases passed on the signed-in Windows desktop on September 9. The ordinary `--test-web` check still requires a valid snapshot. These checks do not enable collection or verify the configuration prompts.
+There are no automatic updates. Check for updates says that updates are not available in this build. The installer refuses to install over an existing copy, so replace it in this order:
 
-## Pairing details
+1. Download and check the new installer as described above.
+2. Right-click the tray icon and choose Quit Observatory.
+3. Uninstall Observatory from Settings, Apps, Installed apps. Your data folder is kept.
+4. Run the new installer and start Observatory from the Start menu.
 
-The tray menu's **Pairing details for Mac…** shows paths from the running source build. **Copy Windows details** exports those paths only after a click and is disabled if bundled pairing tools are missing. The Mac setup form can import the text through **Paste Windows details**. An existing verified SSH alias remains a separate requirement. This does not enable SSH or transfer clipboard contents between devices automatically. See [pairing maintenance](PAIRING-MAINTENANCE.md) for the full flow and privacy limits.
+The new copy opens with your settings and history and does not show the setup screen again.
 
-The Windows details dialog and explicit copy handler passed a synthetic desktop test without accessing the owner's clipboard. The test capture remains pending visual review. The Mac parser separately rejects unsupported versions, unexpected fields and invalid paths. Real cross-device clipboard transfer has not been verified. The September 12 development-machine installation includes these controls.
+Builds up to 0.3.14 build 41 were named Workspace Observatory and kept their data in `%LOCALAPPDATA%\Workspace Observatory`. The renamed app does not read that folder and installs beside the earlier app instead of replacing it. Moving that data is a one-time step run from a checkout with `native/windows/migrate-data.ps1`. It copies the data into the new folder and keeps the earlier folder and the earlier app until you remove them.
 
-## Build on Windows
+### Remove
+
+1. If you turned on Claude Code limits, turn them off in Settings.
+2. If Start at login is on, turn it off in Settings under Startup.
+3. Right-click the tray icon and choose Quit Observatory.
+4. Uninstall Observatory from Settings, Apps, Installed apps.
+
+Uninstalling removes only the files the installer recorded and this installation's registrations. It leaves your data. To remove it too, move `%LOCALAPPDATA%\Observatory` to the Recycle Bin. Removing Observatory does not uninstall ActivityWatch, Tailscale or any provider app, and it does not touch their records.
+
+## Build from source
+
+The rest of this guide is for building, packaging and testing the app from a checkout.
+
+### Build on Windows
 
 Use a Windows-local checkout, .NET 10 SDK, Python 3 with the `py` launcher and PowerShell. From the checkout root:
 
@@ -82,21 +117,17 @@ Pass `-Dotnet C:\path\to\dotnet.exe` for a private SDK installation. The script 
 
 The icon is committed as a small generated asset. Its source is the canonical [telescope mark](../public/brand/telescope.svg). Regenerating that asset currently uses the Mac icon tool, but ordinary Windows builds do not require a Mac.
 
-The build runs native snapshot and startup-contract tests plus the JavaScript and reader test suite. Six POSIX runner tests explicitly skip on Windows because the Windows app uses its native collector, not the `flock` and process-group runner. This does not prove the UI works on a signed-in desktop. Run the executable from `native\windows\bin\Release\net10.0-windows` to inspect the tray and dashboard.
+The build runs native snapshot and startup-contract tests plus the JavaScript and reader test suite. Six POSIX runner tests skip on Windows because the Windows app uses its native collector, not the `flock` and process-group runner. This does not prove the interface works on a signed-in desktop. Run the executable from `native\windows\bin\Release\net10.0-windows` to inspect the tray and window.
 
-## Prepare a package candidate
+To run the app with collection on against a separate folder, pass `--runtime C:\absolute\new-folder`. The app refuses a relative path, a linked path, and the real data folders and anything inside them.
 
-### Voice source coverage
-
-Wispr is the supported voice metadata reader. Retired speech-source configuration is ignored without deleting original application data or saved archives. Update both paired apps together because the supported peer payload has changed. ChatGPT voice collection is not yet verified.
-
-### Build commands
+### Prepare a package candidate
 
 ```powershell
 .\native\windows\package.ps1
 ```
 
-This runs the development build and publishes a fresh candidate under `native\windows\release\candidate-ID\Workspace Observatory`. It bundles Node, Python, timezone data and .NET, so the packaged app does not require separate installations of those runtimes. Microsoft Edge WebView2 Runtime remains a system prerequisite.
+This runs the development build and publishes a fresh candidate under `native\windows\release\candidate-ID\Workspace Observatory`. The package folder keeps its earlier internal name. It bundles Node, Python, timezone data and .NET, so the packaged app does not require separate installations of those runtimes. Microsoft Edge WebView2 Runtime remains a system prerequisite.
 
 Runtime archives have pinned download URLs and SHA-256 digests. The package includes dependency notices and a file-hash manifest. Packaging rejects known private data filenames, linked entries, debug symbols, Python bytecode-cache directories and detected build-machine paths. The manifest records the source revision and whether the checkout had uncommitted changes. A dirty candidate is not a versioned release.
 
@@ -110,17 +141,13 @@ This rejects modified, additional or missing payload files, invalid Windows path
 
 Installer-tool preparation uses the pinned NSIS archive in `native/windows/installer-tool.json`. Its SHA-256 was computed after matching the official release listing's SHA-1 over an HTTPS download. It is not a vendor-published SHA-256. The compiler stays in the Windows build cache and is not installed system-wide.
 
-To verify only that download, run `native/windows/installer.ps1 -VerifyCompilerOnly`. This mode checks the pinned checksum without extracting or executing the archive. The clean-package workflow exposes the same check through `verify_compiler_only`, which skips application building and installation. Compiler downloads use Windows system curl with HTTPS-only redirects and bounded timeouts. A failed or mismatched response is never used as a compiler.
+To verify only that download, run `native/windows/installer.ps1 -VerifyCompilerOnly`. This mode checks the pinned checksum without extracting or executing the archive. Compiler downloads use Windows system curl with HTTPS-only redirects and bounded timeouts. A failed or mismatched response is never used as a compiler.
 
-`-SkipWebBuild` is an explicit development shortcut for packaging-only changes after a successful dashboard build. Do not use it for final release verification. Windows downloads, dependency caches and output stay on the Windows machine.
+`-SkipWebBuild` is a development shortcut for packaging-only changes after a successful web build. Do not use it for release verification. `package.ps1 -BuildPython C:\path\to\python.exe` selects the build interpreter explicitly. Its default remains the Windows Python launcher, with `-3` added only for `py.exe`. This interpreter prepares the pinned packaged Python runtime, rather than replacing it.
 
-`package.ps1 -BuildPython C:\path\to\python.exe` selects the build interpreter explicitly. Its default remains the Windows Python launcher, with `-3` added only for `py.exe`. Both paths disable bytecode writes. This interpreter prepares the pinned packaged Python runtime, rather than replacing it.
+The manually dispatched `Clean Windows package` workflow uses a fresh standard Windows runner, an explicit build Python and the complete packaging command without `-SkipWebBuild`. It exercises dependency restoration, the web build, source tests, runtime preparation and packaged checks. It does not install the application, collect live records, use signing secrets or publish artifacts.
 
-The manually dispatched `Clean Windows package` workflow uses a fresh standard Windows runner, an explicit build Python and the complete packaging command without `-SkipWebBuild`. It exercises dependency restoration, dashboard build, source tests, runtime preparation and packaged checks. It does not install the application, collect live records, use signing secrets or publish artifacts. A successful run is clean-build evidence, not a clean first-launch or release-publication result.
-
-The September 12 candidate recorded below was about 224 MiB unpacked, including its private runtimes. This historical disk-size measurement is not a size guarantee for later builds or a memory/CPU claim. Candidates are unsigned and may trigger Windows security warnings. Do not bypass those warnings because the app is for personal use.
-
-## Build and test the installer
+### Build and test the installer
 
 From a clean checkout matching the package manifest's source revision:
 
@@ -128,7 +155,7 @@ From a clean checkout matching the package manifest's source revision:
 .\native\windows\installer.ps1 -PackageDirectory 'C:\absolute\path\Workspace Observatory'
 ```
 
-This verifies the existing package and builds a per-user NSIS installer with a SHA-256 sidecar. The printed executable lives in a separate `artifacts` directory with its build metadata and NSIS license. Only that artifact directory is intended for distribution. The parent compiler-work directory contains generated build paths and must not be published. Warnings are compilation failures. The installer and package source revisions must match and both must be clean.
+This verifies the existing package and builds a per-user NSIS installer, `Observatory-<version>-windows-x64-setup.exe`, with a SHA-256 sidecar. The printed executable lives in a separate `artifacts` directory with its build metadata and NSIS license. Only that artifact directory is intended for distribution. The parent compiler-work directory contains generated build paths and must not be published. Warnings are compilation failures. The installer and package source revisions must match and both must be clean.
 
 For isolated development verification, add `-TestIdentity`, then pass the printed executable path to:
 
@@ -136,54 +163,25 @@ For isolated development verification, add `-TestIdentity`, then pass the printe
 .\native\windows\test-installer.ps1 -InstallerPath 'C:\absolute\path\TEST-setup.exe'
 ```
 
-The integration test accepts only the test identity and refuses pre-existing test registrations or folders. On the development Windows machine it verified installation, every payload hash, the Start menu shortcut, native self-tests, refusal to overwrite an existing install, running-app refusal, rejection of linked payload directories, uninstall, and reinstall. It also verified preservation of saved data, unrelated files and registration values, and another startup owner. Its temporary installation was removed afterward. These are one-machine checks, not proof of clean-machine compatibility.
+The integration test accepts only the test identity and refuses pre-existing test registrations or folders. It checks installation, every payload hash, the Start menu shortcut, native self-tests, refusal to overwrite an existing install, running-app refusal, rejection of linked payload directories, uninstall and reinstall, and preservation of saved data, unrelated files, registration values and another startup owner.
 
-## Install, remove, update or roll back
+### Guarded upgrade and rollback
 
-The installer uses `%LOCALAPPDATA%\Programs\Workspace Observatory` and adds a Start menu shortcut plus the current user's uninstall registration. It requires no administrator privileges. Source collection and login startup stay opt-in. It does not install ActivityWatch, WSL or WebView2, and it does not change system runtimes.
+For a guarded development upgrade or rollback, verify the exact candidate, quit normally and protect current saved state and recovery under the [runtime backup locks](UPDATES.md#runtime-backup-coordination). The maintained [installer test](../native/windows/test-installer.ps1) and [receipt lifecycle check](../native/windows/check-installer-receipt-cycle.mjs) copy `Uninstall.exe` outside the install root and pass raw `/S _?=<exactroot>`. Keep `_?=` last and its value unquoted, including paths with spaces, so the caller waits for the real uninstaller. Confirm that exit before running the ordinary installer and verifying payload, saved state, startup and readiness. Stop if an app or uninstaller process is unresolved or a preservation guard fails. Do not move the install folder aside or retry to bypass a guard. The tests cover same-schema reinstall, not future data migrations.
 
-Quit the app through its tray menu before removing it in Windows Settings. Uninstall deletes only the package's recorded files and this installation's registrations. Saved settings and snapshots under `%LOCALAPPDATA%\Workspace Observatory` remain. Unrelated files keep their folders from being removed. Linked install directories are refused.
+An SSH peer exchange started by the paired Mac can still update saved peer state after the app quits. Preserve valid newer observations rather than restoring an older database solely because its bytes changed. A consistent backup or comparison needs the [runtime backup coordination](UPDATES.md#runtime-backup-coordination) described in the update guide.
 
-Automatic updates are not available. For a guarded development upgrade or rollback, verify the exact candidate, quit normally and protect current saved state and recovery under the [runtime backup locks](UPDATES.md#runtime-backup-coordination). The maintained [installer test](../native/windows/test-installer.ps1) and [receipt lifecycle check](../native/windows/check-installer-receipt-cycle.mjs) copy `Uninstall.exe` outside the install root and pass raw `/S _?=<exactroot>`. Keep `_?=` last and its value unquoted, including paths with spaces, so the caller waits for the real uninstaller. Confirm that exit before running the ordinary installer and verifying payload, saved state, startup and readiness. Stop if an app or uninstaller process is unresolved or a preservation guard fails. Do not move the install folder aside or retry to bypass a guard. The tests cover same-schema reinstall, not future data migrations.
+### Login startup
 
-An independently launched SSH peer exchange can still update saved peer state after the app quits. Preserve valid newer observations rather than restoring an older database solely because its bytes changed. A consistent backup or comparison needs the [runtime backup coordination](UPDATES.md#runtime-backup-coordination) described in the update guide.
+Start at login, in Settings under Startup, adds or removes only this installation's entry in the current user's Windows Run key. No administrator rights or Windows service are needed. The entry starts the app with `--background`, so the tray app starts without opening the window. Windows Settings, Task Manager or organizational policy may separately disable startup, so an enabled entry does not prove launch occurred. Turn it off before moving or removing the app folder. Another installation's entry is not silently replaced. See Microsoft's [Run-key documentation](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys) for platform behaviour.
 
-## Configure sources
+### Historical package evidence
 
-Choose **Configure local collection** from the telescope tray menu. ActivityWatch must already be installed and running for screen time. Saved native Windows Codex records are read locally. Wispr Flow statistics are separately opt-in.
+These results apply only to the named revisions and are kept as dated evidence. They do not verify a later build.
 
-The app also offers optional [account limits and token history](USAGE-LIMITS.md). Account monitoring for the native scope needs a supported, authenticated Windows client and verification on the exact candidate. Settings files from older builds may contain `wslDistribution` and `quotaWslDistribution`. The app ignores both and removes them the next time source settings are saved. When account limits are on, the app reads the Codex account signed in on Windows. A failed native account read stays unavailable rather than becoming zero or an inferred allowance. Saved token logs are a separate source. Closing Settings without saving leaves its choices unchanged.
+- The [September 15 clean package and installer run for 5907e8a](https://github.com/ScribleSean/observatory/actions/runs/34967825472) passed. All 522 source tests ran across the main suite and a separate ACL-heavy allowance TLS test, with 483 passes, 39 skips and zero failures. The clean package contained 3,051 verified files totaling 258,580,858 unpacked bytes. The unsigned 0.3.12 TEST-identity installer passed installation, payload hashes, shortcut and registration checks, running-app and overwrite refusal, linked-directory rejection, uninstall and reinstall, and saved-data preservation.
+- The [clean Windows package run for f980326](https://github.com/ScribleSean/observatory/actions/runs/34738823435) passed on September 13, 2026 UTC, with 345 passing source tests and 26 explicit skips, and verified all 3,027 manifest files, totaling 257,766,732 bytes.
+- The [full installer run for 04b6fa6](https://github.com/ScribleSean/workspace-observatory/actions/runs/34740480607) passed on September 13, 2026 UTC and exercised the 0.3.3 TEST-identity installer.
+- The September 12 native-default candidate at `d5a2317` passed the full Windows build with 250 JavaScript and reader tests passed, 14 skipped and zero failed. Package verification covered 1,025 files and 234,884,445 bytes. The unsigned installer was 93,988,602 bytes. These sizes include bundled runtimes and are not CPU or memory measurements.
 
-Historical account-client evidence: the earlier Ubuntu route read limits and daily totals successfully, while the native Windows client could not be launched on the tested machine. The September 12 development-machine update preserved its existing monitoring-off choice. Those checks do not establish native Windows account acceptance. Old builds could start WSL for the account client even when Ubuntu log collection was off. Preserve recoverable settings when retiring that choice. Changing Observatory's source scope does not authorize changing or stopping WSL workloads.
-
-The plain development executable requires a working Python 3 installation with timezone data and a Node installation. Package candidates use their bundled copies instead. Local settings and snapshots live under `%LOCALAPPDATA%\Workspace Observatory`, outside the source checkout. Collection runs every five minutes while the configured app is running.
-
-Only allowlisted metadata enters snapshots. Prompts, tool arguments, window titles, transcripts and recordings are excluded. Unsupported or disconnected sources remain unavailable. Combined cross-device token totals require authenticated private exchange and complete deduplication evidence. Local collection alone does not establish a combined total.
-
-## Login startup
-
-**Register start at login** adds or removes only this installation's entry in the current user's Windows Run key. No administrator privileges or Windows service is needed. The checked menu state means the entry matches this installation. Windows Settings, Task Manager or organizational policy may separately disable startup, so a checked entry does not prove launch occurred.
-
-Login registration uses `--background`, which starts the system-tray app without opening the main window. Start menu launches omit that argument and open the window.
-
-Disable registration before moving or removing the app folder. Another installation's entry is not silently replaced. Actual logout/login and reboot behavior still need release testing. See Microsoft's [Run-key documentation](https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys) for platform behavior.
-
-## Historical verification and remaining gates
-
-Earlier development-machine checks passed the native build and snapshot tests. The packaged app collected native Windows activity, saved Codex usage, Wispr statistics and optional Ubuntu Codex usage using its bundled runtimes. A signed-in desktop smoke test loaded the packaged React dashboard with fictional records and fetched its local snapshot through WebView2. The Activity view was visually inspected at the tested window size. These historical checks cover one configured machine, not native-only source retirement, clean-install compatibility or a full visual and accessibility review.
-
-For a synthetic desktop test, prepare a new private test directory with `node native/windows/prepare-demo-runtime.mjs ABSOLUTE_NEW_DIRECTORY`. Run the packaged executable with `--test-web ABSOLUTE_NEW_DIRECTORY` from the signed-in desktop. The test captures only the WebView and only for a snapshot marked as synthetic. It does not capture other windows or the desktop. The result and WebView cache belong in that test directory, never in a release package.
-
-Development builds also accept `--test-usage-popup C:\absolute\path\to\empty-test-directory`. This test requires an existing empty directory and refuses a linked directory. It uses in-memory synthetic quota data, starts no collectors, and captures only its own form and graph controls. On September 9 it passed window selection, reload, saved/unavailable states, accessible chart summaries and inert refresh/navigation callbacks. The captures were visually reviewed. This is not a test of clicking the real tray icon or of an installed release.
-
-The September 12 native-default candidate at `d5a2317` passed the full Windows build with 250 JavaScript/reader tests passed, 14 skipped and zero failed. Packaged native-dashboard, wizard and compact-tray tests passed. Package verification covered 1,025 files and 234,884,445 bytes, about 224 MiB unpacked. The unsigned installer is 93,988,602 bytes. These sizes include bundled runtimes and are not CPU or memory measurements.
-
-The isolated TEST installer passed install/uninstall, overwrite refusal, linked-path refusal and preservation checks. The ordinary build was then installed on the development machine with a recoverable application backup. Installed payload hashes, Start search registration, existing login registration and unchanged configuration/snapshot hashes were verified. Collection completed after restart. The user confirmed the native sidebar window was visible, although the process API returned no main-window handle. This does not prove every source, actual login launch or peer synchronization.
-
-Development source now queues a full refresh after Windows reports [automatic resume](https://learn.microsoft.com/en-us/windows/win32/power/pbt-apmresumeautomatic). A hidden top-level window receives the notification even when the dashboard is closed. Collection runs on the next 30-second timer tick, or after existing work finishes, through the usual consent, pairing-pause and shutdown checks. The later user-resume notification does not queue duplicate work. Normal collection also consumes a pending resume request, and provider cooldown rules are unchanged.
-
-Native compilation and synthetic notification, disposal, pending-work and shutdown checks passed on Windows for source `44ebf5c`. This change is not in the installed 0.3.8 build 14. No real suspend or logout was performed during verification.
-
-Development source adds **Browse saved allowance history** to Allowances. The owner-local window selects a saved account, date range and record type, then reads pages of observations, daily token reports or collection results. It reuses the shared archive reader, does not start collection or sharing, and does not expose history through web or peer routes. Filters invalidate the previous page, invalid date ranges cannot load, and closing the window cancels its bounded helper. This source change still needs packaged bridge and installed-window verification. It does not provide cross-device archive exchange or a Windows installer update.
-
-Current acceptance work is native collection without WSL, the unresolved audit and UI checks (archived), login and sleep/wake behavior, failure recovery, and measured CPU/memory use. Keep package, clean-environment, signing and recovery gates explicit rather than treating personal use as verification. Provider-account expansion, consumer pairing and public installer promotion are not current priorities. Do not publish local snapshots or build caches as artifacts.
+These builds used the earlier Windows Forms interface, which was removed in October 2026. The tag `archive/pre-viewer-removal` marks the last commit that has it. Builds since then show the shared web pages that the Mac app also uses.
