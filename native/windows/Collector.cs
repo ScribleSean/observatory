@@ -35,6 +35,7 @@ internal sealed class Collector : IDisposable
     }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
+    internal bool CollectionPaused => pairingPaused;
     internal bool SharingAvailable => !Busy && !pairingPaused && !lifetime.IsCancellationRequested;
 
     // Queue only. Never perform file or network work inside a power broadcast.
@@ -180,6 +181,15 @@ internal sealed class Collector : IDisposable
             await Refresh(quotaOnly: true);
         }
         catch { /* Missing or invalid state waits for the normal full refresh. */ }
+    }
+
+    internal async Task RefreshAllowancesThenAll()
+    {
+        bool quota;
+        try { quota = ReadConfiguration()["quota"]?.GetValue<bool>() == true; }
+        catch { quota = false; }
+        if (quota) await Refresh(quotaOnly: true);
+        await Refresh(quotaOnly: false);
     }
 
     internal Task Refresh() => Refresh(quotaOnly: false);

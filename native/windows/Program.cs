@@ -293,6 +293,7 @@ internal static class Program
                 WebPanel.SelfTest();
                 WebDashboard.SelfTest();
                 WebViewerPreferences.SelfTest();
+                BridgeHandler.SelfTest();
                 Console.WriteLine("WebView2 runtime: " + WebHostsTests.RuntimeVersion());
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); DirectPairingWindow.CommandShapeSelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();

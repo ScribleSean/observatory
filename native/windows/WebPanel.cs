@@ -251,7 +251,7 @@ internal sealed class WebPanel : Form
         // Browser shortcut settings do not stop accelerator events forwarded as KeyDown.
         web.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { e.Handled = true; Hide(); } };
         // Read once per web view. Changes apply when the next panel is created.
-        var (skin, theme) = WebViewerPreferences.Read();
+        var (skin, theme) = WebViewerPreferences.Read(runtime);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
         if (IsDisposed) return;
         core.Navigate(Origin + "/" + Page);

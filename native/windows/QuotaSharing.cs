@@ -68,9 +68,7 @@ internal static class QuotaSharing
         var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
         var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", settings.Script);
         if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Sharing tools are unavailable.");
-        using var process = new Process { StartInfo = new(node) { UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true } };
-        foreach (var arg in new[] { script, "--runtime", runtime }) process.StartInfo.ArgumentList.Add(arg);
+        using var process = new Process { StartInfo = BridgeProcesses.Create(runtime, settings.Script, "--runtime", runtime) };
         process.Start();
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
