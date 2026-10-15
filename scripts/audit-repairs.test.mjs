@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const read=file=>readFile(new URL('../'+file,import.meta.url),'utf8');
 
-test('both setup wizards describe the SSH prerequisite and separate TLS preview',async()=>{
-  for(const file of ['native/SetupWizard.swift','native/windows/SetupWizard.cs']) {
+// The Mac wizard moved to the shared viewer in O1-2 and has no SSH text by design.
+test('the Windows setup wizard describes the SSH prerequisite and separate TLS preview',async()=>{
+  for(const file of ['native/windows/SetupWizard.cs']) {
     const source=await read(file);
     assert.match(source,/started from the Mac over an existing trusted SSH connection/);
     assert.match(source,/existing SSH alias, trusted host key and key-based sign-in/);
