@@ -67,7 +67,12 @@ test('Windows Claude reading time precedes the fixture reader',
     const runtime=await mkdtemp(path.join(tmpdir(),'observatory-windows-reading-time-'));
     t.after(()=>rm(runtime,{recursive:true,force:true}));
     const claude=path.join(runtime,'fixture-claude'),marker=path.join(runtime,'reader-start.json');
-    await mkdir(path.join(claude,'projects'),{recursive:true});
+    const project=path.join(claude,'projects','fixture');
+    await mkdir(project,{recursive:true});
+    // One synthetic request, so the reader reports ok and the row has a reading time.
+    await writeFile(path.join(project,'requests.jsonl'),JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',
+      requestId:'r1',message:{role:'assistant',id:'m1',model:'claude-sonnet-4-20250514',
+        usage:{input_tokens:1,cache_read_input_tokens:2,cache_creation_input_tokens:3,output_tokens:4}}})+'\n');
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({
       activity:false,codex:false,claude:true,wispr:false,quota:false}));
     const prior=process.env.CLAUDE_CONFIG_DIR;
