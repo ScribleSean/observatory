@@ -219,6 +219,31 @@ test('a failed final rename preserves the snapshot and a retry publishes a new s
   } finally {fsPromises.rename=originalRename;syncBuiltinESMExports();}
 });
 
+for(const damage of ['snapshot broad permissions','snapshot hardlink'])
+  test(`archive preparation refuses ${damage} after snapshot publication`,options,async t=>{
+    const f=await fixture(t),originalOpen=fsPromises.open;
+    let injected=false;
+    fsPromises.open=async(file,...args)=>{
+      const handle=await originalOpen(file,...args);
+      if(path.basename(file)==='snapshot.json' && args[0]==='wx') {
+        const close=handle.close.bind(handle);
+        handle.close=async()=>{
+          await close();
+          if(damage==='snapshot broad permissions')await chmod(file,0o640);
+          if(damage==='snapshot hardlink')await fsPromises.link(file,path.join(f.root,'archive-alias.json'));
+          injected=true;
+        };
+      }
+      return handle;
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(archiveMacSnapshot(f.file,f.archive),/Invalid snapshot file/);
+      assert.equal(injected,true);
+    } finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
+    assert.equal(await readFile(f.file,'utf8'),f.bytes);
+  });
+
 for(const damage of ['snapshot overwrite','receipt EIO','snapshot hardlink','receipt mismatch','snapshot broad permissions'])
   test(`archive preparation refuses ${damage} during receipt publication`,options,async t=>{
     const f=await fixture(t),originalOpen=fsPromises.open;
