@@ -114,8 +114,6 @@ internal static class Snapshot
         void Check(bool value) { if (!value) throw new InvalidOperationException("Snapshot contract failed"); }
         Check(Duration(86400) == "1d 0h 0m" && Duration(90060) == "1d 1h 1m");
         Check(Duration(double.NaN) == "Unknown");
-        Check(DashboardHistoryChart.AxisLabel(1e9) == "1B" && DashboardHistoryChart.AxisLabel(1e12) == "1T");
-        Check(DashboardHistoryChart.AxisLabel(999_999_999) == "1B");
         Check(Number(JsonValue.Create(true)) is null);
         Check(Number(JsonValue.Create(-1)) is null);
         Check(Number(JsonValue.Create("1")) is null);

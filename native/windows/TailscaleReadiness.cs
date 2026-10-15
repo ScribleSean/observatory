@@ -29,15 +29,16 @@ internal static class TailscaleReadiness
         return message;
     }
 
-    internal static async Task<string> Read()
+    internal static async Task<string> Read() => Messages[await ReadStatus()];
+
+    internal static Task<string> ReadStatus() => ReadStatus(AppIdentity.Current.Runtime);
+
+    internal static async Task<string> ReadStatus(string runtime)
     {
         var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
         var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "tailscale-status.mjs");
         if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Readiness tools unavailable.");
-        using var process = new Process { StartInfo = new(node) { UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
-            WorkingDirectory = AppContext.BaseDirectory } };
-        process.StartInfo.ArgumentList.Add(script);
+        using var process = new Process { StartInfo = BridgeProcesses.Create(runtime, "tailscale-status.mjs") };
         process.Start(); process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
@@ -46,7 +47,9 @@ internal static class TailscaleReadiness
         catch { if (!process.HasExited) process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); throw; }
         await Task.WhenAll(output, error);
         if (process.ExitCode != 0) throw new InvalidOperationException("Readiness check failed.");
-        return Parse(await output);
+        var raw = await output;
+        _ = Parse(raw);
+        return JsonNode.Parse(raw)!["status"]!.GetValue<string>();
     }
 
     internal static void SelfTest()

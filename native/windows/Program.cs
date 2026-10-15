@@ -2,9 +2,12 @@ using System.Text.Json.Nodes;
 
 namespace WorkspaceObservatory;
 
+internal enum ViewerMode { Web, Native, Legacy }
+
 internal static class Program
 {
-    internal static bool UseNativeDashboard(string[] args) => !args.Contains("--legacy-dashboard");
+    internal static ViewerMode SelectViewerMode(string[] args) => args.Contains("--legacy-dashboard")
+        ? ViewerMode.Legacy : args.Contains("--native-viewer") ? ViewerMode.Native : ViewerMode.Web;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -293,6 +296,7 @@ internal static class Program
                 WebPanel.SelfTest();
                 WebDashboard.SelfTest();
                 WebViewerPreferences.SelfTest();
+                BridgeHandler.SelfTest();
                 Console.WriteLine("WebView2 runtime: " + WebHostsTests.RuntimeVersion());
                 Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); DirectPairingWindow.CommandShapeSelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
@@ -314,15 +318,25 @@ internal static class Program
                 UpdateActivation.SelfTest();
                 UpdateArchiveTests.Run();
                 OperationDrain.SelfTest();
+                Collector.LaunchSelfTest();
                 Collector.ShutdownSelfTest();
                 PowerResumeWindow.SelfTest();
                 TailscaleReadiness.SelfTest();
                 QuotaArchive.SelfTest();
+                QuotaArchiveWindow.SelfTest();
                 DeviceIdentity.SelfTest();
                 TlsSetupReply.SelfTest();
-                if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
-                    UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
-                Console.WriteLine("Native dashboard default and legacy fallback passed.");
+                foreach (var (flags, expected) in new (string[], ViewerMode)[]
+                {
+                    ([], ViewerMode.Web), (["--background"], ViewerMode.Web),
+                    (["--web-panel"], ViewerMode.Web), (["--web-dashboard"], ViewerMode.Web),
+                    (["--native-dashboard"], ViewerMode.Web), (["--native-viewer"], ViewerMode.Native),
+                    (["--native-viewer", "--background"], ViewerMode.Native),
+                    (["--legacy-dashboard"], ViewerMode.Legacy)
+                })
+                    if (SelectViewerMode(flags) != expected)
+                        throw new InvalidOperationException("Viewer launch mode contract failed.");
+                Console.WriteLine("Shared viewer default, native viewer and legacy fallback passed.");
             }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
             return;
@@ -418,8 +432,8 @@ internal static class Program
             return;
         }
         using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
-        var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit,
-            webPanel: args.Contains("--web-panel"), panelTiming: args.Contains("--panel-timing"), webDashboard: args.Contains("--web-dashboard"));
+        var context = new ObservatoryContext(activation, !args.Contains("--background"), SelectViewerMode(args), updateQuit,
+            panelTiming: args.Contains("--panel-timing"));
         EventHandler? readyHandler = null;
         if (updateReady is not null)
         {
@@ -446,15 +460,13 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly PowerResumeWindow powerNotifications;
     private readonly System.Windows.Forms.Timer activationTimer = new() { Interval = 200 };
     private Form? dashboard;
-    private readonly bool nativeDashboard;
+    private readonly ViewerMode viewerMode;
     private SetupWizard? setupWizard;
     private DirectPairingWindow? directPairing;
+    private bool pairingDetailsOpen;
+    private BridgeHandler? dashboardBridge;
     private UsagePopup? usagePopup;
-    // Spike. Null unless the app was started with --web-panel.
     private WebPanel? webPanel;
-    private readonly bool useWebPanel;
-    // True when the app was started with --web-dashboard. The main window then shows the shared viewer.
-    private readonly bool useWebDashboard;
     private readonly bool panelTiming;
     private Action<string>? panelProbe;
     private Action? panelReleased;
@@ -462,13 +474,19 @@ internal sealed class ObservatoryContext : ApplicationContext
     private bool quitting;
     private readonly UpdateController updater;
     private int updateShutdownRequested;
+    private int nativeDialogCount;
 
-    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null,
-        bool webPanel = false, bool panelTiming = false, bool webDashboard = false)
+    private T WithNativeDialog<T>(Func<T> show)
     {
-        this.nativeDashboard = nativeDashboard;
-        useWebPanel = webPanel;
-        useWebDashboard = webDashboard;
+        nativeDialogCount++;
+        try { return show(); }
+        finally { nativeDialogCount--; }
+    }
+
+    internal ObservatoryContext(EventWaitHandle activation, bool show, ViewerMode viewerMode = ViewerMode.Web, EventWaitHandle? updateQuit = null,
+        bool panelTiming = false)
+    {
+        this.viewerMode = viewerMode;
         this.panelTiming = panelTiming;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
@@ -477,7 +495,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         powerNotifications = new PowerResumeWindow(collector.RequestResumeRefresh);
         var setupPending = true;
         try { setupPending = FirstRunSetup.Prepare(runtime); }
-        catch { MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup"); }
+        catch { WithNativeDialog(() => MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup")); }
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
@@ -502,8 +520,8 @@ internal sealed class ObservatoryContext : ApplicationContext
                 startup.Checked = LoginStartup.Registered();
             }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException)
-            { MessageBox.Show(error.Message, "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-            catch { MessageBox.Show("Windows could not update startup registration. Check your account permissions.", "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            { WithNativeDialog(() => MessageBox.Show(error.Message, "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning)); }
+            catch { WithNativeDialog(() => MessageBox.Show("Windows could not update startup registration. Check your account permissions.", "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning)); }
         };
         var totals = new ToolStripMenuItem("Latest recorded totals");
         foreach (var host in new[] { "All", "Mac", "Windows" })
@@ -537,6 +555,11 @@ internal sealed class ObservatoryContext : ApplicationContext
     private void ShowDirectPairing()
     {
         if (quitting) return;
+        if (BridgeHandler.PairingOpen)
+        {
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Direct device pairing"));
+            return;
+        }
         if (directPairing is not null) { directPairing.Activate(); return; }
         Action<bool>? release = null;
         TlsSetupProcess? bridge = null;
@@ -552,7 +575,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         {
             if (bridge is null) release?.Invoke(true);
             else _ = Cleanup();
-            MessageBox.Show("Pairing setup is unavailable. Wait for collection to finish or check this installation's setup tools.", "Direct device pairing");
+            WithNativeDialog(() => MessageBox.Show("Pairing setup is unavailable. Wait for collection to finish or check this installation's setup tools.", "Direct device pairing"));
         }
         async Task Cleanup()
         {
@@ -563,7 +586,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void ShowUsage()
     {
-        if (useWebPanel) { _ = ShowWebPanel(); return; }
+        if (viewerMode == ViewerMode.Web) { _ = ShowWebPanel(); return; }
         if (usagePopup is not null && !usagePopup.IsDisposed) { usagePopup.Close(); return; }
         usagePopup = new UsagePopup(Data, collector.Refresh, Open);
         usagePopup.FormClosed += (_, _) => usagePopup = null;
@@ -594,10 +617,11 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (webPanel is null || webPanel.IsDisposed)
         {
             webPanel = new WebPanel(runtime, PanelAction) { KeepOpen = panelTiming };
+            var created = webPanel;
             webPanel.Failed += () =>
             {
-                if (WebPanel.ShowsFailure(true, panelTiming)) MessageBox.Show(WebPanel.RuntimeMessage, "Observatory");
-                else
+                if (created.FailureNotification(panelTiming) is { } message) WithNativeDialog(() => MessageBox.Show(message, "Observatory"));
+                else if (panelTiming)
                 {
                     try
                     {
@@ -614,7 +638,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         return shown;
     }
 
-    // Measurement harness for the spike, run only with --panel-timing. It opens
+    // Measurement harness, run only with --panel-timing. It opens
     // and closes whichever panel is active and writes one line per event. The
     // timer starts where the tray click handler starts, not at the mouse click.
     private async Task MeasurePanel()
@@ -624,7 +648,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         async Task<double> OpenOnce()
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            if (useWebPanel)
+            if (viewerMode == ViewerMode.Web)
             {
                 if (!await ShowWebPanel()) return -1;
             }
@@ -641,7 +665,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             }
             return watch.Elapsed.TotalMilliseconds;
         }
-        void CloseOnce() { if (useWebPanel) webPanel?.Hide(); else usagePopup?.Close(); }
+        void CloseOnce() { if (viewerMode == ViewerMode.Web) webPanel?.Hide(); else usagePopup?.Close(); }
         panelReleased = () => { try { Write("released web view"); } catch { } };
         try
         {
@@ -652,25 +676,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             collector.Changed -= Done;
             while (collector.Busy) await Task.Delay(500);
             await Task.Delay(5000);
-            Write("panel=" + (useWebPanel ? "web" : "native") + " pid=" + Environment.ProcessId);
-            if (useWebDashboard)
-            {
-                // Record what the shared dashboard window drew, then close it so it is released.
-                Open();
-                if (dashboard is WebDashboard web)
-                {
-                    // The value comes from the page and is untrusted.
-                    Write("dashboard untrusted-page=" + WebPanel.Untrusted(await web.Describe()));
-                    await web.SavePreview(Path.Combine(runtime, "dashboard-timing.png"));
-                    Write("phase=dashboard-open");
-                    await Task.Delay(20000);
-                    web.Close();
-                    Write("phase=dashboard-closed");
-                    await Task.Delay(20000);
-                }
-                Write("phase=done");
-                return;
-            }
+            Write("panel=" + (viewerMode == ViewerMode.Web ? "web" : "native") + " pid=" + Environment.ProcessId);
             Write("phase=never-opened");
             await Task.Delay(20000);
             Write("open=1 ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
@@ -691,7 +697,7 @@ internal sealed class ObservatoryContext : ApplicationContext
                 CloseOnce();
                 await Task.Delay(3000);
             }
-            if (useWebPanel && await ShowWebPanel() && webPanel is { } panel)
+            if (viewerMode == ViewerMode.Web && await ShowWebPanel() && webPanel is { } panel)
             {
                 Write("untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
                 await panel.SavePreview(Path.Combine(runtime, "panel-timing.png"));
@@ -709,7 +715,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             await Task.Delay(1000);
             if (await OpenOnce() >= 0)
             {
-                Form? shown = useWebPanel ? webPanel : usagePopup;
+                Form? shown = viewerMode == ViewerMode.Web ? webPanel : usagePopup;
                 [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
                 bool Front() => shown is { IsDisposed: false, IsHandleCreated: true } && GetForegroundWindow() == shown.Handle;
                 bool Showing() => shown is { IsDisposed: false, Visible: true };
@@ -723,6 +729,71 @@ internal sealed class ObservatoryContext : ApplicationContext
                 Write("dismiss after-other-window foreground=" + Front() + " visible=" + Showing());
                 CloseOnce();
             }
+            if (viewerMode == ViewerMode.Web)
+            {
+                // Record what the shared dashboard window drew, then close it so it is released.
+                Open();
+                if (dashboard is WebDashboard web)
+                {
+                    // The value comes from the page and is untrusted.
+                    Write("dashboard untrusted-page=" + WebPanel.Untrusted(await web.Describe()));
+                    await web.SavePreview(Path.Combine(runtime, "dashboard-timing.png"));
+                    Write("phase=dashboard-open");
+                    await Task.Delay(20000);
+                    web.Close();
+                    Write("phase=dashboard-closed");
+                    await Task.Delay(20000);
+                }
+                var fixture = Path.Combine(Path.GetTempPath(), "observatory-settings-probe-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    Directory.CreateDirectory(Path.Combine(fixture, "public", "local"));
+                    File.WriteAllText(Path.Combine(fixture, "public", "local", "usage.json"),
+                        "{\"schema\":2,\"demo\":true,\"smokeTest\":true,\"activity\":[],\"tokens\":[],\"agents\":[],\"dictation\":[]}");
+                    new BridgeSettingsStore(fixture).WriteViewer("sage", "system");
+                    using var handler = new BridgeHandler(new WebHostsTests.FakeHost(fixture), fixture, Write);
+                    using var settings = new WebDashboard(fixture, handler, "settings");
+                    settings.Show();
+                    var ready = false;
+                    for (var attempt = 0; attempt < 400; attempt++)
+                    {
+                        if (await settings.RunScriptForTest("window.observatoryDashboardReady === true && document.querySelector('.ob-settings') !== null") == "true")
+                        { ready = true; break; }
+                        await Task.Delay(50);
+                    }
+                    if (!ready) throw new InvalidOperationException("Settings probe did not draw.");
+                    // Let the initial cached status reach the controls.
+                    await Task.Delay(500);
+                    var rawCount = await settings.RunScriptForTest("document.querySelectorAll('.ob-settings button, .ob-settings input[type=checkbox], .ob-settings select').length");
+                    if (!int.TryParse(rawCount, out var controls) || controls < 1 || controls > 256)
+                        throw new InvalidOperationException("Settings probe controls unavailable.");
+                    var presses = 0;
+                    for (var index = 0; index < controls; index++)
+                    {
+                        var result = await settings.RunScriptForTest("(() => { const control = document.querySelectorAll('.ob-settings button, .ob-settings input[type=checkbox], .ob-settings select')[" +
+                            index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]; " +
+                            "if (!control || control.matches(':disabled')) return null; " +
+                            "if (control.tagName === 'SELECT') { const options = Array.from(control.options); " +
+                            "for (let offset = 1; offset <= options.length; offset++) { const next = (control.selectedIndex + offset) % options.length; " +
+                            "if (!options[next].disabled) { control.selectedIndex = next; control.dispatchEvent(new Event('change', {bubbles:true})); return 'select'; } } return null; } " +
+                            "const kind = control.tagName === 'BUTTON' ? 'button' : 'checkbox'; control.click(); return kind; })()");
+                        var kind = System.Text.Json.JsonSerializer.Deserialize<string>(result);
+                        if (kind is "button" or "checkbox" or "select")
+                        {
+                            Write("settings press=" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + " kind=" + kind);
+                            presses++;
+                        }
+                        await Task.Delay(150);
+                    }
+                    Write("settings presses=" + presses.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    settings.Close();
+                }
+                finally
+                {
+                    // WebView2 may still be releasing its profile files.
+                    try { Directory.Delete(fixture, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
+            }
             Write("phase=done");
         }
         catch (Exception error) { try { Write("failed " + error.GetType().Name); } catch { } }
@@ -730,39 +801,47 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void ShowPairingDetails()
     {
+        if (quitting) return;
+        if (BridgeHandler.PairingOpen)
+        {
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Windows pairing details"));
+            return;
+        }
+        pairingDetailsOpen = true;
         try
         {
             using var dialog = new PairingDetailsDialog(PairingDetails.FromInstallation(AppContext.BaseDirectory, runtime));
-            dialog.ShowDialog();
+            WithNativeDialog(() => dialog.ShowDialog());
         }
-        catch { MessageBox.Show("Pairing details are unavailable for this installation. No settings were changed.", "Windows pairing details"); }
+        catch { WithNativeDialog(() => MessageBox.Show("Pairing details are unavailable for this installation. No settings were changed.", "Windows pairing details")); }
+        finally { pairingDetailsOpen = false; }
     }
 
     private async Task DisconnectPairing()
     {
         if (collector.Busy)
         {
-            MessageBox.Show("A local operation is running. Try again when it finishes.", "Disconnect paired device");
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Disconnect paired device"));
             return;
         }
         if (!Directory.Exists(Path.Combine(runtime, "private-sync")))
         {
-            MessageBox.Show("No private pairing state was found for this installation.", "Disconnect paired device");
+            WithNativeDialog(() => MessageBox.Show("No private pairing state was found for this installation.", "Disconnect paired device"));
             return;
         }
-        var answer = MessageBox.Show("Disable pairing on this Windows PC only? Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac.",
-            "Disconnect paired device", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        var answer = WithNativeDialog(() => MessageBox.Show("Disable pairing on this Windows PC only? Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac.",
+            "Disconnect paired device", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2));
         if (answer != DialogResult.Yes) return;
         try
         {
             await collector.DisconnectPairing();
-            MessageBox.Show("Pairing is disabled on this PC. Saved data remains. The dashboard returns to local-only data after the next successful collection. Disconnect the other device separately; SSH access is unchanged.", "Pairing disabled");
+            WithNativeDialog(() => MessageBox.Show("Pairing is disabled on this PC. Saved data remains. The dashboard returns to local-only data after the next successful collection. Disconnect the other device separately. SSH access is unchanged.", "Pairing disabled"));
             await collector.Refresh();
         }
         catch
         {
-            MessageBox.Show("Disconnection could not be verified. Collection is paused for this session. Private state was not deleted, and pairing may already be disabled. Retry disconnection or quit the app until the pairing state can be inspected.",
-                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WithNativeDialog(() => MessageBox.Show("Disconnection could not be verified. Collection is paused for this session. Private state was not deleted, and pairing may already be disabled. Retry disconnection or quit the app until the pairing state can be inspected.",
+                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning));
         }
     }
 
@@ -770,31 +849,31 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (collector.Busy)
         {
-            MessageBox.Show("A local operation is running. Try again when it finishes.", "Prepare pairing repair");
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Prepare pairing repair"));
             return;
         }
-        var answer = MessageBox.Show("If this PC has pairing state, disable it and retain a private backup? Otherwise, confirm this PC is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on the Mac separately, then use Pair with Windows there to create fresh credentials. Retirement cannot be undone by this action.",
-            "Prepare pairing repair", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        var answer = WithNativeDialog(() => MessageBox.Show("If this PC has pairing state, disable it and retain a private backup? Otherwise, confirm this PC is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on the Mac separately, then use Pair with Windows there to create fresh credentials. Retirement cannot be undone by this action.",
+            "Prepare pairing repair", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2));
         if (answer != DialogResult.Yes) return;
         try
         {
             await collector.PreparePairingRepair();
-            MessageBox.Show("This PC is ready for a new pairing. Any retired state remains in a disabled private backup. Prepare repair on the Mac separately, then choose Pair with Windows there. Local collection can continue. This action has not enabled a new pairing.", "Repair prepared");
+            WithNativeDialog(() => MessageBox.Show("This PC is ready for a new pairing. Any retired state remains in a disabled private backup. Prepare repair on the Mac separately, then choose Pair with Windows there. Local collection can continue. This action has not enabled a new pairing.", "Repair prepared"));
             await collector.Refresh();
         }
         catch
         {
-            MessageBox.Show("Repair preparation could not be verified. Collection is paused for this session. Saved state was not deleted, but it may already be retired. Retry or quit until this installation can be inspected. Do not restore old pairing files over a new pairing.",
-                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WithNativeDialog(() => MessageBox.Show("Repair preparation could not be verified. Collection is paused for this session. Saved state was not deleted, but it may already be retired. Retry or quit until this installation can be inspected. Do not restore old pairing files over a new pairing.",
+                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning));
         }
     }
 
     private void Configure()
     {
-        if (!FirstRunSetup.AllowsCollection(runtime)) { Open(); return; }
-        if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
-        // The shared dashboard has no Settings view yet, so settings open in their own window.
-        if (nativeDashboard && !useWebDashboard)
+        if (!FirstRunSetup.AllowsCollection(runtime)) { Open(viewerMode == ViewerMode.Web ? "settings" : null); return; }
+        if (viewerMode == ViewerMode.Web) { Open("settings"); return; }
+        if (collector.Busy) { WithNativeDialog(() => MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings")); return; }
+        if (viewerMode == ViewerMode.Native)
         {
             Open();
             if (dashboard is NativeDashboard existing) existing.ShowSourceSettings();
@@ -804,7 +883,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
             (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates);
         settings.ShowSourceSettings();
-        settings.ShowDialog();
+        WithNativeDialog(() => settings.ShowDialog());
     }
 
     private void RefreshStatus()
@@ -828,11 +907,14 @@ internal sealed class ObservatoryContext : ApplicationContext
             $"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))}\n" +
             $"Recorded date: {Snapshot.Text(tokens?["date"])}";
         if (host == "All") message += "\n\nOnly verified combined totals are shown. Saved records retain their original source labels.";
-        MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        WithNativeDialog(() => MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information));
     }
 
-    private void Open()
+    private void Open() => Open(null);
+
+    private void Open(string? section)
     {
+        if (quitting) return;
         usagePopup?.Close();
         webPanel?.Hide();
         if (setupWizard is not null && !setupWizard.IsDisposed) { setupWizard.Activate(); return; }
@@ -843,19 +925,41 @@ internal sealed class ObservatoryContext : ApplicationContext
                 using var setup = new SetupWizard(runtime, collector);
                 setupWizard = setup;
                 DialogResult result;
-                try { result = setup.ShowDialog(); } finally { setupWizard = null; }
+                try { result = WithNativeDialog(() => setup.ShowDialog()); } finally { setupWizard = null; }
                 if (result != DialogResult.OK) return;
                 collector.Start();
             }
         }
-        catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
+        catch { WithNativeDialog(() => MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup")); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
-            dashboard = useWebDashboard ? new WebDashboard(runtime) : nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
+            if (viewerMode == ViewerMode.Web)
+            {
+                WebDashboard? window = null;
+                var host = new ShellBridgeHost(runtime, collector, () => window,
+                    () => directPairing is { IsDisposed: false } || pairingDetailsOpen,
+                    () => nativeDialogCount > 0, () => quitting, CheckForUpdates, value => Open(value));
+                var handler = new BridgeHandler(host, runtime);
+                window = new WebDashboard(runtime, handler, section);
+                handler.ViewerChanged += (skin, appearance) =>
+                {
+                    window.ApplyViewer(skin, appearance);
+                    webPanel?.ApplyViewer(skin, appearance);
+                };
+                dashboardBridge = handler;
+                dashboard = window;
+                window.FormClosed += (_, _) =>
+                {
+                    handler.Dispose();
+                    if (ReferenceEquals(dashboardBridge, handler)) dashboardBridge = null;
+                };
+            }
+            else dashboard = viewerMode == ViewerMode.Native ? new NativeDashboard(Data, collector.Refresh,
                 new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
                 (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
+        else if (section is not null && dashboard is WebDashboard existing) existing.ShowSection(section);
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
         dashboard.Activate();
@@ -867,8 +971,8 @@ internal sealed class ObservatoryContext : ApplicationContext
         try { await updater.Check(); }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
-        catch (IOException error) { MessageBox.Show(error.Message, "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Information); }
-        catch { MessageBox.Show("The update check could not start. This installation was not changed.", "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (IOException error) { WithNativeDialog(() => MessageBox.Show(error.Message, "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Information)); }
+        catch { WithNativeDialog(() => MessageBox.Show("The update check could not start. This installation was not changed.", "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Warning)); }
     }
 
     private async Task RequestQuit()
@@ -879,9 +983,10 @@ internal sealed class ObservatoryContext : ApplicationContext
         {
             tray.Text = "Observatory · finishing collection before quitting";
             if (directPairing is { } pairingWindow) { await pairingWindow.Shutdown(); if (!pairingWindow.IsDisposed) pairingWindow.Close(); }
+            if (dashboardBridge is { } bridge) await bridge.EndPairingAsync();
             if (!await collector.StopGracefully(TimeSpan.FromSeconds(260)))
             {
-                MessageBox.Show("The current operation has not finished. Observatory stayed open and collection was not interrupted. Try quitting again after it finishes.", "Observatory is still working");
+                WithNativeDialog(() => MessageBox.Show("The current operation has not finished. Observatory stayed open and collection was not interrupted. Try quitting again after it finishes.", "Observatory is still working"));
                 return;
             }
             ExitThread();
