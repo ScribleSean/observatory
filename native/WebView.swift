@@ -95,16 +95,3 @@ let snapshotFetchScript = """
   };
 })();
 """
-
-@MainActor
-func makeDashboard(runtime: URL, resources: URL) -> WKWebView {
-    let config = WKWebViewConfiguration()
-    config.websiteDataStore = .nonPersistent()
-    config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: ["index.html"]), forURLScheme: "observatory")
-    config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
-    config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-    let web = DashboardWebView(frame: .zero, configuration: config)
-    web.underPageBackgroundColor = .windowBackgroundColor
-    web.allowsBackForwardNavigationGestures = false
-    return web
-}

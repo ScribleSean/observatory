@@ -125,6 +125,26 @@ test('All Now uses only verified aggregate hours and their own reading times', (
   assert.equal(totals(data, 'All', 'now', nowTime).seconds, null);
 });
 
+test('All Now on an unpaired one-device snapshot reads that device, hours included', () => {
+  const two = hourlySnapshot();
+  const keep = row => row.host === 'Mac';
+  const one = { timezone: two.timezone, collectedAt: two.collectedAt,
+    tokens: [...two.tokens.filter(keep), { host: 'Windows', status: 'not-connected' }],
+    providerTokenSources: two.providerTokenSources.filter(keep),
+    activity: [...two.activity.filter(keep), { host: 'Windows', status: 'not-connected' }],
+    combined: { host: 'Combined', status: 'unavailable' }, combinedTokens: { host: 'All', status: 'unavailable' } };
+  const result = totals(one, 'All', 'now', nowTime);
+  assert.deepEqual(nowValues(result), nowValues(totals(one, 'Mac', 'now', nowTime)));
+  assert.deepEqual(nowValues(result), [17, 34, 51]);
+  assert.equal(result.claudeNote, '');
+  assert.equal(result.note, strings.activity.nowCaveat);
+  // Unknown stays Unknown on the one device, never 0.
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) delete one[key][0].days[0].hours;
+  assert.deepEqual(nowValues(totals(one, 'All', 'now', nowTime)), [null, null, null]);
+  // With a second device All still reads only the verified aggregates.
+  assert.deepEqual(nowValues(totals(two, 'All', 'now', nowTime)), [102, null, 119]);
+});
+
 test('Now caveat appears when only one value is known, including an observed zero', () => {
   for (const key of ['tokens', 'providerTokenSources', 'activity']) {
     const data = hourlySnapshot();

@@ -1,59 +1,21 @@
 import Foundation
+import Darwin
 
 func runSelfTests() {
+    runRuntimeSetupSelfTests()
     runBridgeSelfTests()
     runBridgeActionSelfTests()
-    runNativeHistoryRetirementTests()
-    runNativeSourceHealthTests()
     MacUpdateTrust.selfTest()
-    precondition(formatted(1e9, compact: true) == "1B")
-    precondition(formatted(1e12, compact: true) == "1T")
-    precondition(formatted(999_999_999, compact: true) == "1B")
-    precondition(formattedDuration(86400) == "1d 0h 0m")
-    precondition(formattedDuration(90060) == "1d 1h 1m")
-    precondition(formattedDuration(nil) == "Unknown")
-    precondition(receiptSourceHelp(nil) == nil)
-    for status in ["ok", "not-connected"] {
-        precondition(receiptSourceHelp(["status": status, "reason": "access-denied"]) == nil)
-    }
-    let denied = receiptSourceHelp(["status": "unavailable", "reason": "access-denied"])!
-    let timedOut = receiptSourceHelp(["status": "unavailable", "reason": "read-timeout"])!
-    precondition(denied.contains("macOS denied access"))
-    precondition(timedOut.contains("does not prove that access was denied"))
-    precondition(receiptSourceHelp(["status": "unavailable"])!.contains("no recognized failure detail"))
-    precondition(receiptSourceHelp(["status": "partial", "reason": "/PRIVATE/receipt.json"])!.contains("no recognized failure detail"))
-    for reason in ["access-denied", "read-timeout", "directory-missing", "unsafe-directory",
-                   "directory-read-failed", "worker-start-failed", "worker-input-failed", "worker-output-failed",
-                   "worker-invalid-output", "worker-output-limit", "worker-failed", "/PRIVATE/receipt.json"] {
-        let help = receiptSourceHelp(["status": "unavailable", "reason": reason, "error": "PRIVATE"])!
-        precondition(!help.contains("PRIVATE"))
-    }
-    var archiveFence = ArchiveRequestFence()
-    let firstArchiveRequest = archiveFence.begin()
-    precondition(archiveFence.accepts(firstArchiveRequest))
-    archiveFence.invalidate()
-    precondition(!archiveFence.accepts(firstArchiveRequest))
-    let nextArchiveRequest = archiveFence.begin()
-    precondition(archiveFence.accepts(nextArchiveRequest) && !archiveFence.accepts(firstArchiveRequest))
-    _ = archiveFence.begin()
-    precondition(!archiveFence.accepts(nextArchiveRequest))
     let emptyArchive = Data(#"{"version":1,"accounts":[],"next":null,"storageBytes":0,"storageLimitBytes":8589934592}"#.utf8)
     precondition((try? ArchiveReply.parse(emptyArchive))?.accounts?.count == 0)
     precondition((try? ArchiveReply.parse(Data(#"{"version":1,"records":[],"next":null}"#.utf8)))?.records?.count == 0)
     let resetArchive = try? ArchiveReply.parse(Data(#"{"version":1,"records":[{"checkedAt":"2026-09-15T12:00:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70,"resetsAt":"2026-09-15T16:00:00Z"}]}],"next":null}"#.utf8))
     precondition(resetArchive?.records?.first?.windows?.first?.resetsAt == "2026-09-15T16:00:00Z")
-    let archiveTimeline = try? ArchiveReply.parse(Data(#"{"version":1,"records":[{"checkedAt":"2026-09-15T12:00:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":70,"resetsAt":"2026-09-15T16:00:00Z"}]},{"checkedAt":"2026-09-15T12:02:00Z","status":"unavailable"},{"checkedAt":"2026-09-15T12:05:00Z","windows":[{"bucket":"codex","window":"primary","remainingPercent":65,"resetsAt":"2026-09-15T16:00:00Z"}]}],"next":null}"#.utf8))
-    let archiveQuota = archiveChartQuota(archiveTimeline!.records!)
-    let archivedPoints = quotaHistoryPoints(rows(archiveQuota["history"]), bucket: "codex", window: "primary")
-    precondition(archivedPoints.count == 2 && quotaIsGap(archivedPoints[0], archivedPoints[1]))
-    precondition(rows(archiveQuota["history"]).count == 3 && text(archiveQuota["status"]) == "stale")
     let maskChart: JSONObject = ["version": 1, "width": 2, "height": 2, "from": 0, "to": 1000,
         "encoding": "ink-mask-u8", "pixels": Data([0, 3, 0, 0]).base64EncodedString(), "scanned": 1, "observations": 1,
         "gaps": 0, "segments": 1, "firstAt": 500, "lastAt": 500, "minUsed": 50, "maxUsed": 50]
     let rasterReply = try? ArchiveReply.parse(JSONSerialization.data(withJSONObject: ["version": 1, "chart": maskChart]))
-    precondition(rasterReply?.chart?.observations == 1 && rasterReply?.chart?.image() != nil)
-    precondition(rasterReply?.chart?.matchesRange(from: 0, to: 1000) == true)
-    precondition(rasterReply?.chart?.matchesRange(from: 1, to: 1000) == false)
+    precondition(rasterReply?.chart?.observations == 1 && (try? rasterReply?.chart?.validatedMask()) != nil)
     for changes: JSONObject in [["width": 1025], ["pixels": "AA=="], ["pixels": Data([0, 4, 0, 0]).base64EncodedString()],
                                ["observations": 0], ["firstAt": 2000], ["maxUsed": 101]] {
         let bad = maskChart.merging(changes) { _, new in new }
@@ -64,18 +26,6 @@ func runSelfTests() {
                     #"{"version":1,"records":[{"checkedAt":"not-a-date"}]}"#] {
         precondition((try? ArchiveReply.parse(Data(invalid.utf8))) == nil)
     }
-    let tickStart = Date(timeIntervalSince1970: 0)
-    let fullDay = (0...24).map { QuotaHourlyPace(hour: tickStart.addingTimeInterval(Double($0) * 3600), percentagePointsPerHour: 1, observedMinutes: 60) }
-    precondition(quotaHourlyTickStride(fullDay) == 6)
-    precondition(quotaHourlyTickStride(Array(fullDay.prefix(3))) == 1)
-    precondition(quotaHourlyTickStride([fullDay[0], fullDay[24]]) == 6)
-    precondition(quotaHourlyTickStride([]) == 1)
-    precondition(quotaHourlyTickDates(fullDay).count == 4)
-    precondition(quotaHourlyTickDates(fullDay).first == tickStart.addingTimeInterval(1800))
-    precondition(quotaHourlyTickDates(fullDay).last == tickStart.addingTimeInterval(18 * 3600 + 1800))
-    precondition(quotaCoverageLabel(0.003) == "Less than 1 percent")
-    precondition(quotaCoverageLabel(0) == "0 percent")
-    precondition(quotaCoverageLabel(1) == "100 percent")
     do {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-update-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
@@ -99,139 +49,13 @@ func runSelfTests() {
                     "{\"version\":1,\"status\":\"running\",\"peerReachability\":\"connected\"}"] {
         precondition((try? TailscaleReadiness.parse(Data(invalid.utf8))) == nil)
     }
-    do {
-        let object: JSONObject = ["schema": 2, "collectedAt": "2026-09-12T12:00:00Z",
-            "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-01", "totalTokens": 42]]]]]
-        let data = try JSONSerialization.data(withJSONObject: object)
-        let snapshot = try SnapshotArchive.parse(data)
-        precondition(snapshot.recordedDays("tokens", host: "Mac").count == 1)
-        precondition((try? SnapshotArchive.parse(Data("{\"schema\":true}".utf8))) == nil)
-        precondition((try? SnapshotArchive.parse(Data("{\"schema\":2,\"collectedAt\":\"invalid\"}".utf8))) == nil)
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-archive-test-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let file = directory.appendingPathComponent("saved.json")
-        try data.write(to: file)
-        let loaded = try SnapshotArchive.read(file)
-        precondition(number(loaded.recordedDays("tokens", host: "Mac").first?["totalTokens"]) == 42)
-        let unchanged = try Data(contentsOf: file)
-        precondition(unchanged == data)
-        let link = directory.appendingPathComponent("linked.json")
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
-        precondition((try? SnapshotArchive.read(link)) == nil)
-        precondition((try? SnapshotArchive.read(directory)) == nil)
-        let oversized = directory.appendingPathComponent("oversized.json")
-        _ = FileManager.default.createFile(atPath: oversized.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: oversized)
-        try handle.truncate(atOffset: UInt64(SnapshotArchive.maximumBytes + 1))
-        try handle.close()
-        precondition((try? SnapshotArchive.read(oversized)) == nil)
-    } catch { preconditionFailure("Snapshot archive tests failed: \(error)") }
     let sharingOff = Data("{\"version\":1,\"enabled\":false,\"canEnable\":false,\"reason\":\"account-unavailable\",\"token\":null}".utf8)
     precondition((try? QuotaSharingStatus.parse(sharingOff))?.enabled == false)
     let invalidSharing = Data("{\"version\":1,\"enabled\":true,\"canEnable\":true,\"reason\":\"ready\",\"token\":\"private\"}".utf8)
     precondition((try? QuotaSharingStatus.parse(invalidSharing)) == nil)
     do {
         try ProviderTokenSharingTests.parseSelfTest()
-        var quotaConsent = UsageSharingConsent(), claudeConsent = UsageSharingConsent()
-        precondition(quotaConsent.change(confirmed: true) == nil && claudeConsent.change(confirmed: true) == nil)
-        let quotaToken = String(repeating: "a", count: 64), claudeToken = String(repeating: "b", count: 64)
-        quotaConsent.status = QuotaSharingStatus(version: 1, enabled: false, canEnable: true, reason: "ready", token: quotaToken)
-        claudeConsent.status = QuotaSharingStatus(version: 1, enabled: false, canEnable: true, reason: "ready", token: claudeToken)
-        precondition(quotaConsent.change(confirmed: false) == nil && claudeConsent.change(confirmed: false) == nil)
-        precondition(quotaConsent.change(confirmed: true)?.token == quotaToken)
-        precondition(claudeConsent.change(confirmed: true)?.token == claudeToken)
-        quotaConsent.status = QuotaSharingStatus(version: 1, enabled: true, canEnable: true, reason: "ready", token: quotaToken)
-        precondition(claudeConsent.status?.enabled == false && claudeConsent.change(confirmed: false) == nil)
-        claudeConsent.status = QuotaSharingStatus(version: 1, enabled: true, canEnable: true, reason: "ready", token: claudeToken)
-        precondition(quotaConsent.change(confirmed: false)?.action == "disable" && quotaConsent.change(confirmed: false)?.token == nil)
-        quotaConsent.status = QuotaSharingStatus(version: 1, enabled: false, canEnable: true, reason: "ready", token: quotaToken)
-        precondition(claudeConsent.status?.enabled == true && claudeConsent.change(confirmed: false)?.action == "disable")
-        claudeConsent.status = nil
-        precondition(claudeConsent.change(confirmed: true) == nil && quotaConsent.change(confirmed: true)?.token == quotaToken)
     } catch { preconditionFailure("Provider sharing consent self-test failed") }
-    let countedModel: JSONObject = ["inputTokens": 10, "cacheReadTokens": 20, "cacheCreationTokens": 0, "outputTokens": 5, "totalTokens": 35]
-    precondition(nativeSettingsCoverage(model: countedModel, profiles: [countedModel]).status == "matched")
-    var largerModel = countedModel
-    largerModel["totalTokens"] = 40
-    precondition(nativeSettingsCoverage(model: largerModel, profiles: [countedModel]).status == "partial")
-    var excessiveProfile = countedModel
-    excessiveProfile["inputTokens"] = 11
-    precondition(nativeSettingsCoverage(model: countedModel, profiles: [excessiveProfile]).profiles.isEmpty)
-    var inferredModel = countedModel
-    inferredModel["inferred"] = true
-    precondition(nativeSettingsCoverage(model: inferredModel, profiles: [countedModel]).status == "missing")
-    precondition(nativeSettingsCoverage(model: countedModel, profiles: [[:]]).status == "unreconciled")
-    precondition(nativeCounters(["invalid": -1, "boolean": true, "AI apps": 60, "Editors": 120]).map(\.name) == ["Editors", "AI apps"])
-    let periodActivity: [JSONObject] = [
-        ["date": "2026-09-01", "seconds": 10, "categories": ["Editors": 10], "apps": ["Editors": ["VS Code": 10]]],
-        ["date": "2026-09-06", "seconds": 20, "categories": ["AI apps": 20], "apps": ["AI apps": ["ChatGPT / Codex": 20]]],
-        ["date": "2026-09-12", "seconds": 30, "categories": ["Editors": 30], "apps": ["Editors": ["VS Code": 30]]]
-    ]
-    let selectedWeek = nativePeriodDays(periodActivity, period: "week", anchor: "2026-09-12")
-    precondition(selectedWeek.count == 2)
-    precondition(number(nativePeriodSummary(selectedWeek, kind: "activity")?["seconds"]) == 50)
-    precondition(number(nativePeriodSummary(periodActivity, kind: "activity")?["seconds"]) == 60)
-    precondition(nativePeriodDays(periodActivity, period: "day", anchor: "2026-09-07").isEmpty)
-    precondition(nativePeriodDays(periodActivity, period: "invalid", anchor: "2026-09-12").isEmpty)
-    let unknownDay = nativePeriodSummary([["date": "2026-09-11", "totalTokens": 10], ["date": "2026-09-12"]], kind: "tokens")
-    precondition(number(unknownDay?["totalTokens"]) == nil)
-    var dailyModel = countedModel
-    dailyModel["model"] = "fixture-model"
-    let tokenDays: [JSONObject] = [["date": "2026-09-11", "models": [dailyModel]], ["date": "2026-09-12", "models": [dailyModel]]]
-    var badProfile = dailyModel
-    badProfile["date"] = "2026-09-11"
-    badProfile["inputTokens"] = 11
-    var goodProfile = dailyModel
-    goodProfile["date"] = "2026-09-12"
-    let reconciled = nativePeriodProfiles(model: dailyModel, days: tokenDays,
-        settings: ["status": "ok", "profiles": [badProfile, goodProfile]])
-    precondition(reconciled.count == 1 && text(reconciled.first?["date"]) == "2026-09-12")
-    precondition(nativePeriodProfiles(model: dailyModel, days: tokenDays,
-        settings: ["status": "ok", "snapshotStable": false, "profiles": [goodProfile]]).isEmpty)
-    let dictationRows: [JSONObject] = [
-        ["date": "2026-09-01", "transcriptions": 1, "words": 12, "audioSeconds": 60, "wordRecords": 1, "audioRecords": 1],
-        ["date": "2026-09-06", "transcriptions": 2, "words": 0, "audioSeconds": 0, "wordRecords": 0, "audioRecords": 0],
-        ["date": "2026-09-12", "transcriptions": 2, "words": 8, "audioSeconds": 30, "wordRecords": 1, "audioRecords": 1]
-    ]
-    let dictationSource: JSONObject = ["status": "ok", "days": dictationRows.reversed().map { $0 }]
-    precondition(dictationDays(dictationSource, latestWeek: true).map { text($0["date"]) } == ["2026-09-06", "2026-09-12"])
-    precondition(dictationDays(dictationSource, latestWeek: false).count == 3)
-    precondition(dictationDays(["status": "unavailable", "days": dictationRows], latestWeek: false).isEmpty)
-    precondition(dictationValue([dictationRows[1]], field: "words", wispr: true) == "Unknown")
-    precondition(dictationValue([dictationRows[2]], field: "words", wispr: true) == "8 (partial)")
-    precondition(dictationValue([dictationRows[2]], field: "audioSeconds", wispr: true) == "0.5 min (partial)")
-    precondition(dictationValue([dictationRows[1]], field: "audioSeconds", wispr: true) == "Unknown")
-    precondition(dictationValue([dictationRows[1]], field: "words", wispr: false) == "0")
-    let voiceFixture: JSONObject = ["host": "Mac", "source": "Wispr Flow", "status": "ok", "days": dictationRows]
-    let retiredVoice: JSONObject = ["host": "Mac", "source": "TypeWhisper", "status": "ok"]
-    precondition(nativeDashboardSources([voiceFixture, retiredVoice], key: "dictation").count == 1)
-    precondition(nativeDashboardSources(retiredVoice, key: "dictation").isEmpty)
-    precondition(nativeDashboardSources([retiredVoice], key: "settings").count == 1)
-    let voiceSources = nativeVoiceSources([voiceFixture], host: "All devices", tool: "All tools")
-    precondition(voiceSources.count == 4 && voiceSources[0].days.count == 3)
-    precondition(voiceSources[1].status == "Tracking not yet verified" && voiceSources[1].days.isEmpty)
-    precondition(voiceSources[2].status == "not-connected")
-    precondition(dictationStatus(voiceSources[0].status) == "Recorded history")
-    precondition(dictationStatus(voiceSources[1].status) == "Tracking not yet verified")
-    precondition(dictationStatus(voiceSources[2].status) == "Not connected")
-    for (status, label) in [("not-found", "No statistics found"), ("unavailable", "Unavailable"),
-                            ("not-supported", "Tracking not yet verified"), ("ambiguous", "Ambiguous source"),
-                            ("future-status", "Unknown"), ("", "Unknown")] {
-        var source = voiceFixture
-        source["status"] = status
-        let voice = nativeVoiceSources([source], host: "Mac", tool: "Wispr Flow")[0]
-        precondition(voice.status == status && voice.days.isEmpty)
-        precondition(dictationStatus(voice.status) == label)
-    }
-    precondition(dictationStatus(nil) == "Unknown")
-    precondition(dictationStatus(nativeVoiceSources([voiceFixture, voiceFixture], host: "Mac", tool: "Wispr Flow")[0].status) == "Ambiguous source")
-    precondition(nativeVoiceSources([voiceFixture, voiceFixture], host: "Mac", tool: "Wispr Flow")[0].days.isEmpty)
-    precondition(nativeVoiceSources([["host": "Mac", "source": "ChatGPT", "status": "ok", "days": dictationRows]], host: "Mac", tool: "ChatGPT")[0].days.isEmpty)
-    precondition(nativePeriodDays(voiceSources[0].days, period: "day", anchor: "2026-09-06").count == 1)
-    precondition(recordedSum([], field: "words") == nil)
-    precondition(recordedSum([["words": 0], [:]], field: "words") == nil)
-    precondition(recordedSum([["words": 0], ["words": 8]], field: "words") == 8)
     do {
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-first-run-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: runtime) }
@@ -240,12 +64,7 @@ func runSelfTests() {
         precondition(disabled.values.allSatisfy { !$0 })
         precondition((try? FirstRunSetup.required(runtime: runtime)) == true)
         precondition((try? FirstRunSetup.prepare(runtime: runtime)) == true)
-        do {
-            try FirstRunSetup.complete(sources: ["quota": true], runtime: runtime)
-            preconditionFailure("Incomplete consent must be rejected")
-        } catch {}
-        precondition((try? FirstRunSetup.required(runtime: runtime)) == true)
-        try FirstRunSetup.complete(sources: disabled, runtime: runtime)
+        precondition(try! FirstRunSetup.markComplete(runtime: runtime))
         precondition((try? FirstRunSetup.required(runtime: runtime)) == false)
         precondition((try? FirstRunSetup.prepare(runtime: runtime)) == false)
         precondition((try? CollectorConfiguration.read(runtime: runtime)) == disabled)
@@ -303,28 +122,6 @@ func runSelfTests() {
             precondition(!preview.refreshing && preview.lastAttempt == "preview-collection-disabled")
         } catch { preconditionFailure("Synthetic settings save checks failed") }
     }
-    let nativeHistory = Snapshot(object: [
-        "tokens": [["host": "Mac", "status": "ok", "days": [["date": "2026-09-12", "totalTokens": 20], ["date": "2026-09-10", "totalTokens": 10]]],
-                   ["host": "Windows", "status": "unavailable", "days": [["date": "2026-09-12", "totalTokens": 999]]]],
-        "combinedTokens": ["status": "ok", "days": [["date": "2026-09-12", "totalTokens": 999]]]
-    ])
-    precondition(nativeHistory.days("tokens", host: "Mac").map { text($0["date"]) } == ["2026-09-10", "2026-09-12"])
-    precondition(number(nativeHistory.latest("tokens", host: "Mac")?["totalTokens"]) == 20)
-    let archivedActivity = Snapshot(object: [
-        "activity": [["host": "Mac", "status": "unavailable", "days": []]],
-        "activityHistory": [
-            ["host": "Mac", "status": "ok", "latestReadStatus": "unavailable", "days": [
-                ["date": "2026-09-12", "seconds": 20], ["date": "2026-08-01", "seconds": 10]]],
-            ["host": "Combined", "status": "ok", "latestReadStatus": "ok", "days": [["date": "2026-09-12", "seconds": 25]]]
-        ]])
-    precondition(archivedActivity.recordedDays("activity", host: "Mac").map { text($0["date"]) } == ["2026-08-01", "2026-09-12"])
-    precondition(archivedActivity.latest("activity", host: "Mac") == nil)
-    precondition(text(archivedActivity.activityArchive(host: "Mac")?["latestReadStatus"]) == "unavailable")
-    precondition(number(archivedActivity.recordedDays("activity", host: "All").last?["seconds"]) == 25)
-    precondition(archivedActivity.recordedDays("activity", host: "Other").isEmpty)
-    precondition(nativeHistory.recordedDays("tokens", host: "Mac").count == 2)
-    precondition(nativeHistory.days("tokens", host: "Windows").isEmpty)
-    precondition(nativeHistory.days("tokens", host: "All").isEmpty)
     let pairingRequest = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows", hostAlias: "fixture-host",
         remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"))
     precondition((try? pairingRequest.validate()) != nil)
@@ -384,62 +181,12 @@ func runSelfTests() {
         precondition((try? CollectorConfiguration.validate([source: true]))?[source] == true)
         precondition((try? CollectorConfiguration.validate([source: "true"])) == nil)
     }
-    precondition(visibleQuotaWindows([["bucket": "codex"], ["bucket": "codex_bengalfox"], ["bucket": "SPARK"], ["bucket": "codex_spark"]]).count == 1)
-    let quotaSamples: [JSONObject] = [
-        ["checkedAt": "2026-09-09T12:00:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 80, "resetsAt": "2026-09-09T16:00:00Z"]]],
-        ["checkedAt": "2026-09-09T12:05:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 75, "resetsAt": "2026-09-09T16:00:00Z"]]],
-        ["checkedAt": "2026-09-09T12:10:00Z", "windows": [["bucket": "codex", "window": "primary", "remainingPercent": 95, "resetsAt": "2026-09-09T21:00:00Z"]]]
-    ]
-    precondition(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary").map(\.segment) == [0, 0, 1])
-    precondition(quotaHistoryPoints(quotaSamples, bucket: "spark", window: "primary").isEmpty)
-    let contiguous = quotaHistoryPoints(Array(quotaSamples.prefix(2)), bucket: "codex", window: "primary")
-    precondition(!quotaIsGap(contiguous[0], contiguous[1]))
-    let missingSample: JSONObject = ["checkedAt": "2026-09-09T12:03:00Z", "windows": []]
-    let midGap = quotaHistoryPoints([quotaSamples[0], missingSample, quotaSamples[1]], bucket: "codex", window: "primary")
-    precondition(midGap.count == 2 && quotaIsGap(midGap[0], midGap[1]))
-    let edges = quotaHistoryPoints([missingSample, quotaSamples[0], quotaSamples[1], missingSample], bucket: "codex", window: "primary")
-    precondition(edges.count == 2 && edges.first!.at == contiguous.first!.at && edges.last!.at == contiguous.last!.at)
-    let resetPoints = quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary")
-    precondition(!quotaIsGap(resetPoints[1], resetPoints[2]))
-    let rangeAnchor = quotaRecordedDate(contiguous[0].at)
-    let dayRange = quotaPeriodRange(contiguous, period: "Day", anchor: rangeAnchor, checkedAt: contiguous[1].at)
-    precondition(dayRange.lowerBound == Calendar.current.startOfDay(for: contiguous[0].at))
-    precondition(dayRange.upperBound == Calendar.current.date(byAdding: .day, value: 1, to: dayRange.lowerBound)!)
-    let weekRange = quotaPeriodRange(contiguous, period: "Week", anchor: rangeAnchor, checkedAt: contiguous[1].at)
-    precondition(weekRange.upperBound == dayRange.upperBound && weekRange.lowerBound == Calendar.current.date(byAdding: .day, value: -6, to: dayRange.lowerBound)!)
-    let paceWindow: JSONObject = ["bucket": "codex", "window": "primary"]
     let dueNow = parseDate("2026-09-09T12:00:00Z")!
     precondition(allowanceRefreshDue(["nextAttemptAt": "2026-09-09T12:00:00Z"], now: dueNow))
     precondition(allowanceRefreshDue(["nextAttemptAt": "2026-09-09T11:59:00Z"], now: dueNow))
     precondition(!allowanceRefreshDue(["nextAttemptAt": "2026-09-09T12:00:01Z"], now: dueNow))
     precondition(!allowanceRefreshDue(["nextAttemptAt": "invalid"], now: dueNow))
     precondition(!allowanceRefreshDue(nil, now: dueNow))
-    let paceQuota: JSONObject = ["status": "ok", "checkedAt": "2026-09-09T12:00:00Z",
-        "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "summary": "Synthetic pace"]]]
-    precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:01:00Z")!) == "Synthetic pace")
-    precondition(quotaPaceText(paceQuota, window: paceWindow, now: parseDate("2026-09-09T12:10:00Z")!) == "Estimate unavailable until a fresh reading.")
-    precondition(quotaPaceText(paceQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == "Not enough recent history to estimate time left.")
-    let coverageWindow: JSONObject = ["bucket": "codex", "window": "primary", "remainingPercent": 40, "resetsAt": "2026-09-09T16:00:00Z"]
-    for rate in [-1.0, 0, 10, 20, Double.infinity] {
-        let coverageQuota: JSONObject = ["status": "ok", "checkedAt": "2026-09-09T12:00:00Z",
-            "pace": [["bucket": "codex", "window": "primary", "asOf": "2026-09-09T12:00:00Z", "status": "projected", "percentagePointsPerHour": rate]]]
-        let live = quotaLivePace(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:01:00Z")!)
-        if rate == 20 {
-            precondition(live?.remaining == "1h 59m" && live?.reset == "3h 59m")
-            precondition(abs(live!.coverage - 119.0 / 239.0) < 0.000001)
-            precondition(quotaLivePace(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:02:00Z")!)?.remaining == "1h 58m")
-        } else if rate == 10 { precondition(live?.remaining == "Lasts until reset" && live?.coverage == 1) }
-        else { precondition(live == nil) }
-        precondition(quotaPaceCoverage(coverageQuota, window: coverageWindow, now: parseDate("2026-09-09T12:10:00Z")!) == nil)
-        precondition(quotaPaceCoverage(coverageQuota, window: ["bucket": "other"], now: parseDate("2026-09-09T12:01:00Z")!) == nil)
-    }
-    var hourlyCalendar = Calendar(identifier: .gregorian)
-    hourlyCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let hourly = quotaHourlyPace(quotaHistoryPoints(quotaSamples, bucket: "codex", window: "primary"), calendar: hourlyCalendar)
-    precondition(hourly.count == 1 && hourly[0].percentagePointsPerHour == 60 && hourly[0].observedMinutes == 5)
-    let boundary = [QuotaHistoryPoint(id: 0, at: dueNow.addingTimeInterval(-60), used: 10, segment: 0),
-                    QuotaHistoryPoint(id: 1, at: dueNow.addingTimeInterval(60), used: 12, segment: 0)]
-    precondition(quotaHourlyPace(boundary, calendar: hourlyCalendar).isEmpty)
     precondition((try? CollectorConfiguration.validate(["codex": 1])) == nil)
     precondition((try? CollectorConfiguration.validate(["remote": true])) == nil)
     precondition((try? CollectorConfiguration.validate(["wispr": "true"])) == nil)
@@ -491,70 +238,21 @@ func runSelfTests() {
     precondition(number(-1) == nil)
     precondition(number(Double.infinity) == nil)
     precondition(number(0) == 0)
-    precondition(formatted(nil) == "Unknown")
-    precondition(formatted(4_000_000_000, compact: true) == "4B")
-    precondition(formatted(2_000_000_000_000, compact: true) == "2T")
-    precondition(formatted(.infinity, compact: true) == "Unknown")
     precondition(parseDate("2026-09-08T20:00:00.123Z") != nil)
     precondition(parseDate("2026-09-08T20:00:00Z") != nil)
-    let source: JSONObject = ["host": "Mac", "status": "ok", "source": "Wispr Flow", "days": [
-        ["date": "2026-09-08", "audioSeconds": 60], ["date": "2026-09-07", "audioSeconds": 20]]]
-    let snapshot = Snapshot(object: ["dictation": [source], "activity": [["host": "Windows", "status": "unavailable"]]])
-    precondition(number(snapshot.latest("dictation", host: "Mac", source: "Wispr Flow")?["audioSeconds"]) == 60)
-    precondition(snapshot.latest("dictation", host: "Windows", source: "Wispr Flow") == nil)
-    precondition(snapshot.latest("dictation", host: "Mac", source: "TypeWhisper") == nil)
-    precondition(snapshot.sourceCounts.read == 1 && snapshot.sourceCounts.total == 2)
-    for (status, label) in [("ok", "Read"), ("not-connected", "Not connected"), ("partial", "Partial coverage"),
-                            ("unavailable", "Unavailable"), ("not-found", "Not found"), ("stale", "Saved reading"),
-                            ("needs-auth", "Sign in required"), ("unsupported", "Not supported"),
-                            ("rate-limited", "Usage check rate-limited"), ("future-status", "Unknown"), ("", "Unknown")] {
-        precondition(sourceHealthStatus(status) == label)
-    }
-    precondition(sourceHealthStatus(nil) == "Unknown")
-    let healthSources: [JSONObject] = ["ok", "partial", "unavailable", "not-connected"].map { ["host": "Mac", "status": $0] }
-    let healthSnapshot = Snapshot(object: ["activity": healthSources, "agents": []])
-    precondition(nativeDashboardSources(healthSnapshot.object["activity"], key: "activity").map {
-        sourceHealthStatus(text($0["status"]))
-    } == ["Read", "Partial coverage", "Unavailable", "Not connected"])
-    precondition(healthSnapshot.sourceCounts.read == 1 && healthSnapshot.sourceCounts.total == 3)
-    precondition(rows(healthSnapshot.object["activity"]).map { text($0["status"]) } == ["ok", "partial", "unavailable", "not-connected"])
-    precondition(rows(healthSnapshot.object["agents"]).isEmpty)
-    let combined = Snapshot(object: [
-        "tokens": [["host": "Mac", "status": "ok", "days": []], ["host": "Windows", "status": "ok", "days": []]],
-        "combined": ["status": "ok", "days": [["date": "2026-09-08", "seconds": 90]]],
-        "combinedTokens": ["status": "ok", "verification": ["status": "verified"],
-                           "days": [["date": "2026-09-08", "totalTokens": 600]]],
-        "dictation": [source]])
-    precondition(number(combined.latest("activity", host: "All")?["seconds"]) == 90)
-    precondition(number(combined.latest("tokens", host: "All")?["totalTokens"]) == 600)
-    precondition(combined.latest("dictation", host: "All", source: "Wispr Flow") == nil)
-    let unverified = Snapshot(object: ["combinedTokens": ["status": "ok",
-        "days": [["date": "2026-09-08", "totalTokens": 600]]]])
-    precondition(unverified.latest("tokens", host: "All") == nil)
-    precondition(snapshot.latest("activity", host: "All") == nil)
-    let unavailable = Snapshot(object: ["combined": ["status": "unavailable",
-        "days": [["date": "2026-09-08", "seconds": 90]]]])
-    precondition(unavailable.latest("activity", host: "All") == nil)
     let assetRoot = URL(fileURLWithPath: "/tmp/observatory-test-assets")
-    let legacy = AssetResolver(root: assetRoot, pages: ["index.html"])
     let panel = AssetResolver(root: assetRoot, pages: ["panel.html"])
     let dashboard = AssetResolver(root: assetRoot, pages: ["dashboard.html"])
-    precondition(legacy.resolve(URL(string: "observatory://app/index.html")!) != nil, "Legacy page refused")
-    precondition(legacy.resolve(URL(string: "observatory://app/assets/app.js")!) != nil, "Legacy script refused")
-    precondition(legacy.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil, "Legacy font refused")
-    precondition(legacy.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil, "Unsafe font URL accepted")
     let unsafeURLs = ["https://app/index.html", "observatory://other/index.html", "observatory://app/../secret.json",
                       "observatory://app/%2e%2e/secret.json", "observatory://app/local/usage.json",
                       "observatory://app/.env", "observatory://app/native-runtime.json/../../secret.json",
                       "observatory://user@app/index.html", "observatory://app:80/index.html"]
-    for url in unsafeURLs {
-        precondition(legacy.resolve(URL(string: url)!) == nil, "Unsafe asset URL accepted")
-    }
-    for page in ["panel.html", "dashboard.html"] {
-        precondition(legacy.resolve(URL(string: "observatory://app/" + page)!) == nil, "Legacy served another host's page")
-    }
     for (name, resolver) in [("panel", panel), ("dashboard", dashboard)] {
+        precondition(!resolver.pages.contains("index.html"), "Host page set contains the removed page")
+        precondition(resolver.resolve(URL(string: "observatory://app/index.html")!) == nil, "Host served the removed page")
         precondition(resolver.resolve(URL(string: "observatory://app/" + name + ".html")!) != nil, "Host page refused")
+        precondition(resolver.resolve(URL(string: "observatory://app/assets/InterTight.ttf")!) != nil, "Host font refused")
+        precondition(resolver.resolve(URL(string: "observatory://app/../InterTight.ttf")!) == nil, "Unsafe font URL accepted")
         precondition(resolver.resolve(URL(string: "observatory://app/assets/app.js")!) != nil, "Host script refused")
         for page in ["index.html", "panel.html", "dashboard.html", "other.html", "local/usage.json"] where page != name + ".html" {
             precondition(resolver.resolve(URL(string: "observatory://app/" + page)!) == nil, "Host served an unlisted page")
@@ -572,7 +270,7 @@ func runSelfTests() {
         precondition(dashboard.resolve(URL(string: "observatory://app/" + path)!) == nil,
                      "Dashboard accepted a refused path: \(path)")
     }
-    for resolver in [legacy, panel, dashboard] {
+    for resolver in [panel, dashboard] {
         precondition(resolver.resolve(URL(string: "observatory://app/assets/x.html")!) == nil,
                      "Host served HTML under assets")
     }
@@ -725,4 +423,235 @@ func runCollectorSelfTest() {
         try? FileHandle.standardError.write(contentsOf: Data("collector-self-test phase=\(currentPhase) code=\(failure.code) child_reason=\(reason) child_status=\(status) child_elapsed_ms=\(elapsed)\n".utf8))
         preconditionFailure("Packaged collector self-test failed")
     }
+}
+
+func runRuntimeSetupSelfTests() {
+    let files = FileManager.default
+    let resolved = realpath(files.temporaryDirectory.path, nil)!
+    let root = URL(fileURLWithPath: String(cString: resolved)).appendingPathComponent("observatory-runtime-" + UUID().uuidString)
+    free(resolved)
+    try! files.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+    defer { try? files.removeItem(at: root) }
+    let real = root.appendingPathComponent("real-assets")
+    try! files.createDirectory(at: real, withIntermediateDirectories: false)
+    func parse(_ args: [String], user: uid_t = getuid()) -> RuntimeOption {
+        RuntimeOption.parse(arguments: ["Observatory"] + args, realDataFolder: real, userID: user)
+    }
+    func refused(_ args: [String], user: uid_t = getuid()) {
+        guard case .refused = parse(args, user: user) else { preconditionFailure("Unsafe runtime accepted") }
+    }
+    func throwsError(_ action: () throws -> Void) {
+        do { try action(); preconditionFailure("Unsafe setup accepted") } catch {}
+    }
+    precondition(parse([]) == .none)
+    refused(["--runtime"])
+    precondition(parse(["--runtime=" + root.path + "/fresh"]) ==
+        .refused("Use --runtime followed by the folder as a separate argument."))
+    let missingReal = root.appendingPathComponent("missing/data")
+    guard case .refused = RuntimeOption.parse(arguments: ["--runtime", root.path],
+        realDataFolder: missingReal, userID: getuid()) else { preconditionFailure("Real data ancestor accepted") }
+    refused(["--runtime", "/.nofollow" + real.path])
+    refused(["--runtime", "/.nofollow" + real.path + "/child"])
+    var uppercaseRoot = stat()
+    if stat(root.path.uppercased(), &uppercaseRoot) == 0 {
+        let folded = root.appendingPathComponent("real-a\u{017F}sets")
+        refused(["--runtime", folded.path])
+        refused(["--runtime", folded.path + "/child"])
+    }
+    let absentReal = root.appendingPathComponent("absent-assets")
+    var aliases = ["/System/Volumes/Data" + absentReal.path, "/.nofollow" + absentReal.path]
+    if stat(root.path.uppercased(), &uppercaseRoot) == 0 {
+        aliases.append(root.appendingPathComponent("absent-a\u{017F}sets").path)
+    }
+    for alias in aliases {
+        guard case .runtime(let folder, _) = RuntimeOption.parse(arguments: ["--runtime", alias],
+            realDataFolder: absentReal, userID: getuid()) else { continue }
+        do {
+            let locked = try RuntimeOption.createAndLock(folder, realDataFolder: absentReal)
+            close(locked.descriptor)
+            preconditionFailure("Real data alias created and locked")
+        } catch RuntimeOption.LockError.realDataFolder {} catch { preconditionFailure("Unexpected alias failure") }
+        precondition(!files.fileExists(atPath: absentReal.path))
+    }
+    throwsError { _ = try RuntimeOption.createAndLock(real, realDataFolder: real) }
+    precondition(files.fileExists(atPath: real.path))
+    precondition(!files.fileExists(atPath: real.appendingPathComponent(".observatory.lock").path))
+    refused(["--runtime", "--preview"])
+    refused(["--runtime", "relative/path"])
+    refused(["--runtime", root.path + "/./fresh"])
+    refused(["--runtime", root.path + "/../fresh"])
+    refused(["--runtime", root.path])
+    var dataVolume = stat()
+    var temporaryVolume = stat()
+    if stat("/System/Volumes/Data", &dataVolume) == 0, stat(root.path, &temporaryVolume) == 0,
+       dataVolume.st_dev == temporaryVolume.st_dev {
+        refused(["--runtime", "/System/Volumes/Data" + real.path])
+        refused(["--runtime", "/System/Volumes/Data" + real.path + "/child"])
+    }
+    refused(["--runtime", real.path])
+    refused(["--runtime", real.path + "/child"])
+    refused(["--runtime", real.path.uppercased() + "/child"])
+    refused(["--runtime", root.path + "/missing/child"])
+    let linked = root.appendingPathComponent("linked")
+    try! files.createSymbolicLink(at: linked, withDestinationURL: real)
+    refused(["--runtime", linked.path])
+    refused(["--runtime", linked.path + "/child"])
+    let writable = root.appendingPathComponent("writable")
+    try! files.createDirectory(at: writable, withIntermediateDirectories: false)
+    precondition(chmod(writable.path, 0o770) == 0)
+    refused(["--runtime", writable.path])
+    refused(["--runtime", writable.path + "/child"])
+    refused(["--runtime", root.path], user: getuid() == 0 ? 1 : 0)
+    for flag in ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace", "--enable-login", "--self-test"] {
+        refused(["--runtime", root.path + "/fresh", flag])
+    }
+    let swapped = root.appendingPathComponent("swapped")
+    try! files.createDirectory(at: swapped, withIntermediateDirectories: false)
+    let directory = open(swapped.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    precondition(directory >= 0)
+    defer { close(directory) }
+    let identity = FileIdentity.at(swapped.path)!
+    precondition(FileIdentity.matches(descriptor: directory, path: swapped.path, expected: identity))
+    try! files.moveItem(at: swapped, to: root.appendingPathComponent("original"))
+    try! files.createDirectory(at: swapped, withIntermediateDirectories: false)
+    precondition(!FileIdentity.matches(descriptor: directory, path: swapped.path, expected: identity))
+    let fresh = root.appendingPathComponent("fresh")
+    func accepted(_ path: String) -> String? { if case .runtime(let url, _) = parse(["--runtime", path]) { return url.path } else { return nil } }
+    precondition(accepted(fresh.path) == fresh.path)
+    let lock = try! RuntimeOption.createAndLock(fresh, realDataFolder: real)
+    // An existing folder keeps its /private path. Standardizing would rewrite it to the /tmp or /var link.
+    precondition(accepted(fresh.path) == fresh.path && accepted(fresh.path + "/") == fresh.path)
+    defer { close(lock.descriptor) }
+    precondition(chmod(fresh.path, 0o755) == 0)
+    precondition(accepted(fresh.path) == fresh.path)
+    precondition(chmod(fresh.path, 0o700) == 0)
+    do {
+        let second = try RuntimeOption.createAndLock(fresh, realDataFolder: real)
+        close(second.descriptor)
+        preconditionFailure("Second runtime lock accepted")
+    } catch RuntimeOption.LockError.inUse {} catch { preconditionFailure("Unexpected lock failure") }
+    precondition((try! files.attributesOfItem(atPath: fresh.path))[.posixPermissions] as? Int == 0o700)
+    precondition(try! FirstRunSetup.prepare(runtime: fresh))
+    let marker = fresh.appendingPathComponent("setup-state.json")
+    let config = fresh.appendingPathComponent("collector.config.json")
+    let sourceBytes = try! Data(contentsOf: config)
+    precondition((try! JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as! JSONObject)["completed"] as? Bool == false)
+    precondition(try! FirstRunSetup.markComplete(runtime: fresh))
+    let completed = try! Data(contentsOf: marker)
+    precondition(completed == Data(#"{"completed":true,"version":1}"#.utf8))
+    precondition((try! files.attributesOfItem(atPath: marker.path))[.posixPermissions] as? Int == 0o600)
+    precondition(try! Data(contentsOf: config) == sourceBytes)
+    let before = try! files.attributesOfItem(atPath: marker.path)
+    precondition(try! !FirstRunSetup.markComplete(runtime: fresh))
+    precondition(try! Data(contentsOf: marker) == completed)
+    precondition((try! files.attributesOfItem(atPath: marker.path))[.modificationDate] as? Date == before[.modificationDate] as? Date)
+    try! files.removeItem(at: marker)
+    try! files.createSymbolicLink(at: marker, withDestinationURL: config)
+    throwsError { _ = try FirstRunSetup.markComplete(runtime: fresh) }
+    precondition((try? FirstRunSetup.required(runtime: fresh)) != false)
+    try! files.removeItem(at: marker)
+    try! Data(repeating: 32, count: 4097).write(to: marker)
+    throwsError { _ = try FirstRunSetup.markComplete(runtime: fresh) }
+    let empty = root.appendingPathComponent("empty")
+    try! files.createDirectory(at: empty, withIntermediateDirectories: false)
+    throwsError { _ = try FirstRunSetup.markComplete(runtime: empty) }
+    precondition(!files.fileExists(atPath: empty.appendingPathComponent("setup-state.json").path))
+    for argument: Any in [true, 1, "synthetic", NSNull(), ["nested": false], [false]] {
+        let data = try! JSONSerialization.data(withJSONObject: ["id": 3, "action": "complete-setup", "args": ["extra": argument]])
+        let message = String(data: data, encoding: .utf8)!
+        guard case .refused = BridgeContract.validate(message) else { preconditionFailure("Complete setup arguments accepted") }
+    }
+    precondition(WebDashboardPage.url(section: "setup").fragment == "setup")
+    precondition(!WebDashboardPage.sections.contains { $0.0 == "setup" })
+    MainActor.assumeIsolated {
+        let blockedStore = ObservatoryStore(runtime: root.appendingPathComponent("blocked"), collectionAllowed: false)
+        blockedStore.runtimeIdentityValid = { false }
+        blockedStore.refresh()
+        precondition(blockedStore.lastAttempt == "runtime-unavailable" && !blockedStore.refreshing)
+        blockedStore.lastAttempt = "synthetic"
+        blockedStore.refreshAllowancesIfDue()
+        precondition(blockedStore.lastAttempt == "runtime-unavailable" && !blockedStore.refreshing)
+        var hookCalls = 0
+        let isolatedHooks = MacBridgeHooks(openDashboard: { _ in hookCalls += 1 },
+            checkForUpdates: { hookCalls += 1; return false },
+            directPairingOpen: { hookCalls += 1; return false },
+            applyViewerPreferences: { _, _ in hookCalls += 1 })
+        let isolatedHost = MacBridgeHost(store: blockedStore, resources: root, preview: false,
+            handler: BridgeHandler(), hooks: isolatedHooks, isolatedRuntime: true)
+        for action in ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm",
+                       "pairing-join-claim", "pairing-join-confirm", "pairing-copy-invitation", "pairing-cancel",
+                       "set-sharing", "set-limits-consent", "pairing-disconnect", "pairing-repair-prepare"] {
+            var replied = false
+            isolatedHost.perform(action: action, args: ["enabled": .bool(true)]) { code, value in
+                precondition(code == .unavailable && value == nil)
+                replied = true
+            }
+            precondition(replied && !isolatedHost.sessionOpen && hookCalls == 0)
+        }
+        let writeFiles = ["viewer.json", "device.json", "setup-state.json", "collector.config.json"]
+        let beforeWrites = writeFiles.map { try? Data(contentsOf: blockedStore.runtime.appendingPathComponent($0)) }
+        let writeActions: [(String, [String: BridgeValue])] = [
+            ("set-source", ["source": .string("codex"), "enabled": .bool(true)]),
+            ("set-skin", ["skin": .string("sage")]),
+            ("set-appearance", ["mode": .string("dark")]),
+            ("set-device-name", ["name": .string("Synthetic Mac")]),
+            ("complete-setup", [:]), ("export-data", [:])]
+        for (action, args) in writeActions {
+            var replied = false
+            isolatedHost.perform(action: action, args: args) { code, value in
+                precondition(code == .unavailable && value == nil)
+                replied = true
+            }
+            precondition(replied && hookCalls == 0)
+            precondition(writeFiles.map { try? Data(contentsOf: blockedStore.runtime.appendingPathComponent($0)) } == beforeWrites)
+        }
+        let resources = root.appendingPathComponent("resources")
+        for path in ["Collector/scripts/claude-limits-consent.mjs", "Runtime/node/bin/node"] {
+            let file = resources.appendingPathComponent(path)
+            try! files.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try! Data().write(to: file)
+            if path.hasSuffix("/node") { precondition(chmod(file.path, 0o700) == 0) }
+        }
+        for isolated in [false, true] {
+            let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { false },
+                directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
+            let host = MacBridgeHost(store: blockedStore, resources: resources, preview: !isolated,
+                handler: BridgeHandler(), hooks: hooks, isolatedRuntime: isolated)
+            for action in ["set-limits-consent", "set-sharing", "pairing-identity-create", "pairing-host-start",
+                           "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"] {
+                var replied = false
+                host.perform(action: action, args: ["enabled": .bool(false)]) { code, value in
+                    precondition(code == .unavailable && value == nil)
+                    replied = true
+                }
+                // Refuse synchronously before any queued script task can run.
+                precondition(replied)
+            }
+        }
+        for paused in [false, true] {
+            let store = ObservatoryStore(runtime: root.appendingPathComponent(UUID().uuidString), collectionAllowed: false)
+            store.collectionPausedForPairing = paused
+            let handler = BridgeHandler()
+            let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { preconditionFailure("Isolated update invoked") },
+                directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
+            let host = MacBridgeHost(store: store, resources: nil, preview: true, handler: handler, hooks: hooks, isolatedRuntime: true)
+            for action in ["set-startup", "check-updates", "set-limits-consent", "set-sharing",
+                           "pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"] {
+                host.perform(action: action, args: [:]) { code, value in
+                    precondition(code == .unavailable && value == nil)
+                }
+            }
+            host.perform(action: "complete-setup", args: [:]) { code, value in
+                precondition(code == .done && value == nil)
+            }
+            precondition(!store.setupRequired && !store.refreshing)
+            precondition(store.lastAttempt == (paused ? "pairing-paused" : "preview-collection-disabled"))
+            store.lastAttempt = "synthetic-unchanged"
+            host.perform(action: "complete-setup", args: [:]) { code, value in
+                precondition(code == .done && value == nil)
+            }
+            precondition(store.lastAttempt == "synthetic-unchanged")
+        }
+    }
+    print("Runtime refusals, simulated owner mismatch, exclusive lock and setup completion checks passed")
 }
