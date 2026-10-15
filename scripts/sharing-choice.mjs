@@ -17,8 +17,9 @@ const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(val
 const exists=async filename=>{try {await lstat(filename);return true;}catch(error){if(error.code==='ENOENT')return false;throw error;}};
 const result=(chosen=false,state='off')=>({version:1,chosen,channels:Object.fromEntries(channels.map(channel=>[channel,state]))});
 const same=(a,b)=>['dev','ino','size','mtimeMs','ctimeMs','mode','nlink','uid'].every(key=>a[key]===b[key]);
-async function readIntent(runtime,pair) {
-  const directory=await privateSyncDirectory(runtime),filename=path.join(directory,'sharing-choice.json');
+async function readIntent(runtime,pair,directory) {
+  directory??=await privateSyncDirectory(runtime);
+  const filename=path.join(directory,'sharing-choice.json');
   let before;
   try {before=await lstat(filename);}catch(error){if(error.code==='ENOENT')return null;throw error;}
   if(!before.isFile() || before.isSymbolicLink() || before.nlink!==1 || before.size>1024 ||
@@ -35,8 +36,8 @@ async function readIntent(runtime,pair) {
     return value.pairId===pair.local.pairId?value:null;
   } finally {await file.close();}
 }
-async function writeIntent(runtime,value) {
-  const directory=await privateSyncDirectory(runtime);
+async function writeIntent(runtime,value,directory) {
+  directory??=await privateSyncDirectory(runtime);
   const pending=path.join(directory,`sharing-choice-${randomBytes(16).toString('hex')}.pending`);
   let created=false,renamed=false;
   try {
@@ -55,35 +56,50 @@ const quotaOn=(state,pair)=>Boolean(state?.sharing.enabled && state.sharing.pair
 export const chooseSharing=(runtime,{enabled})=>withPeerStateLock(runtime,async()=>{
   if(typeof enabled!=='boolean')throw fail();
   if(!enabled) {
+    await clearSharingChoice(runtime);
     await revokeQuotaSharing(runtime);
     await disableProviderTokenSharing(runtime);
-    await clearSharingChoice(runtime);
     return;
   }
   let pair;
   try {pair=await readPairing(runtime);}catch {throw fail();}
   if(!pair)throw fail();
+  const directory=await privateSyncDirectory(runtime);
   let prior;
-  try {prior=await readIntent(runtime,pair);}catch {}
+  try {prior=await readIntent(runtime,pair,directory);}catch {}
   await writeIntent(runtime,prior??{version:1,pairId:pair.local.pairId,enabled:true,
-    applied:Object.fromEntries(channels.map(channel=>[channel,false]))});
+    applied:Object.fromEntries(channels.map(channel=>[channel,false]))},directory);
 });
 
+// Callers must already hold the peer lock because the lstat fast path runs before locking.
 export async function markSharingChoiceApplied(runtime,channel) {
   try {await lstat(path.join(runtime,'private-sync','sharing-choice.json'));}catch(error){if(error.code==='ENOENT')return;}
-  try {await withPeerStateLock(runtime,async()=>{
+  await withPeerStateLock(runtime,async()=>{
     if(!channels.includes(channel))return;
-    const pair=await readPairing(runtime),intent=pair?await readIntent(runtime,pair):null;
+    let pair,intent,directory;
+    try {
+      pair=await readPairing(runtime);
+      if(!pair)return;
+      directory=await privateSyncDirectory(runtime);
+      intent=await readIntent(runtime,pair,directory);
+    } catch {return;}
     if(!intent || intent.applied[channel])return;
     intent.applied[channel]=true;
-    await writeIntent(runtime,intent);
-  });}catch {}
+    try {await writeIntent(runtime,intent,directory);}
+    catch {await clearSharingChoice(runtime);}
+  });
 }
 
 export const applySharingChoice=(runtime,channel,now=Date.now())=>withPeerStateLock(runtime,async()=>{
   if(!channels.includes(channel) || !Number.isSafeInteger(now) || now<0)throw fail();
-  let pair,intent;
-  try {pair=await readPairing(runtime);intent=pair?await readIntent(runtime,pair):null;}catch {return {status:'none'};}
+  let pair,intent,directory;
+  try {
+    pair=await readPairing(runtime);
+    if(pair) {
+      directory=await privateSyncDirectory(runtime);
+      intent=await readIntent(runtime,pair,directory);
+    }
+  } catch {return {status:'none'};}
   if(!intent)return {status:'none'};
   if(intent.applied[channel])return {status:'already-applied'};
   if(channel==='codex-limits') {
@@ -100,7 +116,7 @@ export const applySharingChoice=(runtime,channel,now=Date.now())=>withPeerStateL
     }
   }
   intent.applied[channel]=true;
-  await writeIntent(runtime,intent);
+  await writeIntent(runtime,intent,directory);
   return {status:'applied'};
 });
 
@@ -111,7 +127,7 @@ export async function readSharingChoice(runtime,now=Date.now()) {
     if(await exists(path.join(directory,'revoked')))return result();
     const pair=await readPairing(runtime);
     if(!pair)return result();
-    const intent=await readIntent(runtime,pair),quota=await quotaState(runtime,now),provider=await readProviderTokenState(runtime,now);
+    const intent=await readIntent(runtime,pair,directory),quota=await quotaState(runtime,now),provider=await readProviderTokenState(runtime,now);
     const status=result(Boolean(intent));
     for(const channel of channels)status.channels[channel]=(channel==='codex-limits'?quotaOn(quota,pair):Boolean(provider?.generation))?
       'on':intent && !intent.applied[channel]?'waiting-for-reading':'off';

@@ -54,6 +54,10 @@ async function revokePairingLocked(runtime) {
   catch(error) {if(error.code!=='ENOENT')throw error;}
   if(providerStore)await disableProviderTokenSharing(runtime);
   await clearSharingChoice(runtime);
+  try {
+    const {writePairingStatus}=await import('./peer-pairing-status.mjs');
+    await writePairingStatus(runtime);
+  } catch {}
   return {status:'revoked'};
 }
 

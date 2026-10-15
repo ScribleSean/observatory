@@ -15,8 +15,8 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     (request.action==='enable' && (typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token))))throw Error('Invalid provider sharing request');
   return withPeerStateLock(runtime,async()=>{
     if(request.action==='disable') {
-      await disableProviderTokenSharing(runtime,now);
       await markSharingChoiceApplied(runtime,'claude-code-tokens');
+      await disableProviderTokenSharing(runtime,now);
     }
     let pair;
     try {pair=await readPairing(runtime);}catch {pair=null;}

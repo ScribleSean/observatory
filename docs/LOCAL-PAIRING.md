@@ -220,8 +220,10 @@ turned on again by the intent, so turning one channel off later keeps it off.
 `sharing-choice.mjs --runtime <runtime>` takes `{"action":"status"}` or
 `{"action":"choose","enabled":true|false}` on standard input and prints only
 `{version,chosen,channels}`. Choosing false turns both channels off and removes the
-intent. Revocation now turns both channels off and removes the intent too. The
-two sharing control scripts and every receiver-side check are unchanged.
+intent. Revocation now turns both channels off and removes the intent too. The outputs of the two sharing control scripts and every receiver-side check are
+unchanged. Their disable paths now first mark the channel in the intent, so a
+channel the person turns off is never turned back on, and they fail with the
+channel still on if that mark cannot be saved.
 
 ### Saved pairing status (P1-5 preparation)
 
@@ -234,9 +236,10 @@ claim alone is `establishing-trust`. The trusted sync service writes
 written through a temporary file and a rename) after each 30-second reconcile.
 `readPairingStatusFile` treats a missing, invalid or more than two minutes old
 file as `unavailable`. "Awaiting confirmation" still comes from the control
-process's `status` reply. The bridge contract's `pairing.state` list in
-`docs/DESIGN.md` does not include these states yet. P1-5 adds them there before a
-shell shows them.
+process's `status` reply. The `pairing` entry of the bridge contract's
+`status` value in `docs/DESIGN.md` lists these states and says how a shell reads
+the file. Revocation rewrites the file as `revoked` in the same call, so a
+disconnect is not shown as `active-sync` until the next reconcile.
 
 ### Live controller (P1-4a)
 
@@ -244,8 +247,9 @@ shell shows them.
 `peer-live-fixture.test.mjs`. Like the fixture, it is test-only and excluded from
 both installed packages. `--loopback ADDRESS` starts two local workers.
 `--role host|join --local ADDRESS` starts one local worker and reaches the other
-device's worker through the controller's own standard input and output, which
-must not be a terminal. It runs the acceptance sequence below step by step,
+device's worker through the controller's own standard input and output, which must both be a
+pipe or a socket connected to the other device's worker. A terminal or a file is
+refused. It runs the acceptance sequence below step by step,
 stops at the first step that does not succeed, and prints only step names and
 outcomes to standard error. The invitation travels only inside worker commands.
 `--repaired` first runs "Prepare pairing repair" in both workers. On a Mac the

@@ -8,7 +8,8 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {chooseSharing,applySharingChoice,readSharingChoice,clearSharingChoice,markSharingChoiceApplied} from './sharing-choice.mjs';
-import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
+import {withPeerStateLock} from './peer-lock.mjs';
+import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
 import {readProviderTokenState,updateProviderTokenSource} from './provider-token-store.mjs';
 import {quotaSharingControl} from './quota-sharing-control.mjs';
@@ -46,21 +47,23 @@ async function controls(runtime) {
 }
 for(const paired of [false,true])test(`missing intent with pairing ${paired} only checks the intent path`,async t=>{
   const {runtime}=await fixture(t,paired);
-  const before=await readdir(runtime,{recursive:true});
-  const stat=t.mock.method(fs,'lstat');
-  syncBuiltinESMExports();
-  try {
-    await markSharingChoiceApplied(runtime,'codex-limits');
-    assert.deepEqual(stat.mock.calls.map(call=>call.arguments),[[filename(runtime)]]);
-  } finally {stat.mock.restore();syncBuiltinESMExports();}
-  assert.deepEqual(await readdir(runtime,{recursive:true}),before);
+  await withPeerStateLock(runtime,async()=>{
+    const before=await readdir(runtime,{recursive:true});
+    const stat=t.mock.method(fs,'lstat');
+    syncBuiltinESMExports();
+    try {
+      await markSharingChoiceApplied(runtime,'codex-limits');
+      assert.deepEqual(stat.mock.calls.map(call=>call.arguments),[[filename(runtime)]]);
+    } finally {stat.mock.restore();syncBuiltinESMExports();}
+    assert.deepEqual(await readdir(runtime,{recursive:true}),before);
+  });
 });
 test('marking an existing choice applies only the requested channel',async t=>{
   const {runtime}=await fixture(t);
   await chooseSharing(runtime,{enabled:true});
   const intent=JSON.parse(await readFile(filename(runtime),'utf8'));
   for(const channel of channels) {
-    await markSharingChoiceApplied(runtime,channel);
+    await withPeerStateLock(runtime,()=>markSharingChoiceApplied(runtime,channel));
     intent.applied[channel]=true;
     assert.deepEqual(JSON.parse(await readFile(filename(runtime),'utf8')),intent);
   }
@@ -121,7 +124,8 @@ for(const revoke of [false,true])test(`${revoke?'revocation':'choosing false'} d
   assert.equal((await readSharingChoice(runtime,now)).chosen,false);
   await clearSharingChoice(runtime);await controls(runtime);
 });
-for(const kind of ['corrupt','oversized','linked','hardlinked','group-readable'])test(`${kind} intent fails closed and apply leaves it intact`,async t=>{
+for(const kind of ['corrupt','oversized','linked','hardlinked','group-readable'])test(`${kind} intent fails closed and apply leaves it intact`,
+  {skip:kind==='group-readable' && process.platform==='win32'},async t=>{
   const {runtime}=await fixture(t);await chooseSharing(runtime,{enabled:true});await quota(runtime);
   const file=filename(runtime);
   if(kind==='linked') {
@@ -239,4 +243,77 @@ test('quota collection applies the caller clock to a synthetic reading',async t=
   await chooseSharing(runtime,{enabled:true});await quota(runtime,at);
   await attachQuotaSync(runtime,{data:{quota:{status:'ok'}}},{enabled:true,clock:()=>at});
   assert.equal((await readQuotaState(runtime,at)).sharing.enabled,true);
+});
+
+for(const channel of channels)for(const clearFails of [false,true])test(`${channel} disable handles a failed intent write with clear failure ${clearFails}`,async t=>{
+  const {runtime}=await fixture(t);
+  await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+  const control=channel==='codex-limits'?quotaSharingControl:providerTokenSharingControl;
+  const status=await control(runtime,{action:'status'},now);
+  await control(runtime,{action:'enable',token:status.token},now);
+  await chooseSharing(runtime,{enabled:true});
+  const rename=fs.rename,unlink=fs.unlink;
+  let failures=0;
+  const renameMock=t.mock.method(fs,'rename',async(from,to)=>{
+    if(to===filename(runtime) && failures++===0)throw Error('Synthetic rename failure');
+    return rename(from,to);
+  });
+  const unlinkMock=t.mock.method(fs,'unlink',async file=>{
+    if(clearFails && file===filename(runtime))throw Error('Synthetic unlink failure');
+    return unlink(file);
+  });
+  syncBuiltinESMExports();
+  try {
+    if(clearFails)await assert.rejects(control(runtime,{action:'disable'},now),/Synthetic unlink failure/);
+    else assert.equal((await control(runtime,{action:'disable'},now)).enabled,false);
+    assert.equal(failures,1);
+  } finally {renameMock.mock.restore();unlinkMock.mock.restore();syncBuiltinESMExports();}
+  assert.equal((await control(runtime,{action:'status'},now)).enabled,clearFails);
+  await quota(runtime,now+1);await updateProviderTokenSource(runtime,source(now+1),now+1);
+  if(!clearFails) {
+    assert.equal((await applySharingChoice(runtime,channel,now+1)).status,'none');
+    assert.equal((await control(runtime,{action:'status'},now+1)).enabled,false);
+  }
+});
+
+for(const offChannel of [null,...channels])test(`failed choice removal preserves both channels with prior off ${offChannel}`,async t=>{
+  const {runtime}=await fixture(t);
+  await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+  for(const control of [quotaSharingControl,providerTokenSharingControl]) {
+    const status=await control(runtime,{action:'status'},now);
+    await control(runtime,{action:'enable',token:status.token},now);
+  }
+  await chooseSharing(runtime,{enabled:true});
+  if(offChannel)await (offChannel==='codex-limits'?quotaSharingControl:providerTokenSharingControl)(runtime,{action:'disable'},now);
+  const before=await readSharingChoice(runtime,now),unlink=fs.unlink;
+  let failures=0;
+  const mocked=t.mock.method(fs,'unlink',async file=>{
+    if(file===filename(runtime) && failures++===0)throw Error('Synthetic unlink failure');
+    return unlink(file);
+  });
+  syncBuiltinESMExports();
+  try {await assert.rejects(chooseSharing(runtime,{enabled:false}),/Synthetic unlink failure/);}
+  finally {mocked.mock.restore();syncBuiltinESMExports();}
+  assert.equal(failures,1);
+  assert.deepEqual(await readSharingChoice(runtime,now),before);
+  await quota(runtime,now+1);await updateProviderTokenSource(runtime,source(now+1),now+1);
+  for(const channel of channels)assert.equal((await applySharingChoice(runtime,channel,now+1)).status,channel===offChannel?'already-applied':'applied');
+  assert.deepEqual((await readSharingChoice(runtime,now+1)).channels,before.channels);
+});
+
+test('mark verifies the intent directory once before writing and once after rename',async t=>{
+  const {runtime}=await fixture(t);
+  await chooseSharing(runtime,{enabled:true});
+  const mocked=t.mock.method(fs,'realpath');
+  syncBuiltinESMExports();
+  const checks=()=>mocked.mock.calls.filter(call=>call.arguments[0]===path.dirname(filename(runtime))).length;
+  try {
+    await withPeerStateLock(runtime,async()=>{
+      await readPairing(runtime);
+      const pairingChecks=checks();
+      await markSharingChoiceApplied(runtime,'codex-limits');
+      // Each verification resolves the directory before and after its ACL check.
+      assert.equal(checks()-pairingChecks,pairingChecks+4);
+    });
+  } finally {mocked.mock.restore();syncBuiltinESMExports();}
 });

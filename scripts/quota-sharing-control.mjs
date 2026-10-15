@@ -24,8 +24,8 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
   return withPeerStateLock(runtime,async()=>{
     // Disabling must remain available even if the pairing file is corrupt.
     if(request.action==='disable') {
-      await revokeQuotaSharing(runtime,now);
       await markSharingChoiceApplied(runtime,'codex-limits');
+      await revokeQuotaSharing(runtime,now);
     }
     let pair;
     try {pair=await readPairing(runtime);}catch {pair=null;}
