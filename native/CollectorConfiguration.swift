@@ -33,8 +33,6 @@ enum CollectorConfiguration {
             _ = try read(runtime: runtime)
             return true
         }
-        // Existing configured previews retain their cross-device collector.
-        if files.fileExists(atPath: runtime.appendingPathComponent("local.config.json").path) { return false }
         try save(defaults, runtime: runtime)
         return true
     }
@@ -69,16 +67,15 @@ enum CollectorConfiguration {
         return true
     }
 
-    static func launch(runtime: URL, resources: URL, local: Bool, quotaOnly: Bool = false) throws -> CollectorLaunch {
-        if quotaOnly && !local { throw CocoaError(.featureUnsupported) }
-        if local { _ = try read(runtime: runtime) }
-        // Use the updated bundled collector for both configuration formats.
+    static func launch(runtime: URL, resources: URL, local: Bool = true, quotaOnly: Bool = false) throws -> CollectorLaunch {
+        _ = try read(runtime: runtime)
+        // Use the updated bundled Mac collector.
         // Retained scripts can still contain retired source invocations.
         let python = resources.appendingPathComponent("Runtime/python/bin/python3")
         let node = resources.appendingPathComponent("Runtime/node/bin/node")
         let scripts = resources.appendingPathComponent("Collector/scripts")
         let runner = scripts.appendingPathComponent("run-collector.py")
-        let collector = scripts.appendingPathComponent(local ? "collect-mac.mjs" : "collect-dashboard.mjs")
+        let collector = scripts.appendingPathComponent("collect-mac.mjs")
         guard FileManager.default.isExecutableFile(atPath: python.path),
               FileManager.default.isExecutableFile(atPath: node.path),
               FileManager.default.fileExists(atPath: runner.path),

@@ -32,10 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
             !store.pairingMaintenance && !store.collectionPausedForPairing
     }
-    private var usesWebDashboard: Bool { CommandLine.arguments.contains("--web-dashboard") }
-    private var usesNativeDashboard: Bool { !usesWebDashboard && !CommandLine.arguments.contains("--legacy-dashboard") }
-    // Spike only. Without this flag the native panel is shown as before.
-    private var usesWebPanel: Bool { CommandLine.arguments.contains("--web-panel") }
+    // Keeps the SwiftUI panel and dashboard for one build and is removed with them.
+    private var usesNativeViewer: Bool { CommandLine.arguments.contains("--native-viewer") }
+    private var usesWebDashboard: Bool { !usesNativeViewer && !CommandLine.arguments.contains("--legacy-dashboard") }
+    private var usesNativeDashboard: Bool { usesNativeViewer && !CommandLine.arguments.contains("--legacy-dashboard") }
+    private var usesWebPanel: Bool { !usesNativeViewer }
     private var reportsPanelTiming: Bool { CommandLine.arguments.contains("--panel-timing") }
     private var webPanel: WebPanelController?
     private var collectionObserver: AnyCancellable?
@@ -278,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 guard let self else { return }
                 if self.reportsPanelTiming { print("panel-action name=\(action.rawValue)"); fflush(stdout) }
                 switch action {
-                case .refresh: self.store.refresh()
+                case .refresh: self.store.refreshLimitsFirst()
                 case .checkUpdates: self.checkForUpdates()
                 case .openSettings: self.openPanelSettings()
                 case .openDashboard: self.openDefault()
@@ -481,22 +482,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func sourceSettings() {
         guard !store.shuttingDown else { return }
         closeUsage()
-        if usesNativeDashboard {
+        if usesWebDashboard || usesNativeDashboard {
             openDashboard("settings")
             return
         }
-        // The web dashboard uses this alert until its settings bridge exists.
         let alert = NSAlert()
         alert.messageText = "Local source settings"
-        let local: Bool
-        do { local = try CollectorConfiguration.prepare(runtime: store.runtime) }
+        do { _ = try CollectorConfiguration.prepare(runtime: store.runtime) }
         catch {
             alert.informativeText = "The local configuration could not be read. Existing settings have been preserved."
-            alert.runModal()
-            return
-        }
-        guard local else {
-            alert.informativeText = "This preview uses your existing cross-device configuration. It has been preserved. Local-only settings are available for new installations."
             alert.runModal()
             return
         }
@@ -545,7 +539,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             failure.runModal()
         }
     }
-    @objc private func refresh() { store.refresh() }
+    @objc private func refresh() { store.refreshLimitsFirst() }
     private func setupDirectPairing() {
         guard !store.shuttingDown, previewRuntime == nil else { return }
         if let directPairingWindow { directPairingWindow.showWindow(nil); directPairingWindow.window?.makeKeyAndOrderFront(nil); return }
@@ -1056,6 +1050,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             precondition(usageWindow?.isVisible == true && !popover.isShown)
         }
         Task { @MainActor [self] in
+            if usesWebPanel {
+                guard let webPanel else { preconditionFailure("Web usage panel was not created") }
+                let height: CGFloat? = await withCheckedContinuation { continuation in
+                    webPanel.whenDrawn { continuation.resume(returning: $0) }
+                }
+                precondition(height != nil, "Web usage panel did not draw")
+            }
             // Materialize SwiftUI's AX tree through a client request while the
             // main thread remains available to service AppKit.
             let accessibilityResult = await Task.detached {
@@ -1094,23 +1095,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 print("Native usage popup failed: opening the menu-bar popup opened the dashboard")
                 exit(1)
             }
-            let filters = tree.filter { identifier($0)?.hasPrefix("observatory-filter-") == true }
-            let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Period-day", "Period-week", "Period-all"]
-            precondition(!filters.contains { identifier($0) == "observatory-filter-Source host-Ubuntu" })
-            guard NSApp.activationPolicy() == .regular, expected.allSatisfy({ suffix in
-                let matches = filters.filter { identifier($0) == "observatory-filter-" + suffix }
-                let selected = suffix == "Source host-All" || suffix == "Period-all"
-                return matches.count == 1 && attribute(matches[0], #selector(NSAccessibilityProtocol.accessibilityValue)) as? String == (selected ? "Selected" : "Not selected")
-            }) else {
-                print("Native usage popup failed: accessible filter inventory or default selection differs (found \(filters.count) controls)")
-                let labels = tree.prefix(30).map { [String(describing: type(of: $0)), identifier($0) ?? "none", attribute($0, #selector(NSAccessibilityProtocol.accessibilityLabel)) as? String ?? "none"] }
-                print("Synthetic accessibility tree: \(labels)")
-                exit(1)
+            if usesWebPanel {
+                guard let web = webPanel?.view as? WKWebView else { preconditionFailure("Web usage view missing") }
+                let script = """
+                const groups = [...document.querySelectorAll('fieldset.ob-segments')]
+                const labels = groups.map(group => group.getAttribute('aria-label'))
+                const buttons = groups.map(group => [...group.querySelectorAll('button')])
+                const selected = buttons.map(group => group.filter(button => button.getAttribute('aria-pressed') === 'true').map(button => button.textContent))
+                return window.observatoryPanelReady === true && labels.join('|') === 'Device|Period' &&
+                    buttons[0].some(button => button.textContent === 'All') &&
+                    !buttons[0].some(button => button.textContent === 'Ubuntu') &&
+                    buttons[1].map(button => button.textContent).join('|') === 'Now|Day|Week|Month|All time' &&
+                    selected[0].join('|') === 'All' && selected[1].join('|') === 'Day'
+                """
+                let valid = try? await web.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
+                precondition(NSApp.activationPolicy() == .regular && valid as? Bool == true,
+                             "Web usage filter inventory or default selection differs")
+                print("Web usage popup passed: production panel visible on screen, accessible filters default to all devices and Day, regular app activation")
+            } else {
+                let filters = tree.filter { identifier($0)?.hasPrefix("observatory-filter-") == true }
+                let expected = ["Source host-All", "Source host-Mac", "Source host-Windows", "Period-day", "Period-week", "Period-all"]
+                precondition(!filters.contains { identifier($0) == "observatory-filter-Source host-Ubuntu" })
+                guard NSApp.activationPolicy() == .regular, expected.allSatisfy({ suffix in
+                    let matches = filters.filter { identifier($0) == "observatory-filter-" + suffix }
+                    let selected = suffix == "Source host-All" || suffix == "Period-all"
+                    return matches.count == 1 && attribute(matches[0], #selector(NSAccessibilityProtocol.accessibilityValue)) as? String == (selected ? "Selected" : "Not selected")
+                }) else {
+                    print("Native usage popup failed: accessible filter inventory or default selection differs (found \(filters.count) controls)")
+                    let labels = tree.prefix(30).map { [String(describing: type(of: $0)), identifier($0) ?? "none", attribute($0, #selector(NSAccessibilityProtocol.accessibilityLabel)) as? String ?? "none"] }
+                    print("Synthetic accessibility tree: \(labels)")
+                    exit(1)
+                }
+                print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen; accessible filters default to all sources and all time; regular app activation")
             }
-            print("Native usage popup passed: \(usageWindow == nil ? "anchored" : "floating fallback") production panel visible on screen; accessible filters default to all sources and all time; regular app activation")
             if CommandLine.arguments.contains("--preview-pace") { return }
             openDefault()
             if usesNativeDashboard { precondition(nativeSelection.section == "allowances") }
+            if usesWebDashboard { precondition(webDashboardSection == "limits") }
             // AppKit can hide the window before its closing animation updates
             // isShown. Wait for the closed state with a bounded deadline.
             afterUsageClosed { [self] in
@@ -1139,6 +1160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     openPanelSettings()
                     precondition(detail === previousDashboard)
                     if usesNativeDashboard { precondition(nativeSelection.section == "settings") }
+                    if usesWebDashboard { precondition(webDashboardSection == "settings") }
                     afterUsageClosed { [self] in
                         guard usageWindow == nil, !popover.isShown, detail?.isVisible == true, expectedDashboardPresent else {
                             print("Native usage popup failed after close: usageRetained=\(usageWindow != nil) anchoredShown=\(popover.isShown) dashboardPresent=\(detail != nil) dashboardVisible=\(detail?.isVisible ?? false) webRetained=\(webView != nil)")
@@ -1204,7 +1226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if popover.isShown || usageWindow?.isVisible == true { return false }
-        openDashboard(nativeSelection.section)
+        openDashboard(usesWebDashboard ? webDashboardSection : nativeSelection.section)
         return true
     }
     func applicationWillTerminate(_ notification: Notification) {
