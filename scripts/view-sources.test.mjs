@@ -22,7 +22,7 @@ void test('refusals disclose no raw code or inferred cause', () => {
   for (const code of [undefined, null, 4]) assert.equal(refusalText(code), null);
 });
 void test('check times preserve exact time and handle unknown and future readings', () => {
-  for (const [age, label] of [[0, 'Checked just now'], [59999, 'Checked just now'], [120000, 'Checked 2m ago'], [7200000, 'Checked 2h 0m ago'], [-1, 'Check time is ahead of this device']]) {
+  for (const [age, label] of [[0, 'Checked just now'], [59999, 'Checked just now'], [120000, 'Checked 2m ago'], [7200000, 'Checked 2h 0m ago'], [-1, 'Checked just now'], [-120001, 'Check time is ahead of this device']]) {
     const iso = new Date(now - age).toISOString();
     assert.deepEqual(checkTime(iso, now), { label, iso,
       exact: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(now - age) });

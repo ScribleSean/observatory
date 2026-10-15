@@ -206,7 +206,7 @@ test('categories do not include peer device or Combined records', () => {
 });
 
 test('a reading ahead of the clock has its own Now reason and note', () => {
-  const ahead = '2026-10-14T12:32:30Z';
+  const ahead = '2026-10-14T12:35:00Z';
   assert.equal(run({ readingAt: ahead }).reason, 'ahead');
   const data = snapshot();
   data.activity[0].checkedAt = ahead;

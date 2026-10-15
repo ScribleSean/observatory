@@ -18,7 +18,7 @@ internal sealed class WebDashboard : Form
     private bool drawn, bridgeClosed;
     private string? viewerScript;
     private Task viewerWork = Task.CompletedTask;
-    private const string RuntimeMessage = "The dashboard could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window.";
+    internal const string RuntimeMessage = "The dashboard could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window.";
 
     internal WebDashboard(string runtime, BridgeHandler? handler = null, string? section = null)
     {

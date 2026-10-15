@@ -253,6 +253,7 @@ final class MacBridgeHost: BridgeHost {
     private let store: ObservatoryStore
     private let resources: URL?
     private let preview: Bool
+    private let isolatedRuntime: Bool
     private let handler: BridgeHandler
     private let hooks: MacBridgeHooks
     private var session: BridgePairingSession?
@@ -266,7 +267,8 @@ final class MacBridgeHost: BridgeHost {
     var pairingBlocked: Bool {
         store.refreshing || (store.pairingMaintenance && session?.closed != false) || hooks.directPairingOpen() || operationRunning
     }
-    init(store: ObservatoryStore, resources: URL?, preview: Bool, handler: BridgeHandler, hooks: MacBridgeHooks) {
+    init(store: ObservatoryStore, resources: URL?, preview: Bool, handler: BridgeHandler, hooks: MacBridgeHooks, isolatedRuntime: Bool = false) {
+        self.isolatedRuntime = isolatedRuntime
         self.store = store; self.resources = resources; self.preview = preview; self.handler = handler; self.hooks = hooks
     }
     func documentEnded() { documentGeneration += 1; session?.end() }
@@ -299,6 +301,17 @@ final class MacBridgeHost: BridgeHost {
     }
 
     func perform(action: String, args: [String: BridgeValue], completion: @escaping (BridgeCode, Any?) -> Void) {
+        if ["set-source", "set-skin", "set-appearance", "set-device-name", "complete-setup", "export-data"].contains(action),
+           store.runtimeIdentityValid?() == false {
+            completion(.unavailable, nil)
+            return
+        }
+        if isolatedRuntime && ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm",
+            "pairing-join-claim", "pairing-join-confirm", "pairing-copy-invitation", "pairing-cancel",
+            "set-sharing", "set-limits-consent", "pairing-disconnect", "pairing-repair-prepare"].contains(action) {
+            completion(.unavailable, nil)
+            return
+        }
         func string(_ key: String) -> String { if case .string(let value) = args[key] { return value }; return "" }
         let enabled = args["enabled"] == .bool(true)
         if action == "pairing-copy-invitation" {
@@ -316,7 +329,7 @@ final class MacBridgeHost: BridgeHost {
             return
         }
         if ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action) {
-            guard !preview, !store.shuttingDown else { completion(.unavailable, nil); return }
+            guard !isolatedRuntime, !preview, !store.shuttingDown else { completion(.unavailable, nil); return }
             guard !pairingBlocked else { completion(.busy, nil); return }
             if action == "pairing-identity-create" {
                 let code = confirm("Create device identity?", "Allow a device identity stored in a permission-restricted file. The key is not stored in Keychain or encrypted separately by Observatory.", ["Allow", "Cancel"])
@@ -334,7 +347,7 @@ final class MacBridgeHost: BridgeHost {
             guard !store.refreshing, !sessionOpen else { completion(.busy, nil); return }
             store.refreshLimitsFirst()
             completion(store.refreshing ? .done : .unavailable, nil)
-        case "check-updates": completion(hooks.checkForUpdates() ? .done : .unavailable, nil)
+        case "check-updates": completion(!isolatedRuntime && hooks.checkForUpdates() ? .done : .unavailable, nil)
         case "open-dashboard", "open-settings": hooks.openDashboard(action == "open-settings" ? "settings" : string("section")); completion(.done, nil)
         case "set-source":
             do {
@@ -364,7 +377,7 @@ final class MacBridgeHost: BridgeHost {
             do { try DeviceNameFile.write(runtime: store.runtime, name: args["name"] == .null ? nil : string("name")); completion(.done, nil) }
             catch { completion(.unavailable, nil) }
         case "set-startup":
-            guard !preview else { completion(.unavailable, nil); return }
+            guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             do {
                 if enabled && SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
                 else if !enabled && SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
@@ -372,6 +385,7 @@ final class MacBridgeHost: BridgeHost {
                 completion(status != .requiresApproval && (status == .enabled) == enabled ? .done : .unavailable, nil)
             } catch { completion(.unavailable, nil) }
         case "set-limits-consent":
+            guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             guard hasConsentScript else { completion(.unavailable, nil); return }
             if enabled {
                 let code = confirm("Turn on Claude Code limits?", "Claude Code hides most of its footer keyboard hints while any custom status line is configured.", ["Turn on", "Cancel"])
@@ -384,7 +398,7 @@ final class MacBridgeHost: BridgeHost {
                 } catch { consent.set(nil); completion(.unavailable, nil) }
             }
         case "set-sharing":
-            guard !preview, let resources else { completion(.unavailable, nil); return }
+            guard !isolatedRuntime, !preview, let resources else { completion(.unavailable, nil); return }
             guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
             if enabled {
                 let code = confirm("Share usage records?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.", ["Enable sharing", "Cancel"])
@@ -439,8 +453,14 @@ final class MacBridgeHost: BridgeHost {
                 completion(value == nil ? .unavailable : .done, value)
             }
         case "export-data": export(completion: completion)
-        // O1-2 implements first-run completion on the removal branch.
-        case "complete-setup": completion(.unavailable, nil)
+        case "complete-setup":
+            do {
+                if try FirstRunSetup.markComplete(runtime: store.runtime) {
+                    store.setupCompleted()
+                    store.refresh()
+                }
+                completion(.done, nil)
+            } catch { completion(.unavailable, nil) }
         default: completion(.refused, nil)
         }
     }

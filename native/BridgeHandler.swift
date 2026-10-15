@@ -328,6 +328,7 @@ struct BridgeStatusInput {
               BridgeContract.values["appearance"].strings.contains(input.appearance),
               BridgeContract.values["pairingState"].strings.contains(input.pairingState),
               BridgeContract.values["transport"].strings.contains(input.transport),
+              (input.pairingState != "confirming" || input.peerFingerprint != nil),
               input.peerFingerprint.map({ input.pairingState == "confirming" && hex($0) }) ?? true,
               Set(input.sharing.keys) == ["codex-limits", "claude-code-tokens"] else { return nil }
         var sharing: [String: Any] = [:]
@@ -602,6 +603,7 @@ func runBridgeSelfTests() {
         change(&changed)
         precondition(BridgeStatusInput.bridgeStatusValue(changed) == nil)
     }
+    invalidStatus { $0.pairingState = "confirming" }
     invalidStatus { $0.pairingState = "waiting"; $0.peerFingerprint = String(repeating: "a", count: 64) }
     invalidStatus { $0.appearance = "auto" }
     invalidStatus { $0.customSkins = (0..<33).map { "Custom \($0)" } }
