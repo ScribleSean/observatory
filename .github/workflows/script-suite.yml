@@ -1,0 +1,176 @@
+name: Script suite
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'lib/**'
+      - 'app/**'
+      - 'native/web/**'
+      - 'native/**/*.mjs'
+      - 'native/tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/script-suite.yml'
+      - 'native/BridgeContract.swift'
+      - 'native/windows/BridgeContract.cs'
+      - 'native/Strings.swift'
+      - 'native/windows/Strings.cs'
+      - 'native/DesignTokens.swift'
+      - 'native/windows/DesignTokens.cs'
+      - 'native/prices.json'
+      - 'native/design-tokens.json'
+      - 'native/skins/**'
+      - 'native/windows/runtime-assets.ps1'
+      - 'native/windows/runtime-assets.json'
+      - '.gitattributes'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'lib/**'
+      - 'app/**'
+      - 'native/web/**'
+      - 'native/**/*.mjs'
+      - 'native/tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/script-suite.yml'
+      - 'native/BridgeContract.swift'
+      - 'native/windows/BridgeContract.cs'
+      - 'native/Strings.swift'
+      - 'native/windows/Strings.cs'
+      - 'native/DesignTokens.swift'
+      - 'native/windows/DesignTokens.cs'
+      - 'native/prices.json'
+      - 'native/design-tokens.json'
+      - 'native/skins/**'
+      - 'native/windows/runtime-assets.ps1'
+      - 'native/windows/runtime-assets.json'
+      - '.gitattributes'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: script-suite-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  suite:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+        part: [general, tls-1, tls-2, tls-3]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use the account volume for private-state fixtures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $temporary = Join-Path $env:LOCALAPPDATA ('WorkspaceObservatoryBuild/ci-script-suite-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $temporary | Out-Null
+          foreach ($name in @('TEMP', 'TMP', 'TMPDIR')) {
+            "$name=$temporary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Export selected Python
+        shell: node {0}
+        env:
+          OBSERVATORY_PYTHON: ${{ steps.python.outputs.python-path }}
+          OBSERVATORY_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          const { appendFileSync } = require('node:fs');
+          const path = require('node:path');
+          for (const key of ['OBSERVATORY_PYTHON', 'OBSERVATORY_TEST_PYTHON']) {
+            const python = process.env[key];
+            if (!python || !path.isAbsolute(python) || /[\r\n\0]/.test(python)) {
+              throw new Error('Source tests require an absolute Python executable');
+            }
+            appendFileSync(process.env.GITHUB_ENV, `${key}=${python}\n`);
+          }
+      - name: Install pinned time zone data on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          . ./native/windows/runtime-assets.ps1
+          $cache = Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild/cache'
+          $timezone = Get-ObservatoryArchive -Name tzdata -CacheRoot $cache
+          & $env:OBSERVATORY_PYTHON -B -m pip install --no-index --no-deps $timezone
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned timezone preparation failed.' }
+      - run: npm ci
+      - name: Run full script suite
+        shell: node {0}
+        env:
+          SUITE_PART: ${{ matrix.part }}
+        run: |
+          const { readdirSync } = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+          const part = process.env.SUITE_PART;
+          const shards = {
+            'tls-1': ['provider-token-sync.test.mjs'],
+            'tls-2': ['peer-pairing.test.mjs', 'peer-repair.test.mjs', 'peer-setup.test.mjs', 'peer-tls-service.test.mjs', 'peer-tls-trust.test.mjs'],
+            'tls-3': ['peer-tls-client.test.mjs', 'peer-tls-sync.test.mjs', 'provider-token-tls.test.mjs', 'quota-sync.test.mjs', 'quota-tls.test.mjs'],
+          };
+          const tls = Object.values(shards).flat();
+          const tlsPatterns = [
+            /^peer-tls-.*\.test\.mjs$/,
+            /^peer-(pairing|repair|setup)\.test\.mjs$/,
+            /^provider-token-(sync|tls)\.test\.mjs$/,
+            /^quota-(sync|tls)\.test\.mjs$/,
+          ];
+          const isTls = (name) => tlsPatterns.some((pattern) => pattern.test(name));
+          if (new Set(tls).size !== tls.length) {
+            console.error('Duplicate TLS test file across shards');
+            process.exit(1);
+          }
+          if (part !== 'general' && !Object.hasOwn(shards, part)) {
+            console.error('SUITE_PART must be general or one of: ' + Object.keys(shards).join(', '));
+            process.exit(1);
+          }
+          const files = readdirSync('scripts', { withFileTypes: true })
+            .filter((entry) => entry.isFile() && entry.name.endsWith('.test.mjs'))
+            .map((entry) => entry.name)
+            .sort();
+          for (const name of tls) {
+            if (!files.includes(name)) {
+              console.error(`Missing TLS test file: ${name}`);
+              process.exit(1);
+            }
+          }
+          shards['tls-3'].push(...files.filter((name) => isTls(name) && !tls.includes(name)));
+          const batches = part !== 'general' ? shards[part].map((name) => [name]) : [files.filter((name) => !isTls(name))];
+          const args = ['--import', './native/tests/test-source-runtime.mjs', '--test'];
+          args.push(part !== 'general' ? '--test-timeout=900000' : '--test-timeout=300000');
+          if (part !== 'general' || process.platform === 'darwin') args.push('--test-concurrency=1');
+          for (const batch of batches) {
+            const result = spawnSync(process.execPath, [...args, ...batch.map((name) => `scripts/${name}`)], { stdio: 'inherit' });
+            if (result.error) console.error(result.error);
+            if (result.status !== 0) process.exit(result.status ?? 1);
+          }
+      - name: Run Windows test isolation checks
+        shell: node {0}
+        env:
+          SUITE_PART: ${{ matrix.part }}
+        run: |
+          if (process.env.SUITE_PART !== 'general') process.exit(0);
+          const { spawnSync } = require('node:child_process');
+          const result = spawnSync(process.execPath, ['--test', 'native/tests/windows-test-isolation.test.mjs'], { stdio: 'inherit' });
+          if (result.error) console.error(result.error);
+          if (result.status !== 0) process.exit(result.status ?? 1);
+      - run: npx tsc --noEmit
+        if: matrix.part == 'general'
+      - name: oxlint (advisory until the earlier web dashboard is removed)
+        if: matrix.part == 'general'
+        continue-on-error: true
+        run: npx oxlint
+      - run: node scripts/build-design-tokens.mjs --check
+        if: matrix.part == 'general'
