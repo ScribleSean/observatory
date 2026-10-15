@@ -199,8 +199,17 @@ enum WebViewerPreferences {
     static let appearanceKey = "observatoryAppearance"
     static let skins: Set<String> = ["sage", "almanac", "amber-crt", "instrument"]
 
-    static func skin(_ defaults: UserDefaults = .standard) -> String { skin(stored: defaults.string(forKey: skinKey)) }
-    static func theme(_ defaults: UserDefaults = .standard) -> String? { theme(stored: defaults.string(forKey: appearanceKey)) }
+    static func skin(runtime: URL) -> String { ViewerSettingsFile.read(runtime: runtime).skin }
+    static func theme(runtime: URL) -> String? { theme(stored: ViewerSettingsFile.read(runtime: runtime).appearance) }
+
+    static func migrateIfNeeded(runtime: URL, defaults: UserDefaults = .standard) {
+        let present = defaults.object(forKey: skinKey) != nil || defaults.object(forKey: appearanceKey) != nil
+        if ViewerSettingsFile.migrate(runtime: runtime, storedSkin: defaults.string(forKey: skinKey),
+                                      storedAppearance: defaults.string(forKey: appearanceKey)), present {
+            defaults.removeObject(forKey: skinKey)
+            defaults.removeObject(forKey: appearanceKey)
+        }
+    }
 
     static func skin(stored value: String?) -> String {
         guard let value, skins.contains(value) else { return "sage" }
