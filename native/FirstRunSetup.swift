@@ -1,5 +1,6 @@
 import Foundation
 import CoreFoundation
+import Darwin
 
 enum FirstRunSetup {
     private static func file(_ runtime: URL) -> URL { runtime.appendingPathComponent("setup-state.json") }
@@ -38,9 +39,47 @@ enum FirstRunSetup {
         try CollectorConfiguration.save(sources, runtime: runtime)
         try write(completed: true, runtime: runtime)
     }
+    static func markComplete(runtime: URL) throws -> Bool {
+        guard try required(runtime: runtime) else { return false }
+        _ = try CollectorConfiguration.read(runtime: runtime)
+        try write(completed: true, runtime: runtime)
+        return true
+    }
     private static func write(completed: Bool, runtime: URL) throws {
-        let data = try JSONSerialization.data(withJSONObject: ["version": 1, "completed": completed])
-        try data.write(to: file(runtime), options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file(runtime).path)
+        let target = file(runtime)
+        func checkTarget() throws {
+            var info = stat()
+            if lstat(target.path, &info) == 0 {
+                guard info.st_mode & S_IFMT == S_IFREG, info.st_size <= 4096 else {
+                    throw CocoaError(.fileWriteNoPermission)
+                }
+            } else if errno != ENOENT { throw CocoaError(.fileWriteNoPermission) }
+        }
+        try checkTarget()
+        let temporary = runtime.appendingPathComponent(".setup-state-" + UUID().uuidString)
+        let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw CocoaError(.fileWriteNoPermission) }
+        var closed = false
+        defer {
+            if !closed { close(descriptor) }
+            unlink(temporary.path)
+        }
+        guard fchmod(descriptor, 0o600) == 0 else { throw CocoaError(.fileWriteNoPermission) }
+        let data = Data((completed ? #"{"completed":true,"version":1}"# : #"{"completed":false,"version":1}"#).utf8)
+        try data.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let count = Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw CocoaError(.fileWriteUnknown) }
+                offset += count
+            }
+        }
+        guard fsync(descriptor) == 0 else { throw CocoaError(.fileWriteUnknown) }
+        let result = close(descriptor)
+        closed = true
+        guard result == 0 else { throw CocoaError(.fileWriteUnknown) }
+        try checkTarget()
+        guard rename(temporary.path, target.path) == 0 else { throw CocoaError(.fileWriteUnknown) }
     }
 }
