@@ -77,18 +77,19 @@ enum WebDashboardPage {
 }
 
 @MainActor
-func makeWebDashboard(runtime: URL, resources: URL) -> WKWebView {
+func makeWebDashboard(runtime: URL, resources: URL, bridge: BridgeHandler? = nil) -> WKWebView {
     let config = WKWebViewConfiguration()
     config.websiteDataStore = .nonPersistent()
     config.setURLSchemeHandler(BundledAssets(root: resources.appendingPathComponent("Web"), pages: ["dashboard.html"]), forURLScheme: "observatory")
-    // The page can only read the snapshot until the settings bridge is added.
+    if let bridge { config.userContentController.add(bridge, contentWorld: .page, name: "bridge") }
     config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
     config.userContentController.addUserScript(WKUserScript(source: WebViewerPreferences.documentStartScript(
-        skin: WebViewerPreferences.skin(), theme: WebViewerPreferences.theme()),
+        skin: WebViewerPreferences.skin(runtime: runtime), theme: WebViewerPreferences.theme(runtime: runtime)),
         injectionTime: .atDocumentStart, forMainFrameOnly: true))
     config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     let web = DashboardWebView(frame: .zero, configuration: config)
     let navigation = DashboardNavigation()
+    navigation.onDocumentReplaced = { [weak bridge] in bridge?.documentReplaced() }
     web.navigationGuard = navigation
     web.navigationDelegate = navigation
     web.uiDelegate = navigation
@@ -99,6 +100,13 @@ func makeWebDashboard(runtime: URL, resources: URL) -> WKWebView {
 
 // This is the contract's navigation rule. The file guard stays as a second layer.
 final class DashboardNavigation: NSObject, WKNavigationDelegate, WKUIDelegate {
+    var onDocumentReplaced: (() -> Void)?
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        (webView as? DashboardWebView)?.documentGeneration += 1
+        onDocumentReplaced?()
+    }
+
     static let fragments: Set<String> = ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"]
 
     static func allows(_ url: URL, mainFrame: Bool) -> Bool {
@@ -113,16 +121,10 @@ final class DashboardNavigation: NSObject, WKNavigationDelegate, WKUIDelegate {
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { decisionHandler(.cancel); return }
         if Self.allows(url, mainFrame: action.targetFrame?.isMainFrame == true) { decisionHandler(.allow); return }
-        if action.navigationType == .linkActivated, url.scheme == "https",
-           ["developers.openai.com", "github.com"].contains(url.host ?? "") {
-            NSWorkspace.shared.open(url)
-        }
         decisionHandler(.cancel)
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if action.navigationType == .linkActivated, let url = action.request.url, url.scheme == "https",
-           ["developers.openai.com", "github.com"].contains(url.host ?? "") { NSWorkspace.shared.open(url) }
         return nil
     }
 }

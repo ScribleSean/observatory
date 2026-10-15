@@ -21,19 +21,27 @@ enum TailscaleReadiness {
     ]
 
     static func parse(_ data: Data) throws -> String {
+        messages[try status(data)]!
+    }
+
+    static func status(_ data: Data) throws -> String {
         guard data.count <= 4096,
               let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               Set(value.keys) == Set(["version", "status", "peerReachability"]) else {
             throw CocoaError(.fileReadCorruptFile)
         }
         let response = try JSONDecoder().decode(Response.self, from: data)
-        guard response.version == 1, response.peerReachability == "not-checked", let message = messages[response.status] else {
+        guard response.version == 1, response.peerReachability == "not-checked", messages[response.status] != nil else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        return message
+        return response.status
     }
 
     static func read(resources: URL) async throws -> String {
+        messages[try await readStatus(resources: resources)]!
+    }
+
+    static func readStatus(resources: URL) async throws -> String {
         try await Task.detached(priority: .utility) {
             let node = resources.appendingPathComponent("Runtime/node/bin/node")
             let script = resources.appendingPathComponent("Collector/scripts/tailscale-status.mjs")
@@ -41,6 +49,7 @@ enum TailscaleReadiness {
                 throw CocoaError(.fileReadNoSuchFile)
             }
             let process = Process(), output = Pipe()
+            process.environment = bridgeChildEnvironment()
             process.executableURL = node
             process.arguments = [script.path]
             process.currentDirectoryURL = resources
@@ -54,7 +63,7 @@ enum TailscaleReadiness {
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationReason == .exit, process.terminationStatus == 0 else { throw CocoaError(.fileReadUnknown) }
-            return try parse(data)
+            return try status(data)
         }.value
     }
 }

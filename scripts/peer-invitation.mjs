@@ -1,22 +1,34 @@
 import {randomBytes} from 'node:crypto';
-import {isIP} from 'node:net';
 
 const prefix='observatory-pair:v1:';
+export const defaultSyncPort=43128;
 export const invitationLifetimeMs=10*60*1000;
 const fields=['version','address','port','certificateSha256','secret','createdAt','expiresAt'];
 const hex256=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const invalid=()=>{throw Error('Invalid or expired pairing invitation');};
 
-// Numeric private addresses avoid DNS rebinding and accidental public listeners.
-// IPv6 link-local addresses need interface selection and are not supported yet.
+// Addresses are strings of at most 39 characters. IPv4 uses four decimal parts
+// from 0 to 255 without leading zeros, inside 10.0.0.0/8, 172.16.0.0/12,
+// 192.168.0.0/16 or 100.64.0.0/10.
+// IPv6 starts with a group from fc00 to fdff and uses one to four hex digits per
+// group. It has eight groups, or two to seven groups with exactly one :: after
+// the first group. Zones, embedded IPv4 and extra or single edge colons fail.
 export function isPairingAddress(value) {
-  if(typeof value!=='string')return false;
-  if(isIP(value)===4) {
-    const [a,b]=value.split('.').map(Number);
+  if(typeof value!=='string' || value.length>39 || /[^a-f0-9:.]/i.test(value))return false;
+  if(value.includes('.')) {
+    const parts=value.split('.');
+    if(parts.length!==4 || parts.some(part=>!/^(0|[1-9][0-9]{0,2})$/.test(part) || Number(part)>255))return false;
+    const [a,b]=parts.map(Number);
     return a===10 || (a===172 && b>=16 && b<=31) || (a===192 && b===168) ||
       (a===100 && b>=64 && b<=127);
   }
-  return isIP(value)===6 && /^f[cd][a-f0-9]{2}:/i.test(value);
+  const halves=value.split('::');
+  if(halves.length>2 || !halves[0])return false;
+  const groups=halves.flatMap(half=>half?half.split(':'):[]);
+  if(groups.some(group=>!/^[a-f0-9]{1,4}$/i.test(group)))return false;
+  if(halves.length===1?groups.length!==8:groups.length<2 || groups.length>7)return false;
+  const first=parseInt(groups[0],16);
+  return first>=0xfc00 && first<=0xfdff;
 }
 
 export function validateInvitation(value,now=Date.now()) {

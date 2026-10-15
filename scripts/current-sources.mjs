@@ -18,8 +18,7 @@ export function projectCurrentSources(report) {
     ...report,
     tokens: tokens.filter(native),
     settings: settings.filter(native),
-    hasRetiredSources:
-      mixedScope || Boolean(report.localModel?.records?.length),
+    hasRetiredSources: mixedScope,
     ...(mixedScope
       ? {
           combinedTokens: { host: 'All', status: 'unavailable' },
