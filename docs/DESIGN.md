@@ -448,7 +448,7 @@ Both collectors write these after the provider exchange, in `attachProviderToken
 | Field | Meaning |
 | --- | --- |
 | `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked. Written on every collection. |
-| `apiEstimate` on Claude Code day and model rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table, for the local row and the peer row alike. A model with no price, including the `unknown` model bucket, is excluded. When nothing in a row is priced, `usd` and `parts` are null, never zero. |
+| `apiEstimate` on Claude Code day and model rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table, for each Claude Code row with status `ok`, local or peer. A row with any other status, including a peer row marked `stale`, gets no estimate. A model with no price is excluded. The price lookup matches the exact model name, so a dated name (such as `claude-sonnet-4-20250514`) or a `-latest` name is unpriced unless the table lists that exact name. Claude Fable models and the `unknown` model bucket are unpriced too. When nothing in a row is priced, `usd` and `parts` are null, never zero. |
 
 ### Snapshot additions
 
