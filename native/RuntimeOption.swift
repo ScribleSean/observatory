@@ -7,14 +7,19 @@ enum RuntimeOption: Equatable {
     case refused(String)
 
     static func parse(arguments: [String], realDataFolder: URL, userID: uid_t) -> RuntimeOption {
+        guard !arguments.contains(where: { $0.hasPrefix("--runtime") && $0 != "--runtime" }) else {
+            return .refused("Use --runtime followed by the folder as a separate argument.")
+        }
         guard let index = arguments.firstIndex(of: "--runtime") else { return .none }
         guard arguments.filter({ $0 == "--runtime" }).count == 1,
               index + 1 < arguments.count, !arguments[index + 1].hasPrefix("-") else {
             return .refused("--runtime requires one absolute folder path.")
         }
-        let conflicts = ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace"]
+        let conflicts = ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace",
+            "--enable-login", "--login-status", "--self-test", "--test-web", "--test-collector", "--test-shutdown",
+            "--test-quota-archive", "--test-trusted-sync-owner", "--test-direct-pairing-model", "--test-pairing-details"]
         guard !arguments.contains(where: conflicts.contains) else {
-            return .refused("--runtime cannot be combined with a preview or lifecycle option.")
+            return .refused("--runtime cannot be combined with a preview, lifecycle or one-shot option.")
         }
         let path = arguments[index + 1]
         guard path.hasPrefix("/"), !path.utf8.contains(0),

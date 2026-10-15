@@ -432,7 +432,7 @@ func runRuntimeSetupSelfTests() {
     free(resolved)
     try! files.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
     defer { try? files.removeItem(at: root) }
-    let real = root.appendingPathComponent("real")
+    let real = root.appendingPathComponent("real-assets")
     try! files.createDirectory(at: real, withIntermediateDirectories: false)
     func parse(_ args: [String], user: uid_t = getuid()) -> RuntimeOption {
         RuntimeOption.parse(arguments: ["Observatory"] + args, realDataFolder: real, userID: user)
@@ -445,6 +445,19 @@ func runRuntimeSetupSelfTests() {
     }
     precondition(parse([]) == .none)
     refused(["--runtime"])
+    precondition(parse(["--runtime=" + root.path + "/fresh"]) ==
+        .refused("Use --runtime followed by the folder as a separate argument."))
+    let missingReal = root.appendingPathComponent("missing/data")
+    guard case .refused = RuntimeOption.parse(arguments: ["--runtime", root.path],
+        realDataFolder: missingReal, userID: getuid()) else { preconditionFailure("Real data ancestor accepted") }
+    refused(["--runtime", "/.nofollow" + real.path])
+    refused(["--runtime", "/.nofollow" + real.path + "/child"])
+    var uppercaseRoot = stat()
+    if stat(root.path.uppercased(), &uppercaseRoot) == 0 {
+        let folded = root.appendingPathComponent("real-a\u{017F}sets")
+        refused(["--runtime", folded.path])
+        refused(["--runtime", folded.path + "/child"])
+    }
     refused(["--runtime", "--preview"])
     refused(["--runtime", "relative/path"])
     refused(["--runtime", root.path + "/./fresh"])
@@ -471,7 +484,7 @@ func runRuntimeSetupSelfTests() {
     refused(["--runtime", writable.path])
     refused(["--runtime", writable.path + "/child"])
     refused(["--runtime", root.path], user: getuid() == 0 ? 1 : 0)
-    for flag in ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace"] {
+    for flag in ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace", "--enable-login", "--self-test"] {
         refused(["--runtime", root.path + "/fresh", flag])
     }
     let swapped = root.appendingPathComponent("swapped")
@@ -540,6 +553,23 @@ func runRuntimeSetupSelfTests() {
         blockedStore.lastAttempt = "synthetic"
         blockedStore.refreshAllowancesIfDue()
         precondition(blockedStore.lastAttempt == "runtime-unavailable" && !blockedStore.refreshing)
+        var hookCalls = 0
+        let isolatedHooks = MacBridgeHooks(openDashboard: { _ in hookCalls += 1 },
+            checkForUpdates: { hookCalls += 1; return false },
+            directPairingOpen: { hookCalls += 1; return false },
+            applyViewerPreferences: { _, _ in hookCalls += 1 })
+        let isolatedHost = MacBridgeHost(store: blockedStore, resources: root, preview: false,
+            handler: BridgeHandler(), hooks: isolatedHooks, isolatedRuntime: true)
+        for action in ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm",
+                       "pairing-join-claim", "pairing-join-confirm", "pairing-copy-invitation", "pairing-cancel",
+                       "set-sharing", "set-limits-consent", "pairing-disconnect", "pairing-repair-prepare"] {
+            var replied = false
+            isolatedHost.perform(action: action, args: ["enabled": .bool(true)]) { code, value in
+                precondition(code == .unavailable && value == nil)
+                replied = true
+            }
+            precondition(replied && !isolatedHost.sessionOpen && hookCalls == 0)
+        }
         for isolated in [false, true] {
             let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { false },
                 directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
