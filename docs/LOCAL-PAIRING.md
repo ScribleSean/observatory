@@ -207,8 +207,10 @@ Neither action prints or logs an address. No shell sends them yet (P1-5).
 `private-sync/sharing-choice.json`, under the peer lock. Because it lives in the
 pairing folder, revocation fences it and repair retires it with the old
 generation. The control process records it when `host-confirm` or `join-confirm`
-carries the optional `sharing: true` and the pairing step succeeds. A recording
-failure does not fail the pairing, and status then reports no choice.
+carries the optional `sharing: true` and the pairing step succeeds. If recording
+fails, the command answers `unavailable` although the pairing step completed,
+and status then reports no choice. A channel turned off through its control
+script is marked as applied, so the choice never turns it back on.
 
 Each collection applies the intent once per channel, Codex limits in
 `attachQuotaSync` and Claude Code tokens in `collectProviderTokenSources`, when

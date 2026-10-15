@@ -131,11 +131,12 @@ test('repair consent reaches the claim but never controller or pipe replies',asy
     assert.equal(JSON.stringify(await controller.run(command)).includes(nonce),false);
 });
 
-for(const mode of ['host','join'])test(`${mode} confirmation records only explicit sharing after success without changing replies`,async()=>{
+for(const mode of ['host','join'])test(`${mode} confirmation reports sharing failures and preserves pairing progress`,async()=>{
   for(const sharing of [undefined,false,true,'true'])for(const broken of [false,true]) {
     let confirmed=0,chosen=0;
     const controller=createTLSSetupController('/fixture',{
       startHost:async()=>({invitation:invite(),pending:()=>({claimId:'synthetic',peerCertificateSha256:'b'.repeat(64)}),
+        status:()=>confirmed?'configuration-ready':'confirming',
         confirm:async()=>{confirmed++;},cancel:async()=>{}}),
       readRepair:async()=>null,readIdentity:async()=>({}),claim:async()=>({status:'awaiting-confirmation'}),
       receive:async()=>{confirmed++;return {status:'local-ready'};},
@@ -149,6 +150,15 @@ for(const mode of ['host','join'])test(`${mode} confirmation records only explic
     if(sharing!==undefined)command.sharing=sharing;
     if(typeof sharing==='string') {
       await assert.rejects(controller.run(command));assert.equal(confirmed,0);
+    } else if(sharing===true && broken) {
+      const input=new PassThrough(),output=new PassThrough();
+      const serving=serveTLSSetupControl('/fixture',input,output,{controller});
+      const response=once(output,'data');
+      input.write(JSON.stringify({id:1,command})+'\n');
+      assert.deepEqual(JSON.parse((await response)[0]),{id:1,status:'unavailable'});
+      assert.equal((await controller.run({action:'status'})).status,mode==='host'?'configuration-ready':'local-ready');
+      assert.equal(confirmed,1);
+      input.end();await serving;
     } else assert.deepEqual(await controller.run(command),{status:mode==='host'?'configuration-ready':'local-ready'});
     assert.equal(chosen,sharing===true?1:0);
   }
