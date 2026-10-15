@@ -76,7 +76,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
     Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true });
   }, []);
 
-  return <DashboardView> actionsAvailable={actionsAvailable} collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
+  return <DashboardView actionsAvailable={actionsAvailable} collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={section} onSectionChange={id => { setSection(id); writeSectionHash(window, id); }} onSkinChange={setSkinId} onSetupFinished={() => { setSection('limits'); writeSectionHash(window, 'limits'); }} />;
 }
 
