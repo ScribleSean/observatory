@@ -467,8 +467,11 @@ func runRuntimeSetupSelfTests() {
         refused(["--runtime", root.path + "/fresh", flag])
     }
     let fresh = root.appendingPathComponent("fresh")
-    precondition(parse(["--runtime", fresh.path]) == .runtime(fresh))
+    func accepted(_ path: String) -> String? { if case .runtime(let url) = parse(["--runtime", path]) { return url.path } else { return nil } }
+    precondition(accepted(fresh.path) == fresh.path)
     let lock = try! RuntimeOption.createAndLock(fresh)
+    // An existing folder keeps its /private path. Standardizing would rewrite it to the /tmp or /var link.
+    precondition(accepted(fresh.path) == fresh.path && accepted(fresh.path + "/") == fresh.path)
     defer { close(lock) }
     do {
         let second = try RuntimeOption.createAndLock(fresh)

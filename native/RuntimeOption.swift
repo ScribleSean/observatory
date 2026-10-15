@@ -21,7 +21,9 @@ enum RuntimeOption: Equatable {
               !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
             return .refused("--runtime requires an absolute path without dot components.")
         }
-        let folder = URL(fileURLWithPath: path).standardizedFileURL
+        // standardizedFileURL would turn an existing /private/tmp path into /tmp, so build the path from its components.
+        let parts = path.split(separator: "/").map(String.init)
+        let folder = URL(fileURLWithPath: "/" + parts.joined(separator: "/"), isDirectory: true)
         let candidate = folder.path.lowercased()
         var protected = [realDataFolder.standardizedFileURL.path.lowercased()]
         if let resolved = realpath(realDataFolder.path, nil) {
