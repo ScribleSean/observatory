@@ -1,4 +1,3 @@
-// Never force detailed counters to match a different accounting snapshot.
 export function settingsCoverage(model, rows) {
   const fields=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens'];
   const valid=n=>typeof n==='number' && Number.isFinite(n) && n>=0;

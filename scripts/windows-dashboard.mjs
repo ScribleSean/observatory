@@ -4,8 +4,6 @@ import {cleanWispr} from './wispr.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 
-// Project one set of completed native reads into the public dashboard and,
-// optionally, a separate private peer payload. No source is scanned again here.
 export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peerConfig=null) {
   if(!Number.isFinite(Date.parse(at)))throw Error('Invalid collection time');
   const disconnected=host=>({host,status:'not-connected'});

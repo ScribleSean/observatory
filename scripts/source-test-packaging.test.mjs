@@ -12,7 +12,6 @@ const preload = manifest.scripts.test.match(
   /^node --import (\S+) --test scripts\/\*\.test\.mjs$/,
 )?.[1];
 assert.ok(preload, 'Keep the preload and unfiltered source-test discovery');
-// Also reject an orphaned copy at the original packaged location.
 const testSetup = [
   preload,
   'scripts/test-source-runtime.mjs',

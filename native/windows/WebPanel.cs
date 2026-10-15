@@ -4,7 +4,6 @@ using System.Text.Json;
 
 namespace WorkspaceObservatory;
 
-// The shared viewer is the default tray panel.
 internal sealed class WebPanel : Form
 {
     internal const string Origin = "https://observatory.invalid";
@@ -41,7 +40,6 @@ internal sealed class WebPanel : Form
         ForeColor = WebHostColors.Text(light);
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false; StartPosition = FormStartPosition.Manual;
-        // A tray panel stays above other windows while it is shown.
         TopMost = true;
         ClientSize = new Size(LogicalToDeviceUnits(PanelWidth), LogicalToDeviceUnits(560));
         Controls.Add(web);
@@ -107,7 +105,6 @@ internal sealed class WebPanel : Form
         if (failed) Failed?.Invoke();
     }
 
-    // Completes when the panel is visible and the page reports that it has drawn.
     internal async Task<bool> ShowNearTray()
     {
         var area = Screen.FromPoint(Cursor.Position).WorkingArea;

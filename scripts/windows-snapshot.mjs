@@ -3,7 +3,6 @@ import {estimate} from './api-estimate.mjs';
 
 const fields=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','reasoningOutputTokens','totalTokens'];
 
-// Both token and settings views come from the same read of saved log events.
 export function tokensFromSettings(raw,host) {
   const settings=cleanSettings(raw,host);
   const profiles=settings.tokenProfiles || settings.profiles;

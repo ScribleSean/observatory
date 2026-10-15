@@ -153,8 +153,6 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
 export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
 export const readQuotaChart=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchiveChart(db,query));
 
-// Owner-local account discovery. Scope keys are opaque identifiers, not account
-// names or credentials. Page the catalogue too, rather than loading all history.
 export const listQuotaArchives=(runtime,{after=null,limit=50}={},now=Date.now())=>withDatabase(runtime,db=>{
   if((after!==null && !hex(after)) || !Number.isSafeInteger(limit) || limit<1 || limit>100 || !timestamp(now))
     throw Error('Invalid archive catalogue query');
@@ -167,10 +165,8 @@ export const listQuotaArchives=(runtime,{after=null,limit=50}={},now=Date.now())
 });
 
 const archiveDeletionToken=(state,scope)=>createHash('sha256')
-  .update(JSON.stringify(['observatory-quota-archive-delete-v1',state.salt,state.revision,scope])).digest('hex');
+    .update(JSON.stringify(['observatory-quota-archive-delete-v1',state.salt,state.revision,scope])).digest('hex');
 
-// Internal owner-local API. Native controls must resolve the selected account
-// locally, never accept arbitrary database paths or expose scope keys to peers.
 export const inspectQuotaArchive=(runtime,{scope},now=Date.now())=>withDatabase(runtime,db=>{
   if(!hex(scope) || !timestamp(now))throw Error('Invalid archive selection');
   const state=read(db,now);
@@ -201,9 +197,6 @@ export const deleteQuotaArchive=async(runtime,{scope,token,confirmation},now=Dat
   }));
 };
 
-// Called only after explicit consent for this account and paired device. A new
-// consent rotates the public generation, including when the pairing changes.
-// Disabling changes the revision so an in-flight collection cannot undo it.
 export const setQuotaSharing=(runtime,{revision,enabled,pairingId},now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now) || typeof enabled!=='boolean')throw Error('Invalid quota sharing consent');
   const previous=read(db,now);
@@ -217,8 +210,6 @@ export const setQuotaSharing=(runtime,{revision,enabled,pairingId},now=Date.now(
   save(db,next);return next;
 });
 
-// Pairing retirement is unconditional and atomic with respect to collectors.
-// Do not initialize quota storage for users who never enabled monitoring.
 export async function revokeQuotaSharing(runtime,now=Date.now()) {
   try {await lstat(path.join(runtime,'private-quota'));}
   catch(error) {if(error.code==='ENOENT')return;throw error;}

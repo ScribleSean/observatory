@@ -23,7 +23,6 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.deepEqual([...new Set(serialized.match(/https:\/\/[^" ]+/g))], ['https://example.invalid/model-prices.json']);
     for (const name of Object.values(snapshot.deviceNames)) {
       assert.equal(typeof name, 'string');
-      // 1 to 32 UTF-16 code units, as the Snapshot additions design sets.
       assert.ok(name.length >= 1 && name.length <= 32);
     }
     assert.deepEqual(devices(snapshot).map(row => row.label), ['Studio', 'Desk']);
@@ -45,7 +44,6 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     const primary = computedPace.find(row => row.window === 'primary');
     assert.equal(primary.status, 'projected');
     assert.ok(Date.parse(primary.estimatedExhaustionAt) < Date.parse(snapshot.quota.windows[0].resetsAt));
-    // The weekly window burns slower, so it never reads as running out before the 5-hour one.
     const weekly = computedPace.find(row => row.window === 'secondary');
     assert.ok(weekly.status !== 'projected' || Date.parse(weekly.estimatedExhaustionAt) > Date.parse(primary.estimatedExhaustionAt));
     const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources, snapshot.combinedTokens];
@@ -159,8 +157,6 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.equal(snapshot.dictation[1].status, 'unavailable');
     assert.equal(snapshot.dictation[1].refusal, 'private-folder-refused');
     assert.equal(snapshot.dictation[1].days, undefined);
-    // Now is exempt until D1-7 implements hourly totals in the panel.
-    // All Claude tokens remain intentionally per device, with the By device label.
     for (const host of ['All', 'Mac', 'Windows']) for (const period of ['day', 'week', 'month', 'all']) {
       const values = totals(snapshot, host, period, new Date(now));
       for (const key of ['codexTokens', 'seconds', 'usd', ...(host === 'All' ? [] : ['claudeTokens'])]) assert.ok(Number.isFinite(values[key]), `${host} ${period} ${key}`);

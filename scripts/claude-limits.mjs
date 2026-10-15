@@ -24,7 +24,6 @@ function cleanWindow(raw,observedAt) {
   return {usedPercentage:Math.round(used*10)/10,resetsAt:Math.round(resets)};
 }
 
-// Returns a sanitized record, or null when the input has no usable window.
 export function extractClaudeLimits(input,now=Date.now()) {
   const observedAt=Math.floor(now/1000);
   if(!isObject(input) || !isObject(input.rate_limits))return null;
@@ -110,7 +109,6 @@ export async function claudeStatuslineInstalled(runtime) {
 
 const base={provider:'Claude Code',scope:'account'};
 
-// The snapshot shape matches the Codex quota source so one view can draw both.
 export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   if(!enabled)return {...base,status:'not-connected',windows:[]};
   const record=cleanStored(stored,now);

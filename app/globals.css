@@ -2,7 +2,6 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-/* Local system fonts: no font network requests. */
 :root { --font-geist-sans: ui-sans-serif, system-ui, sans-serif; --font-geist-mono: ui-monospace, monospace; }
 
 @custom-variant dark (&:is(.dark *));
