@@ -171,12 +171,18 @@ jobs:
   }
   assert.equal(
     steps[4],
-    `name: Warm the selected Python
+    `name: Exclude test tools from Defender scans and warm Python
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           OBSERVATORY_PYTHON: \${{ steps.python.outputs.python-path }}
         run: |
+          try {
+            Add-MpPreference -ExclusionPath (Split-Path $env:OBSERVATORY_PYTHON), $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE -ErrorAction Stop
+            Add-MpPreference -ExclusionProcess $env:OBSERVATORY_PYTHON, (Get-Command node).Source -ErrorAction Stop
+          } catch {
+            echo "::warning::Could not configure Defender exclusions. Continuing with Python warm-up."
+          }
           & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 `,

@@ -130,16 +130,22 @@ test('Windows installs pinned time zone data through the selected Python before 
   assert.match(step, /^          if \(\$LASTEXITCODE -ne 0\) \{ throw 'Pinned timezone preparation failed\.' \}$/m);
 });
 
-test('Windows warms the selected Python immediately before the suite and propagates failure', () => {
-  const matches = steps.filter((step) => step.startsWith('name: Warm the selected Python\n'));
+test('Windows attempts Defender exclusions before warming Python and propagates warm-up failure', () => {
+  const matches = steps.filter((step) => step.startsWith('name: Exclude test tools from Defender scans and warm Python\n'));
   assert.equal(matches.length, 1);
   const step = matches[0];
   assert.equal(steps.indexOf(step), steps.findIndex((entry) => entry.startsWith('run: npm ci\n')) + 1);
   assert.equal(steps.indexOf(step) + 1, steps.indexOf(suite));
-  assert.equal(step, `name: Warm the selected Python
+  assert.equal(step, `name: Exclude test tools from Defender scans and warm Python
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          try {
+            Add-MpPreference -ExclusionPath (Split-Path $env:OBSERVATORY_PYTHON), $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE -ErrorAction Stop
+            Add-MpPreference -ExclusionProcess $env:OBSERVATORY_PYTHON, (Get-Command node).Source -ErrorAction Stop
+          } catch {
+            echo "::warning::Could not configure Defender exclusions. Continuing with Python warm-up."
+          }
           & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 `);
