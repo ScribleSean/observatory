@@ -10,14 +10,15 @@ internal sealed class UpdateSession : IDisposable
     internal static UpdateSession Begin(TimeSpan timeout,
         string? setupName = null,
         string? singletonName = null,
-        string? requestName = null)
+        string? requestName = null,
+        string? inUseName = null)
     {
         var gate = InstallationGate.TryEnter(setupName)
             ?? throw new IOException("Installation or command-line collection is busy. Retry the update later.");
         try
         {
             var result = UpdateQuit.Request(singletonName ?? AppIdentity.Current.SingletonName,
-                requestName ?? AppIdentity.Current.QuitName, timeout);
+                requestName ?? AppIdentity.Current.QuitName, inUseName ?? AppIdentity.Current.InUseName, timeout);
             if (result != UpdateQuit.Result.Stopped)
                 throw new IOException(result == UpdateQuit.Result.Unsupported
                     ? "Quit the older application before updating."
@@ -35,14 +36,28 @@ internal sealed class UpdateSession : IDisposable
         using (var busy = InstallationGate.TryEnter(prefix)!)
         {
             var rejected = false;
-            try { using var unexpected = Begin(TimeSpan.Zero, prefix, prefix + ".app", prefix + ".quit"); }
+            try { using var unexpected = Begin(TimeSpan.Zero, prefix, prefix + ".app", prefix + ".quit", prefix + ".InUse"); }
             catch (IOException) { rejected = true; }
             if (!rejected) throw new Exception("Update entered a busy setup gate.");
+        }
+        using (var inUse = new Semaphore(1, int.MaxValue, prefix + ".InUse"))
+        {
+            inUse.WaitOne();
+            try
+            {
+                var rejected = false;
+                try { using var unexpected = Begin(TimeSpan.Zero, prefix, prefix + ".app", prefix + ".quit", prefix + ".InUse"); }
+                catch (IOException) { rejected = true; }
+                if (!rejected) throw new Exception("Runtime instance was accepted for update.");
+                using var released = InstallationGate.TryEnter(prefix)
+                    ?? throw new Exception("Runtime refusal retained setup gate.");
+            }
+            finally { inUse.Release(); }
         }
         using (var older = new Mutex(false, prefix + ".app"))
         {
             var rejected = false;
-            try { using var unexpected = Begin(TimeSpan.Zero, prefix, prefix + ".app", prefix + ".quit"); }
+            try { using var unexpected = Begin(TimeSpan.Zero, prefix, prefix + ".app", prefix + ".quit", prefix + ".InUse"); }
             catch (IOException) { rejected = true; }
             if (!rejected) throw new Exception("Older app without quit receiver was accepted.");
             using var released = InstallationGate.TryEnter(prefix)
@@ -73,7 +88,7 @@ internal sealed class UpdateSession : IDisposable
             {
                 if (!ready.Wait(TimeSpan.FromSeconds(5))) throw new Exception("Update session fixture did not start.");
                 UpdateSession? session = null;
-                try { session = Begin(complete ? TimeSpan.FromSeconds(5) : TimeSpan.FromMilliseconds(100), prefix, prefix + ".app", prefix + ".quit"); }
+                try { session = Begin(complete ? TimeSpan.FromSeconds(5) : TimeSpan.FromMilliseconds(100), prefix, prefix + ".app", prefix + ".quit", prefix + ".InUse"); }
                 catch (IOException) when (!complete) { }
                 using (session)
                 {

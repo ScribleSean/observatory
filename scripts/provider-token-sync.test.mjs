@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cp,mkdtemp,realpath,rm,readFile,writeFile,readdir} from 'node:fs/promises';
+import {cp,copyFile,mkdtemp,realpath,rm,readFile,writeFile,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
+import {privateCollectorDirectory} from './peer-directory.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
@@ -52,8 +53,23 @@ test('API estimates never reach the saved or exchanged Claude record',async t=>{
   local.days[0].models[0].model='claude-opus-5-5';
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-sync-copy-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
-  await cp(estimated.root,root,{recursive:true});
-  const plain=Object.fromEntries(['Mac','Windows'].map(host=>[host,path.join(root,path.relative(estimated.root,estimated[host]))]));
+  async function cloneRuntime(sourceRuntime,host) {
+    const destRuntime=await realpath(await mkdtemp(path.join(root,host)));
+    for(const entry of await readdir(sourceRuntime,{withFileTypes:true})) {
+      const sourcePath=path.join(sourceRuntime,entry.name);
+      if(entry.isDirectory() && entry.name.startsWith('private-')) {
+        // Recreate private folders because copying does not preserve Windows protected DACLs.
+        const destination=await privateCollectorDirectory(destRuntime,entry.name,true);
+        for(const file of await readdir(sourcePath,{withFileTypes:true})) {
+          assert.ok(file.isFile(),'Private directories must contain only regular files');
+          await copyFile(path.join(sourcePath,file.name),path.join(destination,file.name));
+        }
+      } else await cp(sourcePath,path.join(destRuntime,entry.name),{recursive:true});
+    }
+    return destRuntime;
+  }
+  const plain={};
+  for(const host of ['Mac','Windows'])plain[host]=await cloneRuntime(estimated[host],host);
   for(const run of [estimated,plain]) {
     run.requests=[];
     run.request=async(_transport,input)=>{

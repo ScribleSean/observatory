@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readFile,writeFile,symlink,lstat} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,writeFile,symlink,lstat,readlink,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
-import {revokePairing} from './peer-revocation.mjs';
+import {revokePairing,assertPeerNotRevoked} from './peer-revocation.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,readPeerState,acceptPeerState,createPeerRecord} from './peer-store.mjs';
 import {exchangePeerRecord} from './peer-exchange.mjs';
@@ -93,9 +93,18 @@ test('linked revocation marker is never followed or overwritten',{skip:process.p
   await initializePairing(runtime,createPairingConfigurations().Mac);
   const target=path.join(other,'sentinel');await writeFile(target,'preserve');
   await symlink(target,path.join(runtime,'private-sync/revoked'));
-  await assert.rejects(readPairing(runtime),/revoked/);
-  await assert.rejects(revokePairing(runtime),/Unsafe/);
+  await assert.rejects(readPairing(runtime),process.platform==='darwin'?/Private path access-control verification failed/:/revoked/);
+  await assert.rejects(revokePairing(runtime),process.platform==='darwin'?/Private path access-control verification failed/:/Unsafe/);
   assert.equal(await readFile(target,'utf8'),'preserve');
+  assert.ok((await lstat(path.join(runtime,'private-sync/revoked'))).isSymbolicLink());
+  assert.equal(await readlink(path.join(runtime,'private-sync/revoked')),target);
+});
+
+test('a linked revocation marker is detected without being followed',{skip:process.platform==='win32'},async t=>{
+  const runtime=await fixture(t),directory=path.join(runtime,'private-sync');
+  await mkdir(directory,{mode:0o700});
+  await symlink(path.join(runtime,'missing-sentinel'),path.join(directory,'revoked'));
+  await assert.rejects(assertPeerNotRevoked(directory),/revoked/);
 });
 
 test('CLI requires explicit operation and reports no private pairing values',async t=>{

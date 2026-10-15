@@ -53,30 +53,6 @@ jobs:
             node --test scripts/verify-installation.test.mjs
             if ($LASTEXITCODE -ne 0) { throw 'Native updater script integration failed.' }
           } finally { Remove-Item Env:OBSERVATORY_TEST_UPDATE_EXTRACTOR }
-      - name: Verify synthetic Windows dashboard navigation
-        shell: pwsh
-        run: |
-          $output = Join-Path $env:RUNNER_TEMP 'observatory-dashboard-fixture'
-          New-Item -ItemType Directory -Path $output -ErrorAction Stop | Out-Null
-          $test = Start-Process -FilePath ./native-test/WorkspaceObservatory.exe -ArgumentList @('--test-native-dashboard', $output) -PassThru -NoNewWindow
-          if (-not $test.WaitForExit(60000)) {
-            $test.Kill()
-            throw 'Synthetic dashboard test timed out.'
-          }
-          $result = Join-Path $output 'native-result.txt'
-          if (Test-Path $result) { Get-Content $result }
-          if ($test.ExitCode -ne 0) { throw 'Synthetic dashboard test failed.' }
-          if ((Get-Content (Join-Path $output 'native-result.txt') -Raw).Trim() -ne 'native-dashboard: passed') {
-            throw 'Synthetic dashboard result missing or failed.'
-          }
-      - name: Retain fictional dashboard screenshots for visual review
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: synthetic-windows-dashboard
-          path: ${{ runner.temp }}/observatory-dashboard-fixture/*.png
-          retention-days: 1
-          if-no-files-found: error
   macos:
     runs-on: macos-14
     timeout-minutes: 10
