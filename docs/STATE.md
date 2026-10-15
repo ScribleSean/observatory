@@ -116,6 +116,8 @@ The assessment above says the installed app was running. That was true, but it w
 
 ## Remaining Ubuntu code
 
+Updated 2026-10-14 for R2 (issue 111, pull request 119). R2 removes `includeUbuntu` from the pairing messages in the scripts and in both apps, stops writing the `codexHosts` list (saved files that list only their own device stay readable), and limits token comparison to Mac and Windows. That change is in source only. It is not installed on either device until R2-5. What still names Ubuntu after R2 is the `localModel` snapshot slot and the retirement checkpoint code (R2-2), and the legacy migration plan. The rest of this section is the record from before the 2026-10-13 re-pair.
+
 The pairing messages (`includeUbuntu`), the pairing file's `codexHosts` list, three-host token comparison, the `localModel` snapshot slot, the retirement checkpoint code and the legacy migration plan still name Ubuntu.
 
 This PC's saved pairing lists Windows with an Ubuntu slot. With that pairing, the combined All token total stays unverified by design, because the Ubuntu comparison evidence can no longer be supplied. Stored exchange records are validated against the same shape. Removing the legacy shape in code would therefore break the existing pairing.

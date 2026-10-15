@@ -8,7 +8,7 @@ import {validatePeerTransport} from './peer-transport.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {readPeerTrust} from './peer-tls-trust.mjs';
 import {commitConfirmedTLSPairing} from './peer-tls-setup.mjs';
-import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
+import {setupConfigurationDigest,legacySetupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
@@ -40,7 +40,7 @@ async function readStored(directory,name) {
 
 async function saveIdentical(directory,name,value) {
   const saved=await readStored(directory,name);
-  if(saved!==null) {if(!isDeepStrictEqual(saved,value))throw fail();return;}
+  if(saved!==null) {if(!isDeepStrictEqual(name===offerFile?validatePairing(saved):saved,value))throw fail();return;}
   const bytes=JSON.stringify(value);
   if(Buffer.byteLength(bytes)>limit)throw fail();
   const file=await open(path.join(directory,name),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
@@ -56,22 +56,21 @@ function complementary(pair,transport,localFingerprint) {
 }
 
 // Call only after local confirmation of the certificate from the claimed TLS
-// connection. Endpoints and Windows/Ubuntu scope come from explicit setup.
+// connection. Endpoints come from explicit setup.
 export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,async()=>{
   const host=process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null;
-  if(!host || !request || typeof request.includeUbuntu!=='boolean')throw fail();
+  if(!host || !request || typeof request!=='object' || Array.isArray(request) ||
+    Object.keys(request).length!==4 || !['localEndpoint','peerEndpoint','peerCertificate','peerCertificateSha256'].every(key=>Object.hasOwn(request,key)))throw fail();
   const localEndpoint=validatePeerTransport(request.localEndpoint),peerEndpoint=validatePeerTransport(request.peerEndpoint);
   if(localEndpoint.kind!=='tls' || peerEndpoint.kind!=='tls')throw fail();
   const identity=await readDeviceIdentity(runtime);
   if(!identity)throw fail();
   const localFingerprint=fingerprint(identity.cert);
   let pair=await readPairing(runtime);
-  if(!pair)pair=validatePairing({...createPairingConfigurations(request.includeUbuntu)[host],
+  if(!pair)pair=validatePairing({...createPairingConfigurations()[host],
     transport:peerEndpoint,localEndpoint,peerCertificateSha256:request.peerCertificateSha256});
-  const windows=host==='Windows'?pair.local:pair.peer;
   if(pair.local.host!==host || !isDeepStrictEqual(pair.transport,peerEndpoint) || !isDeepStrictEqual(pair.localEndpoint,localEndpoint) ||
-    pair.peerCertificateSha256!==request.peerCertificateSha256 ||
-    !isDeepStrictEqual(windows.codexHosts,request.includeUbuntu?['Windows','Ubuntu']:['Windows']))throw fail();
+    pair.peerCertificateSha256!==request.peerCertificateSha256)throw fail();
   const claim={pairId:pair.local.pairId,localCertificateSha256:localFingerprint,
     peerCertificate:request.peerCertificate,peerCertificateSha256:request.peerCertificateSha256};
   await commitConfirmedTLSPairing(runtime,{pairing:pair,claim});
@@ -87,11 +86,12 @@ async function hostState(runtime) {
   const raw=await readStored(directory,offerFile);
   if(!raw)throw fail();
   const offer=validatePairing(raw);
-  if(!isDeepStrictEqual(raw,offer) || !isDeepStrictEqual(offer,complementary(pair,pair.localEndpoint,trust.localCertificateSha256)))throw fail();
+  if(!isDeepStrictEqual(offer,complementary(pair,pair.localEndpoint,trust.localCertificateSha256)))throw fail();
   const receipt={version:1,pairId:pair.local.pairId,deviceId:pair.peer.deviceId,
     peerCertificateSha256:pair.peerCertificateSha256,digest:setupConfigurationDigest(offer)};
   const ack=await readStored(directory,ackFile);
-  if(ack!==null && !isDeepStrictEqual(ack,receipt))throw fail();
+  if(ack!==null && !isDeepStrictEqual(ack,receipt) &&
+    !isDeepStrictEqual(ack,{...receipt,digest:legacySetupConfigurationDigest(offer)}))throw fail();
   return {directory,offer,receipt,acknowledged:ack!==null};
 }
 
@@ -106,7 +106,7 @@ export const readHostTLSSetup=runtime=>withPeerStateLock(runtime,async()=>{
 export const recordHostTLSAcknowledgement=(runtime,{peerCertificateSha256,digest})=>withPeerStateLock(runtime,async()=>{
   const state=await hostState(runtime);
   if(peerCertificateSha256!==state.receipt.peerCertificateSha256 || digest!==state.receipt.digest)throw fail();
-  await saveIdentical(state.directory,ackFile,state.receipt);
+  if(!state.acknowledged)await saveIdentical(state.directory,ackFile,state.receipt);
   await privateSyncDirectory(runtime);
   return {version:1,status:'acknowledged'};
 });

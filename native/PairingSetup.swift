@@ -11,7 +11,6 @@ struct PairingTransport: Codable {
 
 struct PairingSetupRequest: Codable {
     let transport: PairingTransport
-    let includeUbuntu: Bool
 
     func validate() throws {
         let target = transport

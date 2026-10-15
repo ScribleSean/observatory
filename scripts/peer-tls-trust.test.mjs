@@ -40,7 +40,7 @@ test('TLS trust is bound to persistent identities and pairing generation',
     }
     await t.test('host persists complementary offer and acknowledgement across a fresh process',async()=>{
       const f=await fixture({initialize:false,tls:true});
-      const request={peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert),includeUbuntu:false,
+      const request={peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert),
         localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerEndpoint:f.pairing.transport};
       const offer=await prepareHostTLSSetup(f.runtime,request),localPair=await readPairing(f.runtime);
       assert.equal(offer.local.deviceId,localPair.peer.deviceId);
@@ -71,7 +71,7 @@ test('TLS trust is bound to persistent identities and pairing generation',
       const f=await fixture({initialize:false,tls:true});
       await initializePairing(f.runtime,{...f.pairing,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerCertificateSha256:fingerprint(peer.cert)});
       const offer=await prepareHostTLSSetup(f.runtime,{peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert),
-        includeUbuntu:false,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerEndpoint:f.pairing.transport});
+        localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},peerEndpoint:f.pairing.transport});
       assert.equal(offer.local.pairId,f.pairing.local.pairId);
       const ackFile=path.join(f.runtime,'private-sync','tls-acknowledgement.json');
       await writeFile(ackFile,'null',{mode:0o600});

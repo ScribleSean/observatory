@@ -21,18 +21,21 @@ async function fixture(t,settled=()=>undefined) {
 test('pair generation shares comparison credentials but has distinct device identities',()=>{
   const pairs=createPairingConfigurations(),other=createPairingConfigurations();
   assert.equal(pairs.Mac.local.comparisonSalt,pairs.Windows.local.comparisonSalt);
-  assert.deepEqual(pairs.Mac.peer.codexHosts,['Windows']);
+  assert.equal(Object.hasOwn(pairs.Mac.peer,'codexHosts'),false);
   assert.notEqual(pairs.Mac.local.deviceId,pairs.Windows.local.deviceId);
   assert.notEqual(pairs.Mac.local.pairId,other.Mac.local.pairId);
   assert.ok(!('comparisonSalt' in pairs.Mac.peer));
   const bad=structuredClone(pairs.Mac);bad.peer.deviceId=bad.local.deviceId;
   assert.throws(()=>validatePairing(bad));
 });
-test('new pairings reject retired scope while saved legacy configurations still validate',()=>{
-  assert.throws(()=>createPairingConfigurations(true),/retired/);
-  const legacy=createPairingConfigurations().Mac;
+test('new pairings reject options and legacy single-host configurations normalize',()=>{
+  for(const option of [true,false,null,{},[]])assert.throws(()=>createPairingConfigurations(option));
+  assert.ok(createPairingConfigurations(undefined));
+  const pair=createPairingConfigurations().Mac,legacy=structuredClone(pair);
+  legacy.local.codexHosts=['Mac'];legacy.peer.codexHosts=['Windows'];
+  assert.deepEqual(validatePairing(legacy),pair);
   legacy.peer.codexHosts=['Windows','Ubuntu'];
-  assert.deepEqual(validatePairing(legacy),legacy);
+  assert.throws(()=>validatePairing(legacy));
 });
 test('private pairing round-trips and existing state cannot be overwritten',async t=>{
   const runtime=await fixture(t),pair=createPairingConfigurations().Mac;
@@ -73,7 +76,7 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
         t.signal.throwIfAborted();
         phase.signal.throwIfAborted();
         return execFileSync(process.execPath,[script],{env:{...process.env,OBSERVATORY_RUNTIME:runtime,
-          OBSERVATORY_PYTHON:mac?'/usr/bin/python3':process.env.OBSERVATORY_PYTHON},encoding:'utf8',timeout:20000});
+          OBSERVATORY_PYTHON:process.env.OBSERVATORY_PYTHON},encoding:'utf8',timeout:20000});
       };
       completed=!phase.signal.aborted;
     })());

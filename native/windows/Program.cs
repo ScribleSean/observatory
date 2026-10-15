@@ -294,7 +294,7 @@ internal static class Program
                 WebDashboard.SelfTest();
                 WebViewerPreferences.SelfTest();
                 Console.WriteLine("WebView2 runtime: " + WebHostsTests.RuntimeVersion());
-                Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); FirstRunSetup.SelfTest();
+                Snapshot.SelfTest(); NativeHistory.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); DirectPairingWindow.CommandShapeSelfTest(); FirstRunSetup.SelfTest();
                 NativeDashboard.FreshnessSelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
                 InstallationGate.SelfTest();

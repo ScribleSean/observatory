@@ -52,11 +52,11 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         host=created;
         return {status:'hosting',invitation:encodeInvitation(host.invitation)};
       }
-      if(exact(request,['action','peerCertificateSha256','localEndpoint','peerEndpoint','includeUbuntu']) && request.action==='host-confirm') {
+      if(exact(request,['action','peerCertificateSha256','localEndpoint','peerEndpoint']) && request.action==='host-confirm') {
         const pending=host?.pending();
         if(!pending || pending.peerCertificateSha256!==request.peerCertificateSha256)throw fail();
         await host.confirm(pending.claimId,{localEndpoint:request.localEndpoint,
-          peerEndpoint:request.peerEndpoint,includeUbuntu:request.includeUbuntu});
+          peerEndpoint:request.peerEndpoint});
         return {status:token===epoch?'configuration-ready':'cancelled'};
       }
       if(exact(request,['action','invitation']) && request.action==='join-claim') {
@@ -69,9 +69,9 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         invitation=proposed;joining=result.status;
         return {status:joining};
       }
-      if(exact(request,['action','includeUbuntu']) && request.action==='join-confirm') {
+      if(exact(request,['action']) && request.action==='join-confirm') {
         if(!invitation || host)throw fail();
-        const result=await receive(runtime,invitation,{includeUbuntu:request.includeUbuntu},{signal:abort.signal});
+        const result=await receive(runtime,invitation,{signal:abort.signal});
         if(token!==epoch)return {status:'cancelled'};
         if(!['awaiting-confirmation','local-ready','acknowledged'].includes(result.status))throw fail();
         joining=result.status;return {status:joining};
