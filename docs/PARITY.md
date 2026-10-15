@@ -142,7 +142,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
 | Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow. P1-1 (issue 110) added `tailscaleSelfAddresses()` to the shared script for pre-filling this device's own Tailscale address. Neither shell calls it yet. |
 | Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. P1-0 (issue 110): a device that ran "Prepare pairing repair" can now pair over TLS (shared scripts, loopback tests only). The address check refuses IPv6 zone identifiers. |
-| Usage sharing, two channels | Done | Done | Change | Becomes one choice at pairing time. The shared viewer's Settings view keeps the two switches, one per `set-sharing` channel, until P1 changes the contract. |
+| Usage sharing, two channels | Done | Done | Change | Becomes one choice at pairing time. The shared viewer's Settings view keeps the two switches, one per `set-sharing` channel, until P1 changes the contract. P1-3 (issue 110) added the one choice to the shared scripts (`sharing-choice.mjs`), applied by the collector when each channel first has a reading. Neither shell offers it yet. |
 | Startup switch | Differs | Differs | Change | "Launch at login" on Mac. "Start at login" on Windows. Wording should match within each platform's convention. |
 | Version and Check for updates | Done | Done | Keep | |
 | Footer note | Differs | Differs | Remove | Mac says account management is still being developed. Windows says "Native migration preview". |

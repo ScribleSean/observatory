@@ -184,6 +184,77 @@ URLs. A future copy action must explain that clipboard history can retain it.
 It is not a six-digit code. Short human-entered codes require a separately
 reviewed password-authenticated exchange.
 
+### Pre-filled host values (P1-2)
+
+The pairing control process has two new actions. The existing actions keep
+their exact request and reply keys, which both shells check.
+
+- `host-defaults` returns `{status:"ready",address,port,portAvailable}`. `address`
+  is this device's Tailscale IPv4 from `tailscaleSelfAddresses()` or null.
+  `port` is always 43128. `portAvailable` comes from a bind check on that address
+  and port (an exclusive listen that is closed at once), and is null when there
+  is no address to check, because an unknown result is not "unavailable".
+- `pending-peer` returns `{status,peerAddress}`. While a host has a pending
+  claim, `peerAddress` is the claimant's TLS connection address (an IPv4-mapped
+  IPv6 form is reduced to IPv4) when it passes `isPairingAddress`, otherwise null.
+  It does not take the busy slot, like `status`.
+
+Neither action prints or logs an address. No shell sends them yet (P1-5).
+
+### One sharing choice (P1-3)
+
+`scripts/sharing-choice.mjs` records one consent intent for the active pairing in
+`private-sync/sharing-choice.json`, under the peer lock. Because it lives in the
+pairing folder, revocation fences it and repair retires it with the old
+generation. The control process records it when `host-confirm` or `join-confirm`
+carries the optional `sharing: true` and the pairing step succeeds. A recording
+failure does not fail the pairing, and status then reports no choice.
+
+Each collection applies the intent once per channel, Codex limits in
+`attachQuotaSync` and Claude Code tokens in `collectProviderTokenSources`, when
+that channel first has a recent reading. Until then status reports
+`waiting-for-reading` for that channel. A channel that was applied is never
+turned on again by the intent, so turning one channel off later keeps it off.
+`sharing-choice.mjs --runtime <runtime>` takes `{"action":"status"}` or
+`{"action":"choose","enabled":true|false}` on standard input and prints only
+`{version,chosen,channels}`. Choosing false turns both channels off and removes the
+intent. Revocation now turns both channels off and removes the intent too. The
+two sharing control scripts and every receiver-side check are unchanged.
+
+### Saved pairing status (P1-5 preparation)
+
+`scripts/peer-pairing-status.mjs` reports one of `unpaired`, `revoked`,
+`establishing-trust`, `active-sync`, `sync-stale` or `unavailable`. `active-sync`
+requires a verified peer record collected within the last ten minutes (and, for
+TLS, saved trust). A listener that is open, a reachable device or a completed
+claim alone is `establishing-trust`. The trusted sync service writes
+`<runtime>/pairing-status.json` (`{version,state,checkedAt}`, at most 1 KiB, owner-only,
+written through a temporary file and a rename) after each 30-second reconcile.
+`readPairingStatusFile` treats a missing, invalid or more than two minutes old
+file as `unavailable`. "Awaiting confirmation" still comes from the control
+process's `status` reply. The bridge contract's `pairing.state` list in
+`docs/DESIGN.md` does not include these states yet. P1-5 adds them there before a
+shell shows them.
+
+### Live controller (P1-4a)
+
+`scripts/peer-live-controller.mjs` is the private parent for
+`peer-live-fixture.test.mjs`. Like the fixture, it is test-only and excluded from
+both installed packages. `--loopback ADDRESS` starts two local workers.
+`--role host|join --local ADDRESS` starts one local worker and reaches the other
+device's worker through the controller's own standard input and output, which
+must not be a terminal. It runs the acceptance sequence below step by step,
+stops at the first step that does not succeed, and prints only step names and
+outcomes to standard error. The invitation travels only inside worker commands.
+`--repaired` first runs "Prepare pairing repair" in both workers. On a Mac the
+workers need `OBSERVATORY_PYTHON` set to a Python 3 runtime for the private
+folder check.
+
+A loopback run with two workers on one Mac passes every step up to `confirm`
+and then stops at `finish`, with and without `--repaired`, and cleans up. That is
+expected: a pairing is always one Mac and one Windows, so a second Mac worker
+refuses the host's offer. The full sequence needs the Windows PC (P1-4).
+
 ## In-memory invitation lifecycle
 
 `scripts/peer-invitation-session.mjs` owns one invitation in a single listener
