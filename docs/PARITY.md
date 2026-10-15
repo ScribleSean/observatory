@@ -25,9 +25,9 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Claude Code limits | Missing | Missing | Add | The shared collector writes `claudeLimits` once the status line bridge is installed. No native view reads it. The shared web panel does. |
 | Device filter (All, Mac, Windows) | Differs | Differs | Change | Mac opens on All. Windows opens on Windows. The list is fixed in code on both. |
 | Period filter | Differs | Missing | Change | Mac offers Today, Week, All time. Windows shows the latest recorded day only. |
-| Now period | Missing | Missing | Add | |
+| Now period | Missing | Missing | Add | Since D1 (issue 80, `shared/d1-hours`) the collectors write `hours` on this device's Codex and Claude Code token days, and the shared panel's `totals()` computes Now from them with the rule under "Snapshot additions". Token hours stay on the device that read them, so Codex Now for All stays Unknown until R2. Tested from source with synthetic data, not in an installed build. |
 | Month period | Missing | Missing | Add | |
-| Editable device name shown as "Name (Platform)" | Missing | Missing | Add | Both show fixed Mac and Windows labels |
+| Editable device name shown as "Name (Platform)" | Missing | Missing | Add | Both show fixed Mac and Windows labels. Since D1-3 both collectors attach `deviceNames` with their own key from `<runtime>/device.json`. Nothing writes that file yet (the Settings action is B1 and M2/W2), and the paired device's name does not cross until R2. |
 | Tokens total | Done | Differs | Change | Windows shows the latest recorded day only |
 | Screen time total | Done | Differs | Change | Windows shows the latest recorded day only |
 | Voice row | Done | Missing | Remove | Dictation leaves the panel |
@@ -80,7 +80,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Device filter | Done | Done | Keep | |
-| Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. The shared dashboard's Activity view (V3, issue 97) offers Now, Day, Week, Month and All time. Its Now follows the rule under "Snapshot additions" in the design direction, reads only the `Combined` row for All, and shows Unknown until a collector stamps `checkedAt` on that row. Checked with synthetic tests and the sample in a browser, not inside either host. |
+| Period filter (Day, Week, All retained) | Differs | Differs | Change | Add Now and Month. Rename All retained to All time. The shared dashboard's Activity view (V3, issue 97) offers Now, Day, Week, Month and All time. Its Now follows the rule under "Snapshot additions" in the design direction, reads only the `Combined` row for All, and shows Unknown until a collector stamps `checkedAt` on that row. Since D1 the merge stamps it with the earlier of the two payloads' collection times. Checked with synthetic tests and the sample in a browser, not inside either host. |
 | Date picker | Done | Done | Keep | |
 | Total and bar chart, up to 30 days | Done | Done | Keep | |
 | Tracking status and ActivityWatch help | Differs | Differs | Change | Collapsed on Mac. Always expanded on Windows. The shared dashboard's Activity view shows the status as a fixed word and keeps the detail and the help collapsed behind an information control. Neither app hosts the shared dashboard yet. The help wording moved to the `activity` group of `lib/strings.json`, with "Allowances" renamed to "Limits". `native/ActivityWatchHelp.swift` still holds its own copy until M2 retires the native view. |
@@ -121,7 +121,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Section name | Differs | Differs | Change | Rename to Sources. The shared viewer names it Sources (V1). |
-| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. The shared viewer's Sources view (V5, issue 100) shows the relative time with the exact time on hover, and a refusal code as a sentence that claims no cause. No collector writes `refusal` yet (D1-6). Checked in a browser from the built files with sample data, not inside either host. |
+| Per-source status and last check | Differs | Differs | Change | Mac shows absolute times. Windows shows relative times. The shared viewer's Sources view (V5, issue 100) shows the relative time with the exact time on hover, and a refusal code as a sentence that claims no cause. Since D1-6 both collectors write `refusal` on this device's Codex `settings` and `tokens` rows when the private Codex folder is refused. The Windows `ancestor-refused` mapping has not run on Windows. Checked in a browser from the built files with sample data, not inside either host. |
 | Status wording | Done | Done | Change | The same nine labels are written separately in Swift and C#. Move them to the shared strings file. Since V5 (issue 100) the nine labels are in `lib/strings.json` under `sources` and the shared viewer reads them. The native views still use their own copies. |
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
@@ -175,7 +175,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Design tokens generated from one file | Done | Done | Change | Add meaning, provider and chart colours. CSS for the web viewer is already generated as `app/design-tokens.css` by `scripts/build-design-tokens.mjs`. |
 | Shared strings file | Differs | Differs | Add | `lib/strings.json` exists since 2026-10-14 and generates `native/Strings.swift` and `native/windows/Strings.cs`, which compile but are not read by any native view. The shared viewer reads all its labels from it. |
 | Settings bridge message validator | Missing | Missing | Add | B1-1 (issue 101) generates it from `lib/bridge-contract.json` as `native/BridgeContract.swift` and `native/windows/BridgeContract.cs`, with types for the page. Neither shell calls it yet, which is M2 and W2. The Swift validator was compiled on the Mac and matched the page validator on every test message. The C# validator compiles in the Windows CI job but has not been run against the test messages, because no .NET SDK is installed on the Mac. The script suite from pull request 94 runs that comparison on Windows and macOS once it merges. |
-| Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
+| Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits. Since D1 the collectors write token `hours`, `deviceNames`, `refusal` and the `Combined` row's `checkedAt`, all local to the device that wrote them. The records sent to a paired device are unchanged, which a test checks. Not in an installed build. |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
 | Price table | Done | Done | Keep | `native/prices.json`, taken from LiteLLM's open table and checked on 2026-10-14. The packaged collectors read its generated twin `scripts/price-data.mjs`. `scripts/price-refresh.mjs` refreshes both by hand. |
 | Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together. R2 (issue 111): the pairing scripts and both apps' pairing requests no longer carry the Ubuntu slot, and saved pairings stay readable. The snapshot `localModel` slot (R2-2) remains. |

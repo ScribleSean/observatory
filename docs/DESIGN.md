@@ -93,7 +93,7 @@ Dollar figures are estimates at list price. A subscription is not billed per tok
 - The `rate_limits` fields appear only for Pro and Max subscribers. People have reported versions where the fields were missing. Both cases show Unknown.
 - The Codex app-server protocol is versioned with the installed Codex client and can change.
 - Collection runs every five minutes. Now can be fresher than that only for limits.
-- The snapshot stores tokens per day. Now needs the hourly token field described under "Snapshot additions", which no collector writes yet.
+- The snapshot stores tokens per day. Now needs the hourly token field described under "Snapshot additions". Since D1 the collectors write it for the device that read the tokens, and token hours from a paired device wait for R2.
 - Provider terms changed several times in 2026. Recheck the Claude Code legal page before each public release.
 
 ## Removals
@@ -439,13 +439,13 @@ The sample fixture also carries fields that later snapshot changes will add: `ho
 | Field | Meaning | Until it exists |
 | --- | --- | --- |
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
-| `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
+| `deviceNames` | Custom names keyed by `Mac` and `Windows`. Since D1-3 each collector writes its own key from `device.json`, but nothing writes that file until the Settings action exists. | The panel shows "macOS" and "Windows" |
 | `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked | The dashboard reads `checked` from each estimate |
 | `apiEstimate` on Claude Code day rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table after the peer merge, on the device that shows it. It is never part of the exchanged record. A model with no price is excluded and leaves `usd` null. | Claude Code rows carry no estimate |
 
 `prices` and `apiEstimate` on Claude Code rows are written by the second part of the price table work (D2-4).
 
-`deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
+`deviceNames` is designed under "Snapshot additions" below.
 
 ### Snapshot additions
 
