@@ -11,7 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private let popover = NSPopover()
     private var usageWindow: NSPanel?
     private var detail: NSWindow?
-    private var setupWindow: NSWindow?
     private var directPairingWindow: DirectPairingWindowController?
     private var webView: WKWebView?
     private var bridgeHandler: BridgeHandler?
@@ -27,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     private weak var lifecycleContent: NSView?
     private lazy var updateController = MacUpdateController { [weak self] in
         guard let self, let store = self.store else { return false }
-        return self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
+        return selectedRuntime == nil && self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
             !store.pairingMaintenance && !store.collectionPausedForPairing
     }
     private var reportsPanelTiming: Bool { CommandLine.arguments.contains("--panel-timing") }
@@ -58,7 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let runtime: URL
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
         let popupTest = CommandLine.arguments.contains("--test-popup") || CommandLine.arguments.contains("--preview-pace")
-        if CommandLine.arguments.contains("--preview") || lifecycleTest || popupTest {
+        if let selectedRuntime {
+            runtime = selectedRuntime
+        } else if CommandLine.arguments.contains("--preview") || CommandLine.arguments.contains("--preview-setup") || lifecycleTest || popupTest {
             // An isolated, empty UI preview never changes installed settings or login state.
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-ui-preview-\(UUID().uuidString)")
             do {
@@ -73,11 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 .appendingPathComponent("Library/Application Support/Workspace Observatory")
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
-        if previewRuntime == nil { WebViewerPreferences.migrateIfNeeded(runtime: store.runtime) }
+        if previewRuntime == nil && selectedRuntime == nil { WebViewerPreferences.migrateIfNeeded(runtime: store.runtime) }
         let handler = BridgeHandler()
         let hooks = MacBridgeHooks(openDashboard: { [weak self] in self?.openDashboard($0) },
             checkForUpdates: { [weak self] in
-                guard let self, self.previewRuntime == nil else { return false }
+                guard let self, self.previewRuntime == nil, selectedRuntime == nil else { return false }
                 do { try self.updateController.check(); return true } catch { return false }
             }, directPairingOpen: { [weak self] in self?.directPairingWindow != nil },
             applyViewerPreferences: { [weak self] skin, theme in
@@ -85,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if let web = self?.webView { applyViewerPreferences(web, skin: skin, theme: theme) }
             })
         let host = MacBridgeHost(store: store, resources: Bundle.main.resourceURL,
-                                 preview: previewRuntime != nil, handler: handler, hooks: hooks)
+                                 preview: previewRuntime != nil, handler: handler, hooks: hooks, isolatedRuntime: selectedRuntime != nil)
         handler.host = host
         bridgeHandler = handler; bridgeHost = host
         dashboardCollectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
@@ -122,33 +123,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         if popupTest { DispatchQueue.main.async { [self] in checkUsagePopup() }; return }
         store.start()
-        if store.setupRequired { DispatchQueue.main.async { [self] in showSetup() }; return }
+        if store.setupRequired { DispatchQueue.main.async { [self] in openDashboard("setup") }; return }
         if CommandLine.arguments.contains("--show") {
             DispatchQueue.main.async { [self] in togglePanel() }
         } else if !CommandLine.arguments.contains("--background") {
             DispatchQueue.main.async { [self] in openDashboard("allowances") }
         }
-    }
-
-    private func showSetup() {
-        if setupWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
-                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
-            window.title = "Set up Observatory"
-            window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SetupWizard(runtime: store.runtime, pairingAllowed: previewRuntime == nil) { [weak self] pair in
-                guard let self else { return }
-                self.setupWindow?.close()
-                self.setupWindow = nil
-                self.openDashboard("allowances")
-                if pair && self.previewRuntime == nil { self.setupPairing() }
-                self.store.refresh()
-            })
-            window.center()
-            setupWindow = window
-        }
-        setupWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func makeMenu() {
@@ -423,7 +403,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(.separator())
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
-        login.isEnabled = previewRuntime == nil
+        login.isEnabled = previewRuntime == nil && selectedRuntime == nil
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(withTitle: "Login settings…", action: #selector(loginSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
@@ -434,7 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc private func toggleLogin() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         do {
             if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
             else { try SMAppService.mainApp.register() }
@@ -446,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func loginSettings() {
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         SMAppService.openSystemSettingsLoginItems()
     }
     @objc private func sourceSettings() {
@@ -481,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func setupPairing() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         closeUsage()
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else {
             let busy = NSAlert()
@@ -528,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func disconnectPairing() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         closeUsage()
         let alert = NSAlert()
         alert.messageText = "Disconnect paired device?"
@@ -574,7 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
     @objc private func preparePairingRepair() {
         guard !store.shuttingDown else { return }
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         closeUsage()
         let alert = NSAlert()
         alert.messageText = "Prepare pairing repair on this Mac?"
@@ -648,8 +628,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let current = webDashboardSection
             item.state = detail?.isVisible == true && current == section ? .on : .off
             return true
-        case #selector(setupDirectPairing), #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
-             #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil
+        case #selector(setupDirectPairing): return previewRuntime == nil
+        case #selector(checkForUpdates), #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
+             #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil && selectedRuntime == nil
         case #selector(zoomIn): return zoom.map { $0 < 2 } ?? false
         case #selector(zoomOut): return zoom.map { $0 > 0.75 } ?? false
         case #selector(actualSize):
@@ -664,7 +645,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     private func openDashboard(_ tab: String) {
         closeUsage()
-        if (try? FirstRunSetup.required(runtime: store.runtime)) != false { showSetup(); return }
+        let needsSetup = (try? FirstRunSetup.required(runtime: store.runtime)) != false
         if detail == nil {
             guard let resources = Bundle.main.resourceURL else { return }
             let web = WebDashboardPage.isBundled(resources: resources) ? makeWebDashboard(runtime: store.runtime, resources: resources, bridge: bridgeHandler) : nil
@@ -696,7 +677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             detail = window
             webView = web
         }
-        webDashboardSection = WebDashboardPage.section(for: tab)
+        webDashboardSection = needsSetup ? "setup" : WebDashboardPage.section(for: tab == "setup" ? "limits" : tab)
         webView?.load(URLRequest(url: WebDashboardPage.url(section: webDashboardSection)))
         if reportsPanelTiming, let web = webView {
             describeViewer(web) { [weak self, weak web] facts in
@@ -946,7 +927,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func checkForUpdates() {
-        guard previewRuntime == nil else { return }
+        guard previewRuntime == nil, selectedRuntime == nil else { return }
         do { try updateController.check() }
         catch {
             let alert = NSAlert()
@@ -988,6 +969,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
+let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments,
+    realDataFolder: FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Workspace Observatory"), userID: getuid())
+let selectedRuntime: URL?
+var runtimeLockDescriptor: Int32 = -1
+switch runtimeOption {
+case .none: selectedRuntime = nil
+case .refused(let reason):
+    fputs(reason + "\n", stderr)
+    exit(64)
+case .runtime(let folder): selectedRuntime = folder
+}
+
 let removedArguments: Set<String> = ["--legacy-dashboard", "--native-viewer", "--render-style",
     "--render-archive-style", "--preview-quota-archive"]
 if CommandLine.arguments.dropFirst().contains(where: { removedArguments.contains($0) }) {
@@ -1006,6 +1000,17 @@ guard allowedPreviewArguments.contains(previewArguments) else {
     exit(64)
 }
 #endif
+
+if let selectedRuntime {
+    do { runtimeLockDescriptor = try RuntimeOption.createAndLock(selectedRuntime) }
+    catch RuntimeOption.LockError.inUse {
+        fputs("Another Observatory is already using this folder.\n", stderr)
+        exit(64)
+    } catch {
+        fputs("The runtime folder could not be created or locked.\n", stderr)
+        exit(64)
+    }
+}
 
 if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trusted-sync-owner" {
     Task { @MainActor in
@@ -1056,7 +1061,7 @@ if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trust
         withExtendedLifetime(test) { application.run() }
     }
 } else if CommandLine.arguments.contains("--enable-login") {
-    if CommandLine.arguments.contains("--preview") {
+    if CommandLine.arguments.contains("--preview") || selectedRuntime != nil {
         print("Login registration is disabled for previews")
         exit(1)
     }

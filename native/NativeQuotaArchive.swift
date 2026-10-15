@@ -116,6 +116,7 @@ enum QuotaArchiveProcess {
             let node = resources.appendingPathComponent("Runtime/node/bin/node")
             let script = resources.appendingPathComponent("Collector/scripts/quota-archive-control.mjs")
             let process = Process(), input = Pipe(), output = Pipe()
+            process.environment = collectorChildEnvironment()
             process.executableURL = node
             process.arguments = [script.path, "--runtime", String(cString: canonical)]
             process.standardInput = input; process.standardOutput = output; process.standardError = FileHandle.nullDevice

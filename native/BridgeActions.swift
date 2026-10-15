@@ -253,6 +253,7 @@ final class MacBridgeHost: BridgeHost {
     private let store: ObservatoryStore
     private let resources: URL?
     private let preview: Bool
+    private let isolatedRuntime: Bool
     private let handler: BridgeHandler
     private let hooks: MacBridgeHooks
     private var session: BridgePairingSession?
@@ -266,7 +267,8 @@ final class MacBridgeHost: BridgeHost {
     var pairingBlocked: Bool {
         store.refreshing || (store.pairingMaintenance && session?.closed != false) || hooks.directPairingOpen() || operationRunning
     }
-    init(store: ObservatoryStore, resources: URL?, preview: Bool, handler: BridgeHandler, hooks: MacBridgeHooks) {
+    init(store: ObservatoryStore, resources: URL?, preview: Bool, handler: BridgeHandler, hooks: MacBridgeHooks, isolatedRuntime: Bool = false) {
+        self.isolatedRuntime = isolatedRuntime
         self.store = store; self.resources = resources; self.preview = preview; self.handler = handler; self.hooks = hooks
     }
     func documentEnded() { documentGeneration += 1; session?.end() }
@@ -334,7 +336,7 @@ final class MacBridgeHost: BridgeHost {
             guard !store.refreshing, !sessionOpen else { completion(.busy, nil); return }
             store.refreshLimitsFirst()
             completion(store.refreshing ? .done : .unavailable, nil)
-        case "check-updates": completion(hooks.checkForUpdates() ? .done : .unavailable, nil)
+        case "check-updates": completion(!isolatedRuntime && hooks.checkForUpdates() ? .done : .unavailable, nil)
         case "open-dashboard", "open-settings": hooks.openDashboard(action == "open-settings" ? "settings" : string("section")); completion(.done, nil)
         case "set-source":
             do {
@@ -364,7 +366,7 @@ final class MacBridgeHost: BridgeHost {
             do { try DeviceNameFile.write(runtime: store.runtime, name: args["name"] == .null ? nil : string("name")); completion(.done, nil) }
             catch { completion(.unavailable, nil) }
         case "set-startup":
-            guard !preview else { completion(.unavailable, nil); return }
+            guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             do {
                 if enabled && SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
                 else if !enabled && SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
@@ -439,8 +441,14 @@ final class MacBridgeHost: BridgeHost {
                 completion(value == nil ? .unavailable : .done, value)
             }
         case "export-data": export(completion: completion)
-        // O1-2 implements first-run completion on the removal branch.
-        case "complete-setup": completion(.unavailable, nil)
+        case "complete-setup":
+            do {
+                if try FirstRunSetup.markComplete(runtime: store.runtime) {
+                    store.setupCompleted()
+                    store.refresh()
+                }
+                completion(.done, nil)
+            } catch { completion(.unavailable, nil) }
         default: completion(.refused, nil)
         }
     }

@@ -88,6 +88,8 @@ final class ObservatoryStore: ObservableObject {
         refresh(quotaOnly: true)
     }
 
+    func setupCompleted() { setupRequired = false }
+
     func refreshLimitsFirst() {
         guard !refreshing else { return }
         if (try? CollectorConfiguration.read(runtime: runtime)["quota"]) == true {

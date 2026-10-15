@@ -1,6 +1,8 @@
 import Foundation
+import Darwin
 
 func runSelfTests() {
+    runRuntimeSetupSelfTests()
     runBridgeSelfTests()
     runBridgeActionSelfTests()
     MacUpdateTrust.selfTest()
@@ -62,12 +64,7 @@ func runSelfTests() {
         precondition(disabled.values.allSatisfy { !$0 })
         precondition((try? FirstRunSetup.required(runtime: runtime)) == true)
         precondition((try? FirstRunSetup.prepare(runtime: runtime)) == true)
-        do {
-            try FirstRunSetup.complete(sources: ["quota": true], runtime: runtime)
-            preconditionFailure("Incomplete consent must be rejected")
-        } catch {}
-        precondition((try? FirstRunSetup.required(runtime: runtime)) == true)
-        try FirstRunSetup.complete(sources: disabled, runtime: runtime)
+        precondition(try! FirstRunSetup.markComplete(runtime: runtime))
         precondition((try? FirstRunSetup.required(runtime: runtime)) == false)
         precondition((try? FirstRunSetup.prepare(runtime: runtime)) == false)
         precondition((try? CollectorConfiguration.read(runtime: runtime)) == disabled)
@@ -426,4 +423,115 @@ func runCollectorSelfTest() {
         try? FileHandle.standardError.write(contentsOf: Data("collector-self-test phase=\(currentPhase) code=\(failure.code) child_reason=\(reason) child_status=\(status) child_elapsed_ms=\(elapsed)\n".utf8))
         preconditionFailure("Packaged collector self-test failed")
     }
+}
+
+func runRuntimeSetupSelfTests() {
+    let files = FileManager.default
+    let resolved = realpath(files.temporaryDirectory.path, nil)!
+    let root = URL(fileURLWithPath: String(cString: resolved)).appendingPathComponent("observatory-runtime-" + UUID().uuidString)
+    free(resolved)
+    try! files.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+    defer { try? files.removeItem(at: root) }
+    let real = root.appendingPathComponent("real")
+    try! files.createDirectory(at: real, withIntermediateDirectories: false)
+    func parse(_ args: [String], user: uid_t = getuid()) -> RuntimeOption {
+        RuntimeOption.parse(arguments: ["Observatory"] + args, realDataFolder: real, userID: user)
+    }
+    func refused(_ args: [String], user: uid_t = getuid()) {
+        guard case .refused = parse(args, user: user) else { preconditionFailure("Unsafe runtime accepted") }
+    }
+    func throwsError(_ action: () throws -> Void) {
+        do { try action(); preconditionFailure("Unsafe setup accepted") } catch {}
+    }
+    precondition(parse([]) == .none)
+    refused(["--runtime"])
+    refused(["--runtime", "--preview"])
+    refused(["--runtime", "relative/path"])
+    refused(["--runtime", root.path + "/./fresh"])
+    refused(["--runtime", root.path + "/../fresh"])
+    refused(["--runtime", real.path])
+    refused(["--runtime", real.path + "/child"])
+    refused(["--runtime", real.path.uppercased() + "/child"])
+    refused(["--runtime", root.path + "/missing/child"])
+    let linked = root.appendingPathComponent("linked")
+    try! files.createSymbolicLink(at: linked, withDestinationURL: real)
+    refused(["--runtime", linked.path])
+    refused(["--runtime", linked.path + "/child"])
+    let writable = root.appendingPathComponent("writable")
+    try! files.createDirectory(at: writable, withIntermediateDirectories: false)
+    precondition(chmod(writable.path, 0o770) == 0)
+    refused(["--runtime", writable.path])
+    refused(["--runtime", writable.path + "/child"])
+    refused(["--runtime", root.path], user: getuid() == 0 ? 1 : 0)
+    for flag in ["--preview", "--preview-setup", "--test-lifecycle", "--test-popup", "--preview-pace"] {
+        refused(["--runtime", root.path + "/fresh", flag])
+    }
+    let fresh = root.appendingPathComponent("fresh")
+    precondition(parse(["--runtime", fresh.path]) == .runtime(fresh))
+    let lock = try! RuntimeOption.createAndLock(fresh)
+    defer { close(lock) }
+    do {
+        let second = try RuntimeOption.createAndLock(fresh)
+        close(second)
+        preconditionFailure("Second runtime lock accepted")
+    } catch RuntimeOption.LockError.inUse {} catch { preconditionFailure("Unexpected lock failure") }
+    precondition((try! files.attributesOfItem(atPath: fresh.path))[.posixPermissions] as? Int == 0o700)
+    precondition(try! FirstRunSetup.prepare(runtime: fresh))
+    let marker = fresh.appendingPathComponent("setup-state.json")
+    let config = fresh.appendingPathComponent("collector.config.json")
+    let sourceBytes = try! Data(contentsOf: config)
+    precondition((try! JSONSerialization.jsonObject(with: Data(contentsOf: marker)) as! JSONObject)["completed"] as? Bool == false)
+    precondition(try! FirstRunSetup.markComplete(runtime: fresh))
+    let completed = try! Data(contentsOf: marker)
+    precondition(completed == Data(#"{"completed":true,"version":1}"#.utf8))
+    precondition((try! files.attributesOfItem(atPath: marker.path))[.posixPermissions] as? Int == 0o600)
+    precondition(try! Data(contentsOf: config) == sourceBytes)
+    let before = try! files.attributesOfItem(atPath: marker.path)
+    precondition(try! !FirstRunSetup.markComplete(runtime: fresh))
+    precondition(try! Data(contentsOf: marker) == completed)
+    precondition((try! files.attributesOfItem(atPath: marker.path))[.modificationDate] as? Date == before[.modificationDate] as? Date)
+    try! files.removeItem(at: marker)
+    try! files.createSymbolicLink(at: marker, withDestinationURL: config)
+    throwsError { _ = try FirstRunSetup.markComplete(runtime: fresh) }
+    precondition((try? FirstRunSetup.required(runtime: fresh)) != false)
+    try! files.removeItem(at: marker)
+    try! Data(repeating: 32, count: 4097).write(to: marker)
+    throwsError { _ = try FirstRunSetup.markComplete(runtime: fresh) }
+    let empty = root.appendingPathComponent("empty")
+    try! files.createDirectory(at: empty, withIntermediateDirectories: false)
+    throwsError { _ = try FirstRunSetup.markComplete(runtime: empty) }
+    precondition(!files.fileExists(atPath: empty.appendingPathComponent("setup-state.json").path))
+    for argument: Any in [true, 1, "synthetic", NSNull(), ["nested": false], [false]] {
+        let data = try! JSONSerialization.data(withJSONObject: ["id": 3, "action": "complete-setup", "args": ["extra": argument]])
+        let message = String(data: data, encoding: .utf8)!
+        guard case .refused = BridgeContract.validate(message) else { preconditionFailure("Complete setup arguments accepted") }
+    }
+    precondition(WebDashboardPage.url(section: "setup").fragment == "setup")
+    precondition(!WebDashboardPage.sections.contains { $0.0 == "setup" })
+    MainActor.assumeIsolated {
+        for paused in [false, true] {
+            let store = ObservatoryStore(runtime: root.appendingPathComponent(UUID().uuidString), collectionAllowed: false)
+            store.collectionPausedForPairing = paused
+            let handler = BridgeHandler()
+            let hooks = MacBridgeHooks(openDashboard: { _ in }, checkForUpdates: { preconditionFailure("Isolated update invoked") },
+                directPairingOpen: { false }, applyViewerPreferences: { _, _ in })
+            let host = MacBridgeHost(store: store, resources: nil, preview: true, handler: handler, hooks: hooks, isolatedRuntime: true)
+            for action in ["set-startup", "check-updates"] {
+                host.perform(action: action, args: [:]) { code, value in
+                    precondition(code == .unavailable && value == nil)
+                }
+            }
+            host.perform(action: "complete-setup", args: [:]) { code, value in
+                precondition(code == .done && value == nil)
+            }
+            precondition(!store.setupRequired && !store.refreshing)
+            precondition(store.lastAttempt == (paused ? "pairing-paused" : "preview-collection-disabled"))
+            store.lastAttempt = "synthetic-unchanged"
+            host.perform(action: "complete-setup", args: [:]) { code, value in
+                precondition(code == .done && value == nil)
+            }
+            precondition(store.lastAttempt == "synthetic-unchanged")
+        }
+    }
+    print("Runtime refusals, simulated owner mismatch, exclusive lock and setup completion checks passed")
 }
