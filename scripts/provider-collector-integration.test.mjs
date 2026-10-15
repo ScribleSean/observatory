@@ -43,8 +43,19 @@ test('native collector publishes a separate Claude reading and counts its health
     assert.equal(snapshot.providerTokenSources[0].days[0].requestCount,1);
     assert.equal(snapshot.prices.checkedOn,prices.checkedOn);
     for(const day of snapshot.providerTokenSources[0].days) {
-      assert.ok(day.apiEstimate && typeof day.apiEstimate==='object' && !Array.isArray(day.apiEstimate));
+      assert.equal(day.apiEstimate.checked,prices.checkedOn);
+      if(day.apiEstimate.usd===null) {
+        assert.strictEqual(day.apiEstimate.usd,null);
+        assert.equal(day.apiEstimate.coveredTokens,0);
+      } else {
+        assert.ok(Number.isFinite(day.apiEstimate.usd) && day.apiEstimate.usd>0);
+      }
     }
+    const unpriced=snapshot.providerTokenSources[0].days.find(day=>day.models.some(model=>model.model==='claude-sonnet-4-20250514'));
+    assert.ok(unpriced);
+    assert.strictEqual(unpriced.apiEstimate.usd,null);
+    assert.equal(unpriced.apiEstimate.coveredTokens,0);
+    assert.equal(unpriced.apiEstimate.excluded,1);
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({...config,claude:false}),{mode:0o600});
     await rm(claude,{recursive:true});
     const disabled=await collect();
