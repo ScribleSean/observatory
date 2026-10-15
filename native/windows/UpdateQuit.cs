@@ -7,8 +7,10 @@ internal static class UpdateQuit
     internal const string RequestName = "Local\\WorkspaceObservatory.QuitForUpdate";
     internal enum Result { Stopped, Unsupported, TimedOut }
 
-    internal static Result Request(string singletonName, string requestName, TimeSpan timeout)
+    internal static Result Request(string singletonName, string requestName, string inUseName, TimeSpan timeout)
     {
+        if (Semaphore.TryOpenExisting(inUseName, out var inUse))
+        { inUse.Dispose(); return Result.Unsupported; }
         if (!Mutex.TryOpenExisting(singletonName, out var singleton)) return Result.Stopped;
         using (singleton)
         {
@@ -26,8 +28,18 @@ internal static class UpdateQuit
     internal static void SelfTest()
     {
         var prefix = "Local\\ObservatoryQuitTest-" + Guid.NewGuid().ToString("N");
-        if (Request(prefix, prefix + ".request", TimeSpan.Zero) != Result.Stopped)
+        if (Request(prefix, prefix + ".request", prefix + ".InUse", TimeSpan.Zero) != Result.Stopped)
             throw new Exception("Absent application must not be launched by update quit.");
+        using (var inUse = new Semaphore(1, int.MaxValue, prefix + ".InUse"))
+        {
+            inUse.WaitOne();
+            try
+            {
+                if (Request(prefix, prefix + ".request", prefix + ".InUse", TimeSpan.Zero) != Result.Unsupported)
+                    throw new Exception("Runtime instance was not refused by update quit.");
+            }
+            finally { inUse.Release(); }
+        }
         foreach (var mode in new[] { "unsupported", "busy", "complete" })
         {
             using var ready = new ManualResetEventSlim();
@@ -48,7 +60,7 @@ internal static class UpdateQuit
             try
             {
                 if (!ready.Wait(TimeSpan.FromSeconds(3))) throw new Exception("Quit fixture did not start.");
-                var result = Request(prefix, prefix + ".request", mode == "busy" ? TimeSpan.FromMilliseconds(40) : TimeSpan.FromSeconds(3));
+                var result = Request(prefix, prefix + ".request", prefix + ".InUse", mode == "busy" ? TimeSpan.FromMilliseconds(40) : TimeSpan.FromSeconds(3));
                 var expected = mode == "unsupported" ? Result.Unsupported : mode == "busy" ? Result.TimedOut : Result.Stopped;
                 if (result != expected) throw new Exception("Update quit reported the wrong completion state.");
             }

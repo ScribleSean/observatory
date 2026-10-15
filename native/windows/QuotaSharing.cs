@@ -19,6 +19,18 @@ internal static class QuotaSharing
 
     private static bool ValidToken(string? token) => token is { Length: 64 } && Regex.IsMatch(token, "^[a-f0-9]{64}$");
 
+    internal static void SelfTest()
+    {
+        if (Parse("""{"version":1,"enabled":false,"canEnable":false,"reason":"account-unavailable","token":null}""").CanEnable)
+            throw new InvalidOperationException("Unknown sharing status parsed incorrectly.");
+        try
+        {
+            Parse("""{"version":1,"enabled":true,"canEnable":true,"reason":"ready","token":"private"}""");
+            throw new Exception("Malformed sharing token accepted.");
+        }
+        catch (InvalidOperationException) { }
+    }
+
     internal static async Task BridgeSelfTest()
     {
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-sharing-bridge-" + Guid.NewGuid().ToString("N"));

@@ -69,7 +69,7 @@ void test('all default IPC callers use the selected identity, including update h
   assert.equal(
     (
       program.match(
-        /UpdateQuit.Request\(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName,/g,
+        /UpdateQuit.Request\(AppIdentity.Current.SingletonName, AppIdentity.Current.QuitName, AppIdentity.Current.InUseName,/g,
       ) ?? []
     ).length,
     2,
@@ -82,6 +82,7 @@ void test('all default IPC callers use the selected identity, including update h
   assert.match(session, /string\? setupName = null/);
   assert.match(session, /singletonName \?\? AppIdentity.Current.SingletonName/);
   assert.match(session, /requestName \?\? AppIdentity.Current.QuitName/);
+  assert.match(session, /inUseName \?\? AppIdentity.Current.InUseName/);
   for (const caller of [
     'UpdateHelper.cs',
     'UpdateInstalledState.cs',
@@ -101,6 +102,10 @@ void test('all default IPC callers use the selected identity, including update h
     read('installer.nsi'),
     /OpenMutexW\(i 0x100000, i 0, w "Local\\\$\{APP_ID\}"\)/,
   );
+  assert.match(
+    read('installer.nsi'),
+    /OpenSemaphoreW\(i 0x100000, i 0, w "Local\\\$\{APP_ID\}.InUse"\)/,
+  );
   assert.doesNotMatch(program, /"Local\\\\WorkspaceObservatory(?:\.Open)?"/);
 });
 
@@ -110,7 +115,7 @@ void test('TEST startup, dashboard preferences and receipt storage cannot select
     /ValueName => AppIdentity.Current.StartupName/,
   );
   assert.match(
-    read('DashboardWindowPreferences.cs'),
+    read('WebViewerPreferences.cs'),
     /Key => AppIdentity.Current.IsTest \? @"Software\\WorkspaceObservatoryInstallerTest\\Dashboard" : @"Software\\Observatory\\Dashboard"/,
   );
   assert.match(read('UpdateInstall.cs'), /AppIdentity.Current.Runtime/);

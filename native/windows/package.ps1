@@ -18,7 +18,7 @@ if ($PSBoundParameters.ContainsKey('UpdatePublicKey')) {
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $assets = Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json
 if (-not $SkipWebBuild) { & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot }
-if (-not (Test-Path (Join-Path $sourceRoot '.native-build\web\index.html'))) { throw 'Build the dashboard first.' }
+if (-not (Test-Path (Join-Path $sourceRoot '.native-build\web\dashboard.html'))) { throw 'Build the shared viewer first.' }
 if (Test-Path (Join-Path $sourceRoot '.native-build\web\local')) { throw 'Private snapshots must never enter a package.' }
 
 $nodeArchive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
