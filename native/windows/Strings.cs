@@ -334,7 +334,7 @@ internal static class ObservatoryStrings
         internal const string PairCancelled = "Pairing cancelled";
         internal const string PairEstablishingTrust = "Establishing trust";
         internal const string PairActiveSync = "Active sync";
-        internal const string PairSyncStale = "Last sync more than ten minutes ago";
+        internal const string PairSyncStale = "No recent record from the other device";
         internal const string PairRevoked = "Revoked";
         internal const string ShareUsage = "Share usage records with the paired device";
         internal const string SharingWaiting = "Waiting for a reading";

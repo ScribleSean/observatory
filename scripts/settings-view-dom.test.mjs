@@ -466,12 +466,28 @@ void test('peer defaults preserve typing and new fingerprints reset peer fields 
   assert.equal(fieldFor(f, 'Peer address').value, '100.64.0.3');
   await act(async () => fieldFor(f, 'Share usage records with the paired device').click());
   assert.equal(fieldFor(f, 'Share usage records with the paired device').checked, true);
+  await f.input(fieldFor(f, 'Peer port'), '43129');
+  Object.assign(f.status.pairing, { state: 'working', peerFingerprint: null });
+  await refresh(f);
+  Object.assign(f.status.pairing, { state: 'confirming', peerFingerprint: 'ab'.repeat(32) });
+  await refresh(f);
+  assert.equal(fieldFor(f, 'Peer address').value, '100.64.0.3');
+  assert.equal(fieldFor(f, 'Peer port').value, '43129');
+  assert.equal(fieldFor(f, 'Share usage records with the paired device').checked, true);
+  assert.equal(f.messages.filter(m => m.action === 'pairing-peer-address').length, 1);
   f.status.pairing.peerFingerprint = 'cd'.repeat(32);
   await refresh(f);
   assert.equal(fieldFor(f, 'Peer address').value, '');
+  assert.equal(fieldFor(f, 'Peer port').value, '43128');
   assert.equal(fieldFor(f, 'Share usage records with the paired device').checked, false);
   await f.answer(f.last('pairing-peer-address'), { value: { peerAddress: '100.64.0.4' } });
   assert.equal(fieldFor(f, 'Peer address').value, '100.64.0.4');
+  f.status.pairing.peerFingerprint = 'ab'.repeat(32);
+  await refresh(f);
+  assert.equal(fieldFor(f, 'Peer address').value, '');
+  assert.equal(f.messages.filter(m => m.action === 'pairing-peer-address').length, 3);
+  await f.answer(f.last('pairing-peer-address'), { value: { peerAddress: '100.64.0.5' } });
+  assert.equal(fieldFor(f, 'Peer address').value, '100.64.0.5');
 });
 
 void test('host warning follows both exact defaults and typed fields survive state changes', async t => {

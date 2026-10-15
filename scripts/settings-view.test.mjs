@@ -379,7 +379,7 @@ void test('sharing choice requires exact keys and known channel states', () => {
 void test('new pairing states have distinct words and accept only null fingerprints', () => {
   for (const [state, words] of [
     ['establishing-trust', 'Establishing trust'], ['active-sync', 'Active sync'],
-    ['sync-stale', 'Last sync more than ten minutes ago'], ['revoked', 'Revoked'],
+    ['sync-stale', 'No recent record from the other device'], ['revoked', 'Revoked'],
   ]) {
     const value = sampleBridgeStatus();
     value.pairing.state = state;

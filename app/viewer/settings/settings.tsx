@@ -162,8 +162,6 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   const [previousState, setPreviousState] = useState(state);
   if (previousState !== state) {
     setPreviousState(state); if (state && terminal.has(state)) setFlow(null);
-    // A new pairing step starts with sharing off and no pre-filled peer.
-    setSharing(false); setPeerAddress(''); setPeerPort('43128');
   }
   const hostOpen = flow === 'host' && !['waiting', 'confirming'].includes(state ?? '') && !pairedStates.has(state ?? '') && state !== 'revoked';
   useEffect(() => {
@@ -183,10 +181,13 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   }, [controller, hostOpen]);
   const fingerprint = status?.pairing.peerFingerprint ?? null;
   const [previousFingerprint, setPreviousFingerprint] = useState(fingerprint);
-  if (previousFingerprint !== fingerprint) {
+  if (fingerprint !== null && previousFingerprint !== fingerprint) {
     setPreviousFingerprint(fingerprint);
     setSharing(false); setPeerAddress(''); setPeerPort('43128');
   }
+  useEffect(() => {
+    if (previousFingerprint) peerRequested.current.delete(previousFingerprint);
+  }, [previousFingerprint]);
   useEffect(() => {
     activeFingerprint.current = fingerprint;
     return () => { activeFingerprint.current = null; };

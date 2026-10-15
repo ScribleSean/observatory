@@ -315,7 +315,7 @@ enum ObservatoryStrings {
         static let `pairCancelled` = "Pairing cancelled"
         static let `pairEstablishingTrust` = "Establishing trust"
         static let `pairActiveSync` = "Active sync"
-        static let `pairSyncStale` = "Last sync more than ten minutes ago"
+        static let `pairSyncStale` = "No recent record from the other device"
         static let `pairRevoked` = "Revoked"
         static let `shareUsage` = "Share usage records with the paired device"
         static let `sharingWaiting` = "Waiting for a reading"

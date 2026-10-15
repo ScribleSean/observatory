@@ -315,7 +315,7 @@ export const STRINGS = {
     "pairCancelled": "Pairing cancelled",
     "pairEstablishingTrust": "Establishing trust",
     "pairActiveSync": "Active sync",
-    "pairSyncStale": "Last sync more than ten minutes ago",
+    "pairSyncStale": "No recent record from the other device",
     "pairRevoked": "Revoked",
     "shareUsage": "Share usage records with the paired device",
     "sharingWaiting": "Waiting for a reading",
