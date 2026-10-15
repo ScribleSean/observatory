@@ -5,8 +5,6 @@ import {createHash} from 'node:crypto';
 import childProcess from 'node:child_process';
 import fsPromises from 'node:fs/promises';
 import {syncBuiltinESMExports} from 'node:module';
-import {promisify} from 'node:util';
-import {pathToFileURL} from 'node:url';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {archiveMacSnapshot,retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
@@ -100,71 +98,6 @@ test('retirement resumes a complete copy interrupted before its receipt',async t
   assert.deepEqual(await readFile(f.file),retiredBytes);
 });
 
-async function legacyCollector(t,f,action) {
-  const bundle=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-retirement-bundle-')));
-  t.after(()=>rm(bundle,{recursive:true,force:true}));
-  await fsPromises.cp(new URL('./',import.meta.url),path.join(bundle,'scripts'),{recursive:true});
-  const receiptDirectory=path.join(f.runtime,'receipts');await mkdir(receiptDirectory);
-  const config=JSON.stringify({macCcusage:'/fictional/ccusage',windowsHost:'fixture-host',
-    receiptDirectory,ubuntuHost:'retired-fixture-host',ubuntuCodexHome:'/fictional/retired',
-    dictation:{mac:false,windows:false}});
-  await writeFile(path.join(f.runtime,'local.config.json'),config);
-  const original={execFile:childProcess.execFile,spawn:childProcess.spawn,fetch:globalThis.fetch,
-    runtime:process.env.OBSERVATORY_RUNTIME};
-  const realExecute=promisify(original.execFile),calls=[];
-  childProcess.execFile=()=>{throw Error('Unexpected callback command');};
-  childProcess.execFile[promisify.custom]=async(file,args,options)=>{
-    if(args.some(arg=>/private-sync-acl\.ps1|private-path-acl\.py/.test(String(arg))))return realExecute(file,args,options);
-    calls.push({file,args});
-    if(file==='/fictional/ccusage')return {stdout:JSON.stringify({daily:[]})};
-    if(file==='ssh' && args.includes('fixture-host'))return {stdout:JSON.stringify({categories:{Coding:0,Terminal:0,Browser:0,Other:0}})};
-    throw Error('Unexpected fixture command');
-  };
-  childProcess.spawn=()=>{throw Error('Synthetic local reader unavailable');};
-  globalThis.fetch=async()=>{throw Error('Synthetic activity unavailable');};
-  process.env.OBSERVATORY_RUNTIME=f.runtime;
-  syncBuiltinESMExports();
-  try {
-    const {collect}=await import(pathToFileURL(path.join(bundle,'scripts/collect-dashboard.mjs')));
-    await action(collect);
-    assert.equal(calls.some(call=>call.args.includes('retired-fixture-host')),false);
-    assert.equal(await readFile(path.join(f.runtime,'local.config.json'),'utf8'),config);
-    assert.deepEqual(await fsPromises.readdir(bundle),['scripts']);
-  } finally {
-    childProcess.execFile=original.execFile;childProcess.spawn=original.spawn;globalThis.fetch=original.fetch;
-    if(original.runtime===undefined)delete process.env.OBSERVATORY_RUNTIME;else process.env.OBSERVATORY_RUNTIME=original.runtime;
-    syncBuiltinESMExports();
-  }
-}
-
-test('bundled legacy retirement archives before replacement and never feeds history into current totals',async t=>{
-  const f=await retirementFixture(t);
-  await legacyCollector(t,f,async collect=>{
-    const originalRename=fsPromises.rename;
-    let replacements=0;
-    fsPromises.rename=async(from,to)=>{
-      if(to===f.file) {
-        assert.deepEqual(await readFile(f.archive),retiredBytes);
-        assert.ok(JSON.parse(await readFile(f.receipt)).sha256);
-        if(replacements===0)assert.deepEqual(await readFile(f.file),retiredBytes);
-        replacements++;
-      }
-      return originalRename(from,to);
-    };
-    syncBuiltinESMExports();
-    try {await collect();await collect();}
-    finally {fsPromises.rename=originalRename;syncBuiltinESMExports();}
-    assert.equal(replacements,2);
-    const data=JSON.parse(await readFile(f.file));
-    assert.equal(data.tokens.some(source=>source.host==='Ubuntu'),false);
-    assert.equal(data.localModel.records,undefined);
-    assert.equal(data.combinedTokens.status,'unavailable');
-    assert.equal(JSON.stringify(data).includes(f.runtime),false);
-    assert.deepEqual((await readdir(path.dirname(f.archive))).sort(),['retirement-receipt.json','retirement-snapshot.json']);
-    assert.equal(await readFile(path.join(f.runtime,'original-record.json'),'utf8'),'fictional-original-record-bytes');
-  });
-});
-
 async function privateArchive(f) {
   const control=path.join(f.runtime,'.runtime');
   await mkdir(control,{mode:0o700});
@@ -180,20 +113,13 @@ function windowsAcl(file,grant=false) {
     {input,encoding:'utf8',timeout:15000,env:windowsPowerShellEnvironment()}).trim();
 }
 
-test('unsafe archive directory stops both collectors without changing the current snapshot',async t=>{
-  for(const collector of ['legacy',...(['win32','darwin'].includes(process.platform)?['native']:[])]) {
-    await t.test(collector,async t=>{
-      const f=await retirementFixture(t),outside=path.join(f.runtime,'outside');
-      await mkdir(outside,{mode:0o700});await mkdir(path.join(f.runtime,'.runtime'),{mode:0o700});
-      await symlink(outside,path.dirname(f.archive),process.platform==='win32'?'junction':'dir');
-      const check=async collect=>{
-        await assert.rejects(collect());await assert.rejects(collect());
-        assert.deepEqual(await readFile(f.file),retiredBytes);
-        assert.deepEqual(await readdir(outside),[]);
-      };
-      if(collector==='legacy')await legacyCollector(t,f,check);else await check(()=>nativeCollect(f));
-    });
-  }
+test('unsafe archive directory stops the native collector without changing the current snapshot',nativeOptions,async t=>{
+  const f=await retirementFixture(t),outside=path.join(f.runtime,'outside');
+  await mkdir(outside,{mode:0o700});await mkdir(path.join(f.runtime,'.runtime'),{mode:0o700});
+  await symlink(outside,path.dirname(f.archive),process.platform==='win32'?'junction':'dir');
+  await assert.rejects(nativeCollect(f));await assert.rejects(nativeCollect(f));
+  assert.deepEqual(await readFile(f.file),retiredBytes);
+  assert.deepEqual(await readdir(outside),[]);
 });
 
 test('broad archive permissions are refused without silently repairing directory or file access',async t=>{

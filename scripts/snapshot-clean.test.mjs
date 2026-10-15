@@ -1,14 +1,14 @@
-import { test } from 'node:test'; // Synthetic fixtures only; no personal records.
+import { test } from 'node:test'; // Synthetic fixtures only, no personal records.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   numeric,
   category,
   cleanActivity,
   cleanTokens,
-  cleanReceipts,
   cleanSettings,
   guarded,
-} from './collect-dashboard.mjs';
+} from './snapshot-clean.mjs';
 test('collector wrapper preserves saved quota observation time during cooldown',async()=>{
   const checkedAt='2026-09-12T12:00:00Z';
   const result=await guarded('Codex',async()=>({status:'stale',checkedAt,latestReadStatus:'ok',windows:[]}));
@@ -109,35 +109,9 @@ test('per-model pricing excludes inferred labels and preserves token categories'
   assert.equal(result.days[0].models[1].apiEstimate.usd,null);
   assert.equal(result.days[0].models[0].cacheReadTokens,1000000);
 });
-test('continued conversation keeps latest snapshot, never sums counters', () => {
-  const v = {
-    conversationId: 'same',
-    requestedModel: 'gemini',
-    status: 'SUCCESS',
-    usage: { total_tokens: 100 },
-  };
-  const rows = cleanReceipts([
-    { value: v, modified: 1 },
-    { value: { ...v, usage: { total_tokens: 150 } }, modified: 2 },
-  ]);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].total, 150);
-  assert.ok(!JSON.stringify(rows).includes('same'));
-});
-test('failed provider zero counters stay unknown', () => {
-  const [x] = cleanReceipts([
-    {
-      value: {
-        conversationId: 'error',
-        requestedModel: 'gemini',
-        status: 'ERROR',
-        error: 'private',
-        usage: { total_tokens: 0 },
-      },
-      modified: 1,
-    },
-  ]);
-  assert.equal(x.total, null);
-  assert.equal(x.status, 'failed');
-  assert.ok(!JSON.stringify(x).includes('private'));
+test('native collectors and payloads do not import the legacy dashboard', async () => {
+  for (const file of ['collect-mac.mjs', 'mac-snapshot.mjs', 'windows-snapshot.mjs', 'windows-dashboard.mjs', 'peer-payload.mjs']) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.ok(!source.includes('collect-dashboard'), file);
+  }
 });

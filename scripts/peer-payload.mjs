@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from 'node:util';
-import {cleanActivity,cleanSettings} from './collect-dashboard.mjs';
+import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {validatePeerInventory,combinePeerTokens} from './peer-inventory.mjs';
