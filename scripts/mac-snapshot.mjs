@@ -1,4 +1,6 @@
+import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
+import {attachTokenHours} from './token-hours.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
@@ -17,10 +19,10 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
   if(!Number.isFinite(Date.parse(at)))throw Error('Invalid collection time');
   const disconnected=host=>({host,status:'not-connected'});
   const unavailable=host=>({host,status:'unavailable',checkedAt:at});
-  let peerActivity,peerCodex;
+  let peerActivity,peerCodex,hourTotals;
   const read=async(key,clean)=>{
     if(!config[key])return disconnected('Mac');
-    try{return {...clean(await readers[key]()),checkedAt:at};}catch{return unavailable('Mac');}
+    try{return {...clean(await readers[key]()),checkedAt:at};}catch(error){return {...unavailable('Mac'),...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})};}
   };
   const [activity,settings,wispr]=await Promise.all([
     read('activity',raw=>{
@@ -29,14 +31,15 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
       return safe;
     }),
     read('codex',raw=>{
+      hourTotals=raw.hourTotals;
       const safe=cleanSettings(raw,'Mac');tokensFromSettings(safe,'Mac');
       if(peerConfig)peerCodex={...safe,inventory:raw.inventory};
       return safe;
     }),
     read('wispr',raw=>cleanWispr(raw,'Mac')),
   ]);
-  let tokens=settings.status==='ok'?null:{host:'Mac',status:settings.status,checkedAt:at};
-  if(!tokens)try{tokens={...tokensFromSettings(settings,'Mac'),checkedAt:at};}catch{tokens=unavailable('Mac');}
+  let tokens=settings.status==='ok'?null:{host:'Mac',status:settings.status,checkedAt:at,...(settings.refusal?{refusal:settings.refusal}:{})};
+  if(!tokens)try{tokens={...attachTokenHours(tokensFromSettings(settings,'Mac'),hourTotals),checkedAt:at};}catch{tokens=unavailable('Mac');}
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[activity,disconnected('Windows')],combined:unavailable('Combined'),
     tokens:[tokens,disconnected('Windows')],combinedTokens:unavailable('All'),

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, totals } from '../lib/panel-data.mjs';
+import { compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, sourceCounts, totals } from '../lib/panel-data.mjs';
+import { spawnSync } from 'node:child_process';
+import { SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
+import strings from '../lib/strings.json' with { type: 'json' };
 
 const now = Date.parse('2026-03-10T15:00:00Z');
 const day = (date, totalTokens) => ({ date, totalTokens });
@@ -11,6 +14,159 @@ const snapshot = () => ({
   settings: [],
   combinedTokens: { status: 'ok', verification: { status: 'verified' }, days: [day('2026-03-10', 120)] },
   activity: [{ host: 'Mac', status: 'ok', days: [{ date: '2026-03-10', seconds: 3600 }] }],
+});
+
+const readingAt = '2026-10-14T12:30:00Z';
+const nowTime = Date.parse('2026-10-14T12:32:00Z');
+const hourlyDay = (date, scale = 1) => {
+  const hours = Array.from({ length: 24 }, (_, hour) => (hour + 1) * scale);
+  return { date, hours, totalTokens: hours.reduce((a, b) => a + b, 0) };
+};
+const hourlySnapshot = (read = readingAt) => {
+  const source = (host, scale) => ({ host, status: 'ok', checkedAt: read, days: [hourlyDay(read.slice(0, 10), scale)] });
+  return { timezone: 'America/New_York', collectedAt: read,
+    tokens: [source('Mac', 1), source('Windows', 4)],
+    providerTokenSources: ['Mac', 'Windows'].map(host => ({ ...source(host, 2), provider: 'claude-code' })),
+    activity: [source('Mac', 3), source('Windows', 5)],
+    combinedTokens: { ...source('Combined', 6), verification: { status: 'verified' } },
+    combined: source('Combined', 7) };
+};
+const nowValues = result => [result.codexTokens, result.claudeTokens, result.seconds];
+
+test('panel-data imports first in a fresh process despite the activity cycle', () => {
+  const panelModule = new URL('../lib/panel-data.mjs', import.meta.url).href;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e',
+    `const panel = await import(${JSON.stringify(panelModule)}); if (panel.totals({}, 'All', 'now', 0).seconds !== null) process.exit(1);`], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('device Now adds the previous and current local hours with Date or milliseconds', () => {
+  for (const time of [nowTime, new Date(nowTime)]) {
+    for (const [host, expected] of [['Mac', [17, 34, 51]], ['Windows', [68, 34, 85]]]) {
+      const result = totals(hourlySnapshot(), host, 'now', time);
+      assert.deepEqual(nowValues(result), expected);
+      assert.deepEqual([result.usd, result.codexNote, result.timeNote, result.claudeNote], [null, '', '', '']);
+      assert.equal(result.note, strings.activity.nowCaveat);
+    }
+  }
+});
+
+test('device Now falls back to collection time only when checkedAt is absent', () => {
+  const data = hourlySnapshot();
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) delete data[key][0].checkedAt;
+  assert.deepEqual(nowValues(totals(data, 'Mac', 'now', nowTime)), [17, 34, 51]);
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) data[key][0].checkedAt = '2026-10-14T12:20:00Z';
+  assert.deepEqual(nowValues(totals(data, 'Mac', 'now', nowTime)), [null, null, null]);
+});
+
+for (const [label, read, time] of [
+  ['stale', readingAt, Date.parse(readingAt) + 600001],
+  ['new hour', '2026-10-14T12:58:00Z', Date.parse('2026-10-14T13:03:00Z')],
+  ['skipped hour', '2026-03-08T07:30:00Z', Date.parse('2026-03-08T07:32:00Z')],
+  ['first repeated hour', '2026-11-01T05:30:00Z', Date.parse('2026-11-01T05:32:00Z')],
+  ['second repeated hour', '2026-11-01T06:30:00Z', Date.parse('2026-11-01T06:32:00Z')],
+]) test(`device Now is Unknown for ${label}`, () => {
+  const result = totals(hourlySnapshot(read), 'Mac', 'now', time);
+  assert.deepEqual(nowValues(result), [null, null, null]);
+  assert.equal(result.note, strings.status.hourlyUnavailable);
+});
+
+test('device Now accepts a reading exactly ten minutes old', () => {
+  assert.deepEqual(nowValues(totals(hourlySnapshot(), 'Mac', 'now', Date.parse(readingAt) + 600000)), [17, 34, 51]);
+});
+
+test('device Now requires hours and an ok status for each source', () => {
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) {
+    for (const missing of ['hours', 'status']) {
+      const data = hourlySnapshot();
+      if (missing === 'hours') delete data[key][0].days[0].hours;
+      else data[key][0].status = 'stale';
+      const expected = [17, 34, 51];
+      expected[['tokens', 'providerTokenSources', 'activity'].indexOf(key)] = null;
+      const result = totals(data, 'Mac', 'now', nowTime);
+      assert.deepEqual(nowValues(result), expected);
+      assert.equal(result.note, strings.activity.nowCaveat);
+    }
+  }
+});
+
+test('Now crosses midnight using hour 23 of the previous local day', () => {
+  const data = hourlySnapshot('2026-10-15T04:05:00Z');
+  const time = Date.parse('2026-10-15T04:07:00Z');
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) data[key][0].days.push(hourlyDay('2026-10-14', 10));
+  assert.deepEqual(nowValues(totals(data, 'Mac', 'now', time)), [241, 242, 243]);
+  for (const date of ['2026-10-14', '2026-10-15']) {
+    const missing = structuredClone(data);
+    for (const key of ['tokens', 'providerTokenSources', 'activity']) delete missing[key][0].days.find(day => day.date === date).hours;
+    assert.deepEqual(nowValues(totals(missing, 'Mac', 'now', time)), [null, null, null]);
+  }
+});
+
+test('All Now uses only verified aggregate hours and their own reading times', () => {
+  const data = hourlySnapshot();
+  const result = totals(data, 'All', 'now', nowTime);
+  assert.deepEqual(nowValues(result), [102, null, 119]);
+  assert.equal(result.claudeNote, strings.status.byDevice);
+  assert.equal(result.note, strings.activity.nowCaveat);
+  for (const change of [
+    data => { delete data.combinedTokens.days[0].hours; },
+    data => { data.combinedTokens.verification.status = 'unverified'; },
+    data => { data.combinedTokens.status = 'stale'; },
+    data => { delete data.combinedTokens.checkedAt; },
+    data => { data.tokens[1].status = 'unavailable'; },
+    data => { data.tokens.push({ host: 'Ubuntu', status: 'ok', days: [] }); },
+  ]) {
+    const invalid = hourlySnapshot(); change(invalid);
+    assert.equal(totals(invalid, 'All', 'now', nowTime).codexTokens, null);
+  }
+  delete data.combined.checkedAt;
+  assert.equal(totals(data, 'All', 'now', nowTime).seconds, null);
+  data.combined.checkedAt = '2026-10-14T12:20:00Z';
+  assert.equal(totals(data, 'All', 'now', nowTime).seconds, null);
+});
+
+test('All Now on an unpaired one-device snapshot reads that device, hours included', () => {
+  const two = hourlySnapshot();
+  const keep = row => row.host === 'Mac';
+  const one = { timezone: two.timezone, collectedAt: two.collectedAt,
+    tokens: [...two.tokens.filter(keep), { host: 'Windows', status: 'not-connected' }],
+    providerTokenSources: two.providerTokenSources.filter(keep),
+    activity: [...two.activity.filter(keep), { host: 'Windows', status: 'not-connected' }],
+    combined: { host: 'Combined', status: 'unavailable' }, combinedTokens: { host: 'All', status: 'unavailable' } };
+  const result = totals(one, 'All', 'now', nowTime);
+  assert.deepEqual(nowValues(result), nowValues(totals(one, 'Mac', 'now', nowTime)));
+  assert.deepEqual(nowValues(result), [17, 34, 51]);
+  assert.equal(result.claudeNote, '');
+  assert.equal(result.note, strings.activity.nowCaveat);
+  // Unknown stays Unknown on the one device, never 0.
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) delete one[key][0].days[0].hours;
+  assert.deepEqual(nowValues(totals(one, 'All', 'now', nowTime)), [null, null, null]);
+  // With a second device All still reads only the verified aggregates.
+  assert.deepEqual(nowValues(totals(two, 'All', 'now', nowTime)), [102, null, 119]);
+});
+
+test('Now caveat appears when only one value is known, including an observed zero', () => {
+  for (const key of ['tokens', 'providerTokenSources', 'activity']) {
+    const data = hourlySnapshot();
+    for (const other of ['tokens', 'providerTokenSources', 'activity']) if (other !== key) delete data[other];
+    data[key][0].days[0].hours[7] = 0;
+    data[key][0].days[0].hours[8] = 0;
+    const result = totals(data, 'Mac', 'now', nowTime);
+    assert.equal(nowValues(result).filter(value => value === 0).length, 1);
+    assert.equal(result.note, strings.activity.nowCaveat);
+  }
+  assert.equal(totals({}, 'Mac', 'now', nowTime).note, strings.status.hourlyUnavailable);
+});
+
+test('source counts include consented Claude limits and only count ok as read', () => {
+  for (const [status, read, total] of [['ok', 2, 2], ['stale', 1, 2], ['not-connected', 1, 1]])
+    assert.deepEqual(sourceCounts({ quota: { status: 'ok' }, claudeLimits: { status } }), { read, total });
+  for (const claudeLimits of [undefined, null, [], 'ok']) assert.deepEqual(sourceCounts({ claudeLimits }), { read: 0, total: 0 });
+});
+
+test('sample All Codex Now stays Unknown as declared by SAMPLE_UNKNOWN', () => {
+  assert.ok(SAMPLE_UNKNOWN.some(row => row.path === 'combinedTokens.days.0.hours'));
+  assert.equal(totals(demoSnapshot(nowTime), 'All', 'now', nowTime).codexTokens, null);
 });
 
 test('All uses the verified aggregate and never adds device records', () => {

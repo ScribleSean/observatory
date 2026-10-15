@@ -1,3 +1,5 @@
+import {readDeviceName,attachDeviceName} from './device-name.mjs';
+import {finalizeWithLocalAdditions} from './local-additions.mjs';
 import {spawn} from 'node:child_process';
 import {realpathSync} from 'node:fs';
 import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
@@ -10,7 +12,6 @@ import {macSnapshot,macCollectorConfig} from './mac-snapshot.mjs';
 import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
-import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota,findCodexExecutable} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
@@ -81,7 +82,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     wispr:()=>report('read-wispr.py',[homedir()]),
   },previous,new Date().toISOString(),pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
-  await finalizePeerCollection(runtime,result,savedPairing,previous);
+  await finalizeWithLocalAdditions(runtime,result,savedPairing,previous,'Mac');
+  const deviceName=await readDeviceName(runtime);
+  attachDeviceName(result.data,'Mac',deviceName);
   // Account-wide history belongs to the observing device, not the peer sum.
   let quota;
   try {quota=await readQuota();}
@@ -94,8 +97,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   if(!config.claude) claude=unavailableClaudeTokenSource('Mac',new Date().toISOString(),'not-connected');
   else try {
     if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
+    const claudeStartedAt=new Date().toISOString();
     const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[claudeDirectory]);
-    claude=cleanClaudeTokenSource(raw,'Mac');
+    claude=cleanClaudeTokenSource(raw,'Mac',claudeStartedAt,{hours:true});
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
   attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
@@ -103,6 +107,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   const {given:enabled}=await claudeLimitsConsent(runtime).catch(()=>({given:false}));
   attachClaudeLimits(result,await withinTime(readLimits(runtime),limitsTimeoutMs).catch(()=>({
     ...claudeLimitsSource(null,{enabled}),...(enabled?{usageCommand:'timed-out'}:{})})));
+  attachDeviceName(result.data,'Mac',deviceName);
   const {data,status}=result;
   await atomic('usage.json',data,replacement.preserve);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

@@ -1,4 +1,6 @@
+import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
+import {attachTokenHours} from './token-hours.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {cleanWispr} from './wispr.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
@@ -16,21 +18,22 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     try {
       if(!accepted.includes(source?.status))throw Error('Source unavailable');
       return {...transform(source),checkedAt};
-    } catch {return {...unavailable(host),checkedAt};}
+    } catch {return {...unavailable(host),checkedAt,...(REFUSAL_CODES.includes(source?.refusal)?{refusal:source.refusal}:{})};}
   };
   const settingsSource=(source,host)=>clean(source,host,value=>{
     const safe=cleanSettings(value,host);tokensFromSettings(safe,host);return safe;
   });
+  const hourTotals=raw.localSettings?.hourTotals;
   const localSettings=settingsSource(raw.localSettings,'Windows');
   const windows=clean(raw.windows,'Windows',value=>{
     const {intervals,trackingIntervals,...safe}=cleanActivity(value,'Windows');return safe;
   });
   const wispr=clean(raw.wispr,'Windows',value=>cleanWispr(value,'Windows'),['ok','not-found','ambiguous','unavailable']);
   const tokenSource=source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:
-    {host:source.host,status:source.status,checkedAt:source.checkedAt};
+    {host:source.host,status:source.status,checkedAt:source.checkedAt,...(REFUSAL_CODES.includes(source.refusal)?{refusal:source.refusal}:{})};
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[disconnected('Mac'),windows],combined:unavailable('Combined'),
-    tokens:[disconnected('Mac'),tokenSource(localSettings)],combinedTokens:unavailable('All'),
+    tokens:[disconnected('Mac'),attachTokenHours(tokenSource(localSettings),hourTotals)],combinedTokens:unavailable('All'),
     settings:[localSettings],combinedSettings:unavailable('All'),
     dictation:[{...wispr,source:'Wispr Flow'}],agents:[],agentSource:disconnected('Local'),
     quota:disconnected('Codex account')};

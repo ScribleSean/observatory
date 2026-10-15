@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
 import {mkdtemp,mkdir,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {collectMac} from './collect-mac.mjs';
 import {collectWindows} from './collect-windows.mjs';
 import {execPython} from './test-python.mjs';
@@ -30,7 +33,27 @@ test('native collector publishes a separate Claude reading and counts its health
       t.after(()=>{if(priorPython===undefined)delete process.env.OBSERVATORY_PYTHON;else process.env.OBSERVATORY_PYTHON=priorPython;});
     }
     const collect=process.platform==='darwin'?()=>collectMac(runtime,python):()=>collectWindows(runtime);
-    const result=await collect();
+    await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:' Fixture desk '}));
+    const marker=path.join(runtime,'reader-start.json'),originalReadFile=fs.readFile;
+    t.mock.method(fs,'readFile',async(file,...args)=>{
+      const source=await originalReadFile(file,...args);
+      if(file===fileURLToPath(new URL('./read-claude-usage.py',import.meta.url)))return `import time, json
+with open(${JSON.stringify(marker)}, 'w') as marker:
+    json.dump(time.time() * 1000, marker)
+time.sleep(0.02)
+`+source;
+      return source;
+    });
+    syncBuiltinESMExports();
+    t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+    const before=Date.now(),result=await collect();
+    const checkedAt=Date.parse(result.data.providerTokenSources[0].checkedAt);
+    const readerAt=JSON.parse(await readFile(marker,'utf8'));
+    const collector=JSON.parse(await readFile(path.join(runtime,'public/local/collector.json'),'utf8'));
+    assert.ok(before<=Date.parse(collector.startedAt));
+    assert.ok(Date.parse(collector.startedAt)<=checkedAt);
+    assert.ok(checkedAt<=readerAt,'Claude reading time must precede the fixture reader');
+    assert.deepEqual(result.data.deviceNames,{[process.platform==='darwin'?'Mac':'Windows']:'Fixture desk'});
     assert.equal(result.providerTokenSync.status,'disabled');
     assert.equal(result.data.providerTokenSources.length,1);
     assert.equal(result.data.providerTokenSources[0].status,'ok','Synthetic Claude source must be readable with the selected test Python');
@@ -41,6 +64,8 @@ test('native collector publishes a separate Claude reading and counts its health
     const snapshot=JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
     assert.ok(!JSON.stringify(snapshot).includes('PRIVATE'));
     assert.equal(snapshot.providerTokenSources[0].days[0].requestCount,1);
+    assert.deepEqual(snapshot.deviceNames,result.data.deviceNames);
+    assert.equal(snapshot.providerTokenSources[0].days[0].hours.reduce((a,b)=>a+b,0),10);
     assert.equal(snapshot.prices.checkedOn,prices.checkedOn);
     for(const day of snapshot.providerTokenSources[0].days) {
       assert.equal(day.apiEstimate.checked,prices.checkedOn);
@@ -58,7 +83,9 @@ test('native collector publishes a separate Claude reading and counts its health
     assert.equal(unpriced.apiEstimate.excluded,1);
     await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({...config,claude:false}),{mode:0o600});
     await rm(claude,{recursive:true});
+    await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:'invalid/name'}));
     const disabled=await collect();
+    assert.equal(Object.hasOwn(disabled.data,'deviceNames'),false);
     assert.equal(disabled.status.sourcesConfigured,0);
     assert.equal(disabled.data.providerTokenSources[0].status,'not-connected');
   });

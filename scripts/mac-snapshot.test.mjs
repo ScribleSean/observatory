@@ -95,3 +95,29 @@ test('missing peer evidence leaves local collection intact',async()=>{
   const unpaired=await macSnapshot({},readers,[],at);
   assert.equal(unpaired.peer,undefined);
 });
+
+test('Codex hours stay local and leave the settings and peer projections unchanged',async()=>{
+  const config={host:'Mac',comparisonId:'a'.repeat(64),codexHosts:['Mac']};
+  const report={...settings,inventory:{status:'ok',keys:['b'.repeat(64)],parents:[]}};
+  const run=codex=>macSnapshot({activity:false},{codex:async()=>codex},[],at,config);
+  const before=await run(report),hours=Array.from({length:24},(_,i)=>i===8?10:0);
+  const after=await run({...report,hourTotals:[{date:'2026-09-08',hours}]});
+  assert.deepEqual(after.data.tokens[0].days[0].hours,hours);
+  assert.equal(after.peer.status,'ready');assert.deepEqual(after.peer.payload,before.peer.payload);
+  assert.equal(JSON.stringify(after.peer.payload),JSON.stringify(before.peer.payload));
+  assert.deepEqual(after.data.settings,before.data.settings);
+  for(const value of [after.data.settings,after.peer.payload.codex])assert.doesNotMatch(JSON.stringify(value),/"(?:hourTotals|hours)":/);
+});
+
+test('Codex read refusal codes stay on local settings and tokens only',async()=>{
+  for(const refusal of ['private-folder-refused','ancestor-refused','unknown',undefined]) {
+    const result=await macSnapshot({activity:false},{codex:async()=>{throw Object.assign(Error('PRIVATE'),{refusal});}},[],at,
+      {host:'Mac',comparisonId:'a'.repeat(64),codexHosts:['Mac']});
+    for(const key of ['tokens','settings']) {
+      const row=result.data[key].find(row=>row.host==='Mac');assert.equal(row.status,'unavailable');
+      assert.equal(row.refusal,['private-folder-refused','ancestor-refused'].includes(refusal)?refusal:undefined);
+    }
+    assert.deepEqual(result.peer.payload.codex,[{host:'Mac',status:'unavailable'}]);
+    assert.doesNotMatch(JSON.stringify(result),/PRIVATE/);assert.doesNotMatch(JSON.stringify(result.peer.payload),/refusal/);
+  }
+});

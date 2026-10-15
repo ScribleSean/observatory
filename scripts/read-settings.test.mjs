@@ -267,3 +267,45 @@ with tempfile.TemporaryDirectory() as directory:
 `;
   assert.deepEqual(JSON.parse(execPython(['-c',fixture],{input:JSON.stringify([usage(100)])})),{ok:true});
 });
+
+test('hour totals use retained deduplicated event times across hour and daylight saving boundaries',()=>{
+  const fixture=code.slice(0,code.indexOf('print(json.dumps'))+`
+import pathlib,tempfile
+exec(pathlib.Path('scripts/read-settings-cache.py').read_text(encoding='utf-8'),m.__dict__)
+events=json.load(sys.stdin)
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True)
+    cache=root/'cache'
+    cache.mkdir(mode=0o700)
+    def save(name,rows,parent=None):
+        meta=dict(type='session_meta',payload=dict(id=name,forked_from_id=parent))
+        context=dict(type='turn_context',payload=dict(turn_id='synthetic-turn'))
+        (logs/'sessions'/name).with_suffix('.jsonl').write_text('\\n'.join(json.dumps(row) for row in [meta,context]+rows)+'\\n',encoding='utf-8')
+    save('parent',events)
+    save('child',events,'parent')
+    result=m.collect(logs)
+    m.CACHE_DIRECTORY=str(cache)
+    assert m.collect(logs)==result
+    m.CACHE_SCAN_BUDGET=0
+    assert m.collect(logs)==result
+    print(json.dumps(result))
+`;
+  const stamps=['2024-01-01T13:59:00Z','2024-01-01T14:01:00Z',
+    '2024-03-10T06:59:00Z','2024-03-10T07:01:00Z','2024-11-03T05:30:00Z','2024-11-03T06:30:00Z'];
+  const events=stamps.map((timestamp,i)=>({...usage((i+1)*100),timestamp}));
+  events.push({...events.at(-1)}, {...settings('high','standard'),timestamp:'2024-01-02T12:00:00Z'});
+  const result=JSON.parse(execPython(['-c',fixture],{input:JSON.stringify(events)}));
+  assert.deepEqual(result.hourTotals.map(row=>row.date),['2024-01-01','2024-03-10','2024-11-03']);
+  assert.equal(result.hourTotals[0].hours[8],110);assert.equal(result.hourTotals[0].hours[9],110);
+  assert.equal(result.hourTotals[1].hours[1],110);assert.equal(result.hourTotals[1].hours[2],0);assert.equal(result.hourTotals[1].hours[3],110);
+  assert.equal(result.hourTotals[2].hours[1],220);
+  for(const row of result.hourTotals) {
+    assert.equal(row.hours.length,24);assert.ok(row.hours.every(value=>Number.isSafeInteger(value) && value>=0));
+    assert.equal(row.hours.reduce((sum,value)=>sum+value,0),result.tokenProfiles.filter(day=>day.date===row.date).reduce((sum,day)=>sum+day.totalTokens,0));
+  }
+  for(const row of [...result.profiles,...result.tokenProfiles]) {
+    assert.equal(Object.hasOwn(row,'hours'),false);assert.equal(Object.hasOwn(row,'hourTotals'),false);
+  }
+});

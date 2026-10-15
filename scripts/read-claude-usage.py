@@ -33,7 +33,7 @@ def timestamp(value):
         return None
     if parsed.tzinfo is None:
         return None
-    return parsed.astimezone(ZoneInfo('America/New_York')).date().isoformat()
+    return parsed.astimezone(dt.timezone.utc)
 
 
 def model_name(value):
@@ -120,9 +120,9 @@ def collect(folder):
                     saw_assistant = True
                     values = tuple(number(usage.get(field)) for field in FIELDS)
                     identity = (message.get('id'), event.get('requestId'))
-                    day = timestamp(event.get('timestamp'))
+                    instant = timestamp(event.get('timestamp'))
                     if (not isinstance(identity[0], str) or not 0 < len(identity[0]) <= 256
-                            or day is None or any(value is None for value in values)):
+                            or instant is None or any(value is None for value in values)):
                         return unavailable()
                     raw_model = message.get('model')
                     # Client-generated API errors carry no recorded request usage.
@@ -135,7 +135,7 @@ def collect(folder):
                         continue
                     if not isinstance(identity[1], str) or not 0 < len(identity[1]) <= 256:
                         return unavailable()
-                    current = (day, model_name(raw_model), raw_model, values)
+                    current = (instant, model_name(raw_model), raw_model, values)
                     prior = records.get(identity)
                     if prior is None:
                         records[identity] = current
@@ -148,7 +148,7 @@ def collect(folder):
                         continue
                     if all(a >= b for a, b in zip(after, before)):
                         # A streamed request can finish after local midnight.
-                        # Keep its earliest retained timestamp as its day.
+                        # Keep its earliest retained timestamp for its day and hour.
                         records[identity] = (min(prior[0], current[0]), current[1], current[2], current[3])
                     elif not all(a <= b for a, b in zip(after, before)):
                         return unavailable()
@@ -161,14 +161,17 @@ def collect(folder):
         if not saw_assistant or not records:
             return unavailable()
         days = {}
-        for day, model, _, values in records.values():
+        for instant, model, _, values in records.values():
+            local = instant.astimezone(ZoneInfo('America/New_York'))
+            day = local.date().isoformat()
             row = days.setdefault(day, {'date': day, 'inputTokens': 0, 'cacheReadTokens': 0,
                 'cacheCreationTokens': 0, 'outputTokens': 0, 'totalTokens': 0,
-                'requestCount': 0, 'models': {}})
+                'requestCount': 0, 'models': {}, 'hours': [0] * 24})
             model_row = row['models'].setdefault(model, {'model': model, 'inputTokens': 0,
                 'cacheReadTokens': 0, 'cacheCreationTokens': 0, 'outputTokens': 0,
                 'totalTokens': 0, 'requestCount': 0})
             amounts = (values[0], values[1], values[2], values[3], sum(values))
+            row['hours'][local.hour] += amounts[4]
             for target in (row, model_row):
                 for key, amount in zip(('inputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'outputTokens', 'totalTokens'), amounts):
                     if target[key] + amount > MAX_SAFE:
