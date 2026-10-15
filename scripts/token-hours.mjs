@@ -1,7 +1,7 @@
 export function stripTokenHours(row) {
   return {...row,...(Array.isArray(row?.days)?{days:row.days.map(day=>{
     if(!day || typeof day!=='object')return day;
-    const {hours,...safe}=day;return safe;
+    const {hours:_hours,...safe}=day;return safe;
   })}:{})};
 }
 

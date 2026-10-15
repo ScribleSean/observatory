@@ -1,5 +1,5 @@
 import {attachTokenHours} from './token-hours.mjs';
-import {REFUSAL_CODES} from './peer-directory.mjs';
+import {REFUSAL_CODES} from './refusal-codes.mjs';
 
 const rows=['activity','tokens','settings','dictation'];
 export function captureLocalAdditions(data,host) {

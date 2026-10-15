@@ -1,4 +1,4 @@
-import {REFUSAL_CODES} from './peer-directory.mjs';
+import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
 import {captureLocalAdditions,reapplyLocalAdditions} from './local-additions.mjs';
 import {spawn,execFile} from 'node:child_process';

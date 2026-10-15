@@ -6,7 +6,8 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
-export const REFUSAL_CODES=Object.freeze(['private-folder-refused','ancestor-refused']);
+import {REFUSAL_CODES} from './refusal-codes.mjs';
+export {REFUSAL_CODES};
 const refused=error=>{if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
 const execute=promisify(execFile);
 export async function windowsPermissions(directory,initialize=false,ancestor=false,run=execute) {

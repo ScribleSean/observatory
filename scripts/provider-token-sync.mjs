@@ -69,7 +69,7 @@ export async function collectProviderTokenSources(runtime,source,options={}) {
     now=(options.clock??Date.now)();
     const stripped=Array.isArray(source?.days)?{...source,days:source.days.map(day=>{
       if(!day || typeof day!=='object' || Array.isArray(day))return day;
-      const {hours,...rest}=day;
+      const {hours:_hours,...rest}=day;
       return rest;
     })}:source;
     local=parseProviderTokenSource(stripped,source?.host,now);

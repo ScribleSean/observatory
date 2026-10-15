@@ -34,9 +34,9 @@ const hourlySnapshot = (read = readingAt) => {
 const nowValues = result => [result.codexTokens, result.claudeTokens, result.seconds];
 
 test('panel-data imports first in a fresh process despite the activity cycle', () => {
-  const module = new URL('../lib/panel-data.mjs', import.meta.url).href;
+  const panelModule = new URL('../lib/panel-data.mjs', import.meta.url).href;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e',
-    `const panel = await import(${JSON.stringify(module)}); if (panel.totals({}, 'All', 'now', 0).seconds !== null) process.exit(1);`], { encoding: 'utf8' });
+    `const panel = await import(${JSON.stringify(panelModule)}); if (panel.totals({}, 'All', 'now', 0).seconds !== null) process.exit(1);`], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 });
 

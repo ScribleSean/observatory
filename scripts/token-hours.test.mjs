@@ -12,7 +12,7 @@ test('hours attach only to matching totals and leave input intact',()=>{
 });
 test('invalid entries and duplicate dates are ignored without losing other valid days',()=>{
   const invalid=[null,{},'bad',[],hours.slice(1),[...hours,0],hours.map((v,i)=>i===0?-1:v),
-    hours.map((v,i)=>i===0?0.5:v),hours.map((v,i)=>i===0?'0':v),hours.map((v,i)=>i===0?Number.MAX_SAFE_INTEGER+1:v),new Array(24)];
+    hours.map((v,i)=>i===0?0.5:v),hours.map((v,i)=>i===0?'0':v),hours.map((v,i)=>i===0?Number.MAX_SAFE_INTEGER+1:v),Array.from({length:24})];
   for(const bad of invalid) {
     const result=attachTokenHours(row,[null,{},7,{date:'2026-09-08',hours:bad},{date:'2026-09-10',hours}]);
     assert.equal(Object.hasOwn(result.days[0],'hours'),false);assert.deepEqual(result.days[2].hours,hours);
