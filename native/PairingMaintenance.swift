@@ -36,6 +36,7 @@ enum PairingMaintenance {
         defer { free(resolved) }
         let canonicalRuntime = String(cString: resolved)
         let process = Process()
+        process.environment = bridgeChildEnvironment()
         process.executableURL = node
         process.arguments = [script.path, "--runtime", canonicalRuntime, repair ? "--confirm-local-retirement" : "--revoke"]
         process.currentDirectoryURL = runtime

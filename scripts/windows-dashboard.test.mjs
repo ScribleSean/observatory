@@ -13,6 +13,7 @@ const raw=()=>({localSettings:settings(),ubuntuSettings:{status:'not-connected'}
 
 test('Windows projection preserves local source shape and optional Ubuntu absence',()=>{
   const {data,status,peer}=windowsSnapshot(raw(),[],at);
+  assert.equal(Object.hasOwn(data,'localModel'),false);
   assert.equal(peer,undefined);assert.equal(data.schema,2);assert.equal(data.tokens[0].host,'Mac');
   assert.equal(data.tokens[1].days[0].totalTokens,12);assert.deepEqual(data.tokens.map(source=>source.host),['Mac','Windows']);
   assert.equal(data.tokens[1].checkedAt,'2026-09-09T12:59:59.000Z');

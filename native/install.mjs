@@ -18,9 +18,6 @@ for(const folder of [runtime,applications]) {
 }
 execFileSync('/usr/bin/codesign',['--verify','--strict',source]);
 execFileSync(path.join(source,binary),['--self-test'],{stdio:'inherit'});
-const configFile=existsSync(path.join(runtime,'local.config.json'))
-  ? path.join(runtime,'local.config.json') : path.join(root,'local.config.json');
-JSON.parse(readFileSync(configFile,'utf8'));
 const python=execFileSync('/usr/bin/which',['python3'],{encoding:'utf8'}).trim();
 if(!path.isAbsolute(python) || !path.isAbsolute(process.execPath))throw Error('Absolute installed runtimes required');
 mkdirSync(runtime,{recursive:true,mode:0o700});
@@ -48,10 +45,6 @@ if(existsSync(app)) {
 cpSync(source,app,{recursive:true,errorOnExist:true,force:false});
 execFileSync('/usr/bin/codesign',['--verify','--strict',app]);
 cpSync(path.join(app,'Contents/Resources/Collector/scripts'),path.join(runtime,'scripts'),{recursive:true});
-if(!existsSync(path.join(runtime,'local.config.json'))) {
-  cpSync(configFile,path.join(runtime,'local.config.json'));
-  chmodSync(path.join(runtime,'local.config.json'),0o600);
-}
 writeFileSync(path.join(runtime,'native-runtime.json'),JSON.stringify({python,node:process.execPath}),{mode:0o600});
 const local=path.join(runtime,'public/local');
 mkdirSync(local,{recursive:true,mode:0o700});

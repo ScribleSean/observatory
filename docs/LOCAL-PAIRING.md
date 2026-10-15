@@ -147,6 +147,36 @@ loopback, unspecified addresses and IPv6 link-local addresses. This is an
 initial address policy, not proof that an address is reachable or trustworthy.
 Other existing VPN address schemes are not supported by this primitive yet.
 
+Since P1 (issue 110), `isPairingAddress` follows the same grammar as the
+"Addresses" part of the settings bridge contract in `docs/DESIGN.md`: at most
+39 characters, dotted IPv4 with no leading zeros, and IPv6 written as hexadecimal
+groups whose first group is from `fc00` to `fdff`. It no longer uses Node's
+`isIP`, so an IPv6 zone identifier such as `%en0` and an embedded IPv4 part are
+refused. The default port for the trusted sync listener is 43128
+(`defaultSyncPort`).
+
+`tailscaleSelfAddresses()` in `scripts/tailscale-status.mjs` runs the same
+read-only `tailscale status --json --peers=false` command as the status check and
+returns only this device's own Tailscale IPv4 (in 100.64.0.0/10) and IPv6 (in
+`fd7a:115c:a1e0::/48`) from `Self.TailscaleIPs`. It reads at most eight entries,
+returns null for both unless the client reports `running`, and never prints or
+logs an address. The command-line check still prints only the status word.
+
+### Repaired devices over TLS
+
+"Prepare pairing repair" leaves a fence and a local confirmation nonce in
+`private-repair`. A new pairing is accepted on that device only if its `repair`
+field carries that nonce under the device's own key (`mac` or `windows`). Since
+P1-0, the direct TLS path does this. The joining device sends its nonce inside
+the invitation claim, over the pinned mutual TLS connection, and the host puts
+its own nonce and the joiner's nonce into the pairing it creates. Each device
+checks only its own key, so a pairing works when only one device was repaired
+and the other has never been paired. A nonce that changed after the claim (for
+example a second "Prepare pairing repair") makes the joining device refuse the
+pairing before it writes anything. The SSH setup still requires both devices to
+be prepared when either one is. These are loopback tests with synthetic
+identities, not a two-device result.
+
 The payload is encoded, not encrypted. Anyone who obtains it obtains the
 invitation secret. It must be displayed only during explicit pairing, never
 logged or placed in analytics, browser navigation, process arguments or public

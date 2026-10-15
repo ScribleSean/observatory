@@ -9,6 +9,7 @@ import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
 import {encodeInvitation,decodeInvitation} from './peer-invitation.mjs';
 import {deviceIdentitySetupStatus,prepareDeviceIdentity} from './peer-identity-setup.mjs';
 import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
+import {readRepairConsent} from './peer-repair-consent.mjs';
 
 const fail=()=>Error('Setup command unavailable');
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
@@ -17,7 +18,7 @@ const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(val
 // One controller belongs to one native setup child process. It never returns
 // keys, pairing configurations, comparison salts or internal claim handles.
 export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,readIdentity=readDeviceIdentity,
-  claim=claimFromInvitation,receive=receiveConfirmedTLSPairing}={}) {
+  claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent}={}) {
   let host=null,invitation=null,joining='idle',epoch=0,busy=null,abort=new AbortController();
   async function cancel() {
     epoch++;busy=null;abort.abort();abort=new AbortController();invitation=null;joining='idle';
@@ -63,7 +64,10 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         if(host || invitation)throw fail();
         const proposed=decodeInvitation(request.invitation),identity=await readIdentity(runtime);
         if(!identity || token!==epoch)throw fail();
-        const result=await claim(proposed,identity,{signal:abort.signal});
+        let repairNonce;
+        try {repairNonce=await readRepair(runtime);}catch {throw fail();}
+        if(token!==epoch)throw fail();
+        const result=await claim(proposed,identity,{signal:abort.signal,repairNonce});
         if(token!==epoch)return {status:'cancelled'};
         if(result.status!=='awaiting-confirmation')throw fail();
         invitation=proposed;joining=result.status;

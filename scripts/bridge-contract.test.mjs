@@ -313,13 +313,13 @@ while ((line = Console.ReadLine()) is not null)
     if (result.Outcome == "accepted")
     {
         output["action"] = result.Action;
-        var args = new Dictionary<string, object?>();
+        var fields = new Dictionary<string, object?>();
         foreach (var pair in result.Args!)
         {
             var value = pair.Value;
-            args[pair.Key] = value.Kind switch { "bool" => value.Boolean, "integer" => value.Integer, "string" => value.Text, _ => null };
+            fields[pair.Key] = value.Kind switch { "bool" => value.Boolean, "integer" => value.Integer, "string" => value.Text, _ => null };
         }
-        output["args"] = args;
+        output["args"] = fields;
     }
     Console.WriteLine(JsonSerializer.Serialize(output));
 }

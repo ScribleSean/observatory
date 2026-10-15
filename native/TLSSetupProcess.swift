@@ -67,9 +67,7 @@ final class TLSSetupProcess {
         process.executableURL = node
         process.arguments = [script.path, "--runtime", String(cString: resolved)]
         process.currentDirectoryURL = URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
-        var environment = ProcessInfo.processInfo.environment
-        for key in ["NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", "NODE_PATH"] { environment.removeValue(forKey: key) }
-        process.environment = environment
+        process.environment = bridgeChildEnvironment()
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice

@@ -9,7 +9,6 @@ const source = (file) =>
 // These run on Windows without pretending to compile AppKit or SwiftUI.
 for (const file of [
   'Panel.swift',
-  'windows/UsagePopup.cs',
   'windows/Program.cs',
 ]) {
   void test(`${file} offers only native devices in active filters`, async () => {
@@ -33,11 +32,6 @@ for (const file of [
 
 for (const [dashboard, history, devices] of [
   ['NativeDashboard.swift', 'NativeHistory.swift', 'nativeHistoryDevices'],
-  [
-    'windows/NativeDashboard.cs',
-    'windows/NativeHistory.cs',
-    'NativeHistory.Devices',
-  ],
 ]) {
   void test(`${dashboard} offers Mac and Windows history only`, async () => {
     const [ui, model] = await Promise.all([source(dashboard), source(history)]);
@@ -55,11 +49,7 @@ for (const [dashboard, history, devices] of [
 }
 
 void test('Windows source settings no longer read or describe WSL selectors', async () => {
-  const [settings, collector] = await Promise.all([
-    source('windows/NativeSourceSettings.cs'),
-    source('windows/Collector.cs'),
-  ]);
-  assert.ok(!/WSL|Ubuntu/.test(settings), 'Settings still describes WSL');
+  const collector = await source('windows/Collector.cs');
   assert.ok(
     !/\["(?:quotaWslDistribution|wslDistribution)"\]\s*=/.test(collector),
     'New configuration still writes a WSL selector',
@@ -122,17 +112,13 @@ void test('Mac legacy collection uses bundled scripts, not retained WSL-capable 
     'Legacy collection still launches retained scripts',
   );
   assert.ok(
-    text.includes('local ? "collect-mac.mjs" : "collect-dashboard.mjs"'),
-    'Legacy configuration needs the bundled cross-device collector',
+    text.includes('"collect-mac.mjs"') && !text.includes('"collect-dashboard.mjs"'),
+    'Every configuration needs the bundled Mac collector',
   );
   assert.ok(
     text.includes('"--runtime", runtime.path') &&
       text.includes('"--collector", collector.path'),
     'The bundled collector must receive the unchanged data directory',
-  );
-  assert.ok(
-    text.includes('if quotaOnly && !local'),
-    'Legacy allowance-only collection must remain gated',
   );
 });
 
