@@ -657,7 +657,7 @@ func runCollectorSelfTest() {
         phase("save-disabled")
         try CollectorConfiguration.save(Dictionary(uniqueKeysWithValues: CollectorConfiguration.defaults.keys.map { ($0, false) }), runtime: runtime)
         phase("collector-launch")
-        let launch = try CollectorConfiguration.launch(runtime: runtime, resources: resources, local: true)
+        let launch = try CollectorConfiguration.launch(runtime: runtime, resources: resources)
         let task = Process()
         task.executableURL = launch.executable
         task.arguments = launch.arguments

@@ -175,8 +175,30 @@ private enum BridgeSettingsFile {
         guard !exists(file) || regular(file) else { throw CocoaError(.fileWriteNoPermission) }
         let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         guard data.count <= 1024 else { throw CocoaError(.fileWriteInvalidFileName) }
-        try data.write(to: file, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        let temporary = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).\(UUID().uuidString).tmp")
+        let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
+        var closed = false
+        var renamed = false
+        defer {
+            if !closed { _ = Darwin.close(descriptor) }
+            if !renamed { _ = unlink(temporary.path) }
+        }
+        try data.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let count = Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw CocoaError(.fileWriteUnknown) }
+                offset += count
+            }
+        }
+        guard fsync(descriptor) == 0 else { throw CocoaError(.fileWriteUnknown) }
+        let result = Darwin.close(descriptor)
+        closed = true
+        guard result == 0 else { throw CocoaError(.fileWriteUnknown) }
+        guard rename(temporary.path, file.path) == 0 else { throw CocoaError(.fileWriteUnknown) }
+        renamed = true
     }
 }
 

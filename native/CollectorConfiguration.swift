@@ -67,7 +67,7 @@ enum CollectorConfiguration {
         return true
     }
 
-    static func launch(runtime: URL, resources: URL, local: Bool = true, quotaOnly: Bool = false) throws -> CollectorLaunch {
+    static func launch(runtime: URL, resources: URL, quotaOnly: Bool = false) throws -> CollectorLaunch {
         _ = try read(runtime: runtime)
         // Use the updated bundled Mac collector.
         // Retained scripts can still contain retired source invocations.

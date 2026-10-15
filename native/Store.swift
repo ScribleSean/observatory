@@ -114,12 +114,11 @@ final class ObservatoryStore: ObservableObject {
         guard process == nil, !pairingMaintenance else { return }
         ensureTrustedSync()
         guard let resources = Bundle.main.resourceURL,
-              let local = try? CollectorConfiguration.prepare(runtime: runtime),
-              let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, local: local, quotaOnly: quotaOnly) else {
+              (try? CollectorConfiguration.prepare(runtime: runtime)) != nil,
+              let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, quotaOnly: quotaOnly) else {
             lastAttempt = "runtime-unavailable"
             return
         }
-        localCollection = local
         let task = Process()
         task.executableURL = launch.executable
         task.arguments = launch.arguments

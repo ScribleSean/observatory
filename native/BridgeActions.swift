@@ -5,8 +5,10 @@ import ServiceManagement
 import UniformTypeIdentifiers
 
 func bridgeChildEnvironment() -> [String: String] {
-    var environment = ProcessInfo.processInfo.environment
-    for key in ["NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS"] { environment.removeValue(forKey: key) }
+    // Use an allowlist so loader, Node, OpenSSL and libuv variables never reach a child.
+    let inherited = ProcessInfo.processInfo.environment
+    var environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
+    for key in ["HOME", "USER", "LOGNAME", "LANG", "TMPDIR"] { environment[key] = inherited[key] }
     return environment
 }
 
@@ -92,7 +94,7 @@ final class BridgePairingSession {
         guard !closed, pending.isEmpty else { return }
         send(["action": "status"]) { [weak self] reply in
             guard let self else { return }
-            if reply == nil || ["acknowledged", "unavailable"].contains(reply!.status) { self.end() }
+            if reply == nil || ["acknowledged", "unavailable", "inactive", "cancelled"].contains(reply!.status) { self.end() }
         }
     }
 
@@ -142,7 +144,8 @@ final class BridgePairingSession {
                 if reply.status == "awaiting-confirmation" { code = .done } else { self.end() }
             case "pairing-join-confirm":
                 if reply.status == "acknowledged" { code = .done; self.end() }
-                else if !["local-ready", "awaiting-confirmation"].contains(reply.status) { self.end() }
+                else if reply.status == "local-ready" { code = .done }
+                else if reply.status != "awaiting-confirmation" { self.end() }
             default: break
             }
             completion(code, value)
@@ -413,7 +416,7 @@ final class MacBridgeHost: BridgeHost {
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
                     startup: SMAppService.mainApp.status == .enabled, appearance: viewer.appearance, limitsConsent: limits,
                     pairingState: session?.state ?? paired.state, peerFingerprint: session?.fingerprint,
-                    transport: session == nil ? paired.transport : "tls", invitationKept: session?.invitation != nil, sharing: shared)
+                    transport: paired.transport, invitationKept: session?.invitation != nil, sharing: shared)
                 let value = BridgeStatusInput.bridgeStatusValue(input)
                 completion(value == nil ? .unavailable : .done, value)
             }
@@ -550,6 +553,9 @@ func runBridgeActionSelfTests() {
         precondition(code == .done && NSDictionary(dictionary: join.commands.last!).isEqual(to: ["action": "join-claim", "invitation": invitation]))
         join.reply("local-ready")
         joining.perform(action: "pairing-join-confirm", args: [:], completion: result)
+        precondition(code == .done && !joining.closed)
+        join.reply("awaiting-confirmation")
+        joining.perform(action: "pairing-join-confirm", args: [:], completion: result)
         precondition(code == .unavailable && !joining.closed)
         join.reply("acknowledged")
         joining.perform(action: "pairing-join-confirm", args: [:], completion: result)
@@ -589,21 +595,38 @@ func runBridgeActionSelfTests() {
         let finishing = try! BridgePairingSession(factory: { pollDone }, pollInterval: 60) { _ in }
         pollDone.reply("acknowledged"); finishing.poll(); precondition(finishing.closed)
 
+        for status in ["inactive", "cancelled"] {
+            let control = BridgeActionFake()
+            var stopped = false
+            let polling = try! BridgePairingSession(factory: { control }, pollInterval: 60) { stopped = $0 }
+            control.reply("hosting", invitation: invitation)
+            polling.perform(action: "pairing-host-start", args: ["address": .string("10.0.0.1"), "port": .integer(43128)], completion: result)
+            precondition(polling.invitation == invitation)
+            control.reply(status)
+            polling.poll()
+            precondition(polling.closed && polling.invitation == nil && stopped && control.closed == 1)
+        }
+
         let expired = BridgeActionFake()
         let expiring = try! BridgePairingSession(factory: { expired }, pollInterval: 60, limit: 0.01) { _ in }
         let deadline = Date().addingTimeInterval(1)
         while !expiring.closed && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.005)) }
         precondition(expiring.closed && expired.closed == 1)
 
-        let keys = ["NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS"]
+        let keys = ["NODE_OPTIONS", "OPENSSL_CONF", "NODE_TLS_REJECT_UNAUTHORIZED", "UV_THREADPOOL_SIZE", "DYLD_INSERT_LIBRARIES", "NODE_PATH"]
         let original = ProcessInfo.processInfo.environment
-        for key in keys { setenv(key, "synthetic", 1) }
-        let environment = bridgeChildEnvironment()
-        for key in keys {
-            precondition(environment[key] == nil)
-            if let value = original[key] { setenv(key, value, 1) } else { unsetenv(key) }
+        do {
+            for key in keys { setenv(key, "synthetic", 1) }
+            defer {
+                for key in keys {
+                    if let value = original[key] { setenv(key, value, 1) } else { unsetenv(key) }
+                }
+            }
+            let environment = bridgeChildEnvironment()
+            for key in keys { precondition(environment[key] == nil) }
+            precondition(environment["PATH"] == "/usr/bin:/bin:/usr/sbin:/sbin")
+            precondition(Set(environment.keys).isSubset(of: ["PATH", "HOME", "USER", "LOGNAME", "LANG", "TMPDIR"]))
         }
-        for (key, value) in original where !keys.contains(key) { precondition(environment[key] == value) }
 
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-bridge-actions-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: runtime) }
