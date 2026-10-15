@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 void test('example source configuration does not offer retired readers',async()=>{
   const config=JSON.parse(await readFile(path.join(root,'local.config.example.json'),'utf8'));
-  for(const key of ['ubuntuCcusage','ubuntuHost','ubuntuCodexHome','windowsCodexHome','localModelResults'])
+  for(const key of ['ubuntuCcusage','ubuntuHost','ubuntuCodexHome','windowsCodexHome'])
     assert.equal(Object.hasOwn(config,key),false,key);
   assert.ok(config.macCodexHome);
   assert.ok(config.windowsHost);

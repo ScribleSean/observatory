@@ -122,17 +122,13 @@ void test('Mac legacy collection uses bundled scripts, not retained WSL-capable 
     'Legacy collection still launches retained scripts',
   );
   assert.ok(
-    text.includes('local ? "collect-mac.mjs" : "collect-dashboard.mjs"'),
-    'Legacy configuration needs the bundled cross-device collector',
+    text.includes('"collect-mac.mjs"') && !text.includes('"collect-dashboard.mjs"'),
+    'Every configuration needs the bundled Mac collector',
   );
   assert.ok(
     text.includes('"--runtime", runtime.path') &&
       text.includes('"--collector", collector.path'),
     'The bundled collector must receive the unchanged data directory',
-  );
-  assert.ok(
-    text.includes('if quotaOnly && !local'),
-    'Legacy allowance-only collection must remain gated',
   );
 });
 

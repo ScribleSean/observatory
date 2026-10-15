@@ -67,7 +67,6 @@ export function demoData() {
       windows:[{bucket:'codex',window:'primary',remainingPercent:43,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'}],
       history:[{checkedAt:'2026-09-08T19:35:00.000Z',windows:[{bucket:'codex',window:'primary',remainingPercent:49,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'}]},
         {checkedAt:'2026-09-08T19:55:00.000Z',windows:[{bucket:'codex',window:'primary',remainingPercent:43,durationMinutes:300,resetsAt:'2026-09-09T00:00:00Z'}]}]},
-    localModel:{status:'not-connected'},
   };
 }
 export async function writeDemo(dir) {

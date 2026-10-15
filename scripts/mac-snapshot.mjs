@@ -45,7 +45,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
     tokens:[tokens,disconnected('Windows')],combinedTokens:unavailable('All'),
     settings:[settings],combinedSettings:unavailable('All'),
     dictation:[{...wispr,source:'Wispr Flow'}],
-    agents:[],agentSource:disconnected('Local'),quota:disconnected('Codex account'),localModel:disconnected('Ubuntu')};
+    agents:[],agentSource:disconnected('Local'),quota:disconnected('Codex account')};
   data.activityHistory=retainActivityHistory(previous,data.activity,at);
   const sources=[...data.activity,...data.tokens,...data.settings,...data.dictation].filter(source=>source.status!=='not-connected');
   const sourcesRead=sources.filter(source=>source.status==='ok').length;

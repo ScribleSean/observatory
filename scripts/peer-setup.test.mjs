@@ -8,6 +8,8 @@ import {ensureWindowsPairing} from './peer-setup-endpoint.mjs';
 import {readPairing,readPendingPairing,createPairingConfigurations,initializePairing,
   preparePendingPairing,activatePendingPairing} from './peer-pairing.mjs';
 import {revokePairing} from './peer-revocation.mjs';
+import {preparePairingRepair} from './peer-repair.mjs';
+import {readRepairConsent} from './peer-repair-consent.mjs';
 
 async function fixture(t) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-setup-')));
@@ -16,6 +18,20 @@ async function fixture(t) {
 const request=()=>({transport:{kind:'ssh-windows',hostAlias:'fixture-host',
   remoteNode:'C:/Test/Runtime/node.exe',remoteScript:'C:/Test/Collector/peer-exchange.mjs',remoteRuntime:'C:/Test/Private'}});
 const sendTo=windows=>async(_transport,pairing)=>ensureWindowsPairing(windows,{version:1,pairing},'win32');
+
+test('SSH endpoint requires both repair confirmations before writing a pairing',async t=>{
+  const repaired=await fixture(t),unrepaired=await fixture(t);
+  await initializePairing(repaired,createPairingConfigurations().Windows);
+  await preparePairingRepair(repaired);
+  const nonce=await readRepairConsent(repaired);
+  assert.match(nonce,/^[a-f0-9]{64}$/);
+  for(const [runtime,repair] of [[repaired,{windows:nonce}],[unrepaired,{mac:'a'.repeat(64)}]]) {
+    const pairing={...createPairingConfigurations().Windows,repair};
+    await assert.rejects(ensureWindowsPairing(runtime,{version:1,pairing},'win32'),
+      {message:'Fresh confirmation on both devices required'});
+    await assert.rejects(access(path.join(runtime,'private-sync/pairing.json')),{code:'ENOENT'});
+  }
+});
 
 test('SSH setup rejects TLS before staging a pairing or contacting the peer',async t=>{
   const mac=await fixture(t),transport={kind:'tls',address:'100.64.0.2',port:43128};

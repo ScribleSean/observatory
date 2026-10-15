@@ -46,7 +46,6 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
     ubuntuCodexHome: '/home/fixture/.codex',
     windowsCodexHome: '/mnt/c/Users/fixture/.codex',
     receiptDirectory: receipts,
-    localModelResults: '/home/fixture/results',
     dictation: { mac: false, windows: false },
   });
   await writeFile(path.join(runtime, 'local.config.json'), config);
@@ -104,7 +103,6 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
     );
     assert.deepEqual(data.agents, []);
     assert.equal(data.agentSource.status, 'not-connected');
-    assert.equal(data.localModel.status, 'not-connected');
     assert.equal(
       await readFile(path.join(runtime, 'local.config.json'), 'utf8'),
       config,

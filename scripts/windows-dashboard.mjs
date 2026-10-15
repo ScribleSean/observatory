@@ -36,7 +36,7 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     tokens:[disconnected('Mac'),attachTokenHours(tokenSource(localSettings),hourTotals)],combinedTokens:unavailable('All'),
     settings:[localSettings],combinedSettings:unavailable('All'),
     dictation:[{...wispr,source:'Wispr Flow'}],agents:[],agentSource:disconnected('Local'),
-    quota:disconnected('Codex account'),localModel:disconnected('Ubuntu')};
+    quota:disconnected('Codex account')};
   data.activityHistory=retainActivityHistory(previous,data.activity,at);
   const sources=[...data.activity,...data.tokens,...data.settings,...data.dictation].filter(source=>source.status!=='not-connected');
   const read=sources.filter(source=>source.status==='ok').length;

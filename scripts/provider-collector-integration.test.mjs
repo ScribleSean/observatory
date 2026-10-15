@@ -86,7 +86,6 @@ test('Mac collection ignores saved receipt and benchmark settings',
     const result=await collectMac(runtime,python);
     assert.deepEqual(result.data.agents,[]);
     assert.deepEqual(result.data.agentSource,{host:'Local',status:'not-connected'});
-    assert.deepEqual(result.data.localModel,{host:'Ubuntu',status:'not-connected'});
     assert.equal(result.status.sourcesConfigured,0);
     const published=await readFile(path.join(runtime,'public/local/usage.json'),'utf8');
     assert.ok(!published.includes(receipts));

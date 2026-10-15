@@ -42,11 +42,17 @@ test('a partial optional source prevents an all-sources-success status',async t=
   const s=await status(root);
   assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,2);
 });
-test('empty workflow slots do not count as configured sources',async t=>{
-  const root=await fixture(t,success.replace('settings:[]',"settings:[],agents:[],agentSource:{host:'Local',status:'not-connected'},localModel:{host:'Ubuntu',status:'not-connected'}"));
+test('runner loads saved localModel without counting it as a source',async t=>{
+  const root=await fixture(t,`const fs=require('fs');const saved=JSON.parse(fs.readFileSync('public/local/usage.json'));saved.collectedAt=new Date().toISOString();fs.writeFileSync('public/local/usage.json',JSON.stringify(saved));`);
+  await mkdir(path.join(root,'public/local'),{recursive:true});
+  const saved={collectedAt:'2026-09-09T12:00:00Z',activity:[{status:'ok'}],tokens:[],settings:[],
+    agents:[],agentSource:{host:'Local',status:'not-connected'},quota:{status:'ok'},
+    localModel:{host:'Ubuntu',status:'unavailable',records:[{model:'fixture',output:2}]}};
+  await writeFile(path.join(root,'public/local/usage.json'),JSON.stringify(saved));
   assert.equal(run(root),'ok');
   const s=await status(root);
-  assert.equal(s.state,'ok');assert.equal(s.sourcesRead,1);assert.equal(s.sourcesConfigured,1);
+  assert.equal(s.sourcesRead,2);assert.equal(s.sourcesConfigured,2);
+  assert.deepEqual(JSON.parse(await readFile(path.join(root,'public/local/usage.json'),'utf8')).localModel,saved.localModel);
 });
 test('wrapper health includes configured provider token sources and excludes disabled ones',async t=>{
   for(const [sourceState,read,configured,state] of [['ok',2,2,'ok'],['unavailable',1,2,'partial'],['not-connected',1,1,'ok']]) {

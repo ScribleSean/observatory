@@ -16,7 +16,7 @@ async function ensureWindowsPairingLocked(runtime,request,platform) {
   const desired=validatePairing(request.pairing);
   if(desired.local.host!=='Windows' || desired.transport)throw Error('Windows pairing required');
   const consent=await readRepairConsent(runtime);
-  if((consent || desired.repair) && (!consent || desired.repair?.windows!==consent))
+  if((consent || desired.repair) && (!consent || !desired.repair?.mac || desired.repair?.windows!==consent))
     throw Error('Fresh confirmation on both devices required');
   let existing=await readPairing(runtime);
   if(!existing) {

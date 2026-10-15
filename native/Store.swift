@@ -31,6 +31,7 @@ final class ObservatoryStore: ObservableObject {
         let counts = snapshot.sourceCounts
         return counts.total > 0 && counts.read == counts.total
     }
+    private var refreshAfterLimits = false
     private var process: Process?
     private var trustedSync: TrustedSyncProcess?
     private var pollTimer: Timer?
@@ -97,6 +98,14 @@ final class ObservatoryStore: ObservableObject {
         refresh(quotaOnly: true)
     }
 
+    func refreshLimitsFirst() {
+        guard !refreshing else { return }
+        if (try? CollectorConfiguration.read(runtime: runtime)["quota"]) == true {
+            refresh(quotaOnly: true)
+            refreshAfterLimits = refreshing
+        } else { refresh() }
+    }
+
     func refresh(quotaOnly: Bool = false) {
         guard !shuttingDown else { return }
         guard !collectionPausedForPairing else { lastAttempt = "pairing-paused"; return }
@@ -105,13 +114,13 @@ final class ObservatoryStore: ObservableObject {
         guard process == nil, !pairingMaintenance else { return }
         ensureTrustedSync()
         guard let resources = Bundle.main.resourceURL,
-              let local = try? CollectorConfiguration.prepare(runtime: runtime),
-              let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, local: local, quotaOnly: quotaOnly) else {
+              (try? CollectorConfiguration.prepare(runtime: runtime)) != nil,
+              let launch = try? CollectorConfiguration.launch(runtime: runtime, resources: resources, quotaOnly: quotaOnly) else {
             lastAttempt = "runtime-unavailable"
             return
         }
-        localCollection = local
         let task = Process()
+        task.environment = collectorChildEnvironment()
         task.executableURL = launch.executable
         task.arguments = launch.arguments
         task.currentDirectoryURL = runtime
@@ -140,6 +149,10 @@ final class ObservatoryStore: ObservableObject {
                     self.process = nil
                     self.refreshing = false
                     self.reload()
+                    if self.refreshAfterLimits {
+                        self.refreshAfterLimits = false
+                        self.refresh()
+                    }
                 }
             }
         }
@@ -199,8 +212,18 @@ enum WebViewerPreferences {
     static let appearanceKey = "observatoryAppearance"
     static let skins: Set<String> = ["sage", "almanac", "amber-crt", "instrument"]
 
-    static func skin(_ defaults: UserDefaults = .standard) -> String { skin(stored: defaults.string(forKey: skinKey)) }
-    static func theme(_ defaults: UserDefaults = .standard) -> String? { theme(stored: defaults.string(forKey: appearanceKey)) }
+    static func skin(runtime: URL) -> String { ViewerSettingsFile.read(runtime: runtime).skin }
+    static func theme(runtime: URL) -> String? { theme(stored: ViewerSettingsFile.read(runtime: runtime).appearance) }
+
+    static func migrateIfNeeded(runtime: URL, defaults: UserDefaults = .standard) {
+        let marker = "observatoryViewerSettingsMigrated"
+        guard !defaults.bool(forKey: marker) else { return }
+        if ViewerSettingsFile.migrate(runtime: runtime, storedSkin: defaults.string(forKey: skinKey),
+                                      storedAppearance: defaults.string(forKey: appearanceKey)) {
+            defaults.removeObject(forKey: skinKey)
+            defaults.set(true, forKey: marker)
+        }
+    }
 
     static func skin(stored value: String?) -> String {
         guard let value, skins.contains(value) else { return "sage" }

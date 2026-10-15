@@ -1,15 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,writeFile,readFile,mkdir,lstat,symlink,readdir,rm,chmod,unlink} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
-import childProcess from 'node:child_process';
 import fsPromises from 'node:fs/promises';
 import {syncBuiltinESMExports} from 'node:module';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {archiveMacSnapshot,retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
-import {privateCollectorDirectory} from './peer-directory.mjs';
-import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 const options={skip:process.platform!=='darwin'};
 async function fixture(t) {
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-snapshot-archive-')));
@@ -44,118 +40,6 @@ async function nativeCollect(f,options) {
     : (await import('./collect-mac.mjs')).collectMac(f.runtime,'/unused-python',null,options);
 }
 const nativeOptions={skip:!['win32','darwin'].includes(process.platform)};
-test('native retirement saves exact old evidence privately before replacing the snapshot',
-  nativeOptions,async t=>{
-    const f=await retirementFixture(t);
-    await nativeCollect(f);
-    assert.deepEqual(await readFile(f.archive),retiredBytes);
-    const receipt=JSON.parse(await readFile(f.receipt,'utf8'));
-    assert.equal(receipt.collectedAt,'2026-09-09T12:00:00.000Z');
-    assert.equal(receipt.bytes,retiredBytes.length);
-    assert.equal(receipt.reason,'source-retirement');
-    assert.equal(receipt.source,'public/local/usage.json');
-    const data=JSON.parse(await readFile(f.file,'utf8'));
-    assert.equal(data.tokens.some(source=>source.host==='Ubuntu'),false);
-    assert.equal(data.settings.some(source=>source.host==='Ubuntu'),false);
-    assert.equal(data.localModel?.records,undefined);
-    assert.equal(data.combinedTokens.status,'unavailable');
-    assert.equal(JSON.stringify(data).includes(f.runtime),false);
-    assert.equal(JSON.stringify(data).includes('retirement-snapshot'),false);
-    assert.equal(await readFile(path.join(f.runtime,'collector.config.json'),'utf8'),f.config);
-    assert.equal(await readFile(path.join(f.runtime,'original-record.json'),'utf8'),'fictional-original-record-bytes');
-    const receiptBytes=await readFile(f.receipt);
-    await nativeCollect(f);
-    assert.deepEqual(await readFile(f.receipt),receiptBytes);
-    assert.deepEqual((await readdir(path.dirname(f.archive))).sort(),['retirement-receipt.json','retirement-snapshot.json']);
-    if(process.platform!=='win32')for(const file of [f.archive,f.receipt,path.dirname(f.archive)])
-      assert.equal((await lstat(file)).mode&0o077,0);
-  });
-
-test('retirement retry reuses one exact checkpoint without refreshing its provenance',async t=>{
-  const f=await retirementFixture(t),before=await lstat(f.file,{bigint:true});
-  const guard=await retirementSnapshotGuard(f.runtime);
-  await guard.preserve();
-  const receiptBytes=await readFile(f.receipt),receipt=JSON.parse(receiptBytes);
-  assert.equal(receipt.sha256,createHash('sha256').update(retiredBytes).digest('hex'));
-  assert.equal(receipt.sourceMtimeNs,String(before.mtimeNs));
-  assert.equal(receipt.sourceCtimeNs,String(before.ctimeNs));
-  assert.equal(receipt.sourceBirthtimeNs,String(before.birthtimeNs));
-  assert.ok(Number.isFinite(Date.parse(receipt.archivedAt)));
-  for(let attempt=0;attempt<3;attempt++)await (await retirementSnapshotGuard(f.runtime)).preserve();
-  assert.deepEqual(await readFile(f.receipt),receiptBytes);
-  assert.deepEqual(await readFile(f.archive),retiredBytes);
-  assert.deepEqual(await readFile(f.file),retiredBytes);
-  assert.deepEqual((await readdir(path.dirname(f.archive))).sort(),['retirement-receipt.json','retirement-snapshot.json']);
-});
-
-test('retirement resumes a complete copy interrupted before its receipt',async t=>{
-  const f=await retirementFixture(t);
-  await (await retirementSnapshotGuard(f.runtime)).preserve();
-  await unlink(f.receipt);
-  await (await retirementSnapshotGuard(f.runtime)).preserve();
-  assert.deepEqual(await readFile(f.archive),retiredBytes);
-  assert.equal(JSON.parse(await readFile(f.receipt)).bytes,retiredBytes.length);
-  assert.deepEqual(await readFile(f.file),retiredBytes);
-});
-
-async function privateArchive(f) {
-  const control=path.join(f.runtime,'.runtime');
-  await mkdir(control,{mode:0o700});
-  return privateCollectorDirectory(control,'private-repair',true);
-}
-function windowsAcl(file,grant=false) {
-  const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
-  const literal="'"+file.replaceAll("'","''")+"'";
-  if(grant)childProcess.execFileSync(path.join(process.env.SystemRoot || 'C:/Windows','System32/icacls.exe'),
-    [file,'/grant','*S-1-1-0:(R)'],{encoding:'utf8',timeout:15000});
-  const input=`$ErrorActionPreference='Stop'; (Get-Acl -LiteralPath ${literal}).Sddl`;
-  return childProcess.execFileSync(executable,['-NoProfile','-NonInteractive','-Command','-'],
-    {input,encoding:'utf8',timeout:15000,env:windowsPowerShellEnvironment()}).trim();
-}
-
-test('unsafe archive directory stops the native collector without changing the current snapshot',nativeOptions,async t=>{
-  const f=await retirementFixture(t),outside=path.join(f.runtime,'outside');
-  await mkdir(outside,{mode:0o700});await mkdir(path.join(f.runtime,'.runtime'),{mode:0o700});
-  await symlink(outside,path.dirname(f.archive),process.platform==='win32'?'junction':'dir');
-  await assert.rejects(nativeCollect(f));await assert.rejects(nativeCollect(f));
-  assert.deepEqual(await readFile(f.file),retiredBytes);
-  assert.deepEqual(await readdir(outside),[]);
-});
-
-test('broad archive permissions are refused without silently repairing directory or file access',async t=>{
-  for(const target of ['directory','snapshot','receipt'])await t.test(target,async t=>{
-    const f=await retirementFixture(t);
-    if(target==='directory')await privateArchive(f);else await (await retirementSnapshotGuard(f.runtime)).preserve();
-    const file=target==='directory'?path.dirname(f.archive):target==='snapshot'?f.archive:f.receipt;
-    let before;
-    if(process.platform==='win32')before=windowsAcl(file,true);
-    else {await chmod(file,target==='directory'?0o755:0o644);before=(await lstat(file)).mode;}
-    await assert.rejects((await retirementSnapshotGuard(f.runtime)).preserve());
-    assert.equal(process.platform==='win32'?windowsAcl(file):(await lstat(file)).mode,before);
-    assert.deepEqual(await readFile(f.file),retiredBytes);
-  });
-});
-
-test('a failed receipt write keeps the current snapshot and retries reuse the completed copy',nativeOptions,async t=>{
-  const f=await retirementFixture(t),originalOpen=fsPromises.open;
-  fsPromises.open=async(file,...args)=>{
-    if(file===f.receipt)throw Object.assign(Error('Synthetic disk failure'),{code:'EIO'});
-    return originalOpen(file,...args);
-  };
-  syncBuiltinESMExports();
-  try {
-    for(let attempt=0;attempt<2;attempt++) {
-      await assert.rejects(nativeCollect(f),/Synthetic disk failure/);
-      assert.deepEqual(await readFile(f.file),retiredBytes);
-      assert.deepEqual(await readFile(f.archive),retiredBytes);
-      assert.deepEqual(await readdir(path.dirname(f.archive)),['retirement-snapshot.json']);
-    }
-  } finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
-  await nativeCollect(f);
-  assert.notDeepEqual(await readFile(f.file),retiredBytes);
-  assert.deepEqual(await readFile(f.archive),retiredBytes);
-});
-
 test('a zero-filled or empty snapshot counts as a first collection while other damage still fails closed',async t=>{
   for(const bytes of [Buffer.alloc(0),Buffer.alloc(4096)]) {
     const f=await retirementFixture(t);
@@ -175,23 +59,6 @@ test('a zero-filled or empty snapshot counts as a first collection while other d
     await writeFile(f.file,bytes);
     await assert.rejects(retirementSnapshotGuard(f.runtime));
   }
-});
-
-test('different or corrupt checkpoints fail closed instead of growing or overwriting retained evidence',async t=>{
-  for(const damage of ['different-source','partial-copy','corrupt-receipt','hardlink'])await t.test(damage,async t=>{
-    const f=await retirementFixture(t);
-    await (await retirementSnapshotGuard(f.runtime)).preserve();
-    if(damage==='different-source')await writeFile(f.file,retiredBytes.toString().replace('42','43'));
-    if(damage==='partial-copy')await writeFile(f.archive,'{');
-    if(damage==='corrupt-receipt')await writeFile(f.receipt,'{}');
-    if(damage==='hardlink')await fsPromises.link(f.archive,path.join(f.runtime,'aliased-evidence.json'));
-    const current=await readFile(f.file),saved=await readFile(f.archive),receipt=await readFile(f.receipt);
-    for(let attempt=0;attempt<2;attempt++)await assert.rejects((await retirementSnapshotGuard(f.runtime)).preserve());
-    assert.deepEqual(await readFile(f.file),current);
-    assert.deepEqual(await readFile(f.archive),saved);
-    assert.deepEqual(await readFile(f.receipt),receipt);
-    assert.deepEqual((await readdir(path.dirname(f.archive))).sort(),['retirement-receipt.json','retirement-snapshot.json']);
-  });
 });
 
 test('source removal during the actual read is a race, not an absent first snapshot',async t=>{
@@ -215,18 +82,18 @@ test('a source replaced after history was read is never archived as the original
   await assert.rejects(lstat(f.archive),{code:'ENOENT'});
 });
 
-test('a source changed during archiving is not replaced after saving earlier evidence',nativeOptions,async t=>{
-  const f=await retirementFixture(t),originalOpen=fsPromises.open;
+test('a source changed during the final unchanged check refuses replacement',async t=>{
+  const f=await retirementFixture(t),guard=await retirementSnapshotGuard(f.runtime),originalOpen=fsPromises.open;
   const changed=Buffer.from(retiredBytes.toString().replace('42','43'));
+  let reads=0;
   fsPromises.open=async(file,...args)=>{
-    if(file===f.receipt && args[0]==='wx')await writeFile(f.file,changed);
+    if(file===f.file && ++reads===2)await writeFile(f.file,changed);
     return originalOpen(file,...args);
   };
   syncBuiltinESMExports();
-  try {await assert.rejects(nativeCollect(f),/Snapshot changed/);}
+  try {await assert.rejects(guard.preserve(),/Changing snapshot/);}
   finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
   assert.deepEqual(await readFile(f.file),changed);
-  assert.deepEqual(await readFile(f.archive),retiredBytes);
 });
 
 test('a stale temporary-file alias cannot overwrite evidence before the archive guard',nativeOptions,async t=>{
@@ -239,39 +106,6 @@ test('a stale temporary-file alias cannot overwrite evidence before the archive 
   assert.deepEqual(await readFile(f.file),retiredBytes);
 });
 
-test('retry flushes a completed copy whose first durability sync failed',nativeOptions,async t=>{
-  const f=await retirementFixture(t),originalOpen=fsPromises.open;
-  let fail=true,syncs=0;
-  fsPromises.open=async(file,...args)=>{
-    const handle=await originalOpen(file,...args);
-    if(file===f.archive) {
-      const sync=handle.sync.bind(handle);
-      handle.sync=async()=>{syncs++;if(fail)throw Error('Synthetic flush failure');return sync();};
-    }
-    return handle;
-  };
-  syncBuiltinESMExports();
-  try {
-    await assert.rejects(nativeCollect(f),/Synthetic flush failure/);
-    assert.deepEqual(await readFile(f.file),retiredBytes);
-    fail=false;
-    await nativeCollect(f);
-    assert.ok(syncs>1,'the existing recovery copy must be flushed on retry');
-  } finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
-});
-
-test('archive corruption during receipt publication prevents snapshot replacement',nativeOptions,async t=>{
-  const f=await retirementFixture(t),originalOpen=fsPromises.open;
-  fsPromises.open=async(file,...args)=>{
-    if(file===f.receipt && args[0]==='wx')await writeFile(f.archive,'{}');
-    return originalOpen(file,...args);
-  };
-  syncBuiltinESMExports();
-  try {await assert.rejects(nativeCollect(f));}
-  finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
-  assert.deepEqual(await readFile(f.file),retiredBytes);
-});
-
 test('missing snapshots and disconnected retired placeholders create no archives',async t=>{
   const f=await retirementFixture(t);await unlink(f.file);
   await (await retirementSnapshotGuard(f.runtime)).preserve();
@@ -280,47 +114,6 @@ test('missing snapshots and disconnected retired placeholders create no archives
   await writeFile(f.file,JSON.stringify(clean));
   await (await retirementSnapshotGuard(f.runtime)).preserve();
   await assert.rejects(lstat(path.dirname(f.archive)),{code:'ENOENT'});
-});
-
-test('empty local-model observations retain one exact retirement checkpoint',async t=>{
-  for(const localModel of [
-    {host:'Ubuntu',status:'ok',records:[],checkedAt:'2026-09-09T11:59:00.000Z'},
-    {host:'Ubuntu',status:'unavailable',checkedAt:'2026-09-09T11:58:00.000Z'},
-    {host:'Ubuntu',status:'not-connected',checkedAt:'2026-09-09T11:57:00.000Z'}
-  ])await t.test(localModel.status,async t=>{
-    const f=await retirementFixture(t);
-    const bytes=Buffer.from(JSON.stringify({schema:2,collectedAt:'2026-09-09T12:00:00.000Z',
-      activityHistory:[],localModel},null,2)+'\r\n');
-    await writeFile(f.file,bytes);
-    const guard=await retirementSnapshotGuard(f.runtime);
-    await guard.preserve();
-    const retained=await readFile(f.archive).catch(error=>{if(error.code==='ENOENT')return null;throw error;});
-    assert.notEqual(retained,null,'An empty observation is evidence, not a bare disconnected placeholder');
-    assert.deepEqual(retained,bytes);
-    assert.deepEqual(await readFile(f.file),bytes);
-    assert.deepEqual(guard.history,[]);
-    const receiptBytes=await readFile(f.receipt),receipt=JSON.parse(receiptBytes);
-    assert.equal(receipt.collectedAt,'2026-09-09T12:00:00.000Z');
-    assert.equal(receipt.bytes,bytes.length);
-    assert.equal(receipt.sha256,createHash('sha256').update(bytes).digest('hex'));
-    await (await retirementSnapshotGuard(f.runtime)).preserve();
-    assert.deepEqual(await readFile(f.archive),bytes);
-    assert.deepEqual(await readFile(f.receipt),receiptBytes);
-    assert.deepEqual((await readdir(path.dirname(f.archive))).sort(),['retirement-receipt.json','retirement-snapshot.json']);
-  });
-});
-
-test('each retired evidence channel alone triggers an exact checkpoint',async t=>{
-  const original=JSON.parse(retiredBytes);
-  for(const channel of ['tokens','settings','localModel'])await t.test(channel,async t=>{
-    const f=await retirementFixture(t);
-    const bytes=Buffer.from(JSON.stringify({schema:2,collectedAt:original.collectedAt,[channel]:original[channel]},null,4)+'\n');
-    await writeFile(f.file,bytes);
-    const guard=await retirementSnapshotGuard(f.runtime);
-    await guard.preserve();
-    assert.deepEqual(await readFile(f.archive),bytes);
-    assert.equal(JSON.stringify(guard.history).includes('Ubuntu'),false);
-  });
 });
 
 test('unsafe or invalid source snapshots never authorize replacement',async t=>{
@@ -379,3 +172,107 @@ test('invalid, oversized and non-file inputs leave no archive',options,async t=>
   await assert.rejects(archiveMacSnapshot(f.root,f.archive));
   assert.deepEqual(await readdir(f.archive),[]);
 });
+
+test('saved localModel loads for history and full collection leaves leftover checkpoints unchanged',nativeOptions,async t=>{
+  const f=await retirementFixture(t),saved=JSON.parse(retiredBytes);
+  const day={date:'2026-09-09',seconds:12,hours:[12,...Array(23).fill(0)],categories:{},apps:{},windowStart:null,windowEnd:null};
+  saved.activityHistory=[{host:'Mac',status:'ok',asOf:saved.collectedAt,days:[day]}];
+  await writeFile(f.file,JSON.stringify(saved));
+  await mkdir(path.dirname(f.archive),{recursive:true,mode:0o700});
+  const checkpoints=[Buffer.from('{fictional incomplete snapshot'),Buffer.from('{"fictional":"conflicting receipt"}\r\n')];
+  await writeFile(f.archive,checkpoints[0]);await writeFile(f.receipt,checkpoints[1]);
+  const guard=await retirementSnapshotGuard(f.runtime);
+  assert.deepEqual(guard.history,saved.activityHistory);
+  await guard.preserve();
+  await nativeCollect(f);
+  const next=JSON.parse(await readFile(f.file,'utf8'));
+  assert.equal(Object.hasOwn(next,'localModel'),false);
+  assert.deepEqual(next.activityHistory.find(row=>row.host==='Mac').days,[day]);
+  assert.deepEqual(await readFile(f.archive),checkpoints[0]);
+  assert.deepEqual(await readFile(f.receipt),checkpoints[1]);
+});
+
+test('a failed final rename preserves the snapshot and a retry publishes a new snapshot',nativeOptions,async t=>{
+  const f=await retirementFixture(t),before=await lstat(f.file,{bigint:true}),originalRename=fsPromises.rename;
+  let failed=false;
+  fsPromises.rename=async(from,to)=>{
+    if(to===f.file && !failed) {
+      failed=true;
+      throw Object.assign(Error('Synthetic final rename failure'),{code:'EIO'});
+    }
+    return originalRename(from,to);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(nativeCollect(f),{code:'EIO',message:'Synthetic final rename failure'});
+    assert.equal(failed,true);
+    assert.deepEqual(await readFile(f.file),retiredBytes);
+    const after=await lstat(f.file,{bigint:true});
+    for(const key of ['dev','ino','size','mtimeNs'])assert.equal(after[key],before[key]);
+    assert.deepEqual((await readdir(path.dirname(f.file))).sort(),['collector.json','usage.json']);
+    await nativeCollect(f);
+    const next=await readFile(f.file);
+    assert.notDeepEqual(next,retiredBytes);
+    assert.equal(JSON.parse(next).schema,2);
+    assert.notEqual(JSON.parse(next).collectedAt,JSON.parse(retiredBytes).collectedAt);
+    assert.deepEqual((await readdir(path.dirname(f.file))).sort(),['collector.json','usage.json']);
+  } finally {fsPromises.rename=originalRename;syncBuiltinESMExports();}
+});
+
+for(const damage of ['snapshot broad permissions','snapshot hardlink'])
+  test(`archive preparation refuses ${damage} after snapshot publication`,options,async t=>{
+    const f=await fixture(t),originalOpen=fsPromises.open;
+    let injected=false;
+    fsPromises.open=async(file,...args)=>{
+      const handle=await originalOpen(file,...args);
+      if(path.basename(file)==='snapshot.json' && args[0]==='wx') {
+        const close=handle.close.bind(handle);
+        handle.close=async()=>{
+          await close();
+          if(damage==='snapshot broad permissions')await chmod(file,0o640);
+          if(damage==='snapshot hardlink')await fsPromises.link(file,path.join(f.root,'archive-alias.json'));
+          injected=true;
+        };
+      }
+      return handle;
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(archiveMacSnapshot(f.file,f.archive),/Invalid snapshot file/);
+      assert.equal(injected,true);
+    } finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
+    assert.equal(await readFile(f.file,'utf8'),f.bytes);
+  });
+
+for(const damage of ['snapshot overwrite','receipt EIO','snapshot hardlink','receipt mismatch','snapshot broad permissions'])
+  test(`archive preparation refuses ${damage} during receipt publication`,options,async t=>{
+    const f=await fixture(t),originalOpen=fsPromises.open;
+    let injected=false;
+    fsPromises.open=async(file,...args)=>{
+      if(path.basename(file)==='receipt.json' && args[0]==='wx') {
+        injected=true;
+        const snapshot=path.join(path.dirname(file),'snapshot.json');
+        if(damage==='snapshot overwrite')await writeFile(snapshot,f.bytes.replace('42','43'));
+        if(damage==='receipt EIO')throw Object.assign(Error('Synthetic receipt failure'),{code:'EIO'});
+        if(damage==='snapshot hardlink')await fsPromises.link(snapshot,path.join(f.root,'archive-alias.json'));
+        if(damage==='snapshot broad permissions')await chmod(snapshot,0o640);
+        if(damage==='receipt mismatch') {
+          const handle=await originalOpen(file,...args),write=handle.writeFile.bind(handle);
+          handle.writeFile=async bytes=>write(JSON.stringify({...JSON.parse(bytes),bytes:0})+'\n');
+          return handle;
+        }
+      }
+      return originalOpen(file,...args);
+    };
+    syncBuiltinESMExports();
+    try {
+      const error=damage==='receipt EIO'?{code:'EIO',message:'Synthetic receipt failure'}:
+        damage==='receipt mismatch'?/Archive receipt verification failed/:
+        damage==='snapshot overwrite'?/Archive changed during verification/:
+        // The private-file ACL check runs first and refuses a linked or broad file before the byte read.
+        /Private path access-control verification failed|Invalid snapshot file/;
+      await assert.rejects(archiveMacSnapshot(f.file,f.archive),error);
+      assert.equal(injected,true);
+    } finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
+    assert.equal(await readFile(f.file,'utf8'),f.bytes);
+  });

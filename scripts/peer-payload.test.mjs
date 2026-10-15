@@ -40,6 +40,7 @@ test('either app derives the same combined dashboard without leaking private evi
   const mac=packet('Mac'),windows=packet('Windows');
   const a=mergePeerPayloads(mac,windows,config('Mac'),config('Windows'),[],now);
   const b=mergePeerPayloads(windows,mac,config('Windows'),config('Mac'),[],now);
+  assert.equal(Object.hasOwn(a,'localModel'),false);
   assert.deepEqual(a,b);assert.equal(a.combined.days[0].seconds,90);
   assert.equal(a.combinedTokens.days[0].totalTokens,24);
   assert.equal(a.tokens.some(s=>s.host==='Ubuntu'),false);

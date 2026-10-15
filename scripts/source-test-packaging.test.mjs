@@ -18,7 +18,6 @@ const testSetup = [
   'scripts/test-source-runtime.mjs',
   'scripts/test-file-symlink.mjs',
   'scripts/test-python.mjs',
-  'native/tests/archive-retirement-fixture.mjs',
 ];
 
 test('Mac Collector/scripts excludes source-test support', () => {
