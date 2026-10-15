@@ -105,31 +105,7 @@ test('Mac Dictation does not offer unimplemented ChatGPT as an active filter', (
   assert.ok(swift.includes('More local speech detection coming soon.'));
 });
 
-// This C# source contract is not a substitute for a Windows compile or UI run.
-test('Windows Dictation source excludes unimplemented ChatGPT from active filters', () => {
-  const csharp = readFileSync(
-    path.join(root, 'native/windows/NativeDictation.cs'),
-    'utf8',
-  );
-  const selector = csharp.match(
-    /Choice\("Tool", \[([^\]]*)\], dictationProduct/,
-  )?.[1];
-  assert.ok(selector, 'Tool selector is present');
-  assert.deepEqual(selector.match(/"[^"]+"/g), ['"All tools"', '"Wispr Flow"']);
-  assert.ok(csharp.includes(unimplemented));
-  assert.ok(
-    csharp.includes(
-      'row.source.product == "ChatGPT" ? "Not implemented" : DictationStatus(row.source.status)',
-    ),
-    'Only the unimplemented tool overrides its displayed status',
-  );
-  assert.ok(
-    csharp.includes(
-      '"not-supported" or "Tracking not yet verified" => "Tracking not yet verified"',
-    ),
-    'Legacy status projection remains unchanged',
-  );
-});
+// The Windows Forms Dictation view was removed in W2-4. The shared viewer's Dictation view is covered by its own tests.
 
 test('web Dictation offers supported choices and labels ChatGPT unimplemented', () => {
   const html = render([]);

@@ -131,6 +131,152 @@ internal static class Snapshot
         Check(Latest(data, "dictation", "All") is null);
         Check(Latest(data, "tokens", "Windows") is null);
         Check(Format(null) == "Unknown");
+        AggregateScope();
+        AggregateProvenance();
         Console.WriteLine("Windows snapshot self-tests passed");
+    }
+
+    private const string MixedSnapshot = """
+        {"schema":2,"collectedAt":"2026-09-12T12:00:00Z","tokens":[
+          {"host":"Mac","status":"ok","days":[{"date":"2026-09-12","totalTokens":10}]},
+          {"host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":20}]},
+          {"host":"Other","status":"ok","days":[{"date":"2026-09-12","totalTokens":30}]}],
+         "combinedTokens":{"host":"All","status":"ok","verification":{"status":"verified"},
+          "days":[{"date":"2026-09-12","totalTokens":60}]}}
+        """;
+
+    private static void AggregateScope()
+    {
+        var mixed = JsonNode.Parse(MixedSnapshot)!.AsObject();
+        var before = mixed.ToJsonString();
+        CheckRetirement(Snapshot.Latest(mixed, "tokens", "All") is null,
+            "A verified aggregate that includes another device leaked into native All.");
+        foreach (var (host, tokens) in new[] { ("Mac", 10), ("Windows", 20) })
+        {
+            CheckRetirement(Snapshot.Number(Snapshot.Latest(mixed, "tokens", host)?["totalTokens"]) == tokens,
+                "Per-device latest records were lost: " + host);
+        }
+        CheckRetirement(mixed.ToJsonString() == before, "Scope checking mutated the saved mixed-scope snapshot.");
+
+        var native = mixed.DeepClone().AsObject();
+        native["tokens"]!.AsArray().RemoveAt(2);
+        native["combinedTokens"]!["days"]![0]!["totalTokens"] = 30;
+        CheckRetirement(Snapshot.Number(Snapshot.Latest(native, "tokens", "All")?["totalTokens"]) == 30,
+            "Verified native-only aggregates were withheld.");
+        native["combinedTokens"]!["verification"]!["status"] = "overlap";
+        CheckRetirement(Snapshot.Latest(native, "tokens", "All") is null,
+            "Native-only sources bypassed the collector's overlap verification.");
+        native.Remove("combinedTokens");
+        CheckRetirement(Snapshot.Latest(native, "tokens", "All") is null,
+            "A replacement native total was invented by adding device records.");
+        Console.WriteLine("Native history aggregate scope and unchanged per-device records passed.");
+    }
+
+    private static void AggregateProvenance()
+    {
+        MalformedAggregateProvenance();
+        var unknownScope = JsonNode.Parse(MixedSnapshot)!.AsObject();
+        unknownScope.Remove("tokens");
+        CheckRetirement(Snapshot.Latest(unknownScope, "tokens", "All") is null,
+            "Aggregate-only verification was mistaken for proof of native device scope.");
+        var activity = JsonNode.Parse("""
+            {"activity":[{"host":"Other","status":"ok","days":[{"date":"2026-09-12","seconds":42}]}],
+             "combined":{"status":"ok","days":[{"date":"2026-09-12","seconds":42}]},
+             "activityHistory":[{"host":"Combined","status":"ok","days":[{"date":"2026-09-12","seconds":42}]}]}
+            """)!.AsObject();
+        var before = activity.ToJsonString();
+        CheckRetirement(Snapshot.Latest(activity, "activity", "All") is null,
+            "Activity counters from another device leaked into native All or Combined history.");
+        CheckRetirement(activity.ToJsonString() == before, "Scope checking modified saved activity evidence.");
+    }
+
+    private static JsonObject NativeScopeSnapshot() => JsonNode.Parse("""
+        {"schema":2,"collectedAt":"2026-09-12T12:00:00Z",
+         "tokens":[{"host":"Mac","status":"ok","days":[{"date":"2026-09-12","totalTokens":10}]},
+                   {"host":"Windows","status":"ok","days":[{"date":"2026-09-12","totalTokens":20}]}],
+         "settings":[{"host":"Mac","status":"ok"},{"host":"Windows","status":"ok"}],
+         "combinedTokens":{"status":"ok","verification":{"status":"verified"},
+                           "days":[{"date":"2026-09-12","totalTokens":30}]},
+         "activity":[{"host":"Mac","status":"ok","days":[{"date":"2026-09-12","seconds":600}]},
+                     {"host":"Windows","status":"ok","days":[{"date":"2026-09-12","seconds":1200}]}],
+         "combined":{"status":"ok","days":[{"date":"2026-09-12","seconds":1800}]},
+         "activityHistory":[{"host":"Mac","status":"ok","days":[{"date":"2026-09-01","seconds":3000}]},
+                            {"host":"Windows","status":"ok","days":[{"date":"2026-09-01","seconds":6000}]},
+                            {"host":"Combined","status":"ok","days":[{"date":"2026-09-01","seconds":9000}]}]}
+        """)!.AsObject();
+
+    private static void MalformedAggregateProvenance()
+    {
+        var failures = new List<string>();
+        var count = 0;
+        void Verify(string name, JsonObject data, string kind, bool allowed)
+        {
+            count++;
+            var before = data.ToJsonString();
+            var imported = JsonNode.Parse(before)!.AsObject();
+            var metric = kind == "tokens" ? "totalTokens" : "seconds";
+            try
+            {
+                CheckRetirement(Snapshot.HasNativeAggregateScope(imported, kind) == allowed, "Incorrect native scope decision.");
+                var latest = Snapshot.Latest(imported, kind, "All");
+                if (allowed)
+                {
+                    CheckRetirement(Snapshot.Number(latest?[metric]) == (kind == "tokens" ? 30 : 1800), "Verified native latest total was changed.");
+                }
+                else CheckRetirement(latest is null, "Malformed provenance leaked into native All.");
+                CheckRetirement(imported.ToJsonString() == before, "Scope validation rewrote imported evidence.");
+            }
+            catch (Exception error) { failures.Add(name + ": " + error.Message); }
+        }
+
+        foreach (var key in new[] { "tokens", "settings", "activity", "activityHistory" })
+        {
+            var kind = key is "tokens" or "settings" ? "tokens" : "activity";
+            Verify(key + "/native", NativeScopeSnapshot(), kind, true);
+            var absent = NativeScopeSnapshot(); absent.Remove(key);
+            Verify(key + "/absent", absent, kind, key != "tokens");
+            var empty = NativeScopeSnapshot(); empty[key] = new JsonArray();
+            Verify(key + "/empty", empty, kind, key != "tokens");
+            foreach (var shape in new[] { "null", "{}", "\"invalid\"", "7", "true", """{"host":"Other","status":"ok"}""" })
+            {
+                var malformed = NativeScopeSnapshot(); malformed[key] = JsonNode.Parse(shape);
+                Verify(key + "/shape/" + shape, malformed, kind, false);
+            }
+            foreach (var member in new[] { "null", "\"invalid\"", "7", "true", "[]" })
+            {
+                var mixed = NativeScopeSnapshot(); mixed[key]!.AsArray().Add(JsonNode.Parse(member));
+                Verify(key + "/mixed/" + member, mixed, kind, false);
+                var retired = NativeScopeSnapshot();
+                retired[key] = new JsonArray(new JsonObject { ["host"] = "Other", ["status"] = "ok" }, JsonNode.Parse(member));
+                retired["combinedTokens"]!["days"]![0]!["totalTokens"] = 60;
+                Verify(key + "/retired-mixed/" + member, retired, kind, false);
+            }
+            foreach (var explicitEmpty in new[] { false, true })
+            {
+                var placeholder = new JsonObject { ["host"] = "Other", ["status"] = "not-connected" };
+                if (explicitEmpty) foreach (var field in new[] { "days", "profiles", "tools" }) placeholder[field] = new JsonArray();
+                var data = NativeScopeSnapshot(); data[key]!.AsArray().Add(placeholder);
+                Verify(key + "/empty-placeholder/" + explicitEmpty, data, kind, true);
+            }
+            foreach (var (field, evidence) in new[] {
+                ("days", """[{"date":"2026-09-01","totalTokens":30,"seconds":30}]"""),
+                ("profiles", """[{"model":"fixture","totalTokens":30}]"""),
+                ("tools", """[{"tool":"Codex","totalTokens":30}]""") })
+            {
+                foreach (var value in new[] { evidence, "null", "{}", "\"invalid\"", "7", "true" })
+                {
+                    var data = NativeScopeSnapshot();
+                    data[key]!.AsArray().Add(new JsonObject { ["host"] = "Other", ["status"] = "not-connected", [field] = JsonNode.Parse(value) });
+                    Verify(key + "/placeholder/" + field + "/" + value, data, kind, false);
+                }
+            }
+        }
+        Console.WriteLine($"Native scope provenance fixtures: {count}, failures: {failures.Count}.");
+        CheckRetirement(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    private static void CheckRetirement(bool value, string message)
+    {
+        if (!value) throw new InvalidOperationException(message);
     }
 }
