@@ -11,6 +11,7 @@
     "demo": "node scripts/demo.mjs",
     "collect": "python3 scripts/run-collector.py",
     "serve:local": "node serve-local.mjs",
+    "build:demo": "vite build --config native/vite.demo.config.mts && node scripts/prepare-pages.mjs",
     "build:web": "vite build --config native/vite.config.mts",
     "preview:web": "vite preview --config native/vite.config.mts",
     "prebuild:native": "node scripts/build-brand.mjs",

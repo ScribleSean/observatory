@@ -9,7 +9,7 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

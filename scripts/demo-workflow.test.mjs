@@ -37,10 +37,7 @@ test('demo retains the full test and TypeScript gates before synthetic packaging
       - run: npm ci
       - run: npm test && npx tsc --noEmit
       # Fresh hosted checkout only. Never upload a workstation build.
-      - run: npm run demo
-      - run: npm run build
-        env:
-          DASHBOARD_BASE_PATH: /observatory
+      - run: npx vite build --config native/vite.demo.config.mts
       - run: node scripts/prepare-pages.mjs
       - uses: actions/upload-pages-artifact@v3
         with:

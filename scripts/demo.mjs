@@ -1,3 +1,6 @@
+import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
+export const DEMO_FIXTURE_TIME = '2026-10-14T12:00:00.000Z';
+export function demoFixture() { return sampleSnapshot(Date.parse(DEMO_FIXTURE_TIME)) }
 export { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
