@@ -25,7 +25,7 @@ internal sealed class Collector : IDisposable
         allowanceTimer.Tick += async (_, _) => await RefreshAfterResumeOrAllowances();
     }
 
-    internal void Start() { if (operations.Stopping) return; timer.Start(); allowanceTimer.Start(); EnsureTrustedSync(); _ = Refresh(); }
+    internal void Start() { if (operations.Stopping || CollectionPaused || !FirstRunSetup.AllowsCollection(runtime)) return; timer.Start(); allowanceTimer.Start(); EnsureTrustedSync(); _ = Refresh(); }
     private void EnsureTrustedSync()
     {
         if (Busy) return;
@@ -90,8 +90,9 @@ internal sealed class Collector : IDisposable
         {
             if (Interlocked.Exchange(ref released, 1) != 0) return;
             // Retain a collection pause if the owned helper may still be writing.
-            if (!exitVerified) pairingPaused = true;
+            pairingPaused = !exitVerified;
             operations.Complete();
+            if (exitVerified && FirstRunSetup.AllowsCollection(runtime)) Start();
         };
     }
 
@@ -121,6 +122,7 @@ internal sealed class Collector : IDisposable
             pairingPaused = false;
         }
         finally { operations.Complete(); }
+        if (FirstRunSetup.AllowsCollection(runtime)) Start();
     }
 
     internal void Configure(bool wispr = false, bool quota = false, bool activity = true, bool codex = true, bool claude = false)
@@ -138,7 +140,8 @@ internal sealed class Collector : IDisposable
 
     internal void UpdateConfiguration(JsonObject expected, JsonObject desired)
     {
-        if (Busy || !FirstRunSetup.AllowsCollection(runtime)) throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
+        if (Busy) throw new InvalidOperationException("Collection is active. Try again after it finishes.");
+        _ = FirstRunSetup.Required(runtime);
         using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var file = Path.Combine(runtime, "collector.config.json");
         if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Linked configuration is not editable here.");
@@ -281,6 +284,32 @@ internal sealed class Collector : IDisposable
         result["OBSERVATORY_RUNTIME"] = runtime;
         result["OBSERVATORY_PYTHON"] = python;
         return result;
+    }
+
+    internal static void ConfigurationSelfTest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "observatory-configuration-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var initial = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":true,"futureSetting":"preserved"}""")!.AsObject();
+            File.WriteAllText(Path.Combine(root, "collector.config.json"), initial.ToJsonString());
+            using var collector = new Collector(root);
+            var desired = initial.DeepClone().AsObject();
+            desired["activity"] = true;
+            desired["wispr"] = true;
+            collector.UpdateConfiguration(initial, desired);
+            var current = collector.ReadConfiguration();
+            if (!current["activity"]!.GetValue<bool>() || !current["wispr"]!.GetValue<bool>() ||
+                Snapshot.Text(current["futureSetting"]) != "preserved")
+                throw new Exception("Source settings were not preserved.");
+            try { collector.UpdateConfiguration(initial, initial); throw new Exception("Stale settings accepted."); }
+            catch (InvalidOperationException) { }
+            using var held = new FileStream(Path.Combine(root, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            try { collector.UpdateConfiguration(current, initial); throw new Exception("Collection lock ignored."); }
+            catch (IOException) { }
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     internal static void LaunchSelfTest()
