@@ -15,7 +15,7 @@ export async function readDeviceName(runtime) {
     const value=JSON.parse(buffer.subarray(0,bytesRead).toString('utf8'));
     if(!value || Array.isArray(value) || typeof value!=='object' || Object.keys(value).length!==1 || typeof value.name!=='string')return null;
     const name=value.name.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
-    if(!name || name.length>32 || /[\p{Cc}\p{Cf}\p{Cs}/\\:]/u.test(name))return null;
+    if(!name || name.length>32 || /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}/\\:]/u.test(name))return null;
     return name;
   } catch {return null;}
   finally {if(file)await file.close().catch(()=>{});}

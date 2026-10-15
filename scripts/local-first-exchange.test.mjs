@@ -23,20 +23,23 @@ const report=host=>({status:'ok',profiles:[{date,model:'unknown',effort:'high',s
 async function snapshot(host,additions,failedHost) {
   const settings={...report(host),...(additions?{hourTotals:[{date,hours}]}:{})};
   const refusal=additions?'ancestor-refused':undefined;
-  const result=host==='Mac'?await macSnapshot({activity:false},{codex:async()=>{
+  const failed={status:'unavailable',...(refusal?{refusal}:{})};
+  const refuse=async()=>{throw Object.assign(Error('PRIVATE'),{refusal});};
+  const result=host==='Mac'?await macSnapshot({activity:true,wispr:true},{activity:refuse,wispr:refuse,codex:async()=>{
     if(host===failedHost)throw Object.assign(Error('PRIVATE'),{refusal});return settings;
-  }},[],at,config(host)):windowsSnapshot({windows:{status:'not-connected'},wispr:{status:'not-connected'},
+  }},[],at,config(host)):windowsSnapshot({windows:failed,wispr:failed,
     localSettings:host===failedHost?{status:'unavailable',...(refusal?{refusal}:{})}:settings},[],at,config(host));
   if(additions)attachDeviceName(result.data,host,'Fixture desk');
   return result;
 }
 test('an older peer still accepts what this device sends with local additions',async t=>{
-  for(const failedHost of ['Mac','Windows']) {
+  for(const failedHost of [null,'Mac','Windows']) {
     const results={};
     for(const host of ['Mac','Windows']) {
       const local=await snapshot(host,true,failedHost),plain=await snapshot(host,false,failedHost);
       assert.equal(local.peer.status,'ready');assert.deepEqual(local.peer.payload,plain.peer.payload);
-      assert.doesNotMatch(JSON.stringify(local.peer.payload),/"(?:deviceNames|refusal|hours|hourTotals)":/);
+      assert.doesNotMatch(JSON.stringify(local.peer.payload),/refusal|"(?:deviceNames|hours|hourTotals)":/);
+      assert.equal(local.data.activity.find(row=>row.host===host).refusal,'ancestor-refused');
       results[host]=local;
     }
     for(const host of ['Mac','Windows']) {

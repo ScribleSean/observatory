@@ -26,3 +26,10 @@ test('hours require matching totals and refusals require a non-ok own-host row',
     assert.deepEqual(peer,{host:'Windows',status:'unavailable',refusal:'untouched'});
   }
 });
+
+test('equal token totals on the same day give hours only to the own-host row',()=>{
+  const data={tokens:['Mac','Windows'].map(host=>({host,status:'ok',days:[{date:'2026-10-01',totalTokens:12}]}))};
+  reapplyLocalAdditions(data,'Mac',captureLocalAdditions(fixture(),'Mac'));
+  assert.deepEqual(data.tokens[0].days[0].hours,hours);
+  assert.equal(Object.hasOwn(data.tokens[1].days[0],'hours'),false);
+});

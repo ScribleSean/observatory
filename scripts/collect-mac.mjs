@@ -1,5 +1,5 @@
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
-import {captureLocalAdditions,reapplyLocalAdditions} from './local-additions.mjs';
+import {finalizeWithLocalAdditions} from './local-additions.mjs';
 import {spawn} from 'node:child_process';
 import {realpathSync} from 'node:fs';
 import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
@@ -12,7 +12,6 @@ import {macSnapshot,macCollectorConfig} from './mac-snapshot.mjs';
 import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
-import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota,findCodexExecutable} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
@@ -83,9 +82,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     wispr:()=>report('read-wispr.py',[homedir()]),
   },previous,new Date().toISOString(),pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
-  const additions=captureLocalAdditions(result.data,'Mac');
-  await finalizePeerCollection(runtime,result,savedPairing,previous);
-  reapplyLocalAdditions(result.data,'Mac',additions);
+  await finalizeWithLocalAdditions(runtime,result,savedPairing,previous,'Mac');
   const deviceName=await readDeviceName(runtime);
   attachDeviceName(result.data,'Mac',deviceName);
   // Account-wide history belongs to the observing device, not the peer sum.

@@ -12,14 +12,14 @@ async function fixture(t) {
 test('device names accept trimmed Unicode whitespace and count UTF-16 units',async t=>{
   const runtime=await fixture(t);
   for(const name of ['Desk','x'.repeat(32),'😀'.repeat(16)]) {
-    await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:'\u0085\u00a0\u2028\u3000'+name+'\u0085\u00a0\u2028\u3000'}));
+    await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:'\u0085\u00a0\u2028\u2029\u3000'+name+'\u0085\u00a0\u2028\u2029\u3000'}));
     assert.equal(await readDeviceName(runtime),name);
   }
 });
 test('missing and invalid device names are refused',async t=>{
   const runtime=await fixture(t);
   assert.equal(await readDeviceName(runtime),null);
-  for(const name of ['\uFEFFDesk','', '\u0085\u00a0\u2028\u3000','x'.repeat(33),'😀'.repeat(32),'a\nb','a\u200bb','a\ud800b','a\udc00b','a/b','a\\b','a:b',42]) {
+  for(const name of ['\uFEFFDesk','', '\u0085\u00a0\u2028\u2029\u3000','x'.repeat(33),'😀'.repeat(32),'a\nb','a\u2028b','a\u2029b','a\u200bb','a\ud800b','a\udc00b','a/b','a\\b','a:b',42]) {
     await writeFile(path.join(runtime,'device.json'),JSON.stringify({name}));
     assert.equal(await readDeviceName(runtime),null);
   }
@@ -36,7 +36,7 @@ test('linked device files are refused',{skip:process.platform==='win32'},async t
   await symlink(path.join(runtime,'target.json'),path.join(runtime,'device.json'));
   assert.equal(await readDeviceName(runtime),null);
 });
-test('hard-linked device files are refused',{skip:process.platform==='win32'},async t=>{
+test('hard-linked device files are refused',async t=>{
   const runtime=await fixture(t);await writeFile(path.join(runtime,'target.json'),'{"name":"Desk"}');
   await link(path.join(runtime,'target.json'),path.join(runtime,'device.json'));
   assert.equal(await readDeviceName(runtime),null);

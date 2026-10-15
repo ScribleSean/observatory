@@ -1,3 +1,4 @@
+import {finalizePeerCollection} from './peer-finalize.mjs';
 import {attachTokenHours} from './token-hours.mjs';
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 
@@ -16,4 +17,11 @@ export function reapplyLocalAdditions(data,host,captured) {
     if(!rows.includes(key) || !REFUSAL_CODES.includes(refusal))continue;
     for(const row of data[key]??[])if(row.host===host && row.source===source && row.status!=='ok')row.refusal=refusal;
   }
+}
+
+export async function finalizeWithLocalAdditions(runtime,result,savedPairing,previous,host,{finalize=finalizePeerCollection}={}) {
+  const additions=captureLocalAdditions(result.data,host);
+  await finalize(runtime,result,savedPairing,previous);
+  reapplyLocalAdditions(result.data,host,additions);
+  return result;
 }

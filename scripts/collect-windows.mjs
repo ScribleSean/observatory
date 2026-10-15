@@ -1,6 +1,6 @@
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
-import {captureLocalAdditions,reapplyLocalAdditions} from './local-additions.mjs';
+import {finalizeWithLocalAdditions} from './local-additions.mjs';
 import {spawn,execFile} from 'node:child_process';
 import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -13,7 +13,6 @@ import {windowsCollectorConfig} from './windows-snapshot.mjs';
 import {windowsSnapshot} from './windows-dashboard.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
-import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
@@ -104,9 +103,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   const previous=replacement.history;
   const result=windowsSnapshot({localSettings,windows,wispr},previous,collectedAt,pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
-  const additions=captureLocalAdditions(result.data,'Windows');
-  await finalizePeerCollection(runtime,result,savedPairing,previous);
-  reapplyLocalAdditions(result.data,'Windows',additions);
+  await finalizeWithLocalAdditions(runtime,result,savedPairing,previous,'Windows');
   const deviceName=await readDeviceName(runtime);
   attachDeviceName(result.data,'Windows',deviceName);
   let quota;
