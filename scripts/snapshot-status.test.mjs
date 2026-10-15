@@ -43,6 +43,15 @@ test('fictional values never escape into output',()=>{
   snapshot.models={'synthetic-model-987':{tokens:987654321}};
   // Keep the structural key count distinct from the sample's usage numbers.
   snapshot.probeFixture={};
+  snapshot.tokens[0].status='secretproject';
+  snapshot.tokens[0].refusal='my-home-dir';
+  snapshot.claudeLimits.status='secretproject';
+  snapshot.claudeLimits.usageCommand='sk-synthetic-leak';
+  snapshot.claudeLimits.windows.push({window:'opus_secret'});
+  snapshot.combinedTokens.verification='confidential';
+  snapshot.projects={secretclient:{}};
+  snapshot.apps={slack:{}};
+  snapshot.tokens[0].days[0].byModel={opus:{}};
   const result=snapshotStatus(snapshot),serialized=JSON.stringify(result);
   const allowed=new Set(['Mac','Windows','Combined','Ubuntu','verified',snapshot.prices.checkedOn]);
   for(const rows of Object.values(result.rows))for(const row of rows)for(const key of ['status','refusal'])if(row[key])allowed.add(row[key]);
@@ -61,6 +70,7 @@ test('fictional values never escape into output',()=>{
   });
   for(const value of strings)assert.ok(!serialized.includes(JSON.stringify(value)),'Unexpected snapshot string');
   walk(result,value=>{if(typeof value==='number')assert.ok(!numbers.has(value),'Unexpected snapshot number');});
+  for(const value of ['secretproject','my-home-dir','sk-synthetic-leak','opus_secret','confidential','secretclient','slack','opus'])assert.ok(!serialized.includes(value),value);
   assert.ok(!serialized.includes('Synthetic Desk'));
   assert.ok(!serialized.includes('synthetic-model-987'));
   assert.ok(result.keys.includes('models.<key>.tokens'));
@@ -72,9 +82,9 @@ test('unknown fields are sanitized and missing arrays are omitted',()=>{
   const result=snapshotStatus({tokens:[{host:'Synthetic Desk',status:'bad /path',refusal:123,days:0},null],
     quota:{status:99,usageCommand:'bad command',windows:[{window:'five_hour'},{window:'x2-y'},null,{window:'/secret'}]},
     combinedTokens:null,prices:{checkedOn:'2026-10-14T12:00:00Z'}});
-  assert.deepEqual(result.rows,{tokens:[{host:'other',status:'other',refusal:'other',days:null},{host:'other',status:'other',days:null}]});
-  assert.deepEqual(result.limits.quota,{status:'other',usageCommand:'other',windows:['five_hour','x2-y','other','other'],sessionCost:'absent'});
-  assert.deepEqual(result.combinedTokens,{status:'other',verification:'other'});
+  assert.deepEqual(result.rows,{tokens:[{host:'<value>',status:'<value>',refusal:'<value>',days:null},{host:'<value>',status:'<value>',days:null}]});
+  assert.deepEqual(result.limits.quota,{status:'<value>',usageCommand:'<value>',windows:['five_hour','<value>','<value>','<value>'],sessionCost:'absent'});
+  assert.deepEqual(result.combinedTokens,{status:'<value>',verification:'<value>'});
   assert.equal(result.pricesCheckedOn,null);
   assert.deepEqual(snapshotStatus({}).counts,{rows:0,keys:0});
   for(const value of [null,[],1,'secret'])assert.throws(()=>snapshotStatus(value),/^Error: Snapshot unavailable$/);
@@ -85,11 +95,11 @@ test('key paths collapse arrays, sanitize keys and stop at twelve levels',()=>{
   let cursor=snapshot;
   for(let index=0;index<20;index++)cursor=cursor.child={};
   const {keys}=snapshotStatus(snapshot);
-  assert.ok(keys.includes('items[].valid'));
-  assert.equal(keys.filter(key=>key==='items[].<key>').length,1);
-  assert.ok(keys.includes('empty[]'));
-  assert.ok(keys.includes(Array(12).fill('child').join('.')));
-  assert.ok(!keys.includes(Array(13).fill('child').join('.')));
+  assert.ok(keys.includes('<key>[].<key>'));
+  assert.equal(keys.filter(key=>key==='<key>[].<key>').length,1);
+  assert.ok(keys.includes('<key>[]'));
+  assert.ok(keys.includes(Array(12).fill('<key>').join('.')));
+  assert.ok(!keys.includes(Array(13).fill('<key>').join('.')));
 });
 
 test('absolute file and runtime reads return the same safe JSON',async t=>{
@@ -142,4 +152,18 @@ test('usage errors exit two and exported reader rejects relative paths',async()=
   for(const options of [{},{file:'relative'},{runtime:'relative'},{file:'/tmp/file',runtime:'relative'}]) {
     await assert.rejects(readSnapshotStatus(options),/^Error: Snapshot unavailable$/);
   }
+});
+
+test('hard-coded field names cover the fictional sample structure',()=>{
+  const snapshot=sample(),keys=new Set(snapshotStatus(snapshot).keys);
+  function walk(value,prefix='') {
+    if(Array.isArray(value)) {for(const entry of value)walk(entry,`${prefix}[]`);}
+    else if(value && typeof value==='object')for(const [key,entry] of Object.entries(value)) {
+      const clean=/^[a-z_][A-Za-z0-9_]*$/.test(key)?key:'<key>';
+      const next=prefix?`${prefix}.${clean}`:clean;
+      assert.ok(keys.has(next),next);
+      walk(entry,next);
+    }
+  }
+  walk(snapshot);
 });

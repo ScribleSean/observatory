@@ -17,7 +17,7 @@ import {attachQuotaSync} from './quota-sync.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
-import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,withinTime} from './claude-limits.mjs';
+import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,claudeLimitsConsent,withinTime} from './claude-limits.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 function pythonReport(python,script,args) {
@@ -37,7 +37,7 @@ function pythonReport(python,script,args) {
   });
 }
 
-export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits}={}) {
+export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits,limitsTimeoutMs=20000}={}) {
   if(process.platform!=='darwin' || !path.isAbsolute(runtime) || !path.isAbsolute(python || ''))throw Error('Absolute Mac runtime and Python executable required');
   for(const folder of [runtime,path.join(runtime,'public'),path.join(runtime,'public/local')]) {
     await mkdir(folder,{recursive:true,mode:0o700});
@@ -99,7 +99,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'})));
+  const {given:enabled}=await claudeLimitsConsent(runtime).catch(()=>({given:false}));
+  attachClaudeLimits(result,await withinTime(readLimits(runtime),limitsTimeoutMs).catch(()=>({
+    ...claudeLimitsSource(null,{enabled}),...(enabled?{usageCommand:'timed-out'}:{})})));
   const {data,status}=result;
   await atomic('usage.json',data,replacement.preserve);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

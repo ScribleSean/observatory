@@ -2,7 +2,7 @@
 // Adds or removes the Observatory status line bridge in Claude Code's settings.
 // It changes a file Claude Code owns, so install needs --consent and nothing
 // calls this automatically. The earlier status line is saved and restored.
-import {lstat,readFile,rename,unlink,writeFile,copyFile} from 'node:fs/promises';
+import {lstat,realpath,readFile,rename,unlink,writeFile,copyFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -23,7 +23,7 @@ export function defaultSettingsPath(environment=process.env) {
 export function bridgeCommand(node,bridge,runtime,platform=process.platform) {
   const values=[node,bridge,runtime];
   const absolute=platform==='win32'?path.win32.isAbsolute:path.posix.isAbsolute;
-  if(values.some(value=>typeof value!=='string' || !absolute(value) || /["`$\r\n]/.test(value) || value.includes('\0') || (platform!=='win32' && value.includes('\\'))))
+  if(values.some(value=>typeof value!=='string' || !absolute(value) || /["`$\r\n]/.test(value) || value.includes('\0') || (platform!=='win32' && value.includes('\\')) || (platform==='win32' && /[%!]/.test(value))))
     throw Error('Paths must be absolute and free of quotes and shell characters');
   const quote=value=>`"${platform==='win32'?value.replaceAll('\\','/'):value}"`;
   return `${quote(node)} ${quote(bridge)} --runtime ${quote(runtime)}`;
@@ -68,6 +68,8 @@ export async function installStatusline({runtime,settingsPath=defaultSettingsPat
   let info;
   try {info=await lstat(bridge);}catch {throw Error('Bridge must exist as a plain file');}
   if(!info.isFile() || info.isSymbolicLink())throw Error('Bridge must be a plain file');
+  bridge=await realpath(bridge);
+  if(bridge!==await realpath(path.join(path.dirname(fileURLToPath(import.meta.url)),bridgeName)))throw Error('Bridge must be the installer companion file');
   const command=bridgeCommand(node,bridge,runtime);
   const folder=await ensureClaudeLimitsFolder(runtime);
   const {text,settings}=await readSettings(settingsPath);

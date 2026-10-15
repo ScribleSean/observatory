@@ -1,4 +1,5 @@
-import {lstat,mkdir,readFile,rename,unlink,writeFile} from 'node:fs/promises';
+import {lstat,mkdir,open,rename,unlink,writeFile} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {readClaudeUsage} from './claude-usage-command.mjs';
@@ -86,9 +87,23 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
 const folderOf=runtime=>path.join(runtime,CLAUDE_LIMITS_FOLDER);
 
 async function plainFile(file,limit) {
-  const info=await lstat(file);
-  if(!info.isFile() || info.isSymbolicLink() || info.size>limit)throw Error('Unsafe Claude limits file');
-  return JSON.parse(await readFile(file,'utf8'));
+  let handle;
+  try {
+    const before=await lstat(file);
+    if(!before.isFile() || before.isSymbolicLink() || before.size>limit)throw Error('Unsafe Claude limits file');
+    handle=await open(file,constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const info=await handle.stat();
+    if(!info.isFile() || info.size>limit || info.dev!==before.dev || info.ino!==before.ino)throw Error('Unsafe Claude limits file');
+    const buffer=Buffer.alloc(limit+1);
+    let size=0;
+    while(size<buffer.length) {
+      const {bytesRead}=await handle.read(buffer,size,buffer.length-size,null);
+      if(!bytesRead)break;
+      size+=bytesRead;
+    }
+    if(size>limit)throw Error('Unsafe Claude limits file');
+    return JSON.parse(buffer.toString('utf8',0,size));
+  } finally {await handle?.close().catch(()=>{});}
 }
 
 export async function ensureClaudeLimitsFolder(runtime) {

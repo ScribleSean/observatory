@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {lstat,mkdtemp,readFile,readdir,rm,symlink,writeFile,mkdir} from 'node:fs/promises';
+import {copyFile,lstat,mkdtemp,readFile,readdir,rm,symlink,writeFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {realpathSync} from 'node:fs';
+import fs from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -24,11 +26,7 @@ async function folder(t) {
   return root;
 }
 
-async function bridgeFixture(t) {
-  const bridge=path.join(await folder(t),'claude-statusline-bridge.mjs');
-  await writeFile(bridge,'// Synthetic bridge\n');
-  return bridge;
-}
+const realBridge=realpathSync(fileURLToPath(new URL('./claude-statusline-bridge.mjs',import.meta.url)));
 
 test('extraction keeps only percentages and reset times', () => {
   const record=extractClaudeLimits(input(),now);
@@ -109,7 +107,7 @@ test('install needs consent, saves the earlier status line and uninstall restore
   const settingsPath=path.join(home,'settings.json');
   const earlier={type:'command',command:'echo earlier',padding:0};
   await writeFile(settingsPath,JSON.stringify({model:'synthetic',statusLine:earlier}));
-  const options={runtime,settingsPath,node:'/synthetic/node',bridge:await bridgeFixture(t)};
+  const options={runtime,settingsPath,node:'/synthetic/node',bridge:realBridge};
   await assert.rejects(installStatusline(options),/consent/);
   assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')).statusLine,earlier);
   assert.deepEqual(await installStatusline({...options,consent:true}),{installed:true,replacedStatusLine:true,settingsPath});
@@ -130,7 +128,7 @@ test('install needs consent, saves the earlier status line and uninstall restore
 test('install without an earlier status line or settings file, and refusal of bad input', async t => {
   const runtime=await folder(t),home=await folder(t);
   const settingsPath=path.join(home,'settings.json');
-  const options={runtime,settingsPath,node:'/synthetic/node',bridge:await bridgeFixture(t),consent:true};
+  const options={runtime,settingsPath,node:'/synthetic/node',bridge:realBridge,consent:true};
   assert.equal((await installStatusline(options)).replacedStatusLine,false);
   await uninstallStatusline({runtime,settingsPath});
   assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')),{});
@@ -311,7 +309,7 @@ test('uninstall preserves independent consent and status reports it', async t =>
   const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
   await setLimitsConsent({runtime,consent:true,now:new Date(now)});
   const file=path.join(runtime,'claude-limits/consent.json'),before=await readFile(file,'utf8');
-  await installStatusline({runtime,settingsPath,bridge:await bridgeFixture(t),consent:true});
+  await installStatusline({runtime,settingsPath,bridge:realBridge,consent:true});
   assert.deepEqual((await statuslineStatus({runtime,settingsPath})).limitsConsent,{given:true,consentMarker:true,statusLine:true});
   await uninstallStatusline({runtime,settingsPath});
   assert.equal(await readFile(file,'utf8'),before);
@@ -319,15 +317,20 @@ test('uninstall preserves independent consent and status reports it', async t =>
   assert.equal(Object.hasOwn(await statuslineStatus({settingsPath}),'limitsConsent'),false);
 });
 
-for(const kind of ['relative','missing','directory','link','wrong name'])test(`bridge rejects ${kind} without writes`,
-  {skip:kind==='link' && process.platform==='win32'}, async t => {
+for(const kind of ['relative','missing','directory','link','wrong name','copy','parent segments','linked parent'])test(`bridge rejects ${kind} without writes`,
+  {skip:['link','linked parent'].includes(kind) && process.platform==='win32'}, async t => {
     const runtime=await folder(t),home=await folder(t),settingsPath=path.join(home,'settings.json');
     const text='{"model":"synthetic"}\n';
     await writeFile(settingsPath,text);
     let bridge=path.join(await folder(t),'claude-statusline-bridge.mjs');
+    if(['copy','parent segments','linked parent'].includes(kind)) {
+      await copyFile(realBridge,bridge);
+      if(kind==='parent segments') {await mkdir(path.join(path.dirname(bridge),'nested'));bridge=path.dirname(bridge)+'/nested/../claude-statusline-bridge.mjs';}
+      if(kind==='linked parent') {const link=path.join(await folder(t),'linked');await symlink(path.dirname(bridge),link);bridge=path.join(link,'claude-statusline-bridge.mjs');}
+    }
     if(kind==='relative')bridge='claude-statusline-bridge.mjs';
     if(kind==='directory')await mkdir(bridge);
-    if(kind==='link')await symlink(await bridgeFixture(t),bridge);
+    if(kind==='link')await symlink(realBridge,bridge);
     if(kind==='wrong name') {bridge=path.join(path.dirname(bridge),'other.mjs');await writeFile(bridge,'');}
     await assert.rejects(installStatusline({runtime,settingsPath,bridge,consent:true}),/Bridge/);
     const script=fileURLToPath(new URL('./claude-statusline-install.mjs',import.meta.url));
@@ -338,7 +341,7 @@ for(const kind of ['relative','missing','directory','link','wrong name'])test(`b
   });
 
 test('installer CLI accepts an absolute bridge file', async t => {
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json'),bridge=await bridgeFixture(t);
+  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json'),bridge=realBridge;
   const script=fileURLToPath(new URL('./claude-statusline-install.mjs',import.meta.url));
   await run(process.execPath,[script,'install','--runtime',runtime,'--settings',settingsPath,'--bridge',bridge,'--consent']);
   assert.equal(JSON.parse(await readFile(settingsPath,'utf8')).statusLine.command,bridgeCommand(process.execPath,bridge,runtime));
@@ -426,5 +429,67 @@ test('invalid runtimes and missing or plain file limits folders cannot grant con
     const source=await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'read',usage:input()};}});
     assert.equal(source.status,'not-connected');
     assert.equal(runs,0);
+  }
+});
+
+for(const explicit of [false,true])test(`installer accepts its own bridge with explicit path ${explicit}`,async t=>{
+  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
+  await installStatusline({runtime,settingsPath,consent:true,...(explicit?{bridge:realBridge}:{})});
+  assert.equal(JSON.parse(await readFile(settingsPath,'utf8')).statusLine.command,bridgeCommand(process.execPath,realBridge,runtime));
+});
+
+test('Windows rejects expansion characters in each command path and POSIX preserves them',()=>{
+  for(const character of ['%','!'])for(let index=0;index<3;index++) {
+    const values=['/synthetic/node','/synthetic/bridge','/synthetic/runtime'];
+    values[index]+=character;
+    assert.throws(()=>bridgeCommand(...values,'win32'),/Paths/);
+    assert.ok(bridgeCommand(...values,'darwin').includes(character));
+  }
+});
+
+test('consent replaced by a link is no longer honoured',{skip:process.platform==='win32'},async t=>{
+  const runtime=await folder(t),target=path.join(await folder(t),'consent.json');
+  await setLimitsConsent({runtime,consent:true});
+  assert.equal((await claudeLimitsConsent(runtime)).given,true);
+  const file=path.join(runtime,'claude-limits/consent.json');
+  await writeFile(target,'{"consent":true}');
+  await rm(file);
+  await symlink(target,file);
+  assert.equal((await claudeLimitsConsent(runtime)).given,false);
+});
+
+test('consent swapped for a link after lstat is refused',{skip:process.platform==='win32'},async t=>{
+  const runtime=await folder(t),target=path.join(await folder(t),'consent.json');
+  await setLimitsConsent({runtime,consent:true});
+  await writeFile(target,'{"consent":true}');
+  const file=path.join(runtime,'claude-limits/consent.json'),original=fs.lstat;
+  let swapped=false;
+  const mocked=t.mock.method(fs,'lstat',async (...args)=>{
+    const info=await original(...args);
+    if(args[0]===file && !swapped) {
+      swapped=true;
+      await rm(file);
+      await symlink(target,file);
+    }
+    return info;
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.equal((await claudeLimitsConsent(runtime)).given,false);
+    assert.equal(swapped,true);
+  } finally {mocked.mock.restore();syncBuiltinESMExports();}
+});
+
+test('plain marker size bounds include the exact limit',async t=>{
+  const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
+  await mkdir(directory);
+  for(const [name,limit,content,read] of [
+    ['consent.json',4096,'{"consent":true}',async()=>(await claudeLimitsConsent(runtime)).given],
+    ['statusline.json',16384,'{}',()=>claudeStatuslineInstalled(runtime)]]) {
+    const file=path.join(directory,name);
+    await writeFile(file,content.padEnd(limit,' '));
+    assert.equal(await read(),true);
+    await writeFile(file,content.padEnd(limit+1,' '));
+    assert.equal(await read(),false);
   }
 });
