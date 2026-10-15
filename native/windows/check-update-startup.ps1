@@ -1,11 +1,12 @@
 param([Parameter(Mandatory=$true)][string]$Executable)
 $ErrorActionPreference = 'Stop'
+$appNames = Get-Content (Join-Path $PSScriptRoot '../app-names.json') -Raw | ConvertFrom-Json
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
     Write-Host 'SKIP: normal update startup requires a disposable hosted Windows runner.'
     return
 }
 if (-not [IO.Path]::IsPathFullyQualified($Executable) -or -not (Test-Path -LiteralPath $Executable -PathType Leaf)) { throw 'Package executable required.' }
-$runtime = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Workspace Observatory'
+$runtime = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) $appNames.visible.dataFolder
 if (Test-Path -LiteralPath $runtime) { throw 'Refusing startup test with existing application data.' }
 $existing = $null
 if ([Threading.Mutex]::TryOpenExisting('Local\WorkspaceObservatory', [ref]$existing)) {

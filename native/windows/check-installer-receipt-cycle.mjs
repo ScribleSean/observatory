@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {readFileSync,writeFileSync,mkdirSync,mkdtempSync,existsSync,cpSync,rmSync,realpathSync} from 'node:fs';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
@@ -13,7 +14,7 @@ if(process.platform!=='win32')throw Error('Windows test host required');
 const archive=process.argv[2],asset=JSON.parse(readFileSync(new URL('installer-tool.json',import.meta.url)));
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 if(!archive || !path.isAbsolute(archive) || digest(readFileSync(archive))!==asset.sha256)throw Error('Pinned NSIS archive required');
-const name='Workspace Observatory Installer Test';
+const name=appNames.visible.windowsTestName;
 const installed=path.join(process.env.LOCALAPPDATA,'Programs',name);
 const data=path.join(process.env.LOCALAPPDATA,name);
 const shortcuts=path.join(process.env.APPDATA,'Microsoft/Windows/Start Menu/Programs',name);
@@ -24,14 +25,14 @@ const run=(exe,args,options={})=>{
   return result.stdout;
 };
 const ps=code=>run('powershell.exe',['-NoProfile','-Command',code]);
-ps("if (Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\WorkspaceObservatoryInstallerTest') { throw 'Existing test registration' }");
+ps(`if (Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${appNames.internal.windowsTestSetupId}') { throw 'Existing test registration' }`);
 const scratch=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-full-receipt-cycle-')));
 const quote=text=>"'"+text.replaceAll("'","''")+"'";
 ps(`Expand-Archive -LiteralPath ${quote(archive)} -DestinationPath ${quote(path.join(scratch,'compiler'))}`);
 const compiler=path.join(scratch,'compiler','nsis-3.12','makensis.exe');
 const app=path.join(scratch,'payload');mkdirSync(app);mkdirSync(path.join(app,'Runtime'));
 const bytes=Buffer.from('Synthetic inert payload. Never execute.');
-const files=['LICENSE','Runtime/node.exe','WorkspaceObservatory.exe'].map(file=>{
+const files=['LICENSE','Runtime/node.exe',appNames.internal.windowsExecutable].map(file=>{
   writeFileSync(path.join(app,file),bytes);return {path:file,bytes:bytes.length,sha256:digest(bytes)};
 });
 const manifest=Buffer.from(JSON.stringify({schema:1,platform:'win-x64',sourceRevision:'a'.repeat(40),sourceDirty:false,
@@ -56,7 +57,7 @@ const first=compile(path.join(scratch,'first'),null,null);
 run(first,['/S']);
 const owner=readFileSync(path.join(installed,'installer-owner.ini'));
 const uninstaller=readFileSync(path.join(installed,'Uninstall.exe'));
-const receipt={schema:1,product:'WorkspaceObservatorySetup',platform:'windows-x64',sourceRevision:'a'.repeat(40),
+const receipt={schema:1,product:appNames.internal.receiptProduct,platform:'windows-x64',sourceRevision:'a'.repeat(40),
   buildNumber:desktopReleaseVersion().buildNumber,manifestSha256:digest(manifest),ownerSha256:digest(owner),uninstallerSha256:digest(uninstaller)};
 const keys=generateKeyPairSync('ed25519');
 const publicKey=keys.publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
@@ -77,6 +78,6 @@ assert.throws(()=>verifyInstallation(realpathSync(installed),receipt),/ownership
 uninstall();
 assert.deepEqual(readFileSync(path.join(data,'updates','installed-envelope.json')),envelope);
 rmSync(data,{recursive:true});
-ps("if (Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\WorkspaceObservatoryInstallerTest') { throw 'Test registration remained' }");
+ps(`if (Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${appNames.internal.windowsTestSetupId}') { throw 'Test registration remained' }`);
 console.log(JSON.stringify({status:'passed',ownerSha256:receipt.ownerSha256,uninstallerSha256:receipt.uninstallerSha256,
   evidence:scratch,scope:'Full TEST-identity template, synthetic payload. Production identity remains rejected.'}));

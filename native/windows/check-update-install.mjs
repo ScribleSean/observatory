@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {readFileSync,writeFileSync,existsSync,mkdirSync,readdirSync,statSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -30,13 +31,13 @@ const compressed=spawnSync(path.join(process.env.SystemRoot,'System32/WindowsPow
     '-Directory',prepared,'-Archive',archive],{encoding:'utf8',timeout:120000,maxBuffer:16384,windowsHide:true});
 assert.equal(compressed.status,0,compressed.stderr || String(compressed.error));
 const expanded=path.join(output,'signed-update-extracted');mkdirSync(expanded);
-const extracted=spawnSync(path.join(installed,'WorkspaceObservatory.exe'),
+const extracted=spawnSync(path.join(installed,appNames.internal.windowsExecutable),
   ['--test-update-extraction',archive,expanded],{encoding:'utf8',timeout:120000,maxBuffer:16384,windowsHide:true});
 assert.equal(extracted.status,0,extracted.stderr || String(extracted.error));
 const entries=readdirSync(expanded);
 assert.equal(entries.length,1);
 assert.match(entries[0],/^\.observatory-stage-[a-f0-9]{32}$/);
-const stage=key=>spawnSync(path.join(installed,'WorkspaceObservatory.exe'),
+const stage=key=>spawnSync(path.join(installed,appNames.internal.windowsExecutable),
   ['--test-update-staging',path.join(expanded,entries[0]),installed,receiptPath,key,String(previous.buildNumber)],
   {encoding:'utf8',timeout:300000,maxBuffer:16384,windowsHide:true});
 const before=readdirSync(path.dirname(installed)).sort();
@@ -58,7 +59,7 @@ assert.equal(ready.sourceRevision,candidate.sourceRevision);
 assert.deepEqual(readFileSync(ready.envelopePath),readFileSync(envelope));
 console.log(`PASS: complete signed update wrapper ZIP, native extraction and native staging verified; ${statSync(archive).size} archive bytes. Wrong signer refused, installed payload unchanged. Synthetic receipt signer only.`);
 const helper=stageUpdateHelper(installed,previous,output);
-const result=spawnSync(path.join(helper.helper,'WorkspaceObservatory.exe'),
+const result=spawnSync(path.join(helper.helper,appNames.internal.windowsExecutable),
   ['--test-update-install',installed,ready.staged,receiptPath,ready.envelopePath,publicKey,String(previous.buildNumber)],
   // Do not kill the transaction helper on a subprocess timeout.
   {encoding:'utf8',maxBuffer:16384,windowsHide:true});
@@ -66,9 +67,9 @@ assert.equal(result.status,0,result.stderr || String(result.error));
 const response=JSON.parse(result.stdout);
 assert.equal(response.status,'installed-relaunched-and-stopped');
 assert.equal(response.SourceRevision,candidate.sourceRevision);
-assert.ok(existsSync(path.join(response.Recovery,'previous','WorkspaceObservatory.exe')));
+assert.ok(existsSync(path.join(response.Recovery,'previous',appNames.internal.windowsExecutable)));
 verifyInstallation(installed,candidate);
-const installedEnvelope=readFileSync(path.join(process.env.LOCALAPPDATA,'Workspace Observatory','updates','installed-envelope.json'));
+const installedEnvelope=readFileSync(path.join(process.env.LOCALAPPDATA,appNames.visible.dataFolder,'updates','installed-envelope.json'));
 assert.deepEqual(installedEnvelope,readFileSync(envelope));
 assert.deepEqual(authenticateInstallationReceipt(installedEnvelope,publicKey,previous.buildNumber),candidate);
 console.log('PASS: installed receipt retains the exact authenticated candidate envelope.');

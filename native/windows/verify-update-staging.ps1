@@ -1,11 +1,12 @@
 param([Parameter(Mandatory=$true)][string]$PackageDirectory)
 $ErrorActionPreference = 'Stop'
+$appNames = Get-Content (Join-Path $PSScriptRoot '../app-names.json') -Raw | ConvertFrom-Json
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'This integration check is restricted to disposable GitHub-hosted Windows runners.'
 }
-$installed = Join-Path $env:LOCALAPPDATA 'Programs\Workspace Observatory'
-$data = Join-Path $env:LOCALAPPDATA 'Workspace Observatory'
-$shortcuts = Join-Path ([Environment]::GetFolderPath('Programs')) 'Workspace Observatory'
+$installed = Join-Path $env:LOCALAPPDATA ("Programs\" + $appNames.visible.productName)
+$data = Join-Path $env:LOCALAPPDATA $appNames.visible.dataFolder
+$shortcuts = Join-Path ([Environment]::GetFolderPath('Programs')) $appNames.visible.productName
 $registration = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\WorkspaceObservatorySetup'
 if ((Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $data) -or
     (Test-Path -LiteralPath $shortcuts) -or (Test-Path $registration) -or

@@ -1,3 +1,4 @@
+import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
@@ -16,7 +17,7 @@ test('DMG creation leaves source ownership unchanged and bounds the child',()=>{
 
 function fixture(run) {
   const folder=mkdtempSync(path.join(tmpdir(),'observatory-mac-package-'));
-  const bundle=path.join(folder,'Workspace Observatory.app'),revision='a'.repeat(40);
+  const bundle=path.join(folder,appNames.visible.macBundle),revision='a'.repeat(40);
   const files=['Contents/MacOS/WorkspaceObservatory','Contents/Info.plist',
     'Contents/Resources/LICENSE','Contents/Resources/THIRD-PARTY-NOTICES.md',
     'Contents/Resources/Web/index.html','Contents/Resources/Web/assets/third-party-licenses.txt',

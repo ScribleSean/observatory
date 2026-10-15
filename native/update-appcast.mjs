@@ -1,3 +1,4 @@
+import {appNames} from './app-names.mjs';
 import {createHash,createPublicKey,verify} from 'node:crypto';
 import {parseReleaseVersion} from './release-version.mjs';
 
@@ -29,7 +30,7 @@ export function buildUpdateAppcasts(release,artifacts,publicKeys,previousBuild) 
   for(const platform of platforms) {
     const artifact=artifacts.find(a=>a.platform===platform);
     const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-update.zip';
-    const filename=`Workspace-Observatory-${version}-${suffix}`;
+    const filename=`${appNames.visible.artifactPrefix}-${version}-${suffix}`;
     const url=`${repository}/releases/download/${tag}/${filename}`;
     if(artifact.sourceRevision!==release.sourceRevision || artifact.version!==version ||
       artifact.buildNumber!==buildNumber || artifact.url!==url ||

@@ -1,11 +1,12 @@
 param([Parameter(Mandatory=$true)][string]$InstallerPath)
 $ErrorActionPreference = 'Stop'
+$appNames = Get-Content (Join-Path $PSScriptRoot '../app-names.json') -Raw | ConvertFrom-Json
 if (-not [IO.Path]::IsPathRooted($InstallerPath)) { throw 'Absolute installer path required.' }
 $build = Get-Content (Join-Path (Split-Path $InstallerPath) 'installer-build.json') -Raw | ConvertFrom-Json
 if (-not $build.testIdentity -or [IO.Path]::GetFileName($InstallerPath) -ne $build.installerName) { throw 'Only a generated TEST-identity installer may be used.' }
 $expectedHash = (Get-Content -LiteralPath "$InstallerPath.sha256" -Raw).Split(' ')[0]
 if ((Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) { throw 'Installer checksum mismatch.' }
-$appName = 'Workspace Observatory Installer Test'
+$appName = $appNames.visible.windowsTestName
 $install = Join-Path $env:LOCALAPPDATA "Programs\$appName"
 $shortcuts = Join-Path ([Environment]::GetFolderPath('Programs')) $appName
 $keyName = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\WorkspaceObservatoryInstallerTest'

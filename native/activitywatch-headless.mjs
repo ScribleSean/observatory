@@ -1,3 +1,4 @@
+import {appNames} from './app-names.mjs';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {existsSync,mkdirSync,writeFileSync,readFileSync,renameSync} from 'node:fs';
 import {homedir} from 'node:os';
@@ -8,9 +9,9 @@ const executable='/Applications/ActivityWatch.app/Contents/MacOS/aw-qt';
 if(!existsSync(executable))throw Error('ActivityWatch is not installed at the verified location');
 const help=execFileSync(executable,['--help'],{encoding:'utf8'});
 if(!help.includes('--no-gui'))throw Error('This installation does not offer headless operation');
-const home=homedir(),label='io.workspace-observatory.activitywatch';
+const home=homedir(),label=appNames.internal.macActivityWatchLabel;
 const target=path.join(home,'Library/LaunchAgents',`${label}.plist`);
-const backup=path.join(home,'Library/Application Support/Workspace Observatory/Backups');
+const backup=path.join(home,'Library/Application Support',appNames.visible.dataFolder,'Backups');
 mkdirSync(backup,{recursive:true,mode:0o700});
 if(existsSync(target)) {
   if(!readFileSync(target,'utf8').includes(executable))throw Error('Unexpected existing startup job');

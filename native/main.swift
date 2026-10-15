@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             runtime = temporary
         } else {
             runtime = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support/Workspace Observatory")
+                .appendingPathComponent("Library/Application Support/Observatory")
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
         if let identity = selectedRuntimeIdentity, let selectedRuntime {
@@ -987,7 +987,7 @@ guard allowedPreviewArguments.contains(previewArguments) else {
 #endif
 
 let realDataFolder = FileManager.default.homeDirectoryForCurrentUser
-    .appendingPathComponent("Library/Application Support/Workspace Observatory")
+    .appendingPathComponent("Library/Application Support/Observatory")
 let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments, realDataFolder: realDataFolder, userID: getuid())
 let selectedRuntime: URL?
 var runtimeLockDescriptor: Int32 = -1

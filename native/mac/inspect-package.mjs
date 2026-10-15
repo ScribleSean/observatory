@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {readFileSync,readdirSync,lstatSync,readlinkSync,realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
@@ -5,7 +6,7 @@ import {forbiddenPackageName,containsBuildPath} from '../windows/package-content
 
 export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedBundle=false}={}) {
   const root=realpathSync(bundle);
-  if((!allowRelocatedBundle && path.basename(root)!=='Workspace Observatory.app') || !lstatSync(root).isDirectory())throw Error('Expected the Observatory app bundle');
+  if((!allowRelocatedBundle && path.basename(root)!==appNames.visible.macBundle) || !lstatSync(root).isDirectory())throw Error('Expected the Observatory app bundle');
   const info=JSON.parse(readFileSync(path.join(root,'Contents/Resources/build-info.json'),'utf8'));
   if(info.sourceDirty!==false || !/^[a-f0-9]{40}$/.test(info.sourceRevision) ||
     (revision && info.sourceRevision!==revision) || !/^\d+\.\d+\.\d+$/.test(info.version))throw Error('A matching clean-source app build is required');
@@ -31,7 +32,7 @@ export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedB
   }
   walk(root);
   const names=new Set(files.map(file=>file.path));
-  for(const required of ['Contents/MacOS/WorkspaceObservatory','Contents/Info.plist',
+  for(const required of [`Contents/MacOS/${appNames.internal.macExecutable}`,'Contents/Info.plist',
     'Contents/Resources/LICENSE','Contents/Resources/THIRD-PARTY-NOTICES.md',
     'Contents/Resources/Web/index.html','Contents/Resources/Web/assets/third-party-licenses.txt',
     'Contents/Resources/Runtime/node/bin/node','Contents/Resources/Runtime/node/LICENSE',

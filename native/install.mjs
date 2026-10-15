@@ -1,3 +1,4 @@
+import {appNames} from './app-names.mjs';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {cpSync,existsSync,mkdirSync,writeFileSync,readFileSync,lstatSync,renameSync,chmodSync} from 'node:fs';
 import {homedir,tmpdir} from 'node:os';
@@ -7,12 +8,12 @@ import {fileURLToPath} from 'node:url';
 if (!process.argv.includes('--install')) throw Error('Pass --install to install the verified local app and migrate its collector.');
 const root=fileURLToPath(new URL('..',import.meta.url));
 const home=homedir();
-const runtime=path.join(home,'Library/Application Support/Workspace Observatory');
+const runtime=path.join(home,'Library/Application Support',appNames.visible.dataFolder);
 const applications=path.join(home,'Applications');
-const app=path.join(applications,'Workspace Observatory.app');
+const app=path.join(applications,appNames.visible.macBundle);
 const {bundle:source}=JSON.parse(readFileSync(path.join(root,'.native-build/app.json'),'utf8'));
-if(typeof source!=='string' || !source.startsWith(path.join(tmpdir(),'observatory-build-')) || path.basename(source)!=='Workspace Observatory.app')throw Error('Invalid build artifact');
-const binary='Contents/MacOS/WorkspaceObservatory';
+if(typeof source!=='string' || !source.startsWith(path.join(tmpdir(),'observatory-build-')) || path.basename(source)!==appNames.visible.macBundle)throw Error('Invalid build artifact');
+const binary=`Contents/MacOS/${appNames.internal.macExecutable}`;
 for(const folder of [runtime,applications]) {
   if(existsSync(folder) && lstatSync(folder).isSymbolicLink())throw Error('Installation folders must not be symlinks');
 }
@@ -40,7 +41,7 @@ if(existsSync(app)) {
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   if(!exited)throw Error('App did not exit. Installation left unchanged.');
-  renameSync(app,path.join(backups,`Workspace Observatory-${stamp}.app.backup`));
+  renameSync(app,path.join(backups,`${appNames.visible.productName}-${stamp}.app.backup`));
 }
 cpSync(source,app,{recursive:true,errorOnExist:true,force:false});
 execFileSync('/usr/bin/codesign',['--verify','--strict',app]);

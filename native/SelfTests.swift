@@ -30,7 +30,7 @@ func runSelfTests() {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-update-gate-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let bundle = directory.appendingPathComponent("Workspace Observatory.app")
+        let bundle = directory.appendingPathComponent("Observatory.app")
         let lock = directory.appendingPathComponent(".observatory-install.lock")
         precondition(!MacUpdateGate.isBlocked(bundle: bundle))
         try Data().write(to: lock, options: .withoutOverwriting)

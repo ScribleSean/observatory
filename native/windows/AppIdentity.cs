@@ -4,11 +4,11 @@ namespace WorkspaceObservatory;
 // flag. Shortcuts, direct launches and login startup therefore select alike.
 internal sealed record AppIdentity(bool IsTest)
 {
-    internal const string TestName = "Workspace Observatory Installer Test";
+    internal const string TestName = "Observatory Installer Test";
     internal const string TestId = "WorkspaceObservatoryInstallerTest";
     private static readonly Lazy<AppIdentity> selected = new(() => Read(AppContext.BaseDirectory));
     internal static AppIdentity Current => selected.Value;
-    internal string DataName => IsTest ? TestName : "Workspace Observatory";
+    internal string DataName => IsTest ? TestName : "Observatory";
     internal string StartupName => IsTest ? TestId : "WorkspaceObservatory";
     internal string SingletonName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + OverrideSuffix;
     internal string InUseName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + ".InUse";

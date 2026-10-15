@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,realpathSync,lstatSync,openSync,closeSync,unlinkSync,writeFileSync,fsyncSync} from 'node:fs';
 import path from 'node:path';
@@ -20,7 +21,7 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
     if(typeof folder!=='string' || !path.isAbsolute(folder) || path.resolve(folder)!==realpathSync(folder) ||
       !lstatSync(folder).isDirectory() || lstatSync(folder).isSymbolicLink())throw Error('Canonical app directories are required');
   }
-  if(path.basename(installed)!=='Workspace Observatory.app' || installed===staged || path.dirname(installed)!==path.dirname(staged))
+  if(path.basename(installed)!==appNames.visible.macBundle || installed===staged || path.dirname(installed)!==path.dirname(staged))
     throw Error('Stage the candidate beside the installed app');
   for(const receipt of [previousManifest,candidateManifest]) {
     if(receipt?.schema!==1 || receipt.platform!=='macos-arm64' || !Array.isArray(receipt.files))
@@ -29,7 +30,7 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
   const assertStopped=()=>{
     const output=runningProcesses();
     if(typeof output!=='string' || output.length>8*1024*1024)throw Error('Cannot verify application shutdown');
-    if(output.split('\n').some(line=>line.trim().endsWith('/WorkspaceObservatory')))
+    if(output.split('\n').some(line=>line.trim().endsWith(`/${appNames.internal.macExecutable}`)))
       throw Error('Quit all Observatory app copies before replacement');
   };
   assertStopped();

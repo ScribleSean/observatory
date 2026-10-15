@@ -1,3 +1,4 @@
+import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,realpathSync,renameSync,existsSync} from 'node:fs';
@@ -16,11 +17,11 @@ function setup(t) {
     'Contents/Resources/Runtime/python/bin/python3.13','Contents/Resources/Runtime/python/licenses/LICENSE.cpython.txt',
     'Contents/Resources/Collector/scripts/run-collector.py','Contents/Resources/Collector/scripts/collect-mac.mjs',
     'Contents/_CodeSignature/CodeResources'];
-  const installed=path.join(root,'Workspace Observatory.app'),staged=path.join(root,'candidate.app');
+  const installed=path.join(root,appNames.visible.macBundle),staged=path.join(root,'candidate.app');
   const receipts=[];
   for(const [index,folder] of [installed,staged].entries()) {
     // Inspection of new release artifacts still requires the canonical app name.
-    const temporary=path.join(root,'build-'+index,'Workspace Observatory.app');
+    const temporary=path.join(root,'build-'+index,appNames.visible.macBundle);
     for(const name of files) {
       const target=path.join(temporary,name);mkdirSync(path.dirname(target),{recursive:true});
       writeFileSync(target,'fixture-'+index);

@@ -1,3 +1,4 @@
+import {appNames} from './app-names.mjs';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {mkdirSync,mkdtempSync,cpSync,writeFileSync,readFileSync,readdirSync,rmSync,statSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -35,7 +36,7 @@ if (process.argv.includes('--native-only') || webIndex>=0) {
 }
 // Build app bundles outside file-provider-managed project folders.
 const staging=mkdtempSync(path.join(tmpdir(),'observatory-build-'));
-const bundle=path.join(staging,'Workspace Observatory.app');
+const bundle=path.join(staging,appNames.visible.macBundle);
 const contents=path.join(bundle,'Contents');
 const resources=path.join(contents,'Resources');
 mkdirSync(path.join(contents,'MacOS'),{recursive:true});
@@ -80,17 +81,17 @@ if(updaterArchive) {
   updaterLink.push('-F',frameworks,'-framework','Sparkle','-Xlinker','-rpath',
     '-Xlinker','@executable_path/../Frameworks');
 }
-const binary=path.join(contents,'MacOS','WorkspaceObservatory');
+const binary=path.join(contents,'MacOS',appNames.internal.macExecutable);
 execFileSync('/usr/bin/xcrun',['swiftc','-swift-version','5','-O','-module-cache-path',path.join(output,'module-cache'),
   '-target','arm64-apple-macosx14.0','-framework','AppKit','-framework','SwiftUI','-framework','WebKit',
   '-framework','ServiceManagement',...updaterLink,...sources,'-o',binary],{cwd:root,stdio:'inherit'});
 writeFileSync(path.join(contents,'Info.plist'),`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleIdentifier</key><string>io.workspace-observatory.app</string>
-<key>CFBundleName</key><string>Observatory</string>
-<key>CFBundleDisplayName</key><string>Observatory</string>
-<key>CFBundleExecutable</key><string>WorkspaceObservatory</string>
+<key>CFBundleIdentifier</key><string>${appNames.internal.macBundleIdentifier}</string>
+<key>CFBundleName</key><string>${appNames.visible.productName}</string>
+<key>CFBundleDisplayName</key><string>${appNames.visible.productName}</string>
+<key>CFBundleExecutable</key><string>${appNames.internal.macExecutable}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleShortVersionString</key><string>${release.version}</string>

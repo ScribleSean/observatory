@@ -1,3 +1,4 @@
+import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,readdirSync,existsSync,rmSync,cpSync,symlinkSync,realpathSync} from 'node:fs';
@@ -14,7 +15,7 @@ function fixture(t) {
   const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-retention-')));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const release=path.join(root,'release'),output=path.join(root,'retained');
-  const app=path.join(release,'candidate-one','Workspace Observatory');
+  const app=path.join(release,'candidate-one',appNames.internal.windowsPackageFolder);
   mkdirSync(path.join(app,'Runtime'),{recursive:true});
   const expected={revision:'a'.repeat(40),dirty:false,version:'0.3.13',buildNumber:34};
   const payload=Buffer.from('Synthetic inert package bytes');
@@ -30,7 +31,7 @@ function fixture(t) {
     const identity=testIdentity?'test':'ordinary';
     const artifacts=path.join(release,`installer-${identity}`,'artifacts');
     mkdirSync(artifacts,{recursive:true});
-    const installerName=`Workspace-Observatory-${expected.version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
+    const installerName=`${appNames.visible.artifactPrefix}-${expected.version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
     const build={schema:1,version:expected.version,buildNumber:expected.buildNumber,testIdentity,installerName,
       installerSource:{revision:expected.revision,dirty:false},sourceRevision:expected.revision,sourceDirty:false,
       packageManifestSha256:digest(manifestBytes),updateEnvelopeSha256:null};
@@ -124,7 +125,7 @@ test('linked output ancestors cannot stage inside or change the original package
   for(const nested of [false,true]) {
     const f=fixture(t),alias=path.join(f.root,'outside-alias');
     symlinkSync(nested?path.dirname(f.app):f.app,alias,process.platform==='win32'?'junction':'dir');
-    const output=nested?path.join(alias,'Workspace Observatory','retained'):path.join(alias,'retained');
+    const output=nested?path.join(alias,appNames.internal.windowsPackageFolder,'retained'):path.join(alias,'retained');
     const inventory=readdirSync(f.app).sort();
     assert.throws(()=>retainCandidate(f.release,output,f.expected),/outside the original/);
     assert.equal(existsSync(path.join(f.app,'retained')),false);
