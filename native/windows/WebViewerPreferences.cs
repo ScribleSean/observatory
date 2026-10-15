@@ -50,11 +50,30 @@ internal static class WebViewerPreferences
         skin = Skin(skin);
         theme = Theme(theme);
         // Values come from fixed lists, never from stored text.
-        var script = "document.documentElement.dataset.skin = \"" + skin + "\";";
+        var script = "      root.dataset.skin = \"" + skin + "\";";
         if (theme is not null)
-            script += "\ndocument.documentElement.dataset.theme = \"" + theme + "\";";
-        else script += "\ndelete document.documentElement.dataset.theme;";
-        return "(() => {\n" + script + "\n})();";
+            script += "\n      root.dataset.theme = \"" + theme + "\";";
+        else script += "\n      delete root.dataset.theme;";
+        return "(() => {\n" +
+            "  try {\n" +
+            "    const apply = () => {\n" +
+            "      const root = document.documentElement;\n" +
+            "      if (!root) return false;\n" +
+            script + "\n" +
+            "      return true;\n" +
+            "    };\n" +
+            "    if (apply()) return;\n" +
+            "    const observer = new MutationObserver(() => {\n" +
+            "      try { if (apply()) observer.disconnect(); } catch { }\n" +
+            "    });\n" +
+            "    observer.observe(document, {childList: true});\n" +
+            "    const retry = () => {\n" +
+            "      try { if (apply()) observer.disconnect(); } catch { }\n" +
+            "    };\n" +
+            "    document.addEventListener(\"readystatechange\", retry);\n" +
+            "    document.addEventListener(\"DOMContentLoaded\", retry);\n" +
+            "  } catch { }\n" +
+            "})();";
     }
 
     internal static void SelfTest()
@@ -81,9 +100,16 @@ internal static class WebViewerPreferences
         var invalid = DocumentStartScript("x\"; alert(1)", "dark\"");
         Check(invalid.Contains("dataset.skin = \"sage\""), "Invalid script skin must use Sage");
         Check(!invalid.Contains("alert"), "Script must exclude stored text");
-        Check(invalid.Contains("delete document.documentElement.dataset.theme"), "Invalid theme removes the attribute");
-        Check(DocumentStartScript("sage", "system").Contains("delete document.documentElement.dataset.theme"), "System theme removes the attribute");
-        Check(DocumentStartScript("sage", null).Contains("delete document.documentElement.dataset.theme"), "Missing theme removes the attribute");
+        Check(invalid.Contains("delete root.dataset.theme"), "Invalid theme removes the attribute");
+        Check(DocumentStartScript("sage", "system").Contains("delete root.dataset.theme"), "System theme removes the attribute");
+        Check(DocumentStartScript("sage", null).Contains("delete root.dataset.theme"), "Missing theme removes the attribute");
+        Check(script.Contains("const root = document.documentElement;") && script.Contains("if (!root) return false;"), "Script must wait for the document element");
+        Check(script.Contains("new MutationObserver(") && script.Contains("observer.observe(document, {childList: true})"), "Script must observe document insertion");
+        Check(script.Contains("document.addEventListener(\"readystatechange\", retry)") &&
+            script.Contains("document.addEventListener(\"DOMContentLoaded\", retry)"), "Script must retry on document events");
+        Check(script.StartsWith("(() => {\n  try {\n") && script.EndsWith("  } catch { }\n})();"), "Script must catch startup errors");
+        Check(script.Contains("new MutationObserver(() => {\n      try { if (apply()) observer.disconnect(); } catch { }") &&
+            script.Contains("const retry = () => {\n      try { if (apply()) observer.disconnect(); } catch { }"), "Callbacks must catch errors and disconnect after success");
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-viewer-test-" + Guid.NewGuid().ToString("N"));
         var registryKey = @"Software\WorkspaceObservatoryTests\Viewer-" + Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(runtime);
