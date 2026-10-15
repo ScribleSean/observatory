@@ -20,7 +20,7 @@ The native apps are the everyday entry point. For development builds, follow the
 4. Use **Refresh sources** to collect, then inspect Source health for availability and timestamps. Browser **Reload snapshot** only rereads saved data and does not collect.
 5. Optionally pair devices from the Mac over an existing trusted SSH connection. Follow [pairing maintenance](PAIRING-MAINTENANCE.md) for prerequisites and supported records. Claude usage sharing requires separate consent on both paired devices under Usage sharing. Direct TLS is a separate preview, not a verified replacement for that path.
 
-Each native app can collect its own enabled local sources without the legacy SSH hub. Closing the dashboard leaves the menu-bar or tray app running. Use Quit to stop it. See [Startup](STARTUP.md) for native login behavior and the separate legacy jobs.
+Each native app collects its own enabled local sources. Closing the dashboard leaves the menu-bar or tray app running. Use Quit to stop it. See [Startup](STARTUP.md) for native login behavior and the separate legacy jobs.
 
 ## What you can see
 
@@ -61,27 +61,11 @@ npm run serve:local
 
 Open [localhost:5601](http://127.0.0.1:5601). The demo uses made-up records and labels them as sample data. It refuses to overwrite an existing snapshot with a one-line explanation and exit code 1. Use a separate checkout if this one already contains records you want to preserve. You do not need an AI account, ActivityWatch or an SSH connection to try it.
 
-## Legacy developer appendix: SSH hub and browser dashboard
+## Browser dashboard
 
-This section describes the older Mac-coordinated collector and browser viewer. It is not required for native local collection or the native first-run wizard. Preserve existing private configuration when migrating. Do not create an SSH hub merely to enable a native local source.
+The browser dashboard in this repository shows the fictional demo records described above. It is a development fixture. The legacy SSH hub collector that once filled it from private records was removed on 2026-10-14 (issue 82). A snapshot it wrote earlier is not deleted by this change, and existing private settings are preserved.
 
 The default appearance is black and neutral. The top-bar sun and moon button switches between dark and light themes and saves that choice in this browser. [Brand guidance](BRAND.md) defines the shared telescope mark and visual language.
-
-### View the same instance on another computer
-
-For optional login startup and restart recovery, see [Startup](STARTUP.md).
-
-No second collector or repository clone is needed just to view the dashboard. With a trusted SSH connection from the dashboard host to the viewing computer, run this on the dashboard host:
-
-```sh
-ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -R 127.0.0.1:5601:127.0.0.1:5601 VIEWER_SSH_ALIAS
-```
-
-Open `http://127.0.0.1:5601` on the viewing computer. The host, local server and SSH tunnel must remain running. This is not automatic startup. Stop the tunnel with Ctrl+C. Keep the remote listener restricted to loopback and verify your SSH server permits this forwarding. Do not expose this unauthenticated dashboard to a public or shared network.
-
-The historical Mac hub used SSH and ccusage reports, including Ubuntu reads and a WSL route to native Windows logs. That route is no longer a setup recommendation. Native Windows logs should be read by the Windows app. Do not copy legacy hub examples into a new setup or restart WSL to recover an old source.
-
-Preserve existing private settings and saved snapshots until a tested migration can retain supported Mac/Windows records and retire obsolete source choices. Existing SSH aliases and provider credentials stay with their owning tools. Legacy Mac migration (archived) retains the compatibility assessment, not authorization to resume Ubuntu tracking.
 
 The browser checks for a newer snapshot every 30 seconds while visible, and when it becomes visible again. **Reload snapshot** checks immediately. None of these browser actions starts collection or model tasks. You do not need to rebuild after collecting new records. ActivityWatch records independently of this viewer.
 
@@ -89,7 +73,7 @@ The browser checks for a newer snapshot every 30 seconds while visible, and when
 
 ActivityWatch records foreground windows and away time. The dashboard separates AI apps, editors, terminals, browsers and other apps. Editor time may include AI assistance. These categories do not establish attention, manual coding time or productive output. Empty hours can mean inactivity or missing collector records.
 
-Native Codex counts come from saved logs. The legacy SSH collector uses ccusage reports. Cached tokens are included in the reported total, and reasoning tokens are part of output. These counts cannot tell you how much subscription allowance remains or how much money you spent.
+Native Codex counts come from saved logs. Cached tokens are included in the reported total, and reasoning tokens are part of output. These counts cannot tell you how much subscription allowance remains or how much money you spent.
 
 Saved agent receipts may contain cumulative conversation counters. The dashboard keeps the newest snapshot for each conversation instead of adding them together. A failed call shows Unknown token usage. A returned response does not establish that its answer was correct.
 
@@ -107,13 +91,9 @@ Use `npm run serve:local` for viewing. It serves static files on the loopback ad
 
 ## Optional dictation statistics
 
-The Dictation view defaults to all tools and devices. Wispr is the supported recording-metadata source. ChatGPT voice tracking remains unverified, not zero usage. For the legacy collector, enable either host in the ignored `local.config.json`:
+The Dictation view defaults to all tools and devices. Wispr is the supported recording-metadata source. ChatGPT voice tracking remains unverified, not zero usage. Turn Wispr on in each app's source settings.
 
-```json
-"dictation": { "mac": true, "windows": true }
-```
-
-Wispr reads `flow.sqlite` from Application Support on Mac and AppData/Roaming on Windows. The legacy Windows reader uses its native `py -3` runtime through the Windows SSH connection. Read-only SQLite authorizes only History timestamp, duration and numWords columns. No transcript or audio content is fetched. Dates use America/New_York, which requires Python timezone data on each reader. Missing numeric metadata has explicit record coverage and is never presented as a confirmed zero.
+Wispr reads `flow.sqlite` from Application Support on Mac and AppData/Roaming on Windows. Read-only SQLite authorizes only History timestamp, duration and numWords columns. No transcript or audio content is fetched. Dates use America/New_York, which requires Python timezone data on each reader. Missing numeric metadata has explicit record coverage and is never presented as a confirmed zero.
 
 Only dates, transcription counts, word counts and recorded audio duration enter the dashboard. App names, custom model names, transcripts, recordings and credentials are excluded. A missing, invalid or unsupported store reports unknown usage, not zero. Dates use America/New_York.
 
@@ -127,7 +107,7 @@ The native app requires an Apple Silicon Mac running macOS 14 or later. It uses 
 
 Earlier source installations used `node native/install.mjs --install` with an ignored `local.config.json`. That path copied collectors and private configuration into `Library/Application Support/Workspace Observatory`, installed into the current user's Applications folder and enabled login startup. It backed up the old collector login job before disabling it, while retaining web-server and tunnel jobs. This is compatibility context, not a recommendation to replay an old hub configuration. Follow the platform guide and [guarded replacement procedures](UPDATES.md) before changing an installed app.
 
-Click the telescope menu-bar icon for a compact summary. Open Observatory shows the full detail window. Closing that window leaves the menu-bar app running. The app refreshes every five minutes while the Mac is awake and logged in, retries after wake, and preserves the preceding snapshot if a collection fails. Individual unavailable sources are labeled rather than filled with zeros. Remote reads in an existing legacy hub still require its configured SSH hosts and tools.
+Click the telescope menu-bar icon for a compact summary. Open Observatory shows the full detail window. Closing that window leaves the menu-bar app running. The app refreshes every five minutes while the Mac is awake and logged in, retries after wake, and preserves the preceding snapshot if a collection fails. Individual unavailable sources are labeled rather than filled with zeros.
 
 The panel's All option requires collector-verified combined totals. Historical token snapshots may include Ubuntu. The apps do not show those rows, and a combined total that includes them stays unavailable. Dictation remains per device because synced history may overlap. Missing or unverified combined totals stay unavailable.
 

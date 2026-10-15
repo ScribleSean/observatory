@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {macActivity} from './collect-dashboard.mjs';
+import {macActivity} from './mac-activity.mjs';
 import {macSnapshot,macCollectorConfig} from './mac-snapshot.mjs';
 import {retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';

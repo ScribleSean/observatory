@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {activityCombinations,selectActivityPairs} from './activity-buckets.mjs';
-import {cleanActivity} from './collect-dashboard.mjs';
+import {cleanActivity} from './snapshot-clean.mjs';
 
 const pair = hostname => [
   {id:`window_${hostname}`,hostname,type:'currentwindow'},
