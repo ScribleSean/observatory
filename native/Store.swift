@@ -11,7 +11,6 @@ final class ObservatoryStore: ObservableObject {
     @Published var now = Date()
     let runtime: URL
     let collectionAllowed: Bool
-    private(set) var localCollection = false
     private(set) var setupRequired = false
     @Published var pairingMaintenance = false
     @Published var collectionPausedForPairing = false
@@ -44,7 +43,7 @@ final class ObservatoryStore: ObservableObject {
         self.collectionAllowed = collectionAllowed
         do {
             setupRequired = try FirstRunSetup.prepare(runtime: runtime)
-            localCollection = try CollectorConfiguration.prepare(runtime: runtime)
+            _ = try CollectorConfiguration.prepare(runtime: runtime)
         }
         catch { setupRequired = true; lastAttempt = "configuration-unavailable" }
         reload()
@@ -67,15 +66,6 @@ final class ObservatoryStore: ObservableObject {
         if snapshot?.collectedAt.map({ Date().timeIntervalSince($0) < 300 }) != true { refresh() }
     }
 
-    var freshness: String {
-        guard let date = snapshot?.collectedAt else { return "Updated: Unknown" }
-        if date > now { return "Update time is ahead of this device's clock" }
-        let minutes = max(0, Int(now.timeIntervalSince(date) / 60))
-        if minutes < 1 { return "Updated just now" }
-        if minutes < 60 { return "Updated \(minutes)m ago" }
-        if minutes >= 1440 { return "Updated \(minutes / 1440)d ago" }
-        return "Updated \(minutes / 60)h ago"
-    }
     var stale: Bool { snapshot?.collectedAt.map { now.timeIntervalSince($0) > 900 } ?? true }
 
     func reload() {

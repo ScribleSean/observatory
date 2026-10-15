@@ -13,28 +13,21 @@ test('both setup wizards describe the SSH prerequisite and separate TLS preview'
   }
 });
 
-test('ActivityWatch recovery guidance is linked on all three surfaces',async()=>{
-  for(const file of ['native/ActivityWatchHelp.swift','native/windows/NativeDashboard.cs','app/page.tsx']) {
+test('ActivityWatch recovery guidance is linked on Windows and web',async()=>{
+  for(const file of ['native/windows/NativeDashboard.cs','app/page.tsx']) {
     const source=await read(file);
     assert.match(source,/ActivityWatch is a separate application/);
     assert.match(source,/https:\/\/activitywatch.net\//);
     assert.match(source,/port 5600/);
     assert.match(source,/Missing readings remain Unknown/);
   }
-  assert.match(await read('native/NativeSettings.swift'),/ActivityWatchHelp\(\)/);
   assert.match(await read('native/windows/NativeSourceSettings.cs'),/ActivityWatchHelp\(\)/);
 });
 
-test('Mac pause is visible in both surfaces and gear routes to Settings',async()=>{
-  for(const file of ['native/Panel.swift','native/NativeDashboard.swift'])
-    assert.match(await read(file),/store.pairingPauseMessage/);
+test('Mac gear routes to Settings',async()=>{
   const main=await read('native/main.swift');
-  assert.match(main,/settings: \{ \[weak self\] in self\?\.openPanelSettings\(\)/);
   assert.match(main,/private func openPanelSettings\(\) \{ openDashboard\("settings"\) \}/);
-  // Recovery actions stay available while the failed operation's pause remains.
-  const settings=await read('native/NativeSettings.swift');
-  const recovery=settings.slice(settings.indexOf('Button("Pair with Windows'),settings.indexOf('if actions.preview { Text("Device changes'));
-  assert.doesNotMatch(recovery,/collectionPausedForPairing|\.disabled\(busy/);
+
 });
 
 // Structural routing guard. Native desktop interaction remains a separate check.

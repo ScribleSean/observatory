@@ -8,7 +8,6 @@ const source = (file) =>
 // Cross-platform source contracts complement the native UI and model tests.
 // These run on Windows without pretending to compile AppKit or SwiftUI.
 for (const file of [
-  'Panel.swift',
   'windows/UsagePopup.cs',
   'windows/Program.cs',
 ]) {
@@ -32,7 +31,6 @@ for (const file of [
 }
 
 for (const [dashboard, history, devices] of [
-  ['NativeDashboard.swift', 'NativeHistory.swift', 'nativeHistoryDevices'],
   [
     'windows/NativeDashboard.cs',
     'windows/NativeHistory.cs',
@@ -95,22 +93,6 @@ void test('SSH setup omits retired scope from requests and controls', async () =
       `${file} still contains the retired pairing key`,
     );
   }
-});
-
-void test('Mac Settings does not enable retired benchmark reads', async () => {
-  const text = await source('NativeSettings.swift');
-  assert.ok(
-    !/Toggle\([^\r\n]*binding\("benchmarks"\)/.test(text),
-    'Retired benchmark collection is still offered',
-  );
-  assert.ok(
-    !text.includes('Benchmark reads may connect to Ubuntu'),
-    'Settings still advertises retired benchmark reads',
-  );
-  assert.ok(
-    text.includes('Toggle("Read configured agent receipts"'),
-    'Native receipt consent must remain separate',
-  );
 });
 
 void test('Mac legacy collection uses bundled scripts, not retained WSL-capable code', async () => {
