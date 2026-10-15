@@ -43,9 +43,11 @@ test('Mac pause is visible in both surfaces and gear routes to Settings',async()
 });
 
 // Structural routing guard. Native desktop interaction remains a separate check.
-test('Windows native tray Configure reuses the main dashboard route',async()=>{
+test('Windows tray Configure opens Settings in the shared viewer',async()=>{
   const program=await read('native/windows/Program.cs');
   const configure=program.slice(program.indexOf('private void Configure()'),program.indexOf('private void RefreshStatus()'));
-  assert.match(configure,/private void Configure\(\) => Open\("settings"\);/);
-  assert.doesNotMatch(configure,/new NativeDashboard|ShowDialog/);
+  assert.equal(configure.trim(),'private void Configure() => Open("settings");');
+  assert.match(program,/menu\.Items\.Add\("Configure local collection", null, \(_, _\) => Configure\(\)\);/);
+  assert.doesNotMatch(program,/new\s+NativeDashboard\b|\bShowSourceSettings\b/);
+  assert.doesNotMatch(configure,/\bShowDialog\s*\(/);
 });

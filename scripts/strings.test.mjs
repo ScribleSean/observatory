@@ -1,9 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { format, generatedStrings, validateStrings } from './build-strings.mjs';
+import { format, generatedStrings, normalizeNewlines, validateStrings } from './build-strings.mjs';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('normalizes CRLF and lone CR to LF', () => {
+  const normalized = normalizeNewlines('first\r\nsecond\rthird\n');
+  assert.equal(normalized, 'first\nsecond\nthird\n');
+  assert.ok(!normalized.includes('\r'));
+});
+
+test('generated strings contain no carriage returns', () => {
+  for (const [path, content] of generatedStrings()) assert.ok(!content.includes('\r'), path);
+});
 
 test('all three generated strings files are current', () => {
   const generated = generatedStrings();

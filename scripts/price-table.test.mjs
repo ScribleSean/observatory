@@ -6,6 +6,7 @@ import { loadPrices, priceDataModule, prices, rateFor } from './price-table.mjs'
 
 const entry = () => ({ input: 1, cachedInput: 0, cacheWrite: 2, output: 3 });
 const fixture = () => ({ source: 'https://example.com/prices', checkedOn: '2026-10-14', models: { synthetic: entry() } });
+const normalizeNewlines = text => text.replace(/\r\n/g, '\n');
 
 test('accepts the shipped price data', () => {
   assert.deepEqual(loadPrices(rawPrices), rawPrices);
@@ -15,8 +16,13 @@ test('accepts the shipped price data', () => {
 test('generated module matches the source and generated text', () => {
   const source = JSON.parse(fs.readFileSync(new URL('../native/prices.json', import.meta.url), 'utf8'));
   assert.deepEqual(source, rawPrices);
-  assert.equal(fs.readFileSync(new URL('../native/prices.json', import.meta.url), 'utf8'), JSON.stringify(loadPrices(source), null, 2) + '\n');
-  assert.equal(priceDataModule(loadPrices(source)), fs.readFileSync(new URL('./price-data.mjs', import.meta.url), 'utf8'));
+  assert.equal(normalizeNewlines(fs.readFileSync(new URL('../native/prices.json', import.meta.url), 'utf8')), JSON.stringify(loadPrices(source), null, 2) + '\n');
+  assert.equal(priceDataModule(loadPrices(source)), normalizeNewlines(fs.readFileSync(new URL('./price-data.mjs', import.meta.url), 'utf8')));
+});
+
+test('normalizes a CRLF generated price module to LF', () => {
+  const output = priceDataModule(loadPrices(fixture()));
+  assert.equal(normalizeNewlines(output.replace(/\n/g, '\r\n')), output);
 });
 
 const invalidCases = [
