@@ -38,10 +38,23 @@ test('Mac pause is visible in both surfaces and gear routes to Settings',async()
 });
 
 // Structural routing guard. Native desktop interaction remains a separate check.
-test('Windows native tray Configure reuses the main dashboard route',async()=>{
+test('Windows tray Configure opens Settings in the shared viewer',async()=>{
   const program=await read('native/windows/Program.cs');
   const configure=program.slice(program.indexOf('private void Configure()'),program.indexOf('private void RefreshStatus()'));
-  const native=configure.slice(configure.indexOf('if (nativeDashboard'),configure.indexOf('using var settings'));
-  assert.match(native,/Open\(\);[\s\S]*existing\.ShowSourceSettings\(\);[\s\S]*return;/);
-  assert.doesNotMatch(native,/new NativeDashboard|ShowDialog/);
+  const web=configure.match(/if\s*\(viewerMode == ViewerMode\.Web\)\s*\{\s*Open\("settings"\);\s*return;\s*\}/);
+  assert.ok(web,'Web mode opens Settings and returns');
+  const newNative=configure.indexOf('new NativeDashboard');
+  assert.ok(newNative === -1 || web.index + web[0].length <= newNative,'Web mode returns before constructing a native dashboard');
+
+  const setup=configure.match(/if\s*\(!FirstRunSetup\.AllowsCollection\(runtime\)\)\s*\{[^{}]*return;\s*\}/);
+  assert.ok(setup,'Pending setup returns from Configure');
+  assert.match(setup[0],/Open\(viewerMode == ViewerMode\.Web \? "settings" : null\);/);
+  assert.doesNotMatch(configure.slice(0,setup.index + setup[0].length),/collector\.|new NativeDashboard|new SourceSettingsActions/);
+
+  if (/if\s*\(viewerMode == ViewerMode\.Native\)/.test(configure)) {
+    const native=configure.match(/if\s*\(viewerMode == ViewerMode\.Native\)\s*\{([^{}]*)\}/);
+    assert.ok(native,'Native mode has a separate routing branch');
+    assert.match(native[1],/Open\(\);[\s\S]*existing\.ShowSourceSettings\(\);\s*return;\s*$/);
+    assert.doesNotMatch(native[1],/new NativeDashboard|ShowDialog/);
+  }
 });
