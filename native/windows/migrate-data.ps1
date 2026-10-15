@@ -98,9 +98,10 @@ function StreamCopy([string]$Source, [string]$Destination, [long]$Ticks) {
         if ($null -ne $outputStream) { $outputStream.Dispose() }
         if ($null -ne $inputStream) { $inputStream.Dispose() }
     }
-    [IO.File]::SetLastWriteTimeUtc($partial, [DateTime]::new($Ticks, [DateTimeKind]::Utc))
-    if ([IO.File]::Exists($Destination)) { [IO.File]::Replace($partial, $Destination, $null) }
-    else { [IO.File]::Move($partial, $Destination) }
+    # A stale file at the destination is an earlier staging copy made by this script, never earlier data.
+    if ([IO.File]::Exists($Destination)) { [IO.File]::Delete($Destination) }
+    [IO.File]::Move($partial, $Destination)
+    [IO.File]::SetLastWriteTimeUtc($Destination, [DateTime]::new($Ticks, [DateTimeKind]::Utc))
 }
 try {
     if ($Action -eq 'copy' -and -not $ConfirmAppQuit) { Refuse 'Confirm that every Observatory app is quit before copying.' }
