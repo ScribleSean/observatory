@@ -3,8 +3,7 @@ using Microsoft.Web.WebView2.WinForms;
 
 namespace WorkspaceObservatory;
 
-// The shared viewer in the main window. Shown only with --web-dashboard. The
-// native dashboard stays the default and is not used or changed by this class.
+// The shared viewer is the default main window.
 internal sealed class WebDashboard : Form
 {
     internal const string Page = "dashboard.html";
@@ -131,12 +130,13 @@ internal sealed class WebDashboard : Form
         _ = handler?.CloseAsync();
     }
 
+    // Only a fragment change, which keeps the document and any pairing session.
     internal void ShowSection(string section)
     {
         if (!Fragments.Contains(section, StringComparer.Ordinal)) return;
         this.section = section;
         if (!IsDisposed && !web.IsDisposed && started.IsCompletedSuccessfully && web.CoreWebView2 is { } core)
-            core.Navigate(WebPanel.Origin + "/dashboard.html#" + section);
+            core.Navigate(WebPanel.Origin + "/" + Page + "#" + section);
     }
 
     private void ShowError(string message)

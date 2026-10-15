@@ -4,8 +4,7 @@ using System.Text.Json;
 
 namespace WorkspaceObservatory;
 
-// Spike for the shared web viewer. Shown only with --web-panel. The native
-// UsagePopup stays the default and is not used or changed by this class.
+// The shared viewer is the default tray panel.
 internal sealed class WebPanel : Form
 {
     internal const string Origin = "https://observatory.invalid";

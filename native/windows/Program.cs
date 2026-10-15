@@ -2,9 +2,12 @@ using System.Text.Json.Nodes;
 
 namespace WorkspaceObservatory;
 
+internal enum ViewerMode { Web, Native, Legacy }
+
 internal static class Program
 {
-    internal static bool UseNativeDashboard(string[] args) => !args.Contains("--legacy-dashboard");
+    internal static ViewerMode SelectViewerMode(string[] args) => args.Contains("--legacy-dashboard")
+        ? ViewerMode.Legacy : args.Contains("--native-viewer") ? ViewerMode.Native : ViewerMode.Web;
     [STAThread]
     private static void Main(string[] args)
     {
@@ -321,9 +324,17 @@ internal static class Program
                 QuotaArchive.SelfTest();
                 DeviceIdentity.SelfTest();
                 TlsSetupReply.SelfTest();
-                if (!UseNativeDashboard([]) || !UseNativeDashboard(["--background"]) || UseNativeDashboard(["--legacy-dashboard"]) ||
-                    UseNativeDashboard(["--native-dashboard", "--legacy-dashboard"])) throw new InvalidOperationException("Dashboard launch mode contract failed.");
-                Console.WriteLine("Native dashboard default and legacy fallback passed.");
+                foreach (var (flags, expected) in new (string[], ViewerMode)[]
+                {
+                    ([], ViewerMode.Web), (["--background"], ViewerMode.Web),
+                    (["--web-panel"], ViewerMode.Web), (["--web-dashboard"], ViewerMode.Web),
+                    (["--native-dashboard"], ViewerMode.Web), (["--native-viewer"], ViewerMode.Native),
+                    (["--native-viewer", "--background"], ViewerMode.Native),
+                    (["--legacy-dashboard"], ViewerMode.Legacy)
+                })
+                    if (SelectViewerMode(flags) != expected)
+                        throw new InvalidOperationException("Viewer launch mode contract failed.");
+                Console.WriteLine("Shared viewer default, native viewer and legacy fallback passed.");
             }
             catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
             return;
@@ -419,8 +430,8 @@ internal static class Program
             return;
         }
         using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
-        var context = new ObservatoryContext(activation, !args.Contains("--background"), UseNativeDashboard(args), updateQuit,
-            webPanel: args.Contains("--web-panel"), panelTiming: args.Contains("--panel-timing"), webDashboard: args.Contains("--web-dashboard"));
+        var context = new ObservatoryContext(activation, !args.Contains("--background"), SelectViewerMode(args), updateQuit,
+            panelTiming: args.Contains("--panel-timing"));
         EventHandler? readyHandler = null;
         if (updateReady is not null)
         {
@@ -447,17 +458,13 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly PowerResumeWindow powerNotifications;
     private readonly System.Windows.Forms.Timer activationTimer = new() { Interval = 200 };
     private Form? dashboard;
-    private readonly bool nativeDashboard;
+    private readonly ViewerMode viewerMode;
     private SetupWizard? setupWizard;
     private DirectPairingWindow? directPairing;
     private bool pairingDetailsOpen;
     private BridgeHandler? dashboardBridge;
     private UsagePopup? usagePopup;
-    // Spike. Null unless the app was started with --web-panel.
     private WebPanel? webPanel;
-    private readonly bool useWebPanel;
-    // True when the app was started with --web-dashboard. The main window then shows the shared viewer.
-    private readonly bool useWebDashboard;
     private readonly bool panelTiming;
     private Action<string>? panelProbe;
     private Action? panelReleased;
@@ -466,12 +473,10 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly UpdateController updater;
     private int updateShutdownRequested;
 
-    internal ObservatoryContext(EventWaitHandle activation, bool show, bool nativeDashboard = true, EventWaitHandle? updateQuit = null,
-        bool webPanel = false, bool panelTiming = false, bool webDashboard = false)
+    internal ObservatoryContext(EventWaitHandle activation, bool show, ViewerMode viewerMode = ViewerMode.Web, EventWaitHandle? updateQuit = null,
+        bool panelTiming = false)
     {
-        this.nativeDashboard = nativeDashboard;
-        useWebPanel = webPanel;
-        useWebDashboard = webDashboard;
+        this.viewerMode = viewerMode;
         this.panelTiming = panelTiming;
         Directory.CreateDirectory(runtime);
         collector = new Collector(runtime);
@@ -571,7 +576,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void ShowUsage()
     {
-        if (useWebPanel) { _ = ShowWebPanel(); return; }
+        if (viewerMode == ViewerMode.Web) { _ = ShowWebPanel(); return; }
         if (usagePopup is not null && !usagePopup.IsDisposed) { usagePopup.Close(); return; }
         usagePopup = new UsagePopup(Data, collector.Refresh, Open);
         usagePopup.FormClosed += (_, _) => usagePopup = null;
@@ -623,7 +628,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         return shown;
     }
 
-    // Measurement harness for the spike, run only with --panel-timing. It opens
+    // Measurement harness, run only with --panel-timing. It opens
     // and closes whichever panel is active and writes one line per event. The
     // timer starts where the tray click handler starts, not at the mouse click.
     private async Task MeasurePanel()
@@ -633,7 +638,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         async Task<double> OpenOnce()
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            if (useWebPanel)
+            if (viewerMode == ViewerMode.Web)
             {
                 if (!await ShowWebPanel()) return -1;
             }
@@ -650,7 +655,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             }
             return watch.Elapsed.TotalMilliseconds;
         }
-        void CloseOnce() { if (useWebPanel) webPanel?.Hide(); else usagePopup?.Close(); }
+        void CloseOnce() { if (viewerMode == ViewerMode.Web) webPanel?.Hide(); else usagePopup?.Close(); }
         panelReleased = () => { try { Write("released web view"); } catch { } };
         try
         {
@@ -661,8 +666,60 @@ internal sealed class ObservatoryContext : ApplicationContext
             collector.Changed -= Done;
             while (collector.Busy) await Task.Delay(500);
             await Task.Delay(5000);
-            Write("panel=" + (useWebPanel ? "web" : "native") + " pid=" + Environment.ProcessId);
-            if (useWebDashboard)
+            Write("panel=" + (viewerMode == ViewerMode.Web ? "web" : "native") + " pid=" + Environment.ProcessId);
+            Write("phase=never-opened");
+            await Task.Delay(20000);
+            Write("open=1 ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+            Write("phase=open");
+            await Task.Delay(20000);
+            CloseOnce();
+            Write("phase=closed");
+            await Task.Delay(60000);
+            Write("phase=closed-60s");
+            // The web panel releases its web view about now. Sample again five minutes later.
+            await Task.Delay(TimeSpan.FromMinutes(5));
+            Write("phase=closed-6min");
+            await Task.Delay(15000);
+            for (var open = 2; open <= 6; open++)
+            {
+                Write("open=" + open + " ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                await Task.Delay(3000);
+                CloseOnce();
+                await Task.Delay(3000);
+            }
+            if (viewerMode == ViewerMode.Web && await ShowWebPanel() && webPanel is { } panel)
+            {
+                Write("untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
+                await panel.SavePreview(Path.Combine(runtime, "panel-timing.png"));
+                panelProbe = action => Write("accepted action=" + action);
+                for (var button = 0; button < 4; button++) { await panel.Press(button); await Task.Delay(1500); }
+                panelProbe = null;
+                var before = Snapshot.Text(Data()?["collectedAt"], "");
+                for (var wait = 0; wait < 120 && (collector.Busy || Snapshot.Text(Data()?["collectedAt"], "") == before); wait++) await Task.Delay(500);
+                await Task.Delay(1500);
+                Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
+                panel.Hide();
+            }
+            // Dismissal check. The measuring script brings the open panel to the
+            // foreground and then another window. This records what the panel did.
+            await Task.Delay(1000);
+            if (await OpenOnce() >= 0)
+            {
+                Form? shown = viewerMode == ViewerMode.Web ? webPanel : usagePopup;
+                [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+                bool Front() => shown is { IsDisposed: false, IsHandleCreated: true } && GetForegroundWindow() == shown.Handle;
+                bool Showing() => shown is { IsDisposed: false, Visible: true };
+                Write("phase=dismiss-check");
+                await Task.Delay(6000);
+                if (webPanel is not null) webPanel.KeepOpen = false;
+                Write("dismiss foreground=" + Front() + " visible=" + Showing());
+                await Task.Delay(2000);
+                Write("dismiss after-2s foreground=" + Front() + " visible=" + Showing());
+                await Task.Delay(6000);
+                Write("dismiss after-other-window foreground=" + Front() + " visible=" + Showing());
+                CloseOnce();
+            }
+            if (viewerMode == ViewerMode.Web)
             {
                 // Record what the shared dashboard window drew, then close it so it is released.
                 Open();
@@ -726,60 +783,6 @@ internal sealed class ObservatoryContext : ApplicationContext
                     // WebView2 may still be releasing its profile files.
                     try { Directory.Delete(fixture, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 }
-                Write("phase=done");
-                return;
-            }
-            Write("phase=never-opened");
-            await Task.Delay(20000);
-            Write("open=1 ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
-            Write("phase=open");
-            await Task.Delay(20000);
-            CloseOnce();
-            Write("phase=closed");
-            await Task.Delay(60000);
-            Write("phase=closed-60s");
-            // The web panel releases its web view about now. Sample again five minutes later.
-            await Task.Delay(TimeSpan.FromMinutes(5));
-            Write("phase=closed-6min");
-            await Task.Delay(15000);
-            for (var open = 2; open <= 6; open++)
-            {
-                Write("open=" + open + " ms=" + (await OpenOnce()).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
-                await Task.Delay(3000);
-                CloseOnce();
-                await Task.Delay(3000);
-            }
-            if (useWebPanel && await ShowWebPanel() && webPanel is { } panel)
-            {
-                Write("untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
-                await panel.SavePreview(Path.Combine(runtime, "panel-timing.png"));
-                panelProbe = action => Write("accepted action=" + action);
-                for (var button = 0; button < 4; button++) { await panel.Press(button); await Task.Delay(1500); }
-                panelProbe = null;
-                var before = Snapshot.Text(Data()?["collectedAt"], "");
-                for (var wait = 0; wait < 120 && (collector.Busy || Snapshot.Text(Data()?["collectedAt"], "") == before); wait++) await Task.Delay(500);
-                await Task.Delay(1500);
-                Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
-                panel.Hide();
-            }
-            // Dismissal check. The measuring script brings the open panel to the
-            // foreground and then another window. This records what the panel did.
-            await Task.Delay(1000);
-            if (await OpenOnce() >= 0)
-            {
-                Form? shown = useWebPanel ? webPanel : usagePopup;
-                [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-                bool Front() => shown is { IsDisposed: false, IsHandleCreated: true } && GetForegroundWindow() == shown.Handle;
-                bool Showing() => shown is { IsDisposed: false, Visible: true };
-                Write("phase=dismiss-check");
-                await Task.Delay(6000);
-                if (webPanel is not null) webPanel.KeepOpen = false;
-                Write("dismiss foreground=" + Front() + " visible=" + Showing());
-                await Task.Delay(2000);
-                Write("dismiss after-2s foreground=" + Front() + " visible=" + Showing());
-                await Task.Delay(6000);
-                Write("dismiss after-other-window foreground=" + Front() + " visible=" + Showing());
-                CloseOnce();
             }
             Write("phase=done");
         }
@@ -857,10 +860,10 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private void Configure()
     {
-        if (!FirstRunSetup.AllowsCollection(runtime)) { Open(); return; }
-        if (useWebDashboard) { Open("settings"); return; }
+        if (!FirstRunSetup.AllowsCollection(runtime)) { Open(viewerMode == ViewerMode.Web ? "settings" : null); return; }
+        if (viewerMode == ViewerMode.Web) { Open("settings"); return; }
         if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
-        if (nativeDashboard && !useWebDashboard)
+        if (viewerMode == ViewerMode.Native)
         {
             Open();
             if (dashboard is NativeDashboard existing) existing.ShowSourceSettings();
@@ -920,7 +923,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
-            if (useWebDashboard)
+            if (viewerMode == ViewerMode.Web)
             {
                 WebDashboard? window = null;
                 var host = new ShellBridgeHost(runtime, collector, () => window,
@@ -941,12 +944,12 @@ internal sealed class ObservatoryContext : ApplicationContext
                     if (ReferenceEquals(dashboardBridge, handler)) dashboardBridge = null;
                 };
             }
-            else dashboard = nativeDashboard ? new NativeDashboard(Data, collector.Refresh,
+            else dashboard = viewerMode == ViewerMode.Native ? new NativeDashboard(Data, collector.Refresh,
                 new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
                 (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates) : new Dashboard(runtime);
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
-        if (section is not null && dashboard is WebDashboard existing) existing.ShowSection(section);
+        else if (section is not null && dashboard is WebDashboard existing) existing.ShowSection(section);
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
         dashboard.Activate();
