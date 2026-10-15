@@ -33,6 +33,7 @@ internal static class WebHostsTests
         public bool CollectorBusy => false;
         public bool CollectionPaused => false;
         public bool NativePairingOpen => false;
+        public bool NativeDialogOpen => false;
         public bool Confirm(string title, string text) { Calls++; return false; }
         public string? ChooseExportFile() { Calls++; return null; }
         public void CopyInvitation(string invitation) => throw new InvalidOperationException("Unexpected fixture action.");
@@ -181,6 +182,15 @@ internal static class WebHostsTests
                 await dashboard.RunScriptForTest(listen).WaitAsync(stop.Token);
                 await dashboard.RunScriptForTest("chrome.webview.postMessage(JSON.stringify({id:7,action:'status',args:{}}))").WaitAsync(stop.Token);
                 await Poll(async () => await dashboard.RunScriptForTest("window.bridgeResults.some(r => r.id === 7 && r.ok === true && r.code === 'done' && r.value?.version === 1)") == "true", 5);
+                Passed();
+
+                step = "bridge-section";
+                var documentNumber = dashboard.DocumentNumber;
+                dashboard.ShowSection("settings");
+                await Poll(async () => await dashboard.RunScriptForTest("location.hash === '#settings'") == "true", 3);
+                Require(dashboard.DocumentNumber == documentNumber);
+                await dashboard.RunScriptForTest("chrome.webview.postMessage(JSON.stringify({id:12,action:'status',args:{}}))").WaitAsync(stop.Token);
+                await Poll(async () => await dashboard.RunScriptForTest("window.bridgeResults.some(r => r.id === 12 && r.ok === true && r.code === 'done')") == "true", 5);
                 Passed();
 
                 step = "bridge-ignored";

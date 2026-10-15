@@ -14,6 +14,7 @@ internal sealed class WebDashboard : Form
     private readonly BridgeHandler? handler;
     private string? section;
     private long documentNumber;
+    internal long DocumentNumber => documentNumber;
     private bool drawn, bridgeClosed;
     private string? viewerScript;
     private Task viewerWork = Task.CompletedTask;
@@ -83,7 +84,7 @@ internal sealed class WebDashboard : Form
                 if (e.ProcessFailedKind is not (CoreWebView2ProcessFailedKind.BrowserProcessExited or
                     CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)) return;
                 documentNumber++;
-                handler?.DocumentReplaced();
+                handler?.DocumentReplaced(documentNumber);
                 if (!IsDisposed && !web.IsDisposed)
                     ShowError(drawn ? "The dashboard stopped. Close this window and open it again from the tray." : RuntimeMessage);
             };
@@ -106,8 +107,8 @@ internal sealed class WebDashboard : Form
             core.NavigationStarting += (_, e) =>
             {
                 if (!AllowsNavigation(e.Uri)) e.Cancel = true;
-                if (!e.Cancel) { documentNumber++; handler?.DocumentReplaced(); }
             };
+            core.ContentLoading += (_, _) => { documentNumber++; handler?.DocumentReplaced(documentNumber); };
             core.FrameNavigationStarting += (_, e) => e.Cancel = true;
             core.NewWindowRequested += (_, e) => e.Handled = true;
             core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
@@ -138,7 +139,7 @@ internal sealed class WebDashboard : Form
         if (!Fragments.Contains(section, StringComparer.Ordinal)) return;
         this.section = section;
         if (!IsDisposed && !web.IsDisposed && started.IsCompletedSuccessfully && web.CoreWebView2 is { } core)
-            core.Navigate(WebPanel.Origin + "/" + Page + "#" + section);
+            _ = core.ExecuteScriptAsync("location.hash = '#" + section + "'");
     }
 
     private void ShowError(string message)

@@ -473,6 +473,14 @@ internal sealed class ObservatoryContext : ApplicationContext
     private bool quitting;
     private readonly UpdateController updater;
     private int updateShutdownRequested;
+    private int nativeDialogCount;
+
+    private T WithNativeDialog<T>(Func<T> show)
+    {
+        nativeDialogCount++;
+        try { return show(); }
+        finally { nativeDialogCount--; }
+    }
 
     internal ObservatoryContext(EventWaitHandle activation, bool show, ViewerMode viewerMode = ViewerMode.Web, EventWaitHandle? updateQuit = null,
         bool panelTiming = false)
@@ -486,7 +494,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         powerNotifications = new PowerResumeWindow(collector.RequestResumeRefresh);
         var setupPending = true;
         try { setupPending = FirstRunSetup.Prepare(runtime); }
-        catch { MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup"); }
+        catch { WithNativeDialog(() => MessageBox.Show("Setup state could not be read. Collection is paused and existing settings are preserved.", "Observatory setup")); }
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
@@ -511,8 +519,8 @@ internal sealed class ObservatoryContext : ApplicationContext
                 startup.Checked = LoginStartup.Registered();
             }
             catch (Exception error) when (error is InvalidOperationException or ArgumentException)
-            { MessageBox.Show(error.Message, "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-            catch { MessageBox.Show("Windows could not update startup registration. Check your account permissions.", "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            { WithNativeDialog(() => MessageBox.Show(error.Message, "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning)); }
+            catch { WithNativeDialog(() => MessageBox.Show("Windows could not update startup registration. Check your account permissions.", "Login startup", MessageBoxButtons.OK, MessageBoxIcon.Warning)); }
         };
         var totals = new ToolStripMenuItem("Latest recorded totals");
         foreach (var host in new[] { "All", "Mac", "Windows" })
@@ -548,7 +556,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (quitting) return;
         if (BridgeHandler.PairingOpen)
         {
-            MessageBox.Show("A local operation is running. Try again when it finishes.", "Direct device pairing");
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Direct device pairing"));
             return;
         }
         if (directPairing is not null) { directPairing.Activate(); return; }
@@ -566,7 +574,7 @@ internal sealed class ObservatoryContext : ApplicationContext
         {
             if (bridge is null) release?.Invoke(true);
             else _ = Cleanup();
-            MessageBox.Show("Pairing setup is unavailable. Wait for collection to finish or check this installation's setup tools.", "Direct device pairing");
+            WithNativeDialog(() => MessageBox.Show("Pairing setup is unavailable. Wait for collection to finish or check this installation's setup tools.", "Direct device pairing"));
         }
         async Task Cleanup()
         {
@@ -611,7 +619,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             var created = webPanel;
             webPanel.Failed += () =>
             {
-                if (created.FailureNotification(panelTiming) is { } message) MessageBox.Show(message, "Observatory");
+                if (created.FailureNotification(panelTiming) is { } message) WithNativeDialog(() => MessageBox.Show(message, "Observatory"));
                 else if (panelTiming)
                 {
                     try
@@ -795,16 +803,16 @@ internal sealed class ObservatoryContext : ApplicationContext
         if (quitting) return;
         if (BridgeHandler.PairingOpen)
         {
-            MessageBox.Show("A local operation is running. Try again when it finishes.", "Windows pairing details");
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Windows pairing details"));
             return;
         }
         pairingDetailsOpen = true;
         try
         {
             using var dialog = new PairingDetailsDialog(PairingDetails.FromInstallation(AppContext.BaseDirectory, runtime));
-            dialog.ShowDialog();
+            WithNativeDialog(() => dialog.ShowDialog());
         }
-        catch { MessageBox.Show("Pairing details are unavailable for this installation. No settings were changed.", "Windows pairing details"); }
+        catch { WithNativeDialog(() => MessageBox.Show("Pairing details are unavailable for this installation. No settings were changed.", "Windows pairing details")); }
         finally { pairingDetailsOpen = false; }
     }
 
@@ -812,27 +820,27 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (collector.Busy)
         {
-            MessageBox.Show("A local operation is running. Try again when it finishes.", "Disconnect paired device");
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Disconnect paired device"));
             return;
         }
         if (!Directory.Exists(Path.Combine(runtime, "private-sync")))
         {
-            MessageBox.Show("No private pairing state was found for this installation.", "Disconnect paired device");
+            WithNativeDialog(() => MessageBox.Show("No private pairing state was found for this installation.", "Disconnect paired device"));
             return;
         }
-        var answer = MessageBox.Show("Disable pairing on this Windows PC only? Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac.",
-            "Disconnect paired device", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        var answer = WithNativeDialog(() => MessageBox.Show("Disable pairing on this Windows PC only? Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac.",
+            "Disconnect paired device", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2));
         if (answer != DialogResult.Yes) return;
         try
         {
             await collector.DisconnectPairing();
-            MessageBox.Show("Pairing is disabled on this PC. Saved data remains. The dashboard returns to local-only data after the next successful collection. Disconnect the other device separately; SSH access is unchanged.", "Pairing disabled");
+            WithNativeDialog(() => MessageBox.Show("Pairing is disabled on this PC. Saved data remains. The dashboard returns to local-only data after the next successful collection. Disconnect the other device separately. SSH access is unchanged.", "Pairing disabled"));
             await collector.Refresh();
         }
         catch
         {
-            MessageBox.Show("Disconnection could not be verified. Collection is paused for this session. Private state was not deleted, and pairing may already be disabled. Retry disconnection or quit the app until the pairing state can be inspected.",
-                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WithNativeDialog(() => MessageBox.Show("Disconnection could not be verified. Collection is paused for this session. Private state was not deleted, and pairing may already be disabled. Retry disconnection or quit the app until the pairing state can be inspected.",
+                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning));
         }
     }
 
@@ -840,22 +848,22 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (collector.Busy)
         {
-            MessageBox.Show("A local operation is running. Try again when it finishes.", "Prepare pairing repair");
+            WithNativeDialog(() => MessageBox.Show("A local operation is running. Try again when it finishes.", "Prepare pairing repair"));
             return;
         }
-        var answer = MessageBox.Show("If this PC has pairing state, disable it and retain a private backup? Otherwise, confirm this PC is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on the Mac separately, then use Pair with Windows there to create fresh credentials. Retirement cannot be undone by this action.",
-            "Prepare pairing repair", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        var answer = WithNativeDialog(() => MessageBox.Show("If this PC has pairing state, disable it and retain a private backup? Otherwise, confirm this PC is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on the Mac separately, then use Pair with Windows there to create fresh credentials. Retirement cannot be undone by this action.",
+            "Prepare pairing repair", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2));
         if (answer != DialogResult.Yes) return;
         try
         {
             await collector.PreparePairingRepair();
-            MessageBox.Show("This PC is ready for a new pairing. Any retired state remains in a disabled private backup. Prepare repair on the Mac separately, then choose Pair with Windows there. Local collection can continue. This action has not enabled a new pairing.", "Repair prepared");
+            WithNativeDialog(() => MessageBox.Show("This PC is ready for a new pairing. Any retired state remains in a disabled private backup. Prepare repair on the Mac separately, then choose Pair with Windows there. Local collection can continue. This action has not enabled a new pairing.", "Repair prepared"));
             await collector.Refresh();
         }
         catch
         {
-            MessageBox.Show("Repair preparation could not be verified. Collection is paused for this session. Saved state was not deleted, but it may already be retired. Retry or quit until this installation can be inspected. Do not restore old pairing files over a new pairing.",
-                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            WithNativeDialog(() => MessageBox.Show("Repair preparation could not be verified. Collection is paused for this session. Saved state was not deleted, but it may already be retired. Retry or quit until this installation can be inspected. Do not restore old pairing files over a new pairing.",
+                "Pairing needs attention", MessageBoxButtons.OK, MessageBoxIcon.Warning));
         }
     }
 
@@ -863,7 +871,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (!FirstRunSetup.AllowsCollection(runtime)) { Open(viewerMode == ViewerMode.Web ? "settings" : null); return; }
         if (viewerMode == ViewerMode.Web) { Open("settings"); return; }
-        if (collector.Busy) { MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings"); return; }
+        if (collector.Busy) { WithNativeDialog(() => MessageBox.Show("Wait for the current collection to finish before changing sources.", "Source settings")); return; }
         if (viewerMode == ViewerMode.Native)
         {
             Open();
@@ -874,7 +882,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             new SourceSettingsActions(collector.ReadConfiguration, (expected, desired) => { collector.UpdateConfiguration(expected, desired); collector.Start(); }), DeviceActions(),
             (request, cancellation) => QuotaArchive.Run(runtime, request, cancellation), rememberLayout: true, checkUpdates: CheckForUpdates);
         settings.ShowSourceSettings();
-        settings.ShowDialog();
+        WithNativeDialog(() => settings.ShowDialog());
     }
 
     private void RefreshStatus()
@@ -898,7 +906,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             $"Tokens: {Snapshot.Format(Snapshot.Number(tokens?["totalTokens"]))}\n" +
             $"Recorded date: {Snapshot.Text(tokens?["date"])}";
         if (host == "All") message += "\n\nOnly verified combined totals are shown. Saved records retain their original source labels.";
-        MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        WithNativeDialog(() => MessageBox.Show(message, $"Observatory · {host}", MessageBoxButtons.OK, MessageBoxIcon.Information));
     }
 
     private void Open() => Open(null);
@@ -916,12 +924,12 @@ internal sealed class ObservatoryContext : ApplicationContext
                 using var setup = new SetupWizard(runtime, collector);
                 setupWizard = setup;
                 DialogResult result;
-                try { result = setup.ShowDialog(); } finally { setupWizard = null; }
+                try { result = WithNativeDialog(() => setup.ShowDialog()); } finally { setupWizard = null; }
                 if (result != DialogResult.OK) return;
                 collector.Start();
             }
         }
-        catch { MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup"); return; }
+        catch { WithNativeDialog(() => MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup")); return; }
         if (dashboard is null || dashboard.IsDisposed)
         {
             if (viewerMode == ViewerMode.Web)
@@ -929,7 +937,7 @@ internal sealed class ObservatoryContext : ApplicationContext
                 WebDashboard? window = null;
                 var host = new ShellBridgeHost(runtime, collector, () => window,
                     () => directPairing is { IsDisposed: false } || pairingDetailsOpen,
-                    () => quitting, CheckForUpdates, value => Open(value));
+                    () => nativeDialogCount > 0, () => quitting, CheckForUpdates, value => Open(value));
                 var handler = new BridgeHandler(host, runtime);
                 window = new WebDashboard(runtime, handler, section);
                 handler.ViewerChanged += (skin, appearance) =>
@@ -962,8 +970,8 @@ internal sealed class ObservatoryContext : ApplicationContext
         try { await updater.Check(); }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }
-        catch (IOException error) { MessageBox.Show(error.Message, "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Information); }
-        catch { MessageBox.Show("The update check could not start. This installation was not changed.", "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (IOException error) { WithNativeDialog(() => MessageBox.Show(error.Message, "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Information)); }
+        catch { WithNativeDialog(() => MessageBox.Show("The update check could not start. This installation was not changed.", "Observatory updates", MessageBoxButtons.OK, MessageBoxIcon.Warning)); }
     }
 
     private async Task RequestQuit()
@@ -977,7 +985,7 @@ internal sealed class ObservatoryContext : ApplicationContext
             if (dashboardBridge is { } bridge) await bridge.EndPairingAsync();
             if (!await collector.StopGracefully(TimeSpan.FromSeconds(260)))
             {
-                MessageBox.Show("The current operation has not finished. Observatory stayed open and collection was not interrupted. Try quitting again after it finishes.", "Observatory is still working");
+                WithNativeDialog(() => MessageBox.Show("The current operation has not finished. Observatory stayed open and collection was not interrupted. Try quitting again after it finishes.", "Observatory is still working"));
                 return;
             }
             ExitThread();

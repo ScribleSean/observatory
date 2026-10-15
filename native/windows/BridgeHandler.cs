@@ -17,6 +17,7 @@ internal interface IBridgeHost
     bool CollectorBusy { get; }
     bool CollectionPaused { get; }
     bool NativePairingOpen { get; }
+    bool NativeDialogOpen { get; }
     bool Confirm(string title, string text);
     // Require .observatory and do not offer replacement of an existing file.
     string? ChooseExportFile();
@@ -175,25 +176,33 @@ internal sealed class BridgeSettingsStore(string runtime)
         Write("viewer.json", new JsonObject { ["skin"] = skin, ["appearance"] = appearance }, replace);
     }
 
-    private void GuardWrite(string path)
+    private void GuardWrite(string path, bool allowOversized = false)
     {
         PlainFolder(runtime);
         var attributes = Attributes(path);
-        if (attributes is not null && ((attributes.Value & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0 || new FileInfo(path).Length > 1024))
+        if (attributes is not null && ((attributes.Value & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0 || (!allowOversized && new FileInfo(path).Length > 1024)))
             throw new IOException("Settings file unavailable.");
     }
 
     private void Write(string name, JsonObject value, bool replace = true)
     {
         var path = Path.Combine(runtime, name);
-        GuardWrite(path);
+        bool replaceViewer = name == "viewer.json" && replace;
+        GuardWrite(path, replaceViewer);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
         if (bytes.Length > 1024) throw new IOException("Settings file too large.");
         var temporary = Path.Combine(runtime, ".viewer-" + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None)) stream.Write(bytes);
-            GuardWrite(path);
+            GuardWrite(path, replaceViewer);
+            if (replaceViewer && File.Exists(path) && new FileInfo(path).Length > 1024)
+            {
+                var backup = path + ".bak";
+                GuardWrite(backup, allowOversized: true);
+                File.Copy(path, backup, overwrite: true);
+                GuardWrite(path, allowOversized: true);
+            }
             File.Move(temporary, path, replace);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -288,6 +297,7 @@ internal sealed class BridgeHandler : IDisposable
     private long sessionGeneration;
     private DateTimeOffset began;
     private string pairingState = "idle";
+    private string? identityState;
     private string? fingerprint, invitation;
     private JsonObject? endpoint;
     private System.Windows.Forms.Timer? timer;
@@ -325,12 +335,13 @@ internal sealed class BridgeHandler : IDisposable
         lock (gate)
         {
             if (closed) return;
-            if (this.document is long current && document < current) return;
-            if (this.document != document)
+            if (this.document is null)
             {
-                Replace();
-                this.document = document;
+                try { post(new JsonObject { ["bridgeResult"] = new JsonObject { ["id"] = id, ["ok"] = false, ["code"] = "refused" } }.ToJsonString()); }
+                catch { }
+                return;
             }
+            if (this.document != document) return;
             var request = new Request(id, validation.Action ?? "", validation.Args ?? new(), document, epoch, post);
             if (validation.Outcome == "refused" || ids.Contains((epoch, id))) { Post(request, new("refused")); return; }
             if (probe is not null)
@@ -352,7 +363,7 @@ internal sealed class BridgeHandler : IDisposable
                 ids.Add((epoch, id));
                 cancel = request;
             }
-            else if (dialog || actions.Contains(request.Action) || (running && queue.Count >= BridgeContract.Limits["queue"].Number) || PairingBusy(request.Action))
+            else if (dialog || host.NativeDialogOpen || CollectorBlocked(request.Action) || actions.Contains(request.Action) || (running && queue.Count >= BridgeContract.Limits["queue"].Number) || PairingBusy(request.Action))
             { Post(request, new("busy")); return; }
             else
             {
@@ -363,6 +374,8 @@ internal sealed class BridgeHandler : IDisposable
         if (cancel is not null) _ = Cancel(cancel);
         if (start) drain = Drain();
     }
+
+    private bool CollectorBlocked(string action) => (action is "refresh" or "set-source") && (host.CollectorBusy || host.CollectionPaused);
 
     private static bool Exclusive(string action) => action is "refresh" or "set-sharing" or "pairing-disconnect" or "pairing-repair-prepare";
     private bool PairingBusy(string action) =>
@@ -424,12 +437,16 @@ internal sealed class BridgeHandler : IDisposable
             // The active action must not reject itself.
             var saved = activeAction; activeAction = null;
             bool busy = PairingBusy(request.Action); activeAction = saved;
-            if (busy) return new("busy");
+            if (busy || dialog || host.NativeDialogOpen || CollectorBlocked(request.Action)) return new("busy");
         }
         switch (request.Action)
         {
             case "refresh": await host.RefreshAllowancesThenAll(); break;
-            case "check-updates": await host.CheckUpdates(); break;
+            case "check-updates":
+                lock (gate) dialog = true;
+                try { await host.CheckUpdates(); }
+                finally { lock (gate) dialog = false; }
+                break;
             case "open-dashboard": host.OpenDashboard(Text("section")); break;
             case "open-settings": host.OpenDashboard("settings"); break;
             case "set-source":
@@ -516,7 +533,7 @@ internal sealed class BridgeHandler : IDisposable
             bool startup;
             try { startup = host.ReadStartup(); } catch { startup = false; }
             var pair = host.Settings.ReadPairing();
-            var state = working ? "working" : session is not null ? pairingState : host.CollectionPaused ? "unavailable" : pair.State;
+            var state = working ? "working" : session is not null ? pairingState : identityState is not null ? identityState : host.CollectionPaused ? "unavailable" : pair.State;
             var value = new JsonObject
             {
                 ["version"] = 1, ["app"] = new JsonObject { ["version"] = versionText, ["build"] = version.Revision },
@@ -526,7 +543,7 @@ internal sealed class BridgeHandler : IDisposable
                 ["deviceName"] = host.Settings.ReadDevice(), ["startup"] = startup, ["appearance"] = viewer.Appearance,
                 ["limitsConsent"] = host.Settings.ReadLimitsConsent(),
                 ["pairing"] = new JsonObject { ["state"] = state, ["peerFingerprint"] = state == "confirming" ? fingerprint : null,
-                    ["transport"] = session is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
+                    ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
                 ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) }
             };
             return Encoding.UTF8.GetByteCount(value.ToJsonString()) <= 16384 ? new("done", value) : new("unavailable");
@@ -611,7 +628,7 @@ internal sealed class BridgeHandler : IDisposable
             try
             {
                 session = host.CreatePairingSession(); began = host.Now; sessionGeneration++;
-                pairingState = "idle";
+                pairingState = "idle"; identityState = null;
                 if (SynchronizationContext.Current is System.Windows.Forms.WindowsFormsSynchronizationContext)
                 {
                     timer = new System.Windows.Forms.Timer { Interval = BridgeContract.Limits["pairingPollSeconds"].Number * 1000 };
@@ -647,7 +664,8 @@ internal sealed class BridgeHandler : IDisposable
             string? kept;
             lock (gate) kept = invitation;
             if (kept is null) return new("unavailable");
-            host.CopyInvitation(kept);
+            try { host.CopyInvitation(kept); }
+            catch { return new("unavailable"); }
             return new("done");
         }
         bool temporary = false;
@@ -682,7 +700,12 @@ internal sealed class BridgeHandler : IDisposable
                 case "pairing-host-start": case "pairing-join-claim":
                     var identity = await current.Send(new JsonObject { ["action"] = "identity-status" });
                     if (!Current()) return new("unavailable");
-                    if (identity.Status != "identity-ready") { await EndSession(); return new("unavailable"); }
+                    if (identity.Status != "identity-ready")
+                    {
+                        lock (gate) identityState = identity.Status is "identity-required" or "identity-recovery-required" ? identity.Status : null;
+                        await EndSession(current);
+                        return new("unavailable");
+                    }
                     reply = await current.Send(action == "pairing-host-start"
                         ? new JsonObject { ["action"] = "host-start", ["address"] = request.Args["address"].Text, ["port"] = 0 }
                         : new JsonObject { ["action"] = "join-claim", ["invitation"] = request.Args["invitation"].Text });
@@ -710,7 +733,8 @@ internal sealed class BridgeHandler : IDisposable
             }
             if (action == "pairing-join-claim" && reply.Status == "awaiting-confirmation") return new("done");
             if (action == "pairing-join-confirm" && reply.Status == "local-ready") return new("unavailable");
-            if (action == "pairing-identity-create" && reply.Status == "identity-ready") return new("done");
+            if (action == "pairing-identity-create" && reply.Status == "identity-ready")
+            { lock (gate) identityState = null; return new("done"); }
             bool finished = (action == "pairing-host-confirm" && reply.Status is "configuration-ready" or "acknowledged") ||
                 (action == "pairing-join-confirm" && reply.Status == "acknowledged");
             await EndSession();
@@ -790,7 +814,7 @@ internal sealed class BridgeHandler : IDisposable
     }
     internal Task EndPairingAsync() => EndSession();
     internal Task WhenIdle => drain;
-    internal void DocumentReplaced() { lock (gate) { Replace(); document = null; } }
+    internal void DocumentReplaced(long next) { lock (gate) { Replace(); document = next; } }
     internal Task CloseAsync() { lock (gate) { if (!closed) { closed = true; Replace(); } return ending; } }
     public void Dispose() { lock (gate) { if (!closed) _ = CloseAsync(); } }
 
@@ -857,12 +881,14 @@ internal sealed class BridgeHandler : IDisposable
         public bool CollectorBusy { get; set; }
         public bool CollectionPaused { get; set; }
         public bool NativePairingOpen { get; set; }
+        public bool NativeDialogOpen { get; set; }
+        internal bool CopyThrows, ScriptThrows;
         public bool Confirm(string title, string text) { Calls.Enqueue("confirm:" + title); Dialogs++; InDialog?.Invoke(); return Consent; }
         public string? ChooseExportFile() { Calls.Enqueue("export"); InDialog?.Invoke(); return ExportFile; }
-        public void CopyInvitation(string value) { Check(value.StartsWith("observatory-pair:v1:", StringComparison.Ordinal), "Clipboard value"); Calls.Enqueue("copy"); }
+        public void CopyInvitation(string value) { if (CopyThrows) throw new InvalidOperationException("Synthetic clipboard failure"); Check(value.StartsWith("observatory-pair:v1:", StringComparison.Ordinal), "Clipboard value"); Calls.Enqueue("copy"); }
         public Task RefreshAllowancesThenAll() { Calls.Enqueue("refresh-all"); return (Task?)RefreshWait?.Task ?? Task.CompletedTask; }
         public Task Refresh() { Calls.Enqueue("refresh"); return Task.CompletedTask; }
-        public Task CheckUpdates() { Calls.Enqueue("updates"); return (Task?)UpdateWait?.Task ?? Task.CompletedTask; }
+        public Task CheckUpdates() { Calls.Enqueue("updates"); InDialog?.Invoke(); return (Task?)UpdateWait?.Task ?? Task.CompletedTask; }
         public void OpenDashboard(string section) => Calls.Enqueue("open:" + section);
         public JsonObject ReadConfiguration() { Calls.Enqueue("config-read"); return Configuration.DeepClone().AsObject(); }
         public void UpdateConfiguration(JsonObject expected, JsonObject desired)
@@ -895,6 +921,7 @@ internal sealed class BridgeHandler : IDisposable
         }
         public Task<BridgeScriptResult> RunScript(ProcessStartInfo start)
         {
+            if (ScriptThrows) throw new InvalidOperationException("Synthetic missing script");
             Calls.Enqueue("script:" + Path.GetFileName(start.ArgumentList[0])); Scripts.Add(start);
             return Task.FromResult(new BridgeScriptResult(ScriptExit, "Synthetic output must stay private"));
         }
@@ -915,11 +942,18 @@ internal sealed class BridgeHandler : IDisposable
         try
         {
             TestedActions.Clear();
+            using (var initial = new BridgeHandler(new TestHost(runtime), runtime))
+            {
+                var refusedPosts = new List<string>();
+                initial.Receive("{\"id\":1,\"action\":\"refresh\",\"args\":{}}", TestDriver.Origin, 1, refusedPosts.Add);
+                Check(refusedPosts.Count == 1 && JsonNode.Parse(refusedPosts[0])!["bridgeResult"]!["code"]!.GetValue<string>() == "refused", "Message before document");
+            }
             var probeHost = new TestHost(runtime);
             var lines = new List<string>();
             var posts = new List<string>();
             using (var probeHandler = new BridgeHandler(probeHost, runtime, lines.Add))
             {
+                probeHandler.DocumentReplaced(1);
                 probeHandler.Receive("{\"id\":1,\"action\":\"refresh\",\"args\":{}}", TestDriver.Origin, 1, posts.Add);
                 Check(probeHost.Calls.IsEmpty && posts.Single().Contains("\"code\":\"cancelled\"") &&
                     lines.SequenceEqual(new[] { "accepted action=refresh" }), "Probe action isolation");
@@ -950,7 +984,7 @@ internal sealed class BridgeHandler : IDisposable
         internal int NextId;
         internal long Document = 1;
         internal const string Origin = "https://observatory.invalid/dashboard.html#settings";
-        internal TestDriver(string runtime) { Host = new(runtime); Handler = new(Host, runtime); }
+        internal TestDriver(string runtime) { Host = new(runtime); Handler = new(Host, runtime); Handler.DocumentReplaced(1); }
         internal int Send(string action, JsonObject? args = null, int? id = null)
         {
             int number = id ?? ++NextId;
@@ -1093,13 +1127,35 @@ internal sealed class BridgeHandler : IDisposable
         };
         await test.Run("set-limits-consent", new() { ["enabled"] = true });
         await test.Run("export-data", code: "cancelled");
+        await test.Run("check-updates");
         test.Host.InDialog = null;
+        test.Host.NativeDialogOpen = true;
+        await test.Run("refresh", code: "busy");
+        await test.Run("status");
+        await test.Run("pairing-cancel");
+        test.Host.NativeDialogOpen = false;
+        foreach (var paused in new[] { false, true })
+        {
+            test.Host.CollectorBusy = !paused;
+            test.Host.CollectionPaused = paused;
+            int calls = test.Host.Calls.Count;
+            await test.Run("refresh", code: "busy");
+            await test.Run("set-source", new() { ["source"] = "quota", ["enabled"] = false }, "busy");
+            Check(test.Host.Calls.Count == calls, "Busy collector side effects");
+        }
+        test.Host.CollectorBusy = test.Host.CollectionPaused = false;
         test.Host.UpdateWait = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        int old = test.Send("check-updates"); test.Handler.DocumentReplaced();
+        int old = test.Send("check-updates"); test.Handler.DocumentReplaced(2);
         test.Host.UpdateWait.SetResult(true); await test.Handler.drain;
         Check(!test.Posts.Any(p => JsonNode.Parse(p)!["bridgeResult"]!["id"]!.GetValue<int>() == old), "Replaced document result");
+        int count = test.Posts.Count;
+        test.Send("status");
+        Check(test.Posts.Count == count, "Old document message");
+        test.Document = 4;
+        test.Send("status");
+        Check(test.Posts.Count == count, "Future document message");
         test.Document = 2; test.Host.UpdateWait = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        old = test.Send("check-updates"); test.Document = 3; test.Send("status");
+        old = test.Send("check-updates"); test.Handler.DocumentReplaced(3); test.Document = 3; test.Send("status");
         test.Host.UpdateWait.SetResult(true); await test.Handler.drain;
         Check(!test.Posts.Any(p => JsonNode.Parse(p)!["bridgeResult"]!["id"]!.GetValue<int>() == old), "Different document result");
     }
@@ -1107,6 +1163,10 @@ internal sealed class BridgeHandler : IDisposable
     private static async Task TestConsent(string runtime)
     {
         using var test = new TestDriver(runtime);
+        test.Host.ScriptThrows = true;
+        await test.Run("set-limits-consent", new() { ["enabled"] = true }, "unavailable");
+        test.Host.ScriptThrows = false;
+        test.Host.Dialogs = 0;
         test.Host.Consent = false;
         await test.Run("set-source", new() { ["source"] = "quota", ["enabled"] = false }, "cancelled");
         await test.Run("set-sharing", ShareArgs(true), "cancelled");
@@ -1141,6 +1201,10 @@ internal sealed class BridgeHandler : IDisposable
         var session = test.Host.Session!;
         Check(session.Commands.Count == 2 && session.Commands[0]["action"]!.GetValue<string>() == "identity-status" &&
             session.Commands[1]["port"]!.GetValue<int>() == 0, "Identity before hosting");
+        test.Host.CopyThrows = true;
+        await test.Run("pairing-copy-invitation", code: "unavailable");
+        Check(!session.Disposed && test.Host.Reserved && (await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "waiting", "Clipboard failure preserves hosting");
+        test.Host.CopyThrows = false;
         await test.Run("pairing-copy-invitation"); Check(test.Host.Calls.Contains("copy"), "Clipboard host call");
         var state = (await test.Run("status"))["value"]!;
         Check(state["pairing"]!["state"]!.GetValue<string>() == "waiting" && !state.ToJsonString().Contains("observatory-pair:"), "Hosting status privacy");
@@ -1174,9 +1238,24 @@ internal sealed class BridgeHandler : IDisposable
         session.Held!.SetResult(new(1, "hosting", "observatory-pair:v1:c3ludGhldGlj", null));
         await test.Handler.drain;
         Check(test.Result(pending)["code"]!.GetValue<string>() == "unavailable" && test.Handler.invitation is null, "Cancelled command revived invitation");
-        test.Host.MakeSession = () => new TestSession { IdentityState = "identity-required" };
-        await test.Run("pairing-host-start", HostArgs(), "unavailable");
-        Check(test.Host.Session!.Disposed && test.Host.Session.Commands.Count == 1, "Missing identity created automatically");
+        foreach (var identityState in new[] { "identity-required", "identity-recovery-required" })
+        foreach (var action in new[] { "pairing-host-start", "pairing-join-claim" })
+        {
+            test.Host.MakeSession = () => new TestSession { IdentityState = identityState };
+            await test.Run(action, action == "pairing-host-start" ? HostArgs() : new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" }, "unavailable");
+            Check(test.Host.Session!.Disposed && test.Host.Session.Commands.Count == 1, "Missing identity created automatically");
+            var identityStatus = (await test.Run("status"))["value"]!["pairing"]!;
+            Check(identityStatus["state"]!.GetValue<string>() == identityState && identityStatus["transport"]!.GetValue<string>() == "none", "Identity status retained");
+            await test.Run("pairing-cancel");
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == identityState, "Identity status survives cancel");
+            await test.Run("pairing-identity-create");
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() != identityState, "Identity ready clears state");
+            await test.Run(action, action == "pairing-host-start" ? HostArgs() : new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" }, "unavailable");
+            test.Host.MakeSession = null;
+            await test.Run("pairing-host-start", HostArgs());
+            Check(test.Handler.identityState is null && (await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "waiting", "New session clears identity state");
+            await test.Run("pairing-cancel");
+        }
         test.Host.MakeSession = () => new TestSession { VerifyExit = false };
         await test.Run("pairing-host-start", HostArgs()); await test.Run("pairing-cancel");
         Check(test.Host.CollectionPaused && (await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "unavailable", "Unverified exit pause");
@@ -1191,7 +1270,7 @@ internal sealed class BridgeHandler : IDisposable
         await oldPoll;
         Check(!test.Host.Session!.Disposed && test.Host.Reserved, "Old poll ended new session");
         await test.Run("pairing-cancel");
-        await test.Run("pairing-host-start", HostArgs()); test.Handler.DocumentReplaced(); await test.Handler.ending;
+        await test.Run("pairing-host-start", HostArgs()); test.Handler.DocumentReplaced(2); await test.Handler.ending;
         Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Document pairing cleanup");
         test.Document++; await test.Run("pairing-host-start", HostArgs()); await test.Handler.CloseAsync();
         Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Close pairing cleanup");
@@ -1218,9 +1297,13 @@ internal sealed class BridgeHandler : IDisposable
             "{\"skin\":\"sage\",\"skin\":\"almanac\",\"appearance\":\"dark\"}", "{\"skin\":\"custom\",\"appearance\":\"dark\"}",
             "{\"skin\":\"sage\",\"appearance\":\"auto\"}", new string(' ', 1025) })
         { File.WriteAllText(viewer, invalid); Check(store.ReadViewer() == ("sage", "system"), "Invalid viewer default"); }
+        var oldViewer = File.ReadAllBytes(viewer);
         bool refused = false;
-        try { store.WriteViewer("sage", "system"); } catch (IOException) { refused = true; }
-        Check(refused, "Oversized viewer write");
+        try { store.WriteViewer("sage", "system", replace: false); } catch (IOException) { refused = true; }
+        Check(refused && File.ReadAllBytes(viewer).SequenceEqual(oldViewer), "Oversized viewer migration refusal");
+        File.WriteAllText(viewer + ".bak", "older synthetic backup");
+        store.WriteViewer("sage", "system");
+        Check(store.ReadViewer() == ("sage", "system") && File.ReadAllBytes(viewer + ".bak").SequenceEqual(oldViewer), "Oversized viewer write");
         File.Delete(viewer);
         store.WriteDevice("\u3000Fictional PC\u00a0");
         var device = Path.Combine(runtime, "device.json");
@@ -1241,6 +1324,29 @@ internal sealed class BridgeHandler : IDisposable
             }
             finally { File.Delete(path); }
         }
+        File.Delete(viewer + ".bak");
+        File.WriteAllBytes(viewer, oldViewer);
+        if (TryLink(viewer + ".bak", target))
+        {
+            try
+            {
+                refused = false;
+                try { store.WriteViewer("sage", "system"); } catch (IOException) { refused = true; }
+                Check(refused && File.ReadAllBytes(viewer).SequenceEqual(oldViewer) && File.ReadAllText(target) == "{}", "Linked viewer backup refusal");
+            }
+            finally { File.Delete(viewer + ".bak"); }
+        }
+        Directory.CreateDirectory(viewer + ".bak");
+        refused = false;
+        try { store.WriteViewer("sage", "system"); } catch (IOException) { refused = true; }
+        Check(refused && File.ReadAllBytes(viewer).SequenceEqual(oldViewer), "Viewer backup folder refusal");
+        Directory.Delete(viewer + ".bak");
+        File.Delete(viewer);
+        Directory.CreateDirectory(viewer);
+        refused = false;
+        try { store.WriteViewer("sage", "system"); } catch (IOException) { refused = true; }
+        Check(refused, "Viewer folder refusal");
+        Directory.Delete(viewer);
         var consentFolder = Path.Combine(runtime, "claude-limits"); Directory.CreateDirectory(consentFolder);
         var consent = Path.Combine(consentFolder, "consent.json");
         foreach (var text in new[] { "{\"consent\":false}", "{\"consent\":\"true\"}", new string(' ', 4097) })

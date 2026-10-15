@@ -5,7 +5,7 @@ namespace WorkspaceObservatory;
 
 internal sealed class ShellBridgeHost(
     string runtime, Collector collector, Func<Form?> window, Func<bool> nativePairingOpen,
-    Func<bool> quitting, Func<Task> checkUpdates, Action<string> openDashboard) : IBridgeHost
+    Func<bool> nativeDialogOpen, Func<bool> quitting, Func<Task> checkUpdates, Action<string> openDashboard) : IBridgeHost
 {
     public BridgeSettingsStore Settings { get; } = new(runtime);
     public DateTimeOffset Now => DateTimeOffset.UtcNow;
@@ -13,6 +13,7 @@ internal sealed class ShellBridgeHost(
     public bool CollectorBusy => quitting() || collector.Busy;
     public bool CollectionPaused => collector.CollectionPaused;
     public bool NativePairingOpen => nativePairingOpen();
+    public bool NativeDialogOpen => nativeDialogOpen();
 
     private Form Owner => window() is { IsDisposed: false, Disposing: false } owner
         ? owner : throw new InvalidOperationException("Dashboard unavailable.");
