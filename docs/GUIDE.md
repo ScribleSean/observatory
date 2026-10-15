@@ -63,7 +63,7 @@ Open [localhost:5601](http://127.0.0.1:5601). The demo uses made-up records and 
 
 ## Browser dashboard
 
-The browser dashboard in this repository shows the fictional demo records described above. It is a development fixture. The legacy SSH hub collector that once filled it from private records was removed on 2026-10-14 (issue 82). A snapshot it wrote earlier stays on disk unchanged, and existing private settings are preserved.
+The browser dashboard in this repository shows the fictional demo records described above. It is a development fixture. The legacy SSH hub collector that once filled it from private records was removed on 2026-10-14 (issue 82). A snapshot it wrote earlier is not deleted by this change, and existing private settings are preserved.
 
 The default appearance is black and neutral. The top-bar sun and moon button switches between dark and light themes and saves that choice in this browser. [Brand guidance](BRAND.md) defines the shared telescope mark and visual language.
 
@@ -91,11 +91,7 @@ Use `npm run serve:local` for viewing. It serves static files on the loopback ad
 
 ## Optional dictation statistics
 
-The Dictation view defaults to all tools and devices. Wispr is the supported recording-metadata source. ChatGPT voice tracking remains unverified, not zero usage. For the legacy collector, enable either host in the ignored `local.config.json`:
-
-```json
-"dictation": { "mac": true, "windows": true }
-```
+The Dictation view defaults to all tools and devices. Wispr is the supported recording-metadata source. ChatGPT voice tracking remains unverified, not zero usage. Turn Wispr on in each app's source settings.
 
 Wispr reads `flow.sqlite` from Application Support on Mac and AppData/Roaming on Windows. Read-only SQLite authorizes only History timestamp, duration and numWords columns. No transcript or audio content is fetched. Dates use America/New_York, which requires Python timezone data on each reader. Missing numeric metadata has explicit record coverage and is never presented as a confirmed zero.
 
