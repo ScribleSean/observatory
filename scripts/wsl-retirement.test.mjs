@@ -84,17 +84,7 @@ test(
         codexHosts: ['Windows', 'Ubuntu'],
       };
       const paired = await collectWindows(runtime, legacyPair);
-      assert.equal(paired.peer.status, 'ready');
-      assert.deepEqual(
-        paired.peer.payload.codex.map((source) => ({
-          host: source.host,
-          status: source.status,
-        })),
-        [
-          { host: 'Windows', status: 'ok' },
-          { host: 'Ubuntu', status: 'not-connected' },
-        ],
-      );
+      assert.equal(paired.peer.status, 'unavailable');
       assert.equal(calls.length, 2);
       assert.equal(
         calls.some((file) => /wsl(?:\.exe)?$/i.test(file)),

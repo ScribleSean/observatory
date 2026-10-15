@@ -19,12 +19,27 @@ const SECTIONS = [
 type Section = typeof SECTIONS[number][0];
 export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
 
+export function followSectionHash(target: Pick<Window, 'addEventListener' | 'removeEventListener'> & { location: Pick<Location, 'hash'> }, onSection: (section: Section) => void) {
+  const follow = () => onSection(sectionFromHash(target.location.hash));
+  target.addEventListener('hashchange', follow);
+  return () => target.removeEventListener('hashchange', follow);
+}
+
+export function writeSectionHash(target: { location: Pick<Location, 'hash' | 'pathname' | 'search'>; history: Pick<History, 'state' | 'replaceState'> }, id: Section) {
+  if (target.location.hash !== `#${id}`) {
+    const { pathname, search } = target.location;
+    target.history.replaceState(target.history.state, '', `${pathname}${search}#${id}`);
+  }
+}
+
 export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
   const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
   const [section, setSection] = useState<Section>(() => sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash));
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => followSectionHash(window, setSection), []);
 
   const load = useCallback(async () => {
     if (demo) return;
@@ -50,7 +65,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
 
   // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
   return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
-    section={section} onSectionChange={setSection} onSkinChange={setSkinId} />;
+    section={section} onSectionChange={id => { setSection(id); writeSectionHash(window, id); }} onSkinChange={setSkinId} />;
 }
 
 type DashboardViewProps = {

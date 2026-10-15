@@ -30,8 +30,7 @@ export async function setupStatus(runtime,platform=process.platform) {
     }
     if(pair.local.host!=='Mac' || !pair.transport ||
       (!active && entries.some(name=>name!=='setup.pending.json')))throw Error('Setup state needs repair');
-    return {status:pending?'pending':'paired',request:{transport:validatePeerTransport(pair.transport),
-      includeUbuntu:pair.peer.codexHosts.length===2}};
+    return {status:pending?'pending':'paired',request:{transport:validatePeerTransport(pair.transport)}};
   } catch {return {status:'needs-repair',request:null};}
 }
 
@@ -47,7 +46,7 @@ export const setupPairing=(runtime,request,send=sshPeerSetup,platform=process.pl
   withPeerStateLock(runtime,()=>setupPairingLocked(runtime,request,send,platform,readiness));
 async function setupPairingLocked(runtime,request,send,platform,readiness) {
   if(platform!=='darwin' || !request || typeof request!=='object' || Array.isArray(request) ||
-    Object.keys(request).length!==2 || !Object.hasOwn(request,'transport') || typeof request.includeUbuntu!=='boolean')
+    Object.keys(request).length!==1 || !Object.hasOwn(request,'transport'))
     throw Error('Explicit Mac setup request required');
   const transport=validatePeerTransport(request.transport);
   if(transport.kind!=='ssh-windows')throw Error('Explicit SSH setup transport required');
@@ -56,7 +55,7 @@ async function setupPairingLocked(runtime,request,send,platform,readiness) {
   if(pending && active && !isDeepStrictEqual(pending,active))throw Error('Conflicting setup state');
   let pair=pending??active;
   if(!pair) {
-    const desired=createPairingConfigurations(request.includeUbuntu).Mac;
+    const desired=createPairingConfigurations().Mac;
     desired.transport=transport;
     if(localConsent) {
       const peerConsent=await readiness(transport);
@@ -67,8 +66,7 @@ async function setupPairingLocked(runtime,request,send,platform,readiness) {
     catch(error) {pair=await readPendingPairing(runtime);if(!pair)throw error;}
   }
   if(localConsent && pair.repair?.mac!==localConsent)throw Error('Current Mac repair confirmation required');
-  if(pair.local.host!=='Mac' || !isDeepStrictEqual(pair.transport,transport) ||
-    (pair.peer.codexHosts.length===2)!==request.includeUbuntu)throw Error('Retry requires the original setup target and source scope');
+  if(pair.local.host!=='Mac' || !isDeepStrictEqual(pair.transport,transport))throw Error('Retry requires the original setup target');
   await assertPairingActive(runtime);
   const response=await send(transport,complementaryWindowsPairing(pair));
   if(!isDeepStrictEqual(response,{version:1,status:'ready'}))throw Error('Peer setup was not acknowledged');

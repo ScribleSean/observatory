@@ -46,9 +46,7 @@ enum PairingSetupDialog {
         while alert.runModal() == .alertSecondButtonReturn {
             let request = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows",
                 hostAlias: host.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                remoteNode: node.stringValue, remoteScript: script.stringValue, remoteRuntime: runtime.stringValue),
-                // Legacy pairing metadata is fixed for retries, not a source opt-in.
-                includeUbuntu: saved.request?.includeUbuntu ?? false)
+                remoteNode: node.stringValue, remoteScript: script.stringValue, remoteRuntime: runtime.stringValue))
             do { try request.validate(); return request }
             catch {
                 let invalid = NSAlert()

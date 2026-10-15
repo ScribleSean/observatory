@@ -6,14 +6,13 @@ import {commitConfirmedTLSPairing} from './peer-tls-setup.mjs';
 
 // Explicit joining-controller action after invitation claim and local approval.
 // No generated keys, implicit source selection, background polling or listener.
-export async function receiveConfirmedTLSPairing(runtime,invitation,{includeUbuntu},options={}) {
+export async function receiveConfirmedTLSPairing(runtime,invitation,options={}) {
   const host=process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null;
-  if(!host || typeof includeUbuntu!=='boolean' || (host==='Mac' && includeUbuntu))
-    throw Error('Explicit local source scope required');
+  if(!host)throw Error('Native host required');
   const safe=validateInvitation(invitation),identity=await readDeviceIdentity(runtime);
   if(!identity)throw Error('Saved local identity required');
   const certificate=await discoverPeerCertificate(safe,options);
-  const response=await requestPeerSetup(safe,certificate,identity,{host,includeUbuntu},options);
+  const response=await requestPeerSetup(safe,certificate,identity,{host},options);
   if(response.status==='awaiting-confirmation')return response;
   const claim={pairId:response.pairing.local.pairId,
     localCertificateSha256:new X509Certificate(identity.cert).fingerprint256.replaceAll(':','').toLowerCase(),

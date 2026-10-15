@@ -301,6 +301,14 @@ With `--web-dashboard` the main window showed the shared viewer through the same
 - An installed package. The Clean Windows package workflow was not run for this revision.
 - Release behaviour across sleep and wake, and memory over hours.
 
+### Release after a failed start (code only, October 14)
+
+Recorded for W1 (issue 84). This is a code change with no measurement. The numbers above are for a web view that started. In those runs a panel whose web view failed to start was never released, as both reviews of pull request 87 found.
+
+- On `win/w1-finish` a failed start, or a browser process failure reported by `ProcessFailed`, hides the panel and retires it at once, which disposes the form and its web view. The dashboard window disposes its web view before it shows the runtime error message.
+- The release decision is a function checked by `--self-test`. The Windows CI job compiled the code and ran that self-test. Codex wrote the code on the Mac because the Windows session was unreachable.
+- Not run: the `--test-web-hosts` fixture, which simulates a failed start and a one-second release time in a real WebView2, a start with the WebView2 runtime missing, and any memory reading after a failed start. Those need the PC, started outside a Claude desktop session.
+
 ## Web view release rule on Mac, October 14
 
 Recorded for M1 (issue 83, pull request 126). This entry states a rule from source and staged-build checks. It is not a measurement.
