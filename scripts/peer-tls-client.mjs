@@ -3,6 +3,7 @@ import {createHash,X509Certificate} from 'node:crypto';
 import {validateInvitation} from './peer-invitation.mjs';
 import {validatePairing} from './peer-pairing.mjs';
 import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
+import {validRepairNonce} from './peer-repair-consent.mjs';
 
 const protocol='observatory-pair/1';
 const failure=()=>Error('Authenticated pairing connection unavailable');
@@ -42,6 +43,7 @@ export async function discoverPeerCertificate(invitation,{connect=tls.connect,ti
 }
 
 export async function claimFromInvitation(invitation,identity,options={}) {
+  if(options.repairNonce!=null && !validRepairNonce(options.repairNonce))throw failure();
   const timeoutMs=options.timeoutMs??8000,started=performance.now();
   const certificate=await discoverPeerCertificate(invitation,{...options,timeoutMs});
   const remaining=Math.floor(timeoutMs-(performance.now()-started));
@@ -53,7 +55,9 @@ export async function claimFromInvitation(invitation,identity,options={}) {
 // fingerprint must match the out-of-band invitation before it becomes a CA.
 // The supplied identity must be a private, locally owned TLS client identity.
 export async function requestPeerClaim(invitation,certificatePem,identity,options={}) {
-  return pairingRequest(invitation,certificatePem,identity,{version:1,action:'claim',secret:invitation?.secret},response=>{
+  if(options.repairNonce!=null && !validRepairNonce(options.repairNonce))throw failure();
+  return pairingRequest(invitation,certificatePem,identity,{version:1,action:'claim',secret:invitation?.secret,
+    ...(options.repairNonce!=null?{repair:options.repairNonce}:{})},response=>{
     if(!response || Object.keys(response).length!==2 || response.version!==1 ||
       response.status!=='awaiting-confirmation')throw failure();
     return {status:'awaiting-confirmation'};

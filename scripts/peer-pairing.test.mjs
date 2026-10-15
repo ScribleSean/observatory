@@ -119,3 +119,17 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
       assert.equal(JSON.parse(await readFile(path.join(runtime,'private-sync/pairing.json'),'utf8')).local.pairId,pair.local.pairId);
     })());
   });
+
+test('repair confirmations accept either host key and reject invalid maps',()=>{
+  const pair=createPairingConfigurations().Mac,a='a'.repeat(64),b='b'.repeat(64);
+  for(const repair of [{mac:a},{windows:b},{mac:a,windows:b}])
+    assert.deepEqual(validatePairing({...pair,repair}).repair,repair);
+  for(const repair of [{},{mac:a,windows:a},{mac:a,extra:b},{mac:null},{windows:'A'.repeat(64)},[],null])
+    assert.throws(()=>validatePairing({...pair,repair}),{message:'Invalid repair confirmations'});
+});
+
+test('local repair consent ignores only the other device key',async t=>{
+  const runtime=await fixture(t),pair={...createPairingConfigurations().Mac,repair:{windows:'b'.repeat(64)}};
+  await initializePairing(runtime,pair);
+  assert.deepEqual(await readPairing(runtime),pair);
+});
