@@ -166,19 +166,19 @@ void test('fake bridge implements actions, copied status and pairing transitions
   assert.equal(claimed.pairing.peerFingerprint, 'ab'.repeat(32));
   assert.equal((await status()).pairing.invitationKept, true);
   assert.equal((await send('pairing-copy-invitation')).code, 'done');
-  assert.equal((await send('pairing-host-confirm', { fingerprint: 'cd'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090 })).code, 'unavailable');
+  assert.equal((await send('pairing-host-confirm', { fingerprint: 'cd'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090, sharing: false })).code, 'unavailable');
   assert.equal((await status()).pairing.state, 'confirming');
-  assert.equal((await send('pairing-host-confirm', { fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090 })).code, 'done');
-  assert.equal((await status()).pairing.state, 'paired');
+  assert.equal((await send('pairing-host-confirm', { fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090, sharing: false })).code, 'done');
+  assert.equal((await status()).pairing.state, 'establishing-trust');
   assert.equal((await status()).pairing.invitationKept, false);
   await send('pairing-disconnect'); assert.equal((await status()).pairing.state, 'unpaired');
   await send('pairing-repair-prepare'); assert.equal((await status()).pairing.state, 'idle');
-  assert.equal((await send('pairing-join-confirm')).code, 'unavailable');
+  assert.equal((await send('pairing-join-confirm', { sharing: false })).code, 'unavailable');
   assert.equal((await send('pairing-join-claim', hosted.value)).code, 'done');
   const joining = await status();
   assert.equal(joining.pairing.state, 'awaiting-confirmation');
   assert.equal(joining.pairing.peerFingerprint, null);
-  assert.equal((await send('pairing-join-confirm')).code, 'done'); assert.equal((await status()).pairing.state, 'paired');
+  assert.equal((await send('pairing-join-confirm', { sharing: false })).code, 'done'); assert.equal((await status()).pairing.state, 'establishing-trust');
   await send('pairing-cancel'); assert.equal((await status()).pairing.state, 'idle');
   assert.deepEqual((await send('tailscale-check')).value, { status: 'running' });
   for (const action of ['export-data', 'refresh', 'check-updates', 'open-settings']) assert.equal((await send(action)).code, 'done');
@@ -245,4 +245,22 @@ void test('controller completes setup and reads status once after done', async (
   assert.deepEqual(controller.getStatus(), sampleBridgeStatus());
   controller.dispose();
   bridge.dispose();
+});
+
+void test('fake pairing defaults and sharing choice use fictional values', async () => {
+  const bridge = createFakeBridge(sampleBridgeStatus(), 0);
+  try {
+    assert.deepEqual((await bridge.send('pairing-host-defaults', {})).value,
+      { address: '100.101.102.103', port: 43128, portAvailable: true });
+    assert.deepEqual((await bridge.send('pairing-peer-address', {})).value,
+      { peerAddress: 'fd7a:115c:a1e0::1234' });
+    for (const enabled of [true, false]) {
+      await bridge.send('set-sharing-choice', { enabled });
+      assert.deepEqual((await bridge.send('status', {})).value.sharingChoice,
+        { chosen: enabled, channels: { 'codex-limits': enabled ? 'waiting-for-reading' : 'off', 'claude-code-tokens': enabled ? 'waiting-for-reading' : 'off' } });
+    }
+    await bridge.send('pairing-join-claim', { invitation: 'observatory-pair:v1:U0FNUExF' });
+    await bridge.send('pairing-join-confirm', { sharing: true });
+    assert.equal((await bridge.send('status', {})).value.sharingChoice.chosen, true);
+  } finally { bridge.dispose(); }
 });
