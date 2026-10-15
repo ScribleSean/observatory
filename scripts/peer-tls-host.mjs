@@ -12,6 +12,7 @@ import {setupConfigurationDigest,legacySetupConfigurationDigest} from './peer-tl
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
+import {validRepairNonce,readRepairConsent} from './peer-repair-consent.mjs';
 
 const fail=()=>Error('Confirmed host setup unavailable');
 const fingerprint=pem=>new X509Certificate(pem).fingerprint256.replaceAll(':','').toLowerCase();
@@ -60,7 +61,12 @@ function complementary(pair,transport,localFingerprint) {
 export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,async()=>{
   const host=process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null;
   if(!host || !request || typeof request!=='object' || Array.isArray(request) ||
-    Object.keys(request).length!==4 || !['localEndpoint','peerEndpoint','peerCertificate','peerCertificateSha256'].every(key=>Object.hasOwn(request,key)))throw fail();
+    Object.keys(request).length!==(Object.hasOwn(request,'peerRepairNonce')?5:4) ||
+    !['localEndpoint','peerEndpoint','peerCertificate','peerCertificateSha256'].every(key=>Object.hasOwn(request,key)) ||
+    (Object.hasOwn(request,'peerRepairNonce') && request.peerRepairNonce!==null && !validRepairNonce(request.peerRepairNonce)))throw fail();
+  const nonce=await readRepairConsent(runtime),localKey=host==='Mac'?'mac':'windows',peerKey=host==='Mac'?'windows':'mac';
+  const repair=nonce || request.peerRepairNonce?{...(nonce?{[localKey]:nonce}:{}),
+    ...(request.peerRepairNonce?{[peerKey]:request.peerRepairNonce}:{})}:undefined;
   const localEndpoint=validatePeerTransport(request.localEndpoint),peerEndpoint=validatePeerTransport(request.peerEndpoint);
   if(localEndpoint.kind!=='tls' || peerEndpoint.kind!=='tls')throw fail();
   const identity=await readDeviceIdentity(runtime);
@@ -68,8 +74,8 @@ export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,as
   const localFingerprint=fingerprint(identity.cert);
   let pair=await readPairing(runtime);
   if(!pair)pair=validatePairing({...createPairingConfigurations()[host],
-    transport:peerEndpoint,localEndpoint,peerCertificateSha256:request.peerCertificateSha256});
-  if(pair.local.host!==host || !isDeepStrictEqual(pair.transport,peerEndpoint) || !isDeepStrictEqual(pair.localEndpoint,localEndpoint) ||
+    transport:peerEndpoint,localEndpoint,peerCertificateSha256:request.peerCertificateSha256,...(repair?{repair}:{})});
+  if(!isDeepStrictEqual(pair.repair,repair) || pair.local.host!==host || !isDeepStrictEqual(pair.transport,peerEndpoint) || !isDeepStrictEqual(pair.localEndpoint,localEndpoint) ||
     pair.peerCertificateSha256!==request.peerCertificateSha256)throw fail();
   const claim={pairId:pair.local.pairId,localCertificateSha256:localFingerprint,
     peerCertificate:request.peerCertificate,peerCertificateSha256:request.peerCertificateSha256};
@@ -128,7 +134,7 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
         !current || fingerprint(current.cert)!==localFingerprint ||
         request?.localEndpoint?.address!==address)throw fail();
       const offer=await prepareHostTLSSetup(runtime,{...request,peerCertificate:pending.peerCertificate,
-        peerCertificateSha256:pending.peerCertificateSha256});
+        peerCertificateSha256:pending.peerCertificateSha256,peerRepairNonce:pending.peerRepairNonce});
       return listener.confirmSetup(claimId,offer);
     }),
   };
