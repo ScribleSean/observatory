@@ -6,11 +6,18 @@ private final class SmokeBridgeHost: BridgeHost {
     let sessionOpen = false
     let pairingBlocked = false
     private(set) var actions: [String] = []
+    private let shapes = bridgeSyntheticStatusShapes()
+    private var statusCount = 0
+    var willSendStatus: (([String: Any]) -> Void)?
 
     func perform(action: String, args: [String: BridgeValue], completion: @escaping (BridgeCode, Any?) -> Void) {
         actions.append(action)
         switch action {
-        case "status": completion(.done, ["smoke": true])
+        case "status":
+            let value = shapes[statusCount % shapes.count]
+            statusCount += 1
+            willSendStatus?(value)
+            completion(.done, value)
         case "refresh":
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { completion(.done, nil) }
         default: completion(.unavailable, nil)
@@ -137,6 +144,7 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         let bridge = BridgeHandler(host: host)
         let view = makeWebDashboard(runtime: runtime, resources: resources, bridge: bridge)
         installBridgeListener(view)
+        trackStatus(host, in: view)
         web = view
         defer {
             view.stopLoading()
@@ -144,9 +152,20 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
             web = nil
         }
         view.frame = NSRect(x: 0, y: 0, width: 1100, height: 760)
-        view.load(URLRequest(url: WebDashboardPage.url(section: "activity")))
+        view.load(URLRequest(url: WebDashboardPage.url(section: "settings")))
         guard try await waitUntilReady(view, flag: "observatoryDashboardReady"),
               try await checkHost(view, blockedPages: ["./index.html", "./panel.html"], panelHost: false) else { return false }
+        let settingsReady = try await view.callAsyncJavaScript("""
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline) {
+          const name = [...document.querySelectorAll('label.ob-settings-field')]
+            .find(label => label.textContent.includes('Device name'))?.querySelector('input');
+          if (name?.value === 'Synthetic Mac' && !document.body.textContent.includes('Observatory could not read its settings.')) return true;
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        return false;
+        """, arguments: [:], in: nil, contentWorld: .page)
+        guard settingsReady as? Bool == true else { return false }
         guard try await checkBridge(view, host: host, bridge: bridge, resources: resources) else { return false }
         for url in ["https://example.com/", "observatory://app/index.html", "observatory://app/panel.html",
                     "observatory://app/dashboard.html?demo", "observatory://other/dashboard.html"] {
@@ -191,16 +210,33 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         return popupDenied as? Bool == true && view.url == before
     }
 
+    private func trackStatus(_ host: SmokeBridgeHost, in view: WKWebView) {
+        host.willSendStatus = { [weak view] value in
+            view?.callAsyncJavaScript("window.smokeSentStatuses.push(value);",
+                arguments: ["value": value], in: nil, in: .page)
+        }
+    }
     private func installBridgeListener(_ view: WKWebView) {
         view.configuration.userContentController.addUserScript(WKUserScript(source: """
         window.smokeBridgeResults = [];
-        window.addEventListener('observatory:bridge-result', event => window.smokeBridgeResults.push(event.detail));
+        window.smokeSentStatuses = [];
+        window.smokeExpectedStatuses = {};
+        window.addEventListener('observatory:bridge-result', event => {
+          const result = event.detail;
+          if (result.code === 'done' && result.value?.version === 1) {
+            window.smokeExpectedStatuses[result.id] = window.smokeSentStatuses.shift();
+          }
+          window.smokeBridgeResults.push(result);
+        });
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
     private func bridgeCheck(_ view: WKWebView, script: String) async throws -> Bool {
         // The page sends its own status messages with small ids, so these checks use ids from 9001 and match results by id.
         let value = try await view.callAsyncJavaScript("""
         const results = window.smokeBridgeResults;
+        const canonical = value => JSON.stringify(value, (_, item) =>
+          item && typeof item === 'object' && !Array.isArray(item)
+            ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
         const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
         const post = (id, action = 'status') => window.webkit.messageHandlers.bridge.postMessage(JSON.stringify({id, action, args: {}}));
         const none = async (...ids) => {
@@ -217,7 +253,7 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
           const result = matches[0];
           return result.ok === (code === 'done') && result.code === code
             && Object.keys(result).sort().join(',') === (code === 'done' ? 'code,id,ok,value' : 'code,id,ok')
-            && (code !== 'done' || (result.value?.smoke === true && Object.keys(result.value).join(',') === 'smoke'));
+            && (code !== 'done' || canonical(result.value) === canonical(window.smokeExpectedStatuses[id]));
         };
         \(script)
         """, arguments: [:], in: nil, contentWorld: .page)
@@ -243,7 +279,8 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         document.body.append(frame);
         try {
           const handler = frame.contentWindow.webkit?.messageHandlers?.bridge;
-          if (handler) handler.postMessage(JSON.stringify({id: 9010, action: 'refresh', args: {}}));
+          if (!handler) return false;
+          handler.postMessage(JSON.stringify({id: 9010, action: 'refresh', args: {}}));
           return await none(9010);
         } finally { frame.remove(); }
         """), others() == ["complete-setup"] else { return false }
@@ -275,14 +312,16 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
               others() == ["complete-setup", "refresh"] else { return false }
         let second = makeWebDashboard(runtime: runtime, resources: resources, bridge: bridge)
         installBridgeListener(second)
+        trackStatus(host, in: second)
         defer {
             second.stopLoading()
             second.configuration.userContentController.removeAllScriptMessageHandlers()
         }
         second.frame = view.frame
         second.load(URLRequest(url: WebDashboardPage.url(section: "activity")))
-        guard try await waitUntilReady(second, flag: "observatoryDashboardReady"),
-              try await bridgeCheck(view, script: "post(9020); return await expect(9020);"),
+        guard try await waitUntilReady(second, flag: "observatoryDashboardReady") else { return false }
+        trackStatus(host, in: view)
+        guard try await bridgeCheck(view, script: "post(9020); return await expect(9020);"),
               try await bridgeCheck(second, script: "return await none(9020);") else { return false }
         return others() == ["complete-setup", "refresh"]
     }

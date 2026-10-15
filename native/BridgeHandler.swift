@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Darwin
 import WebKit
@@ -35,16 +36,21 @@ final class BridgeAdmission {
         }
     }
     var dialogOpen = false
+    private let modalOpen: @MainActor () -> Bool
     private let state: () -> (sessionOpen: Bool, pairingBlocked: Bool)
     private var running: Entry?
     private var waiting: [Entry] = []
     private var immediate: [UUID: Entry] = [:]
 
-    init(state: @escaping () -> (sessionOpen: Bool, pairingBlocked: Bool)) { self.state = state }
+    init(modalOpen: @escaping @MainActor () -> Bool = { NSApp.modalWindow != nil },
+         state: @escaping () -> (sessionOpen: Bool, pairingBlocked: Bool)) {
+        self.modalOpen = modalOpen
+        self.state = state
+    }
 
     private func busy(_ action: String) -> Bool {
         let state = state()
-        return dialogOpen || (state.sessionOpen && ["refresh", "set-sharing", "pairing-disconnect", "pairing-repair-prepare"].contains(action)) ||
+        return dialogOpen || modalOpen() || (state.sessionOpen && ["refresh", "set-sharing", "pairing-disconnect", "pairing-repair-prepare"].contains(action)) ||
             (state.pairingBlocked && ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action))
     }
 
@@ -166,11 +172,30 @@ private enum BridgeSettingsFile {
         return lstat(file.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
     }
     static func read(_ file: URL) -> [String: Any]? {
-        guard regular(file), let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
-              let size = values.fileSize, size <= 1024,
-              let data = try? Data(contentsOf: file), data.count <= 1024 else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard descriptor >= 0 else { return nil }
+        var closed = false
+        defer { if !closed { _ = Darwin.close(descriptor) } }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+              info.st_size >= 0, info.st_size <= 1024 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: 1025)
+        var offset = 0
+        while offset < bytes.count {
+            let count = bytes.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress!.advanced(by: offset), $0.count - offset)
+            }
+            if count < 0 && errno == EINTR { continue }
+            guard count >= 0 else { return nil }
+            if count == 0 { break }
+            offset += count
+        }
+        let result = Darwin.close(descriptor)
+        closed = true
+        guard result == 0, offset <= 1024 else { return nil }
+        return (try? JSONSerialization.jsonObject(with: Data(bytes.prefix(offset)))) as? [String: Any]
     }
+
     static func write(_ object: [String: Any], to file: URL) throws {
         guard !exists(file) || regular(file) else { throw CocoaError(.fileWriteNoPermission) }
         let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
@@ -249,7 +274,7 @@ enum DeviceNameFile {
             try BridgeSettingsFile.write(["name": name], to: file)
         } else if BridgeSettingsFile.exists(file) {
             guard BridgeSettingsFile.regular(file) else { throw CocoaError(.fileWriteNoPermission) }
-            try FileManager.default.removeItem(at: file)
+            guard unlink(file.path) == 0 else { throw CocoaError(.fileWriteNoPermission) }
         }
     }
 }
@@ -324,12 +349,45 @@ struct BridgeStatusInput {
     }
 }
 
+func bridgeSyntheticStatusShapes() -> [[String: Any]] {
+    let unavailable = QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "pairing-unavailable", token: nil)
+    return ["confirming", "awaiting-confirmation", "local-ready", "acknowledged"].map { state in
+        BridgeStatusInput.bridgeStatusValue(BridgeStatusInput(appVersion: "1.0-test", appBuild: 1,
+            sources: ["activity": true, "codex": true, "claude": false, "wispr": false, "quota": false],
+            skin: "sage", customSkins: [], deviceName: "Synthetic Mac", startup: false, appearance: "system",
+            limitsConsent: false, collectionPaused: true, pairingState: state,
+            peerFingerprint: state == "confirming" ? String(repeating: "a", count: 64) : nil,
+            transport: "none", invitationKept: state == "confirming",
+            sharing: ["codex-limits": unavailable, "claude-code-tokens": unavailable]))!
+    }
+}
+
 func runBridgeSelfTests() {
+    // Keep this JSON literal identical to native/tests/bridge-status-shapes.json. scripts/mac-bridge-status.test.mjs checks both.
+    let expectedShapes = #"""
+    [{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":true,"peerFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","state":"confirming","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"awaiting-confirmation","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"local-ready","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"acknowledged","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1}]
+    """#
+    let expected = try! JSONSerialization.jsonObject(with: Data(expectedShapes.utf8)) as! [[String: Any]]
+    for (value, fixture) in zip(bridgeSyntheticStatusShapes(), expected) {
+        precondition(try! JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) ==
+            JSONSerialization.data(withJSONObject: fixture, options: [.sortedKeys]))
+    }
+    let planted = ["NODE_OPTIONS", "PYTHONPATH", "PYTHONHOME", "DYLD_INSERT_LIBRARIES", "UV_THREADPOOL_SIZE",
+                   "OPENSSL_CONF", "SSL_CERT_FILE", "CLAUDE_CONFIG_DIR", "CODEX_HOME"]
+    let originalEnvironment = ProcessInfo.processInfo.environment
+    for key in planted { setenv(key, "synthetic-value", 1) }
+    let childEnvironment = collectorChildEnvironment()
+    for key in planted.prefix(7) { precondition(childEnvironment[key] == nil) }
+    for key in planted.suffix(2) { precondition(childEnvironment[key] == "synthetic-value") }
+    for key in planted {
+        if let value = originalEnvironment[key] { setenv(key, value, 1) } else { unsetenv(key) }
+    }
     MainActor.assumeIsolated {
         let document = UUID()
         var session = false
         var blocked = false
-        let admission = BridgeAdmission { (session, blocked) }
+        var modal = false
+        let admission = BridgeAdmission(modalOpen: { modal }) { (session, blocked) }
         var started: [Int] = []
         var results: [Int: BridgeResult] = [:]
         var completions: [Int: (BridgeCode, Any?) -> Void] = [:]
@@ -339,6 +397,15 @@ func runBridgeSelfTests() {
                 completions[id] = completion
             }, reply: { results[id] = $0 })
         }
+        modal = true
+        submit(80, "set-skin")
+        submit(81, "status")
+        submit(82, "pairing-cancel")
+        precondition(results[80]?.code == .busy && started == [81, 82])
+        completions[81]?(.done, nil)
+        completions[82]?(.done, nil)
+        modal = false
+        started.removeAll()
         submit(1, "refresh")
         submit(2, "refresh")
         precondition(results[2]?.code == .busy)
@@ -440,11 +507,15 @@ func runBridgeSelfTests() {
     put(["skin": "almanac", "appearance": "dark", "extra": true], viewerFile)
     precondition(ViewerSettingsFile.read(runtime: viewer) == ("sage", "system"))
     try! Data(repeating: 32, count: 2000).write(to: viewerFile)
+    precondition(BridgeSettingsFile.read(viewerFile) == nil)
     precondition(ViewerSettingsFile.read(runtime: viewer) == ("sage", "system"))
     for skin in ["Almanac", "../sage"] {
         put(["skin": skin, "appearance": "dark"], viewerFile)
         precondition(ViewerSettingsFile.read(runtime: viewer).skin == "sage")
     }
+    let fifo = root.appendingPathComponent("fifo.json")
+    precondition(mkfifo(fifo.path, 0o600) == 0)
+    precondition(BridgeSettingsFile.read(fifo) == nil)
     let linked = folder()
     let target = root.appendingPathComponent("target.json")
     put(["skin": "almanac", "appearance": "dark"], target)
@@ -463,6 +534,23 @@ func runBridgeSelfTests() {
     let invalid = folder()
     precondition(ViewerSettingsFile.migrate(runtime: invalid, storedSkin: "x", storedAppearance: "auto"))
     precondition(ViewerSettingsFile.read(runtime: invalid) == ("sage", "system"))
+    let suiteName = "observatory-synthetic-migration-" + UUID().uuidString
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let migration = folder()
+    defaults.set("almanac", forKey: "observatorySkin")
+    defaults.set("dark", forKey: "observatoryAppearance")
+    defaults.set(true, forKey: "observatoryViewerSettingsMigrated")
+    WebViewerPreferences.migrateIfNeeded(runtime: migration, defaults: defaults)
+    precondition(!files.fileExists(atPath: migration.appendingPathComponent("viewer.json").path))
+    precondition(defaults.string(forKey: "observatorySkin") == "almanac")
+    precondition(defaults.string(forKey: "observatoryAppearance") == "dark")
+    defaults.set(false, forKey: "observatoryViewerSettingsMigrated")
+    WebViewerPreferences.migrateIfNeeded(runtime: migration, defaults: defaults)
+    precondition(ViewerSettingsFile.read(runtime: migration) == ("almanac", "dark"))
+    precondition(defaults.object(forKey: "observatorySkin") == nil)
+    precondition(defaults.string(forKey: "observatoryAppearance") == "dark")
+    precondition(defaults.bool(forKey: "observatoryViewerSettingsMigrated"))
     let device = folder()
     let deviceFile = device.appendingPathComponent("device.json")
     try! DeviceNameFile.write(runtime: device, name: "Studio")

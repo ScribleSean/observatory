@@ -120,6 +120,7 @@ final class ObservatoryStore: ObservableObject {
             return
         }
         let task = Process()
+        task.environment = collectorChildEnvironment()
         task.executableURL = launch.executable
         task.arguments = launch.arguments
         task.currentDirectoryURL = runtime
@@ -215,11 +216,12 @@ enum WebViewerPreferences {
     static func theme(runtime: URL) -> String? { theme(stored: ViewerSettingsFile.read(runtime: runtime).appearance) }
 
     static func migrateIfNeeded(runtime: URL, defaults: UserDefaults = .standard) {
-        let present = defaults.object(forKey: skinKey) != nil || defaults.object(forKey: appearanceKey) != nil
+        let marker = "observatoryViewerSettingsMigrated"
+        guard !defaults.bool(forKey: marker) else { return }
         if ViewerSettingsFile.migrate(runtime: runtime, storedSkin: defaults.string(forKey: skinKey),
-                                      storedAppearance: defaults.string(forKey: appearanceKey)), present {
+                                      storedAppearance: defaults.string(forKey: appearanceKey)) {
             defaults.removeObject(forKey: skinKey)
-            defaults.removeObject(forKey: appearanceKey)
+            defaults.set(true, forKey: marker)
         }
     }
 

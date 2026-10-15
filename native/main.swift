@@ -451,6 +451,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         menu.addItem(withTitle: "Check for updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings and device connection…", action: #selector(sourceSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Pair with Windows…", action: #selector(setupPairing), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Disconnect paired device…", action: #selector(disconnectPairing), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Prepare pairing repair…", action: #selector(preparePairingRepair), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Direct device pairing…", action: #selector(setupDirectPairing), keyEquivalent: "").target = self
+        menu.addItem(.separator())
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.isEnabled = previewRuntime == nil
@@ -540,7 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
     @objc private func refresh() { store.refreshLimitsFirst() }
-    private func setupDirectPairing() {
+    @objc private func setupDirectPairing() {
         guard !store.shuttingDown, previewRuntime == nil else { return }
         if let directPairingWindow { directPairingWindow.showWindow(nil); directPairingWindow.window?.makeKeyAndOrderFront(nil); return }
         guard !store.refreshing, !store.pairingMaintenance, let resources = Bundle.main.resourceURL else { return }
@@ -735,7 +740,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let current = usesWebDashboard ? webDashboardSection : nativeSelection.section
             item.state = detail?.isVisible == true && current == section ? .on : .off
             return true
-        case #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
+        case #selector(setupDirectPairing), #selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
              #selector(toggleLogin), #selector(loginSettings): return previewRuntime == nil
         case #selector(zoomIn): return zoom.map { $0 < 2 } ?? false
         case #selector(zoomOut): return zoom.map { $0 > 0.75 } ?? false

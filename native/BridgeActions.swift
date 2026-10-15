@@ -12,6 +12,13 @@ func bridgeChildEnvironment() -> [String: String] {
     return environment
 }
 
+func collectorChildEnvironment() -> [String: String] {
+    ProcessInfo.processInfo.environment.filter { key, _ in
+        !["NODE_", "PYTHON", "DYLD_", "UV_"].contains(where: key.hasPrefix) &&
+            !["OPENSSL_CONF", "OPENSSL_MODULES", "SSL_CERT_FILE", "SSL_CERT_DIR", "LD_PRELOAD"].contains(key)
+    }
+}
+
 func bridgePairingFiles(runtime: URL) -> (state: String, transport: String) {
     func exists(_ file: URL) throws -> Bool {
         var info = stat()
@@ -264,7 +271,7 @@ final class MacBridgeHost: BridgeHost {
     }
     func documentEnded() { documentGeneration += 1; session?.end() }
 
-    private func confirm(_ title: String, _ text: String, _ buttons: [String], second: Bool = false) -> Bool {
+    private func confirm(_ title: String, _ text: String, _ buttons: [String], second: Bool = false) -> BridgeCode {
         let generation = documentGeneration
         handler.beginNativeDialog()
         defer { handler.endNativeDialog() }
@@ -272,8 +279,9 @@ final class MacBridgeHost: BridgeHost {
         let alert = NSAlert()
         alert.messageText = title; alert.informativeText = text
         for button in buttons { alert.addButton(withTitle: button) }
+        guard NSApp.modalWindow == nil else { return .busy }
         let response = alert.runModal()
-        return generation == documentGeneration && response == (second ? .alertSecondButtonReturn : .alertFirstButtonReturn)
+        return generation == documentGeneration && response == (second ? .alertSecondButtonReturn : .alertFirstButtonReturn) ? .done : .cancelled
     }
 
     private func beginSession() throws -> BridgePairingSession {
@@ -310,8 +318,9 @@ final class MacBridgeHost: BridgeHost {
         if ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action) {
             guard !preview, !store.shuttingDown else { completion(.unavailable, nil); return }
             guard !pairingBlocked else { completion(.busy, nil); return }
-            if action == "pairing-identity-create" && !confirm("Create device identity?", "Allow a device identity stored in a permission-restricted file. The key is not stored in Keychain or encrypted separately by Observatory.", ["Allow", "Cancel"]) {
-                completion(.cancelled, nil); return
+            if action == "pairing-identity-create" {
+                let code = confirm("Create device identity?", "Allow a device identity stored in a permission-restricted file. The key is not stored in Keychain or encrypted separately by Observatory.", ["Allow", "Cancel"])
+                guard code == .done else { completion(code, nil); return }
             }
             guard !pairingBlocked, !store.shuttingDown else { completion(.busy, nil); return }
             let identityOnly = action == "pairing-identity-create" && session == nil
@@ -333,8 +342,10 @@ final class MacBridgeHost: BridgeHost {
                 guard !store.refreshing else { completion(.busy, nil); return }
                 let current = try CollectorConfiguration.read(runtime: store.runtime), source = string("source")
                 guard current[source] != enabled else { completion(.done, nil); return }
-                if source == "quota", !enabled, current[source] == true,
-                   !confirm("Account history", "Turn account monitoring off and clear Observatory's retained account readings on the next collection? Saved log-token history remains.", ["Turn off", "Cancel"]) { completion(.cancelled, nil); return }
+                if source == "quota", !enabled, current[source] == true {
+                    let code = confirm("Account history", "Turn account monitoring off and clear Observatory's retained account readings on the next collection? Saved log-token history remains.", ["Turn off", "Cancel"])
+                    guard code == .done else { completion(code, nil); return }
+                }
                 guard !store.refreshing else { completion(.busy, nil); return }
                 var updated = current; updated[source] = enabled
                 guard try CollectorConfiguration.saveIfUnchanged(updated, expected: current, runtime: store.runtime) else { completion(.unavailable, nil); return }
@@ -362,7 +373,10 @@ final class MacBridgeHost: BridgeHost {
             } catch { completion(.unavailable, nil) }
         case "set-limits-consent":
             guard hasConsentScript else { completion(.unavailable, nil); return }
-            if enabled && !confirm("Turn on Claude Code limits?", "Claude Code hides most of its footer keyboard hints while any custom status line is configured.", ["Turn on", "Cancel"]) { completion(.cancelled, nil); return }
+            if enabled {
+                let code = confirm("Turn on Claude Code limits?", "Claude Code hides most of its footer keyboard hints while any custom status line is configured.", ["Turn on", "Cancel"])
+                guard code == .done else { completion(code, nil); return }
+            }
             Task {
                 do {
                     let value = try await readConsent(arguments: enabled ? ["set", "--consent"] : ["clear"])
@@ -372,7 +386,10 @@ final class MacBridgeHost: BridgeHost {
         case "set-sharing":
             guard !preview, let resources else { completion(.unavailable, nil); return }
             guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
-            if enabled && !confirm("Share usage records?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.", ["Enable sharing", "Cancel"]) { completion(.cancelled, nil); return }
+            if enabled {
+                let code = confirm("Share usage records?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.", ["Enable sharing", "Cancel"])
+                guard code == .done else { completion(code, nil); return }
+            }
             guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
             operationRunning = true; store.pairingMaintenance = true
             let channel = string("channel"), token = enabled ? string("token") : nil
@@ -454,7 +471,8 @@ final class MacBridgeHost: BridgeHost {
         if !repair && !FileManager.default.fileExists(atPath: store.runtime.appendingPathComponent("private-sync").path) { completion(.unavailable, nil); return }
         let title = repair ? "Prepare pairing repair on this Mac?" : "Disconnect paired device?"
         let text = repair ? "If this Mac has pairing state, disable it and retain a private backup. Otherwise, confirm this Mac is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on Windows separately, then use Pair with Windows here to create fresh credentials. Retirement cannot be undone by this action." : "Disable pairing on this Mac only. Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect on the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac."
-        guard confirm(title, text, ["Cancel", repair ? "Retain backup and prepare" : "Disconnect on this Mac"], second: true) else { completion(.cancelled, nil); return }
+        let code = confirm(title, text, ["Cancel", repair ? "Retain backup and prepare" : "Disconnect on this Mac"], second: true)
+        guard code == .done else { completion(code, nil); return }
         store.collectionPausedForPairing = true
         guard !store.refreshing, !store.pairingMaintenance, !sessionOpen else { completion(.busy, nil); return }
         operationRunning = true; store.pairingMaintenance = true
@@ -478,6 +496,7 @@ final class MacBridgeHost: BridgeHost {
         let generation = documentGeneration
         handler.beginNativeDialog()
         NSApp.activate(ignoringOtherApps: true)
+        guard NSApp.modalWindow == nil else { handler.endNativeDialog(); completion(.busy, nil); return }
         let response = panel.runModal()
         handler.endNativeDialog()
         guard generation == documentGeneration, response == .OK, let url = panel.url else { completion(.cancelled, nil); return }

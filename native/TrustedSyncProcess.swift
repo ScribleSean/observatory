@@ -29,9 +29,7 @@ final class TrustedSyncProcess {
         child.executableURL = node
         child.arguments = [script.path, "--runtime", canonicalRuntime]
         child.currentDirectoryURL = URL(fileURLWithPath: canonicalRuntime, isDirectory: true)
-        var environment = ProcessInfo.processInfo.environment
-        for key in ["NODE_OPTIONS", "NODE_EXTRA_CA_CERTS", "NODE_PATH"] { environment.removeValue(forKey: key) }
-        child.environment = environment
+        child.environment = collectorChildEnvironment()
         child.standardInput = pipe
         child.standardOutput = FileHandle.nullDevice
         child.standardError = FileHandle.nullDevice
