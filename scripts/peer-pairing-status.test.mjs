@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {readPairingStatus,writePairingStatus,readPairingStatusFile} from './peer-pairing-status.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
+import {privateSyncDirectory} from './peer-directory.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
@@ -24,10 +25,10 @@ async function paired(t) {
   await initializePairing(runtime,pairs.Mac);await initializePairing(remote,pairs.Windows);
   return {runtime,remote,pairs};
 }
-test('empty and empty pairing folders are unpaired, leftover state needs repair',async t=>{
+test('missing and empty pairing folders are unpaired, leftover state needs repair',async t=>{
   const runtime=await fixture(t);
   assert.deepEqual(await readPairingStatus(runtime),status('unpaired'));
-  await mkdir(path.join(runtime,'private-sync'),{mode:0o700});
+  await privateSyncDirectory(runtime,true);
   assert.deepEqual(await readPairingStatus(runtime),status('unpaired'));
   await writeFile(path.join(runtime,'private-sync/leftover'),'synthetic',{mode:0o600});
   assert.deepEqual(await readPairingStatus(runtime),status('unavailable'));
@@ -123,7 +124,7 @@ test('a repair consent fence makes an old pairing unavailable',async t=>{
   const {runtime}=await paired(t),name=path.join(runtime,'private-sync/pairing.json');
   const old=await readFile(name);
   await preparePairingRepair(runtime);
-  await mkdir(path.join(runtime,'private-sync'),{mode:0o700});
+  await privateSyncDirectory(runtime,true);
   await writeFile(name,old,{mode:0o600});
   assert.deepEqual(await readPairingStatus(runtime),status('unavailable'));
 });
