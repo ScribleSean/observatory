@@ -77,9 +77,9 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
                 '/usr/bin', '/bin', env.get('PATH', '')]))
             if collector is not None:
                 collector = pathlib.Path(collector)
-                if not collector.is_absolute() or collector.name not in ('collect-mac.mjs', 'collect-dashboard.mjs'):
+                if not collector.is_absolute() or collector.name != 'collect-mac.mjs':
                     raise ValueError('Unsupported collector entrypoint')
-                env['OBSERVATORY_RUNTIME'] = str(root)
+            env['OBSERVATORY_RUNTIME'] = str(root)
             # Source and bundled collectors use this runner's selected Python.
             python = sys.executable if python is None else python
             if (not isinstance(python, str) or not os.path.isabs(python)
@@ -87,7 +87,7 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
                     or not os.path.isfile(python) or not os.access(python, os.X_OK)):
                 raise ValueError('Absolute Python executable required')
             env['OBSERVATORY_PYTHON'] = python
-            command = [node, str(collector or root / 'scripts' / 'collect-dashboard.mjs')]
+            command = [node, str(collector or root / 'scripts' / 'collect-mac.mjs')]
             if quota_only:
                 command.append('--quota-only')
             child = subprocess.Popen(command,

@@ -432,7 +432,7 @@ Recorded on 2026-10-14 from the reviews of pull request 87 (issue 84).
 | Appearance and skin | The same rules as the panel: `data-theme` and `data-skin` on the root element. |
 | Sample data | `dashboard.html?demo` shows the same fixture as the panel and labels it "Sample data". |
 
-The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2 and will be checked against those changes when they land. Until then no collector writes them.
+The sample fixture also carries fields that later snapshot changes will add: `hours` on activity, Codex token and Claude Code days, `claudeLimits.sessionCost` and `claudeLimits.history`, top-level `prices`, `apiEstimate` on Claude Code day rows, and a dictation source row with `refusal: 'private-folder-refused'`. As the design requires before R2, the verified `combinedTokens` days carry no `hours`, so Codex Now for All is Unknown in the sample too. Their shapes follow the "Snapshot additions" section and the execution plan text for D2. The collectors now write top-level `prices` and `apiEstimate` on Claude Code day and model rows in those shapes. No collector writes the other fields yet.
 
 ### Snapshot fields the panel reads that no collector writes yet
 
@@ -440,12 +440,17 @@ The sample fixture also carries fields that later snapshot changes will add: `ho
 | --- | --- | --- |
 | `claudeLimits` | Claude Code limit windows in the same shape as `quota`. Written by the collectors since the change described under "Claude Code limits bridge". | Without the bridge installed its status is `not-connected` and the panel shows one Claude Code row reading Unknown |
 | `deviceNames` | Custom names keyed by `Mac` and `Windows` | The panel shows "macOS" and "Windows" |
-| `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked | The dashboard reads `checked` from each estimate |
-| `apiEstimate` on Claude Code day rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table after the peer merge, on the device that shows it. It is never part of the exchanged record. A model with no price is excluded and leaves `usd` null. | Claude Code rows carry no estimate |
-
-`prices` and `apiEstimate` on Claude Code rows are written by the second part of the price table work (D2-4).
 
 `deviceNames` is designed under "Snapshot additions" below. It becomes part of the snapshot format when the collector change that writes it is reviewed and merged.
+
+### Price fields in the snapshot
+
+Both collectors write these after the provider exchange, in `attachProviderTokenEstimates` (`scripts/provider-token-sources.mjs`). They are computed on the device that writes the snapshot, from rows already in it, so nothing new crosses the exchange and the exchanged Claude Code record and its digest are unchanged.
+
+| Field | Meaning |
+| --- | --- |
+| `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked. Written on every collection. |
+| `apiEstimate` on Claude Code day and model rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table, for each Claude Code row with status `ok`, local or peer. A row with any other status, including a peer row marked `stale`, gets no estimate. A model with no price is excluded. The price lookup matches the exact model name, so a dated name (such as `claude-sonnet-4-20250514`) or a `-latest` name is unpriced unless the table lists that exact name. Claude Fable models and the `unknown` model bucket are unpriced too. When nothing in a row is priced, `usd` and `parts` are null, never zero. |
 
 ### Snapshot additions
 
