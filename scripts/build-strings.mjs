@@ -9,6 +9,10 @@ const upper = name => name[0].toUpperCase() + name.slice(1);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const keyPattern = /^[a-z][A-Za-z0-9]*$/;
 
+export function normalizeNewlines(text) {
+  return text.replace(/\r\n?/g, '\n');
+}
+
 export function validateStrings(raw) {
   if (!object(raw)) throw new Error('Strings must be an object');
   for (const [group, entries] of Object.entries(raw)) {
@@ -43,7 +47,7 @@ export function generatedStrings() {
   }
   swift.push('}', '');
   windows.push('}', '');
-  const typedFormat = format.toString().replace('function format(template, values)', 'function format(template: string, values: Record<string, string | number>): string');
+  const typedFormat = normalizeNewlines(format.toString()).replace('function format(template, values)', 'function format(template: string, values: Record<string, string | number>): string');
   return new Map([
     ['lib/strings.generated.ts', `${notice}export const STRINGS = ${JSON.stringify(strings, null, 2)} as const;\n\nexport ${typedFormat}\n`],
     ['native/Strings.swift', swift.join('\n')],
@@ -56,7 +60,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const file = new URL(path, root);
     if (process.argv.includes('--check')) {
       let actual;
-      try { actual = readFileSync(file, 'utf8').replace(/\r\n/g, '\n'); } catch { actual = null; }
+      try { actual = normalizeNewlines(readFileSync(file, 'utf8')); } catch { actual = null; }
       if (actual !== content) {
         console.error(`${path} needs regeneration`);
         process.exitCode = 1;
