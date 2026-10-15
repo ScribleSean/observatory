@@ -243,15 +243,15 @@ void test('dashboard follows hash changes and removes its listener on cleanup', 
   const sections = [];
   const cleanup = followSectionHash(target, section => sections.push(section));
   assert.deepEqual(sections, []);
-  for (const hash of ['#tokens', '#bogus', '#setup']) {
+  for (const hash of ['#tokens', '#bogus', '#setup', '#Setup']) {
     target.location.hash = hash;
     listeners.get('hashchange')?.();
   }
-  assert.deepEqual(sections, ['tokens', 'limits', 'limits']);
+  assert.deepEqual(sections, ['tokens', 'limits', 'setup', 'limits']);
   cleanup();
   target.location.hash = '#activity';
   listeners.get('hashchange')?.();
-  assert.deepEqual(sections, ['tokens', 'limits', 'limits']);
+  assert.deepEqual(sections, ['tokens', 'limits', 'setup', 'limits']);
   assert.equal(listeners.size, 0);
 });
 
@@ -279,5 +279,6 @@ void test('Dashboard follows hashes in an effect and writes them from navigation
   const stateful = source.slice(source.indexOf('export default function Dashboard('), source.indexOf('type DashboardViewProps'));
   assert.match(stateful, /useEffect\(\(\) => followSectionHash\(window, setSection\), \[\]\)/);
   assert.match(stateful, /onSectionChange=\{id => \{\s*setSection\(id\)\s*\W+\s*writeSectionHash\(window, id\)/);
-  assert.equal((stateful.match(/writeSectionHash\(/g) ?? []).length, 1);
+  assert.match(stateful, /onSetupFinished=\{\(\) => \{\s*setSection\('limits'\)\s*\W+\s*writeSectionHash\(window, 'limits'\)/);
+  assert.equal((stateful.match(/writeSectionHash\(/g) ?? []).length, 2);
 });
