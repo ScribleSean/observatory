@@ -25,7 +25,7 @@ internal sealed class Collector : IDisposable
         allowanceTimer.Tick += async (_, _) => await RefreshAfterResumeOrAllowances();
     }
 
-    internal void Start() { if (operations.Stopping) return; timer.Start(); allowanceTimer.Start(); EnsureTrustedSync(); _ = Refresh(); }
+    internal void Start() { if (operations.Stopping || CollectionPaused || !FirstRunSetup.AllowsCollection(runtime)) return; timer.Start(); allowanceTimer.Start(); EnsureTrustedSync(); _ = Refresh(); }
     private void EnsureTrustedSync()
     {
         if (Busy) return;
@@ -138,7 +138,8 @@ internal sealed class Collector : IDisposable
 
     internal void UpdateConfiguration(JsonObject expected, JsonObject desired)
     {
-        if (Busy || !FirstRunSetup.AllowsCollection(runtime)) throw new InvalidOperationException("Collection or setup is active. Try again after it finishes.");
+        if (Busy) throw new InvalidOperationException("Collection is active. Try again after it finishes.");
+        _ = FirstRunSetup.Required(runtime);
         using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var file = Path.Combine(runtime, "collector.config.json");
         if (File.GetAttributes(file).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException("Linked configuration is not editable here.");

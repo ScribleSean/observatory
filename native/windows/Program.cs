@@ -7,12 +7,29 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Any(argument => argument == "--runtime") && !LaunchArguments.Valid(args))
+        {
+            Console.Error.WriteLine("Use --runtime with one absolute folder from an ordinary installation.");
+            Environment.ExitCode = 64;
+            return;
+        }
         if (!LaunchArguments.Valid(args)) { Environment.ExitCode = 64; return; }
         try { _ = AppIdentity.Current; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         { Environment.ExitCode = 64; return; }
+        if (AppIdentity.Current.IsTest && args.Contains("--runtime"))
+        {
+            Console.Error.WriteLine("Runtime overrides are unavailable in a TEST installation.");
+            Environment.ExitCode = 64;
+            return;
+        }
         if (AppIdentity.Current.IsTest && !LaunchArguments.ValidForTestInstallation(args))
         { Environment.ExitCode = 64; return; }
+        if (args.Length == 2 && args[0] == "--runtime")
+        {
+            try { AppIdentity.RuntimeOverride = RuntimeOverride.Check(args[1]); }
+            catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 64; return; }
+        }
         if (args.SequenceEqual(new[] { "--test-launch-isolation" }))
         {
             try { LaunchIsolationTests.Run(); }
@@ -294,7 +311,7 @@ internal static class Program
                 WebViewerPreferences.SelfTest();
                 BridgeHandler.SelfTest();
                 Console.WriteLine("WebView2 runtime: " + WebHostsTests.RuntimeVersion());
-                Snapshot.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); DirectPairingWindow.CommandShapeSelfTest(); FirstRunSetup.SelfTest();
+                Snapshot.SelfTest(); LoginStartup.SelfTest(); PairingDetails.SelfTest(); DirectPairingWindow.CommandShapeSelfTest(); FirstRunSetup.SelfTest(); RuntimeOverride.SelfTest();
                 QuotaSharing.SelfTest();
                 ProviderTokenSharingTests.ParseSelfTest();
                 InstallationGate.SelfTest();
@@ -355,14 +372,6 @@ internal static class Program
             return;
         }
         ApplicationConfiguration.Initialize();
-        if (args.Length == 2 && args[0] == "--test-setup-wizard")
-        {
-            if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
-                File.GetAttributes(args[1]).HasFlag(FileAttributes.ReparsePoint)) { Environment.ExitCode = 1; return; }
-            try { SetupWizardTests.Run(args[1]); }
-            catch (Exception error) { Console.Error.WriteLine(error.Message); Environment.ExitCode = 1; }
-            return;
-        }
         if (args.Length == 2 && args[0] == "--test-web-hosts")
         {
             if (!Path.IsPathFullyQualified(args[1]) || !Directory.Exists(args[1]) ||
@@ -424,7 +433,6 @@ internal sealed class ObservatoryContext : ApplicationContext
     private readonly PowerResumeWindow powerNotifications;
     private readonly System.Windows.Forms.Timer activationTimer = new() { Interval = 200 };
     private Form? dashboard;
-    private SetupWizard? setupWizard;
     private bool pairingDetailsOpen;
     private BridgeHandler? dashboardBridge;
     private WebPanel? webPanel;
@@ -460,20 +468,22 @@ internal sealed class ObservatoryContext : ApplicationContext
         menu.Items.Add("Open Observatory", null, (_, _) => Open());
         menu.Items.Add("Usage overview", null, (_, _) => ShowUsage());
         menu.Items.Add("Refresh sources", null, async (_, _) => await collector.Refresh());
-        menu.Items.Add("Check for updates…", null, async (_, _) => await CheckForUpdates());
+        menu.Items.Add("Check for updates…", null, async (_, _) => await CheckForUpdates()).Enabled = AppIdentity.RuntimeOverride is null;
         menu.Items.Add("Configure local collection", null, (_, _) => Configure());
-        menu.Items.Add("Pairing details for Mac…", null, (_, _) => ShowPairingDetails());
-        menu.Items.Add("Disconnect paired device…", null, async (_, _) => await DisconnectPairing());
-        menu.Items.Add("Prepare pairing repair…", null, async (_, _) => await PreparePairingRepair());
-        var startup = new ToolStripMenuItem("Register start at login");
+        menu.Items.Add("Pairing details for Mac…", null, (_, _) => ShowPairingDetails()).Enabled = AppIdentity.RuntimeOverride is null;
+        menu.Items.Add("Disconnect paired device…", null, async (_, _) => await DisconnectPairing()).Enabled = AppIdentity.RuntimeOverride is null;
+        menu.Items.Add("Prepare pairing repair…", null, async (_, _) => await PreparePairingRepair()).Enabled = AppIdentity.RuntimeOverride is null;
+        var startup = new ToolStripMenuItem("Register start at login") { Enabled = AppIdentity.RuntimeOverride is null };
         menu.Items.Add(startup);
         menu.Opening += (_, _) =>
         {
+            if (AppIdentity.RuntimeOverride is not null) { startup.Checked = false; startup.Enabled = false; return; }
             try { startup.Checked = LoginStartup.Registered(); startup.Enabled = true; }
             catch { startup.Checked = false; startup.Enabled = false; }
         };
         startup.Click += (_, _) =>
         {
+            if (AppIdentity.RuntimeOverride is not null) return;
             try
             {
                 LoginStartup.SetRegistered(!LoginStartup.Registered());
@@ -799,20 +809,9 @@ internal sealed class ObservatoryContext : ApplicationContext
     {
         if (quitting) return;
         webPanel?.Hide();
-        if (setupWizard is not null && !setupWizard.IsDisposed) { setupWizard.Activate(); return; }
-        try
-        {
-            if (FirstRunSetup.Required(runtime))
-            {
-                using var setup = new SetupWizard(runtime, collector);
-                setupWizard = setup;
-                DialogResult result;
-                try { result = WithNativeDialog(() => setup.ShowDialog()); } finally { setupWizard = null; }
-                if (result != DialogResult.OK) return;
-                collector.Start();
-            }
-        }
-        catch { WithNativeDialog(() => MessageBox.Show("Setup state is unavailable. Collection remains paused.", "Observatory setup")); return; }
+        try { if (FirstRunSetup.Required(runtime)) section = "setup"; }
+        catch { section = "setup"; }
+        dashboardBridge?.RefreshFilesNow();
         if (dashboard is null || dashboard.IsDisposed)
         {
             WebDashboard? window = null;
@@ -820,6 +819,7 @@ internal sealed class ObservatoryContext : ApplicationContext
                 () => pairingDetailsOpen,
                 () => nativeDialogCount > 0, () => quitting, CheckForUpdates, value => Open(value));
             var handler = new BridgeHandler(host, runtime);
+            handler.RefreshFilesNow();
             window = new WebDashboard(runtime, handler, section);
             handler.ViewerChanged += (skin, appearance) =>
             {
@@ -843,7 +843,7 @@ internal sealed class ObservatoryContext : ApplicationContext
 
     private async Task CheckForUpdates()
     {
-        if (quitting) return;
+        if (quitting || AppIdentity.RuntimeOverride is not null) return;
         try { await updater.Check(); }
         catch (OperationCanceledException) { }
         catch (ObjectDisposedException) { }

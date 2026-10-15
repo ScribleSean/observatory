@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace WorkspaceObservatory;
 
 // Installed identity comes from the installer's owned marker, never a launch
@@ -10,11 +13,26 @@ internal sealed record AppIdentity(bool IsTest)
     internal static AppIdentity Current => selected.Value;
     internal string DataName => IsTest ? TestName : "Workspace Observatory";
     internal string StartupName => IsTest ? TestId : "WorkspaceObservatory";
-    internal string SingletonName => "Local\\" + (IsTest ? TestId + ".App" : StartupName);
+    internal string SingletonName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + OverrideSuffix;
     internal string SetupName => IsTest ? "Local\\" + TestId : InstallationGate.Name;
     internal string ActivationName => SingletonName + ".Open";
     internal string QuitName => SingletonName + ".QuitForUpdate";
-    internal string Runtime => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DataName);
+    private static string? runtimeOverride;
+    internal static string? RuntimeOverride
+    {
+        get => runtimeOverride;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (Interlocked.CompareExchange(ref runtimeOverride, value, null) is not null)
+                throw new InvalidOperationException("The runtime folder is already selected.");
+        }
+    }
+    private static string OverrideSuffix => runtimeOverride is null ? "" : RuntimeSuffix(runtimeOverride);
+    internal static string RuntimeSuffix(string folder) => "." + Convert.ToHexString(SHA256.HashData(
+        Encoding.UTF8.GetBytes(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant()))))[..16];
+    internal string Runtime => runtimeOverride ?? DefaultRuntime;
+    internal string DefaultRuntime => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DataName);
 
     private static AppIdentity Read(string directory)
     {

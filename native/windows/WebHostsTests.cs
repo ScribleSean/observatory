@@ -32,6 +32,8 @@ internal static class WebHostsTests
         public Version? AppVersion => new(1, 2, 3, 4);
         public bool CollectorBusy => false;
         public bool CollectionPaused => false;
+        public bool RuntimeOverride => false;
+        public void CompleteSetup() => throw new InvalidOperationException("Unexpected fixture action.");
         public bool NativePairingOpen => false;
         public bool NativeDialogOpen => false;
         public bool Confirm(string title, string text) { Calls++; return false; }

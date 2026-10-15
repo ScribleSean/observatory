@@ -110,7 +110,7 @@ void test('TEST startup, dashboard preferences and receipt storage cannot select
     /ValueName => AppIdentity.Current.StartupName/,
   );
   assert.match(
-    read('DashboardWindowPreferences.cs'),
+    read('WebViewerPreferences.cs'),
     /Key => AppIdentity.Current.IsTest \? @"Software\\WorkspaceObservatoryInstallerTest\\Dashboard" : @"Software\\Observatory\\Dashboard"/,
   );
   assert.match(read('UpdateInstall.cs'), /AppIdentity.Current.Runtime/);

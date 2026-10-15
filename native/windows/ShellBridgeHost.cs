@@ -12,6 +12,11 @@ internal sealed class ShellBridgeHost(
     public Version? AppVersion => BridgeSettingsStore.ReadAssemblyVersion();
     public bool CollectorBusy => quitting() || collector.Busy;
     public bool CollectionPaused => collector.CollectionPaused;
+    public bool RuntimeOverride => AppIdentity.RuntimeOverride is not null;
+    public void CompleteSetup()
+    {
+        if (FirstRunSetup.MarkComplete(runtime) && !CollectionPaused) collector.Start();
+    }
     public bool NativePairingOpen => nativePairingOpen();
     public bool NativeDialogOpen => nativeDialogOpen();
 
@@ -47,8 +52,8 @@ internal sealed class ShellBridgeHost(
     public void OpenDashboard(string section) => openDashboard(section);
     public JsonObject ReadConfiguration() => collector.ReadConfiguration();
     public void UpdateConfiguration(JsonObject expected, JsonObject desired) => collector.UpdateConfiguration(expected, desired);
-    public void StartCollector() => collector.Start();
-    public bool ReadStartup() => LoginStartup.Registered();
+    public void StartCollector() { if (FirstRunSetup.AllowsCollection(runtime)) collector.Start(); }
+    public bool ReadStartup() => !RuntimeOverride && LoginStartup.Registered();
     public void SetStartup(bool enabled) => LoginStartup.SetRegistered(enabled);
     public Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel)
     {

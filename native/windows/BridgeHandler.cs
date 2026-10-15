@@ -18,6 +18,8 @@ internal interface IBridgeHost
     Version? AppVersion { get; }
     bool CollectorBusy { get; }
     bool CollectionPaused { get; }
+    bool RuntimeOverride { get; }
+    void CompleteSetup();
     bool NativePairingOpen { get; }
     bool NativeDialogOpen { get; }
     bool Confirm(string title, string text);
@@ -145,7 +147,7 @@ internal sealed class BridgeSettingsStore(string runtime)
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FileInformation information);
 
-    private static void RefuseHardLink(string path)
+    internal static void RefuseHardLink(string path)
     {
         using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read,
             FileShare.ReadWrite | FileShare.Delete, FileOptions.None);
@@ -414,7 +416,8 @@ internal sealed class BridgeHandler : IDisposable
         if (start) drain = Drain();
     }
 
-    private bool CollectorBlocked(string action) => (action is "refresh" or "set-source") && (host.CollectorBusy || host.CollectionPaused);
+    private bool CollectorBlocked(string action) => ((action is "refresh" or "set-source") && (host.CollectorBusy || host.CollectionPaused)) ||
+        (action == "complete-setup" && host.CollectorBusy);
 
     private static bool Exclusive(string action) => action is "refresh" or "set-sharing" or "pairing-disconnect" or "pairing-repair-prepare";
     private bool PairingBusy(string action) =>
@@ -454,7 +457,7 @@ internal sealed class BridgeHandler : IDisposable
                 finally
                 {
                     if (refreshFiles && request.Action is ("set-source" or "set-skin" or "set-appearance" or "set-device-name" or
-                        "set-startup" or "set-limits-consent" or "pairing-disconnect" or "pairing-repair-prepare"))
+                        "set-startup" or "set-limits-consent" or "complete-setup" or "pairing-disconnect" or "pairing-repair-prepare"))
                         RefreshFilesNow();
                 }
             }
@@ -493,6 +496,7 @@ internal sealed class BridgeHandler : IDisposable
         {
             case "refresh": await host.RefreshAllowancesThenAll(); break;
             case "check-updates":
+                if (host.RuntimeOverride) return new("unavailable");
                 lock (gate) dialog = true;
                 try { await host.CheckUpdates(); }
                 finally { lock (gate) dialog = false; }
@@ -505,13 +509,17 @@ internal sealed class BridgeHandler : IDisposable
                 if (Text("source") == "quota" && desired["quota"]!.GetValue<bool>() && !Enabled() &&
                     !Confirm(request, "Account history", "Turn account monitoring off and clear Observatory's retained account readings on the next collection? Saved log-token history remains.")) return new("cancelled");
                 desired[Text("source")] = Enabled();
-                host.UpdateConfiguration(expected, desired); host.StartCollector(); break;
+                host.UpdateConfiguration(expected, desired);
+                if (FirstRunSetup.AllowsCollection(runtime)) host.StartCollector();
+                break;
             case "set-skin":
                 if (!BridgeSettingsStore.Bundled.Contains(Text("skin"), StringComparer.Ordinal)) return new("refused");
                 host.Settings.WriteViewer(Text("skin"), host.Settings.ReadViewer().Appearance); ApplyViewer(); break;
             case "set-appearance": host.Settings.WriteViewer(host.Settings.ReadViewer().Skin, Text("mode")); ApplyViewer(); break;
             case "set-device-name": host.Settings.WriteDevice(request.Args["name"].Text); break;
-            case "set-startup": host.SetStartup(Enabled()); break;
+            case "set-startup":
+                if (host.RuntimeOverride) return new("unavailable");
+                host.SetStartup(Enabled()); break;
             case "set-limits-consent":
                 if (Enabled() && !Confirm(request, "Claude Code limits", "Claude Code hides most of its footer keyboard hints while any custom status line is configured. Turn on Claude Code limits?")) return new("cancelled");
                 var consentArgs = Enabled() ? new[] { "set", "--runtime", runtime, "--consent" } : new[] { "clear", "--runtime", runtime };
@@ -550,8 +558,7 @@ internal sealed class BridgeHandler : IDisposable
                 }
                 finally { lock (gate) working = false; }
                 break;
-            // First-run completion is implemented with O1-2. Until then it changes nothing.
-            case "complete-setup": return new("unavailable");
+            case "complete-setup": host.CompleteSetup(); break;
             default: return await Pairing(request);
         }
         return new("done");
@@ -585,6 +592,7 @@ internal sealed class BridgeHandler : IDisposable
             var viewer = files.Viewer;
             var pair = files.Pairing;
             var state = working ? "working" : session is not null ? pairingState : identityState is not null ? identityState : host.CollectionPaused ? "unavailable" : pair.State;
+            if (state == "confirming" && !Hex64(fingerprint)) state = "unavailable";
             var value = new JsonObject
             {
                 ["version"] = 1, ["app"] = new JsonObject { ["version"] = versionText, ["build"] = version.Revision },
@@ -600,9 +608,71 @@ internal sealed class BridgeHandler : IDisposable
                     ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
                 ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) }
             };
-            return Encoding.UTF8.GetByteCount(value.ToJsonString()) <= 16384 ? new("done", value) : new("unavailable");
+            return ValidStatusShape(value) ? new("done", value) : new("unavailable");
         }
         catch { return new("unavailable"); }
+    }
+
+    private static bool Hex64(string? text) => text is { Length: 64 } && text.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+
+    internal static bool ValidStatusShape(JsonObject value)
+    {
+        static bool Keys(JsonNode? node, params string[] keys) => node is JsonObject obj && obj.Count == keys.Length && keys.All(obj.ContainsKey);
+        static bool Number(JsonNode? node, out double number)
+        {
+            using var json = JsonDocument.Parse(node?.ToJsonString() ?? "null");
+            number = 0;
+            return json.RootElement.ValueKind == JsonValueKind.Number && json.RootElement.TryGetDouble(out number);
+        }
+        static bool Boolean(JsonNode? node) => node is JsonValue item && item.TryGetValue<bool>(out _);
+        static string? Text(JsonNode? node) => node is JsonValue item && item.TryGetValue<string>(out var text) ? text : null;
+        static bool Argument(string action, string key, JsonNode? node) => BridgeContract.Validate(new JsonObject
+            { ["id"] = 1, ["action"] = action, ["args"] = new JsonObject { [key] = node?.DeepClone() } }.ToJsonString()).Outcome == "accepted";
+        try
+        {
+            var status = BridgeContract.Data["status"];
+            var values = BridgeContract.Data["values"];
+            if (Encoding.UTF8.GetByteCount(value.ToJsonString()) > status["maxBytes"].Number ||
+                !Keys(value, status["fields"].Items.Select(item => item.Text).ToArray()) ||
+                !Number(value["version"], out var schema) || schema != status["version"].Number) return false;
+            var app = value["app"];
+            var version = Text(app?["version"]);
+            if (!Keys(app, "version", "build") || version is null || version.Length == 0 || version.Length > status["appVersionMaxLength"].Number ||
+                !char.IsAsciiLetterOrDigit(version[0]) || version.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not (' ' or '.' or '+' or '-')) ||
+                app!["build"] is not JsonValue || !Number(app["build"], out var build) ||
+                !double.IsFinite(build) || build < 0 || build > 9007199254740991 || Math.Truncate(build) != build) return false;
+            var sources = value["sources"];
+            if (!Keys(sources, "activity", "codex", "claude", "wispr", "quota") || sources!.AsObject().Any(p => !Boolean(p.Value)) ||
+                !Boolean(value["startup"]) || !Boolean(value["limitsConsent"]) || !Boolean(value["collectionPaused"]) ||
+                Text(value["appearance"]) is not string appearance || !values["appearance"].Contains(appearance) ||
+                !Argument("set-device-name", "name", value["deviceName"])) return false;
+            var skin = value["skin"];
+            var bundled = BridgeContract.Actions["set-skin"]["args"]["skin"]["bundled"].Items.Select(item => item.Text).ToArray();
+            if (!Keys(skin, "current", "bundled", "custom") || skin!["bundled"] is not JsonArray bundledArray ||
+                skin["custom"] is not JsonArray customArray) return false;
+            var listed = bundledArray.Select(Text).ToArray();
+            var custom = customArray.Select(Text).ToArray();
+            if (listed.Length != bundled.Length || listed.Distinct(StringComparer.Ordinal).Count() != bundled.Length ||
+                listed.Any(name => name is null || !bundled.Contains(name, StringComparer.Ordinal)) ||
+                custom.Length > status["customSkinsMax"].Number || custom.Distinct(StringComparer.Ordinal).Count() != custom.Length ||
+                customArray.Any(node => Text(node) is not string name || !Argument("set-skin", "skin", node) || bundled.Contains(name.ToLowerInvariant(), StringComparer.Ordinal)) ||
+                Text(skin["current"]) is not string current || !listed.Concat(custom).Contains(current, StringComparer.Ordinal)) return false;
+            var pairing = value["pairing"];
+            if (!Keys(pairing, "state", "peerFingerprint", "transport", "invitationKept") ||
+                Text(pairing!["state"]) is not string state || !values["pairingState"].Contains(state) ||
+                Text(pairing["transport"]) is not string transport || !values["transport"].Contains(transport) ||
+                !Boolean(pairing["invitationKept"]) ||
+                (state == "confirming" ? !Hex64(Text(pairing["peerFingerprint"])) : pairing["peerFingerprint"] is not null)) return false;
+            var sharing = value["sharing"];
+            if (!Keys(sharing, "codex-limits", "claude-code-tokens")) return false;
+            foreach (var (channel, item) in sharing!.AsObject())
+                if (!Keys(item, "enabled", "canEnable", "reason", "token") || !Boolean(item!["enabled"]) || !Boolean(item["canEnable"]) ||
+                    Text(item["reason"]) is not string reason || !values["sharingReason"].Contains(reason) ||
+                    (channel == "codex-limits" && reason == "source-unavailable") || (channel == "claude-code-tokens" && reason == "account-unavailable") ||
+                    (item["canEnable"]!.GetValue<bool>() ? !Hex64(Text(item["token"])) : item["token"] is not null)) return false;
+            return true;
+        }
+        catch { return false; }
     }
 
     private static SharingChannel Channel(int index) => index == 0 ? SharingChannel.Quota : SharingChannel.ProviderTokens;
@@ -626,7 +696,7 @@ internal sealed class BridgeHandler : IDisposable
         return value;
     }
 
-    private void RefreshFilesNow()
+    internal void RefreshFilesNow()
     {
         FileStatus previous;
         long revision;
@@ -970,7 +1040,7 @@ internal sealed class BridgeHandler : IDisposable
         internal readonly System.Collections.Concurrent.ConcurrentQueue<string> Calls = new();
         internal readonly List<ProcessStartInfo> Scripts = new();
         internal JsonObject Configuration = new() { ["activity"] = true, ["codex"] = true, ["claude"] = false, ["wispr"] = false, ["quota"] = true };
-        internal bool Consent = true, Startup, Reserved, FailReads;
+        internal bool Consent = true, Startup, Reserved, FailReads, UseFiles;
         internal int Dialogs, Releases;
         internal Action? InDialog;
         internal string? ExportFile;
@@ -983,6 +1053,11 @@ internal sealed class BridgeHandler : IDisposable
         public Version? AppVersion { get; set; } = new(1, 2, 3, 4);
         public bool CollectorBusy { get; set; }
         public bool CollectionPaused { get; set; }
+        public bool RuntimeOverride { get; set; }
+        public void CompleteSetup()
+        {
+            if (FirstRunSetup.MarkComplete(runtime) && !CollectionPaused) StartCollector();
+        }
         public bool NativePairingOpen { get; set; }
         public bool NativeDialogOpen { get; set; }
         internal bool CopyThrows, ScriptThrows;
@@ -993,9 +1068,16 @@ internal sealed class BridgeHandler : IDisposable
         public Task Refresh() { Calls.Enqueue("refresh"); return Task.CompletedTask; }
         public Task CheckUpdates() { Calls.Enqueue("updates"); InDialog?.Invoke(); return (Task?)UpdateWait?.Task ?? Task.CompletedTask; }
         public void OpenDashboard(string section) => Calls.Enqueue("open:" + section);
-        public JsonObject ReadConfiguration() { Calls.Enqueue("config-read"); if (FailReads) throw new IOException("Synthetic read failure"); return Configuration.DeepClone().AsObject(); }
+        public JsonObject ReadConfiguration() { Calls.Enqueue("config-read"); if (FailReads) throw new IOException("Synthetic read failure"); return UseFiles ? JsonNode.Parse(File.ReadAllText(Path.Combine(runtime, "collector.config.json")))!.AsObject() : Configuration.DeepClone().AsObject(); }
         public void UpdateConfiguration(JsonObject expected, JsonObject desired)
         {
+            if (UseFiles)
+            {
+                using var collector = new Collector(runtime);
+                collector.UpdateConfiguration(expected, desired);
+                Calls.Enqueue("config-write");
+                return;
+            }
             Check(JsonNode.DeepEquals(expected, Configuration) && desired.Count == 5, "Configuration fence");
             Configuration = desired.DeepClone().AsObject(); Calls.Enqueue("config-write");
         }
@@ -1067,6 +1149,7 @@ internal sealed class BridgeHandler : IDisposable
                 probeHandler.Receive("{\"id\":3,\"action\":\"tailscale-check\",\"args\":{}}", TestDriver.Origin, 1, posts.Add);
                 Check(!probeHost.Calls.Contains("tailscale") && !probeHost.Calls.Any(c => c.StartsWith("sharing:")), "Probe cache isolation");
             }
+            await TestSetup(runtime);
             await TestMessages(runtime);
             await TestCache(runtime);
             await TestQueue(runtime);
@@ -1124,6 +1207,92 @@ internal sealed class BridgeHandler : IDisposable
     private static JsonObject ShareArgs(bool enabled) => enabled
         ? new() { ["channel"] = "codex-limits", ["enabled"] = true, ["token"] = new string('a', 64) }
         : new() { ["channel"] = "codex-limits", ["enabled"] = false };
+
+    private static async Task TestSetup(string parent)
+    {
+        foreach (var scenario in new[] { "success", "all-off", "paused", "folder", "readonly", "linked", "linked-config", "oversized", "missing-config", "invalid-config", "oversized-config", "unreadable", "unreadable-config" })
+        {
+            var root = Path.Combine(parent, "setup-" + scenario);
+            FirstRunSetup.Prepare(root);
+            var marker = Path.Combine(root, "setup-state.json");
+            var config = Path.Combine(root, "collector.config.json");
+            var pending = File.ReadAllBytes(marker);
+            using var test = new TestDriver(root);
+            test.Host.UseFiles = true;
+            test.Handler.RefreshFilesNow();
+            var initial = (await test.Run("status"))["value"]!.AsObject();
+            Check(ValidStatusShape(initial) && initial["sources"]!.AsObject().All(p => !p.Value!.GetValue<bool>()), "Initial setup status");
+            await test.Run("complete-setup", new() { ["completed"] = true }, "refused");
+            test.Host.CollectorBusy = true;
+            await test.Run("complete-setup", code: "busy");
+            await test.Run("set-source", new() { ["source"] = "activity", ["enabled"] = true }, "busy");
+            test.Host.CollectorBusy = false;
+            await test.Run("set-source", new() { ["source"] = "activity", ["enabled"] = true });
+            Check(JsonNode.Parse(File.ReadAllText(config))!["activity"]!.GetValue<bool>() &&
+                !test.Host.Calls.Contains("start") && !FirstRunSetup.AllowsCollection(root), "Pending source edit started collection");
+            using (var collector = new Collector(root))
+            {
+                collector.Start();
+                await collector.Refresh();
+                Check(!File.Exists(Path.Combine(root, "public", "local", "collector.json")), "Pending collector ran");
+            }
+            var updated = (await test.Run("status"))["value"]!.AsObject();
+            Check(ValidStatusShape(updated) && updated["sources"]!["activity"]!.GetValue<bool>(), "Source edit did not refresh status");
+            if (scenario == "all-off") await test.Run("set-source", new() { ["source"] = "activity", ["enabled"] = false });
+            FileStream? held = null;
+            if (scenario == "paused") test.Host.CollectionPaused = true;
+            if (scenario == "folder") { File.Delete(marker); Directory.CreateDirectory(marker); }
+            if (scenario == "readonly") File.SetAttributes(marker, FileAttributes.ReadOnly);
+            if (scenario == "oversized") File.WriteAllText(marker, new string(' ', 4097));
+            if (scenario == "missing-config") File.Delete(config);
+            if (scenario == "invalid-config") File.WriteAllText(config, "{}");
+            if (scenario == "oversized-config") File.WriteAllText(config, new string(' ', 4097));
+            if (scenario == "unreadable") held = new FileStream(marker, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            if (scenario == "unreadable-config") held = new FileStream(config, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            var linkedPath = scenario == "linked-config" ? config : marker;
+            byte[]? linkedBytes = null;
+            if (scenario is "linked" or "linked-config")
+            {
+                linkedBytes = File.ReadAllBytes(linkedPath);
+                File.Delete(linkedPath);
+                var target = Path.Combine(root, "target.json"); File.WriteAllBytes(target, linkedBytes);
+                try { File.CreateSymbolicLink(linkedPath, target); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+                { Console.WriteLine("Setup link test skipped because links cannot be created."); continue; }
+            }
+            try
+            {
+                var success = scenario is "success" or "all-off" or "paused";
+                var starts = scenario is "success" or "all-off" ? 1 : 0;
+                var savedConfig = scenario != "unreadable-config" && File.Exists(config) ? File.ReadAllBytes(config) : null;
+                await test.Run("complete-setup", code: success ? "done" : "unavailable");
+                Check(FirstRunSetup.AllowsCollection(root) == success, "Setup collection gate");
+                Check(test.Host.Calls.Count(call => call == "start") == starts, "Setup start count");
+                if (savedConfig is not null) Check(savedConfig.SequenceEqual(File.ReadAllBytes(config)), "Completion changed sources");
+                if (success)
+                {
+                    var completed = File.ReadAllBytes(marker);
+                    await test.Run("complete-setup");
+                    Check(completed.SequenceEqual(File.ReadAllBytes(marker)) && test.Host.Calls.Count(call => call == "start") ==
+                        starts, "Repeated completion changed state");
+                }
+                else if (linkedBytes is not null) Check(linkedBytes.SequenceEqual(File.ReadAllBytes(Path.Combine(root, "target.json"))), "Linked target changed");
+                else if (scenario is "readonly" or "missing-config" or "invalid-config" or "oversized-config")
+                    Check(pending.SequenceEqual(File.ReadAllBytes(marker)), "Failed completion changed marker");
+            }
+            finally
+            {
+                held?.Dispose();
+                if (scenario == "readonly") File.SetAttributes(marker, FileAttributes.Normal);
+                if (scenario is "linked" or "linked-config") File.Delete(linkedPath);
+            }
+        }
+        using var isolated = new TestDriver(parent);
+        isolated.Host.RuntimeOverride = true;
+        await isolated.Run("set-startup", new() { ["enabled"] = true }, "unavailable");
+        await isolated.Run("check-updates", code: "unavailable");
+        Check(!isolated.Host.Calls.Contains("startup-write") && !isolated.Host.Calls.Contains("updates"), "Runtime override changed installation");
+    }
 
     private static async Task TestMessages(string runtime)
     {
@@ -1189,7 +1358,7 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("export-data", code: "unavailable");
         await test.Run("set-skin", new() { ["skin"] = "custom" }, "refused");
         await test.Run("complete-setup", code: "unavailable");
-        foreach (var call in new[] { "refresh-all", "updates", "open:tokens", "open:settings", "config-write", "start", "startup-write", "settings",
+        foreach (var call in new[] { "refresh-all", "updates", "open:tokens", "open:settings", "config-write", "startup-write", "settings",
             "script:claude-limits-consent.mjs", "script:observatory-file.mjs", "sharing:enable:Quota", "sharing:disable:Quota" })
             Check(test.Host.Calls.Contains(call), "Missing host action " + call);
     }
@@ -1398,6 +1567,18 @@ internal sealed class BridgeHandler : IDisposable
         foreach (var action in new[] { "refresh", "set-sharing", "pairing-disconnect", "pairing-repair-prepare" })
             await test.Run(action, action == "set-sharing" ? ShareArgs(false) : null, "busy");
         session.PollState = "confirming"; await test.Handler.PollAsync();
+        var hostStatus = (await test.Run("status"))["value"]!.AsObject();
+        Check(ValidStatusShape(hostStatus), "Host confirming status shape");
+        var invalidStatus = hostStatus.DeepClone().AsObject(); invalidStatus["pairing"]!["peerFingerprint"] = null;
+        Check(!ValidStatusShape(invalidStatus), "Confirming without fingerprint accepted");
+        invalidStatus = hostStatus.DeepClone().AsObject(); invalidStatus.Remove("collectionPaused");
+        Check(!ValidStatusShape(invalidStatus), "Missing pause accepted");
+        invalidStatus = hostStatus.DeepClone().AsObject(); invalidStatus["extra"] = false;
+        Check(!ValidStatusShape(invalidStatus), "Extra status key accepted");
+        test.Handler.fingerprint = null;
+        var unavailableStatus = (await test.Run("status"))["value"]!.AsObject();
+        Check(ValidStatusShape(unavailableStatus) && unavailableStatus["pairing"]!["state"]!.GetValue<string>() == "unavailable", "Missing fingerprint normalization");
+        await test.Handler.PollAsync();
         Check((await test.Run("status"))["value"]!["pairing"]!["peerFingerprint"]!.GetValue<string>() == new string('a', 64), "Poll fingerprint");
         session.HeldConfirm = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int confirming = test.Send("pairing-host-confirm", new() { ["fingerprint"] = new string('a', 64), ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 });
@@ -1410,6 +1591,10 @@ internal sealed class BridgeHandler : IDisposable
         var command = session.Commands.Last(c => c["action"]!.GetValue<string>() == "host-confirm");
         Check(command.Count == 4 && command["localEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"192.168.1.2\",\"port\":43128}" && session.Disposed && !test.Host.Reserved, "Host confirmation endpoint");
         await test.Run("pairing-join-claim", new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" });
+        var joinStatus = (await test.Run("status"))["value"]!.AsObject();
+        Check(joinStatus["pairing"]!["state"]!.GetValue<string>() == "awaiting-confirmation" && ValidStatusShape(joinStatus), "Join status shape");
+        joinStatus["pairing"]!["peerFingerprint"] = new string('a', 64);
+        Check(!ValidStatusShape(joinStatus), "Join fingerprint accepted");
         session = test.Host.Session!; session.JoinState = "local-ready";
         await test.Run("pairing-join-confirm", code: "unavailable"); Check(!session.Disposed, "Join retry ended session");
         session.JoinState = "acknowledged"; await test.Run("pairing-join-confirm");

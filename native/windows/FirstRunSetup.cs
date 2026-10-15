@@ -11,6 +11,7 @@ internal static class FirstRunSetup
         if (Directory.Exists(file)) throw new IOException("Setup state must be a regular file.");
         if (info.LinkTarget is not null || (info.Exists && (info.Attributes.HasFlag(FileAttributes.ReparsePoint) || info.Length > 4096)))
             throw new IOException("Unsafe setup file.");
+        if (info.Exists) BridgeSettingsStore.RefuseHardLink(file);
     }
     internal static bool Required(string runtime)
     {
@@ -39,25 +40,45 @@ internal static class FirstRunSetup
         if (File.GetAttributes(runtime).HasFlag(FileAttributes.ReparsePoint)) throw new IOException("Invalid setup directory.");
         if (!Required(runtime)) return false;
         if (!File.Exists(Marker(runtime))) Write(runtime, false);
+        var config = Path.Combine(runtime, "collector.config.json");
+        CheckFile(config);
+        if (!File.Exists(config))
+        {
+            var sources = new JsonObject();
+            foreach (var key in new[] { "activity", "codex", "claude", "wispr", "quota" }) sources[key] = false;
+            WriteFile(config, sources);
+        }
         return true;
     }
     private static void Write(string runtime, bool completed)
     {
-        CheckFile(Marker(runtime));
-        var temporary = Path.Combine(runtime, "setup-state-" + Guid.NewGuid().ToString("N") + ".tmp");
+        WriteFile(Marker(runtime), new JsonObject { ["version"] = 1, ["completed"] = completed });
+    }
+    private static void WriteFile(string file, JsonObject value)
+    {
+        CheckFile(file);
+        var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, new JsonObject { ["version"] = 1, ["completed"] = completed }.ToJsonString());
-            File.Move(temporary, Marker(runtime), true);
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                System.Text.Json.JsonSerializer.Serialize(stream, value);
+            CheckFile(file);
+            File.Move(temporary, file, true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
-    internal static void Complete(string runtime, Action saveSources)
+    internal static bool MarkComplete(string runtime)
     {
         using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        if (!Required(runtime)) throw new InvalidOperationException("Setup already completed.");
-        saveSources();
+        if (!Required(runtime)) return false;
+        var config = Path.Combine(runtime, "collector.config.json");
+        CheckFile(config);
+        var sources = JsonNode.Parse(File.ReadAllText(config)) as JsonObject;
+        foreach (var key in new[] { "activity", "codex", "claude", "wispr", "quota" })
+            if (sources?[key] is not JsonValue value || !value.TryGetValue<bool>(out _))
+                throw new IOException("Invalid source settings.");
         Write(runtime, true);
+        return true;
     }
     internal static void SelfTest()
     {
@@ -66,11 +87,22 @@ internal static class FirstRunSetup
         try
         {
             if (!Prepare(root) || !Prepare(root) || AllowsCollection(root)) throw new Exception("Pending setup did not survive restart.");
-            try { Complete(root, () => throw new IOException("Synthetic save failure")); } catch (IOException) { }
-            if (AllowsCollection(root)) throw new Exception("Failed save enabled collection.");
             var config = Path.Combine(root, "collector.config.json");
-            Complete(root, () => File.WriteAllText(config, "{\"activity\":false,\"codex\":false}"));
-            if (Prepare(root) || !AllowsCollection(root)) throw new Exception("Completed setup was not retained.");
+            var sources = JsonNode.Parse(File.ReadAllText(config))!.AsObject();
+            if (sources.Count != 5 || sources.Any(p => p.Value!.GetValue<bool>())) throw new Exception("Sources were enabled by default.");
+            sources["activity"] = true;
+            File.WriteAllText(config, sources.ToJsonString());
+            var saved = File.ReadAllText(config);
+            Prepare(root);
+            if (File.ReadAllText(config) != saved) throw new Exception("Prepare changed source choices.");
+            File.WriteAllText(config, "{}");
+            var pending = File.ReadAllText(Marker(root));
+            try { MarkComplete(root); throw new Exception("Invalid config accepted."); } catch (IOException) { }
+            if (File.ReadAllText(Marker(root)) != pending || AllowsCollection(root)) throw new Exception("Failed completion changed consent.");
+            File.WriteAllText(config, saved);
+            if (!MarkComplete(root) || Prepare(root) || !AllowsCollection(root)) throw new Exception("Completed setup was not retained.");
+            var completed = File.ReadAllBytes(Marker(root));
+            if (MarkComplete(root) || !completed.SequenceEqual(File.ReadAllBytes(Marker(root)))) throw new Exception("Completion was not idempotent.");
             File.WriteAllText(Marker(root), "invalid");
             if (AllowsCollection(root)) throw new Exception("Corrupt setup enabled collection.");
             File.Delete(Marker(root));

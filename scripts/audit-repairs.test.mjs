@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const read=file=>readFile(new URL('../'+file,import.meta.url),'utf8');
 
-test('both setup wizards describe the SSH prerequisite and separate TLS preview',async()=>{
-  for(const file of ['native/SetupWizard.swift','native/windows/SetupWizard.cs']) {
+test('remaining Mac setup wizard describes the SSH prerequisite and separate TLS preview',async()=>{
+  for(const file of ['native/SetupWizard.swift']) {
     const source=await read(file);
     assert.match(source,/started from the Mac over an existing trusted SSH connection/);
     assert.match(source,/existing SSH alias, trusted host key and key-based sign-in/);

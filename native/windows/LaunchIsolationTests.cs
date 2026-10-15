@@ -45,6 +45,8 @@ internal static class LaunchIsolationTests
             ["--test-usage-popup", "fixture-runtime"],
             ["--test-web", "fixture-runtime"],
             ["--test-first-run", "fixture-runtime"],
+            ["--test-setup-wizard", "fixture-runtime"],
+            ["--runtime"], ["--runtime", "--background"], ["--runtime", "x", "--background"],
             ["--test-archive-window", "fixture-runtime"],
             ["--test-native-dashboard"], ["--test-native-dashboard", "x", "extra"],
             ["--test-web-hosts"], ["--test-web-hosts", "x", "extra"], ["--test-web-hosts", "--background"],
@@ -56,11 +58,16 @@ internal static class LaunchIsolationTests
             ["--native-viewer", "--legacy-dashboard"], ["--native-viewer", "--web-panel"],
             ["--native-viewer", "--web-dashboard"], ["--native-viewer", "x"], ["--native-viewer=1"] })
             Check(!LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));
-        foreach (var args in new string[][] { ["--collect-once", "fixture-runtime"],
+        foreach (var args in new string[][] { ["--collect-once", "fixture-runtime"], ["--runtime", "fixture-runtime"],
             ["--test-web-hosts", "fixture-runtime"],
             ["--apply-update", "installed", "staged", "receipt", "envelope", "7"],
             ["--test-update-install", "installed", "staged", "receipt", "envelope", "key", "7"] })
             Check(LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));
+        var fixturePath = Path.Combine(Path.GetTempPath(), "observatory-runtime-identity");
+        var suffix = AppIdentity.RuntimeSuffix(fixturePath);
+        Check(suffix.Length == 17 && suffix[0] == '.' && suffix[1..].All(Uri.IsHexDigit));
+        Check(suffix == AppIdentity.RuntimeSuffix(fixturePath.ToUpperInvariant() + Path.DirectorySeparatorChar));
+        Check(suffix != AppIdentity.RuntimeSuffix(fixturePath + "-other"));
         var current = AppIdentity.Current;
         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schema = 1, status = "launch-isolation-passed",
             testIdentity = current.IsTest, dataName = current.DataName, startupName = current.StartupName,
