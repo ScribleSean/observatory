@@ -270,7 +270,7 @@ The four actions map to things each shell already does. This is not a general co
 
 ### Settings bridge contract
 
-Written on 2026-10-14 for B1, before any shell implements it. It needs two reviewer checks against the rule below before code starts. No shell implements it yet.
+Written on 2026-10-14 for B1, before any shell implements it. It needs two reviewer checks against the rule below before code starts. The Mac shell implements it on the M2 branch (issue 102). The Windows shell does not yet (W2).
 
 The action list, the argument rules and the limits below are also kept as data in `lib/bridge-contract.json`. `scripts/build-bridge-contract.mjs` generates the TypeScript types (`lib/bridge-contract.generated.ts`) and a message validator for each shell (`native/BridgeContract.swift` and `native/windows/BridgeContract.cs`), and its `--check` fails when a generated file is stale. `lib/bridge-contract.mjs` is the same validator for the page. This section stays the authority, and a change here and in the data file go in one reviewed pull request. The validators read "no readable `id`" as: the text is not valid JSON, nests deeper than 16 levels, is not an object, or has no `id`, more than one `id` or an `id` that is not an integer in range. Each such message is ignored without a result. Whether a custom skin name is in the shell's own list is checked by the shell, not by the validator.
 
