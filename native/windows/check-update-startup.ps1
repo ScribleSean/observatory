@@ -18,7 +18,6 @@ $child = $null
 $passed = $false
 try {
     New-Item -ItemType Directory -Path $runtime | Out-Null
-    # Completed setup without any source configuration keeps collection disabled.
     [IO.File]::WriteAllText((Join-Path $runtime 'setup-state.json'), '{"version":1,"completed":true}')
     $start = [Diagnostics.ProcessStartInfo]::new($Executable)
     $start.UseShellExecute = $false
@@ -37,7 +36,6 @@ try {
 } finally {
     $ready.Dispose()
     if ($null -ne $child) {
-        # Only this test-owned process on a disposable runner may be terminated.
         if (-not $child.HasExited) { $child.Kill($true); $child.WaitForExit() }
         $child.Dispose()
     }

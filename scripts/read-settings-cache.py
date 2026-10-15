@@ -1,4 +1,3 @@
-"""Private, reconstructible cache of allowlisted Codex events, not log text."""
 import os
 import sqlite3
 import stat
@@ -65,12 +64,6 @@ def cache_event(event, cached=False):
 
 
 class SettingsCache:
-    """Unchanged files reuse sanitized events; changed files are reread in full.
-
-    File-granularity invalidation deliberately avoids assuming logs are append
-    only. A cold cache advances within the existing per-run scan budget and
-    withholds the report until every selected file has complete coverage.
-    """
     def __init__(self, directory, budget=1_000_000_000):
         root = pathlib.Path(directory)
         if not root.is_absolute() or root.resolve(strict=True) != root or root.is_symlink():
@@ -178,7 +171,6 @@ class SettingsCache:
         return events
 
     def close(self):
-        # Remove metadata for logs no longer in the selected session and archive set.
         try:
             for (key,) in self.db.execute('SELECT key FROM events').fetchall():
                 if key not in self.used:

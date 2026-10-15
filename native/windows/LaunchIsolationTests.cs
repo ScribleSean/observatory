@@ -1,7 +1,5 @@
 namespace WorkspaceObservatory;
 
-// Pure identity and dispatch checks. The dedicated command never starts a UI,
-// collector, installer or startup registration. It does not query known folders.
 internal static class LaunchIsolationTests
 {
     internal static void Run()

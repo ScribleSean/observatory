@@ -246,7 +246,6 @@ test('session cost follows the shared Limits rule', () => {
   assert.deepEqual(view({}, { host: 'All' }).claude.sessionCost, unknown);
   for (const usd of [-1, 10001, '3', null, NaN]) assert.deepEqual(cost(usd, 0), unknown);
   assert.deepEqual(cost(3, 0, 'not-a-date'), unknown);
-  // The shared rule refuses a cost 10 minutes old or older and any future observation.
   assert.deepEqual(cost(3, 600000), unknown);
   assert.deepEqual(cost(3, -1000), unknown);
   assert.equal(cost(0, 0).status, 'ok');

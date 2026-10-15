@@ -3,8 +3,6 @@ using System.Security.Cryptography;
 
 namespace WorkspaceObservatory;
 
-// Initialization requires explicit trust and callbacks. Once initialized, native
-// code and delegates remain rooted until process exit, including after cleanup.
 internal sealed class WinSparkleLibrary : IDisposable
 {
     private const string ExpectedSha256 = "9b43b1c16ee39fb9a91b5bd75138767898779510e0836be2919250607cdbe8ab";
@@ -38,7 +36,6 @@ internal sealed class WinSparkleLibrary : IDisposable
         EnsureConfigurable();
         ArgumentNullException.ThrowIfNull(value);
         if (callbacks is not null) throw new InvalidOperationException("Updater callbacks are already attached.");
-        // Retain all delegates even if a later registration fails.
         callbacks = value;
         Export<SetCallback>("win_sparkle_set_user_run_installer_callback")(Marshal.GetFunctionPointerForDelegate(value.Install));
         Export<SetCallback>("win_sparkle_set_can_shutdown_callback")(Marshal.GetFunctionPointerForDelegate(value.CanShutdown));
@@ -68,13 +65,11 @@ internal sealed class WinSparkleLibrary : IDisposable
         Export<SetUtf8>("win_sparkle_set_registry_path")(registryPath);
         Export<SetDetails>("win_sparkle_set_app_details")("Observatory", "Observatory", version);
         Export<SetWide>("win_sparkle_set_app_build_version")(build.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        // User-initiated checks only. Do not inherit automatic-check consent.
         Export<SetInt>("win_sparkle_set_automatic_check_for_updates")(0);
         using (var settings = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(registryPath))
             if (settings?.GetValue("CheckForUpdates") is not string automatic || automatic != "0")
                 throw new IOException("Updater manual-only settings were not saved.");
         var start = Export<Invoke>("win_sparkle_init");
-        // Retain before entering native code, even if initialization fails.
         processOwner = this;
         initialized = true;
         start();
@@ -107,8 +102,6 @@ internal sealed class WinSparkleLibrary : IDisposable
         {
             if (file.Length != 2886144 || Convert.ToHexString(SHA256.HashData(file)).ToLowerInvariant() != ExpectedSha256)
                 throw new IOException("Updater library does not match the pinned runtime.");
-            // Absolute primary DLL, system-only dependency lookup. Never search
-            // the current directory, PATH or a downloaded candidate directory.
             handle = NativeLibrary.Load(libraryPath, typeof(WinSparkleLibrary).Assembly, DllImportSearchPath.System32);
         }
         catch { file.Dispose(); Volatile.Write(ref owned, 0); throw; }

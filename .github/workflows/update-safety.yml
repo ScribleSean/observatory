@@ -42,8 +42,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Dependency-free tests create only disposable keys and synthetic payloads.
-      # This workflow neither builds releases nor accesses production signing keys.
       - name: Verify signatures, replacement and rollback
         run: node --test scripts/verify-installation.test.mjs scripts/replace-payload.test.mjs scripts/mac-replacement.test.mjs scripts/mac-package.test.mjs scripts/update-appcast.test.mjs
       - name: Verify official Sparkle signing interoperability

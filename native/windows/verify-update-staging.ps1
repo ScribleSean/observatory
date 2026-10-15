@@ -54,7 +54,6 @@ try {
     # the runner's potentially different temporary volume.
     $stagingParent = Split-Path -Parent $installed
     $existingStages = @(Get-ChildItem -LiteralPath $stagingParent -Force -Directory | ForEach-Object FullName)
-    # Exercise the shipped extractor, not the framework's unrestricted extractor.
     RunChecked (Join-Path $installed 'WorkspaceObservatory.exe') ('--test-update-extraction "' + $archive + '" "' + $stagingParent + '"')
     $staged = @(Get-ChildItem -LiteralPath $stagingParent -Force -Directory |
         Where-Object { $_.FullName -notin $existingStages })
@@ -72,15 +71,11 @@ try {
     }
     RunChecked (Join-Path $expanded 'WorkspaceObservatory.exe') '--self-test'
     if (Test-Path -LiteralPath $data) { throw 'Staging unexpectedly created live collection data.' }
-    # No source configuration exists. Exercise the full update and normal UI
-    # without allowing collection or touching any account or paired device.
     New-Item -ItemType Directory -Path $data | Out-Null
     [IO.File]::WriteAllText((Join-Path $data 'setup-state.json'), '{"version":1,"completed":true}')
     & $node (Join-Path $PSScriptRoot 'check-update-install.mjs') $installed $expanded (Join-Path $request 'installation-receipt.json') $output
     if ($LASTEXITCODE -ne 0) { throw 'Complete update and relaunch verification failed.' }
     $dataFiles = @(Get-ChildItem -LiteralPath $data -Recurse -File)
-    # The update publishes its authenticated receipt before relaunch. The Node
-    # integration check verifies its exact bytes and signature above.
     $expectedData = @((Join-Path $data 'setup-state.json'), (Join-Path $data 'updates\installed-envelope.json'))
     if ($dataFiles.Count -ne $expectedData.Count -or @($dataFiles | Where-Object { $_.FullName -notin $expectedData }).Count -ne 0) {
         throw 'Update test wrote unexpected data.'

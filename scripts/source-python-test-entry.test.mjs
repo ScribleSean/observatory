@@ -33,8 +33,6 @@ const selected = () =>
   );
 
 function launch(env) {
-  // This child only reports the selected interpreter. It imports no collector
-  // or permission helper and does not log the inherited environment.
   return spawnSync(
     process.execPath,
     [
@@ -196,8 +194,6 @@ for (const mode of ['timeout', 'stdout', 'stderr']) {
         BODY_MARKER: body,
         PROBE_TRACE: trace,
       });
-      // Substitute only the harmless -c payload. The selected executable and
-      // original execFileSync options still enforce the real process bounds.
       const payload =
         'import os,pathlib,sys,time\n' +
         'pathlib.Path(os.environ["PROBE_STARTED"]).write_text(str(os.getpid()))\n' +
@@ -269,8 +265,6 @@ try {
           encoding: 'utf8',
           shell: false,
           windowsHide: true,
-          // The sleeper also exits after 30 seconds if enforcement regresses.
-          // No external PID cleanup or arbitrary descendant process is used.
           timeout: 40000,
           maxBuffer: 16384,
           killSignal: 'SIGKILL',
@@ -355,7 +349,6 @@ test('normal offline npm discovery validates Python before inert test bodies', (
         scripts: { test: packageJSON.scripts.test },
       }),
     );
-    // Only inert fixtures are discoverable. No install or production import.
     for (const name of ['first', 'second'])
       writeFileSync(
         path.join(directory, 'scripts', `${name}.test.mjs`),
@@ -404,7 +397,6 @@ assert.equal(JSON.parse(child.stdout), process.env.EXPECTED_PYTHON);
         process.env.PATH ?? process.env.Path ?? '',
       ].join(path.delimiter);
       delete env.NODE_OPTIONS;
-      // This is a separate npm invocation, not a recursive node:test run.
       delete env.NODE_TEST_CONTEXT;
       if (explicit !== undefined) env.OBSERVATORY_PYTHON = explicit;
       const result = spawnSync(

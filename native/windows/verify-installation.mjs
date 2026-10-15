@@ -12,8 +12,6 @@ function readRegular(root,name,limit) {
   return readFileSync(file);
 }
 
-// The candidate receipt must be authenticated independently of these files.
-// Comparing a package to a receipt stored inside that same package is not trust.
 export function verifyInstallation(root,receipt) {
   if(typeof root!=='string' || !path.isAbsolute(root) || path.resolve(root)!==realpathSync(root))
     throw Error('Canonical installation required');
@@ -43,8 +41,6 @@ export function verifyInstallation(root,receipt) {
   return {sourceRevision:receipt.sourceRevision,buildNumber:receipt.buildNumber};
 }
 
-// Caller still owns shutdown, both locks, authenticated receipt selection,
-// registration preservation and relaunch. No installer subprocess is executed.
 export function replaceVerifiedInstallation({installed,staged,previousReceipt,candidateReceipt}) {
   return replaceWithEvidence({installed,staged,previousReceipt,candidateReceipt});
 }
@@ -64,8 +60,6 @@ function replaceWithEvidence({installed,staged,previousReceipt,candidateReceipt,
     }});
 }
 
-// The installed receipt and public key must already be trusted locally.
-// Authenticate the downloaded receipt before any replacement operation begins.
 export function replaceSignedInstallation({installed,staged,previousReceipt,candidateEnvelope,trustedPublicKey}) {
   const previous=verifyInstallation(installed,previousReceipt);
   const candidateReceipt=authenticateInstallationReceipt(candidateEnvelope,trustedPublicKey,previous.buildNumber);

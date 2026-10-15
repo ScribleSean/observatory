@@ -3,8 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
-// Stages trusted OLD code outside the installation. It does not launch it or
-// request shutdown. The caller supplies independently retained receipt state.
 internal static class UpdateHelper
 {
     internal static string Parse(string output, string parent, string previousRevision, long previousBuild)

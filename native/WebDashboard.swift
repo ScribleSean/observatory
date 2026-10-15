@@ -98,7 +98,6 @@ func makeWebDashboard(runtime: URL, resources: URL, bridge: BridgeHandler? = nil
     return web
 }
 
-// This is the contract's navigation rule. The file guard stays as a second layer.
 final class DashboardNavigation: NSObject, WKNavigationDelegate, WKUIDelegate {
     var onDocumentReplaced: (() -> Void)?
 

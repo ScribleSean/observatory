@@ -9,9 +9,6 @@ const protocol='observatory-pair/1';
 const failure=()=>Error('Authenticated pairing connection unavailable');
 const fingerprint=raw=>createHash('sha256').update(raw).digest('hex');
 
-// Bootstrap retrieves only the public certificate. No client identity or
-// application data is sent, and the out-of-band pin is mandatory. The actual
-// claim uses normal certificate validation with this exact trust anchor.
 export async function discoverPeerCertificate(invitation,{connect=tls.connect,timeoutMs=8000,signal}={}) {
   const safe=validateInvitation(invitation);
   if(!Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>8000 || signal?.aborted)throw failure();
@@ -51,9 +48,6 @@ export async function claimFromInvitation(invitation,identity,options={}) {
   return requestPeerClaim(invitation,certificate,identity,{...options,timeoutMs:remaining});
 }
 
-// The certificate may be obtained over an untrusted discovery channel. Its DER
-// fingerprint must match the out-of-band invitation before it becomes a CA.
-// The supplied identity must be a private, locally owned TLS client identity.
 export async function requestPeerClaim(invitation,certificatePem,identity,options={}) {
   if(options.repairNonce!=null && !validRepairNonce(options.repairNonce))throw failure();
   return pairingRequest(invitation,certificatePem,identity,{version:1,action:'claim',secret:invitation?.secret,
@@ -64,8 +58,6 @@ export async function requestPeerClaim(invitation,certificatePem,identity,option
   },options);
 }
 
-// The controller supplies the local host. A remote proposal may not change
-// that host or the invitation pin.
 export async function requestPeerSetup(invitation,certificatePem,identity,expected,options={}) {
   if(!expected || typeof expected!=='object' || Array.isArray(expected) || Object.keys(expected).length!==1 ||
     !Object.hasOwn(expected,'host') || !['Mac','Windows'].includes(expected.host))throw failure();
@@ -80,7 +72,6 @@ export async function requestPeerSetup(invitation,certificatePem,identity,expect
   },options);
 }
 
-// Only call after the local controller has verified its durable pairing commit.
 export async function acknowledgePeerSetup(invitation,certificatePem,identity,pairing,options={}) {
   if(pairing?.peerCertificateSha256!==invitation?.certificateSha256)throw failure();
   return pairingRequest(invitation,certificatePem,identity,
@@ -119,7 +110,6 @@ async function pairingRequest(invitation,certificatePem,identity,request,validat
         ca:certificate.toString(),key:identity.key,cert:identity.cert,
         rejectUnauthorized:true,minVersion:'TLSv1.3',maxVersion:'TLSv1.3',
         ALPNProtocols:[protocol],
-        // Trust is the exact out-of-band device certificate, not a DNS name.
         checkServerIdentity:(_host,peer)=>
           peer.raw && fingerprint(peer.raw)===safe.certificateSha256?undefined:failure()});
       socket.once('secureConnect',()=>{
@@ -128,7 +118,6 @@ async function pairingRequest(invitation,certificatePem,identity,request,validat
           const peer=socket.getPeerCertificate();
           if(!socket.authorized || socket.alpnProtocol!==protocol || !peer.raw ||
             fingerprint(peer.raw)!==safe.certificateSha256)throw failure();
-          // No invitation bytes are written before all authentication checks.
           socket.end(JSON.stringify(request)+'\n');
         } catch {finish(failure());}
       });

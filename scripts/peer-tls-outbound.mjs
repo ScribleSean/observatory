@@ -72,8 +72,6 @@ async function trustedRequest(runtime,transport,request,{connect,limit,authorize
   const input=JSON.stringify(request);
   if(Buffer.byteLength(input)>limit)throw failure();
   const expected=new X509Certificate(state.trust.peerCertificate).fingerprint256;
-  // Do not hold the local peer lock while waiting on the network. Both devices
-  // may initiate simultaneously, and the receiver needs its own local lock.
   return new Promise((resolve,reject)=>{
     let socket,done=false,sent=false,size=0;const chunks=[];
     const finish=(error,value)=>{
@@ -103,7 +101,6 @@ async function trustedRequest(runtime,transport,request,{connect,limit,authorize
         try {
           if(!sent)throw failure();
           const response=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
-          // Storage validates received records and revision ordering again.
           finish(null,decode(response));
         } catch {finish(failure());}
       });

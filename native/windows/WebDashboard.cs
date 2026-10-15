@@ -36,8 +36,6 @@ internal sealed class WebDashboard : Form
         started = Start();
     }
 
-    // Closing the window disposes the form and its web view, which ends the
-    // browser processes. Opening again creates a new window.
     private async Task Start()
     {
         try
@@ -112,7 +110,6 @@ internal sealed class WebDashboard : Form
             core.NewWindowRequested += (_, e) => e.Handled = true;
             core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
             core.DownloadStarting += (_, e) => e.Cancel = true;
-            // Seed new documents with the saved viewer choices.
             var (skin, theme) = WebViewerPreferences.Read(runtime);
             viewerScript = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
             if (IsDisposed || web.IsDisposed) return;
@@ -132,7 +129,6 @@ internal sealed class WebDashboard : Form
         _ = handler?.CloseAsync();
     }
 
-    // Only a fragment change, which keeps the document and any pairing session.
     internal void ShowSection(string section)
     {
         if (!Fragments.Contains(section, StringComparer.Ordinal)) return;
@@ -191,7 +187,6 @@ internal sealed class WebDashboard : Form
         catch { }
     }
 
-    // Measurement helpers for --panel-timing. They only read facts about the drawn page.
     internal async Task<string> Describe()
     {
         await started;

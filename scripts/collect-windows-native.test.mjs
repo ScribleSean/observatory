@@ -36,7 +36,6 @@ test('native Windows ignores retired source settings and preserves source files'
     await writeFile(file,fixture);
     const config={activity:false,codex:false,wispr:false,typewhisper:true,quota:false};
     const env={...process.env,USERPROFILE:home,OBSERVATORY_RUNTIME:runtime};
-    // Refuse the fixture run unless the child really resolves the fictional home.
     assert.equal(path.resolve(execFileSync(process.execPath,['-p',"require('node:os').homedir()"],
       {env,encoding:'utf8'}).trim()),path.resolve(home));
     const collect=async()=>{

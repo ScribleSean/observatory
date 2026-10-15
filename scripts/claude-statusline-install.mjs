@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// Adds or removes the Observatory status line bridge in Claude Code's settings.
-// It changes a file Claude Code owns, so install needs --consent and nothing
-// calls this automatically. The earlier status line is saved and restored.
 import {lstat,readFile,rename,unlink,writeFile,copyFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
@@ -69,7 +66,6 @@ export async function installStatusline({runtime,settingsPath=defaultSettingsPat
   const marker=path.join(folder,CLAUDE_STATUSLINE_FILE);
   let previous=settings.statusLine===undefined?null:settings.statusLine;
   if(isOurs(previous)) {
-    // Reinstalling keeps the status line saved by the first install.
     try {previous=JSON.parse(await readFile(marker,'utf8')).previous ?? null;}catch{previous=null;}
   }
   if(text!==null)await copyFile(settingsPath,settingsPath+'.observatory-backup');

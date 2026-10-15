@@ -13,7 +13,6 @@ type Snapshot = Record<string, unknown>;
 
 const PERIOD_LABELS: [string, string][] = [['now', STRINGS.periods.now], ['day', STRINGS.periods.day], ['week', STRINGS.periods.week], ['month', STRINGS.periods.month], ['all', STRINGS.periods.all]];
 
-// The shell accepts these four names and nothing else. No arguments are sent.
 function send(action: PanelAction) {
   const host = window as unknown as {
     webkit?: { messageHandlers?: { panelAction?: { postMessage: (value: string) => void } } };

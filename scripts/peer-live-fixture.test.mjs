@@ -1,4 +1,3 @@
-// Opt-in two-device fixture. Never included in an installed collector bundle.
 import {mkdtemp,realpath,readFile,rm,lstat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -21,7 +20,6 @@ import {revokePairing} from './peer-revocation.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 import {syncQuota} from './quota-sync.mjs';
 
-// Only called with the fixture's owned temporary runtime. No provider is read.
 export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
   async function summary() {
     try {await lstat(path.join(runtime,'private-quota'));}

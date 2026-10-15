@@ -1,4 +1,3 @@
-"""Fake Darwin C adapter tests. Runnable on Windows without native ACL calls."""
 import ctypes as C
 import errno
 import stat
@@ -24,13 +23,11 @@ class Function:
 
 
 class FakeLib:
-    """Addresses exceed 32 bits to catch undeclared pointer return types."""
     ACL_HANDLE = 0x123400000000
     EMPTY_HANDLE = ACL_HANDLE + 0x1000
     ENTRY_BASE = ACL_HANDLE + 0x2000
 
     def __init__(self, entries=(), flags=0):
-        # Each entry is (tag, permissions, flags, resolved ID type, resolved ID).
         self.entries = list(entries)
         self.flags = flags
         self.index = -1
@@ -64,7 +61,6 @@ class FakeLib:
         return self.EMPTY_HANDLE
 
     def _acl_size(self, acl):
-        # Deliberately not Darwin's current external layout. Do not parse it.
         return 80 if acl == self.EMPTY_HANDLE else 80 + len(self.entries) * 40
 
     def _acl_valid(self, acl):
@@ -414,7 +410,6 @@ class SearchOnlyOS:
                 raise PermissionError(errno.EPERM, "ancestor data access is denied")
         else:
             assert flags == guards | self.O_NONBLOCK | self.O_EVTONLY
-        # Allocate the fictional handle after enforcing the FD-relative request.
         fd = self.tree.open(path, None, directory)
         self.flags[fd] = flags
         return fd

@@ -4,7 +4,6 @@ import {demoData} from '../../scripts/demo.mjs';
 
 const runtime=process.argv[2];
 if(!runtime || !path.isAbsolute(runtime))throw Error('A new absolute demo runtime directory is required');
-// An existing directory is an error, including a private runtime or earlier demo.
 mkdirSync(runtime,{mode:0o700});
 const local=path.join(runtime,'public/local');
 mkdirSync(local,{recursive:true,mode:0o700});

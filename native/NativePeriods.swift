@@ -48,8 +48,6 @@ func nativePeriodSummary(_ days: [JSONObject], kind: String) -> JSONObject? {
         let categories = days.compactMap { $0["categories"] as? JSONObject }
         if categories.count == days.count { result["categories"] = summedMap(categories) }
         let appDays = days.compactMap { $0["apps"] as? JSONObject }
-        // A missing app breakdown is not an empty day. Withhold the range
-        // breakdown rather than imply that partial app counters cover it all.
         if appDays.count == days.count {
             var apps: JSONObject = [:]
             for category in Set(appDays.flatMap(\.keys)) {
@@ -78,8 +76,6 @@ func nativePeriodSummary(_ days: [JSONObject], kind: String) -> JSONObject? {
 func nativePeriodProfiles(model: JSONObject, days: [JSONObject], settings: JSONObject?) -> [JSONObject] {
     guard text(settings?["status"]) == "ok", settings?["snapshotStable"] as? Bool != false else { return [] }
     let profiles = rows(settings?["profiles"])
-    // Reconcile against each day's counters first. A surplus on one date must
-    // not be hidden by unused capacity on another date in a period total.
     return days.flatMap { day -> [JSONObject] in
         guard let daily = rows(day["models"]).first(where: {
             text($0["model"]) == text(model["model"]) && ($0["inferred"] as? Bool == true) == (model["inferred"] as? Bool == true)

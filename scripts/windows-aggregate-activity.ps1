@@ -1,4 +1,3 @@
-# Read-only host adapter: aggregate before crossing SSH. Never emit titles or raw app names.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $base = 'http://127.0.0.1:5600/api/0'

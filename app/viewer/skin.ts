@@ -5,7 +5,6 @@ import almanac from '../../native/skins/almanac.json';
 import instrument from '../../native/skins/instrument.json';
 import amberCrt from '../../native/skins/amber-crt.json';
 
-// Bundled skins. A person's own skin files will arrive through the shell later.
 export const SKINS: Record<string, unknown> = { sage, almanac, instrument, 'amber-crt': amberCrt };
 
 function isSkinId(id: unknown): id is string {

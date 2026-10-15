@@ -106,8 +106,6 @@ internal sealed class PairingDetailsDialog : Form
         catch { status.Text = "Could not copy details. The clipboard may be busy. Try again. No pairing was requested."; }
     }
 
-    // A synthetic clipboard sink verifies the click without reading or replacing
-    // the owner's clipboard. No collector or SSH process is started.
     internal static void RunDialogTest(string testRuntime)
     {
         var fixture = new PairingDetails("C:/Fixture/Runtime/node.exe", "C:/Fixture/Collector/scripts/peer-exchange.mjs", "C:/Fixture/Data", true);

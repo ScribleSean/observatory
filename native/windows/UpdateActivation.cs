@@ -69,8 +69,6 @@ internal static class UpdateActivation
         }
         var output = Read(process.StandardOutput);
         var error = Read(process.StandardError);
-        // Once replacement begins, keep the gate until the writer actually exits.
-        // Do not cancel or forcibly kill a process in the middle of its transaction.
         await process.WaitForExitAsync();
         await Task.WhenAll(output, error);
         if (process.ExitCode != 0 || await output is not string response || await error is null)
@@ -94,7 +92,6 @@ internal static class UpdateActivation
         }
         finally
         {
-            // Even an IPC failure must not release setup exclusion while the writer lives.
             if (!process.HasExited) await process.WaitForExitAsync();
         }
     }

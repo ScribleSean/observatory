@@ -5,8 +5,6 @@ using System.Text.Json;
 
 namespace WorkspaceObservatory;
 
-// In-memory material for explicit setup. Never serialize it to logs or write
-// it to an unprotected temporary file. This does not install a Windows identity.
 internal sealed class DeviceIdentity
 {
     internal string Key { get; }

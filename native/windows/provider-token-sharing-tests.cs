@@ -46,8 +46,6 @@ internal static class ProviderTokenSharingTests
         Require(Rejects(source, (SharingChannel)999));
     }
 
-    // The executable's packaged resources are reused, but all mutable data is
-    // confined to a new unpaired runtime instead of the user's runtime.
     internal static async Task BridgeSelfTest()
     {
         ParseSelfTest();

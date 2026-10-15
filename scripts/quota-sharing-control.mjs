@@ -13,15 +13,12 @@ const recent=(state,now)=>state?.history?.latestReadStatus==='ok' &&
   now-Date.parse(state.history.asOf)>=0 && now-Date.parse(state.history.asOf)<=600000;
 const token=(state,pair)=>createHash('sha256').update(JSON.stringify([state.salt,state.revision,pair.local.pairId])).digest('hex');
 
-// A narrow local interface for native settings. Pairing/account identifiers and
-// quota readings are never returned. The token fences stale confirmation views.
 export async function quotaSharingControl(runtime,request={action:'status'},now=Date.now()) {
   if(!request || !['status','enable','disable'].includes(request.action) ||
     Object.keys(request).some(key=>!['action','token'].includes(key)) ||
     (request.action==='enable' ? typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token) : Object.hasOwn(request,'token')) ||
     !Number.isSafeInteger(now) || now<0)throw Error('Invalid sharing settings request');
   return withPeerStateLock(runtime,async()=>{
-    // Disabling must remain available even if the pairing file is corrupt.
     if(request.action==='disable')await revokeQuotaSharing(runtime,now);
     let pair;
     try {pair=await readPairing(runtime);}catch {pair=null;}

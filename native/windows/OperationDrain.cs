@@ -1,7 +1,5 @@
 namespace WorkspaceObservatory;
 
-// Serializes new work against a graceful shutdown request. Stopping does not
-// cancel an operation that may be publishing a snapshot or pairing state.
 internal sealed class OperationDrain
 {
     private readonly object sync = new();

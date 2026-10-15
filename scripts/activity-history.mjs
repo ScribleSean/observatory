@@ -44,7 +44,6 @@ export function retainActivityHistory(previous,current,collectedAt,maxDates=3650
         const prior=days.get(row.date);
         const lo=r=>r.windowStart?Date.parse(r.windowStart):-Infinity;
         const hi=r=>r.windowEnd?Date.parse(r.windowEnd):Infinity;
-        // Replacement, never addition. A shrinking boundary day cannot erase history.
         if(!prior || (lo(row)<=lo(prior)&&hi(row)>=hi(prior))) days.set(row.date,row);
       }
     }

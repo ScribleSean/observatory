@@ -1,7 +1,5 @@
 namespace WorkspaceObservatory;
 
-// This only requests a normal quit. The updater must separately acquire its
-// installation locks and authenticate the candidate before replacing files.
 internal static class UpdateQuit
 {
     internal const string RequestName = "Local\\WorkspaceObservatory.QuitForUpdate";

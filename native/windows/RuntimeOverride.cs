@@ -42,7 +42,6 @@ internal static class RuntimeOverride
             else CheckInherited(Ancestors(full).First(Directory.Exists));
             while (missing.TryPop(out var directory))
             {
-                // Record only directories this call created.
                 if (!CreateDirectory(directory, IntPtr.Zero)) throw new IOException();
                 created.Add(directory);
             }
@@ -96,7 +95,6 @@ internal static class RuntimeOverride
             var protectedFolders = Ancestors(real).Where(Directory.Exists).Select(ReadIdentity).ToArray();
             if (Directory.Exists(real) && checkedFolders.Any(folder => folder.Id == protectedFolders[0].Id))
                 throw new IOException();
-            // A missing child's existing parent can be shared with the real folder.
             if (Directory.Exists(full) && protectedFolders.Any(folder => folder.Id == checkedFolders[0].Id))
                 throw new IOException();
         }

@@ -1,8 +1,3 @@
-// Standalone, macOS-only pixel regression for synthetic --render-style output.
-// Build separately (not as an app entry point):
-// swiftc -parse-as-library -D OBSERVATORY_CHART_RENDER_TEST -framework AppKit \
-//   -framework Vision native/ChartRenderRegression.swift -o /path/to/check-chart-render
-// Run: /path/to/check-chart-render /absolute/path/to/rendered-fixtures
 #if OBSERVATORY_CHART_RENDER_TEST
 import AppKit
 import Vision
@@ -62,15 +57,10 @@ struct ChartRenderRegression {
                 failures.append("\(fixture.name): fewer than two readable y-axis labels")
             }
             let contrast = yLabels.map { text, box -> [String: Any] in
-                // Compare glyph interiors with the surrounding card, not the
-                // antialiased edges of 11pt labels. Ignore isolated extreme pixels;
-                // this is a disappearance/contrast regression, not a WCAG audit.
                 let left = max(0, Int(box.minX * Double(bitmap.pixelsWide)))
                 let right = min(bitmap.pixelsWide - 1, Int(box.maxX * Double(bitmap.pixelsWide)))
                 let top = max(0, Int((1 - box.maxY) * Double(bitmap.pixelsHigh)))
                 let bottom = min(bitmap.pixelsHigh - 1, Int((1 - box.minY) * Double(bitmap.pixelsHigh)))
-                // The left neighbor can be a grid line or bar; sample the card
-                // just beyond the trailing label instead.
                 let background = luminance(bitmap.colorAt(x: min(bitmap.pixelsWide - 1, right + 5), y: (top + bottom) / 2)!)
                 var ratios = [Double]()
                 for y in top...bottom {

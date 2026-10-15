@@ -10,7 +10,6 @@ const execute=promisify(execFile);
 const limit=1024*1024;
 const result=status=>({version:1,status,peerReachability:'not-checked'});
 
-// Never return authentication URLs, account identities, addresses or peer lists.
 export function summarizeTailscale(raw) {
   if(typeof raw!=='string' || Buffer.byteLength(raw)>limit)return result('unavailable');
   let data;

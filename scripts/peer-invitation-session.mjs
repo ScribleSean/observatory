@@ -5,9 +5,6 @@ const hex256=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const digest=value=>createHash('sha256').update(value,'ascii').digest();
 const refused=()=>{throw Error('Pairing invitation is unavailable');};
 
-// One instance belongs to one setup listener in one process. It is deliberately
-// not serialized. A listener restart must require a newly displayed invitation.
-// No method writes trust, pairing configuration or sharing consent.
 export class InvitationSession {
   #state=null;
   #wall;
@@ -32,7 +29,6 @@ export class InvitationSession {
   }
 
   issue(options) {
-    // Even a failed replacement invalidates the previous invitation.
     this.cancel();
     const now=this.#wall(),started=this.#monotonic();
     if(!Number.isFinite(started))refused();
@@ -46,9 +42,6 @@ export class InvitationSession {
     return this.#live()?.phase??'inactive';
   }
 
-  // The transport must obtain peerCertificateSha256 from the actual TLS peer
-  // certificate with proof of private-key possession, never from request JSON.
-  // This synchronous transition occurs before any async UI or storage work.
   claim(secret,peerCertificateSha256) {
     const state=this.#live();
     if(!state || state.phase!=='waiting' || !hex256(secret) ||
@@ -60,8 +53,6 @@ export class InvitationSession {
     return {claimId,peerCertificateSha256};
   }
 
-  // Only an explicit local confirmation handler may call this. The returned
-  // identity still needs an atomic trust commit using the existing peer lock.
   confirm(claimId) {
     const state=this.#live();
     if(!state || state.phase!=='confirming' || !hex256(claimId) ||

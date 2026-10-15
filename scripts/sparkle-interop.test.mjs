@@ -16,7 +16,6 @@ test('official Sparkle signing agrees with Node and rejects altered synthetic ar
   const file=path.join(root,'synthetic-update.bin'),keyFile=path.join(root,'disposable.key');
   const bytes=Buffer.from('Synthetic Observatory signing fixture, not an application.');
   // Sparkle 2.10 accepts a base64-encoded 32-byte seed through --ed-key-file.
-  // Always supply that argument. Never access the login Keychain or real keys.
   const run=args=>{
     const result=spawnSync(tool,['--ed-key-file',keyFile,...args],{
       encoding:'utf8',timeout:15000,maxBuffer:16384,
@@ -47,7 +46,6 @@ test('official Sparkle signing agrees with Node and rejects altered synthetic ar
       'macos-arm64':publicRaw,'windows-x64':publicRaw,
     },7)).length,2);
   } finally {
-    // Delete only this test's unique synthetic directory, including its test key.
     rmSync(root,{recursive:true,force:true});
   }
 });

@@ -2,8 +2,6 @@ using System.Reflection;
 
 namespace WorkspaceObservatory;
 
-// Construct, check and dispose on the application UI thread. Initialization is
-// lazy and manual-only. No updater is loaded just by opening the application.
 internal sealed class UpdateController : IDisposable
 {
     private readonly string installed = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);

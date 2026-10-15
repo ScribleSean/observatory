@@ -66,13 +66,6 @@ class ACL:
 
 
 def check_access(mode, owner, acl, uid, *, private):
-    """Reject broad grants without assuming that deny order cancels them.
-
-    Ancestors may expose read/search metadata but must not be mutable by any
-    untrusted account. Private objects allow no untrusted nonzero grant. Apply
-    this even to inherit-only entries, which can expose newly created files.
-    Deny-only ACLs restrict access and need no principal membership lookup.
-    """
     if private:
         if owner != uid or mode & 0o7077:
             raise UnsafePath()
@@ -266,8 +259,6 @@ class FileSystem:
 
 def check_filesystem(filesystem, uid):
     # SDK sys/mount.h: MNT_LOCAL, MNT_IGNORE_OWNERSHIP, MNT_UNION.
-    # Support only local APFS/HFS with real ownership. Network, synthetic,
-    # union, FSKit and unknown filesystem semantics are intentionally rejected.
     if (filesystem.kind not in (b"apfs", b"hfs")
             or not filesystem.flags & 0x00001000
             or filesystem.flags & (0x00200000 | 0x00000020)
@@ -345,7 +336,6 @@ class NativeReader:
         return self.native_acl.read(fd)
 
     def names(self, fd):
-        # Only private-leaf enumeration needs a readable directory handle.
         readable = self.os.open(".", self.os.O_RDONLY | self.os.O_DIRECTORY
                                 | self.os.O_NOFOLLOW | self.os.O_CLOEXEC, dir_fd=fd)
         try:
@@ -378,14 +368,6 @@ def bounded_names(reader, fd):
 
 
 def verify_directory(path, *, private=True, reader=None):
-    """Verify held root-to-leaf descriptors, then recheck names and metadata.
-
-    --ancestor inspects only the directory chain. --private additionally
-    inspects the owner-only leaf and at most ten immediate, single-link,
-    owner-only regular files. No recursion or contents inspection is performed.
-    Existing read-only or deny-protected objects may pass. This does not promise
-    that subsequent application writes will succeed.
-    """
     if (not isinstance(path, str) or not path.startswith("/") or path.startswith("//")
             or "\0" in path or posixpath.normpath(path) != path):
         raise UnsafePath()
@@ -403,8 +385,6 @@ def verify_directory(path, *, private=True, reader=None):
                 raise UnsafePath()
             if before.st_nlink < 1 or (not directory and before.st_nlink != 1):
                 raise UnsafePath()
-            # Reject obviously unsafe objects before opening them. Actual ACL
-            # checks follow on the opened descriptor, not on a pathname.
             check_access(before.st_mode, before.st_uid, ACL(), reader.uid, private=private_object)
             identity = fingerprint(before)
             fd = reader.open(name, parent, directory)
@@ -453,7 +433,6 @@ def main(arguments=None):
         sys.stdout.write("private-path-acl: ok")
         return 0
     except (Exception, KeyboardInterrupt):
-        # Do not expose paths, qualifiers, account IDs or native exceptions.
         sys.stderr.write("private-path-acl: verification failed\n")
         return 1
 

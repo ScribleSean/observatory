@@ -4,9 +4,6 @@ internal static class UpdateReceiptStore
 {
     internal static string EnvelopePath(string runtime) => Path.Combine(runtime, "updates", "installed-envelope.json");
 
-    // Publish only an envelope that authenticates the current installed bytes.
-    // Existing receipt bytes are retained before an atomic replacement. This
-    // does not claim power-loss durability for the directory entry.
     internal static async Task<string> Persist(string installed, string envelope, string pinnedKey,
         long previousBuild, string expectedRevision, string runtime)
     {

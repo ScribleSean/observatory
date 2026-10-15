@@ -13,7 +13,6 @@ test('every tab group owns a panel, including device selectors', () => {
       groups++;
       const panels = node.children.filter(child =>
         ts.isJsxElement(child) && child.openingElement.tagName.getText(tree) === 'TabsContent');
-      // The outer navigation conditionally renders its panels inside main.
       if (node.openingElement.getText(tree).includes('host-tabs')) {
         assert.equal(panels.length, 1, 'device tabs need their own result panel');
         const value = node.openingElement.attributes.properties.find(p => p.name?.getText(tree) === 'value');

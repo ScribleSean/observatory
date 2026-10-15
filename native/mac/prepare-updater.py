@@ -13,7 +13,6 @@ def prepare(archive, output):
     data = archive.read_bytes()
     if hashlib.sha256(data).hexdigest() != asset['sha256']:
         raise ValueError('Sparkle archive checksum mismatch')
-    # Validate before writing. Do not extract test apps, signing tools or symbols.
     import io
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:xz') as source:
         selected = {}
@@ -39,7 +38,7 @@ def prepare(archive, output):
             for parent in PurePosixPath(name).parents:
                 if str(parent) in selected and not selected[str(parent)].isdir():
                     raise ValueError('Archive member under non-directory')
-        output.mkdir()  # Exclusive destination, never overwrite a prepared framework.
+        output.mkdir()
         for name, member in sorted(selected.items(), key=lambda item: (len(PurePosixPath(item[0]).parts), item[0])):
             destination = output / name
             destination.parent.mkdir(parents=True, exist_ok=True)

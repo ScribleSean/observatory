@@ -5,8 +5,6 @@ import {assertPairingActive} from './peer-revocation.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {exchangeProviderTokens} from './provider-token-exchange.mjs';
 
-// This is a local stdin/stdout endpoint for an authenticated SSH session, not a
-// network listener. Its caller must authenticate the remote host and account.
 export const exchangePeerRecord=(runtime,request,now=Date.now())=>
   withPeerStateLock(runtime,()=>exchangePeerRecordLocked(runtime,request,now));
 async function exchangePeerRecordLocked(runtime,request,now) {
@@ -22,9 +20,6 @@ async function exchangePeerRecordLocked(runtime,request,now) {
   return {version:1,record:local};
 }
 
-// Provider readings use an independently versioned optional channel. Keep the
-// core record request exactly as it was so an updated caller and an older peer
-// can still exchange activity snapshots without interpreting provider data.
 export function exchangePeerRequest(runtime,message,now=Date.now()) {
   if(message && typeof message==='object' && !Array.isArray(message) && message.version===1 &&
     message.channel==='provider-tokens' && Object.keys(message).length===3 &&

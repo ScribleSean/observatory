@@ -78,4 +78,3 @@ jobs:
             native/*.swift -o native-test/ObservatoryPreview
       - name: Reject unsafe preview launches
         run: node native/verify-preview-guard.mjs native-test/ObservatoryPreview
-      # No app installation, live sources or release artifacts. Windows UI uses fictional fixtures only.

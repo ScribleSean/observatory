@@ -34,7 +34,6 @@ test('both appcasts use one increasing build and distinct signed platform artifa
 });
 test('a correctly signed first-install EXE is not an update target',()=>{
   const f=fixture();
-  // The digest and signature remain valid for these bytes. Only the route changes.
   f.artifacts[1].url=f.artifacts[1].url.replace('windows-x64-update.zip','windows-x64-setup.exe');
   assert.throws(()=>render(f),/identity or digest mismatch/);
 });

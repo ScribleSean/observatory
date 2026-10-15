@@ -1,4 +1,3 @@
-"""Checks for the pinned, selective Sparkle extractor."""
 import importlib.util
 import os
 from pathlib import Path

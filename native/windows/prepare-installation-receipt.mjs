@@ -7,11 +7,6 @@ import {installationReceiptSigningBytes} from './signed-receipt.mjs';
 
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-// Release tooling only. The caller must run its independently verified installer
-// in a controlled staging environment, not point this at a downloaded directory.
-// build comes from that trusted build pipeline, never from the staged payload.
-// The result is unsigned and does not confer trust until the release signer
-// approves these exact bytes. This function never accesses signing keys.
 export function prepareInstallationReceipt(root,build) {
   if(!build || build.schema!==1 || build.testIdentity!==false || build.sourceDirty!==false ||
     !Number.isSafeInteger(build.buildNumber) || build.buildNumber<1 ||
@@ -37,7 +32,6 @@ export function prepareInstallationReceipt(root,build) {
   const receipt={schema:1,product:'WorkspaceObservatorySetup',platform:'windows-x64',
     sourceRevision:build.sourceRevision,buildNumber:build.buildNumber,manifestSha256,
     ownerSha256:hashFile('installer-owner.ini',4096),uninstallerSha256:hashFile('Uninstall.exe',20_000_000)};
-  // Reuse the actual updater's full file inventory and owner verification.
   verifyInstallation(root,receipt);
   installationReceiptSigningBytes(receipt);
   return Object.freeze(receipt);

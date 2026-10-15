@@ -4,7 +4,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 
-// Source contracts only. Never launch a workflow, native helper or child process.
 const source = (name) =>
   readFileSync(new URL(`../${name}`, import.meta.url), 'utf8').replaceAll(
     '\r\n',
@@ -26,8 +25,6 @@ const entryPoints = [
 ].map((name) => `scripts/${name}.test.mjs`);
 
 function verifyGate(workflow) {
-  // Keep the deliberately small workflow closed to extra jobs, permissions,
-  // conditional skips, shell commands, publication and dependency installs.
   const [header, ...steps] = workflow
     .split('\n')
     .filter((line) => !/^\s*#/.test(line) && line.trim())
@@ -94,8 +91,6 @@ jobs:
     /^name: Isolate fictional state\n        shell: node \{0\}\n        run: \|\n((?:          .+\n)+)$/,
   );
   assert.ok(preparation, 'Prepare owned state without a platform shell');
-  // Model this inspected Node snippet, not a runner or security sandbox.
-  // All filesystem calls are inert and restricted to fresh fictional paths.
   for (const paths of [path.posix, path.win32]) {
     const windows = paths === path.win32;
     const runnerTemp = paths.resolve(

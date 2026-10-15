@@ -1,5 +1,3 @@
-// A native app owns the sole writer. The Node entrypoint owns this read end.
-// Dispose after collection so a successful operation cannot keep Node alive.
 export function windowsCollectorLease(input,{timeoutMs=2000}={}) {
   const controller=new AbortController();
   let resolveReady,received=false,disposed=false;

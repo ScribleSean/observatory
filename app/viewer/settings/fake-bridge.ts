@@ -13,7 +13,6 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
   const end = (next: string) => {
     state.pairing = { state: next, peerFingerprint: null, invitationKept: false, transport: next === 'paired' ? 'tls' : 'none' };
     hostPolls = 0;
-    // Sample sharing follows the sample pairing, so the demo can show both switch states.
     for (const [channel, item] of Object.entries(state.sharing)) {
       const paired = next === 'paired';
       Object.assign(item, { enabled: paired && item.enabled, canEnable: paired, reason: paired ? 'ready' : 'pairing-unavailable',

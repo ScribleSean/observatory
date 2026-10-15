@@ -5,8 +5,6 @@ import {readReceiptFile} from './verify-candidate.mjs';
 import {authenticateInstallationReceipt} from './signed-receipt.mjs';
 import {verifyInstallation} from './verify-installation.mjs';
 
-// Release preparation only. The caller supplies a separately trusted public key
-// and excludes concurrent writers. No signer, installer or candidate is executed.
 export function prepareUpdatePayload(installed,envelopePath,publicKey,previousBuild,output) {
   const envelope=readReceiptFile(envelopePath);
   const receipt=authenticateInstallationReceipt(envelope,publicKey,previousBuild);

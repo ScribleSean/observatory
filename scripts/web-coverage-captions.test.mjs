@@ -11,8 +11,6 @@ const ts = require('typescript');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 
-// Compile trusted repository JSX in memory, never snapshot-supplied code.
-// This uses real React rendering, not a security sandbox or component stubs.
 function compileJsx(source, filename) {
   const { outputText } = ts.transpileModule(source, {
     fileName: filename,
@@ -201,8 +199,6 @@ function findCaption(node) {
 }
 findCaption(pageSource);
 assert.equal(captions.length, 1, 'Render the unique existing Agents caption');
-// Render the exact caption JSX from Home in a fixture component. Do not import
-// Home's fetch lifecycle, substitute its logic, or add a production test seam.
 const ReceiptCaption = compileJsx(
   `export default function ReceiptCaption({ data }) { return (${captions[0]}); }`,
   pageFile,
@@ -319,8 +315,6 @@ const homeNotice = uniqueHomeFragment(
     ),
   'historical notice conditional',
 );
-// Characterize the existing projection and exact Home fragments, not Home's
-// imports, effects, fetch lifecycle, browser behavior or native acceptance.
 const updateHomeData = compileJsx(
   `export default function update(previous, v, projectCurrentSources) {
     return (${homeUpdater})(previous);

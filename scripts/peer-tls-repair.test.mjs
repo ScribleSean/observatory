@@ -86,7 +86,6 @@ test('TLS repair consent',{skip:!existsSync(openssl) || !['darwin','win32'].incl
           peerCertificateSha256:listener.invitation.certificateSha256,repair:{[localKey]:nonce??'a'.repeat(64)}};
         listener.confirmSetup(listener.pending().claimId,pair);
         if(mode==='stale nonce is refused') {
-          // A replacement generation is retired again after the claim.
           await initializePairing(local,{...createPairingConfigurations()[host],repair:{[localKey]:nonce}});
           await preparePairingRepair(local);
           assert.notEqual(await readRepairConsent(local),nonce);

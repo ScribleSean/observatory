@@ -2,7 +2,6 @@ using System.Text.Json.Nodes;
 
 namespace WorkspaceObservatory;
 
-// This window owns the setup helper and the collector reservation together.
 internal sealed class DirectPairingWindow : Form
 {
     private readonly TlsSetupProcess bridge;

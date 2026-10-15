@@ -1,8 +1,3 @@
-"""Source runner contracts with inert children and modeled POSIX locks.
-
-No collector, provider or permission verifier is executed. All writes are inside
-an owned fictional runtime. These tests do not establish real flock behavior.
-"""
 import importlib.util
 import json
 import os
@@ -42,13 +37,10 @@ class SourceRuntimeTests(unittest.TestCase):
                           self.resources / 'Runtime' / 'python' / 'bin'):
             directory.mkdir(parents=True)
         self.selected = str(self.resources / 'Runtime' / 'python' / 'bin' / 'python3')
-        # A permission-checkable fixture, never an executable child.
         descriptor = os.open(self.selected, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o700)
         os.close(descriptor)
         self.node = str(self.fixture / 'fictional-node')
         self.runner, self.locks = load_runner()
-        # Only the runner's lock descriptor is modeled. Status writes are real
-        # writes in the owned fixture, not a fake collector-success override.
         setattr(self.runner, 'os', types.SimpleNamespace(**vars(os)))
         self.runner.os.O_NOFOLLOW = getattr(os, 'O_NOFOLLOW', 0x20000)
         self.runner.os.open = Mock(return_value=731)
@@ -65,7 +57,6 @@ class SourceRuntimeTests(unittest.TestCase):
             Popen=Mock(side_effect=self.fake_launch)))
 
     def fake_launch(self, command, *, cwd, env, stdout, stderr, start_new_session):
-        # Record only the selected synthetic fields, never an inherited env.
         self.launches.append(dict(command=command, cwd=cwd,
                                   python=env.get('OBSERVATORY_PYTHON'),
                                   runtime=env.get('OBSERVATORY_RUNTIME'),
@@ -147,7 +138,6 @@ class SourceRuntimeTests(unittest.TestCase):
                     self.assert_refused(value, collector)
 
     def test_nonexecutable_selected_python_is_refused_before_child_launch(self):
-        # Modeled access denial, no ACL query or mutation.
         self.runner.os.access = Mock(return_value=False)
         self.assert_refused(self.selected)
 

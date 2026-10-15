@@ -1,7 +1,5 @@
 namespace WorkspaceObservatory;
 
-// Runs in the verified external helper. Trusted receipt/key provisioning and
-// candidate download are caller responsibilities, not inferred from arguments.
 internal static class UpdateInstall
 {
     internal sealed record Result(string SourceRevision, string Recovery, int? ProcessId, bool LaunchConfirmed);
@@ -17,8 +15,6 @@ internal static class UpdateInstall
         Func<UpdateActivation.Result, Task> persistReceipt,
         Func<UpdateActivation.Result, Task<UpdateRelaunch.Result>> relaunch)
     {
-        // Apply returns only after the writer exits, registration is updated and
-        // its setup gate is released. A failed activation must never launch.
         var installed = await activate();
         try
         {
@@ -29,9 +25,6 @@ internal static class UpdateInstall
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or
             System.ComponentModel.Win32Exception or InvalidOperationException or System.Text.Json.JsonException or OperationCanceledException)
         {
-            // Replacement succeeded, even if receipt publication failed. Do not
-            // report an unchanged installation or
-            // roll back after a process may have opened or migrated saved data.
             return new(installed.SourceRevision, installed.Recovery, null, false);
         }
     }

@@ -15,7 +15,6 @@ const windows = { skip: process.platform !== 'win32' };
 const scratch = mkdtempSync(path.join(tmpdir(), 'observatory-policy-'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-// All items and ACLs below are in memory. Never set permissions on OS objects.
 function inspectWindows({
   change = '',
   ancestor = false,

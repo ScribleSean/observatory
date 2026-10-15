@@ -18,7 +18,6 @@ function deviceCertificate(raw) {
   return createHash('sha256').update(cert.raw).digest('hex');
 }
 
-// Explicit setup only. No auto-start, discovery, file writes or trust activation.
 export async function startPairingListener({address,port=0,identity},
   {createServer=tls.createServer,onAcknowledged}={}) {
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
@@ -39,9 +38,6 @@ export async function startPairingListener({address,port=0,identity},
   };
   try {
     server=createServer({key:identity.key,cert:identity.cert,requestCert:true,
-      // New devices have no CA trust yet. TLS proves possession of the presented
-      // key. The checks below require a valid self-signed device certificate,
-      // the invitation secret and subsequent local approval. No data is shared.
       rejectUnauthorized:false,minVersion:'TLSv1.3',maxVersion:'TLSv1.3',
       ALPNProtocols:['observatory-pair/1'],handshakeTimeout:8000,allowHalfOpen:true},socket=>{
       let peerFingerprint,peerCertificate;
@@ -99,7 +95,6 @@ export async function startPairingListener({address,port=0,identity},
       attempts++;
       if(sockets.size>=4 || attempts>64){socket.destroy();if(attempts>64)void close();return;}
       sockets.add(socket);socket.once('close',()=>sockets.delete(socket));
-      // Covers sockets that never complete TLS as well as slow application input.
       const deadline=setTimeout(()=>socket.destroy(),8000);
       socket.once('close',()=>clearTimeout(deadline));
     });
@@ -123,8 +118,6 @@ export async function startPairingListener({address,port=0,identity},
         await close();
         return result;
       },
-      // The native controller must commit its own complementary pairing before
-      // publishing this peer configuration. No storage or consent is implied.
       confirmSetup:(claimId,pairing)=>{
         const safe=validatePairing(pairing);
         if(safe.transport?.kind!=='tls' || safe.peerCertificateSha256!==fingerprint)throw failure();

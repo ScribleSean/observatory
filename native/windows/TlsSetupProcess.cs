@@ -41,8 +41,6 @@ internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, 
     }
 }
 
-// One native setup window owns one child. Private invitation text travels only
-// through these pipes, never shell arguments, a webview or diagnostic output.
 internal sealed class TlsSetupProcess : IAsyncDisposable
 {
     private readonly Process process;
@@ -106,7 +104,6 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
         finally { pending.TryRemove(id, out _); }
     }
 
-    // Caller must obtain consent after disclosing restricted-file storage.
     internal async Task<TlsSetupReply> PrepareIdentity(bool storageConsent, CancellationToken cancellation = default)
     {
         if (!storageConsent) throw new InvalidOperationException("Identity storage consent required.");

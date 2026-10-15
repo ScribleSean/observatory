@@ -17,8 +17,6 @@ struct WindowsPairingDetails: Decodable {
         }
         let details = try JSONDecoder().decode(WindowsPairingDetails.self, from: data)
         guard details.version == 1, details.kind == "windows-installation" else { throw CocoaError(.fileReadCorruptFile) }
-        // Validate only the three imported paths. The Mac's SSH alias is a
-        // separate user choice and cannot be set by pasted content.
         try PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows", hostAlias: "validation-only",
             remoteNode: details.remoteNode, remoteScript: details.remoteScript, remoteRuntime: details.remoteRuntime)).validate()
         return details

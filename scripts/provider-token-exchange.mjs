@@ -4,8 +4,6 @@ import {withPeerStateLock} from './peer-lock.mjs';
 import {readProviderTokenState,acceptProviderTokenReply} from './provider-token-store.mjs';
 import {parseProviderTokenRequest} from './provider-token-peer.mjs';
 
-// The transport has authenticated the saved peer before invoking this handler.
-// A readiness probe carries only pairing identities, never provider readings.
 export const exchangeProviderTokens=(runtime,request,now=Date.now())=>withPeerStateLock(runtime,async()=>{
   const pair=await readPairing(runtime);
   if(!pair)throw Error('Provider pairing unavailable');

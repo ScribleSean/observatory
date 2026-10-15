@@ -1,5 +1,3 @@
-# Actual native validators run only against disposable hosted fixtures.
-# Hostile ancestry is a failure, never a reason to repair runner permissions.
 name: Native private-state contracts
 on:
   pull_request:
@@ -57,10 +55,6 @@ jobs:
             mkdirSync(directory, {recursive: true, mode: 0o700});
             appendFileSync(process.env.GITHUB_ENV, `${key}=${directory}\n`);
           }
-      # The preload and test-python receive this selected Python explicitly.
-      # run-collector.test.mjs still uses PATH python3 on Mac, not a child pin.
-      # Windows skips POSIX runner cases, Mac skips Windows DACL models.
-      # Python FakeLib/FakeReader remain modeled tests.
       - name: Verify fictional native private-state contracts
         timeout-minutes: 12
         shell: bash

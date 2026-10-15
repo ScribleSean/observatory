@@ -7,8 +7,6 @@ export function describeArtifact(file) {
     sha256:createHash('sha256').update(readFileSync(file)).digest('hex')};
 }
 
-// Call only after the ZIP's extracted contents, signature and runtime checks pass.
-// This independent receipt remains valid if later DMG creation fails.
 export function recordVerifiedZip(output,manifest,zip) {
   const artifact=describeArtifact(zip);
   writeFileSync(path.join(output,'app-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});

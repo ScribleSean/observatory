@@ -4,8 +4,6 @@ const minute = 60000;
 const timestamp = value => typeof value === 'string' ? Date.parse(value) : NaN;
 const percent = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;
 
-// Call separately for each account-scoped local or peer projection. Never
-// merge devices or providers here. These are estimates, not saved observations.
 export function quotaPace(quota, now = Date.now()) {
   if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid pace clock');
   const asOf = timestamp(quota?.checkedAt);
@@ -34,8 +32,6 @@ export function quotaPace(quota, now = Date.now()) {
       if (previous && (at <= previous.at || at-previous.at > quotaHistoryMaxGapMs || row.remainingPercent > previous.remaining)) segment = [];
       segment.push({at,remaining:row.remainingPercent});
     }
-    // Use actual endpoints within the last hour, without interpolating across
-    // missing observations, resets, corrections or duplicate timestamps.
     segment = segment.filter(point => point.at >= asOf-60*minute);
     const first = segment[0], last = segment.at(-1);
     if (segment.length < 3 || last.at !== asOf || last.remaining !== window.remainingPercent ||

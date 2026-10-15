@@ -32,8 +32,6 @@ test('official WinSparkle and the feed renderer agree on signatures and reject c
     assert.notEqual(run(verifyArgs).status,0,'Upstream rejects modified bytes');
     writeFileSync(file,bytes);
 
-    // These keys exist only in this temporary test directory and are never used
-    // for a production feed, imported into a keychain or printed to test logs.
     const generated=run(['generate-key','--file',keyFile]);
     assert.equal(generated.status,0,'Upstream test key generation succeeds');
     const upstreamPublic=generated.stdout.match(/Public key:\s*([A-Za-z0-9+/]{43}=)/)?.[1];
@@ -51,7 +49,6 @@ test('official WinSparkle and the feed renderer agree on signatures and reject c
     artifacts[0].sha256=createHash('sha256').update(artifacts[0].data).digest('hex');
     assert.throws(()=>buildUpdateAppcasts(release,artifacts,keys,7),/Invalid update signature/);
   } finally {
-    // Only the unique test directory created above is removed.
     rmSync(root,{recursive:true,force:true});
   }
 });

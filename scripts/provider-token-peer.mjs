@@ -10,8 +10,6 @@ export const providerGeneration=value=>typeof value==='string' && /^[a-f0-9]{32}
 export const providerClock=now=>Number.isSafeInteger(now) && now>=0 && Number.isFinite(new Date(now).getTime());
 const digest=payload=>createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
-// Incoming sources must already be the public allowlisted projection. The
-// expected host comes from the saved pairing, never from the incoming record.
 export function parseProviderTokenSource(raw,host,now=Date.now()) {
   if(!providerClock(now) || !raw || typeof raw.checkedAt!=='string' ||
     !Number.isFinite(Date.parse(raw.checkedAt)) || Date.parse(raw.checkedAt)>now+300000)

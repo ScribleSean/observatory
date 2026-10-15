@@ -4,8 +4,6 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {forbiddenPackageName} from './package-content.mjs';
 
-// Restrict release names to literal, portable Windows paths. In particular, do
-// not allow script interpolation, wildcards, device names or alternate streams.
 export function validPackagePath(value) {
   return typeof value==='string' && value.length>0 && value.length<220 &&
     value.split('/').every(part=>/^[A-Za-z0-9_][A-Za-z0-9_. +\-]*$/.test(part) &&

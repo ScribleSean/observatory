@@ -18,8 +18,6 @@ async function windowsPermissions(directory,initialize=false,ancestor=false) {
       if(stdout.trim()!=='private-sync-acl: ok')throw Error('Invalid verification result');
       return;
     } catch(error) {
-      // A transient child can disappear between enumeration and Get-Acl.
-      // Retry the entire inspection once, including the root and every child.
       if(attempt===0 && error.code===2)continue;
       throw Error('Private sync access-control verification failed');
     }
@@ -28,9 +26,6 @@ async function windowsPermissions(directory,initialize=false,ancestor=false) {
 
 async function macPermissions(directory,privateLeaf) {
   try {
-    // CollectorConfiguration.swift and run-collector.py pass the selected
-    // runtime. Direct native JS helpers use Collector/scripts beside Runtime.
-    // Never discover a different interpreter from PATH or install a dependency.
     const python=process.env.OBSERVATORY_PYTHON ?? fileURLToPath(new URL('../../Runtime/python/bin/python3',import.meta.url));
     if(typeof python!=='string' || !path.isAbsolute(python) || /[\r\n]/.test(python) || python.includes('\0'))throw Error('Invalid Python runtime');
     await access(python,constants.X_OK);
@@ -70,8 +65,6 @@ async function verifiedDirectory(directory,privateLeaf) {
   return leaf;
 }
 
-// These checks exclude replacement by other local accounts, not compromise of
-// the process account or OS administrators. Neither validator repairs ACLs.
 export const trustedDirectoryAncestry=directory=>verifiedDirectory(directory,false);
 export const verifyPrivateDirectory=directory=>verifiedDirectory(directory,true);
 

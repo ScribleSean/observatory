@@ -9,8 +9,6 @@ import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs'
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,createPeerRecord,readPeerState} from './peer-store.mjs';
 
-// Frozen endpoint source from main 2292d0d. Execute it as a separate process so
-// rolling-upgrade coverage cannot silently acquire the new optional dispatcher.
 const legacyEndpoint = [
   "import {fileURLToPath} from 'node:url';",
   "import {readPairing} from './peer-pairing.mjs';",

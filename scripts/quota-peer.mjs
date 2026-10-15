@@ -1,8 +1,6 @@
 import {isDeepStrictEqual} from 'node:util';
 import {cleanQuotaObservation} from './quota-history.mjs';
 
-// Authenticated SSH and TLS exchanges share this opt-in contract.
-// Generation is random, not an account ID.
 export const sharedQuotaLimits=Object.freeze({bytes:1_000_000,samples:10000,days:366,historyMs:86400000});
 const stamp=value=>typeof value==='string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString()===value;
 const statuses=['ok','stale','unavailable','needs-auth','unsupported','rate-limited','not-connected'];
@@ -15,8 +13,6 @@ export function createSharedQuota(raw,{enabled=false,host,generation,now=Date.no
       !Number.isSafeInteger(now) || now<0)throw Error('Invalid quota sharing identity');
   if(!raw || !statuses.includes(raw.status))throw Error('Invalid quota sharing status');
   const result={version:1,host,provider:'Codex',generation,status:raw.status,checkedAt:null,history:[],dailyCheckedAt:null,dailyUsageBuckets:[]};
-  // Failed authentication and disabled sources must not continue publishing an
-  // old account's readings. No scope hash, email, salt or credentials are copied.
   if(!['ok','stale'].includes(raw.status))return result;
   if(!stamp(raw.checkedAt) || Date.parse(raw.checkedAt)>now || !Array.isArray(raw.history) ||
       raw.history.length>sharedQuotaLimits.samples || !Array.isArray(raw.dailyUsageBuckets) || raw.dailyUsageBuckets.length>sharedQuotaLimits.days)
@@ -37,8 +33,6 @@ export function createSharedQuota(raw,{enabled=false,host,generation,now=Date.no
     }
     const cleaned=cleanQuotaObservation({checkedAt:sample.checkedAt,windows:supported},now);
     if(!cleaned)throw Error('Invalid shared quota observation');
-    // Only the currently supported account bucket may cross devices. Retired or
-    // arbitrary provider labels cannot carry private text through this channel.
     cleaned.windows=cleaned.windows.filter(window=>window.bucket==='codex');
     if(!cleaned.windows.length)continue;
     if(Date.parse(cleaned.checkedAt)>Date.parse(raw.checkedAt))throw Error('Observation newer than source');
@@ -66,8 +60,6 @@ export function createSharedQuota(raw,{enabled=false,host,generation,now=Date.no
   return result;
 }
 
-// Caller supplies the authenticated owner and generation. A received label is
-// never enough to establish identity or permission. Extra fields are rejected.
 export function parseSharedQuota(text,{host,generation,enabled=false,now=Date.now()}={}) {
   if(enabled!==true)throw Error('Quota sharing is not enabled');
   if(typeof text!=='string' || Buffer.byteLength(text)>sharedQuotaLimits.bytes)throw Error('Shared quota size exceeded');

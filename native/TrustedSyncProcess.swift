@@ -1,7 +1,6 @@
 import Foundation
 import Darwin
 
-// The app owns stdin. EOF requests a drain without interrupting record writes.
 @MainActor
 final class TrustedSyncProcess {
     private let runtime: URL, node: URL, script: URL

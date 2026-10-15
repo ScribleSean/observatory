@@ -1,8 +1,5 @@
 const native = (source) => source?.host === 'Mac' || source?.host === 'Windows';
 
-// Read-only view of an existing snapshot. Keep its saved bytes and historical
-// schemas intact. Public snapshots have no private inventory with which to
-// re-verify a smaller sum, so legacy mixed-scope totals must remain Unknown.
 export function projectCurrentSources(report) {
   const tokens = Array.isArray(report.tokens) ? report.tokens : [];
   const settings = Array.isArray(report.settings) ? report.settings : [];

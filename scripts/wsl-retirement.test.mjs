@@ -28,8 +28,6 @@ test(
     await writeFile(file, config);
     const original = childProcess.spawn,
       calls = [];
-    // No real reader process can launch and no installed account is read.
-    // Only synthetic saved counters are returned.
     childProcess.spawn = (executable) => {
       calls.push(executable);
       const child = new EventEmitter();

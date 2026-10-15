@@ -82,14 +82,11 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   },previous,new Date().toISOString(),pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
   await finalizePeerCollection(runtime,result,savedPairing,previous);
-  // Account-wide history belongs to the observing device, not the peer sum.
   let quota;
   try {quota=await readQuota();}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
-  // Optional provider sharing uses its own channel after core peer merging.
-  // These records never enter Codex totals or the core peer payload.
   let claude;
   if(!config.claude) claude=unavailableClaudeTokenSource('Mac',new Date().toISOString(),'not-connected');
   else try {
@@ -98,8 +95,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     claude=cleanClaudeTokenSource(raw,'Mac');
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
-  attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
-  // Account-wide limits observed on this device. They are not shared with a paired device.
+  attachProviderTokenEstimates(result);
   attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
   const {data,status}=result;
   await atomic('usage.json',data,replacement.preserve);

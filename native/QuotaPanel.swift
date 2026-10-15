@@ -79,8 +79,6 @@ func quotaHourlyTickDates(_ hours: [QuotaHourlyPace]) -> [Date] {
     let ticks = stride(from: 0, through: count, by: quotaHourlyTickStride(hours)).map {
         first.hour.addingTimeInterval(Double($0) * 3600 + 1800)
     }
-    // A last-hour label has too little trailing space in a dense day chart.
-    // Keep the bar and the explicit date range, omit only that crowded tick.
     return count >= 6 && ticks.count > 1 ? ticks.filter { $0 < last.hour } : ticks
 }
 

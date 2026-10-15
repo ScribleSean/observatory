@@ -108,7 +108,6 @@ test('independent windows and empty inputs',()=>{
 test('expired extrapolation waits for evidence instead of reporting a measured exhaustion',()=>{
   const q=fixture();q.windows[0].remainingPercent=0.1;
   for(const [i,s] of q.history.entries())s.windows[0].remainingPercent=12.1-i;
-  // Keep the latest reading exactly equal despite floating point arithmetic.
   q.history.at(-1).windows[0].remainingPercent=0.1;
   assert.equal(quotaPace(q,now+60000)[0].status,'awaiting-observation');
   assert.equal(quotaPace(q,now+60000)[0].remainingMinutes,null);

@@ -28,7 +28,6 @@ async function readEvidence(file,limit=maximumBytes,privateFile=false) {
       if(!bytesRead)break;
       total+=bytesRead;
     }
-    // Flush verified archive handles before allowing the original to change.
     if(privateFile)await handle.sync();
     const after=await handle.stat({bigint:true}),named=await lstat(file,{bigint:true});
     if(total!==Number(before.size) || !same(before,after) || !same(before,named) ||
@@ -46,9 +45,6 @@ async function readSnapshot(file,privateFile=false) {
   return {...snapshot,collectedAt:value.collectedAt,value};
 }
 
-// Migration preparation only. The caller owns collector locking and activation.
-// Partial writes remain in a new private directory and never count as success.
-// This preserves existing snapshot bytes, not arbitrary raw source records.
 export async function archiveMacSnapshot(snapshotFile,archiveRoot) {
   if(process.platform!=='darwin')throw Error('Mac archive preparation required');
   if(!path.isAbsolute(archiveRoot) || await realpath(archiveRoot)!==archiveRoot)
@@ -102,19 +98,11 @@ async function writeArchive(snapshot,folder,snapshotName,receiptName) {
 }
 
 async function optionalSnapshot(file) {
-  // Only an initially absent entry means first collection. A disappearance
-  // after opening or while verifying the read must propagate as a failure.
   try {await lstat(file);}catch(error) {if(error.code==='ENOENT')return null;throw error;}
-  // A crash before the data reached disk can leave a snapshot of zero bytes
-  // only. It holds no records, so it counts as a first collection. Any other
-  // unreadable snapshot still fails closed.
   if((await readEvidence(file,maximumBytes)).data.every(byte=>byte===0))return null;
   return readSnapshot(file);
 }
 
-// The platform caller already owns collection.lock or .runtime/collector.lock.
-// Do not acquire a second lock here. Read history from the same stable source,
-// then check it again immediately before the caller renames.
 export async function retirementSnapshotGuard(runtime) {
   if(!path.isAbsolute(runtime) || path.resolve(runtime)!==await realpath(runtime))
     throw Error('Canonical snapshot runtime required');
@@ -129,7 +117,6 @@ export async function retirementSnapshotGuard(runtime) {
       throw Error('Snapshot changed during collection');
   };
   return {history,preserve:async()=>{
-    // This is the last check before the caller renames.
     await unchanged();
   }};
 }

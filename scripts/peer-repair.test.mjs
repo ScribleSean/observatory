@@ -46,8 +46,6 @@ test('both local retirements are required before authenticated setup replaces an
   if(process.platform!=='win32')assert.equal((await stat(path.join(mac,archives[0]))).mode&0o077,0);
   await assert.rejects(setupPairing(mac,request,sendTo(windows),'darwin',readiness(windows)));
   assert.deepEqual(await readPairing(windows),oldWindows);
-  // No remote endpoint is permitted to retire Windows. This explicit local
-  // operation stands for the native Windows confirmation in protocol tests.
   assert.deepEqual(await preparePairingRepair(windows),{status:'prepared'});
   await setupPairing(mac,request,sendTo(windows),'darwin',readiness(windows));
   const next=await readPairing(mac);
@@ -168,7 +166,6 @@ test('process death releases the repair lock without deleting a lock file',async
   const module=new URL('./peer-lock.mjs',import.meta.url).href;
   const code=`import {withPeerStateLock} from ${JSON.stringify(module)};
     await withPeerStateLock(process.argv[1],async()=>{process.stdout.write('ready');await new Promise(()=>{});});`;
-  // The interval keeps the synthetic lock owner alive until this test kills it.
   const child=spawn(process.execPath,['--input-type=module','-e','setInterval(()=>{},1000);'+code,runtime],{stdio:['ignore','pipe','pipe']});
   t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
   await Promise.race([once(child.stdout,'data'),once(child,'exit').then(()=>{throw Error('Lock owner exited');})]);

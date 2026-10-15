@@ -7,12 +7,6 @@ const fields=['version','address','port','certificateSha256','secret','createdAt
 const hex256=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const invalid=()=>{throw Error('Invalid or expired pairing invitation');};
 
-// Addresses are strings of at most 39 characters. IPv4 uses four decimal parts
-// from 0 to 255 without leading zeros, inside 10.0.0.0/8, 172.16.0.0/12,
-// 192.168.0.0/16 or 100.64.0.0/10.
-// IPv6 starts with a group from fc00 to fdff and uses one to four hex digits per
-// group. It has eight groups, or two to seven groups with exactly one :: after
-// the first group. Zones, embedded IPv4 and extra or single edge colons fail.
 export function isPairingAddress(value) {
   if(typeof value!=='string' || value.length>39 || /[^a-f0-9:.]/i.test(value))return false;
   if(value.includes('.')) {
@@ -43,8 +37,6 @@ export function validateInvitation(value,now=Date.now()) {
   return Object.fromEntries(fields.map(key=>[key,value[key]]));
 }
 
-// This is an out-of-band bearer secret, not a short numeric pairing code.
-// Never log the invitation or pass it through a browser URL or command line.
 export function createInvitation({address,port,certificateSha256},now=Date.now()) {
   return validateInvitation({version:1,address,port,certificateSha256,
     secret:randomBytes(32).toString('hex'),createdAt:now,expiresAt:now+invitationLifetimeMs},now);
@@ -61,7 +53,6 @@ export function decodeInvitation(text,now=Date.now()) {
     if(!/^[A-Za-z0-9_-]+$/.test(encoded))invalid();
     const json=new TextDecoder('utf-8',{fatal:true}).decode(Buffer.from(encoded,'base64url'));
     const value=validateInvitation(JSON.parse(json),now);
-    // Reject duplicate keys, alternate encodings and ambiguous representations.
     if(encodeInvitation(value,now)!==text)invalid();
     return value;
   } catch {invalid();}

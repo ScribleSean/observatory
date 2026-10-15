@@ -56,7 +56,6 @@ function Invoke-TestUninstall([int]$Expected = 0) {
 }
 
 try {
-    # The TEST singleton is distinct from both ordinary IPC and the setup lock.
     $first = $false
     $mutex = New-Object System.Threading.Mutex($true, 'Local\WorkspaceObservatoryInstallerTest.App', [ref]$first)
     try {
@@ -87,7 +86,6 @@ try {
     Check-Payload
     Write-Output 'PASS: existing-install overwrite refused'
 
-    # A replaced payload directory must be rejected before any file is removed.
     $runtime = Join-Path $install 'Runtime'
     $held = Join-Path $install 'Runtime-test-held'
     $outside = Join-Path $work 'unrelated-target'
@@ -121,7 +119,6 @@ try {
     Check ((Get-FileHash -LiteralPath $canary -Algorithm SHA256).Hash -eq $canaryHash) 'Saved-data canary changed.'
     Write-Output 'PASS: uninstall preserves saved data and unrelated files/registry values; removes owned startup'
 
-    # Remove only this test's exact sentinels and now-empty test containers.
     Remove-Item -LiteralPath (Join-Path $install 'unrelated-test.txt')
     [IO.Directory]::Delete($install, $false)
     Remove-Item -LiteralPath (Join-Path $shortcuts 'unrelated-test.txt')

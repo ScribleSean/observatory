@@ -45,7 +45,6 @@ internal sealed class WebPanel : Form
         Controls.Add(web);
         VisibleChanged += (_, _) => { release.Stop(); if (ShouldRelease(Visible, IsDisposed, started is not null, failed)) release.Start(); };
         release.Tick += (_, _) => { release.Stop(); if (ShouldRelease(Visible, IsDisposed, started is not null, failed)) Retire(); };
-        // Close when another window comes to the foreground, as tray panels do.
         // The form's Deactivate event is not used: it also fires when focus
         // moves into the page, and then does not fire again. The foreground
         // window is read on a short timer while the panel is shown instead.
@@ -54,8 +53,6 @@ internal sealed class WebPanel : Form
             if (IsDisposed || !Visible || !IsHandleCreated) { watch.Stop(); return; }
             var front = GetForegroundWindow();
             var ours = front == Handle || (front != IntPtr.Zero && GetAncestor(front, 3) == Handle);
-            // Only a panel that has held the foreground can lose it. One that
-            // Windows never brought forward stays until it is used or closed.
             if (ours) { held = true; return; }
             if (!held || KeepOpen || front == IntPtr.Zero) return;
             dismissed = Environment.TickCount64; Hide();
@@ -71,8 +68,6 @@ internal sealed class WebPanel : Form
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr GetAncestor(IntPtr window, uint flags);
 
-    // Set by the timing harness only, so an unattended opening is not closed
-    // while it is being measured.
     internal bool KeepOpen;
     internal bool IsForeground => IsHandleCreated && GetForegroundWindow() == Handle;
 
@@ -81,10 +76,6 @@ internal sealed class WebPanel : Form
     private long? dismissed;
     internal bool DismissedJustNow => dismissed is { } at && Environment.TickCount64 - at < 400;
 
-    // The web view is created when the panel opens. Closing hides the panel, so
-    // reopening soon is fast. After the panel has stayed hidden for a minute the
-    // form and its web view are disposed, which ends the browser processes. The
-    // owner then creates a new panel on the next opening.
     internal static readonly TimeSpan DefaultReleaseAfter = TimeSpan.FromSeconds(60);
     private readonly System.Windows.Forms.Timer release = new();
 
@@ -157,13 +148,11 @@ internal sealed class WebPanel : Form
     private async Task FitContent()
     {
         if (IsDisposed || web.CoreWebView2 is null) return;
-        // The document is at least as tall as the window, so measure the panel element itself.
         var measured = await web.CoreWebView2.ExecuteScriptAsync(ContentHeight);
         if (IsDisposed || !double.TryParse(measured, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var height) || height < 1) return;
         var area = Screen.FromControl(this).WorkingArea;
         var bottom = Bottom;
         ClientSize = new Size(ClientSize.Width, Math.Min(LogicalToDeviceUnits((int)Math.Min(height, 4000)), area.Height - 24));
-        // Keep the lower edge beside the tray while the height follows the page.
         Location = new Point(Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - Width)),
             Math.Clamp(bottom - Height, area.Top, Math.Max(area.Top, area.Bottom - Height)));
     }
@@ -208,8 +197,6 @@ internal sealed class WebPanel : Form
         catch { }
     }
 
-    // Measurement helpers for --panel-timing. They read facts about the drawn
-    // page and press its own buttons. They add no way for the page to reach the app.
     internal async Task<string> Describe()
     {
         if (IsDisposed || web.CoreWebView2 is null) return "unavailable";
@@ -264,7 +251,6 @@ internal sealed class WebPanel : Form
         core.Settings.IsGeneralAutofillEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = false;
-        // The page sends four fixed action names. Nothing is sent to the page.
         core.Settings.IsWebMessageEnabled = true;
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (_, e) => Respond(environment, e, runtime, Page);
@@ -280,7 +266,6 @@ internal sealed class WebPanel : Form
         };
         // Browser shortcut settings do not stop accelerator events forwarded as KeyDown.
         web.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { e.Handled = true; Hide(); } };
-        // Seed new documents with the saved viewer choices.
         var (skin, theme) = WebViewerPreferences.Read(runtime);
         viewerScript = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
         if (IsDisposed) return;
@@ -293,8 +278,6 @@ internal sealed class WebPanel : Form
         return base.ProcessCmdKey(ref message, keyData);
     }
 
-    // Exactly { "panelAction": name } with one of the four names. Anything
-    // else, including extra fields or arguments, is ignored.
     internal static string? ParseAction(string json)
     {
         try
@@ -340,7 +323,6 @@ internal sealed class WebPanel : Form
         foreach (var character in part)
             if (!(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-' or '_')) return false;
         var name = part.Split('.')[0];
-        // Device names are a second layer, including '$' and superscripts already refused above.
         foreach (var reserved in new[] { "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$" })
             if (name.Equals(reserved, StringComparison.OrdinalIgnoreCase)) return false;
         if (name.Length == 4 && (name.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
@@ -349,9 +331,6 @@ internal sealed class WebPanel : Form
         return true;
     }
 
-    // Returns the bundled file for a request path, or null when the path is
-    // outside what a shared viewer page may load: that one page, bundled assets
-    // and the sanitized snapshot.
     internal static string? Resolve(string runtime, string relative, string page = Page, string? webRoot = null)
     {
         if (page is not (Page or WebDashboard.Page)) return null;

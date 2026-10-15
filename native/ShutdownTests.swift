@@ -67,7 +67,6 @@ func testShutdownDrain() async throws {
 
 @MainActor
 private func testModalChildDrain(root: URL) {
-    // Exercise the production child completion path while only the modal loop runs.
     let collecting = ObservatoryStore(runtime: root, collectionAllowed: false)
     let child = Process()
     child.executableURL = URL(fileURLWithPath: "/bin/sleep")

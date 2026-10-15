@@ -8,13 +8,10 @@ using System.Text.Json.Nodes;
 
 namespace WorkspaceObservatory;
 
-// The window adapter owns UI dispatch. Calls start on the receiving UI context.
-// Tests supply only temporary storage and fake operations.
 internal interface IBridgeHost
 {
     BridgeSettingsStore Settings { get; }
     DateTimeOffset Now { get; }
-    // Use BridgeSettingsStore.ReadAssemblyVersion in the window adapter.
     Version? AppVersion { get; }
     bool CollectorBusy { get; }
     bool CollectionPaused { get; }
@@ -23,7 +20,6 @@ internal interface IBridgeHost
     bool NativePairingOpen { get; }
     bool NativeDialogOpen { get; }
     bool Confirm(string title, string text);
-    // Require .observatory and do not offer replacement of an existing file.
     string? ChooseExportFile();
     void CopyInvitation(string invitation);
     Task RefreshAllowancesThenAll();
@@ -82,7 +78,6 @@ internal static class BridgeProcesses
         return start;
     }
 
-    // The production host can delegate its script operation here.
     internal static async Task<BridgeScriptResult> Run(ProcessStartInfo start)
     {
         if (!File.Exists(start.FileName) || start.ArgumentList.Count == 0 || !File.Exists(start.ArgumentList[0]))
@@ -287,7 +282,6 @@ internal sealed class BridgeSettingsStore(string runtime)
             var root = Path.Combine(runtime, "private-sync");
             if (Attributes(root) is null) return ("unpaired", "none");
             PlainFolder(root);
-            // Check every relevant path before accepting any one of them.
             var paths = new[] { "revoked", "tls-trust.json", "pairing.json" };
             var present = new bool[paths.Length];
             for (int i = 0; i < paths.Length; i++)
@@ -341,7 +335,6 @@ internal sealed class BridgeHandler : IDisposable
     private readonly DateTimeOffset?[] sharingRead = new DateTimeOffset?[2];
     private readonly bool[] sharingReading = new bool[2];
     private readonly long[] sharingRevision = new long[2];
-    // This is the not yet read state. The contract has no unknown sharing value.
     private readonly QuotaSharingStatus[] sharing = [new(false, false, "pairing-unavailable", null), new(false, false, "pairing-unavailable", null)];
 
     private sealed record FileStatus((string Skin, string Appearance) Viewer, string? Device,
@@ -370,7 +363,6 @@ internal sealed class BridgeHandler : IDisposable
         var validation = BridgeContract.Validate(text);
         probe?.Invoke(validation.Outcome == "accepted" ? "accepted action=" + validation.Action : "refused");
         if (validation.Outcome == "ignore" || validation.Id is not int id) return;
-        // Work that may open a native dialog starts after the lock is released.
         Request? cancel = null;
         bool start = false;
         lock (gate)
@@ -493,7 +485,6 @@ internal sealed class BridgeHandler : IDisposable
         bool Enabled() => request.Args["enabled"].Boolean;
         lock (gate)
         {
-            // The active action must not reject itself.
             var saved = activeAction; activeAction = null;
             bool busy = PairingBusy(request.Action); activeAction = saved;
             if (busy || dialog || host.NativeDialogOpen || CollectorBlocked(request.Action)) return new("busy");
@@ -557,7 +548,6 @@ internal sealed class BridgeHandler : IDisposable
                 lock (gate) working = true;
                 try
                 {
-                    // Always enter the collector so its busy race also preserves the pause.
                     try { if (repair) await host.PreparePairingRepair(); else await host.DisconnectPairing(); }
                     catch { return new(host.CollectorBusy ? "busy" : "unavailable"); }
                     await host.Refresh();
@@ -607,8 +597,6 @@ internal sealed class BridgeHandler : IDisposable
                     ["bundled"] = new JsonArray(BridgeSettingsStore.Bundled.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()), ["custom"] = new JsonArray() },
                 ["deviceName"] = files.Device, ["startup"] = files.Startup, ["appearance"] = viewer.Appearance,
                 ["limitsConsent"] = files.LimitsConsent,
-                // Held while a pairing session reserves collection, while disconnect or repair runs,
-                // and while collection stays paused after unverified pairing work.
                 ["collectionPaused"] = session is not null || working || host.CollectionPaused,
                 ["pairing"] = new JsonObject { ["state"] = state, ["peerFingerprint"] = state == "confirming" ? fingerprint : null,
                     ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },

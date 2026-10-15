@@ -197,7 +197,6 @@ final class ObservatoryStore: ObservableObject {
         trustedSync?.requestStop()
         pollTimer?.invalidate()
         refreshTimer?.invalidate()
-        // The runner catches termination and stops only its own collection process group.
         process?.terminate()
     }
 }
@@ -237,7 +236,6 @@ enum WebViewerPreferences {
 
     static func documentStartScript(skin: String, theme: String?) -> String {
         let skin = skins.contains(skin) ? skin : "sage"
-        // Values come from fixed lists, never from free text.
         var script = "document.documentElement.dataset.skin = \"\(skin)\";"
         if let theme, theme == "light" || theme == "dark" {
             script += "\ndocument.documentElement.dataset.theme = \"\(theme)\";"

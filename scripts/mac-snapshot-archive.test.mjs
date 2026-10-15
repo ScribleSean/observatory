@@ -49,7 +49,6 @@ test('a zero-filled or empty snapshot counts as a first collection while other d
     await guard.preserve();
     assert.deepEqual(await readFile(f.file),bytes);
     await assert.rejects(readFile(f.archive),{code:'ENOENT'});
-    // A snapshot that appears while collecting must still stop the replacement.
     const racing=await retirementSnapshotGuard(f.runtime);
     await writeFile(f.file,retiredBytes);
     await assert.rejects(racing.preserve(),/Snapshot changed during collection/);
@@ -98,7 +97,6 @@ test('a source changed during the final unchanged check refuses replacement',asy
 
 test('a stale temporary-file alias cannot overwrite evidence before the archive guard',nativeOptions,async t=>{
   const f=await retirementFixture(t);
-  // The limits reader is the last step before the snapshot is written, so it stands in for anything that runs then.
   await assert.rejects(nativeCollect(f,{readLimits:async()=>{
     await fsPromises.link(f.file,f.file+'.tmp');
     return {provider:'Claude Code',scope:'account',status:'not-connected',windows:[]};
@@ -269,7 +267,6 @@ for(const damage of ['snapshot overwrite','receipt EIO','snapshot hardlink','rec
       const error=damage==='receipt EIO'?{code:'EIO',message:'Synthetic receipt failure'}:
         damage==='receipt mismatch'?/Archive receipt verification failed/:
         damage==='snapshot overwrite'?/Archive changed during verification/:
-        // The private-file ACL check runs first and refuses a linked or broad file before the byte read.
         /Private path access-control verification failed|Invalid snapshot file/;
       await assert.rejects(archiveMacSnapshot(f.file,f.archive),error);
       assert.equal(injected,true);

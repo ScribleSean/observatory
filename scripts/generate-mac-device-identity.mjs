@@ -3,8 +3,6 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {validateDeviceIdentity} from './peer-device-identity.mjs';
 
-// Explicit setup only. No files, Keychain entries, output or network requests.
-// The caller owns private persistence and must never log the returned identity.
 export async function generateMacDeviceIdentity() {
   if(process.platform!=='darwin')throw Error('Mac device identity generation unavailable');
   try {

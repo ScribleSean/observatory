@@ -91,8 +91,6 @@ test('looks up exact model ids and returns null for unknown or inherited names',
 });
 
 test('all fixture models are priced or deliberately unpriced', () => {
-  // The source table carries these only under cloud-provider names.
-  // They stay unpriced and exercise the null estimate path.
   const deliberatelyUnpriced = new Set([
     'claude-sonnet-4-20250514',
     'claude-sonnet-4',

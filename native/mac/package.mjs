@@ -45,7 +45,6 @@ const zipArtifact=recordVerifiedZip(output,manifest,zip);
 cpSync(path.join(root,'native/mac/INSTALL.txt'),path.join(output,'INSTALL.txt'),{errorOnExist:true,force:false});
 console.log('ZIP verified. Independent manifest, checksum and verification receipt saved.');
 if(process.argv.includes('--zip-only')) {
-  // No image has been created or mounted in this explicitly selected mode.
   rmSync(stage,{recursive:true});
   console.log(JSON.stringify({output,artifacts:[zipArtifact],unpackedBytes:manifest.bytes,
     zipVerification:'passed',dmgVerification:'not-requested',temporaryCopiesRemoved:true}));
@@ -81,7 +80,5 @@ writeFileSync(path.join(output,'SHA256SUMS.txt'),artifacts.map(asset=>`${asset.s
 writeFileSync(path.join(output,'release-info.json'),JSON.stringify({platform:manifest.platform,version:manifest.version,
   sourceRevision:manifest.sourceRevision,signing:manifest.signing,unpackedBytes:manifest.bytes,
   checks:['source-clean','privacy-scan','full-file-manifest','nested-signatures','zip-roundtrip','relocated-collector','relocated-webkit','relocated-window-lifecycle','dmg-integrity','mounted-dmg-manifest'],artifacts},null,2)+'\n',{flag:'wx'});
-// All mounts have detached successfully. Only this invocation's generated copies
-// are removed; the distribution directory and input app remain untouched.
 rmSync(stage,{recursive:true});
 console.log(JSON.stringify({output,artifacts,unpackedBytes:manifest.bytes,verification:'passed',temporaryCopiesRemoved:true}));

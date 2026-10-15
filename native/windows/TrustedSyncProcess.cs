@@ -2,7 +2,6 @@ using System.Diagnostics;
 
 namespace WorkspaceObservatory;
 
-// One app-owned helper. Closing stdin requests a drain, never a forced kill.
 internal sealed class TrustedSyncProcess
 {
     private readonly string runtime, node, script;
@@ -36,7 +35,6 @@ internal sealed class TrustedSyncProcess
         {
             if (!candidate.Start()) { candidate.Dispose(); return; }
             child = candidate;
-            // Fixed-size drains never retain service output or private diagnostics.
             _ = Discard(candidate.StandardOutput); _ = Discard(candidate.StandardError);
         }
         catch { candidate.Dispose(); }
@@ -65,7 +63,6 @@ internal sealed class TrustedSyncProcess
             using var deadline = new CancellationTokenSource(timeout);
             await owned.WaitForExitAsync(deadline.Token);
             if (!owned.HasExited) return false;
-            // No replacement is allowed until this process is confirmed exited.
             if (ReferenceEquals(child, owned)) child = null;
             owned.Dispose();
             return true;

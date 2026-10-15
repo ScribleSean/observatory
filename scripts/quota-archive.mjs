@@ -31,7 +31,6 @@ function daily(db,scope,rows,checkedAt,now) {
   }
 }
 
-// Runs in the cache transaction. Backfill before its first retention prune.
 export function backfillQuotaArchive(db,history) {
   if(!scopeKey(history?.scope))return;
   if(!Array.isArray(history.samples) || history.samples.length>10000)throw Error('Invalid legacy quota history');
@@ -54,14 +53,10 @@ export function archiveQuotaPoll(db,{scope,observation,enabled},now) {
     daily(db,scope,observation.accountUsage.dailyUsageBuckets,observation.accountUsage.checkedAt??observation.checkedAt,now);
 }
 
-// Owner-local only. Never project archive scope keys or records wholesale to peers.
 export function readQuotaArchivePage(db,{scope,kind,from=0,to=8640000000000000,after=null,limit=100}={}) {
   if(!scopeKey(scope) || !['observation','daily','poll','timeline'].includes(kind) ||
     !validTime(from) || !validTime(to) || from>to || !Number.isSafeInteger(limit) || limit<1 || limit>200 ||
     (after!==null && (!validTime(after.at) || !Number.isSafeInteger(after.id) || after.id<1)))throw Error('Invalid archive query');
-  // Failed checks are evidence of unknown coverage, including failures shorter
-  // than the normal gap threshold. Omit a successful poll only when a matching
-  // observation exists. An empty successful response still has unknown coverage.
   const predicate=kind==='timeline'?timelinePredicate:'kind=?';
   const found=db.prepare(`SELECT id,observed_at,record FROM quota_archive WHERE scope=? AND ${predicate} AND observed_at>=? AND observed_at<=? AND (observed_at,id)>(?,?) ORDER BY observed_at,id LIMIT ?`)
     .all(scope,...(kind==='timeline'?[]:[kind]),from,to,after?.at??-1,after?.id??0,limit+1);

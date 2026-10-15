@@ -1210,7 +1210,6 @@ code {
   }
 }
 
-/* Observatory's shared desktop system. Native equivalents: ObservatoryTheme.swift. */
 :root {
   --text: #292d28; --muted: #64695f; --strong: #364632; --track: #dadbd3;
   --sage: #586f50; --purple: #79658e;

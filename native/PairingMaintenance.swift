@@ -8,7 +8,6 @@ enum PairingMaintenance {
         }.value
     }
 
-    // Run off the main actor. Only the bundled CLI owns private-state writes.
     static func runDisconnect(runtime: URL, resources: URL) throws {
         try runOperation(runtime: runtime, resources: resources, repair: false)
     }
@@ -45,7 +44,6 @@ enum PairingMaintenance {
         let startedAt = DispatchTime.now()
         try process.run()
         let timeout = DispatchWorkItem {
-            // Terminate only this owned process. The CLI starts no Mac helpers.
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + 20, execute: timeout)

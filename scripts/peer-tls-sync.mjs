@@ -13,8 +13,6 @@ const protocol='observatory-sync/1',limit=17_000_000;
 const fingerprint=cert=>createHash('sha256').update(cert.raw).digest('hex');
 const unavailable=()=>Error('Trusted sync listener unavailable');
 
-// Explicit lifecycle only. A setup claim cannot start this listener without
-// previously saved pairing configuration, local identity and peer trust.
 export async function startTrustedSyncListener(runtime,{address,port=0},{createServer=tls.createServer,expectedPairing}={}) {
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
     (port!==0 && (port<1024 || port>65535)))throw unavailable();
@@ -52,8 +50,6 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
       });
       socket.once('end',()=>{
         const exchange=withPeerStateLock(runtime,async()=>{
-          // Read trust again under the same lock as record acceptance. An open
-          // TLS connection cannot outlive revocation or a generation change.
           const current=await readPeerTrust(runtime);
           if(expectedPairing && !isDeepStrictEqual(await readPairing(runtime),expectedPairing))throw unavailable();
           if(socket.destroyed || !current || current.pairId!==state.trust.pairId ||

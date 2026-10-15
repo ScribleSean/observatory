@@ -8,9 +8,6 @@ import {withPeerStateLock} from './peer-lock.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {readRepairConsent,writeRepairConsent} from './peer-repair-consent.mjs';
 
-// Called only by an explicit local confirmation, never by an SSH endpoint or
-// collector. Each device must retire its own state before normal setup can
-// create a replacement. The old generation stays disabled and is not reused.
 export async function preparePairingRepair(runtime) {
   return withPeerStateLock(runtime,async()=>{
     let directory;
@@ -20,8 +17,6 @@ export async function preparePairingRepair(runtime) {
     if(!directory && previousConsent)return {status:'unpaired'};
     const entries=directory?await readdir(directory):[];
     if(entries.length>9)throw Error('Private state needs manual inspection');
-    // Do not follow or copy links, change permissions, parse corrupt records,
-    // or move an unbounded directory tree as part of automatic recovery.
     for(const name of entries) {
       const info=await lstat(path.join(directory,name));
       if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1 || info.size>64*1024*1024 ||
@@ -30,8 +25,6 @@ export async function preparePairingRepair(runtime) {
     const retired=(await readdir(runtime)).filter(name=>/^private-sync-retired-[a-f0-9]{64}$/.test(name));
     if(retired.length>=16)throw Error('Retained pairing limit needs manual review');
     const control=await privateCollectorDirectory(runtime,'private-repair');
-    // This persistent fence makes stale in-memory collectors require the newly
-    // saved generation before accessing the replacement database.
     try {
       const file=await open(path.join(control,'require-pairing'),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
       try {await file.writeFile('Retired generations cannot write replacement state.\n');await file.sync();}

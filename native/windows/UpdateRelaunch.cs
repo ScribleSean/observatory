@@ -6,8 +6,6 @@ internal static class UpdateRelaunch
 {
     internal sealed record Result(int ProcessId, bool EventLoopConfirmed);
 
-    // Call after activation releases the setup gate. Never roll back automatically
-    // after launch: the new application may already have migrated its saved data.
     internal static async Task<Result> Start(string installed, string envelope, string pinnedKey,
         long previousBuild, string expectedRevision)
     {

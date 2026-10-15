@@ -1,8 +1,6 @@
 const fields=['pairId','deviceId','comparisonId','comparisonSalt','host'];
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 
-// Pairing is supplied by a trusted private configuration loader, never by the
-// dashboard or received payload. The salt travels to Python on stdin only.
 export function preparePeerCollection(value,host,codexHosts) {
   if(!value || typeof value!=='object' || Array.isArray(value) ||
     Object.keys(value).length!==fields.length+(Object.hasOwn(value,'codexHosts')?1:0) ||

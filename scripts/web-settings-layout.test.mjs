@@ -8,7 +8,6 @@ const css = readFileSync(
 );
 
 test('narrow icon-only reload styling is scoped to header actions', () => {
-  // Settings reuses the reload style for a text-only appearance button.
   const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
   const iconOnly = rules.filter(
     ([, selector, body]) =>

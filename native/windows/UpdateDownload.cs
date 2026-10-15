@@ -4,8 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
-// Download preparation runs on WinSparkle's installer thread. Keep retained
-// inputs outside its download directory and never wait for activation here.
+// Download preparation runs on WinSparkle's installer thread.
 internal static class UpdateDownload
 {
     internal sealed record Prepared(string Installed, string Staged, string PreviousReceipt,
@@ -22,8 +21,6 @@ internal static class UpdateDownload
                 previousBuild, trust.PublicKey).GetAwaiter().GetResult();
             using var child = Process.Start(StartInfo(prepared))
                 ?? throw new IOException("The external update helper did not start.");
-            // A successful process start is a launch acknowledgement, not proof
-            // of activation. The helper re-verifies and waits for graceful quit.
             return true;
         });
     }
@@ -51,7 +48,6 @@ internal static class UpdateDownload
             throw new IOException("Invalid installed update identity or archive.");
         var parent = Path.GetDirectoryName(installed)!;
         // WinSparkle may remove the download's parent at its next startup.
-        // Never place retained inputs in that directory or a descendant.
         RequireOutside(parent, Path.GetDirectoryName(downloaded)!);
         RequireOutside(previousReceipt, installed);
         CheckDirectory(parent);
@@ -59,8 +55,6 @@ internal static class UpdateDownload
         var retained = Path.Combine(parent, ".observatory-download-" + Guid.NewGuid().ToString("N"));
         if (Path.Exists(retained)) throw new IOException("Retained update directory already exists.");
         Directory.CreateDirectory(retained);
-        // Failed preparation is retained for inspection. It never alters the
-        // installed app and does not authorize shutdown or a fallback installer.
         var receipt = RetainReceipt(previousReceipt, retained);
         var extracted = UpdateArchive.Extract(downloaded, retained, cancellation);
         var candidate = await UpdateStaging.Stage(extracted, installed, receipt, pinnedKey, previousBuild, cancellation);

@@ -36,8 +36,6 @@ function validate(value,{pairing,localFingerprint}) {
   return {...value,peerCertificate:cert.toString()};
 }
 
-// Trust shares the pairing directory, so existing revocation fences it and
-// explicit repair retires it with the old generation. It grants no data scope.
 export const readPeerTrust=runtime=>withPeerStateLock(runtime,async()=>{
   const current=await context(runtime),directory=await privateSyncDirectory(runtime);
   const name=path.join(directory,filename);
@@ -68,13 +66,9 @@ function claimRecord(claim,current) {
     peerCertificate:peer.toString()},current);
 }
 
-// Validate against a proposed pairing before saving any configuration. This
-// checks cryptographic bindings, not whether the user confirmed the device.
 export const validateConfirmedPeerTrust=(runtime,pairing,claim)=>withPeerStateLock(runtime,async()=>
   claimRecord(claim,await context(runtime,validatePairing(pairing))));
 
-// Only the local confirmation handler may supply this verified claim binding.
-// Requires an already saved complementary pairing, never converts SSH in place.
 export const saveConfirmedPeerTrust=(runtime,claim)=>withPeerStateLock(runtime,async()=>{
   const safe=claimRecord(claim,await context(runtime));
   const directory=await privateSyncDirectory(runtime),bytes=JSON.stringify(safe);

@@ -21,7 +21,6 @@ const read = (name) => {
   return readFileSync(file(name), 'utf8');
 };
 
-// These are source-contract checks, not compiled Windows runtime acceptance.
 void test('TEST application selects an installation identity before dispatch or state access', () => {
   const program = read('Program.cs');
   const main = program.slice(
@@ -242,7 +241,6 @@ void test('a bounded identity diagnostic precedes normal startup and runs pure n
   );
 });
 
-// Exercise the real generator with inert payload bytes. Nothing is compiled.
 void test('generated TEST metadata separates setup, singleton, startup and uninstall identities', (t) => {
   const root = realpathSync(
     mkdtempSync(path.join(tmpdir(), 'observatory-test-identity-')),

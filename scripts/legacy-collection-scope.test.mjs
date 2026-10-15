@@ -27,7 +27,6 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
     await mkdtemp(path.join(tmpdir(), 'observatory-legacy-bundle-')),
   );
   t.after(() => rm(bundle, { recursive: true, force: true }));
-  // Bundled code and private state are separate, as in the native Mac launch.
   await cp(new URL('./', import.meta.url), path.join(bundle, 'scripts'), {
     recursive: true,
   });

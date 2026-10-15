@@ -18,7 +18,6 @@ function unavailableConfiguredPeerSources(result,pairing) {
   }
 }
 
-// A sync failure must not replace a valid standalone dashboard with an error.
 export async function finalizePeerCollection(runtime,result,pairing,previous=[],now=Date.now(),{exchangeTLS=tlsPeerExchange}={}) {
   if(!pairing || result.peer?.status!=='ready')return result;
   try {

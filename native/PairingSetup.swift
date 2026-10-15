@@ -67,8 +67,6 @@ enum PairingSetup {
         }.value
     }
 
-    // Off-main-thread, bounded stdin/stdout. All private writes belong to the
-    // bundled setup CLI. Nothing passes through a shell or a webview message.
     private static func run(runtime: URL, resources: URL, request: PairingSetupRequest?) throws -> Data {
         let values = try runtime.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true,

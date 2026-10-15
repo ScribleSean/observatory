@@ -5,13 +5,10 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {collectQuota} from './collect-quota.mjs';
-// This runner uses POSIX process groups and flock. Windows uses Collector.cs,
-// whose contracts are exercised by the native Windows build and live checks.
 const test=(name,fn)=>nodeTest(name,{skip:process.platform==='win32'?'POSIX runner only; Windows uses the native collector':false},fn);
 const reader=path.resolve('scripts/run-collector.py');
 const code=`import importlib.util,sys\ns=importlib.util.spec_from_file_location('runner',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nprint(m.run_collection(sys.argv[2],sys.argv[3],300,float(sys.argv[4])))`;
 const success=`require('fs').writeFileSync('public/local/usage.json',JSON.stringify({collectedAt:new Date().toISOString(),activity:[{status:'ok'}],tokens:[],settings:[]}));`;
-// Shell exec preserves the fixture PID and exact Node path, including spaces and quotes.
 const nodeLauncher=`#!/bin/sh\n':' //; exec '${process.execPath.replaceAll("'", "'\\''")}' "$0" "$@"`;
 async function fixture(t,script) {
   const root=await realpath(await mkdtemp(path.join(tmpdir(),'dashboard-runner-')));

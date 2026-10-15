@@ -78,7 +78,6 @@ test('recording writes one small private file and reading needs the install mark
   assert.doesNotMatch(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'),/synthetic|project|transcript/i);
   assert.equal((await readClaudeLimits(runtime,{now})).status,'not-connected');
   await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
-  // Tests never start the real Claude Code command.
   const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>null});
   assert.equal(source.status,'ok');
   const result={data:{}};attachClaudeLimits(result,source);
@@ -107,7 +106,6 @@ test('install needs consent, saves the earlier status line and uninstall restore
   assert.deepEqual(await installStatusline({...options,consent:true}),{installed:true,replacedStatusLine:true,settingsPath});
   const installed=JSON.parse(await readFile(settingsPath,'utf8'));
   assert.equal(installed.model,'synthetic');
-  // The installer writes forward slashes on Windows, so the command also runs in Git Bash.
   const quoted=process.platform==='win32'?runtime.replaceAll('\\','/'):runtime;
   assert.equal(installed.statusLine.command,`"/synthetic/node" "/synthetic/scripts/claude-statusline-bridge.mjs" --runtime "${quoted}"`);
   assert.deepEqual(JSON.parse(await readFile(settingsPath+'.observatory-backup','utf8')).statusLine,earlier);

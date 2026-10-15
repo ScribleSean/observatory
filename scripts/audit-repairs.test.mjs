@@ -36,13 +36,11 @@ test('Mac pause is visible in both surfaces and gear routes to Settings',async()
   const main=await read('native/main.swift');
   assert.match(main,/settings: \{ \[weak self\] in self\?\.openPanelSettings\(\)/);
   assert.match(main,/private func openPanelSettings\(\) \{ openDashboard\("settings"\) \}/);
-  // Recovery actions stay available while the failed operation's pause remains.
   const settings=await read('native/NativeSettings.swift');
   const recovery=settings.slice(settings.indexOf('Button("Pair with Windows'),settings.indexOf('if actions.preview { Text("Device changes'));
   assert.doesNotMatch(recovery,/collectionPausedForPairing|\.disabled\(busy/);
 });
 
-// Structural routing guard. Native desktop interaction remains a separate check.
 test('Windows native tray Configure reuses the main dashboard route',async()=>{
   const program=await read('native/windows/Program.cs');
   const configure=program.slice(program.indexOf('private void Configure()'),program.indexOf('private void RefreshStatus()'));

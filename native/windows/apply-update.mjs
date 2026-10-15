@@ -3,9 +3,6 @@ import {fileURLToPath} from 'node:url';
 import {readReceiptFile} from './verify-candidate.mjs';
 import {replaceSignedInstallation} from './verify-installation.mjs';
 
-// Internal entry point for the trusted external native helper. That caller
-// must hold UpdateSession and exclude other writers until this process exits.
-// Receipt path and key originate in trusted local configuration, not a feed.
 export function applyUpdate(installed,staged,previousReceiptPath,candidateEnvelopePath,trustedPublicKey) {
   const runtime=fileURLToPath(new URL('..',import.meta.url));
   for(const root of [installed,staged]) {

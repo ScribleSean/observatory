@@ -28,8 +28,6 @@ test('Mac Collector/scripts excludes source-test support', () => {
   assert.equal(loops.length, 1, 'Expected the native script-copy selector');
   const selected = [];
   const scripts = path.join(root, 'fictional-package', 'Collector', 'scripts');
-  // Execute only this trusted repository loop with inert copy callbacks.
-  // This is not a VM security sandbox or a native application build.
   vm.runInNewContext(loops[0][0], {
     root,
     scripts,
@@ -58,7 +56,6 @@ test('Mac Collector/scripts excludes source-test support', () => {
 });
 
 test('Windows Collector/scripts excludes source-test support', () => {
-  // Evaluate the literal Content globs, not MSBuild targets or a native build.
   const items = [
     ...source('native/windows/WorkspaceObservatory.csproj').matchAll(
       /<Content\s+([^>]+)>([\s\S]*?)<\/Content>/g,

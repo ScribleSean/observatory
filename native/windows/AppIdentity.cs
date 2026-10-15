@@ -1,7 +1,5 @@
 namespace WorkspaceObservatory;
 
-// Installed identity comes from the installer's owned marker, never a launch
-// flag. Shortcuts, direct launches and login startup therefore select alike.
 internal sealed record AppIdentity(bool IsTest)
 {
     internal const string TestName = "Workspace Observatory Installer Test";
@@ -50,7 +48,7 @@ internal sealed record AppIdentity(bool IsTest)
         if (owner is null)
         {
             if (testDirectory) throw new IOException("TEST installation identity is missing.");
-            return new(false); // Uninstalled source builds retain the ordinary identity.
+            return new(false);
         }
         var lines = owner.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
         if (lines.Length != 3 || lines[0] != "[Owner]" || !lines[2].StartsWith("Revision=", StringComparison.Ordinal) ||

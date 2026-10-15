@@ -13,9 +13,6 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const root = fileURLToPath(new URL('../', import.meta.url));
 const cache = new Map();
 
-// Render trusted repository TSX and shared controls, not snapshot-supplied code.
-// This loader uses full Node privileges, not a security sandbox or UI stubs.
-// Keep the transpiled code in memory so fixtures do not modify the source tree.
 function loadTsx(filename) {
   if (cache.has(filename)) return cache.get(filename).exports;
   const loaded = { exports: {} };

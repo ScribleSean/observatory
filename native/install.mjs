@@ -52,7 +52,6 @@ for(const name of ['usage.json','collector.json']) {
   const from=path.join(root,'public/local',name),to=path.join(local,name);
   if(existsSync(from) && !existsSync(to)) {cpSync(from,to);chmodSync(to,0o600);}
 }
-// Disable only the previous collector for this exact checkout. Its files remain recoverable.
 const old=path.join(home,'Library/LaunchAgents/io.ai-usage-dashboard.collector.plist');
 if(existsSync(old)) {
   const value=readFileSync(old,'utf8');

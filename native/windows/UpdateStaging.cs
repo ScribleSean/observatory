@@ -3,8 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
-// Prepares a candidate without quitting the app. Activation must reverify it
-// under UpdateSession. Receipt and key come from trusted local configuration.
 internal static class UpdateStaging
 {
     internal sealed record Result(string Staged, string EnvelopePath, string SourceRevision, long BuildNumber);

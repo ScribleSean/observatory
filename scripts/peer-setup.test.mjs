@@ -197,6 +197,5 @@ test('revocation during the remote call prevents subsequent local activation',as
   },'darwin'));
   await assert.rejects(readPairing(mac),/revoked/);
   await assert.rejects(access(path.join(mac,'private-sync/pairing.json')),{code:'ENOENT'});
-  // The acknowledged remote write remains; local revocation is not a remote rollback.
   assert.equal((await readPairing(windows)).local.host,'Windows');
 });

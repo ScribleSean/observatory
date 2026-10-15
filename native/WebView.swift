@@ -78,8 +78,6 @@ final class LocalNavigation: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 }
 
-// Routes the two saved snapshot files through the snapshot bridge. Every
-// other request goes to the bundled file guard.
 let snapshotFetchScript = """
 (() => {
   const original = window.fetch.bind(window);

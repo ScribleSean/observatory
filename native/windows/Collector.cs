@@ -89,7 +89,6 @@ internal sealed class Collector : IDisposable
         return exitVerified =>
         {
             if (Interlocked.Exchange(ref released, 1) != 0) return;
-            // Retain a collection pause if the owned helper may still be writing.
             pairingPaused = !exitVerified;
             operations.Complete();
             if (exitVerified && FirstRunSetup.AllowsCollection(runtime)) Start();
@@ -110,8 +109,6 @@ internal sealed class Collector : IDisposable
 
     private async Task MaintainPairing(bool repair)
     {
-        // The timer may have started work while the confirmation was open.
-        // Preserve the request to stop future collection even in that race.
         pairingPaused = true;
         if (lifetime.IsCancellationRequested || !operations.TryBegin()) throw new InvalidOperationException("A local operation is running.");
         try
@@ -152,8 +149,6 @@ internal sealed class Collector : IDisposable
             if (desired[key] is not JsonValue value || !value.TryGetValue<bool>(out var enabled)) throw new ArgumentException("Invalid source setting.");
             current[key] = enabled;
         }
-        // Older settings views do not expose this opt-in source yet. Preserve
-        // their save path while writing a secure default for legacy config.
         foreach (var optional in new[] { "claude" })
         {
             if (desired[optional] is JsonNode choice)
@@ -163,7 +158,6 @@ internal sealed class Collector : IDisposable
             }
             else current[optional] ??= false;
         }
-        // Older settings files carried two source selectors that are no longer read.
         foreach (var key in new[] { "wslDistribution", "quotaWslDistribution" }) current.Remove(key);
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, current.ToJsonString()); File.Move(temporary, file, true); }
@@ -216,7 +210,6 @@ internal sealed class Collector : IDisposable
         if (!quotaOnly) resumePending = false;
         try
         {
-            // Serialize app and command-line collection without relying on a stale PID file.
             using var locked = new FileStream(Path.Combine(runtime, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             var node = Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe");
             if (!File.Exists(node)) node = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe");
@@ -248,7 +241,6 @@ internal sealed class Collector : IDisposable
             try
             {
                 timeout.Token.ThrowIfCancellationRequested();
-                // This app owns the sole writer. Abrupt app death also sends EOF.
                 process.StandardInput.BaseStream.WriteByte(1);
                 process.StandardInput.BaseStream.Flush();
                 await process.WaitForExitAsync(timeout.Token);

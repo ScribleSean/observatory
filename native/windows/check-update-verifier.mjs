@@ -12,7 +12,6 @@ const root=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-native-updat
 try {
   const staged=path.join(root,'synthetic candidate');mkdirSync(staged);
   const revision='a'.repeat(40),hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-  // Public build bytes provide real version resources. This copied payload is never launched.
   const payload=readFileSync(executable);
   const manifest=Buffer.from(JSON.stringify({schema:1,platform:'win-x64',sourceRevision:revision,sourceDirty:false,
     totalBytes:payload.length,files:[{path:'WorkspaceObservatory.exe',bytes:payload.length,sha256:hash(payload)}]}));
@@ -49,7 +48,6 @@ try {
     const recoveries=readdirSync(root).filter(name=>name.startsWith('.observatory-update-'));
     assert.equal(recoveries.length,1);
     assert.deepEqual(readFileSync(path.join(root,recoveries[0],'previous','Uninstall.exe')),oldUninstaller);
-    // Restore only the synthetic staged fixture for the remaining rejection check.
     cpSync(installed,staged,{recursive:true});
     console.log('PASS: external native activation holds update session and replaces synthetic payload with previous files retained. No app relaunched.');
   } else console.log('SKIP: native activation test requires a disposable hosted Windows runner.');

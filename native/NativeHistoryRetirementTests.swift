@@ -41,7 +41,6 @@ private func testMalformedNativeAggregateProvenance() throws {
         } else {
             check(latest == nil && days.isEmpty, "Malformed provenance leaked into native All.")
         }
-        // The other category remains readable, including older per-device archive records.
         let other = kind == "tokens" ? "activity" : "tokens"
         let otherMetric = kind == "tokens" ? "seconds" : "totalTokens"
         check(number(imported.recordedDays(other, host: "Mac").last?[otherMetric]) == (kind == "tokens" ? 3000 : 10),

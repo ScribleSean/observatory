@@ -108,7 +108,6 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-chart-unknown { stroke-dasharray: 4 3; }
 .ob-chart-line { fill: none; stroke-width: 2; }
 .ob-chart-reveal { display: block; font-size: var(--ob-meta-size); cursor: pointer; }
-/* The extra .ob-chart selector keeps a view's own table rules (for example width: 100%) from undoing this. */
 .ob-visually-hidden, .ob-chart .ob-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 .ob-chart figcaption:has(input:checked) .ob-visually-hidden { position: static; width: 100%; height: auto; margin: 0; overflow: visible; clip: auto; clip-path: none; white-space: normal; }
 .ob-chart figcaption:has(input:checked) .ob-visually-hidden table { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }

@@ -2,7 +2,6 @@ import Foundation
 import AppKit
 import Darwin
 
-// Diagnostic fault fixtures only. The integration check uses unchanged helpers.
 @main
 struct PairingProcessDiagnosticsTests {
     static func main() throws {
@@ -56,8 +55,6 @@ struct PairingProcessDiagnosticsTests {
         }
         for operation in operations { try operation() }
         print("pairing-diagnostics exit=0 cases=9")
-        // The real packaged CLI must reject fictional wrong-type quota storage.
-        // No pairing is configured. All state belongs to this fresh runtime.
         let realResources = URL(fileURLWithPath: CommandLine.arguments[2])
         let realRuntime = root.appendingPathComponent("real-runtime")
         try files.createDirectory(at: realRuntime, withIntermediateDirectories: false,

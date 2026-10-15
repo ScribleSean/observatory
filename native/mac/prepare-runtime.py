@@ -80,7 +80,6 @@ def prepare(cache, output, assets):
     archives = {name: verified_archive(cache, asset) for name, asset in assets.items()}
     notices, exceptions = python_notices(archives['pythonFull'], assets['pythonFull'])
     manifest = {'schema': 1, 'assets': assets, 'licenseExceptions': exceptions, 'files': {}, 'symlinks': {}}
-    # Exclusive creation preserves any earlier verified payload on failure.
     with output.open('xb') as handle, gzip.GzipFile(filename='', fileobj=handle, mode='wb', mtime=0) as compressed, tarfile.open(fileobj=compressed, mode='w') as target:
         def add_bytes(name, data):
             member = tarfile.TarInfo(name)

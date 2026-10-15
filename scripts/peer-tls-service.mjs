@@ -12,7 +12,6 @@ import {serveTLSSetupControl} from './peer-tls-control.mjs';
 async function readBinding(runtime) {
   return withPeerStateLock(runtime,async()=>{
     const pairing=await readPairing(runtime);
-    // Legacy SSH and incomplete TLS configurations never guess a bind address.
     if(pairing?.transport?.kind!=='tls' || !pairing.localEndpoint)return null;
     const trust=await readPeerTrust(runtime);
     if(!trust)throw Error('Confirmed trust required');
@@ -20,8 +19,6 @@ async function readBinding(runtime) {
   });
 }
 
-// Owned by the native app through a private stdin pipe. No identity creation,
-// setup operations, public bind, discovery or independent startup registration.
 export function createTrustedSyncService(runtime,{read=readBinding,start=startTrustedSyncListener,
   schedule=callback=>setInterval(callback,30000),unschedule=clearInterval}={}) {
   let listener=null,binding=null,pending=null,timer=null,closed=false,status='sync-disabled';
@@ -42,7 +39,6 @@ export function createTrustedSyncService(runtime,{read=readBinding,start=startTr
         if(!next){status='sync-disabled';return;}
         const created=await start(runtime,next.pairing.localEndpoint,{expectedPairing:next.pairing});
         listener=created;
-        // Check again after binding. Never retain a listener from a stale start.
         if(closed || !isDeepStrictEqual(await read(runtime),next)) {await stopListener();status='sync-disabled';return;}
         listener=created;binding=next;status='sync-listening';
       } catch {await stopListener();status='unavailable';}
@@ -74,8 +70,6 @@ async function main() {
   const stop=()=>process.stdin.destroy();
   process.once('SIGTERM',stop);process.once('SIGINT',stop);
   try {
-    // Native launch itself is the lifecycle action. No polling commands are
-    // required from the parent, so the bounded command-ID space cannot expire.
     await Promise.all([serveTLSSetupControl(args[1],process.stdin,process.stdout,{controller}),
       controller.run({action:'status'})]);
   }

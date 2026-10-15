@@ -3,8 +3,6 @@ using System.Text.Json;
 
 namespace WorkspaceObservatory;
 
-// An installed receipt becomes trusted only after signature and inventory
-// verification. A receipt found on disk or beside a download is not authority.
 internal static class UpdateInstalledState
 {
     internal sealed record Result(string ReceiptPath, string SourceRevision, long BuildNumber);
@@ -27,8 +25,6 @@ internal static class UpdateInstalledState
         if (Path.Exists(retained)) throw new IOException("Retained trust directory already exists.");
         Directory.CreateDirectory(retained);
         var envelope = UpdateDownload.RetainReceipt(signedReceipt, retained);
-        // Keep the exact bytes immutable while the installed verifier reads them
-        // and until the authenticated receipt has been retained independently.
         using var lease = new FileStream(envelope, FileMode.Open, FileAccess.Read, FileShare.Read);
         var identity = await UpdateCandidate.Verify(installed, envelope, pinnedKey, 0, cancellation);
         if (identity.BuildNumber != expectedBuild)

@@ -25,8 +25,6 @@ internal static class UpdateRegistration
         return new(keyPath, installed, Text("DisplayVersion"));
     }
 
-    // Caller holds the update session and invokes this only after payload verification.
-    // Never rewrite startup, shortcut, consent or unrelated registry values.
     internal static void SetVersion(Snapshot expected, string version)
     {
         if (!Regex.IsMatch(version, @"^\d+\.\d+\.\d+$") || version.Length > 32)

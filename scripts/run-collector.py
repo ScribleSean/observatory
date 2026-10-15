@@ -33,7 +33,6 @@ def write_status(folder, value, name='collector.json'):
 
 
 def stop_child(child):
-    # This process group was created exclusively for this collection.
     if child.poll() is not None:
         return
     try:
@@ -70,7 +69,6 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
         write_status(folder, state, status_name)
         child = None
         try:
-            # Keep the normal installed tool locations available at login.
             env = dict(os.environ)
             env['PATH'] = os.pathsep.join(dict.fromkeys([
                 str(pathlib.Path(node).parent), '/opt/homebrew/bin', '/usr/local/bin',
@@ -80,7 +78,6 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
                 if not collector.is_absolute() or collector.name != 'collect-mac.mjs':
                     raise ValueError('Unsupported collector entrypoint')
             env['OBSERVATORY_RUNTIME'] = str(root)
-            # Source and bundled collectors use this runner's selected Python.
             python = sys.executable if python is None else python
             if (not isinstance(python, str) or not os.path.isabs(python)
                     or any(ord(char) in (0, 10, 13) for char in python)

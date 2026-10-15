@@ -2,8 +2,6 @@ using System.Text.Json;
 
 namespace WorkspaceObservatory;
 
-// Only release-controlled configuration embedded in the installed application
-// may establish update trust. Never read a replacement key from a feed or download.
 internal sealed class UpdateTrust
 {
     internal const string Feed = "https://scriblesean.github.io/observatory/updates/windows-x64.xml";

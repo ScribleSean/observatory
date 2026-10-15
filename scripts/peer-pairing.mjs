@@ -48,8 +48,6 @@ export function validatePairing(value) {
   return result;
 }
 
-// Returns private configuration in memory only. Delivery requires authenticated
-// transport and explicit device setup. Never print this return value to logs.
 export function createPairingConfigurations(...options) {
   if(options.some(value=>value!==undefined))throw Error('Pairing options are not supported.');
   const id=()=>randomBytes(32).toString('hex');
@@ -69,7 +67,6 @@ async function initializePairingLocked(runtime,value) {
   if((await readdir(directory)).length)throw Error('Private state already exists; explicit repair or rotation required');
   const file=await open(path.join(directory,'pairing.json'),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
   try {await file.writeFile(bytes);await file.sync();}finally{await file.close();}
-  // Check the resulting inherited Windows ACL before any collector uses it.
   await privateSyncDirectory(runtime);
 }
 
@@ -112,8 +109,6 @@ async function writeSetupFile(directory,name,value) {
   try {await file.writeFile(bytes);await file.sync();}finally{await file.close();}
 }
 
-// Pending state is not consumed by collectors. A failed remote acknowledgement
-// leaves the same generation available for an explicit retry.
 export const preparePendingPairing=(runtime,value)=>withPeerStateLock(runtime,()=>preparePendingPairingLocked(runtime,value));
 async function preparePendingPairingLocked(runtime,value) {
   const safe=validatePairing(value);
@@ -127,9 +122,6 @@ async function preparePendingPairingLocked(runtime,value) {
   return safe;
 }
 
-// Only call after the authenticated peer acknowledged this exact generation.
-// Exclusive creation prevents overwriting an active or partially written file.
-// A corrupt partial file needs explicit repair; it is never silently replaced.
 export const activatePendingPairing=(runtime,expected)=>withPeerStateLock(runtime,()=>activatePendingPairingLocked(runtime,expected));
 async function activatePendingPairingLocked(runtime,expected) {
   const safe=validatePairing(expected),directory=await privateSyncDirectory(runtime);

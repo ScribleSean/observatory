@@ -13,8 +13,6 @@ enum SnapshotArchive {
         return Snapshot(object: object)
     }
 
-    // User-selected archive only. Never follows links or opens a live store,
-    // executes content, changes collection, or merges this data into live totals.
     static func read(_ url: URL) throws -> Snapshot {
         let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
         guard descriptor >= 0 else { throw CocoaError(.fileReadNoPermission) }

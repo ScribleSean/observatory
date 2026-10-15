@@ -4,8 +4,6 @@ import {fileURLToPath} from 'node:url';
 import {authenticateInstallationReceipt} from './signed-receipt.mjs';
 import {verifyInstallation} from './verify-installation.mjs';
 
-// This command comes from the trusted installed runtime, never the candidate.
-// Public key and previous build are trusted caller configuration, not feed fields.
 export function readReceiptFile(envelopePath) {
   if(typeof envelopePath!=='string' || !path.isAbsolute(envelopePath) ||
     path.resolve(envelopePath)!==realpathSync(envelopePath))throw Error('Canonical receipt path required');

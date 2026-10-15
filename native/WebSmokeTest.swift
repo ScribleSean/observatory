@@ -26,7 +26,6 @@ private final class SmokeBridgeHost: BridgeHost {
     func documentEnded() {}
 }
 
-// Exercises the bundled renderer and narrow data bridge with synthetic data, without a window.
 @MainActor
 final class WebSmokeTest: NSObject, WKNavigationDelegate {
     private var web: WKWebView?
@@ -231,7 +230,6 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     }
     private func bridgeCheck(_ view: WKWebView, script: String) async throws -> Bool {
-        // The page sends its own status messages with small ids, so these checks use ids from 9001 and match results by id.
         let value = try await view.callAsyncJavaScript("""
         const results = window.smokeBridgeResults;
         const canonical = value => JSON.stringify(value, (_, item) =>
@@ -260,7 +258,6 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
         return value as? Bool == true
     }
     private func checkBridge(_ view: WKWebView, host: SmokeBridgeHost, bridge: BridgeHandler, resources: URL) async throws -> Bool {
-        // Only actions other than status are compared, because the page also reads status on its own.
         func others() -> [String] { host.actions.filter { $0 != "status" } }
         guard try await bridgeCheck(view, script: """
         post(9001);
@@ -345,8 +342,6 @@ final class WebSmokeTest: NSObject, WKNavigationDelegate {
             let denied = false;
             try { await window.webkit.messageHandlers.snapshot.postMessage('../native-runtime'); }
             catch { denied = true; }
-            // React mounts asynchronously. Verify the primitive's actual semantics,
-            // not only the CSS orientation attribute on its wrapper.
             let views;
             for (let attempt = 0; attempt < 100; attempt++) {
               views = document.querySelector('[role="tablist"][aria-label="Usage views"]');

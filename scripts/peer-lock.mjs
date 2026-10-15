@@ -8,10 +8,6 @@ import {privateCollectorDirectory} from './peer-directory.mjs';
 
 const held=new AsyncLocalStorage();
 
-// SQLite supplies a process-crash-safe local mutex outside the directory that
-// repair retires. No pairing records or credentials are stored in this file.
-// Short contention waits asynchronously. Longer operations fail within a bound
-// so callers can retry rather than blocking the UI or resetting peer state.
 export async function withPeerStateLock(runtime,action) {
   if(held.getStore()?.get(runtime)?.active)return action();
   const directory=await privateCollectorDirectory(runtime,'private-repair',true);
@@ -39,8 +35,6 @@ export async function withPeerStateLock(runtime,action) {
     if(after.dev!==before.dev || after.ino!==before.ino)throw Error('Changing pairing operation lock');
     if(database.prepare('PRAGMA journal_mode').get().journal_mode!=='delete')throw Error('Unsupported pairing lock mode');
     database.exec('PRAGMA busy_timeout=0; PRAGMA trusted_schema=OFF');
-    // Windows verifies protected ACLs through its system helper while holding
-    // the lease. Allow short normal writers to finish before treating it busy.
     const deadline=performance.now()+(process.platform==='win32'?5000:1000);
     for(;;) {
       try {database.exec('BEGIN IMMEDIATE');break;}

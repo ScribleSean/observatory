@@ -8,7 +8,6 @@ export function macCollectorConfig(raw) {
   const keys=['activity','codex','claude','wispr','typewhisper','quota','antigravity','receipts','benchmarks'];
   if(!raw || typeof raw!=='object' || Array.isArray(raw) ||
     Object.keys(raw).some(key=>!keys.includes(key) || typeof raw[key]!=='boolean'))throw Error('Invalid local Mac source settings');
-  // Accept retired antigravity, typewhisper, receipts and benchmarks booleans only for reading existing configuration.
   return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,quota:raw.quota===true};
 }
 
@@ -48,8 +47,6 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
   const sourcesRead=sources.filter(source=>source.status==='ok').length;
   const result={data,status:{state:sources.length && sourcesRead===sources.length?'ok':'partial',sourcesRead,sourcesConfigured:sources.length}};
   if(peerConfig) {
-    // This separate return value must never be included in dashboard JSON.
-    // Failed peer export must not prevent independent local collection.
     try {
       if(peerConfig.host!=='Mac')throw Error('Wrong local peer identity');
       result.peer={status:'ready',payload:createPeerPayload({collectedAt:new Date(at).toISOString(),

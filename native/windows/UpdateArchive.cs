@@ -3,8 +3,6 @@ using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
-// Staging is not authentication. Verify the signed installation receipt and
-// full extracted inventory before executing or promoting any extracted file.
 internal static class UpdateArchive
 {
     internal sealed record Limits(long ArchiveBytes = 512 * 1024 * 1024L,

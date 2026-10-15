@@ -107,8 +107,6 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
   attachQuota(result,quota);
   await attachQuotaSync(runtime,result,{enabled:config.quota});
-  // Windows does not infer a WSL Claude installation. Optional provider sharing
-  // uses its own channel and never changes the core Codex peer payload.
   let claude;
   if(!config.claude) claude=unavailableClaudeTokenSource('Windows',new Date().toISOString(),'not-connected');
   else try {
@@ -117,9 +115,8 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     claude=cleanClaudeTokenSource(raw,'Windows');
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   await attachProviderTokenSync(runtime,result,claude);
-  attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
+  attachProviderTokenEstimates(result);
   signal?.throwIfAborted();
-  // Account-wide limits observed on this device. They are not shared with a paired device.
   attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});

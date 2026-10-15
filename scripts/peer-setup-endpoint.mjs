@@ -5,8 +5,6 @@ import {validatePairing,readPairing,initializePairing} from './peer-pairing.mjs'
 import {withPeerStateLock} from './peer-lock.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
 
-// This endpoint is reachable only through a separately authenticated local
-// invocation (normally SSH). It creates no listener and grants no SSH access.
 export const ensureWindowsPairing=(runtime,request,platform=process.platform)=>
   withPeerStateLock(runtime,()=>ensureWindowsPairingLocked(runtime,request,platform));
 async function ensureWindowsPairingLocked(runtime,request,platform) {
@@ -22,8 +20,6 @@ async function ensureWindowsPairingLocked(runtime,request,platform) {
   if(!existing) {
     try {await initializePairing(runtime,desired);}
     catch(error) {
-      // A concurrent retry may have finished the same exclusive initialization.
-      // Never repair or replace an unreadable or different pairing here.
       existing=await readPairing(runtime);
       if(!existing)throw error;
     }

@@ -14,9 +14,6 @@ function validate(value,expected,now) {
   return Object.fromEntries(fields.map(key=>[key,value[key]]));
 }
 
-// Called only after authenticated transport and strict payload validation.
-// A digest is an integrity identifier, not a signature or proof of peer identity.
-// The caller persists this watermark with the accepted payload in one transaction.
 export function selectPeerRevision(current,incoming,expected,now=Date.now()) {
   if(!Number.isFinite(now) || !expected ||
     !['Mac','Windows'].includes(expected.host) ||

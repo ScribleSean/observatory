@@ -279,7 +279,6 @@ func runSelfTests() {
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-preview-settings-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: runtime) }
         let preview = ObservatoryStore(runtime: runtime, collectionAllowed: false)
-        // Even a configuration enabling sources must not start collection in a preview.
         try! CollectorConfiguration.save(CollectorConfiguration.defaults, runtime: runtime)
         precondition((try? CollectorConfiguration.read(runtime: runtime))?["codex"] == true)
         preview.refresh()
@@ -291,12 +290,10 @@ func runSelfTests() {
             draft["quota"] = true
             let saved = try CollectorConfiguration.saveIfUnchanged(draft, expected: baseline, runtime: runtime)
             precondition(saved && (try? CollectorConfiguration.read(runtime: runtime)) == draft)
-            // An editor holding the old version must not overwrite a newer save.
             let staleSave = try CollectorConfiguration.saveIfUnchanged(baseline, expected: baseline, runtime: runtime)
             precondition(!staleSave && (try? CollectorConfiguration.read(runtime: runtime)) == draft)
             let invalidSave = try? CollectorConfiguration.saveIfUnchanged(["unknown-source": true], expected: draft, runtime: runtime)
             precondition(invalidSave == nil && (try? CollectorConfiguration.read(runtime: runtime)) == draft)
-            // Reloading the saved version allows a deliberate subsequent edit.
             let reloadedSave = try CollectorConfiguration.saveIfUnchanged(baseline, expected: draft, runtime: runtime)
             precondition(reloadedSave && (try? CollectorConfiguration.read(runtime: runtime)) == baseline)
             preview.refresh()
@@ -373,7 +370,6 @@ func runSelfTests() {
     precondition((try? CollectorConfiguration.validate(["quota": true]))?["quota"] == true)
     precondition(CollectorConfiguration.defaults["quota"] == false)
     precondition(CollectorConfiguration.defaults["claude"] == false)
-    // A saved key for a removed source is still accepted and is no longer kept.
     precondition(CollectorConfiguration.defaults["antigravity"] == nil)
     precondition((try? CollectorConfiguration.validate(["antigravity": true])).map { $0["antigravity"] == nil } == true)
     precondition((try? CollectorConfiguration.validate(["antigravity": "true"])) == nil)
@@ -466,7 +462,6 @@ func runSelfTests() {
         precondition(migrated == CollectorConfiguration.defaults)
         let preparedLegacyBytes = try Data(contentsOf: legacyFile)
         precondition(preparedLegacyBytes == legacyBytes)
-        // Retain legacy configuration, but never launch its old collector code.
         let resources = directory.appendingPathComponent("fixture-resources")
         for relative in ["Runtime/python/bin/python3", "Runtime/node/bin/node", "Collector/scripts/run-collector.py",
                          "Collector/scripts/collect-mac.mjs"] {
@@ -585,7 +580,6 @@ func runSelfTests() {
     let refused: [Any] = ["", "Refresh", "refresh ", "quit", "open-dashboard:settings", ["refresh"], ["panelAction": "refresh"], 1, NSNull()]
     for value in refused { precondition(PanelAction.parse(value) == nil, "Unknown panel action accepted") }
     do {
-        // Checked on plain values so the test writes no preferences file.
         precondition(WebViewerPreferences.skin(stored: nil) == "sage", "Missing skin must use Sage")
         precondition(WebViewerPreferences.theme(stored: nil) == nil, "Missing theme must follow the system")
         for skin in ["almanac", "amber-crt"] {

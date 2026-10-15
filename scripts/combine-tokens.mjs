@@ -7,7 +7,6 @@ const empty = () => Object.fromEntries(fields.map(k=>[k,0]));
 const add = (target, row) => fields.forEach(k=>{target[k]+=row[k];});
 
 export function verifyHostInventory(sources, inventories, expectedHosts=['Mac','Windows']) {
-  // Pair configuration defines coverage. Never infer it from whichever peers responded.
   if (!Array.isArray(expectedHosts) || expectedHosts.length!==2 ||
       new Set(expectedHosts).size!==expectedHosts.length ||
       !['Mac','Windows'].every(host=>expectedHosts.includes(host)) ||
@@ -36,8 +35,6 @@ export function combineTokens(sources, inventories, expectedHosts) {
   if (verification.status !== 'verified') return {host:'All',status:verification.status,verification};
   const days=new Map();
   for (const source of sources) for (const row of source.days) {
-    // A successful source read with no row means no recorded usage on that day.
-    // A malformed row is unknown, never silently treated as zero.
     if (fields.some(k=>!valid(row[k])) || !Array.isArray(row.models) ||
         row.models.some(m=>fields.some(k=>!valid(m[k]))) ||
         fields.some(k=>row.models.reduce((n,m)=>n+m[k],0)!==row[k]))

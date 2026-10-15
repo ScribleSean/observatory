@@ -40,8 +40,6 @@ struct TLSSetupReply: Decodable {
     }
 }
 
-// Owned by one native setup window. Commands and invitations use private pipes,
-// never shell arguments, webview messages, logs or a local HTTP endpoint.
 final class TLSSetupProcess {
     typealias Completion = (Result<TLSSetupReply, Error>) -> Void
     private let process = Process(), input = Pipe(), output = Pipe()
@@ -123,7 +121,6 @@ final class TLSSetupProcess {
         }
     }
 
-    // UI must first disclose the restricted-file storage policy and obtain consent.
     func prepareIdentity(storageConsent: Bool, completion: @escaping Completion) {
         guard storageConsent else {
             DispatchQueue.main.async { completion(.failure(CocoaError(.userCancelled))) }; return

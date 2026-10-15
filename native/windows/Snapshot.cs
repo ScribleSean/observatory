@@ -60,7 +60,6 @@ internal static class Snapshot
     {
         if (kind is not ("activity" or "tokens")) return false;
         var keys = kind == "tokens" ? new[] { "tokens", "settings" } : new[] { "activity", "activityHistory" };
-        // Missing optional sources are valid. Present malformed sources cannot prove scope.
         JsonObject[]? ScopeRows(string key)
         {
             if (snapshot is null || !snapshot.TryGetPropertyValue(key, out var value)) return [];
@@ -74,8 +73,6 @@ internal static class Snapshot
             Text(row["host"]) is not ("Mac" or "Windows") && !(kind == "activity" && Text(row["host"]) == "Combined") &&
             (Text(row["status"]) != "not-connected" || new[] { "days", "profiles", "tools" }.Any(key =>
                 row.TryGetPropertyValue(key, out var value) && value is not JsonArray { Count: 0 })))) return false;
-        // Activity's collector contract is native-only. Legacy token verification
-        // can cover another device too, so require the original native source set as well.
         if (kind == "activity") return true;
         return new[] { "Mac", "Windows" }.All(host =>
         {

@@ -1,7 +1,5 @@
 import {readFileSync} from 'node:fs';
 
-// One checked-in version source for both app builds and installer names.
-// Build numbers must advance for releases, even when the display version stays.
 export function parseReleaseVersion(xml) {
   if(typeof xml!=='string' || xml.length>4096)throw Error('Invalid desktop release version');
   const version=[...xml.matchAll(/<Version>([^<]+)<\/Version>/g)];

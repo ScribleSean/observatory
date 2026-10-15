@@ -2,8 +2,6 @@ namespace WorkspaceObservatory;
 
 internal static class LaunchArguments
 {
-    // Validate before any dispatch. A misspelled or truncated fixture command
-    // must never fall through to an ordinary application launch.
     internal static bool Valid(string[] args)
     {
         if (args.All(argument => argument is "--background" or "--native-dashboard" or "--web-panel" or "--web-dashboard" or "--panel-timing"))
@@ -30,8 +28,6 @@ internal static class LaunchArguments
         return args.Length == count;
     }
 
-    // Installed TEST apps do not run release updates or helpers accepting an
-    // arbitrary runtime path. Source-tree fixtures retain their existing modes.
     internal static bool ValidForTestInstallation(string[] args) => Valid(args) &&
         (args.Length == 0 || args[0] is "--background" or "--native-dashboard" or "--web-panel" or "--web-dashboard" or "--panel-timing" or
             "--self-test" or "--quit-for-update" or "--update-ready" or "--test-update-ready" or

@@ -4,8 +4,6 @@ const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const hosts=['Mac','Windows'];
 const fields=['version','comparisonId','host','status','keys','parents'];
 
-// Private peer evidence only. comparisonId identifies a shared salt generation,
-// not the salt itself. Neither comparison keys nor the salt belong in usage.json.
 export function validatePeerInventory(value,expectedHost,comparisonId) {
   if(!hosts.includes(expectedHost) || !hex(comparisonId) || !value ||
     typeof value!=='object' || Array.isArray(value) ||
@@ -18,7 +16,6 @@ export function validatePeerInventory(value,expectedHost,comparisonId) {
 }
 
 export function combinePeerTokens(sources,evidence,comparisonId,expectedHosts,evidenceHosts=expectedHosts) {
-  // Pairing defines metric coverage separately from ancestry-only evidence.
   if(!Array.isArray(expectedHosts) || !Array.isArray(evidenceHosts) ||
     evidenceHosts.length!==2 || new Set(evidenceHosts).size!==evidenceHosts.length ||
     evidenceHosts.some(host=>!hosts.includes(host)) || expectedHosts.some(host=>!evidenceHosts.includes(host)) ||
@@ -36,8 +33,6 @@ export function combinePeerTokens(sources,evidence,comparisonId,expectedHosts,ev
   const verification=verifyHostInventory(sources,inventories,expectedHosts);
   if(verification.status!=='verified')return {host:'All',status:verification.status,verification};
 
-  // The wire inventories flatten per-session edges. Conservatively follow
-  // connected host inventories, including hosts whose counters are not counted.
   const ancestry=Object.entries(inventories).map(([host,row])=>({host,keys:[...row.keys,...row.parents]}));
   for(const host of expectedHosts) {
     const reached=new Set([host]),keys=new Set(ancestry.find(row=>row.host===host).keys);
@@ -51,7 +46,6 @@ export function combinePeerTokens(sources,evidence,comparisonId,expectedHosts,ev
     if(expectedHosts.some(other=>other!==host && reached.has(other)))
       return {host:'All',status:'overlap',verification:{status:'overlap'}};
   }
-  // A parent absent from every supplied inventory may hide another bridge.
   const knownKeys=new Set(Object.values(inventories).flatMap(row=>row.keys));
   if(Object.values(inventories).some(row=>row.parents.some(parent=>!knownKeys.has(parent))))
     return {host:'All',status:'unverified'};

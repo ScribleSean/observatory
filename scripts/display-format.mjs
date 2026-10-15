@@ -1,4 +1,3 @@
-// Presentation only. Never changes stored observations or measurement units.
 export function durationText(seconds) {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return 'Unknown';
   if (seconds === 0) return '0m';

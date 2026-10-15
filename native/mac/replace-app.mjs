@@ -8,10 +8,6 @@ const signature=folder=>execFileSync('/usr/bin/codesign',['--verify','--deep','-
   {stdio:'pipe',timeout:30000});
 const processes=()=>execFileSync('/bin/ps',['-axo','comm='],{encoding:'utf8',timeout:10000});
 
-// Trusted local installer entry point, not a downloaded update endpoint. Receipts
-// must be authenticated independently. Never derive them from untrusted input.
-// The caller first stages a sibling bundle and requests normal application quit.
-// This function never launches a bundle or accesses the collection runtime.
 export function replaceMacApp({installed,staged,previousManifest,candidateManifest,
   verifySignature=signature,runningProcesses=processes}) {
   if(process.platform!=='darwin')throw Error('Mac app replacement requires macOS');

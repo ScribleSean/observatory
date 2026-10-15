@@ -23,12 +23,10 @@ function base64(value,length) {
   return bytes;
 }
 
-// The release signer signs these bytes outside the application. No private key is accepted here.
 export function installationReceiptSigningBytes(receipt) {
   return Buffer.from(domain+JSON.stringify(canonicalReceipt(receipt)),'utf8');
 }
 
-// trustedPublicKey is pinned application configuration, never a field from the download.
 export function authenticateInstallationReceipt(envelopeBytes,trustedPublicKey,previousBuild) {
   if(!Buffer.isBuffer(envelopeBytes) || envelopeBytes.length===0 || envelopeBytes.length>8192)
     throw Error('Invalid receipt envelope size');

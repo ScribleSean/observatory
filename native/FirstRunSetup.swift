@@ -25,8 +25,6 @@ enum FirstRunSetup {
         guard info.isDirectory == true, info.isSymbolicLink != true else { throw CocoaError(.fileWriteNoPermission) }
         let pending = try required(runtime: runtime)
         if pending && !FileManager.default.fileExists(atPath: file(runtime).path) {
-            // Persist the pending gate before creating collection settings. A
-            // restart during setup must not silently opt the user into collection.
             try write(completed: false, runtime: runtime)
             try CollectorConfiguration.save(Dictionary(uniqueKeysWithValues: CollectorConfiguration.defaults.keys.map { ($0, false) }), runtime: runtime)
         }

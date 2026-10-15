@@ -1,4 +1,3 @@
-"""Synthetic policy tests. No platform ACL changes or real private data."""
 import importlib.util
 import pathlib
 import stat

@@ -11,8 +11,6 @@ function unlinkedDirectory(value) {
   }
 }
 
-// Read-only recovery assessment. Caller supplies trusted paths and a verifier
-// bound to the previous and candidate receipts. Journal text is not authority.
 export function inspectPayloadRecovery({installed,staged,recovery,verify}) {
   if(typeof verify!=='function')throw Error('Payload verification is required');
   for(const value of [installed,staged,recovery]) {
@@ -51,15 +49,12 @@ export function inspectPayloadRecovery({installed,staged,recovery,verify}) {
   return {state,payloads};
 }
 
-// Caller must hold the installer and collector locks and keep the app stopped.
-// Restore only the unambiguous gap before candidate promotion. No files are deleted.
 export function restoreInterruptedPayload(options) {
   const {installed,recovery,verify}=options;
   if(inspectPayloadRecovery(options).state!=='previous-awaiting-restore')
     throw Error('Interrupted payload requires manual inspection');
   const previous=path.join(recovery,'previous');
   const expected=verify(previous,'previous');
-  // Refuse even an empty obstruction. The caller must exclude concurrent writers.
   let absent=false;
   try { lstatSync(installed); } catch(error) { if(error.code==='ENOENT')absent=true; else throw error; }
   if(!absent)throw Error('Installed path appeared during recovery');
@@ -70,16 +65,11 @@ export function restoreInterruptedPayload(options) {
       throw Error('Restored payload identity changed');
     return {state:'previous-restored',installed,recovery,sourceRevision:restored.sourceRevision};
   } catch(error) {
-    // Leave the relocated bytes in place for inspection, never delete or retry them.
     throw Object.assign(new Error('Restored payload verification failed. Manual inspection required.',{cause:error}),
       {installed,recovery});
   }
 }
 
-// The updater must run outside the directory being replaced. Before calling,
-// hold the installer and collector locks, stop the app, authenticate the staged
-// release and capture registration. This primitive changes only payload paths.
-// verify must synchronously check full inventories, revisions and ownership.
 export function replacePayload({installed,staged,verify,prepareRecovery=()=>{}}) {
   if(typeof verify!=='function')throw Error('Payload verification is required');
   if(typeof prepareRecovery!=='function')throw Error('Recovery preparation must be a function');
@@ -107,8 +97,6 @@ export function replacePayload({installed,staged,verify,prepareRecovery=()=>{}})
   };
   let movedOld=false,movedNew=false;
   try {
-    // Retain caller-authenticated evidence before moving either payload.
-    // Preparation must be synchronous and must throw if persistence fails.
     const preparation=prepareRecovery(recovery);
     if(preparation && typeof preparation.then==='function')throw Error('Recovery preparation must be synchronous');
     record('prepared');
@@ -124,8 +112,6 @@ export function replacePayload({installed,staged,verify,prepareRecovery=()=>{}})
     record('payload-verified');
     return {installed,recovery,previous,journal,sourceRevision:newIdentity.sourceRevision};
   } catch(error) {
-    // Never remove a payload, overwrite a backup or retry an uncertain move.
-    // An interrupted process leaves the journal and directories for inspection.
     let restored=false;
     try {
       if(movedNew)renameSync(installed,rejected);

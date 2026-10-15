@@ -50,7 +50,6 @@ internal static class LoginStartup
             try { Command(invalid); } catch (ArgumentException) { rejected = true; }
             Check(rejected);
         }
-        // Use a unique test key, never the real login-startup key.
         var testPath = @"Software\WorkspaceObservatoryTests\" + Guid.NewGuid().ToString("N");
         try
         {

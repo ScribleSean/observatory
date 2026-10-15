@@ -41,7 +41,6 @@ func testDirectPairingModel() async {
     precondition(Set((bridge.requests.last ?? [:]).keys) ==
         Set(["action", "peerCertificateSha256", "localEndpoint", "peerEndpoint"]))
     subject.shutdown(); subject.shutdown(); precondition(bridge.closed == 1)
-    // New pairing requests include only native devices on either side.
     let joinBridge = PairingTestBridge()
     let joining = DirectPairingModel(bridge: joinBridge, polling: false)
     joining.storageConsent = true

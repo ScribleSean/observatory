@@ -5,8 +5,6 @@ import { readFile } from 'node:fs/promises';
 const source = (file) =>
   readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 
-// Cross-platform source contracts complement the native UI and model tests.
-// These run on Windows without pretending to compile AppKit or SwiftUI.
 for (const file of [
   'Panel.swift',
   'windows/Program.cs',

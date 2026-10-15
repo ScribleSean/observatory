@@ -51,8 +51,6 @@ function codex(raw,host,comparisonId) {
   return {...safe,inventory};
 }
 
-// Outbound construction strips fields through the existing source cleaners.
-// Only this private payload carries intervals and keyed comparison inventories.
 export function createPeerPayload(raw,config) {
   configuration(config);
   if(!raw || !timestamp(raw.collectedAt) || !Array.isArray(raw.codex) || raw.codex.length!==1)
@@ -73,8 +71,6 @@ export function createPeerPayload(raw,config) {
     activity:activity(raw.activity,config.host),codex:sources,dictation};
 }
 
-// Incoming bytes must already have an authenticated transport identity. Reject
-// any difference from the allowlisted form instead of silently accepting extras.
 export function parsePeerPayload(text,config,now=Date.now()) {
   if(typeof text!=='string' || Buffer.byteLength(text)>16_000_000 || !Number.isFinite(now))throw Error('Invalid peer payload size');
   const raw=JSON.parse(text),safe=createPeerPayload(raw,config);
@@ -82,8 +78,6 @@ export function parsePeerPayload(text,config,now=Date.now()) {
   return safe;
 }
 
-// Pure dashboard construction shared by both native collectors. Callers retain
-// private peer state separately and publish only this sanitized projection.
 export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],now=Date.now()) {
   if(localConfig.host===peerConfig.host || localConfig.comparisonId!==peerConfig.comparisonId)throw Error('Invalid peer pair');
   const payloads=[parsePeerPayload(JSON.stringify(local),localConfig,now),parsePeerPayload(JSON.stringify(peer),peerConfig,now)]
@@ -97,7 +91,6 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   const evidenceHosts=[localConfig.host,peerConfig.host];
   const evidence=payloads.flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
     version:1,comparisonId:p.comparisonId,host:row.host,...row.inventory,
-    // Recorded usage requires a nonempty inventory.
     status:!row.inventory.keys.length && (row.profiles.some(profile=>profile.totalTokens>0) ||
       row.tokenProfiles?.some(profile=>profile.totalTokens>0))
       ?'incomplete':row.inventory.status})));

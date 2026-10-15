@@ -23,8 +23,6 @@ command[promisify.custom] = async (...args) => active.execute(...args);
 const absent = () =>
   Object.assign(Error('Synthetic absent entry'), { code: 'ENOENT' });
 
-// Entire filesystem, metadata and native verifier are modeled. No chmod,
-// Set-Acl, subprocess verifier or directory-substitution experiment is run.
 async function model(t, { platform = 'darwin', reject = () => false } = {}) {
   const owned = await fs.mkdtemp(path.join(tmpdir(), 'observatory-boundary-'));
   const runtime = path.join(owned, 'runtime');
@@ -216,7 +214,6 @@ for (const acl of [
       reject: ({ name, mode, entries }) =>
         mode === '--private' && entries.get(name)?.acl === acl,
     });
-    // Native --private is authoritative even when POSIX bits report 0700.
     m.leafPatch = { acl };
     await assert.rejects(
       m.archive.archiveMacSnapshot(m.file, m.archiveRoot),

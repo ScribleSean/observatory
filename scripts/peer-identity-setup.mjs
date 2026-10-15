@@ -9,7 +9,6 @@ async function assertNewDevice(runtime) {
   throw Error('Existing pairing requires explicit identity recovery');
 }
 
-// Read-only status. Missing identity for existing pairing is not first launch.
 export async function deviceIdentitySetupStatus(runtime) {
   try {
     if(await readDeviceIdentity(runtime))return {status:'identity-ready'};
@@ -18,8 +17,6 @@ export async function deviceIdentitySetupStatus(runtime) {
   } catch {return {status:'identity-recovery-required'};}
 }
 
-// Explicit setup only. A saved identity is reused, never replaced. The caller
-// must disclose that this is a restricted plaintext file, not an OS key vault.
 export async function prepareDeviceIdentity(runtime,{storage,generate,signal}) {
   if(storage!=='restricted-file' || typeof generate!=='function' || signal?.aborted)
     throw Error('Explicit identity storage consent required');

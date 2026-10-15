@@ -1,4 +1,3 @@
-// Run against the existing preview without collecting or printing personal data.
 import http from 'node:http';
 import assert from 'node:assert/strict';
 

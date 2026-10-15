@@ -1,4 +1,3 @@
-"""Synthetic named-object and identity-change checks. No path replacement I/O."""
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import stat

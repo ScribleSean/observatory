@@ -22,8 +22,6 @@ export function projectPeerQuota(state,pair,now=Date.now()) {
   return {...projected,pace:quotaPace(projected,now)};
 }
 
-// No caller may supply pairing identity or enable sharing implicitly. All
-// decisions come from owner-local state and the active authenticated pairing.
 export async function syncQuota(runtime,{request,clock=Date.now}={}) {
   try {await lstat(path.join(runtime,'private-quota'));}
   catch(error) {if(error.code==='ENOENT')return {status:'disabled',peer:null};throw error;}
@@ -44,7 +42,6 @@ export async function syncQuota(runtime,{request,clock=Date.now}={}) {
     return isDeepStrictEqual(state.sharing,original.sharing)?state:null;
   };
   try {
-    // Never hold a local pairing lock across network waits. Both peers can send.
     const ready=await send(pair.transport,{...identity,action:'status'});
     const prepared=await withPeerStateLock(runtime,async()=>{
       const state=await current();
@@ -66,8 +63,6 @@ export async function syncQuota(runtime,{request,clock=Date.now}={}) {
       const state=await current();
       if(!state)return {status:'disabled',peer:null};
       if(!['ready','disabled'].includes(response.status))throw Error('Invalid exchange');
-      // Inbound exchanges may advance the revision without changing consent.
-      // Accept only against the just-read revision and the same sharing epoch.
       await acceptQuotaReply(runtime,{revision:state.revision,pairingId:pair.local.pairId,host:pair.peer.host,
         record:response.status==='disabled'?null:response.record},clock());
       return {status:response.status==='ready'?'ok':'peer-disabled',peer:projectPeerQuota(await readQuotaState(runtime,clock()),pair,clock())};

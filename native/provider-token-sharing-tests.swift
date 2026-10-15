@@ -43,8 +43,6 @@ enum ProviderTokenSharingTests {
         try require((try? QuotaSharingStatus.parse(Data(repeating: 32, count: 4097), channel: .providerTokens)) == nil)
     }
 
-    // The caller supplies packaged resources. All mutable data belongs to this
-    // new, unpaired runtime, never the user's configured runtime.
     static func bridgeSelfTest(resources: URL) async throws {
         try parseSelfTest()
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-provider-token-bridge-" + UUID().uuidString)

@@ -58,8 +58,6 @@ async function safeFile(file,optional=false) {
   } catch(error) {if(optional && error.code==='ENOENT')return null;throw error;}
 }
 
-// A separate file preserves the exact core peer database schema. The existing
-// pairing lock, revocation fence, ACL checks and directory retirement apply.
 async function withState(runtime,{create=false,disabled=false,now=Date.now()}={},action) {
   if(!providerClock(now))throw Error('Invalid provider clock');
   return withPeerStateLock(runtime,async()=>{
@@ -127,7 +125,6 @@ export const setProviderTokenSharing=(runtime,{revision,enabled},now=Date.now())
   return next;
 });
 
-// Local disable remains possible when pairing is revoked or its file is corrupt.
 export const disableProviderTokenSharing=(runtime,now=Date.now())=>withState(runtime,{disabled:true,now},state=>
   state.generation?{...advance(state),generation:null}:state);
 

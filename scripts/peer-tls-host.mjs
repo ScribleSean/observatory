@@ -56,8 +56,6 @@ function complementary(pair,transport,localFingerprint) {
     peerCertificateSha256:localFingerprint,...(pair.repair?{repair:pair.repair}:{})});
 }
 
-// Call only after local confirmation of the certificate from the claimed TLS
-// connection. Endpoints come from explicit setup.
 export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,async()=>{
   const host=process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null;
   if(!host || !request || typeof request!=='object' || Array.isArray(request) ||
@@ -101,14 +99,11 @@ async function hostState(runtime) {
   return {directory,offer,receipt,acknowledged:ack!==null};
 }
 
-// Returns private configuration only to the local setup controller. A saved
-// acknowledgement proves receipt, not that the remote app is currently online.
 export const readHostTLSSetup=runtime=>withPeerStateLock(runtime,async()=>{
   const state=await hostState(runtime);
   return {pairing:state.offer,acknowledged:state.acknowledged};
 });
 
-// Listener supplies the fingerprint from the actual TLS socket, not JSON.
 export const recordHostTLSAcknowledgement=(runtime,{peerCertificateSha256,digest})=>withPeerStateLock(runtime,async()=>{
   const state=await hostState(runtime);
   if(peerCertificateSha256!==state.receipt.peerCertificateSha256 || digest!==state.receipt.digest)throw fail();
@@ -117,9 +112,6 @@ export const recordHostTLSAcknowledgement=(runtime,{peerCertificateSha256,digest
   return {version:1,status:'acknowledged'};
 });
 
-// Native host controller entrypoint. Starts only on an explicit setup action.
-// Reopening after restart requires a new invitation and local confirmation,
-// while the saved offer and acknowledgement remain bound to the same peer.
 export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
   const identity=await readDeviceIdentity(runtime);
   if(!identity)throw fail();

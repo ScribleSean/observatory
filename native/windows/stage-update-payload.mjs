@@ -5,9 +5,6 @@ import {authenticateInstallationReceipt} from './signed-receipt.mjs';
 import {readReceiptFile} from './verify-candidate.mjs';
 import {verifyInstallation} from './verify-installation.mjs';
 
-// Call through trusted code after bounded extraction. Caller holds installation
-// exclusion and supplies the independent installed receipt and pinned public key.
-// No candidate code runs here, and the current installation is never modified.
 export function stageUpdatePayload(extracted,installed,previousReceipt,publicKey) {
   const previous=verifyInstallation(installed,previousReceipt);
   if(typeof extracted!=='string' || !path.isAbsolute(extracted) || path.resolve(extracted)!==extracted || realpathSync(extracted)!==extracted)
@@ -36,8 +33,6 @@ export function stageUpdatePayload(extracted,installed,previousReceipt,publicKey
   }
 }
 
-// Internal command for the installed runtime. The caller must hold installation
-// exclusion and obtain the previous receipt and key from trusted local state.
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
     const args=process.argv.slice(2);

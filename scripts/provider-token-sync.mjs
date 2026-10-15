@@ -61,14 +61,10 @@ export async function syncProviderTokens(runtime,{request,clock=Date.now}={}) {
   }
 }
 
-// Collectors pass one already sanitized local source. This function never reads
-// provider logs or changes core peer records. Failure preserves that local row.
 export async function collectProviderTokenSources(runtime,source,options={}) {
   let now,local;
   try {now=(options.clock??Date.now)();local=parseProviderTokenSource(source,source?.host,now);}
   catch {
-    // Invalid optional input must not abort a successfully finalized dashboard
-    // or copy unchecked provider fields into its public projection.
     return {status:'unavailable',sources:['Mac','Windows'].includes(source?.host)?[unavailableClaudeTokenSource(source.host)]:[]};
   }
   try {
@@ -79,8 +75,6 @@ export async function collectProviderTokenSources(runtime,source,options={}) {
   } catch {return {status:'unavailable',sources:[local]};}
 }
 
-// Invoke once, after core finalization and local Claude collection. It replaces
-// the provider array and contributes each configured source to health once.
 export async function attachProviderTokenSync(runtime,result,source,options={}) {
   const collected=await collectProviderTokenSources(runtime,source,options);
   attachProviderTokenSources(result,collected.sources);

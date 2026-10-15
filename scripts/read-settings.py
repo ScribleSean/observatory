@@ -1,4 +1,3 @@
-"""Summarize saved Codex settings and tool-call categories without exporting text."""
 import datetime as dt
 import hashlib
 import hmac
@@ -23,7 +22,6 @@ def tool_identifier(value, fallback):
     return value if isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.:/-]{0,199}', value) else fallback
 
 def inventory_metadata(meta, salt):
-    """Ephemeral comparison keys only. The collector never saves these keys."""
     payload = meta.get('payload', {}) if isinstance(meta, dict) and meta.get('type') == 'session_meta' else {}
     if not isinstance(payload, dict):
         return None
@@ -57,7 +55,6 @@ def summarize(events, cutoff, retained=None, seen=None):
             selected_model = next_selected
             if 'service_tier' in s:
                 selected_speed = TIERS.get(s['service_tier'], 'unknown')
-            # A newly selected model does not relabel the preceding turn.
             if context_model is None:
                 model = selected_model
             if selected_model == model:
@@ -112,8 +109,6 @@ def summarize(events, cutoff, retained=None, seen=None):
         prior = current
         if repeated:
             continue
-        # Match the daily reader: use the recorded request counters when the
-        # cumulative counter advances. Deltas alone can lose usage after resets.
         last = (p.get('info') or {}).get('last_token_usage')
         if isinstance(last, dict):
             delta = {k:number(last.get(k, 0 if k == 'cache_write_input_tokens' else None)) for k in FIELDS}
@@ -125,8 +120,6 @@ def summarize(events, cutoff, retained=None, seen=None):
         uncached = delta['input_tokens']-delta['cached_input_tokens']-delta['cache_write_input_tokens']
         if uncached < 0 or abs(delta['input_tokens']+delta['output_tokens']-delta['total_tokens']) > 1:
             continue
-        # Copies inherited by related sessions count once. Each file still
-        # advances its own cumulative baseline before this shared check.
         if seen is not None and turn_key is not None:
             identity = (turn_key, stamp.isoformat(), model, effort, speed, tuple(current[k] for k in FIELDS), tuple(delta[k] for k in FIELDS))
             if identity in seen:
@@ -227,9 +220,6 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
             cache.close()
     if cache:
         if cache.pending:
-            # Rebuild metadata and inventory after a transient file change. A
-            # second attempt shares the original byte budget and never returns
-            # an incomplete first-pass total as a successful report.
             if retry_cache and cache.remaining > 0:
                 return collect(folder, retry_cache=False, cache_budget=cache.remaining)
             raise ValueError('Private Codex cache warming; complete report unavailable')

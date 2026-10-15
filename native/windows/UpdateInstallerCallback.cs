@@ -5,7 +5,6 @@ namespace WorkspaceObservatory;
 internal sealed class UpdateInstallerCallback
 {
     private readonly Func<string, bool> prepareAndLaunch;
-    // 0 idle, 1 preparing, 2 accepted, 3 uncertain. Neither terminal state retries.
     private int state;
     internal bool Accepted => Volatile.Read(ref state) == 2;
 
@@ -14,10 +13,7 @@ internal sealed class UpdateInstallerCallback
         this.prepareAndLaunch = prepareAndLaunch ?? throw new ArgumentNullException(nameof(prepareAndLaunch));
     }
 
-    // Called on WinSparkle's thread, not the application UI thread. The supplied
-    // operation must retain verified inputs and launch the trusted external helper,
-    // not wait for replacement while the host application is still running.
-    // Return false only when no helper was launched. Throw on an uncertain launch.
+    // Called on WinSparkle's thread, not the application UI thread.
     internal int Handle(string downloadedPath)
     {
         if (Interlocked.CompareExchange(ref state, 1, 0) != 0) return -1;
@@ -33,7 +29,6 @@ internal sealed class UpdateInstallerCallback
         catch
         {
             // Managed exceptions must not escape through the native callback.
-            // No fallback installer is safe after an uncertain handoff.
             Interlocked.Exchange(ref state, 3);
             return -1;
         }

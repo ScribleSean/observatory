@@ -72,7 +72,6 @@ for(const file of files)assert.equal(digest(readFileSync(path.join(installed,fil
 const provisioned=readFileSync(path.join(data,'updates','installed-envelope.json'));
 assert.deepEqual(provisioned,envelope);
 assert.deepEqual(authenticateInstallationReceipt(provisioned,publicKey,0),receipt);
-// The fixture must never become eligible for production activation.
 assert.throws(()=>verifyInstallation(realpathSync(installed),receipt),/ownership mismatch/);
 uninstall();
 assert.deepEqual(readFileSync(path.join(data,'updates','installed-envelope.json')),envelope);

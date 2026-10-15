@@ -33,7 +33,6 @@ if ($VerifyCompilerOnly) {
     Write-Output "Pinned installer compiler archive verified: $((Get-Item -LiteralPath $archive).Length) bytes, SHA256 $($asset.sha256). No archive content was executed."
     return
 }
-# Extract a fresh compiler from the verified archive, not a mutable cached exe.
 $compilerFolder = Join-Path $CacheRoot ('nsis-compiler-' + [guid]::NewGuid().ToString('N'))
 Expand-Archive -LiteralPath $archive -DestinationPath $compilerFolder
 $compilerRoot = Join-Path $compilerFolder 'nsis-3.12'

@@ -33,10 +33,8 @@ func renderArchiveChartPreview(output: URL) throws {
     print("Synthetic archive light/dark gap fixtures rendered. No sources opened.")
 }
 
-// Synthetic offscreen previews. Never opens a source or starts collection.
 @MainActor
 func renderStylePreview(output: URL) throws {
-    // Keep fixture state beside its output, including in cache-contained runs.
     let temporary = output.appendingPathComponent(".observatory-style-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: temporary) }
     let store = ObservatoryStore(runtime: temporary, collectionAllowed: false)
@@ -82,7 +80,6 @@ func renderStylePreview(output: URL) throws {
         let view = NativeDashboard(store: store, selection: selection, settingsActions: actions, initialPeriod: period)
             .defaultAppStorage(defaults).frame(width: size.width, height: size.height)
         let hosting = NSHostingView(rootView: view)
-        // AppKit-backed chart labels must match the SwiftUI preview appearance.
         hosting.appearance = NSAppearance(named: mode == "light" ? .aqua : .darkAqua)
         hosting.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)

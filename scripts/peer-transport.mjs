@@ -34,8 +34,6 @@ function runSSH(args,input) {
   });
 }
 
-// Only the Mac initiates transport. Windows receives through its existing SSH
-// account and updates its dashboard on its next independent collection cycle.
 async function sshRequest(transport,request,endpoint,invoke,limit) {
   const safe=validatePeerTransport(transport);
   if(safe.kind!=='ssh-windows')throw Error('Explicit SSH transport required');
@@ -58,7 +56,7 @@ export async function sshPeerExchange(transport,record,invoke=runSSH) {
   const response=await sshRequest(transport,{version:1,record},'exchange',invoke,17_000_000);
   if(!response || typeof response!=='object' || Array.isArray(response) || response.version!==1 ||
     Object.keys(response).length!==2 || !Object.hasOwn(response,'record'))throw Error('Invalid private SSH response');
-  return response.record; // The caller must validate and commit against saved peer identity.
+  return response.record;
 }
 
 export async function sshQuotaRequest(transport,request,invoke=runSSH) {
@@ -70,9 +68,6 @@ export async function sshQuotaRequest(transport,request,invoke=runSSH) {
   return response;
 }
 
-// Provider-token requests deliberately use the existing peer-exchange
-// endpoint. Older endpoints reject this optional wrapper without changing the
-// core peer record they already understand.
 export async function sshProviderTokenRequest(transport,request,invoke=runSSH) {
   const response=await sshRequest(transport,{version:1,channel:'provider-tokens',request},'exchange',invoke,17_000_000);
   return parseProviderTokenReply(response,request);

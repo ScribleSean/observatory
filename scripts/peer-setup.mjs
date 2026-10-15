@@ -11,8 +11,6 @@ import {privateSyncDirectory} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {readRepairConsent,validRepairNonce} from './peer-repair-consent.mjs';
 
-// A native form may prefill its target, but never receives pairing identities,
-// comparison salts, snapshot records or raw error details.
 export async function setupStatus(runtime,platform=process.platform) {
   try {
     if(platform!=='darwin' || typeof runtime!=='string' || !path.isAbsolute(runtime) ||
@@ -41,7 +39,6 @@ export function complementaryWindowsPairing(mac) {
   return validatePairing({version:1,local:{...safe.peer,comparisonSalt},peer,...(safe.repair?{repair:safe.repair}:{})});
 }
 
-// Explicit setup only. Normal collectors never call this or create a pairing.
 export const setupPairing=(runtime,request,send=sshPeerSetup,platform=process.platform,readiness=sshPeerRepairReadiness)=>
   withPeerStateLock(runtime,()=>setupPairingLocked(runtime,request,send,platform,readiness));
 async function setupPairingLocked(runtime,request,send,platform,readiness) {

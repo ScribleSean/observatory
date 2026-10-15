@@ -17,4 +17,3 @@ jobs:
           node-version: '24.21.0'
       - name: Verify synthetic pairing and allowance exchange in isolation
         run: node --test --test-concurrency=1 scripts/peer-directory.test.mjs scripts/peer-tls-client.test.mjs scripts/quota-tls.test.mjs
-      # Temporary synthetic identities only. No real pairing or installation.

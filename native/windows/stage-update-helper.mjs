@@ -4,8 +4,6 @@ import {fileURLToPath} from 'node:url';
 import {verifyInstallation} from './verify-installation.mjs';
 import {readReceiptFile} from './verify-candidate.mjs';
 
-// The caller supplies an independently trusted installed receipt and excludes
-// concurrent writers. Never bootstrap from downloaded or unverified code.
 export function stageUpdateHelper(installed,previousReceipt,parent) {
   const identity=verifyInstallation(installed,previousReceipt);
   if(typeof parent!=='string' || !path.isAbsolute(parent) || path.resolve(parent)!==realpathSync(parent))
@@ -30,8 +28,6 @@ export function stageUpdateHelper(installed,previousReceipt,parent) {
   }
 }
 
-// Only the trusted installed runtime invokes this command. The caller holds
-// installation exclusion and supplies an independently retained old receipt.
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
     const args=process.argv.slice(2);

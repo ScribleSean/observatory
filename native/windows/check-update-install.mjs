@@ -60,7 +60,6 @@ console.log(`PASS: complete signed update wrapper ZIP, native extraction and nat
 const helper=stageUpdateHelper(installed,previous,output);
 const result=spawnSync(path.join(helper.helper,'WorkspaceObservatory.exe'),
   ['--test-update-install',installed,ready.staged,receiptPath,ready.envelopePath,publicKey,String(previous.buildNumber)],
-  // Do not kill the transaction helper on a subprocess timeout.
   {encoding:'utf8',maxBuffer:16384,windowsHide:true});
 assert.equal(result.status,0,result.stderr || String(result.error));
 const response=JSON.parse(result.stdout);

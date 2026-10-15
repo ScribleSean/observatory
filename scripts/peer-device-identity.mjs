@@ -20,8 +20,6 @@ export function validateDeviceIdentity(value) {
       !(Date.parse(cert.validFrom)<=now && now<Date.parse(cert.validTo)) ||
       !(type==='rsa' && details.modulusLength>=2048 && details.modulusLength<=8192 ||
         type==='ec' && ['prime256v1','secp384r1'].includes(details.namedCurve)))throw unavailable();
-    // Normalize to one certificate and an unencrypted key for Node TLS. This
-    // storage layer relies on filesystem access controls, not at-rest encryption.
     return {version:1,key:privateKey.export({type:'pkcs8',format:'pem'}).toString(),cert:cert.toString()};
   } catch {throw unavailable();}
 }
@@ -49,8 +47,6 @@ export async function readDeviceIdentity(runtime) {
   finally {await file.close();}
 }
 
-// Called only by explicit first-device setup with a newly generated identity.
-// No replacement, auto-generation, repair or existing pairing mutation occurs.
 export const initializeDeviceIdentity=(runtime,value)=>withPeerStateLock(runtime,async()=>{
   const safe=validateDeviceIdentity(value),bytes=JSON.stringify(safe);
   if(Buffer.byteLength(bytes)>limit)throw unavailable();

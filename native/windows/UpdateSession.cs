@@ -1,7 +1,5 @@
 namespace WorkspaceObservatory;
 
-// Keep this lease alive through verification and replacement. It prevents new
-// participating app/collector starts, but does not authenticate any payload.
 internal sealed class UpdateSession : IDisposable
 {
     private readonly InstallationGate gate;

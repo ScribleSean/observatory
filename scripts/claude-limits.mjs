@@ -4,9 +4,7 @@ import path from 'node:path';
 import {runClaudeUsage} from './claude-usage-command.mjs';
 
 // Claude Code passes rate_limits to a status line command for Pro and Max
-// subscribers after the first response of a session. This module keeps only
-// the two percentages and reset times. It never reads a credential, a
-// transcript, a working directory or a session identifier.
+// subscribers after the first response of a session.
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
 export const CLAUDE_STATUSLINE_FILE='statusline.json';
@@ -19,7 +17,6 @@ function cleanWindow(raw,observedAt) {
   if(!isObject(raw))return null;
   const used=raw.used_percentage ?? raw.usedPercentage,resets=raw.resets_at ?? raw.resetsAt;
   if(typeof used!=='number' || !Number.isFinite(used) || used<0 || used>100)return null;
-  // A reset more than eight days ahead cannot belong to either window.
   if(typeof resets!=='number' || !Number.isSafeInteger(Math.round(resets)) || resets<=observedAt || resets>observedAt+8*86400)return null;
   return {usedPercentage:Math.round(used*10)/10,resetsAt:Math.round(resets)};
 }
@@ -114,7 +111,6 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   const record=cleanStored(stored,now);
   const seconds=Math.floor(now/1000);
   if(!record)return {...base,status:'unavailable',windows:[]};
-  // A window whose reset time has passed has an unknown value until the next reading.
   const live=Object.entries(record.windows).filter(([,window])=>window.resetsAt>seconds);
   if(!live.length)return {...base,status:'unavailable',windows:[]};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
@@ -123,9 +119,6 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
-// With consent given, each collection also asks the installed CLI for the
-// current figures, so limits stay current when no terminal session is open.
-// A failed or unexpected command result changes nothing.
 export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=runClaudeUsage}={}) {
   const enabled=await claudeStatuslineInstalled(runtime);
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
@@ -143,7 +136,6 @@ export function attachClaudeLimits(result,source) {
   return result;
 }
 
-// Rejects when the work has not settled in time, so the caller's fallback runs.
 export function withinTime(work,milliseconds) {
   let timer;
   const limit=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Timed out')),milliseconds);timer.unref?.();});

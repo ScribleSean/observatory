@@ -1,4 +1,3 @@
-"""Read numeric Claude Code usage metadata without exporting conversation data."""
 import datetime as dt
 import json
 import os
@@ -53,7 +52,6 @@ def walk_error(error):
 
 
 def collect(folder):
-    """Return complete, deduplicated daily numeric usage or a fail-closed status."""
     try:
         supplied = pathlib.Path(folder)
         if supplied.is_symlink() or not supplied.is_dir():
@@ -147,8 +145,6 @@ def collect(folder):
                         records[identity] = (min(prior[0], current[0]), prior[1], prior[2], prior[3])
                         continue
                     if all(a >= b for a, b in zip(after, before)):
-                        # A streamed request can finish after local midnight.
-                        # Keep its earliest retained timestamp as its day.
                         records[identity] = (min(prior[0], current[0]), current[1], current[2], current[3])
                     elif not all(a <= b for a, b in zip(after, before)):
                         return unavailable()

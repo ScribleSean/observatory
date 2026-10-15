@@ -17,8 +17,6 @@ const digest=payload=>createHash('sha256').update(JSON.stringify(payload)).diges
 const missing=error=>error.code==='ENOENT';
 const validSlot=slot=>{if(!['local','peer'].includes(slot))throw Error('Invalid peer state slot');};
 
-// Once any generation has been retired, an absent or different active pairing
-// must never be treated as an empty database for an old in-memory collector.
 export async function assertCurrentPeerConfig(runtime,config,slot='local') {
   validSlot(slot);
   try {await lstat(path.join(runtime,'private-repair','require-pairing'));}
@@ -32,7 +30,6 @@ export async function assertCurrentPeerConfig(runtime,config,slot='local') {
 async function locations(runtime,create=false) {
   const directory=await privateSyncDirectory(runtime,create);
   await assertPeerNotRevoked(directory);
-  // The JSON prototype was never released. Do not discard its watermark.
   for(const name of ['peer.json','write.lock']) {
     try {await lstat(path.join(directory,name));throw Error('Legacy development peer state requires explicit migration');}
     catch(error){if(!missing(error))throw error;}
@@ -122,8 +119,6 @@ async function readPeerStateLocked(runtime,config,now,slot) {
   } finally {if(db){try{db.exec('ROLLBACK');}catch{}db.close();}}
 }
 
-// Allocate the local sequence under the same writer transaction as the payload.
-// Callers must not implement read-then-increment outside this transaction.
 export const publishLocalPayload=(runtime,payload,config,now=Date.now())=>
   withPeerStateLock(runtime,()=>publishLocalPayloadLocked(runtime,payload,config,now));
 async function publishLocalPayloadLocked(runtime,payload,config,now) {
@@ -145,9 +140,6 @@ async function publishLocalPayloadLocked(runtime,payload,config,now) {
   } finally {if(db){try{db.exec('ROLLBACK');}catch{}db.close();}}
 }
 
-// Authenticated identity comes from the caller, not from the content digest.
-// SQLite owns writer exclusion and process-crash recovery. Use a local disk,
-// never an SMB or synchronized network directory.
 export const acceptPeerState=(runtime,incoming,config,now=Date.now(),slot='peer')=>
   withPeerStateLock(runtime,()=>acceptPeerStateLocked(runtime,incoming,config,now,slot));
 async function acceptPeerStateLocked(runtime,incoming,config,now,slot) {

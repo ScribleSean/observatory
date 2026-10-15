@@ -46,8 +46,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if MacUpdateGate.isBlocked(bundle: Bundle.main.bundleURL) {
-            // The installer retains the previous app and removes its lock only
-            // after verification. Do not start collection during replacement.
             if !CommandLine.arguments.contains("--background") {
                 NSApp.setActivationPolicy(.regular)
                 let alert = NSAlert()
@@ -67,7 +65,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let lifecycleTest = CommandLine.arguments.contains("--test-lifecycle")
         let popupTest = CommandLine.arguments.contains("--test-popup") || CommandLine.arguments.contains("--preview-pace")
         if CommandLine.arguments.contains("--preview") || lifecycleTest || popupTest {
-            // An isolated, empty UI preview never changes installed settings or login state.
             let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-ui-preview-\(UUID().uuidString)")
             do {
                 if CommandLine.arguments.contains("--preview-setup") { _ = try FirstRunSetup.prepare(runtime: temporary) }
@@ -237,20 +234,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func closeUsage() {
-        // This read-only view has no unsaved edits or delegate veto. Explicit
-        // navigation must close it even if AppKit has attached a child window.
         popover.close()
         usageWindow?.close()
         removeDismissMonitors()
     }
 
-    // The popover stays semitransient so a dashboard handoff inside this app
-    // does not close it early. These monitors close it on any click outside
-    // it, in this app or in another one, as other menu-bar panels do.
     private func installDismissMonitors() {
         guard dismissMonitors.isEmpty, popover.isShown || usageWindow?.isVisible == true else { return }
         let mouseDown: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        // A click on the menu-bar icon is left to togglePanel.
         let onIcon: () -> Bool = { [weak self] in
             self?.statusItem.button?.window?.frame.contains(NSEvent.mouseLocation) == true
         }
@@ -292,8 +283,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return webPanel
     }
 
-    // Timing is printed only with --panel-timing. The web panel also takes its
-    // height from the page once the page reports that it has drawn.
     private func panelOpened(since start: CFAbsoluteTime) {
         let report: (String) -> Void = { [weak self] kind in
             guard self?.reportsPanelTiming == true else { return }
@@ -407,14 +396,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             size = NSSize(width: width, height: min(ceil(measurement.fittingSize.height), max(240, visible.height - 48)))
         }
         // A hidden or overflowed menu-bar item cannot anchor an NSPopover.
-        // Keep the same usage view available to the explicit menu/keyboard action.
         if button.visibleRect.isEmpty || button.window?.isVisible != true {
             showFloatingUsage(size: size, visible: visible)
             return
         }
-        // An unchanged anchor that already produced an offscreen popover is
-        // not a new opportunity to retry it on every dashboard handoff.
-        // A display or menu-bar layout change permits anchored placement again.
         if let unreliableUsageAnchor, button.window?.frame == unreliableUsageAnchor {
             showFloatingUsage(size: size, visible: visible)
             return
@@ -431,7 +416,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
         }
         else {
-            // Visibility can change between checking the anchor and showing it.
             popover.close()
             showFloatingUsage(size: size, visible: visible)
         }
@@ -849,7 +833,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         guard let window = notification.object as? NSWindow, window === detail else { return }
         bridgeHandler?.dashboardClosed()
-        // Closing the main window releases its web view, while the panel web view is kept.
         webView?.stopLoading()
         webView?.configuration.userContentController.removeAllScriptMessageHandlers()
         detail?.contentView = nil
@@ -1006,13 +989,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     private func checkUsagePopup() {
-        // Exercise the production popup with synthetic data and no collectors.
         precondition(previewRuntime != nil && !store.collectionAllowed)
         for action in [#selector(setupPairing), #selector(disconnectPairing), #selector(preparePairingRepair),
                        #selector(toggleLogin), #selector(loginSettings)] {
             precondition(!validateMenuItem(NSMenuItem(title: "Preview action", action: action, keyEquivalent: "")))
         }
-        // Direct callbacks must refuse before showing a dialog or invoking a tool.
         setupPairing()
         disconnectPairing()
         preparePairingRepair()
@@ -1139,8 +1120,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     print("Native usage popup failed: dashboard handoff did not close the usage view")
                     exit(1)
                 }
-                // Establish activation from AppKit state before simulating a
-                // later status-item click. A fixed delay races slow runners.
                 afterDashboardActivated { [self] in
                 detail?.orderOut(nil)
                 showUsage()
@@ -1232,8 +1211,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func applicationWillTerminate(_ notification: Notification) {
         directPairingWindow?.close()
         store?.stop()
-        // Keep a preview directory if collection is still shutting down. It contains
-        // only this preview's settings/snapshots, never installed application state.
         if let temporary = previewRuntime, store?.refreshing == false, store?.pairingMaintenance == false {
             try? FileManager.default.removeItem(at: temporary)
         }
@@ -1242,7 +1219,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
 #if OBSERVATORY_PREVIEW_ONLY
 // UI tools may relaunch a closed app without preserving its launch arguments.
-// Preview-only builds must never fall through to the installed data runtime.
 let previewArguments = Array(CommandLine.arguments.dropFirst())
 let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
     ["--test-popup"], ["--test-popup", "--force-offscreen-popup"], ["--test-popup", "--legacy-dashboard"],

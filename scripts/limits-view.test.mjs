@@ -118,7 +118,6 @@ void test('dashboard selects Limits and preserves other empty sections', () => {
   const limits = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'limits' }));
   assert.match(limits, /class="ob-limits"/);
   assert.doesNotMatch(limits, /This section is not built yet/);
-  // Settings now has its own view (B1-2), so it shows neither the empty state nor the limits.
   const settings = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'settings' }));
   assert.match(settings, /class="ob-settings"/);
   assert.doesNotMatch(settings, /This section is not built yet/);

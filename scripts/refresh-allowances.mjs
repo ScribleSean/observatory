@@ -3,8 +3,6 @@ import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {attachQuotaSync} from './quota-sync.mjs';
 
-// Called under the platform collector lock. Never make unrelated sources look
-// freshly collected just because an allowance observation changed.
 export async function refreshAllowances(runtime,{enabled,readQuota,sync=attachQuotaSync}) {
   if(!path.isAbsolute(runtime) || typeof enabled!=='boolean' || typeof readQuota!=='function')throw Error('Invalid allowance refresh');
   const folder=path.join(runtime,'public/local'),file=path.join(folder,'usage.json');
@@ -23,7 +21,6 @@ export async function refreshAllowances(runtime,{enabled,readQuota,sync=attachQu
   await sync(runtime,result,{enabled});
   const next=JSON.stringify(data);
   if(Buffer.byteLength(next)>16_000_000)throw Error('Allowance snapshot too large');
-  // Detect unexpected external writers as well as respecting the caller lock.
   const current=await lstat(file);
   if(!current.isFile() || current.isSymbolicLink() || await readFile(file,'utf8')!==original)throw Error('Snapshot changed during allowance refresh');
   const temporary=path.join(folder,`.allowances-${randomUUID()}.tmp`);

@@ -39,7 +39,6 @@ function ChartFrame({ title, labels, columns, rows, maximum, children, formatVal
   const stride = Math.max(1, Math.ceil(labels.length / 12), Math.ceil(labels.length * Math.min(16, Math.max(1, ...labels.map(label => label.length))) * 7 / width));
   return (
     <figure className="ob-chart">
-      {/* Inline SVG needs an image role to expose its title as one graphic */}
       {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role */}
       <svg viewBox="0 0 320 180" width="100%" role="img" aria-labelledby={id}>
         <title id={id}>{title}</title>

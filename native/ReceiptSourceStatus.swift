@@ -1,7 +1,5 @@
 import Foundation
 
-// Local snapshots may be old or contain unknown fields. Render only fixed
-// explanations, never a raw error, private path or unrecognized reason string.
 func receiptSourceHelp(_ source: JSONObject?) -> String? {
     guard let source, !["ok", "not-connected"].contains(text(source["status"])) else { return nil }
     switch text(source["reason"]) {

@@ -3,9 +3,6 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { execPython } from '../../scripts/test-python.mjs';
 
-// Test-only source-tree setup. Production helpers keep their explicit or
-// bundled runtime selection and never use this launcher's PATH discovery.
-// Preserve an explicit runtime, including failing closed if it is invalid.
 let python = process.env.OBSERVATORY_PYTHON;
 if (python === undefined) {
   python = JSON.parse(
@@ -24,8 +21,7 @@ if (
 if (!statSync(python).isFile())
   throw Error('Source tests require a Python executable file');
 accessSync(python, constants.X_OK);
-// Windows X_OK also accepts ordinary files. Probe the exact selected runtime
-// without site startup code, source imports, bytecode writes or shell fallback.
+// Windows X_OK also accepts ordinary files.
 const version = execFileSync(
   python,
   ['-I', '-S', '-B', '-c', 'import sys\nprint(sys.version_info.major)'],

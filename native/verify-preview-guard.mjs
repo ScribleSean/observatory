@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 
-// Run only against a disposable OBSERVATORY_PREVIEW_ONLY build, never an
-// installed app. A broken guard is bounded by the subprocess timeout.
 assert.equal(process.argv.length,3,'Expected the preview-only executable path');
 const executable=path.resolve(process.argv[2]);
 const rejected=[[],['--show'],['--enable-login'],['--preview','--enable-login'],

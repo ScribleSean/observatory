@@ -28,8 +28,6 @@ internal static class UpdateCandidate
         return new(revision, build, digest);
     }
 
-    // The installed runtime is trusted by the caller. Never execute a verifier
-    // or Node binary from the extracted candidate to establish its authenticity.
     internal static async Task<Identity> Verify(string staged, string envelope, string pinnedKey,
         long previousBuild, CancellationToken cancellation = default)
     {
@@ -42,7 +40,6 @@ internal static class UpdateCandidate
         return Parse(output, previousBuild);
     }
 
-    // Only installed updater entry points may use this bounded process runner.
     internal static async Task<string> RunTrustedCommand(string command, string[] arguments,
         CancellationToken cancellation = default)
     {
@@ -85,8 +82,6 @@ internal static class UpdateCandidate
         }
         finally
         {
-            // No allowed command modifies the installed app. A cancelled
-            // staging copy can remain partial, but cannot become an activation.
             if (!process.HasExited) process.Kill(entireProcessTree: true);
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             await process.WaitForExitAsync(cleanup.Token);

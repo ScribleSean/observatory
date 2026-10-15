@@ -194,7 +194,6 @@ private struct ObservatorySegmentControl: NSViewRepresentable {
     }
 }
 
-// One label column keeps native segmented controls aligned across dashboards.
 struct ObservatoryFilterRow<Content: View>: View {
     @Environment(\.observatoryTextScale) private var scale
     let title: String
@@ -209,7 +208,6 @@ struct ObservatoryFilterRow<Content: View>: View {
     }
 }
 
-// Palette, dimensions and type scale come from native/design-tokens.json.
 enum ObservatoryTheme {
     static func color(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in

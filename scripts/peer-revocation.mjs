@@ -8,8 +8,6 @@ import {revokeQuotaSharing} from './quota-store.mjs';
 
 const marker='revoked';
 
-// Any entry at this name disables pairing, including an incomplete write or
-// an unsafe entry. Never follow it and never silently remove it to reconnect.
 export async function assertPeerNotRevoked(directory) {
   try {await lstat(path.join(directory,marker));}
   catch(error) {if(error.code==='ENOENT')return;throw error;}
@@ -20,8 +18,6 @@ export async function assertPairingActive(runtime) {
   await assertPeerNotRevoked(await privateSyncDirectory(runtime));
 }
 
-// Local disable only. Stop collectors/exchanges on both devices first when an
-// immediate cutoff is needed. Bytes already sent cannot be recalled.
 export const revokePairing=runtime=>withPeerStateLock(runtime,()=>revokePairingLocked(runtime));
 async function revokePairingLocked(runtime) {
   const directory=await privateSyncDirectory(runtime,true);
@@ -43,8 +39,6 @@ async function revokePairingLocked(runtime) {
     const parent=await open(directory,constants.O_RDONLY);
     try {await parent.sync();}finally{await parent.close();}
   }
-  // Write the pairing fence first. If quota storage needs repair, transfers
-  // remain disabled and the caller reports incomplete cleanup, not success.
   await revokeQuotaSharing(runtime);
   return {status:'revoked'};
 }

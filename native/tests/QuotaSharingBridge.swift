@@ -1,7 +1,5 @@
 import Foundation
 
-// Run with an explicit test Resources directory containing the bundled Node
-// layout and Collector/scripts. Always creates its own empty temporary runtime.
 @main
 struct QuotaSharingBridgeTest {
     static func main() async throws {

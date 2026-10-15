@@ -52,7 +52,6 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
   server.listen(0,'127.0.0.1');await once(server,'listening');
   t.after(async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));});
   const invitation=createInvitation({address:'10.0.0.2',port:server.address().port,certificateSha256:pin});
-  // Only tests redirect the numeric destination to an ephemeral loopback server.
   const connect=options=>tls.connect({...options,host:'127.0.0.1'});
   await t.test('mutual TLS success sends only the claim and returns no remote details',async()=>{
     assert.deepEqual(await requestPeerClaim(invitation,serverIdentity.cert,clientIdentity,{connect}),

@@ -4,8 +4,6 @@ import {validateDeviceIdentity} from './peer-device-identity.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
 import {requestPeerClaim} from './peer-tls-client.mjs';
 
-// Explicit synthetic interoperability check, never called during collection.
-// Identities arrive only through the native parent's private stdin pipe.
 async function main() {
   if(process.argv.length!==2 || process.platform!=='win32')throw Error('Unsupported bridge test');
   let size=0;const chunks=[];

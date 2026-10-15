@@ -25,7 +25,6 @@ while ($pending.Count -gt 0) {
 if ($files.Count -eq 0) { throw 'Empty update archive refused.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.IO.Compression
-# Create mode refuses an existing file. Keep partial output on failure.
 $zip = [IO.Compression.ZipFile]::Open($target, [IO.Compression.ZipArchiveMode]::Create)
 try {
     foreach ($file in $files) {

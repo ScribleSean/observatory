@@ -15,8 +15,6 @@ const fail=()=>Error('Setup command unavailable');
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
   Object.keys(value).length===keys.length && keys.every(key=>Object.hasOwn(value,key));
 
-// One controller belongs to one native setup child process. It never returns
-// keys, pairing configurations, comparison salts or internal claim handles.
 export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,readIdentity=readDeviceIdentity,
   claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent}={}) {
   let host=null,invitation=null,joining='idle',epoch=0,busy=null,abort=new AbortController();
@@ -86,8 +84,6 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
   return {run,cancel};
 }
 
-// Bounded newline-delimited JSON over private parent-child pipes only. Cancel
-// remains responsive while an earlier command awaits network or local storage.
 export function serveTLSSetupControl(runtime,input,output,{controller=createTLSSetupController(runtime)}={}) {
   return new Promise((resolve,reject)=>{
     let buffer=Buffer.alloc(0),closed=false,count=0;
@@ -107,8 +103,6 @@ export function serveTLSSetupControl(runtime,input,output,{controller=createTLSS
     };
     const data=chunk=>{
       buffer=Buffer.concat([buffer,chunk]);
-      // Native commands are small. Reject a giant chunk even if it contains
-      // multiple frames rather than allocating an unbounded request queue.
       if(buffer.length>16384){void shutdown(fail());return;}
       let newline;
       while(!closed && (newline=buffer.indexOf(10))!==-1) {

@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// Claude Code runs this as its status line command. It saves the two limit
-// windows for Observatory, then prints what the person's earlier status line
-// command prints. It must stay fast and must never fail the status line.
 import {spawn} from 'node:child_process';
 import {readFile,lstat} from 'node:fs/promises';
 import path from 'node:path';

@@ -19,7 +19,6 @@ function setup(t) {
   const installed=path.join(root,'Workspace Observatory.app'),staged=path.join(root,'candidate.app');
   const receipts=[];
   for(const [index,folder] of [installed,staged].entries()) {
-    // Inspection of new release artifacts still requires the canonical app name.
     const temporary=path.join(root,'build-'+index,'Workspace Observatory.app');
     for(const name of files) {
       const target=path.join(temporary,name);mkdirSync(path.dirname(target),{recursive:true});

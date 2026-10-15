@@ -24,8 +24,6 @@ export function cleanIntervals(rows, start, end) {
   }).filter(r => r.end > r.start);
 }
 
-// Sweep interval boundaries instead of adding device totals. Concurrent categories
-// remain explicitly mixed rather than guessing which device held attention.
 export function summarize(rows, start, end) {
   const days = new Map();
   const day = date => {
@@ -45,7 +43,6 @@ export function summarize(rows, start, end) {
       const category = labels.size === 1 ? [...labels][0] : 'Mixed activity';
       const apps = new Set([...active.values()].map(v => v.app));
       const app = category === 'Mixed activity' ? 'Overlapping categories' : apps.size === 1 ? [...apps][0] : 'Multiple apps';
-      // Split on minute boundaries to honor local midnight and DST transitions.
       for (let cursor = previous; cursor < t;) {
         const next = Math.min(t, (Math.floor(cursor / 60000) + 1) * 60000);
         const s = slot(cursor), d = day(s.date), seconds = (next - cursor) / 1000;
@@ -73,7 +70,6 @@ export function summarizeTracked(rows, tracking, start, end) {
   if (!Array.isArray(tracking)) return result;
   const through = [...tracking, ...rows].reduce((latest, row) => Math.max(latest, row.end), -Infinity);
   result.trackingThrough = Number.isFinite(through) ? new Date(through).toISOString() : null;
-  // Include idle intervals and deduplicate overlapping tracking evidence.
   const observed = summarize([...tracking,...rows].map(r=>({...r,category:'Other',app:'Unknown app'})),start,end);
   result.days = result.days.map(day=>{
     const coverage=observed.days.find(d=>d.date===day.date);

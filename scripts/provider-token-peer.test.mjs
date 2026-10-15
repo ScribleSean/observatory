@@ -28,7 +28,6 @@ test('provider records bind the public source to device, generation and digest',
 
 test('legacy public model order remains unchanged inside its digest-bound record',()=>{
   const doubled=Object.fromEntries(Object.entries(counters).map(([key,value])=>[key,value*2]));
-  // Construct the prior v1 public payload directly, without the current cleaner.
   const legacySource={...source,days:[{date:'2026-09-25',...doubled,
     models:[{model:'unknown',...counters},{model:'claude-sonnet-4',...counters}]}]};
   const payload={version:1,generation:'a'.repeat(32),source:legacySource};

@@ -1,8 +1,6 @@
 import AppKit
 import WebKit
 
-// The shared panel page may ask the shell for exactly these four things.
-// This is not a command channel. Any other value is ignored.
 enum PanelAction: String, CaseIterable {
     case refresh
     case checkUpdates = "check-updates"
@@ -78,8 +76,6 @@ final class WebPanelController: NSViewController {
 
     func savePreview(to file: URL) { saveViewerPreview(web, to: file) }
 
-    // Reports the content height once the page says it has drawn. A page that
-    // never becomes ready reports nil and keeps the previous height.
     func whenDrawn(deadline: Date = Date().addingTimeInterval(5), _ completion: @escaping (CGFloat?) -> Void) {
         // A call made while the page is still loading is dropped by WebKit
         // when the page commits. Wait for the load with a bounded deadline.

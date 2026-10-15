@@ -9,9 +9,6 @@ function base64(value,bytes) {
   return Buffer.from(value,'base64');
 }
 
-// Artifact bytes must come from the independently verified packaging output.
-// Public keys must come from trusted release configuration, not the manifest.
-// This checks signatures and metadata, not package contents or OS signatures.
 export function buildUpdateAppcasts(release,artifacts,publicKeys,previousBuild) {
   if(!release || typeof release.version!=='string' || !/^[a-f0-9]{40}$/.test(release.sourceRevision))
     throw Error('Invalid release identity');

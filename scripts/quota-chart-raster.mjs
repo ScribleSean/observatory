@@ -1,8 +1,5 @@
 import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
 
-// One byte per display pixel, independent of archive length. Native consumers
-// tint this mask with their theme ink: 0 empty, 1 solid, 2 dashed, 3 observation.
-// Pixels are drawing instructions, never fabricated percentage observations.
 export function rasterQuotaTimeline(records,{from,to,bucket,window,width=1024,height=160}={}) {
   if(!Number.isSafeInteger(from)||!Number.isSafeInteger(to)||from<0||to<=from||to>8640000000000000||
     !Number.isInteger(width)||width<2||width>1024||!Number.isInteger(height)||height<2||height>160||

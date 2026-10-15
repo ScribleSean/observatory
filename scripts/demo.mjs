@@ -7,7 +7,6 @@ import { retainActivityHistory } from './activity-history.mjs';
 import { combineTokens, combineSettings } from './combine-tokens.mjs';
 import { estimate } from './api-estimate.mjs';
 
-// Fixed fictional fixtures. Never read configuration, device records or credentials.
 export function demoData() {
   const collectedAt='2026-09-08T20:00:00.000Z';
   const dates=Array.from({length:14},(_,i)=>new Date(Date.UTC(2026,7,26+i)).toISOString().slice(0,10));

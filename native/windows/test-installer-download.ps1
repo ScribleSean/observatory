@@ -7,7 +7,6 @@ $errors = $null
 if ($errors.Count -ne 0) { throw 'Installer script parse failed.' }
 & $installer -VerifyCompilerOnly -CacheRoot $CacheRoot
 
-# This unique fixture contains no compiler, executable or personal data.
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('observatory-compiler-check-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($fixture) | Out-Null
 $archive = Join-Path $fixture 'nsis-3.12.zip'

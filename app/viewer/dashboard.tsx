@@ -111,7 +111,7 @@ export function DashboardView({ actionsAvailable = true, collectionPaused = fals
       <style>{css}</style>
       <Row as="header">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
-        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The paused note uses the requested span status markup. */}
+        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role */}
         {collectionPaused && <span role="status" className="ob-meta warn">{STRINGS.settings.collectionPaused}</span>}
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>
       </Row>

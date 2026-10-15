@@ -16,7 +16,6 @@ enum CollectorConfiguration {
                   CFGetTypeID(value) == CFBooleanGetTypeID() else {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            // Read old settings without re-enabling or saving the retired source.
             if defaults[key] != nil { result[key] = value.boolValue }
         }
         return result
@@ -57,8 +56,6 @@ enum CollectorConfiguration {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
     }
 
-    // Optimistic conflict detection for settings loaded into an editor. This
-    // does not claim an interprocess compare-and-swap transaction.
     static func saveIfUnchanged(_ sources: [String: Bool], expected: [String: Bool], runtime: URL) throws -> Bool {
         let checked = try validate(sources)
         let baseline = try validate(expected)
@@ -69,8 +66,6 @@ enum CollectorConfiguration {
 
     static func launch(runtime: URL, resources: URL, quotaOnly: Bool = false) throws -> CollectorLaunch {
         _ = try read(runtime: runtime)
-        // Use the updated bundled Mac collector.
-        // Retained scripts can still contain retired source invocations.
         let python = resources.appendingPathComponent("Runtime/python/bin/python3")
         let node = resources.appendingPathComponent("Runtime/node/bin/node")
         let scripts = resources.appendingPathComponent("Collector/scripts")

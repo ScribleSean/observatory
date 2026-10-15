@@ -53,7 +53,6 @@ function grantEveryone(file) {
   assert.equal(result.status,0,result.stderr);
   assert.equal(result.stdout.trim(),'verified');
 }
-// Change only expected values or suppress a synthetic DACL write, never the owner or privileges.
 /** @type {[string, {writeGrant?: boolean, wrongOwner?: boolean, wrongInheritance?: boolean}, RegExp][]} */
 const invalidGrantCases = [
   ['ACE',{writeGrant:false},/Synthetic broad grant was not written/],
@@ -128,7 +127,6 @@ test('Windows ACL verification ignores incompatible inherited modules',
       const directory=await privateSyncDirectory(runtime,true);
       const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
       const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
-      // Control reproduces the former inherited-environment failure.
       assert.throws(()=>execFileSync(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory],
         {env:{...process.env},stdio:'pipe',timeout:15000}));
       assert.equal(await privateSyncDirectory(runtime),directory);
@@ -138,7 +136,6 @@ test('Windows ACL verification ignores incompatible inherited modules',
     }
   });
 
-// Independent Darwin readback, not the Python verifier's own ACL adapter.
 function darwinTool(executable,args) {
   assert.equal(process.platform,'darwin');
   return execFileSync(executable,args,{encoding:'utf8',timeout:15000,maxBuffer:16384,
@@ -159,7 +156,6 @@ for(const [target,right] of [['directory','list'],['file','read'],['ancestor','d
     {skip:process.platform!=='darwin',timeout:120000},async t=>{
       const runtime=await fixture(t),directory=await privateSyncDirectory(runtime,true);
       const file=path.join(directory,'pairing.json');await writeFile(file,'{}',{mode:0o600});
-      // A real positive excludes unrelated ancestry or runtime failures.
       assert.equal(await privateSyncDirectory(runtime),directory);
       const files=[runtime,directory,file],modes=[0o700,0o700,0o600];
       const before=await Promise.all(files.map(darwinAccess));
@@ -170,7 +166,6 @@ for(const [target,right] of [['directory','list'],['file','read'],['ancestor','d
       const index=target==='ancestor'?0:target==='directory'?1:2;
       const grant=`group:everyone allow ${right}`;
       assert.equal(before[index].acl.includes(grant),false);
-      // Add exactly one effective ACE on an owned object, never an OS ancestor.
       darwinTool('/bin/chmod',['+a',grant,files[index]]);
       const granted=await Promise.all(files.map(darwinAccess));
       assert.equal(granted[index].acl.filter(ace=>ace===grant).length,1,
@@ -187,6 +182,5 @@ for(const [target,right] of [['directory','list'],['file','read'],['ancestor','d
         assert.deepEqual(await Promise.all(files.map(darwinAccess)),granted,
           'Refusal must not remove grants, replace objects or repair owner/mode');
       }
-      // fixture(t) removes only this newly owned tree, with the ACE still set.
     });
 }

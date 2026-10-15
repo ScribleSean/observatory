@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-// One system-composited backdrop, with no animation loop or web blur layers.
 private struct ObservatoryMaterial: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()

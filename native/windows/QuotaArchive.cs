@@ -6,7 +6,6 @@ using System.Globalization;
 
 namespace WorkspaceObservatory;
 
-// Owner-local history only. Never expose this bridge to web or peer requests.
 internal static class QuotaArchive
 {
     internal static async Task BridgeSelfTest()
@@ -23,7 +22,6 @@ internal static class QuotaArchive
             catch (InvalidOperationException) { rejected = true; }
             if (!rejected) throw new Exception("Unsupported history action accepted.");
 
-            // Write fictional observations only inside this newly created test runtime.
             const string fixture = """
                 import {pathToFileURL} from 'node:url';
                 const {readQuotaState,updateQuotaState}=await import(pathToFileURL(process.argv[1]).href);
@@ -139,7 +137,7 @@ internal static class QuotaArchive
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
         process.Start();
-        // Kill also unblocks pending pipe reads. Never retain unbounded helper output.
+        // Kill also unblocks pending pipe reads.
         using var registration = timeout.Token.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } catch (System.ComponentModel.Win32Exception) { } });
         async Task<string> ReadBounded(StreamReader reader, int limit)
         {

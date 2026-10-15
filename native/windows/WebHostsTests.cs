@@ -5,8 +5,6 @@ using System.Diagnostics;
 
 namespace WorkspaceObservatory;
 
-// This fixture briefly shows the panel and dashboard window on screen.
-// Run it on Windows outside a Claude desktop session.
 internal static class WebHostsTests
 {
     internal static string RuntimeVersion()
@@ -270,7 +268,7 @@ internal static class WebHostsTests
                 dashboard ? "./panel.html" : "./dashboard.html", "./index.html", "./private-sync/pairing.json"
             };
             if (dashboard) blocked.Add("./dashboard.html?demo");
-            // ExecuteScriptAsync does not await promises. Poll the stored JSON result.
+            // ExecuteScriptAsync does not await promises.
             await script("window.webHostsResult = null; void (async () => {\n" +
                 "const blocked = " + JsonSerializer.Serialize(blocked) + ";\n" +
                 "const asset = " + JsonSerializer.Serialize(asset) + ";\n" + """

@@ -15,8 +15,6 @@ final class NativeDashboardSelection: ObservableObject {
     @Published var previewAppearance: String?
 }
 
-// Native dashboard. It consumes the existing sanitized
-// snapshot and never sums overlapping device records or reads raw source files.
 struct NativeDashboard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var store: ObservatoryStore
@@ -482,7 +480,6 @@ func sourceHealthStatus(_ status: String?) -> String {
 }
 
 func nativeDashboardSources(_ value: Any?, key: String) -> [JSONObject] {
-    // Device lists show Mac and Windows only. Rows for any other host are not listed.
     let sources = (value as? JSONObject).map { [$0] } ??
         rows(value).filter { ["Mac", "Windows"].contains(text($0["host"])) }
     return sources.filter { key != "dictation" || text($0["source"]).lowercased() != "typewhisper" }

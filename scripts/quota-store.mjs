@@ -14,9 +14,6 @@ const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const timestamp=value=>Number.isSafeInteger(value) && value>=0 && value<=8640000000000000;
 const sharingOff=()=>({enabled:false,generation:null,scope:null,pairingId:null});
 
-// Keep an independently readable legacy database before changing its schema.
-// The caller holds BEGIN IMMEDIATE on the original, so the saved row cannot race
-// another writer. Never restore this automatically over newer observations.
 function backupLegacyQuota(directory,record) {
   const file=path.join(directory,'migration-v1-'+randomBytes(16).toString('hex')+'.sqlite');
   const descriptor=openSync(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
@@ -57,7 +54,6 @@ async function safeFile(file,optional=false) {
 async function withDatabase(runtime,action) {
   const directory=await privateCollectorDirectory(runtime,'private-quota',true);
   const file=path.join(directory,'state.sqlite');
-  // Exclusive file creation preserves private permissions before SQLite opens it.
   try {const handle=await open(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);await handle.close();}
   catch(error) {if(error.code!=='EEXIST')throw error;}
   const before=await safeFile(file);
@@ -125,16 +121,12 @@ function save(db,value) {
   db.prepare('INSERT INTO quota_state(slot,record) VALUES(1,?) ON CONFLICT(slot) DO UPDATE SET record=excluded.record').run(record);
 }
 
-// The salt is private state. Never include this result wholesale in a snapshot.
 export const readQuotaState=(runtime,now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now))throw Error('Invalid observation time');
   const state=read(db,now);
-  // Persist the initial salt before any network read, including concurrent runs.
   save(db,state);return state;
 });
 
-// Collection occurs outside the transaction. Reject a late result if another
-// collector or a source-disable operation has already changed this generation.
 export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,nextAttemptAt=0,failures=0},now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now) || !timestamp(nextAttemptAt) || !Number.isSafeInteger(failures) || failures<0 || failures>32)
     throw Error('Invalid quota polling state');
@@ -176,8 +168,6 @@ export const inspectQuotaArchive=(runtime,{scope},now=Date.now())=>withDatabase(
     token:groups.length?archiveDeletionToken(state,scope):null};
 });
 
-// Logical deletion is atomic with invalidation of pending collectors. It does
-// not claim secure erasure of backups, filesystem snapshots or paired devices.
 export const deleteQuotaArchive=async(runtime,{scope,token,confirmation},now=Date.now())=>{
   if(!hex(scope) || !hex(token) || confirmation!=='delete-account-history' || !timestamp(now))throw Error('Invalid archive deletion confirmation');
   await lstat(path.join(runtime,'private-quota'));
@@ -222,8 +212,6 @@ export async function revokeQuotaSharing(runtime,now=Date.now()) {
   });
 }
 
-// Caller authenticates the peer and holds the pairing lock. Recheck consent in
-// the same transaction as the saved watermark so disable cannot race acceptance.
 export const exchangeQuotaState=(runtime,{revision,pairingId,host,record,outgoing},now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now))throw Error('Invalid allowance exchange time');
   const previous=read(db,now);

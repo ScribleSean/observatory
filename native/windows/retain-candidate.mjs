@@ -18,13 +18,10 @@ function file(filename) {
   return readFileSync(filename);
 }
 
-// Called only after the package, TEST lifecycle and ordinary staging gates pass.
-// Stage an explicit allowlist, never installer work files or installed copies.
 export function retainCandidate(release,output,{revision,dirty,version,buildNumber}) {
   if(!path.isAbsolute(release) || !path.isAbsolute(output) || dirty!==false ||
     !/^[a-f0-9]{40}$/.test(revision) || !/^\d+\.\d+\.\d+$/.test(version) ||
     !Number.isSafeInteger(buildNumber) || buildNumber<1)throw Error('Invalid clean retention identity');
-  // The new directory does not exist yet. Resolve its parent before following any links while staging.
   output=path.join(realpathSync(path.dirname(output)),path.basename(output));
   const relative=path.relative(realpathSync(release),output);
   if(relative!=='..' && !relative.startsWith('..'+path.sep) && !path.isAbsolute(relative))
@@ -65,7 +62,6 @@ export function retainCandidate(release,output,{revision,dirty,version,buildNumb
     throw Error('Ordinary installer checksum mismatch');
   const license=file(path.join(artifacts,'NSIS-LICENSE.txt'));
 
-  // Refuse an existing destination instead of mixing outputs from different runs.
   mkdirSync(output);
   const retainedInstaller=path.join(output,'installer'),retainedPackage=path.join(output,'package');
   mkdirSync(retainedInstaller);mkdirSync(retainedPackage);

@@ -1,4 +1,3 @@
-; Per-user install. Generated payload lists contain only verified literal paths.
 Unicode true
 RequestExecutionLevel user
 SetCompressor /SOLID zlib
@@ -25,8 +24,6 @@ ShowUninstDetails show
 
 Var SetupMutex
 
-; Refuse linked directories, including ancestors. This does not attempt to
-; defend against an adversary concurrently changing this user's own filesystem.
 !macro SafetyFunctions PREFIX
 Function ${PREFIX}NoLinkedPath
   Exch $0
@@ -92,7 +89,6 @@ Function .onInit
   ${EndIf}
   SetRegView 64
   SetShellVarContext current
-  ; Ignore /D overrides: this installer owns only its fixed per-user location.
   StrCpy $INSTDIR "$LOCALAPPDATA\Programs\${APP_NAME}"
   Call AcquireSetupLock
   Call CheckRunning
@@ -133,8 +129,6 @@ Section "Install"
   !include "install-files.nsh"
   IfErrors install_failed
   !ifdef UPDATE_ENVELOPE
-    ; Generated from a signature-checked receipt matching this package. Runtime
-    ; verification still checks its embedded key, build and installed inventory.
     Push "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates\installed-envelope.json"
     Call NoLinkedPath
     CreateDirectory "$LOCALAPPDATA\${UPDATE_DATA_NAME}\updates"
@@ -215,7 +209,6 @@ Function un.onInit
 FunctionEnd
 
 Section "Uninstall"
-  ; Exact owned files only. Never recursively remove install or saved-data roots.
   ClearErrors
   !include "uninstall-files.nsh"
   IfErrors uninstall_failed

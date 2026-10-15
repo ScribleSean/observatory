@@ -1,8 +1,6 @@
 import {visibleQuotaBucket} from './quota-buckets.mjs';
 import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
 
-// Retained account observations, not a conversion from tokens to allowance.
-// The caller supplies a local, opaque account scope and never a raw account ID.
 const stamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const scopeKey = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const count = value => Number.isSafeInteger(value) && value >= 0;
@@ -42,8 +40,6 @@ function cleanDaily(raw, now) {
 export function retainQuotaHistory(previous, current, {scope,enabled=true,now=Date.now()}={}) {
   if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid observation time');
   if (typeof enabled !== 'boolean') throw Error('Invalid monitoring state');
-  // Disabled collection must forget its displayed account readings, including
-  // after restart. This does not touch the account owner's login.
   if (!enabled) return {version:1,status:'not-connected',scope:null,samples:[],dailyUsageBuckets:[],asOf:null};
   if (!scopeKey(scope)) throw Error('Verified opaque account scope required');
   const latestReadStatus = statuses.includes(current?.status) ? current.status : 'unavailable';
@@ -78,8 +74,6 @@ export function retainQuotaHistory(previous, current, {scope,enabled=true,now=Da
     latestReadStatus,asOf,dailyAsOf,samples:retained,dailyUsageBuckets:[...days.values()].sort((a,b)=>a.startDate.localeCompare(b.startDate)).slice(-quotaRetention.maxDailyBuckets)};
 }
 
-// Explicit line segments prevent a renderer from drawing through missed polls
-// or an allowance reset. A falling used percentage is not negative token use.
 export function quotaChartSegments(history,bucket,window,maxGapMs=quotaHistoryMaxGapMs) {
   if (!Number.isSafeInteger(maxGapMs) || maxGapMs < 1) throw Error('Invalid chart gap');
   const result=[];

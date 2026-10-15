@@ -49,7 +49,6 @@ internal static class WebViewerPreferences
     {
         skin = Skin(skin);
         theme = Theme(theme);
-        // Values come from fixed lists, never from stored text.
         var script = "document.documentElement.dataset.skin = \"" + skin + "\";";
         if (theme is not null)
             script += "\ndocument.documentElement.dataset.theme = \"" + theme + "\";";

@@ -83,7 +83,6 @@ internal static class Program
             { Environment.ExitCode = 64; return; }
             try
             {
-                // Preparation only. No helper, candidate or installed app runs.
                 var result = UpdateDownload.Prepare(args[1], args[2], args[3], args[4], previousBuild, args[6])
                     .GetAwaiter().GetResult();
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
@@ -400,8 +399,6 @@ internal static class Program
         if (inUse is not null && !inUse.WaitOne(0)) { Environment.ExitCode = 1; return; }
         try
         {
-            // The singleton or runtime semaphore protects the installation files.
-            // Release the startup gate so existing-instance activation works.
             installationGate.Dispose();
             using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.ActivationName);
             if (!first)
@@ -545,12 +542,9 @@ internal sealed class ObservatoryContext : ApplicationContext
     private JsonObject? Data() => Snapshot.Read(Path.Combine(runtime, "public", "local", "usage.json"));
     private void ShowUsage() => _ = ShowWebPanel();
 
-    // The four actions the shared panel may ask for map to tray actions.
     private void PanelAction(string action)
     {
         if (quitting) return;
-        // While the harness presses the page's buttons it records each accepted
-        // action. Only refresh runs for real there, since the others open windows.
         if (panelProbe is not null) { panelProbe(action); if (action != "refresh") return; }
         switch (action)
         {
@@ -589,9 +583,6 @@ internal sealed class ObservatoryContext : ApplicationContext
         return shown;
     }
 
-    // Measurement harness, run only with --panel-timing. It opens
-    // and closes the shared panel and writes one line per event. The
-    // timer starts where the tray click handler starts, not at the mouse click.
     private async Task MeasurePanel()
     {
         var log = Path.Combine(runtime, "panel-timing.log");
@@ -623,7 +614,6 @@ internal sealed class ObservatoryContext : ApplicationContext
             Write("phase=closed");
             await Task.Delay(60000);
             Write("phase=closed-60s");
-            // The web panel releases its web view about now. Sample again five minutes later.
             await Task.Delay(TimeSpan.FromMinutes(5));
             Write("phase=closed-6min");
             await Task.Delay(15000);
@@ -647,8 +637,6 @@ internal sealed class ObservatoryContext : ApplicationContext
                 Write("after refresh snapshot changed=" + (Snapshot.Text(Data()?["collectedAt"], "") != before) + " untrusted-page=" + WebPanel.Untrusted(await panel.Describe()));
                 panel.Hide();
             }
-            // Dismissal check. The measuring script brings the open panel to the
-            // foreground and then another window. This records what the panel did.
             await Task.Delay(1000);
             if (await OpenOnce() >= 0)
             {
@@ -666,11 +654,9 @@ internal sealed class ObservatoryContext : ApplicationContext
                 Write("dismiss after-other-window foreground=" + Front() + " visible=" + Showing());
                 CloseOnce();
             }
-            // Record what the shared dashboard window drew, then close it so it is released.
             Open();
             if (dashboard is WebDashboard web)
             {
-                // The value comes from the page and is untrusted.
                 Write("dashboard untrusted-page=" + WebPanel.Untrusted(await web.Describe()));
                 await web.SavePreview(Path.Combine(runtime, "dashboard-timing.png"));
                 Write("phase=dashboard-open");
@@ -697,7 +683,6 @@ internal sealed class ObservatoryContext : ApplicationContext
                     await Task.Delay(50);
                 }
                 if (!ready) throw new InvalidOperationException("Settings probe did not draw.");
-                // Let the initial cached status reach the controls.
                 await Task.Delay(500);
                 var rawCount = await settings.RunScriptForTest("document.querySelectorAll('.ob-settings button, .ob-settings input[type=checkbox], .ob-settings select').length");
                 if (!int.TryParse(rawCount, out var controls) || controls < 1 || controls > 256)

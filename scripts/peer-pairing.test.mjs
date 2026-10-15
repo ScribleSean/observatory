@@ -13,7 +13,6 @@ import {revokePairing} from './peer-revocation.mjs';
 async function fixture(t,settled=()=>undefined) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-pairing-')));
   t.after(async()=>{
-    // Cancellation can leave the current ACL operation settling asynchronously.
     await Promise.resolve(settled()).catch(()=>{});
     await rm(runtime,{recursive:true,force:true});
   });return runtime;

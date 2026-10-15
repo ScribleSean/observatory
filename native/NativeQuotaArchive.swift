@@ -45,7 +45,6 @@ struct ArchiveReply: Decodable {
     let chart: ArchiveChart?
     let storageBytes: Int?
     let storageLimitBytes: Int?
-    // Catalogue and reading cursors have different shapes.
     let next: ArchiveNext?
     enum ArchiveNext: Decodable {
         case account(String), page(ArchiveCursor)

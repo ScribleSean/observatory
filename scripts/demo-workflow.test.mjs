@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-// Source contracts only. Do not execute collectors, permissions or deployment.
 const workflow = readFileSync(
   new URL('../.github/workflows/demo.yml', import.meta.url),
   'utf8',

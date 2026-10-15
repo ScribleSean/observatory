@@ -8,7 +8,6 @@ const { createServer } = await load('vite');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
 after(() => server.close());
 const { validateBridgeStatus } = await server.ssrLoadModule('/app/viewer/settings/status.ts');
-// The fixture must stay identical to the JSON literal in runBridgeSelfTests (native/BridgeHandler.swift).
 const fixtureText = readFileSync(new URL('../native/tests/bridge-status-shapes.json', import.meta.url), 'utf8');
 const shapes = JSON.parse(fixtureText.replace(/^\/\/[^\n]*\n/, ''));
 test('Mac fixture stays identical to the Swift self-test literal', () => {

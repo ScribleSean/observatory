@@ -1,4 +1,3 @@
-// Release configuration is supplied at build time, never by a downloaded feed.
 export const macUpdateFeed='https://scriblesean.github.io/observatory/updates/macos-arm64.xml';
 
 export function macUpdateConfiguration(publicKey,{hasFramework=false}={}) {

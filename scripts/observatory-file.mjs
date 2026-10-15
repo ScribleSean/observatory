@@ -13,9 +13,6 @@ const isObject=value=>value!==null && typeof value==='object' && !Array.isArray(
 const validDate=value=>typeof value==='string' && /^\d{4}-\d\d-\d\d$/.test(value) && !Number.isNaN(Date.parse(value+'T12:00:00Z'));
 const validTime=value=>typeof value==='string' && value.length<=40 && !Number.isNaN(Date.parse(value));
 
-// Every value in a record is a number, a boolean, null, a short label or a
-// small container of those. Long text cannot pass, so a title, a prompt or a
-// path cannot ride along even if a later snapshot field carried one.
 function plain(value,depth=0,budget={left:2_000_000}) {
   if(--budget.left<0)throw Error('Record is too large');
   if(value===null || typeof value==='boolean')return value;
@@ -90,7 +87,6 @@ export function buildExport(snapshot,{appVersion='Unknown',now=new Date(),device
     devices:Object.keys(platforms).filter(host=>used.has(host)).map(host=>({id:host,platform:platforms[host],
       name:typeof names[host]==='string' && names[host].trim()?names[host].trim().slice(0,32):null})),
     records,combined,
-    // Account-wide readings observed on the exporting device. They belong to an account, not a device.
     limits:[limits(snapshot.quota,'codex'),limits(snapshot.claudeLimits,'claude-code')].filter(Boolean),
   };
 }
@@ -147,7 +143,6 @@ export function validateExport(document) {
   };
 }
 
-// A description with counts and date ranges only. It holds no usage values.
 export function describeExport(document) {
   const clean=validateExport(document);
   const range=list=>list.length?{from:list[0].date,to:list.at(-1).date,days:list.length}:{days:0};

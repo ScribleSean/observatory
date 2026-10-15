@@ -1,8 +1,5 @@
 namespace WorkspaceObservatory;
 
-// The NSIS installer uses existence of this named mutex, not ownership, as its
-// setup lock. Hold a handle until the app's singleton handle has been created.
-// This closes the race between installer CheckRunning and application startup.
 internal sealed class InstallationGate : IDisposable
 {
     internal const string Name = "Local\\WorkspaceObservatorySetup";

@@ -8,7 +8,6 @@ $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not [IO.Path]::IsPathRooted($CacheRoot)) { throw 'CacheRoot must be absolute.' }
 New-Item -ItemType Directory -Path $CacheRoot -Force | Out-Null
 
-# Keep build tools and package caches on the Windows build machine.
 $nodeVersion = (Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json).node.version
 $archive = Get-ObservatoryArchive -Name node -CacheRoot $CacheRoot
 $nodeRoot = Join-Path $CacheRoot "node-v$nodeVersion-win-x64"
@@ -36,8 +35,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
     & $Dotnet native/windows/bin/Release/net10.0-windows/WorkspaceObservatory.dll --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Windows self-tests failed.' }
-    # Keep permission-heavy CLI/TLS fixtures out of the parallel suite. Their
-    # absolute timeouts stay unchanged, and every test file still runs.
     $isolatedTests = @('peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs')
     $contractTests = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File |
         Where-Object { $_.Name -notin $isolatedTests } | Sort-Object Name |

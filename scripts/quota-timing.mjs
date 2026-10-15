@@ -1,5 +1,3 @@
-// Match the native timer's bounded scheduling tolerance. This only controls
-// continuity between observations, never the freshness of the latest reading.
 export const quotaHistoryMaxGapMs = 630000;
 export function sameQuotaReset(a,b) {
   if(a===b)return true;

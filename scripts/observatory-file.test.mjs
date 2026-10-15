@@ -25,7 +25,6 @@ const snapshot=()=>({
     history:[{checkedAt:'2026-03-10T14:00:00.000Z',windows:[{bucket:'codex',window:'primary',remainingPercent:90,resetsAt:'2026-03-10T18:00:00.000Z'}]}],
     dailyUsageBuckets:[{startDate:'2026-03-09',tokens:55}]},
   claudeLimits:{status:'stale',checkedAt:'2026-03-10T13:00:00.000Z',windows:[{bucket:'claude',window:'five_hour',durationMinutes:300,remainingPercent:64,resetsAt:'2026-03-10T17:00:00.000Z'}]},
-  // Fields that must never reach an export.
   pairing:{secret:'synthetic-secret'},comparisonSalt:'synthetic-salt',peer:{payload:{key:'synthetic-key'}},agents:[{title:'synthetic title'}],
 });
 async function folder(t) {

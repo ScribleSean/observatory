@@ -8,8 +8,6 @@ import {rasterQuotaTimeline} from './quota-chart-raster.mjs';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const time=value=>Number.isSafeInteger(value) && value>=0 && value<=8640000000000000;
 
-// Native-process stdin/stdout only. Do not mount this on a web or peer route.
-// No provider discovery, authentication, collection or deletion is performed.
 export async function quotaArchiveControl(runtime,request) {
   if(!path.isAbsolute(runtime) || !request || Array.isArray(request) || typeof request!=='object')throw Error('Invalid archive request');
   const keys=Object.keys(request);
@@ -30,7 +28,6 @@ export async function quotaArchiveControl(runtime,request) {
       (request.after!==undefined && request.after!==null && (typeof request.after!=='object' ||
         Object.keys(request.after).sort().join(',')!=='at,id' || !time(request.after.at) || !Number.isSafeInteger(request.after.id) || request.after.id<1)))throw Error('Invalid page request');
   } else throw Error('Invalid archive action');
-  // Merely opening History must not initialize storage for a never-enabled source.
   const directory=await lstat(runtime);
   if(!directory.isDirectory() || directory.isSymbolicLink())throw Error('Invalid runtime');
   try {await lstat(path.join(runtime,'private-quota','state.sqlite'));}

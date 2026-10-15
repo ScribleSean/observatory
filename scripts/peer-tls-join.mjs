@@ -4,8 +4,6 @@ import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {discoverPeerCertificate,requestPeerSetup,acknowledgePeerSetup} from './peer-tls-client.mjs';
 import {commitConfirmedTLSPairing} from './peer-tls-setup.mjs';
 
-// Explicit joining-controller action after invitation claim and local approval.
-// No generated keys, implicit source selection, background polling or listener.
 export async function receiveConfirmedTLSPairing(runtime,invitation,options={}) {
   const host=process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null;
   if(!host)throw Error('Native host required');
@@ -19,8 +17,6 @@ export async function receiveConfirmedTLSPairing(runtime,invitation,options={}) 
     peerCertificate:certificate,peerCertificateSha256:safe.certificateSha256};
   if(options.signal?.aborted)throw Error('Pairing confirmation cancelled');
   await commitConfirmedTLSPairing(runtime,{pairing:response.pairing,claim});
-  // A lost acknowledgement must leave the saved binding intact for an explicit
-  // identical retry. It is not grounds for re-pairing or announcing success.
   try {
     await acknowledgePeerSetup(safe,certificate,identity,response.pairing,options);
     return {status:'acknowledged'};

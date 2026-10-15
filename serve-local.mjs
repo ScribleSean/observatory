@@ -1,4 +1,3 @@
-// Static files only: no RSC, server functions, Vite dev endpoints or remote APIs.
 import http from 'node:http';
 import { readFile, realpath, lstat } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';

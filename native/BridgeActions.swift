@@ -5,7 +5,6 @@ import ServiceManagement
 import UniformTypeIdentifiers
 
 func bridgeChildEnvironment() -> [String: String] {
-    // Use an allowlist so loader, Node, OpenSSL and libuv variables never reach a child.
     let inherited = ProcessInfo.processInfo.environment
     var environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
     for key in ["HOME", "USER", "LOGNAME", "LANG", "TMPDIR"] { environment[key] = inherited[key] }
@@ -439,7 +438,6 @@ final class MacBridgeHost: BridgeHost {
                 completion(value == nil ? .unavailable : .done, value)
             }
         case "export-data": export(completion: completion)
-        // O1-2 implements first-run completion on the removal branch.
         case "complete-setup": completion(.unavailable, nil)
         default: completion(.refused, nil)
         }

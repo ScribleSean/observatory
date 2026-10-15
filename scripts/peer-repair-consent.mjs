@@ -5,8 +5,6 @@ import {privateCollectorDirectory} from './peer-directory.mjs';
 
 export const validRepairNonce=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 
-// These tokens bind the current local confirmations to a replacement pairing.
-// They are private protocol metadata, not a new authentication mechanism.
 async function readConsentFile(runtime) {
   let directory;
   try {directory=await privateCollectorDirectory(runtime,'private-repair');}
@@ -40,10 +38,9 @@ export async function readRepairConsent(runtime) {
   return nonce;
 }
 
-// The caller holds the operation lock and has explicit local confirmation.
 export async function writeRepairConsent(runtime,nonce) {
   if(!validRepairNonce(nonce))throw Error('Invalid repair confirmation');
-  await readConsentFile(runtime); // Refuse corrupt or unsafe prior control state.
+  await readConsentFile(runtime);
   const directory=await privateCollectorDirectory(runtime,'private-repair');
   const pending=path.join(directory,'prepare.pending');
   const file=await open(pending,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);

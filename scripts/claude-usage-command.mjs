@@ -1,6 +1,3 @@
-// Reads Claude Code limits by running the installed CLI's own usage command
-// in print mode. The command is local: it reports zero turns and zero cost.
-// Only the two limit lines are kept. The rest of the text is discarded.
 import {spawn} from 'node:child_process';
 import {lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
@@ -34,8 +31,6 @@ export function parseResetTime(text,now=Date.now()) {
   return null;
 }
 
-// Returns the same shape the status line passes, or null when the output is
-// not the expected local command result.
 export function parseClaudeUsage(envelope,now=Date.now()) {
   if(!envelope || typeof envelope!=='object' || envelope.is_error!==false || envelope.num_turns!==0 || envelope.total_cost_usd!==0 ||
     envelope.local_command!=='usage' || typeof envelope.result!=='string' || envelope.result.length>20000)return null;
@@ -82,9 +77,6 @@ function forceStop(child,platform) {
   } catch {}
 }
 
-// Always settles within the time limit, whatever the child does. A command
-// that ignores a polite stop or leaves a helper holding its output open
-// cannot hold up a collection.
 function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
   return new Promise(resolve=>{
     let output='',done=false,child;
