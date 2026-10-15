@@ -338,7 +338,7 @@ The shell checks every address argument with this grammar, which both shells can
 - IPv6: groups of one to four hexadecimal digits in lowercase or uppercase, separated by `:`. Either exactly eight groups with no `::`, or two to seven groups with exactly one `::`. The first group is from `fc00` to `fdff` (unique local addresses). No `%` zone identifier and no embedded IPv4 part.
 - At most 39 characters.
 
-The pairing control process still checks the address with `isPairingAddress`, as the final check. That function accepts IPv6 zone identifiers through Node's `isIP`, which its own comment says are unsupported. That belongs in an issue for P1.
+The pairing control process still checks the address with `isPairingAddress`, as the final check. Since P1 (issue 110) that function follows this same grammar and no longer uses Node's `isIP`, so it refuses IPv6 zone identifiers and embedded IPv4 too.
 
 #### Actions
 

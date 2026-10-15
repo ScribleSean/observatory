@@ -57,9 +57,10 @@ test('TLS repair consent',{skip:!existsSync(openssl) || !['darwin','win32'].incl
     for(const file of ['pairing.json','tls-trust.json'])assert.equal(existsSync(path.join(runtime,'private-sync',file)),false);
     assert.equal(listener.status(),'configuration-ready');
   }
-  for(const both of [false,true])await t.test(both?'repair on both sides':'repair on the host side only',async()=>{
-    const local=await runtime(serverIdentity,true),nonce=await readRepairConsent(local),before=await retiredBytes(local);
-    const peerNonce=both?'b'.repeat(64):null,repair={[localKey]:nonce,...(both?{[peerKey]:peerNonce}:{})};
+  for(const [name,hostRepaired,both] of [['repair on the host side only',true,false],['repair on both sides',true,true],
+    ['repair on the joining side only, unrepaired host',false,true]])await t.test(name,async()=>{
+    const local=await runtime(serverIdentity,hostRepaired),nonce=await readRepairConsent(local),before=await retiredBytes(local);
+    const peerNonce=both?'b'.repeat(64):null,repair={...(nonce?{[localKey]:nonce}:{}),...(both?{[peerKey]:peerNonce}:{})};
     const listener=await startHostTLSSetup(local,{address:'10.0.0.2'},{createServer});
     try {
       await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect,...(both?{repairNonce:peerNonce}:{})});
