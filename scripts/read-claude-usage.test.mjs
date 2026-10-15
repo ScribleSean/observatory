@@ -9,7 +9,16 @@ import {fileSymlinkOrSkip} from './test-file-symlink.mjs';
 const script='scripts/read-claude-usage.py';
 const event=(id,requestId,usage,{timestamp='2026-09-25T04:30:00Z',model='claude-sonnet-4-20250514',type='assistant'}={})=>JSON.stringify({type,timestamp,requestId,message:{role:'assistant',id,model,usage,content:'PRIVATE'}})+'\n';
 const usage=(input_tokens,cache_read_input_tokens,cache_creation_input_tokens,output_tokens)=>({input_tokens,cache_read_input_tokens,cache_creation_input_tokens,output_tokens});
-function read(root){return JSON.parse(execPython([script,root]).toString());}
+function read(root){
+  const data=JSON.parse(execPython([script,root]).toString());
+  for(const day of data.days??[]) {
+    assert.equal(day.hours.length,24);
+    assert.ok(day.hours.every(value=>Number.isSafeInteger(value) && value>=0));
+    assert.equal(day.hours.reduce((total,value)=>total+value,0),day.totalTokens);
+    for(const model of day.models)assert.equal(Object.hasOwn(model,'hours'),false);
+  }
+  return data;
+}
 async function fixture(action){const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-'));try{await action(root);}finally{await rm(root,{recursive:true,force:true});}}
 async function log(root,name,body){const file=path.join(root,'projects','a',name);await mkdir(path.dirname(file),{recursive:true});await writeFile(file,body);return file;}
 
@@ -21,7 +30,23 @@ test('requires Claude assistant envelopes, rejects malformed nonblank lines, and
   await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2),{type:'system'}));assert.equal(read(root).status,'unavailable');
   await rm(path.join(root,'projects'),{recursive:true});await log(root,'one.jsonl','{bad json}\n');assert.equal(read(root).status,'unavailable');
   await rm(path.join(root,'projects'),{recursive:true});await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-09-25T03:59:59Z'})+event('m1','r1',usage(2,0,0,3),{timestamp:'2026-09-25T04:00:01Z'}));
-  assert.equal(read(root).days[0].date,'2026-09-24');
+  const data=read(root);assert.equal(data.days.length,1);assert.equal(data.days[0].date,'2026-09-24');
+  assert.equal(data.days[0].hours[23],5);assert.equal(data.days[0].requestCount,1);
+}));
+test('hour boundary streams use the earliest instant across timestamp offsets and file order',async()=>fixture(async root=>{
+  for(const earlier of [usage(1,0,0,2),usage(4,0,0,8)]) {
+    await log(root,'a-later.jsonl',event('m1','r1',usage(4,0,0,8),{timestamp:'2026-09-25T01:00:01-04:00'}));
+    await log(root,'z-earlier.jsonl',event('m1','r1',earlier,{timestamp:'2026-09-25T04:59:59Z'}));
+    const data=read(root),day=data.days[0];
+    assert.equal(data.days.length,1);assert.equal(day.date,'2026-09-25');assert.equal(day.requestCount,1);
+    assert.deepEqual(day.hours,[12,...Array(23).fill(0)]);
+  }
+}));
+test('repeated daylight saving hours compare instants and share the same bucket',async()=>fixture(async root=>{
+  await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2),{timestamp:'2026-11-01T01:59:00-04:00'})+
+    event('m1','r1',usage(4,0,0,8),{timestamp:'2026-11-01T01:01:00-05:00'})+
+    event('m2','r2',usage(2,0,0,3),{timestamp:'2026-11-01T01:30:00-05:00'}));
+  const day=read(root).days[0];assert.equal(day.hours[1],17);assert.equal(day.requestCount,2);
 }));
 test('withholds when an assistant envelope lacks numeric usage while non-assistant events stay out of scope',async()=>fixture(async root=>{
   const missing=JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r2',message:{role:'assistant',id:'m2'}})+'\n';

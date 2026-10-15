@@ -27,7 +27,7 @@ function sum(rows,key) {
 // The reader may retain local implementation fields, but this public projection
 // copies only counters and known model names. Its result is intentionally kept
 // outside Codex token aggregation and peer payloads.
-export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString()) {
+export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString(),{hours=false}={}) {
   if(!['Mac','Windows'].includes(host) || !Number.isFinite(Date.parse(checkedAt)) ||
     !raw || typeof raw!=='object' || raw.provider!=='claude-code' || raw.status!=='ok' ||
     !Array.isArray(raw.days) || !raw.days.length || raw.days.length>3660) throw Error('Invalid Claude report');
@@ -49,6 +49,8 @@ export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString
     // Preserve public row order because existing peer digests include it.
     day.models=[...models.values()];
     for(const key of counters)if(sum(day.models,key)!==day[key])throw Error('Inconsistent Claude day');
+    if(hours && Array.isArray(rawDay.hours) && rawDay.hours.length===24 &&
+      [...rawDay.hours].every(valid) && rawDay.hours.reduce((total,value)=>total+value,0)===day.totalTokens)day.hours=[...rawDay.hours];
     return day;
   }).sort((a,b)=>a.date.localeCompare(b.date));
   return {provider:'claude-code',host,status:'ok',checkedAt:new Date(checkedAt).toISOString(),scope:'Recorded Claude Code requests',days};

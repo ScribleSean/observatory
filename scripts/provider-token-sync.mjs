@@ -3,7 +3,7 @@ import {readPairing} from './peer-pairing.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {sshProviderTokenRequest} from './peer-transport.mjs';
 import {tlsProviderTokenRequest} from './peer-tls-outbound.mjs';
-import {attachProviderTokenSources,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {parseProviderTokenSource,parseProviderTokenReply} from './provider-token-peer.mjs';
 import {assertOutgoingProviderTokenRequest} from './provider-token-exchange.mjs';
 import {readProviderTokenState,updateProviderTokenSource,acceptProviderTokenReply,providerTokenBinding} from './provider-token-store.mjs';
@@ -64,19 +64,30 @@ export async function syncProviderTokens(runtime,{request,clock=Date.now}={}) {
 // Collectors pass one already sanitized local source. This function never reads
 // provider logs or changes core peer records. Failure preserves that local row.
 export async function collectProviderTokenSources(runtime,source,options={}) {
-  let now,local;
-  try {now=(options.clock??Date.now)();local=parseProviderTokenSource(source,source?.host,now);}
+  let now,local,dashboard;
+  try {
+    now=(options.clock??Date.now)();
+    const stripped=Array.isArray(source?.days)?{...source,days:source.days.map(day=>{
+      if(!day || typeof day!=='object' || Array.isArray(day))return day;
+      const {hours,...rest}=day;
+      return rest;
+    })}:source;
+    local=parseProviderTokenSource(stripped,source?.host,now);
+    dashboard=local.status==='ok'?cleanClaudeTokenSource({...local,days:local.days.map(day=>({
+      ...day,hours:source.days.find(item=>item.date===day.date)?.hours
+    }))},local.host,local.checkedAt,{hours:true}):local;
+  }
   catch {
     // Invalid optional input must not abort a successfully finalized dashboard
     // or copy unchecked provider fields into its public projection.
     return {status:'unavailable',sources:['Mac','Windows'].includes(source?.host)?[unavailableClaudeTokenSource(source.host)]:[]};
   }
   try {
-    if(!await readPairing(runtime))return {status:'disabled',sources:[local]};
+    if(!await readPairing(runtime))return {status:'disabled',sources:[dashboard]};
     await updateProviderTokenSource(runtime,local,now);
     const result=await syncProviderTokens(runtime,options);
-    return {status:result.status,sources:[local,...(result.peer?[result.peer]:[])]};
-  } catch {return {status:'unavailable',sources:[local]};}
+    return {status:result.status,sources:[dashboard,...(result.peer?[result.peer]:[])]};
+  } catch {return {status:'unavailable',sources:[dashboard]};}
 }
 
 // Invoke once, after core finalization and local Claude collection. It replaces

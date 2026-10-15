@@ -155,6 +155,44 @@ test('concurrent TLS roles exchange without holding a network lock and preserve 
   assert.deepEqual(await readdir(unpaired),[]);
 });
 
+test('local hours stay on the dashboard while stored and exchanged records remain identical',async t=>{
+  const {Mac,Windows,request,requests}=await fixture(t),plain=source('Mac');
+  await collectProviderTokenSources(Mac,plain,{request,clock:()=>now});
+  const stored=(await readProviderTokenState(Mac,now)).local;
+  const sent=requests.find(item=>item.action==='exchange').record;
+  const received=(await readProviderTokenState(Windows,now)).remote.record;
+  const local=structuredClone(plain);local.days[0].hours=[14,...Array(23).fill(0)];
+  const original=structuredClone(local);
+  requests.length=0;
+  const result=await collectProviderTokenSources(Mac,local,{request,clock:()=>now});
+  assert.equal(result.status,'ok');assert.deepEqual(result.sources[0],local);
+  assert.equal(Object.hasOwn(result.sources[1].days[0],'hours'),false);
+  assert.deepEqual((await readProviderTokenState(Mac,now)).local,stored);
+  assert.deepEqual(requests.find(item=>item.action==='exchange').record,sent);
+  assert.deepEqual((await readProviderTokenState(Windows,now)).remote.record,received);
+  assert.equal(JSON.stringify(stored).includes('"hours"'),false);
+  assert.equal(JSON.stringify(sent).includes('"hours"'),false);
+  assert.deepEqual(local,original);
+  const offline=await collectProviderTokenSources(Mac,local,{clock:()=>now,request:()=>{throw Error('offline');}});
+  assert.equal(offline.status,'unavailable');assert.deepEqual(offline.sources[0],local);
+  for(const hours of [Array(24).fill(0),[14],[-1,15,...Array(22).fill(0)]]) {
+    const invalid={...local,days:[{...local.days[0],hours}]};
+    const collected=await collectProviderTokenSources(Mac,invalid,{request,clock:()=>now});
+    assert.deepEqual(collected.sources[0],plain);
+    assert.deepEqual((await readProviderTokenState(Mac,now)).local,stored);
+  }
+  await disableProviderTokenSharing(Mac,now);
+  const disabled=await collectProviderTokenSources(Mac,local,{clock:()=>now});
+  assert.equal(disabled.status,'disabled');assert.deepEqual(disabled.sources[0],local);
+  await writeFile(path.join(Mac,'private-sync','pairing.json'),'bad',{mode:0o600});
+  const failed=await collectProviderTokenSources(Mac,local,{clock:()=>now});
+  assert.equal(failed.status,'unavailable');assert.deepEqual(failed.sources[0],local);
+  const unpaired=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-hours-')));
+  t.after(()=>rm(unpaired,{recursive:true,force:true}));
+  assert.deepEqual(await collectProviderTokenSources(unpaired,local,{clock:()=>now}),{status:'disabled',sources:[local]});
+  assert.deepEqual(await readdir(unpaired),[]);
+});
+
 test('collection off disables sharing and failed reads replace totals with Unknown',async t=>{
   const {Mac,Windows,request}=await fixture(t);
   await updateProviderTokenSource(Windows,unavailableClaudeTokenSource('Windows',new Date(now+1).toISOString()),now+1);
