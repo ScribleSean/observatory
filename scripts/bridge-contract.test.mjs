@@ -37,6 +37,8 @@ for (const action of ACTIONS) {
     add(`${action} missing ${key}`, message(action, missing), 'refused');
     const wrong = rule.type === 'boolean' ? [1, 'true', null, {}, []] : rule.type === 'integer' ? ['1024', true, null, {}, []] : [true, 1, {}, [], ...(rule.nullable ? [] : [null])];
     for (const value of wrong) add(`${action} ${key} wrong type ${JSON.stringify(value)}`, message(action, { ...args, [key]: value }), 'refused');
+    if (rule.type === 'boolean' && action !== 'set-sharing') add(`${action} ${key} false`, message(action, { ...args, [key]: false }),
+      rule.presentWhen ? 'refused' : accepted(action, { ...args, [key]: false }));
     if (rule.type === 'integer') {
       for (const value of [rule.min - 1, rule.max + 1]) add(`${action} ${key} bound ${value}`, message(action, { ...args, [key]: value }), 'refused');
       for (const value of [rule.min, rule.max]) add(`${action} ${key} inclusive ${value}`, message(action, { ...args, [key]: value }), accepted(action, { ...args, [key]: value }));
@@ -221,6 +223,8 @@ test('generator rejects malformed data and checks normalized output', async () =
     data => { data.address.ipv4[0] = ['10.01.0.0', 8]; },
     data => { data.address.ipv4[0][1] = 33; },
     data => { data.values.appearance = [true]; },
+    data => { delete data.values.sharingChoiceState; },
+    data => { data.values.sharingChoiceState = [true]; },
     data => { data.actions.status.reserved = 1; },
     data => { data.actions.status.extra = true; },
     data => { data.actions['set-skin'].args.skin.type = 'unknown'; },
@@ -476,7 +480,7 @@ test('contract numbers anywhere stay within nonnegative Int32 bounds', () => {
 });
 
 void test('status fields are exact and reject malformed lists', () => {
-  assert.deepEqual(contract.status.fields, ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing"]);
+  assert.deepEqual(contract.status.fields, ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharingChoice", "sharing"]);
   for (const fields of [undefined, [], ['version', 'version'], ['version', 1], ['Bad'], ['bad-key']]) {
     const data = structuredClone(contract);
     data.status.fields = fields;

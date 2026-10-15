@@ -279,7 +279,9 @@ internal sealed class Collector : IDisposable
         foreach (var name in new[] { "SystemRoot", "windir", "SystemDrive", "PATH", "PATHEXT", "TEMP", "TMP",
             "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "ProgramData", "ProgramFiles",
             "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles", "USERNAME", "USERDOMAIN", "COMPUTERNAME",
-            "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "TZ", "CLAUDE_CONFIG_DIR" })
+            "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "TZ", "CLAUDE_CONFIG_DIR",
+            // Measurement only (issue 106): passed on when set, never set by the app.
+            "OBSERVATORY_COUNT_POWERSHELL" })
             if (Environment.GetEnvironmentVariable(name) is { } value) result[name] = value;
         result["OBSERVATORY_RUNTIME"] = runtime;
         result["OBSERVATORY_PYTHON"] = python;
@@ -314,13 +316,17 @@ internal sealed class Collector : IDisposable
 
     internal static void LaunchSelfTest()
     {
-        var names = new[] { "NODE_OPTIONS", "PYTHONPATH", "PYTHONHOME", "SystemRoot" };
+        var names = new[] { "NODE_OPTIONS", "PYTHONPATH", "PYTHONHOME", "SystemRoot", "OBSERVATORY_COUNT_POWERSHELL" };
         var previous = names.Select(Environment.GetEnvironmentVariable).ToArray();
         try
         {
+            Environment.SetEnvironmentVariable("OBSERVATORY_COUNT_POWERSHELL", null);
+            if (BuildLaunchEnvironment("synthetic-runtime", "synthetic-python").ContainsKey("OBSERVATORY_COUNT_POWERSHELL"))
+                throw new InvalidOperationException("Collector launch environment failed.");
             foreach (var name in names) Environment.SetEnvironmentVariable(name, "synthetic");
             var environment = BuildLaunchEnvironment("synthetic-runtime", "synthetic-python");
             if (names.Take(3).Any(environment.ContainsKey) || environment["SystemRoot"] != "synthetic" ||
+                environment["OBSERVATORY_COUNT_POWERSHELL"] != "synthetic" ||
                 environment["OBSERVATORY_RUNTIME"] != "synthetic-runtime" || environment["OBSERVATORY_PYTHON"] != "synthetic-python")
                 throw new InvalidOperationException("Collector launch environment failed.");
         }

@@ -47,7 +47,7 @@ export function validateContract(data) {
     const parts = pair[0].split('.');
     if (parts.length !== 4 || parts.some(p => !/^(0|[1-9][0-9]{0,2})$/.test(p) || Number(p) > 255)) fail();
   }
-  keys(data.values, ['tailscaleStatus', 'pairingState', 'transport', 'sharingReason', 'appearance']); Object.values(data.values).forEach(strings);
+  keys(data.values, ['tailscaleStatus', 'pairingState', 'transport', 'sharingChoiceState', 'sharingReason', 'appearance']); Object.values(data.values).forEach(strings);
   if (!object(data.actions) || !Object.keys(data.actions).length) fail();
   for (const [name, action] of Object.entries(data.actions)) {
     if (!/^[a-z][a-z-]*$/.test(name)) fail();

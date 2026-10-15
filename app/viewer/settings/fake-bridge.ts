@@ -11,14 +11,17 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
   let hostPolls = 0;
   const waiters = new Map<ReturnType<typeof setTimeout>, () => void>();
   const end = (next: string) => {
-    state.pairing = { state: next, peerFingerprint: null, invitationKept: false, transport: next === 'paired' ? 'tls' : 'none' };
+    state.pairing = { state: next, peerFingerprint: null, invitationKept: false, transport: ['paired', 'establishing-trust', 'active-sync', 'sync-stale'].includes(next) ? 'tls' : 'none' };
     hostPolls = 0;
     // Sample sharing follows the sample pairing, so the demo can show both switch states.
     for (const [channel, item] of Object.entries(state.sharing)) {
-      const paired = next === 'paired';
+      const paired = ['paired', 'establishing-trust', 'active-sync', 'sync-stale'].includes(next);
       Object.assign(item, { enabled: paired && item.enabled, canEnable: paired, reason: paired ? 'ready' : 'pairing-unavailable',
         token: paired ? (channel === 'codex-limits' ? 'c0' : 'd0').repeat(32) : null });
     }
+  };
+  const chooseSharing = (enabled: boolean) => {
+    state.sharingChoice = { chosen: enabled, channels: { 'codex-limits': enabled ? 'waiting-for-reading' : 'off', 'claude-code-tokens': enabled ? 'waiting-for-reading' : 'off' } };
   };
   return {
     available: true,
@@ -50,6 +53,9 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
             case 'set-startup': state.startup = input.enabled as boolean; break;
             case 'set-appearance': state.appearance = input.mode as typeof state.appearance; break;
             case 'set-limits-consent': state.limitsConsent = input.enabled as boolean; break;
+            case 'pairing-host-defaults': result.value = { address: '100.101.102.103', port: 43128, portAvailable: true }; break;
+            case 'pairing-peer-address': result.value = { peerAddress: 'fd7a:115c:a1e0::1234' }; break;
+            case 'set-sharing-choice': chooseSharing(input.enabled as boolean); break;
             case 'set-sharing': {
               const channel = state.sharing[input.channel as SharingChannel];
               if (input.enabled && (!channel.canEnable || input.token !== channel.token)) unavailable();
@@ -63,10 +69,10 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
             case 'pairing-copy-invitation': if (!state.pairing.invitationKept) unavailable(); break;
             case 'pairing-host-confirm':
               if (state.pairing.state !== 'confirming' || input.fingerprint !== state.pairing.peerFingerprint) unavailable();
-              else end('paired');
+              else { end('establishing-trust'); chooseSharing(input.sharing as boolean); }
               break;
             case 'pairing-join-claim': end('awaiting-confirmation'); break;
-            case 'pairing-join-confirm': if (state.pairing.state !== 'awaiting-confirmation') unavailable(); else end('paired'); break;
+            case 'pairing-join-confirm': if (state.pairing.state !== 'awaiting-confirmation') unavailable(); else { end('establishing-trust'); chooseSharing(input.sharing as boolean); } break;
             case 'pairing-cancel': end('idle'); break;
             case 'pairing-disconnect': end('unpaired'); break;
             case 'pairing-repair-prepare': end('idle'); break;
