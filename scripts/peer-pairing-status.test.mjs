@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readFile,writeFile,readdir,lstat,symlink,link,mkdir,open} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,writeFile,readdir,lstat,symlink,link,mkdir,open,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -35,11 +35,13 @@ test('empty and empty pairing folders are unpaired, leftover state needs repair'
 test('pairing without a verified record is establishing trust even with a listener',async t=>{
   const {runtime,pairs}=await paired(t);
   assert.deepEqual(await readPairingStatus(runtime),status('establishing-trust'));
-  const service=createTrustedSyncService(runtime,{read:async()=>({pairing:{...pairs.Mac,
+  let written;const complete=new Promise(resolve=>written=resolve);
+  const service=createTrustedSyncService(runtime,{writeStatus:async location=>{try {await writePairingStatus(location);}finally{written();}},read:async()=>({pairing:{...pairs.Mac,
     localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128}},trust:{version:1}}),
     start:async()=>({isListening:()=>true,close:async()=>{}}),schedule:()=>1,unschedule:()=>{}});
   try {
     assert.deepEqual(await service.run({action:'status'}),{status:'sync-listening'});
+    await complete;
     assert.deepEqual(await readPairingStatusFile(runtime),status('establishing-trust'));
   } finally {await service.cancel();}
 });
@@ -103,7 +105,7 @@ for(const kind of ['missing','extra','unknown','old','future','invalid-time'])te
   if(kind==='old')value.checkedAt=new Date(now-120001).toISOString();
   if(kind==='future')value.checkedAt=new Date(now+60001).toISOString();
   if(kind==='invalid-time')value.checkedAt='Unknown';
-  if(kind!=='missing')await writeFile(path.join(runtime,'pairing-status.json'),JSON.stringify(value));
+  if(kind!=='missing')await writeFile(path.join(runtime,'pairing-status.json'),JSON.stringify(value),{mode:0o600});
   assert.deepEqual(await readPairingStatusFile(runtime,now),status('unavailable'));
 });
 test('CLI prints only the state and refuses relative paths and extra arguments',async t=>{
@@ -139,4 +141,15 @@ test('a flush failure removes the exclusive temporary file and preserves the tar
     assert.deepEqual(await readFile(name),before);
     assert.deepEqual((await readdir(runtime)).filter(name=>name.endsWith('.tmp')),[]);
   } finally {mocked.mock.restore();}
+});
+
+for(const mode of [0o640,0o620,0o604,0o602])test(`status reader refuses permission ${mode.toString(8)}`,{skip:process.platform==='win32'},async t=>{
+  const runtime=await fixture(t),now=Date.now();await writePairingStatus(runtime,now);
+  await chmod(path.join(runtime,'pairing-status.json'),mode);
+  assert.deepEqual(await readPairingStatusFile(runtime,now),status('unavailable'));
+});
+test('status reader refuses another owner',{skip:process.platform==='win32'},async t=>{
+  const runtime=await fixture(t),now=Date.now();await writePairingStatus(runtime,now);
+  const uid=process.getuid();t.mock.method(process,'getuid',()=>uid+1);
+  assert.deepEqual(await readPairingStatusFile(runtime,now),status('unavailable'));
 });

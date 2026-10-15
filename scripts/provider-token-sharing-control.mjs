@@ -1,3 +1,4 @@
+import {markSharingChoiceApplied} from './sharing-choice.mjs';
 import {realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
@@ -13,7 +14,10 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     !exactProviderFields(request,request.action==='enable'?['action','token']:['action']) ||
     (request.action==='enable' && (typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token))))throw Error('Invalid provider sharing request');
   return withPeerStateLock(runtime,async()=>{
-    if(request.action==='disable')await disableProviderTokenSharing(runtime,now);
+    if(request.action==='disable') {
+      await disableProviderTokenSharing(runtime,now);
+      await markSharingChoiceApplied(runtime,'claude-code-tokens');
+    }
     let pair;
     try {pair=await readPairing(runtime);}catch {pair=null;}
     let state=pair?await readProviderTokenState(runtime,now):null;

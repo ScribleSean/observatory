@@ -25,7 +25,7 @@ async function readBinding(runtime) {
 // setup operations, public bind, discovery or independent startup registration.
 export function createTrustedSyncService(runtime,{read=readBinding,start=startTrustedSyncListener,
   schedule=callback=>setInterval(callback,30000),unschedule=clearInterval,writeStatus=writePairingStatus}={}) {
-  let listener=null,binding=null,pending=null,timer=null,closed=false,status='sync-disabled';
+  let listener=null,binding=null,pending=null,statusWrite=null,timer=null,closed=false,status='sync-disabled';
   async function stopListener() {
     const old=listener;listener=null;binding=null;
     if(old)await old.close();
@@ -47,9 +47,10 @@ export function createTrustedSyncService(runtime,{read=readBinding,start=startTr
         if(closed || !isDeepStrictEqual(await read(runtime),next)) {await stopListener();status='sync-disabled';return;}
         listener=created;binding=next;status='sync-listening';
       } catch {await stopListener();status='unavailable';}
-    })().then(async()=>{
-      if(!closed)try {await writeStatus(runtime);}catch{}
-      return {status};
+    })().then(()=>{
+      const reply={status};
+      if(!closed && !statusWrite)statusWrite=Promise.resolve().then(()=>writeStatus(runtime)).catch(()=>{}).finally(()=>{statusWrite=null;});
+      return reply;
     }).finally(()=>{pending=null;});
     return pending;
   }

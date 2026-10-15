@@ -1,3 +1,4 @@
+import {fstatSync} from 'node:fs';
 // Private test controller. Never included in installed packages.
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -13,14 +14,16 @@ function deadline(promise,ms) {
   return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(failed()),ms);})])
     .finally(()=>clearTimeout(timer));
 }
-export function acceptsTTY({stdinIsTTY,stdoutIsTTY}) {return !stdinIsTTY && !stdoutIsTTY;}
-export function parseArguments(args,tty={}) {
+export function acceptsPipes({stdin,stdout}={}) {
+  return [stdin,stdout].every(info=>Boolean(info && (info.isFIFO() || info.isSocket())));
+}
+export function parseArguments(args,streams={}) {
   const values=[...args],repaired=values.at(-1)==='--repaired';
   if(repaired)values.pop();
   if(values.length===2 && values[0]==='--loopback' && isPairingAddress(values[1]))
     return {address:values[1],repaired,role:null};
   if(values.length===4 && values[0]==='--role' && ['host','join'].includes(values[1]) &&
-    values[2]==='--local' && isPairingAddress(values[3]) && acceptsTTY(tty))
+    values[2]==='--local' && isPairingAddress(values[3]) && acceptsPipes(streams))
     return {address:values[3],repaired,role:values[1]};
   throw failed();
 }
@@ -135,7 +138,7 @@ function localWorker(address) {
   return {...createWorkerLink(child.stdout,child.stdin),exited};
 }
 async function main() {
-  const options=parseArguments(process.argv.slice(2),{stdinIsTTY:process.stdin.isTTY,stdoutIsTTY:process.stdout.isTTY});
+  const options=parseArguments(process.argv.slice(2),{stdin:fstatSync(0),stdout:fstatSync(1)});
   const workers=[];
   let passed=false;
   try {

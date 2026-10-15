@@ -90,3 +90,19 @@ test('status writes follow the first reconcile and timer ticks without changing 
     assert.equal(writes,2);assert.equal(closes,1);
   } finally {await service.cancel();}
 });
+
+test('pending status write never delays replies and only one write runs',async()=>{
+  let finish,writes=0,tick;
+  const blocked=new Promise(resolve=>finish=resolve);
+  const service=createTrustedSyncService('/synthetic',{read:async()=>null,
+    schedule:callback=>{tick=callback;return 1;},unschedule:()=>{},
+    writeStatus:()=>{writes++;return blocked;}});
+  try {
+    assert.deepEqual(await service.run({action:'status'}),{status:'sync-disabled'});
+    assert.equal(writes,1);
+    tick();assert.deepEqual(await service.reconcile(),{status:'sync-disabled'});
+    assert.equal(writes,1);
+    finish();await new Promise(resolve=>setImmediate(resolve));
+    tick();await service.reconcile();assert.equal(writes,2);
+  } finally {finish();await service.cancel();}
+});

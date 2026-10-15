@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {PassThrough,Writable} from 'node:stream';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsTTY} from './peer-live-controller.mjs';
+import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes} from './peer-live-controller.mjs';
 
 const invitation='observatory-pair:v1:fictional-secret';
 const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','service','publish',
@@ -143,14 +143,20 @@ test('cleanup failure prevents a passing result',async()=>{
   assert.equal(await runSequence({...run,cleanup:async()=>{throw Error('private');}}),false);
   assert.deepEqual(run.lines.slice(-2),['step cleanup: failed','result: stopped at cleanup']);
 });
-test('strict command lines and terminal refusal',()=>{
+test('strict command lines require pipes or sockets for both role streams',()=>{
+  const info=kind=>({isFIFO:()=>kind==='pipe',isSocket:()=>kind==='socket'});
   assert.deepEqual(parseArguments(['--loopback','10.0.0.1','--repaired']),{address:'10.0.0.1',role:null,repaired:true});
-  for(const role of ['host','join'])assert.equal(parseArguments(['--role',role,'--local','10.0.0.1']).role,role);
-  for(const tty of [{stdinIsTTY:true},{stdoutIsTTY:true},{stdinIsTTY:true,stdoutIsTTY:true}]) {
-    assert.equal(acceptsTTY(tty),false);
-    assert.throws(()=>parseArguments(['--role','host','--local','10.0.0.1'],tty));
+  for(const input of ['file','terminal','pipe','socket'])for(const output of ['file','terminal','pipe','socket']) {
+    const streams={stdin:info(input),stdout:info(output)},allowed=['pipe','socket'].includes(input) && ['pipe','socket'].includes(output);
+    assert.equal(acceptsPipes(streams),allowed);
+    for(const role of ['host','join']) {
+      const args=['--role',role,'--local','10.0.0.1'];
+      if(allowed)assert.equal(parseArguments(args,streams).role,role);
+      else assert.throws(()=>parseArguments(args,streams));
+    }
   }
-  assert.equal(acceptsTTY({stdinIsTTY:false,stdoutIsTTY:false}),true);
+  assert.equal(acceptsPipes(),false);
+  assert.throws(()=>parseArguments(['--role','host','--local','10.0.0.1']));
   for(const args of [[],['--loopback','127.0.0.1'],['--loopback','10.0.0.1','extra'],
     ['--role','other','--local','10.0.0.1'],['--role','host','--local','8.8.8.8'],
     ['--repaired','--loopback','10.0.0.1'],['--loopback','10.0.0.1','--repaired','--repaired']])assert.throws(()=>parseArguments(args));

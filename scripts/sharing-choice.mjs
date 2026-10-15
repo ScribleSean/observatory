@@ -38,9 +38,13 @@ async function readIntent(runtime,pair) {
 async function writeIntent(runtime,value) {
   const directory=await privateSyncDirectory(runtime);
   const pending=path.join(directory,`sharing-choice-${randomBytes(16).toString('hex')}.pending`);
-  const file=await open(pending,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
-  try {await file.writeFile(JSON.stringify(value));await file.sync();}finally{await file.close();}
-  await rename(pending,path.join(directory,'sharing-choice.json'));
+  let created=false,renamed=false;
+  try {
+    const file=await open(pending,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
+    created=true;
+    try {await file.writeFile(JSON.stringify(value));await file.sync();}finally{await file.close();}
+    await rename(pending,path.join(directory,'sharing-choice.json'));renamed=true;
+  } finally {if(created && !renamed)await unlink(pending);}
   await privateSyncDirectory(runtime);
 }
 async function quotaState(runtime,now) {
@@ -50,20 +54,30 @@ const quotaOn=(state,pair)=>Boolean(state?.sharing.enabled && state.sharing.pair
 
 export const chooseSharing=(runtime,{enabled})=>withPeerStateLock(runtime,async()=>{
   if(typeof enabled!=='boolean')throw fail();
-  let pair;
-  try {pair=await readPairing(runtime);}catch {throw fail();}
-  if(!pair)throw fail();
   if(!enabled) {
-    if(await exists(path.join(runtime,'private-quota')))await revokeQuotaSharing(runtime);
-    if(await exists(path.join(runtime,'private-sync/provider-tokens.sqlite')))await disableProviderTokenSharing(runtime);
+    await revokeQuotaSharing(runtime);
+    await disableProviderTokenSharing(runtime);
     await clearSharingChoice(runtime);
     return;
   }
+  let pair;
+  try {pair=await readPairing(runtime);}catch {throw fail();}
+  if(!pair)throw fail();
   let prior;
   try {prior=await readIntent(runtime,pair);}catch {}
   await writeIntent(runtime,prior??{version:1,pairId:pair.local.pairId,enabled:true,
     applied:Object.fromEntries(channels.map(channel=>[channel,false]))});
 });
+
+export async function markSharingChoiceApplied(runtime,channel) {
+  try {await withPeerStateLock(runtime,async()=>{
+    if(!channels.includes(channel))return;
+    const pair=await readPairing(runtime),intent=pair?await readIntent(runtime,pair):null;
+    if(!intent || intent.applied[channel])return;
+    intent.applied[channel]=true;
+    await writeIntent(runtime,intent);
+  });}catch {}
+}
 
 export const applySharingChoice=(runtime,channel,now=Date.now())=>withPeerStateLock(runtime,async()=>{
   if(!channels.includes(channel) || !Number.isSafeInteger(now) || now<0)throw fail();

@@ -33,10 +33,11 @@ export async function readPairingStatus(runtime,now=Date.now()) {
 }
 
 function guard(info) {
-  if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1 || info.size>limit)throw fail();
+  if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1 || info.size>limit ||
+    (process.platform!=='win32' && ((info.mode&0o077) || info.uid!==process.getuid())))throw fail();
   return info;
 }
-const same=(a,b)=>['dev','ino','size','mtimeMs','ctimeMs','mode','nlink'].every(key=>a[key]===b[key]);
+const same=(a,b)=>['dev','ino','size','mtimeMs','ctimeMs','mode','nlink','uid'].every(key=>a[key]===b[key]);
 async function targetInfo(name) {
   try {return guard(await lstat(name));}catch(error){if(error.code==='ENOENT')return null;throw error;}
 }

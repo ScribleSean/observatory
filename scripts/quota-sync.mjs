@@ -84,7 +84,7 @@ export async function syncQuota(runtime,{request,clock=Date.now}={}) {
 export async function attachQuotaSync(runtime,result,{enabled=false,...options}={}) {
   result.data.peerQuota=null;
   if(enabled!==true || !['ok','stale'].includes(result.data.quota?.status))return result;
-  try {await applySharingChoice(runtime,'codex-limits');}catch {}
+  try {await applySharingChoice(runtime,'codex-limits',options.clock?.()??Date.now());}catch {}
   try {
     const synced=await syncQuota(runtime,options);
     result.data.peerQuota=synced.peer;

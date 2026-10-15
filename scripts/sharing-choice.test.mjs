@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,lstat,readFile,writeFile,symlink,chmod,unlink} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,lstat,readFile,writeFile,symlink,chmod,unlink,mkdir,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -173,4 +173,47 @@ test('a throwing apply store path does not abort quota collection',async t=>{
   const input={data:{quota:{status:'ok'}}};
   assert.equal(await attachQuotaSync(runtime,input,{enabled:true}),input);
   assert.equal(input.quotaSync.status,'unavailable');assert.equal(input.data.quota.status,'ok');
+});
+
+for(const channel of channels)test(`manual disable before a reading keeps ${channel} off`,async t=>{
+  const {runtime}=await fixture(t);
+  await chooseSharing(runtime,{enabled:true});
+  const control=channel==='codex-limits'?quotaSharingControl:providerTokenSharingControl;
+  assert.deepEqual(await control(runtime,{action:'disable'},now),{version:1,enabled:false,canEnable:false,
+    reason:channel==='codex-limits'?'account-unavailable':'source-unavailable',token:null});
+  await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+  for(const current of channels)assert.equal((await applySharingChoice(runtime,current,now)).status,current===channel?'already-applied':'applied');
+  const status=await readSharingChoice(runtime,now);
+  for(const current of channels)assert.equal(status.channels[current],current===channel?'off':'on');
+});
+test('choosing off disables both channels with corrupt pairing',async t=>{
+  const {runtime}=await fixture(t);
+  await chooseSharing(runtime,{enabled:true});await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+  for(const channel of channels)await applySharingChoice(runtime,channel,now);
+  await writeFile(path.join(runtime,'private-sync/pairing.json'),'{');
+  await chooseSharing(runtime,{enabled:false});
+  assert.equal((await readQuotaState(runtime,now)).sharing.enabled,false);
+  const db=new DatabaseSync(path.join(runtime,'private-sync/provider-tokens.sqlite'));
+  try {assert.equal(JSON.parse(db.prepare('SELECT record FROM provider_token_state').get().record).generation,null);}finally{db.close();}
+  await assert.rejects(lstat(filename(runtime)),{code:'ENOENT'});
+});
+test('failed intent rename removes its temporary file',async t=>{
+  const {runtime}=await fixture(t);await mkdir(filename(runtime),{mode:0o700});
+  await assert.rejects(chooseSharing(runtime,{enabled:true}));
+  assert.deepEqual((await readdir(path.dirname(filename(runtime)))).filter(name=>name.endsWith('.pending')),[]);
+});
+for(const channel of channels)test(`invalid intent never blocks ${channel} disable`,async t=>{
+  const {runtime}=await fixture(t);await chooseSharing(runtime,{enabled:true});
+  await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+  for(const current of channels)await applySharingChoice(runtime,current,now);
+  await writeFile(filename(runtime),'{');
+  const control=channel==='codex-limits'?quotaSharingControl:providerTokenSharingControl;
+  assert.equal((await control(runtime,{action:'disable'},now)).enabled,false);
+  assert.equal(await readFile(filename(runtime),'utf8'),'{');
+});
+test('quota collection applies the caller clock to a synthetic reading',async t=>{
+  const {runtime}=await fixture(t),at=Date.UTC(2020,0,1);
+  await chooseSharing(runtime,{enabled:true});await quota(runtime,at);
+  await attachQuotaSync(runtime,{data:{quota:{status:'ok'}}},{enabled:true,clock:()=>at});
+  assert.equal((await readQuotaState(runtime,at)).sharing.enabled,true);
 });
