@@ -452,6 +452,7 @@ internal sealed class ObservatoryContext : ApplicationContext
     private int updateShutdownRequested;
     private int nativeDialogCount;
     private bool setupWarningShown;
+    private bool dashboardOpened;
 
     private void ShowSetupWarning()
     {
@@ -529,7 +530,15 @@ internal sealed class ObservatoryContext : ApplicationContext
             else if (!quitting && activation.WaitOne(0)) Open();
         };
         activationTimer.Start();
-        if (show || setupPending) Open();
+        if (show || setupPending)
+        {
+            void OpenOnIdle(object? sender, EventArgs args)
+            {
+                Application.Idle -= OpenOnIdle;
+                Open();
+            }
+            Application.Idle += OpenOnIdle;
+        }
         if (panelTiming && !setupPending) _ = MeasurePanel();
     }
 
@@ -851,9 +860,14 @@ internal sealed class ObservatoryContext : ApplicationContext
             dashboard.FormClosed += (_, _) => dashboard = null;
         }
         else if (section is not null && dashboard is WebDashboard existing) existing.ShowSection(section);
+        var foregroundSetup = !dashboardOpened && section == "setup";
         dashboard.Show();
         if (dashboard.WindowState == FormWindowState.Minimized) dashboard.WindowState = FormWindowState.Normal;
+        if (foregroundSetup) dashboard.TopMost = true;
         dashboard.Activate();
+        dashboard.BringToFront();
+        if (foregroundSetup) dashboard.TopMost = false;
+        dashboardOpened = true;
     }
 
     private async Task CheckForUpdates()
