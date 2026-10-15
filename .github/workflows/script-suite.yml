@@ -6,6 +6,7 @@ on:
       - 'lib/**'
       - 'app/**'
       - 'native/web/**'
+      - 'native/**/*.mjs'
       - 'native/tests/**'
       - 'package.json'
       - 'package-lock.json'
@@ -29,6 +30,7 @@ on:
       - 'lib/**'
       - 'app/**'
       - 'native/web/**'
+      - 'native/**/*.mjs'
       - 'native/tests/**'
       - 'package.json'
       - 'package-lock.json'
@@ -146,6 +148,16 @@ jobs:
             if (result.error) console.error(result.error);
             if (result.status !== 0) process.exit(result.status ?? 1);
           }
+      - name: Run Windows test isolation checks
+        shell: node {0}
+        env:
+          SUITE_PART: ${{ matrix.part }}
+        run: |
+          if (process.env.SUITE_PART !== 'general') process.exit(0);
+          const { spawnSync } = require('node:child_process');
+          const result = spawnSync(process.execPath, ['--test', 'native/tests/windows-test-isolation.test.mjs'], { stdio: 'inherit' });
+          if (result.error) console.error(result.error);
+          if (result.status !== 0) process.exit(result.status ?? 1);
       - run: npx tsc --noEmit
         if: matrix.part == 'general'
       - name: oxlint (advisory until the earlier web dashboard is removed)

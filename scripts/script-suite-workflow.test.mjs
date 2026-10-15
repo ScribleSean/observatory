@@ -19,6 +19,7 @@ const paths = [
   'lib/**',
   'app/**',
   'native/web/**',
+  'native/**/*.mjs',
   'native/tests/**',
   'package.json',
   'package-lock.json',
@@ -53,7 +54,7 @@ test('manual dispatch has no inputs', () => {
 });
 
 for (const event of ['pull_request', 'push']) {
-  test(`${event} has exactly the twenty script suite paths`, () => {
+  test(`${event} has exactly the twenty-one script suite paths`, () => {
     const block = triggers.match(new RegExp(`^  ${event}:\\n([\\s\\S]*?)(?=^  \\w|$(?![\\s\\S]))`, 'm'))?.[1];
     assert.deepEqual(
       [...block.matchAll(/^      - '([^']+)'$/gm)].map((match) => match[1]),
@@ -72,6 +73,20 @@ test('workflow contains no write permission text', () => {
 
 test('matrix contains exactly the runner and suite part axes', () => {
   assert.match(workflow, /      matrix:\n        os: \[windows-latest, macos-14\]\n        part: \[general, tls-1, tls-2, tls-3\]\n    runs-on: \$\{\{ matrix.os \}\}/);
+});
+
+test('workflow has exactly the existing if lines in order', () => {
+  assert.deepEqual(workflow.match(/^\s*if:.*$/gm), [
+    "        if: runner.os == 'Windows'",
+    "        if: runner.os == 'Windows'",
+    "        if: matrix.part == 'general'",
+    "        if: matrix.part == 'general'",
+    "        if: matrix.part == 'general'",
+  ]);
+});
+
+test('no job has a job-level if or env key', () => {
+  assert.doesNotMatch(section('jobs'), /^    (?:if|env):/m);
 });
 
 test('Node is pinned to 24.21.0', () => {
@@ -260,6 +275,33 @@ test('suite stops at the first nonzero child exit', (t) => {
     const result = runSuite(t, part, 'win32', [...tls, ...general], 7);
     assert.equal(result.status, 7);
     assert.equal(result.calls.length, 1);
+  }
+});
+
+test('general runs Windows test isolation checks after the full suite on both runners', (t) => {
+  const matches = steps.filter((step) => step.startsWith('name: Run Windows test isolation checks\n'));
+  assert.equal(matches.length, 1);
+  const step = matches[0];
+  assert.equal(steps.indexOf(step), steps.indexOf(suite) + 1);
+  assert.match(step, /^        shell: node \{0\}$/m);
+  assert.match(step, /        env:\n          SUITE_PART: \$\{\{ matrix.part \}\}\n        run: \|\n/);
+  const script = step.split('        run: |\n')[1]
+    .split('\n').map((line) => line.slice(10)).join('\n');
+  for (const platform of ['win32', 'darwin']) {
+    for (const status of [0, 7, null]) {
+      const result = runSuite(t, 'general', platform, [], status, script);
+      assert.equal(result.status, status ?? 1);
+      assert.deepEqual(result.calls, [{
+        executable: 'synthetic-node',
+        args: ['--test', 'native/tests/windows-test-isolation.test.mjs'],
+        options: { stdio: 'inherit' },
+      }]);
+    }
+    for (const part of Object.keys(shards)) {
+      const result = runSuite(t, part, platform, [], 7, script);
+      assert.equal(result.status, 0);
+      assert.deepEqual(result.calls, []);
+    }
   }
 });
 
