@@ -1,0 +1,9 @@
+.ob-setup { width: 100%; max-width: 640px; overflow-wrap: anywhere; }
+.ob-setup p { margin: var(--ob-space-3) 0; }
+.ob-setup-summary { list-style: none; padding: 0; }
+.ob-setup-summary li { display: flex; justify-content: space-between; gap: var(--ob-space-3); margin: var(--ob-space-2) 0; }
+.ob-setup-navigation { display: flex; flex-wrap: wrap; gap: var(--ob-space-2); margin-top: var(--ob-space-4); }
+.ob-dashboard-layout:has(.ob-setup) { grid-template-columns: minmax(0, 1fr); }
+.ob-setup .ob-settings-toggle { margin-bottom: 0; }
+.ob-setup .ob-settings-toggle + .ob-meta { margin: 0 0 var(--ob-space-4); padding-left: calc(13px + var(--ob-space-2)); }
+.ob-setup h3:focus { outline: none; }

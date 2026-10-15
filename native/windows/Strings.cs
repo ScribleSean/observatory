@@ -259,6 +259,7 @@ internal static class ObservatoryStrings
         internal const string ShareCodexLimits = "Share Codex limits";
         internal const string ShareClaudeTokens = "Share Claude Code tokens";
         internal const string Unknown = "Unknown";
+        internal const string CollectionPaused = "Collection paused";
         internal const string AppOnly = "Open settings inside the Observatory app to make changes.";
         internal const string On = "On";
         internal const string Off = "Off";
@@ -324,8 +325,8 @@ internal static class ObservatoryStrings
         internal const string PairIdentityRecoveryRequired = "Device identity recovery required";
         internal const string PairInactive = "Pairing inactive";
         internal const string PairWaiting = "Waiting for a device";
-        internal const string PairConfirming = "Confirm the invitation";
-        internal const string PairAwaitingConfirmation = "Confirm the peer device";
+        internal const string PairJoinConfirm = "Confirm the invitation";
+        internal const string PairHostConfirm = "Confirm the peer device";
         internal const string PairLocalReady = "Local device ready";
         internal const string PairAcknowledged = "Peer acknowledged";
         internal const string PairConfigurationReady = "Configuration ready";
@@ -344,5 +345,33 @@ internal static class ObservatoryStrings
         internal const string TailscaleNotInstalled = "Tailscale is not installed.";
         internal const string TailscaleUnsupported = "Tailscale is unsupported.";
         internal const string TailscaleUnavailable = "Tailscale status is unavailable.";
+    }
+    internal static class Setup
+    {
+        internal const string StatusUnavailable = "Observatory could not read its settings.";
+        internal const string Retry = "Try again";
+        internal const string Title = "Set up Observatory";
+        internal const string StepLabel = "Step {step} of {count}";
+        internal const string SourcesTitle = "Choose what to collect";
+        internal const string SourcesIntro = "Turn on the sources this device should read. Everything starts off, and you can change it later in Settings.";
+        internal const string SourcesNote = "ActivityWatch is installed separately and must be running. Each other source needs its own application and local records. Turning a source on does not prove it is available, and a source that cannot be read shows Unknown.";
+        internal const string PrivacyNote = "Snapshots leave out prompts, window titles, transcripts, audio and credentials. Provider sign-ins stay on the device that owns them.";
+        internal const string ActivityHint = "Screen time from ActivityWatch on this device.";
+        internal const string CodexHint = "Token use from saved Codex sessions.";
+        internal const string ClaudeHint = "Token use from saved Claude Code sessions.";
+        internal const string WisprHint = "Dictation statistics from Wispr Flow.";
+        internal const string QuotaHint = "Codex account limits, read online through the installed Codex sign-in without making model requests.";
+        internal const string ClaudeLimitsHint = "Claude Code account limits, read from a status line that Observatory adds to Claude Code. Read the notes before turning it on.";
+        internal const string PairingTitle = "Other devices";
+        internal const string PairingIntro = "Pairing a second device is optional. You can pair later, in Settings.";
+        internal const string PairingHow = "One device creates an invitation in Settings, and the other device pastes it. Observatory works on this device alone until then.";
+        internal const string PairingNoAccount = "There is no Observatory account or hosted sync service.";
+        internal const string FinishTitle = "Finish";
+        internal const string FinishIntro = "Observatory collects from the sources that are on. You can change them later in Settings.";
+        internal const string FinishNone = "No source is on. Each section shows Unknown until a source is turned on in Settings.";
+        internal const string Back = "Back";
+        internal const string Next = "Continue";
+        internal const string Finish = "Finish";
+        internal const string AppOnly = "Open Observatory to finish setup.";
     }
 }

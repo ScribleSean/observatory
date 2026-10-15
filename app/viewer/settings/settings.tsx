@@ -14,7 +14,8 @@ const S = STRINGS.settings;
 const pairingWords: Record<string, string> = {
   idle: S.pairIdle, 'identity-ready': S.pairIdentityReady, 'identity-required': S.pairIdentityRequired,
   'identity-recovery-required': S.pairIdentityRecoveryRequired, inactive: S.pairInactive, waiting: S.pairWaiting,
-  confirming: S.pairConfirming, 'awaiting-confirmation': S.pairAwaitingConfirmation, 'local-ready': S.pairLocalReady,
+  // The host confirms the peer device in confirming and the joiner confirms the invitation in awaiting-confirmation.
+  confirming: S.pairHostConfirm, 'awaiting-confirmation': S.pairJoinConfirm, 'local-ready': S.pairLocalReady,
   acknowledged: S.pairAcknowledged, 'configuration-ready': S.pairConfigurationReady, working: S.pairWorking,
   cancelled: S.pairCancelled, paired: S.pairPaired, unpaired: S.pairUnpaired, unavailable: S.pairUnavailable,
 };
@@ -155,6 +156,8 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   const pairingAction = (task: (c: SettingsController) => Promise<BridgeOutcome>, host = false) => action(task, { pairing: true, host });
   return <div className="ob-settings" data-skin={skinId} aria-busy={busy}>
     {!available && <p>{S.appOnly}</p>}
+    {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The paused note uses the requested paragraph status markup. */}
+    {status?.collectionPaused === true && <p className="ob-settings-paused" role="status">{S.collectionPaused}</p>}
     <output aria-live="polite">{busy ? S.working : message}</output>
     {group(S.sources, <>{(['activity', 'codex', 'claude', 'wispr'] as const).map(source => <div key={source}>{toggle(S[source], status?.sources[source], enabled => action(c => c.setSource(source, enabled)))}</div>)}</>)}
     {group(S.accounts, <>
@@ -173,21 +176,21 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       {flow === 'choose' && <Row>{button(S.host, () => setFlow('host'))}{button(S.join, () => setFlow('join'))}</Row>}
       {(flow === 'host' || state === 'identity-required' || state === 'identity-ready') && <>
         {state === 'identity-required' ? button(S.identity, () => pairingAction(c => c.pairingIdentityCreate())) :
-          !['waiting', 'awaiting-confirmation', 'paired'].includes(state ?? '') && <>{field(S.address, address, setAddress)}{field(S.port, port, setPort, true)}{button(S.start, () => pairingAction(c => c.pairingHostStart(address, port), true))}</>}
+          !['waiting', 'confirming', 'paired'].includes(state ?? '') && <>{field(S.address, address, setAddress)}{field(S.port, port, setPort, true)}{button(S.start, () => pairingAction(c => c.pairingHostStart(address, port), true))}</>}
       </>}
       {invitation && <label className="ob-settings-field">{S.invitation}<textarea readOnly spellCheck={false} value={invitation} /></label>}
       {(invitation || status?.pairing.invitationKept) && <p>{S.invitationWarning}</p>}
       {status?.pairing.invitationKept && button(S.copyInvitation, () => action(c => c.pairingCopyInvitation(), { pairing: true }))}
-      {state === 'awaiting-confirmation' && status?.pairing.peerFingerprint && <>
+      {state === 'confirming' && status?.pairing.peerFingerprint && <>
         <label className="ob-settings-field">{S.fingerprint}<input readOnly value={status.pairing.peerFingerprint} /></label>
         {field(S.peerAddress, peerAddress, setPeerAddress)}{field(S.peerPort, peerPort, setPeerPort, true)}
         {button(S.confirm, () => pairingAction(c => c.pairingHostConfirm(status.pairing.peerFingerprint!, peerAddress, peerPort)))}
       </>}
-      {flow === 'join' && state !== 'confirming' && state !== 'paired' && <>
+      {flow === 'join' && !['awaiting-confirmation', 'local-ready', 'acknowledged', 'paired'].includes(state ?? '') && <>
         <label className="ob-settings-field">{S.invitation}<textarea value={joinText} autoComplete="off" spellCheck={false} disabled={disabled} onChange={event => onJoinTextChange(event.target.value)} /></label>
         {button(S.claim, () => pairingAction(async c => { try { return await c.pairingJoinClaim(joinText); } finally { onJoinTextChange(''); } }))}
       </>}
-      {state === 'confirming' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm()))}
+      {state === 'awaiting-confirmation' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm()))}
       {state === 'paired' && <Row>{button(S.disconnect, () => pairingAction(c => c.pairingDisconnect()))}{button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}</Row>}
       {(flow || (state && !terminal.has(state))) && button(S.cancel, () => {
         onJoinTextChange(''); setFlow(null); action(c => c.pairingCancel(), { pairing: true, cancel: true });
