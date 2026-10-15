@@ -29,8 +29,11 @@ internal sealed record AppIdentity(bool IsTest)
         }
     }
     private static string OverrideSuffix => runtimeOverride is null ? "" : RuntimeSuffix(runtimeOverride);
-    internal static string RuntimeSuffix(string folder) => "." + Convert.ToHexString(SHA256.HashData(
-        Encoding.UTF8.GetBytes(Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant()))))[..16];
+    internal static string RuntimeSuffix(string folder)
+    {
+        var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)).ToUpperInvariant();
+        return "." + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..16];
+    }
     internal string Runtime => runtimeOverride ?? DefaultRuntime;
     internal string DefaultRuntime => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DataName);
 
