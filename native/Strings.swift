@@ -306,8 +306,8 @@ enum ObservatoryStrings {
         static let `pairIdentityRecoveryRequired` = "Device identity recovery required"
         static let `pairInactive` = "Pairing inactive"
         static let `pairWaiting` = "Waiting for a device"
-        static let `pairConfirming` = "Confirm the invitation"
-        static let `pairAwaitingConfirmation` = "Confirm the peer device"
+        static let `pairJoinConfirm` = "Confirm the invitation"
+        static let `pairHostConfirm` = "Confirm the peer device"
         static let `pairLocalReady` = "Local device ready"
         static let `pairAcknowledged` = "Peer acknowledged"
         static let `pairConfigurationReady` = "Configuration ready"
@@ -328,6 +328,8 @@ enum ObservatoryStrings {
         static let `tailscaleUnavailable` = "Tailscale status is unavailable."
     }
     enum Setup {
+        static let `statusUnavailable` = "Observatory could not read its settings."
+        static let `retry` = "Try again"
         static let `title` = "Set up Observatory"
         static let `stepLabel` = "Step {step} of {count}"
         static let `sourcesTitle` = "Choose what to collect"

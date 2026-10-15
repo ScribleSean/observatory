@@ -325,8 +325,8 @@ internal static class ObservatoryStrings
         internal const string PairIdentityRecoveryRequired = "Device identity recovery required";
         internal const string PairInactive = "Pairing inactive";
         internal const string PairWaiting = "Waiting for a device";
-        internal const string PairConfirming = "Confirm the invitation";
-        internal const string PairAwaitingConfirmation = "Confirm the peer device";
+        internal const string PairJoinConfirm = "Confirm the invitation";
+        internal const string PairHostConfirm = "Confirm the peer device";
         internal const string PairLocalReady = "Local device ready";
         internal const string PairAcknowledged = "Peer acknowledged";
         internal const string PairConfigurationReady = "Configuration ready";
@@ -348,6 +348,8 @@ internal static class ObservatoryStrings
     }
     internal static class Setup
     {
+        internal const string StatusUnavailable = "Observatory could not read its settings.";
+        internal const string Retry = "Try again";
         internal const string Title = "Set up Observatory";
         internal const string StepLabel = "Step {step} of {count}";
         internal const string SourcesTitle = "Choose what to collect";

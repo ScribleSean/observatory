@@ -98,6 +98,7 @@ type DashboardViewProps = {
 };
 
 export function DashboardView({ actionsAvailable = true, collectionPaused = false, demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange, onSetupFinished = () => {} }: DashboardViewProps) {
+  const [setupBlocked, setSetupBlocked] = useState(false);
   const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
     source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
   const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
@@ -116,7 +117,7 @@ export function DashboardView({ actionsAvailable = true, collectionPaused = fals
       </Row>
 
       <div className="ob-dashboard-layout">
-        {(selected !== 'setup' || !actionsAvailable) && <nav aria-label={STRINGS.sections.navigation}>
+        {(selected !== 'setup' || !actionsAvailable || setupBlocked) && <nav aria-label={STRINGS.sections.navigation}>
           {sections.map(([id, name]) => (
             <button key={id} type="button" aria-current={id === selected ? 'page' : undefined} className={id === selected ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>
           ))}
@@ -124,7 +125,7 @@ export function DashboardView({ actionsAvailable = true, collectionPaused = fals
         <main>
           <section aria-labelledby={`ob-section-${selected}`}>
             <h2 id={`ob-section-${selected}`}>{title}</h2>
-            {selected === 'setup' ? <SetupView demo={demo} onFinished={onSetupFinished} /> : selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : selected === 'activity' ? <ActivityView snapshot={snapshot} now={now} /> : selected === 'tokens' ? <TokensView snapshot={snapshot} now={now} /> : selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : selected === 'settings' ? <SettingsView demo={demo} skinId={skinId} onSkinChange={onSkinChange} /> : <EmptyState text={STRINGS.sections.emptyState} />}
+            {selected === 'setup' ? <SetupView demo={demo} onFinished={onSetupFinished} onBlockedChange={setSetupBlocked} /> : selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : selected === 'activity' ? <ActivityView snapshot={snapshot} now={now} /> : selected === 'tokens' ? <TokensView snapshot={snapshot} now={now} /> : selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : selected === 'settings' ? <SettingsView demo={demo} skinId={skinId} onSkinChange={onSkinChange} /> : <EmptyState text={STRINGS.sections.emptyState} />}
           </section>
         </main>
       </div>

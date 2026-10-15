@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { STRINGS } from '../../../lib/strings.generated';
 import { SETUP_SOURCES, clampStep, sampleSetupStatus, setupSummary, stepLabel } from '../../../lib/view-setup.mjs';
@@ -16,8 +16,9 @@ type ContentProps = {
   onStep: (step: number) => void; onSource: (id: string, enabled: boolean) => void;
   onLimits: (enabled: boolean) => void; onConfirm: () => void; onCancel: () => void; onFinish: () => void;
   headingRef?: Ref<HTMLHeadingElement>;
+  statusUnavailable?: boolean; onRetry?: () => void;
 };
-export function SetupContent({ status, step, available, busy, message, disclosureOpen, onStep, onSource, onLimits, onConfirm, onCancel, onFinish, headingRef }: ContentProps) {
+export function SetupContent({ status, step, available, busy, message, disclosureOpen, onStep, onSource, onLimits, onConfirm, onCancel, onFinish, headingRef, statusUnavailable, onRetry }: ContentProps) {
   const index = clampStep(step);
   const disabled = !available || !status || busy;
   const summary = setupSummary(status);
@@ -34,6 +35,7 @@ export function SetupContent({ status, step, available, busy, message, disclosur
     <p className="ob-meta">{stepLabel(index)}</p>
     <output aria-live="polite">{busy ? S.working : message}</output>
     {!available && <p>{W.appOnly}</p>}
+    {statusUnavailable && <><p role="alert">{W.statusUnavailable}</p><button type="button" disabled={busy} onClick={onRetry}>{W.retry}</button></>}
     <h3 ref={headingRef} tabIndex={-1}>{[W.sourcesTitle, W.pairingTitle, W.finishTitle][index]}</h3>
     {index === 0 && <>
       <p>{W.sourcesIntro}</p>
@@ -55,10 +57,11 @@ export function SetupContent({ status, step, available, busy, message, disclosur
   </div>;
 }
 
-export function SetupView({ demo, bridge, onFinished }: { demo: boolean; bridge?: Bridge; onFinished: () => void }) {
+export function SetupView({ demo, bridge, onFinished, onBlockedChange }: { demo: boolean; bridge?: Bridge; onFinished: () => void; onBlockedChange?: (blocked: boolean) => void }) {
   const [controller, setController] = useState<SettingsController | null>(null);
   const [status, setStatus] = useState<BridgeStatus | null>(() => demo ? validateBridgeStatus(sampleSetupStatus()) : null);
   const [available, setAvailable] = useState(demo || !!bridge?.available);
+  const [statusReadFinished, setStatusReadFinished] = useState(false);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -72,6 +75,26 @@ export function SetupView({ demo, bridge, onFinished }: { demo: boolean; bridge?
     if (previousStep.current !== step) heading.current?.focus();
     previousStep.current = step;
   }, [step]);
+  const blocked = !available || (statusReadFinished && status === null);
+  const previousBlocked = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (previousBlocked.current !== blocked) {
+      previousBlocked.current = blocked;
+      onBlockedChange?.(blocked);
+    }
+  }, [blocked, onBlockedChange]);
+  const readStatus = useCallback((next: SettingsController) => {
+    if (running.current) return;
+    const ticket = generation.current;
+    running.current = true;
+    setBusy(true);
+    void next.status().catch(() => {}).finally(() => {
+      if (ticket !== generation.current) return;
+      setStatusReadFinished(true);
+      running.current = false;
+      setBusy(false);
+    });
+  }, []);
   useEffect(() => {
     const transport = bridge ?? (demo ? createFakeBridge(sampleSetupStatus()) : createBridge());
     const next = createSettingsController(transport, () => generation.current);
@@ -79,7 +102,9 @@ export function SetupView({ demo, bridge, onFinished }: { demo: boolean; bridge?
     setController(next);
     setAvailable(transport.available);
     const unsubscribe = next.subscribe(setStatus);
-    void next.status();
+    setStatusReadFinished(false);
+    setStatus(demo ? validateBridgeStatus(sampleSetupStatus()) : null);
+    readStatus(next);
     const clear = () => { generation.current++; running.current = false; flow.current?.cancel(); setDisclosureOpen(false); setBusy(false); };
     const hide = () => flushSync(clear);
     window.addEventListener('pagehide', hide);
@@ -87,7 +112,7 @@ export function SetupView({ demo, bridge, onFinished }: { demo: boolean; bridge?
       clear(); window.removeEventListener('pagehide', hide); unsubscribe(); next.dispose();
       if (!bridge) transport.dispose();
     };
-  }, [bridge, demo]);
+  }, [bridge, demo, readStatus]);
   const run = (task: () => Promise<BridgeOutcome> | null, finish = false) => {
     if (running.current || !available || !status) return;
     const ticket = generation.current;
@@ -103,6 +128,7 @@ export function SetupView({ demo, bridge, onFinished }: { demo: boolean; bridge?
     });
   };
   return <SetupContent status={status} step={step} available={available} busy={busy} message={message} disclosureOpen={disclosureOpen} headingRef={heading}
+    statusUnavailable={available && statusReadFinished && status === null} onRetry={() => { if (controller) readStatus(controller); }}
     onStep={value => { flow.current?.cancel(); setDisclosureOpen(false); if (!running.current) setMessage(''); setStep(clampStep(value)); }}
     onSource={(id, enabled) => run(() => controller!.setSource(id, enabled))}
     onLimits={enabled => { if (enabled) { flow.current?.request(); setDisclosureOpen(true); } else run(() => controller!.setLimitsConsent(false)); }}

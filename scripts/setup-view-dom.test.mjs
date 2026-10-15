@@ -12,7 +12,7 @@ after(() => server.close());
 const allActions = new Set();
 after(() => { for (const action of allActions) assert.ok(['status', 'set-source', 'set-limits-consent', 'complete-setup'].includes(action), action); });
 let SetupView;
-async function fixture(t, { code = 'done', demo = false } = {}) {
+async function fixture(t, { code = 'done', demo = false, firstStatus, dashboard = false, holdRetry = false } = {}) {
   const win = new Window({ url: 'https://synthetic.test/dashboard.html#setup' });
   const globals = { window: win, document: win.document, navigator: win.navigator, HTMLElement: win.HTMLElement, HTMLInputElement: win.HTMLInputElement, Node: win.Node, Event: win.Event, MouseEvent: win.MouseEvent, IS_REACT_ACT_ENVIRONMENT: true };
   const saved = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -22,12 +22,16 @@ async function fixture(t, { code = 'done', demo = false } = {}) {
   const { validateBridgeStatus } = await server.ssrLoadModule('/app/viewer/settings/status.ts');
   const status = sampleSetupStatus();
   const messages = [];
+  const blocked = [];
+  let releaseRetry;
   let finished = 0;
   let disposed = false;
   const bridge = {
     available: true,
     async send(action, args) {
       allActions.add(action); messages.push({ action, args });
+      if (action === 'status' && messages.length === 1 && firstStatus) return { id: 1, ...firstStatus };
+      if (action === 'status' && messages.length === 2 && holdRetry) await new Promise(resolve => { releaseRetry = resolve; });
       if (action === 'set-source') status.sources[args.source] = args.enabled;
       if (action === 'set-limits-consent') status.limitsConsent = args.enabled;
       const resultCode = action === 'complete-setup' ? code : 'done';
@@ -42,12 +46,30 @@ async function fixture(t, { code = 'done', demo = false } = {}) {
     finally { for (const [key, descriptor] of saved) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); } }
   });
   const waitDemo = () => demo ? new Promise(resolve => setTimeout(resolve, 400)) : Promise.resolve();
-  await act(async () => root.render(createElement(SetupView, { demo, ...(demo ? {} : { bridge }), onFinished: () => { finished++; } })));
+  let element;
+  if (dashboard) {
+    win.webkit = { messageHandlers: { bridge: { postMessage(text) {
+      const message = JSON.parse(text);
+      void bridge.send(message.action, message.args).then(result => {
+        win.dispatchEvent(new win.CustomEvent('observatory:bridge-result', { detail: { ...result, id: message.id } }));
+      });
+    } } } };
+    const { DashboardView, sectionFromHash } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
+    const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
+    const { validateSkin } = await server.ssrLoadModule('/lib/skins.mjs');
+    element = createElement(DashboardView, {
+      actionsAvailable: true, snapshot: null, loaded: true, now: 0, skinId: 'sage', skin: validateSkin(SKINS.sage),
+      section: sectionFromHash(win.location.hash), onSectionChange: () => {}, onSkinChange: () => {},
+    });
+  } else {
+    element = createElement(SetupView, { demo, ...(demo ? {} : { bridge }), onFinished: () => { finished++; }, onBlockedChange: value => blocked.push(value) });
+  }
+  await act(async () => root.render(element));
   await act(waitDemo);
   const button = text => [...container.querySelectorAll('button')].find(node => node.textContent === text);
   const click = async text => { assert.ok(button(text), text); await act(async () => { button(text).click(); await waitDemo(); }); };
   const toggle = async text => act(async () => [...container.querySelectorAll('label')].find(node => node.textContent === text).querySelector('input').click());
-  return { win, container, messages, click, toggle, finished: () => finished };
+  return { win, container, messages, click, toggle, blocked, releaseRetry: async () => act(async () => releaseRetry()), finished: () => finished };
 }
 void test('ActivityWatch alone completes with only the permitted action sequence', async t => {
   const f = await fixture(t);
@@ -94,4 +116,34 @@ void test('demo starts with every source off and finishes without native transpo
   assert.equal(inputs.length, 6); assert.ok(inputs.every(input => !input.checked && !input.indeterminate));
   await f.click('Continue'); await f.click('Continue'); await f.click('Finish');
   assert.equal(f.finished(), 1);
+});
+
+for (const invalid of [false, true]) void test(`${invalid ? 'invalid' : 'unavailable'} status can retry and unblock setup`, async t => {
+  const value = sampleSetupStatus();
+  delete value.collectionPaused;
+  const firstStatus = invalid ? { ok: true, code: 'done', value } : { ok: false, code: 'unavailable' };
+  const f = await fixture(t, { firstStatus, holdRetry: true });
+  assert.equal(f.container.querySelector('[role="alert"]').textContent, strings.setup.statusUnavailable);
+  assert.deepEqual(f.blocked, [false, true]);
+  assert.ok([...f.container.querySelectorAll('input')].every(input => input.disabled));
+  const retry = () => [...f.container.querySelectorAll('button')].find(button => button.textContent === strings.setup.retry);
+  assert.equal(retry().disabled, false);
+  await f.click(strings.setup.retry);
+  assert.equal(retry().disabled, true);
+  await f.click(strings.setup.retry);
+  assert.deepEqual(f.messages, [{ action: 'status', args: {} }, { action: 'status', args: {} }]);
+  assert.deepEqual(f.blocked, [false, true]);
+  await f.releaseRetry();
+  assert.equal(f.container.querySelector('[role="alert"]'), null);
+  assert.equal(retry(), undefined);
+  assert.ok([...f.container.querySelectorAll('input')].every(input => !input.disabled));
+  assert.deepEqual(f.blocked, [false, true, false]);
+  assert.deepEqual(f.messages.map(message => message.action), ['status', 'status']);
+});
+void test('DashboardView at #setup restores navigation after rejected status', async t => {
+  const f = await fixture(t, { dashboard: true, firstStatus: { ok: false, code: 'unavailable' } });
+  assert.equal(f.win.location.hash, '#setup');
+  assert.ok(f.container.querySelector('[role="alert"]'));
+  assert.ok(f.container.querySelector('nav'));
+  assert.deepEqual(f.messages, [{ action: 'status', args: {} }]);
 });

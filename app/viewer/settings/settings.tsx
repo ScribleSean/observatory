@@ -15,7 +15,7 @@ const pairingWords: Record<string, string> = {
   idle: S.pairIdle, 'identity-ready': S.pairIdentityReady, 'identity-required': S.pairIdentityRequired,
   'identity-recovery-required': S.pairIdentityRecoveryRequired, inactive: S.pairInactive, waiting: S.pairWaiting,
   // The host confirms the peer device in confirming and the joiner confirms the invitation in awaiting-confirmation.
-  confirming: S.pairAwaitingConfirmation, 'awaiting-confirmation': S.pairConfirming, 'local-ready': S.pairLocalReady,
+  confirming: S.pairHostConfirm, 'awaiting-confirmation': S.pairJoinConfirm, 'local-ready': S.pairLocalReady,
   acknowledged: S.pairAcknowledged, 'configuration-ready': S.pairConfigurationReady, working: S.pairWorking,
   cancelled: S.pairCancelled, paired: S.pairPaired, unpaired: S.pairUnpaired, unavailable: S.pairUnavailable,
 };

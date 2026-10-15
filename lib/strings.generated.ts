@@ -306,8 +306,8 @@ export const STRINGS = {
     "pairIdentityRecoveryRequired": "Device identity recovery required",
     "pairInactive": "Pairing inactive",
     "pairWaiting": "Waiting for a device",
-    "pairConfirming": "Confirm the invitation",
-    "pairAwaitingConfirmation": "Confirm the peer device",
+    "pairJoinConfirm": "Confirm the invitation",
+    "pairHostConfirm": "Confirm the peer device",
     "pairLocalReady": "Local device ready",
     "pairAcknowledged": "Peer acknowledged",
     "pairConfigurationReady": "Configuration ready",
@@ -328,6 +328,8 @@ export const STRINGS = {
     "tailscaleUnavailable": "Tailscale status is unavailable."
   },
   "setup": {
+    "statusUnavailable": "Observatory could not read its settings.",
+    "retry": "Try again",
     "title": "Set up Observatory",
     "stepLabel": "Step {step} of {count}",
     "sourcesTitle": "Choose what to collect",
