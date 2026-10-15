@@ -24,7 +24,7 @@ export async function assertCurrentPeerConfig(runtime,config,slot='local') {
   try {await lstat(path.join(runtime,'private-repair','require-pairing'));}
   catch(error) {if(missing(error))return;throw error;}
   const active=(await readPairing(runtime))?.[slot];
-  const keys=['pairId','deviceId','comparisonId','host','codexHosts'];
+  const keys=['pairId','deviceId','comparisonId','host'];
   if(!active || !keys.every(key=>isDeepStrictEqual(active[key],config[key])))
     throw Error('Retired or unavailable pairing generation');
 }

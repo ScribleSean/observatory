@@ -6,11 +6,11 @@ Pairing setup has a CLI and a Mac setup dialog. Both native apps can prepare the
 
 Use the Mac setup CLI only after verifying that the SSH alias resolves to the intended Windows machine and account, its host key is trusted, and noninteractive key authentication already works. This tool does not create credentials, enable SSH, accept a new host key or open a network listener. Both installations need the updated collector scripts, including `peer-setup-endpoint.mjs` on Windows.
 
-In the Mac source build, choose **Pair with Windows…** from the app menu or menu-bar icon's context menu. Enter the existing SSH alias, Windows bundled Node executable, exchange script and app data directory. Ubuntu scope is optional and does not start or enable a source. Cancel sends nothing. Setup blocks this app's collection while the dialog or request is active. On success, local collection resumes. If the request fails, collection stays paused for that app session and the saved target can be retried. This session pause does not stop a different process or device.
+In the Mac source build, choose **Pair with Windows…** from the app menu or menu-bar icon's context menu. Enter the existing SSH alias, Windows bundled Node executable, exchange script and app data directory. Cancel sends nothing. Setup blocks this app's collection while the dialog or request is active. On success, local collection resumes. If the request fails, collection stays paused for that app session and the saved target can be retried. This session pause does not stop a different process or device.
 
 The Windows source build provides **Pairing details for Mac…** in its tray menu. It derives the three paths from the running installation, checks that the bundled setup tools are present and offers **Copy Windows details**. Copy is an explicit action. The text contains installation paths that can identify your Windows username, but no keys, pairing identifiers or usage records. Transfer it to the Mac using a method you trust. Observatory does not synchronize clipboards.
 
-On Mac, **Paste Windows details** reads the clipboard only when selected. It validates the format and all three paths before filling the form. It cannot change the SSH alias or Ubuntu scope and does not send setup. Review the fields and confirm **Pair devices** separately. Invalid content leaves the fields unchanged. Paste is disabled for an already saved target.
+On Mac, **Paste Windows details** reads the clipboard only when selected. It validates the format and all three paths before filling the form. It cannot change the SSH alias and does not send setup. Review the fields and confirm **Pair devices** separately. Invalid content leaves the fields unchanged. Paste is disabled for an already saved target.
 
 Saved pending and active targets are prefilled and read-only. The form does not receive comparison salts, device identifiers or records. Revoked, corrupt or conflicting local state shows a repair message instead of a replacement form. The read-only CLI `--status` mode supplies these fields without creating pairing state. It is not a remote health check.
 
@@ -26,7 +26,6 @@ Example request with fictional paths, to be replaced with the verified installat
 
 ```json
 {
-  "includeUbuntu": false,
   "transport": {
     "kind": "ssh-windows",
     "hostAlias": "my-windows",
@@ -37,11 +36,11 @@ Example request with fictional paths, to be replaced with the verified installat
 }
 ```
 
-Keep the request outside Git because it identifies private installation paths. It contains no SSH key or comparison salt. `includeUbuntu` is explicit pairing scope, not permission to enable or reconfigure WSL collection. The corresponding source must be configured consistently on Windows before it can export usable data.
+Keep the request outside Git because it identifies private installation paths. It contains no SSH key or comparison salt.
 
 The Mac first saves `private-sync/setup.pending.json`. Normal collection ignores this pending configuration and stays standalone. Setup sends the complementary Windows configuration only through authenticated SSH stdin. The Windows endpoint either initializes an empty private directory or verifies an exact match with an existing pairing. It refuses a different generation, revoked state or unreadable configuration. After a successful acknowledgement, Mac exclusively creates its active configuration and removes the pending file.
 
-If the connection fails or its reply is lost, retry the same command with the same target and Ubuntu scope. The saved pending generation is reused. A remote pairing may already exist after an uncertain reply; retries do not reset it. Active matching pairings can also be rechecked without changing their credentials. A changed target or scope requires explicit repair, not an automatic replacement.
+If the connection fails or its reply is lost, retry the same command with the same target. The saved pending generation is reused. A remote pairing may already exist after an uncertain reply, and retries do not reset it. Active matching pairings can also be rechecked without changing their credentials. A changed target requires explicit repair, not an automatic replacement.
 
 Partial or corrupt files fail closed. A process interrupted during a file write can leave state that needs repair; this is not a fully crash-atomic transaction across two computers. Setup does not erase those files or revoke a remote pairing as rollback. Revocation during setup prevents subsequent local activation, but an acknowledged remote write can remain and must be handled on that device.
 

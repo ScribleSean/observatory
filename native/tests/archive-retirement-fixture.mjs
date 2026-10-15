@@ -153,8 +153,7 @@ export async function retirementFixture(t, bytes) {
       export let reads=0;
       export async function collectQuota(){reads++;return {status:'not-connected'};}
       export function attachQuota(result,quota){result.data.quota=quota;}
-      export function findCodexExecutable(){throw Error('Unexpected provider discovery');}
-      export function collectLegacyQuota(){throw Error('Unexpected legacy provider');}`,
+      export function findCodexExecutable(){throw Error('Unexpected provider discovery');}`,
     'quota-sync.mjs': `
       export let syncs=0;
       export async function attachQuotaSync(){syncs++;}`,

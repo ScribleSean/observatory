@@ -36,12 +36,11 @@ test('peer output shares input counters and intervals without duplicating them i
   assert.equal(result.peer.payload.activity.intervals.length,1);assert.ok(!JSON.stringify(result).includes('PRIVATE'));
   assert.equal(result.data.activity[1].intervals,undefined);
 });
-test('legacy Ubuntu input is ignored while its peer slot stays explicitly disconnected',()=>{
+test('legacy two-slot pairing is refused without changing native readings',()=>{
   const input=raw();input.ubuntuSettings=settings();input.ubuntuSettings.inventory.keys=['c'.repeat(64)];
   const before=structuredClone(input);
   const result=windowsSnapshot(input,[],at,{...peerConfig,codexHosts:['Windows','Ubuntu']});
-  assert.equal(result.peer.status,'ready');
-  assert.deepEqual(result.peer.payload.codex[1],{host:'Ubuntu',status:'not-connected'});
+  assert.equal(result.peer.status,'unavailable');
   assert.equal(result.data.tokens.some(source=>source.host==='Ubuntu'),false);
   assert.equal(result.data.settings.some(source=>source.host==='Ubuntu'),false);
   assert.equal(result.status.sourcesConfigured,windowsSnapshot(raw(),[],at).status.sourcesConfigured);

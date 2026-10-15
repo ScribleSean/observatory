@@ -109,7 +109,7 @@ final class DirectPairingModel: ObservableObject {
         }
         perform(["action": "host-confirm", "peerCertificateSha256": fingerprint,
                  "localEndpoint": ["kind": "tls", "address": address, "port": local],
-                 "peerEndpoint": ["kind": "tls", "address": peerAddress, "port": remote], "includeUbuntu": false])
+                 "peerEndpoint": ["kind": "tls", "address": peerAddress, "port": remote]])
     }
 
     func join() {
@@ -119,7 +119,7 @@ final class DirectPairingModel: ObservableObject {
         withIdentity { [weak self] in guard let self else { return }; self.perform(["action": "join-claim", "invitation": self.invitation]) }
     }
 
-    func finishJoining() { if joining { perform(["action": "join-confirm", "includeUbuntu": false]) } }
+    func finishJoining() { if joining { perform(["action": "join-confirm"]) } }
 
     func cancel() {
         guard !closed else { return }

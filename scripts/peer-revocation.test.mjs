@@ -19,7 +19,7 @@ async function fixture(t) {
   return runtime;
 }
 const payload=config=>createPeerPayload({collectedAt:new Date().toISOString(),activity:{status:'not-connected'},
-  codex:config.codexHosts.map(host=>({host,status:'not-connected'})),
+  codex:[config.host].map(host=>({host,status:'not-connected'})),
   dictation:['Wispr Flow']
     .map(source=>({source,status:'not-connected'}))},config);
 

@@ -14,7 +14,7 @@ import {createPairingConfigurations,readPairing} from './peer-pairing.mjs';
 import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {readPeerTrust} from './peer-tls-trust.mjs';
-import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
+import {setupConfigurationDigest,legacySetupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {startHostTLSSetup,readHostTLSSetup} from './peer-tls-host.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
 import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
@@ -104,13 +104,50 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
       const listener=await startHostTLSSetup(runtime,{address:'10.0.0.2'},{createServer});
       try {
         await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
-        const input={includeUbuntu:false,localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},
+        const input={localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},
           peerEndpoint:{kind:'tls',address:'10.0.0.3',port:43128}};
         await assert.rejects(listener.confirm('0'.repeat(64),input));assert.equal(await readPairing(runtime),null);
         await listener.confirm(listener.pending().claimId,input);
-        const expected={host:process.platform==='darwin'?'Windows':'Mac',includeUbuntu:false};
+        const expected={host:process.platform==='darwin'?'Windows':'Mac'};
         const response=await requestPeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,expected,{connect});
         assert.deepEqual(await readHostTLSSetup(runtime),{pairing:response.pairing,acknowledged:false});
+        assert.deepEqual(await acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,response.pairing,{connect}),
+          {status:'acknowledged'});
+        assert.equal((await readHostTLSSetup(runtime)).acknowledged,true);
+        assert.equal(listener.status(),'acknowledged');
+      } finally {await listener.cancel();}
+    });
+  await t.test('host controller refuses a legacy digest over TLS and accepts a correct retry',
+    {skip:!['darwin','win32'].includes(process.platform)},async()=>{
+      const runtime=await realpath(mkdtempSync(path.join(root,'hosting-legacy-')));
+      await initializeDeviceIdentity(runtime,{version:1,...serverIdentity});
+      const listener=await startHostTLSSetup(runtime,{address:'10.0.0.2'},{createServer});
+      try {
+        await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+        await listener.confirm(listener.pending().claimId,{
+          localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},
+          peerEndpoint:{kind:'tls',address:'10.0.0.3',port:43128}});
+        const expected={host:process.platform==='darwin'?'Windows':'Mac'};
+        const response=await requestPeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,expected,{connect});
+        const digest=setupConfigurationDigest(response.pairing),legacy=legacySetupConfigurationDigest(response.pairing);
+        assert.notEqual(digest,legacy);
+        let rewritten=false;
+        const legacyConnect=options=>{
+          const socket=connect(options),end=socket.end.bind(socket);
+          socket.end=(line,...args)=>{
+            const request=JSON.parse(line);
+            assert.deepEqual(request,{version:1,action:'acknowledge',digest});
+            request.digest=legacy;rewritten=true;
+            return end(JSON.stringify(request)+'\n',...args);
+          };
+          return socket;
+        };
+        await assert.rejects(acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,response.pairing,
+          {connect:legacyConnect}),{message:'Authenticated pairing connection unavailable'});
+        assert.equal(rewritten,true);
+        assert.equal((await readHostTLSSetup(runtime)).acknowledged,false);
+        assert.equal(existsSync(path.join(runtime,'private-sync','tls-acknowledgement.json')),false);
+        assert.equal(listener.status(),'configuration-ready');
         assert.deepEqual(await acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,response.pairing,{connect}),
           {status:'acknowledged'});
         assert.equal((await readHostTLSSetup(runtime)).acknowledged,true);
@@ -124,7 +161,7 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
       const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
       try {
         await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
-        const receive=options=>receiveConfirmedTLSPairing(runtime,listener.invitation,{includeUbuntu:false},options);
+        const receive=options=>receiveConfirmedTLSPairing(runtime,listener.invitation,options);
         assert.deepEqual(await receive({connect}),{status:'awaiting-confirmation'});
         assert.equal(await readPairing(runtime),null);
         const pair=createPairingConfigurations()[process.platform==='darwin'?'Mac':'Windows'];
@@ -153,7 +190,7 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
         if(!allowSave)throw Error('Synthetic persistence failure');
         return {version:1,status:'acknowledged'};
       }});
-    const expected={host:'Windows',includeUbuntu:false};
+    const expected={host:'Windows'};
     const get=(identity=clientIdentity,scope=expected)=>requestPeerSetup(listener.invitation,serverIdentity.cert,identity,scope,{connect});
     try {
       await assert.rejects(get());
@@ -173,7 +210,7 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
       assert.throws(()=>listener.confirmSetup(claim.claimId,pair));
       await assert.rejects(get(serverIdentity));
       await assert.rejects(get(clientIdentity,{host:'Windows',includeUbuntu:true}));
-      await assert.rejects(get(clientIdentity,{host:'Mac',includeUbuntu:false}));
+      await assert.rejects(get(clientIdentity,{host:'Mac'}));
       assert.deepEqual(await get(),{status:'configuration',pairing:pair});
       const changed={...pair,transport:{...pair.transport,port:43129}};
       await assert.rejects(acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,changed,{connect}));

@@ -19,7 +19,8 @@ test('controller exposes only invitation and peer fingerprint, never internal ha
   assert.equal((await controller.run({action:'host-start',address:'10.0.0.2',port:0})).status,'hosting');
   const status=await controller.run({action:'status'});
   assert.deepEqual(status,{status:'confirming',peerCertificateSha256:'b'.repeat(64)});
-  const command={action:'host-confirm',peerCertificateSha256:'b'.repeat(64),localEndpoint:{},peerEndpoint:{},includeUbuntu:false};
+  const command={action:'host-confirm',peerCertificateSha256:'b'.repeat(64),localEndpoint:{},peerEndpoint:{}};
+  await assert.rejects(controller.run({...command,includeUbuntu:false}));
   await assert.rejects(controller.run({...command,peerCertificateSha256:'c'.repeat(64)}));
   assert.equal(confirmed,0);
   assert.deepEqual(await controller.run(command),{status:'configuration-ready'});
@@ -86,4 +87,17 @@ test('real child process exchanges status through pipes and exits when the paren
   assert.deepEqual(JSON.parse((await response)[0]),{id:1,status:'idle',peerCertificateSha256:null});
   child.stdin.end();const [code,signal]=await finished;
   assert.equal(code,0);assert.equal(signal,null);
+});
+
+test('join confirmation accepts only the action key',async()=>{
+  let received=0;
+  const controller=createTLSSetupController('/fixture',{readIdentity:async()=>({}),
+    claim:async()=>({status:'awaiting-confirmation'}),receive:async(_runtime,_invitation,options)=>{
+      assert.ok(options.signal);received++;return {status:'acknowledged'};
+    }});
+  await controller.run({action:'join-claim',invitation:encodeInvitation(invite())});
+  await assert.rejects(controller.run({action:'join-confirm',includeUbuntu:false}));
+  assert.equal(received,0);
+  assert.deepEqual(await controller.run({action:'join-confirm'}),{status:'acknowledged'});
+  assert.equal(received,1);
 });

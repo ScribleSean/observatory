@@ -324,10 +324,10 @@ func runSelfTests() {
     precondition(nativeHistory.days("tokens", host: "Windows").isEmpty)
     precondition(nativeHistory.days("tokens", host: "All").isEmpty)
     let pairingRequest = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows", hostAlias: "fixture-host",
-        remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"), includeUbuntu: false)
+        remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"))
     precondition((try? pairingRequest.validate()) != nil)
     let invalidPairingRequest = PairingSetupRequest(transport: PairingTransport(kind: "ssh-windows", hostAlias: "-oBad",
-        remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"), includeUbuntu: false)
+        remoteNode: "C:/Fixture/Runtime/node.exe", remoteScript: "C:/Fixture/Collector/peer-exchange.mjs", remoteRuntime: "C:/Fixture/Data"))
     precondition((try? invalidPairingRequest.validate()) == nil)
     let windowsDetails = """
     {"version":1,"kind":"windows-installation","remoteNode":"C:/Fixture/Runtime/node.exe","remoteScript":"C:/Fixture/Collector/scripts/peer-exchange.mjs","remoteRuntime":"C:/Fixture/Data"}

@@ -9,13 +9,20 @@ const settings={profiles:[{date:'2026-09-08',model:'gpt-6-astra',effort:'medium'
   tools:[{date:'2026-09-08',category:'Shell',tool:'exec_command',namespace:'functions',count:2,arguments:'PRIVATE'}]};
 
 test('Mac local settings accept only explicit source booleans, without remote command settings',()=>{
-  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,claude:false,wispr:false,quota:false,receipts:false,benchmarks:false});
+  assert.deepEqual(macCollectorConfig({}),{activity:true,codex:true,claude:false,wispr:false,quota:false});
   // A saved key for a source that was removed is still accepted and is no longer read.
   assert.equal(Object.hasOwn(macCollectorConfig({antigravity:true}),'antigravity'),false);
   assert.throws(()=>macCollectorConfig({antigravity:'true'}));
   assert.equal(macCollectorConfig({claude:true}).claude,true);
-  assert.equal(macCollectorConfig({benchmarks:true}).benchmarks,false);
+  assert.equal(Object.hasOwn(macCollectorConfig({receipts:true}),'receipts'),false);
+  assert.equal(Object.hasOwn(macCollectorConfig({benchmarks:true}),'benchmarks'),false);
   for(const value of [null,[],{wispr:'yes'},{windowsHost:'private-host'},{python:'/arbitrary/program'}])assert.throws(()=>macCollectorConfig(value));
+});
+test('saved Mac settings accept retired receipts and benchmarks booleans without returning them',()=>{
+  assert.deepEqual(macCollectorConfig({activity:true,codex:false,claude:true,wispr:false,quota:true,receipts:true,benchmarks:true}),
+    {activity:true,codex:false,claude:true,wispr:false,quota:true});
+  assert.throws(()=>macCollectorConfig({receipts:'true'}));
+  assert.throws(()=>macCollectorConfig({benchmarks:1}));
 });
 test('disabled local sources are never invoked and missing peers are unavailable',async()=>{
   let calls=0;

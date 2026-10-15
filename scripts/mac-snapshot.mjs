@@ -8,9 +8,8 @@ export function macCollectorConfig(raw) {
   const keys=['activity','codex','claude','wispr','typewhisper','quota','antigravity','receipts','benchmarks'];
   if(!raw || typeof raw!=='object' || Array.isArray(raw) ||
     Object.keys(raw).some(key=>!keys.includes(key) || typeof raw[key]!=='boolean'))throw Error('Invalid local Mac source settings');
-  // Accept retired booleans only for reading existing configuration.
-  return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,quota:raw.quota===true,
-    receipts:raw.receipts===true,benchmarks:false};
+  // Accept retired antigravity, typewhisper, receipts and benchmarks booleans only for reading existing configuration.
+  return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,quota:raw.quota===true};
 }
 
 export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().toISOString(),peerConfig=null) {

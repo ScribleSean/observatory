@@ -109,9 +109,9 @@ async function main(address) {
         invitation=decodeInvitation(command.invitation);
         return claimFromInvitation(invitation,await readDeviceIdentity(runtime));
       case 'confirm':
-        await listener.confirm(listener.pending()?.claimId,{localEndpoint:endpoint,peerEndpoint:command.peerEndpoint,includeUbuntu:false});
+        await listener.confirm(listener.pending()?.claimId,{localEndpoint:endpoint,peerEndpoint:command.peerEndpoint});
         return {status:'configuration-ready'};
-      case 'finish': return receiveConfirmedTLSPairing(runtime,invitation,{includeUbuntu:false});
+      case 'finish': return receiveConfirmedTLSPairing(runtime,invitation);
       case 'acknowledged': return {acknowledged:(await readHostTLSSetup(runtime)).acknowledged};
       case 'service':
         if(service)throw Error('Already running');

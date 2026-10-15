@@ -238,7 +238,7 @@ test('sample panel shows the computed Codex exhaustion duration', () => {
 });
 
 test('activity archives have separate tracking metadata and capped hours', () => {
-  for (const time of ['2026-10-14T00:03:00Z', '2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
+  for (const time of ['2026-10-14T00:00:30Z', '2026-10-14T00:02:59Z', '2026-10-14T00:03:00Z', '2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
     const snapshot = sampleSnapshot(Date.parse(time));
     for (const source of [snapshot.combined, ...snapshot.activity]) {
       const archive = snapshot.activityHistory.find(row => row.host === source.host);
@@ -246,7 +246,12 @@ test('activity archives have separate tracking metadata and capped hours', () =>
       assert.equal(archive.latestReadStatus, 'ok');
       assert.equal(archive.asOf, source.checkedAt);
       assert.equal(archive.trackingStatus, 'recent');
-      assert.equal(Date.parse(archive.trackingThrough), Date.parse(source.checkedAt) - 60000);
+      const checkedAt = Date.parse(source.checkedAt);
+      const midnight = new Date(checkedAt).setUTCHours(0, 0, 0, 0);
+      const trackingThrough = Date.parse(archive.trackingThrough);
+      assert.ok(trackingThrough >= midnight);
+      assert.ok(trackingThrough <= checkedAt);
+      if (checkedAt - midnight >= 60000) assert.equal(trackingThrough, checkedAt - 60000);
       for (const key of ['latestReadStatus', 'asOf', 'trackingStatus', 'trackingThrough']) assert.equal(source[key], undefined);
       for (const day of source.days) assert.ok(day.hours.every(hour => hour <= 3600));
     }
