@@ -111,7 +111,12 @@ for (const [invitation, ok] of [[prefix + 'abc-_', true], ['wrong:abc', false], 
   add(`invitation ${invitation.length} ${invitation.slice(-3)}`, message('pairing-join-claim', args), ok ? accepted('pairing-join-claim', args) : 'refused');
 }
 for (const [name, text, expect] of [
-  ['reserved', message('complete-setup', {}), 'refused'],
+  ['complete setup accepted', message('complete-setup', {}), accepted('complete-setup', {})],
+  ['complete setup extra argument', message('complete-setup', { extra: true }), 'refused'],
+  ['complete setup enabled argument', message('complete-setup', { enabled: true }), 'refused'],
+  ...[null, [], true, 1, 'setup'].map(args => [
+    `complete setup non-object args ${JSON.stringify(args)}`, message('complete-setup', args), 'refused'
+  ]),
   ['duplicate action', '{"id":1,"action":"status","action":"status","args":{}}', 'refused'],
   ['duplicate args', '{"id":1,"action":"status","args":{},"args":{}}', 'refused'],
   ['duplicate argument', '{"id":1,"action":"set-startup","args":{"enabled":true,"enabled":false}}', 'refused'],
@@ -245,7 +250,7 @@ test('generator rejects malformed data and checks normalized output', async () =
 test('page helpers validate and round trip', () => {
   assert.deepEqual(validateArgs('set-device-name', { name: ' Example ' }), { ok: true, args: { name: 'Example' } });
   assert.deepEqual(validateMessage(encodeMessage(1, 'set-device-name', { name: ' Example ' })), { outcome: 'accepted', id: 1, action: 'set-device-name', args: { name: 'Example' } });
-  for (const [action, args] of [['set-startup', { enabled: 1 }], ['set-startup', { enabled: 'true' }], ['pairing-host-start', { address: '10.0.0.1', port: -0 }], ['status', []], ['status', new Date()], ['status', { toJSON() { return {}; } }], ['status', { get x() { throw new Error('Getter called'); } }], ['status', { [Symbol('x')]: true }], ['complete-setup', {}], ['unknown', {}]]) {
+  for (const [action, args] of [['set-startup', { enabled: 1 }], ['set-startup', { enabled: 'true' }], ['pairing-host-start', { address: '10.0.0.1', port: -0 }], ['status', []], ['status', new Date()], ['status', { toJSON() { return {}; } }], ['status', { get x() { throw new Error('Getter called'); } }], ['status', { [Symbol('x')]: true }], ['unknown', {}]]) {
     assert.deepEqual(validateArgs(action, args), { ok: false });
     assert.throws(() => encodeMessage(1, action, args), TypeError);
   }

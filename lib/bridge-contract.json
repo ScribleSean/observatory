@@ -109,6 +109,6 @@
     "tailscale-check": { "args": {}, "value": true },
     "export-data": { "args": {} },
     "status": { "args": {}, "immediate": true, "value": true },
-    "complete-setup": { "args": {}, "reserved": true }
+    "complete-setup": { "args": {} }
   }
 }

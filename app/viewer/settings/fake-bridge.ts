@@ -34,6 +34,7 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
           const result: BridgeOutcome = { id, ok: true, code: 'done' };
           const unavailable = () => { result.ok = false; result.code = 'unavailable'; };
           switch (action) {
+            case 'complete-setup': break;
             case 'status':
               if (state.pairing.state === 'waiting' && ++hostPolls > 1) {
                 state.pairing.state = 'awaiting-confirmation';

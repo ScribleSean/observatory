@@ -259,7 +259,7 @@ enum BridgeContract {
         let value89: BridgeNode = BridgeNode(entries: [])
         let value90: BridgeNode = BridgeNode(entries: [("args", value89), ("immediate", BridgeNode("boolean", "true")), ("value", BridgeNode("boolean", "true"))])
         let value91: BridgeNode = BridgeNode(entries: [])
-        let value92: BridgeNode = BridgeNode(entries: [("args", value91), ("reserved", BridgeNode("boolean", "true"))])
+        let value92: BridgeNode = BridgeNode(entries: [("args", value91)])
         let value93: BridgeNode = BridgeNode(entries: [("refresh", value22), ("check-updates", value24), ("open-dashboard", value28), ("open-settings", value30), ("set-source", value35), ("set-skin", value39), ("set-device-name", value43), ("set-startup", value46), ("set-appearance", value50), ("set-limits-consent", value53), ("set-sharing", value60), ("pairing-identity-create", value62), ("pairing-host-start", value66), ("pairing-copy-invitation", value68), ("pairing-host-confirm", value73), ("pairing-join-claim", value76), ("pairing-join-confirm", value78), ("pairing-cancel", value80), ("pairing-disconnect", value82), ("pairing-repair-prepare", value84), ("tailscale-check", value86), ("export-data", value88), ("status", value90), ("complete-setup", value92)])
         let value94: BridgeNode = BridgeNode(entries: [("version", BridgeNode("number", "1")), ("source", BridgeNode("string", "docs/DESIGN.md, Settings bridge contract")), ("message", value2), ("codes", value3), ("limits", value4), ("status", value5), ("dashboardFragments", value6), ("whiteSpace", value7), ("address", value14), ("values", value20), ("actions", value93)])
         return value94
