@@ -6,10 +6,8 @@ internal static class LaunchArguments
     // must never fall through to an ordinary application launch.
     internal static bool Valid(string[] args)
     {
-        if (args.All(argument => argument is "--background" or "--native-dashboard" or "--native-viewer" or "--legacy-dashboard" or "--web-panel" or "--web-dashboard" or "--panel-timing"))
-            return args.Distinct(StringComparer.Ordinal).Count() == args.Length &&
-                !(args.Contains("--native-viewer") && args.Any(argument =>
-                    argument is "--legacy-dashboard" or "--web-panel" or "--web-dashboard"));
+        if (args.All(argument => argument is "--background" or "--native-dashboard" or "--web-panel" or "--web-dashboard" or "--panel-timing"))
+            return args.Distinct(StringComparer.Ordinal).Count() == args.Length;
         if (args.Skip(1).Any(argument => string.IsNullOrWhiteSpace(argument) || argument.StartsWith("--", StringComparison.Ordinal)))
             return false;
         var count = args[0] switch
@@ -19,9 +17,9 @@ internal static class LaunchArguments
             "--collect-once" or "--update-ready" or "--test-update-ready" or
                 "--test-update-trust" or "--test-updater-lifecycle" or "--test-updater-library" or
                 "--test-tls-setup-bridge" or "--test-tls-identity-bridge" or "--test-device-identity-bridge" or
-                "--test-direct-pairing-window" or "--test-trusted-sync-owner" or "--test-archive-window" or
-                "--test-native-dashboard" or "--test-setup-wizard" or "--test-usage-popup" or
-                "--test-pairing-details" or "--test-web" or "--test-first-run" or "--test-web-hosts" => 2,
+                "--test-direct-pairing-window" or "--test-trusted-sync-owner" or
+                "--test-setup-wizard" or
+                "--test-pairing-details" or "--test-web-hosts" => 2,
             "--test-update-extraction" => 3,
             "--test-installed-update-state" or "--test-update-candidate" => 5,
             "--apply-update" or "--test-update-staging" => 6,
@@ -35,7 +33,7 @@ internal static class LaunchArguments
     // Installed TEST apps do not run release updates or helpers accepting an
     // arbitrary runtime path. Source-tree fixtures retain their existing modes.
     internal static bool ValidForTestInstallation(string[] args) => Valid(args) &&
-        (args.Length == 0 || args[0] is "--background" or "--native-dashboard" or "--native-viewer" or "--legacy-dashboard" or "--web-panel" or "--web-dashboard" or "--panel-timing" or
+        (args.Length == 0 || args[0] is "--background" or "--native-dashboard" or "--web-panel" or "--web-dashboard" or "--panel-timing" or
             "--self-test" or "--quit-for-update" or "--update-ready" or "--test-update-ready" or
             "--test-launch-isolation");
 }

@@ -9,7 +9,6 @@ const source = (file) =>
 // These run on Windows without pretending to compile AppKit or SwiftUI.
 for (const file of [
   'Panel.swift',
-  'windows/UsagePopup.cs',
   'windows/Program.cs',
 ]) {
   void test(`${file} offers only native devices in active filters`, async () => {
@@ -33,11 +32,6 @@ for (const file of [
 
 for (const [dashboard, history, devices] of [
   ['NativeDashboard.swift', 'NativeHistory.swift', 'nativeHistoryDevices'],
-  [
-    'windows/NativeDashboard.cs',
-    'windows/NativeHistory.cs',
-    'NativeHistory.Devices',
-  ],
 ]) {
   void test(`${dashboard} offers Mac and Windows history only`, async () => {
     const [ui, model] = await Promise.all([source(dashboard), source(history)]);
@@ -55,11 +49,7 @@ for (const [dashboard, history, devices] of [
 }
 
 void test('Windows source settings no longer read or describe WSL selectors', async () => {
-  const [settings, collector] = await Promise.all([
-    source('windows/NativeSourceSettings.cs'),
-    source('windows/Collector.cs'),
-  ]);
-  assert.ok(!/WSL|Ubuntu/.test(settings), 'Settings still describes WSL');
+  const collector = await source('windows/Collector.cs');
   assert.ok(
     !/\["(?:quotaWslDistribution|wslDistribution)"\]\s*=/.test(collector),
     'New configuration still writes a WSL selector',

@@ -283,6 +283,32 @@ internal sealed class Collector : IDisposable
         return result;
     }
 
+    internal static void ConfigurationSelfTest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "observatory-configuration-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var initial = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":true,"futureSetting":"preserved"}""")!.AsObject();
+            File.WriteAllText(Path.Combine(root, "collector.config.json"), initial.ToJsonString());
+            using var collector = new Collector(root);
+            var desired = initial.DeepClone().AsObject();
+            desired["activity"] = true;
+            desired["wispr"] = true;
+            collector.UpdateConfiguration(initial, desired);
+            var current = collector.ReadConfiguration();
+            if (!current["activity"]!.GetValue<bool>() || !current["wispr"]!.GetValue<bool>() ||
+                Snapshot.Text(current["futureSetting"]) != "preserved")
+                throw new Exception("Source settings were not preserved.");
+            try { collector.UpdateConfiguration(initial, initial); throw new Exception("Stale settings accepted."); }
+            catch (InvalidOperationException) { }
+            using var held = new FileStream(Path.Combine(root, "collection.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            try { collector.UpdateConfiguration(current, initial); throw new Exception("Collection lock ignored."); }
+            catch (IOException) { }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     internal static void LaunchSelfTest()
     {
         var names = new[] { "NODE_OPTIONS", "PYTHONPATH", "PYTHONHOME", "SystemRoot" };
