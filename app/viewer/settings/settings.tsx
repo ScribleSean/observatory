@@ -176,9 +176,8 @@ export function SettingsContent({ status: raw, controller, available = true, bus
           !['waiting', 'awaiting-confirmation', 'paired'].includes(state ?? '') && <>{field(S.address, address, setAddress)}{field(S.port, port, setPort, true)}{button(S.start, () => pairingAction(c => c.pairingHostStart(address, port), true))}</>}
       </>}
       {invitation && <label className="ob-settings-field">{S.invitation}<textarea readOnly spellCheck={false} value={invitation} /></label>}
-      {status?.pairing.invitationKept && <>
-        <p>{S.invitationWarning}</p>{button(S.copyInvitation, () => action(c => c.pairingCopyInvitation(), { pairing: true }))}
-      </>}
+      {(invitation || status?.pairing.invitationKept) && <p>{S.invitationWarning}</p>}
+      {status?.pairing.invitationKept && button(S.copyInvitation, () => action(c => c.pairingCopyInvitation(), { pairing: true }))}
       {state === 'awaiting-confirmation' && status?.pairing.peerFingerprint && <>
         <label className="ob-settings-field">{S.fingerprint}<input readOnly value={status.pairing.peerFingerprint} /></label>
         {field(S.peerAddress, peerAddress, setPeerAddress)}{field(S.peerPort, peerPort, setPeerPort, true)}

@@ -163,13 +163,20 @@ void test('Copy busy and cancelled retain invitation, remount retains only the C
   assert.match(f.container.textContent, /Clipboard managers may retain copied invitations/);
 });
 
-void test('a failed status read keeps the invitation in the DOM', async t => {
+void test('the invitation warning appears once before and after a failed status read', async t => {
   const f = await fixture(t);
   await f.hosted();
+  const warning = 'Share privately. Clipboard managers may retain copied invitations. It expires within ten minutes.';
+  const warningCount = () => f.container.textContent.split(warning).length - 1;
+  assert.equal(warningCount(), 1);
+  assert.equal(f.button('Copy invitation').disabled, false);
   f.failStatus();
   await f.click('Check for updates');
   await f.answer(f.last('check-updates'));
   assert.equal(f.container.querySelector('textarea[readonly]').value, invitation);
+  assert.equal(warningCount(), 1);
+  assert.equal(f.container.querySelectorAll('input[aria-checked="mixed"]').length, 9);
+  assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Copy invitation'));
 });
 
 void test('typed join text survives status refresh and clears on Cancel and pagehide', async t => {
