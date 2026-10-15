@@ -259,6 +259,7 @@ internal static class ObservatoryStrings
         internal const string ShareCodexLimits = "Share Codex limits";
         internal const string ShareClaudeTokens = "Share Claude Code tokens";
         internal const string Unknown = "Unknown";
+        internal const string CollectionPaused = "Collection paused";
         internal const string AppOnly = "Open settings inside the Observatory app to make changes.";
         internal const string On = "On";
         internal const string Off = "Off";

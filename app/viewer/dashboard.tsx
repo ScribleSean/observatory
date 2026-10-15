@@ -12,6 +12,8 @@ import { SourcesView } from './sources/SourcesView';
 import { DictationView } from './dictation/DictationView';
 import { SetupView } from './setup/SetupView';
 import { SettingsView } from './settings/settings';
+import { createBridge } from './bridge';
+import { createSettingsController } from './settings/controller';
 
 type Snapshot = Record<string, unknown>;
 const SECTIONS = [
@@ -39,6 +41,7 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
   const [loaded, setLoaded] = useState(demo);
+  const [collectionPaused, setCollectionPaused] = useState(false);
   const [section, setSection] = useState<DashboardSection>(() => sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash));
   const [now, setNow] = useState(() => Date.now());
 
@@ -54,24 +57,30 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   }, [demo]);
 
   useEffect(() => {
-    const first = setTimeout(() => void load(), 0);
-    const reload = () => { void load(); };
-    const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) void load(); }, 30000);
+    const bridge = demo ? null : createBridge();
+    const controller = bridge?.available ? createSettingsController(bridge) : null;
+    controller?.subscribe(status => setCollectionPaused(status?.collectionPaused === true));
+    const readStatus = () => { void controller?.status(); };
+    readStatus();
+    const first = setTimeout(() => { void load(); if (!controller) setCollectionPaused(false); }, 0);
+    const reload = () => { void load(); readStatus(); };
+    const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) reload(); }, 30000);
     window.addEventListener('observatory:snapshot-changed', reload);
     document.addEventListener('visibilitychange', reload);
-    return () => { clearTimeout(first); clearInterval(tick); window.removeEventListener('observatory:snapshot-changed', reload); document.removeEventListener('visibilitychange', reload); };
-  }, [load]);
+    return () => { clearTimeout(first); clearInterval(tick); window.removeEventListener('observatory:snapshot-changed', reload); document.removeEventListener('visibilitychange', reload); controller?.dispose(); bridge?.dispose(); };
+  }, [load, demo]);
 
   useEffect(() => {
     try { Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true }); } catch { /* The shell may already have defined the flag. */ }
   }, []);
 
   // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
-  return <DashboardView demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
+  return <DashboardView collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={section} onSectionChange={id => { setSection(id); writeSectionHash(window, id); }} onSkinChange={setSkinId} onSetupFinished={() => { setSection('limits'); writeSectionHash(window, 'limits'); }} />;
 }
 
 type DashboardViewProps = {
+  collectionPaused?: boolean;
   onSetupFinished?: () => void;
   demo?: boolean;
   snapshot: Snapshot | null;
@@ -86,7 +95,7 @@ type DashboardViewProps = {
   onSkinChange: (skin: string) => void;
 };
 
-export function DashboardView({ demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange, onSetupFinished = () => {} }: DashboardViewProps) {
+export function DashboardView({ collectionPaused = false, demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange, onSetupFinished = () => {} }: DashboardViewProps) {
   const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
     source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
   const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
@@ -99,6 +108,7 @@ export function DashboardView({ demo = false, snapshot, loaded, now, skinId, ski
       <style>{css}</style>
       <Row as="header">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
+        {collectionPaused && <span className="ob-meta warn">{STRINGS.settings.collectionPaused}</span>}
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>
       </Row>
 

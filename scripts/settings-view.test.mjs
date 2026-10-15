@@ -307,3 +307,31 @@ void test('pairing timeout returns while its follow-up status is still pending',
   assert.equal(statusSettled, false);
   controller.dispose(); bridge.dispose();
 });
+
+void test('collectionPaused is required and strictly boolean', () => {
+  for (const collectionPaused of [false, true]) assert.ok(validateBridgeStatus({ ...sampleBridgeStatus(), collectionPaused }));
+  for (const collectionPaused of [null, 0, 'false']) assert.equal(validateBridgeStatus({ ...sampleBridgeStatus(), collectionPaused }), null);
+  const missing = sampleBridgeStatus();
+  delete missing.collectionPaused;
+  assert.equal(validateBridgeStatus(missing), null);
+  assert.equal(validateBridgeStatus({ ...sampleBridgeStatus(), extra: true }), null);
+});
+for (const skinId of ['sage', 'almanac']) {
+  void test(`collection paused Settings note in ${skinId}`, () => {
+    assert.doesNotMatch(render(sampleBridgeStatus(), { skinId }), /Collection paused/);
+    assert.doesNotMatch(render(null, { skinId }), /Collection paused/);
+    const html = render({ ...sampleBridgeStatus(), collectionPaused: true }, { skinId });
+    assert.equal((html.match(/Collection paused/g) ?? []).length, 1);
+    assert.match(html, /<p class="ob-settings-paused" role="status">Collection paused<\/p><output/);
+  });
+}
+void test('fake bridge preserves collectionPaused through setting changes', async () => {
+  const bridge = createFakeBridge({ ...sampleBridgeStatus(), collectionPaused: true }, 0);
+  const controller = createSettingsController(bridge);
+  try {
+    await controller.status();
+    assert.equal(controller.getStatus().collectionPaused, true);
+    await controller.setStartup(false);
+    assert.equal(controller.getStatus().collectionPaused, true);
+  } finally { controller.dispose(); bridge.dispose(); }
+});

@@ -155,6 +155,8 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   const pairingAction = (task: (c: SettingsController) => Promise<BridgeOutcome>, host = false) => action(task, { pairing: true, host });
   return <div className="ob-settings" data-skin={skinId} aria-busy={busy}>
     {!available && <p>{S.appOnly}</p>}
+    {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The paused note uses the requested paragraph status markup. */}
+    {status?.collectionPaused === true && <p className="ob-settings-paused" role="status">{S.collectionPaused}</p>}
     <output aria-live="polite">{busy ? S.working : message}</output>
     {group(S.sources, <>{(['activity', 'codex', 'claude', 'wispr'] as const).map(source => <div key={source}>{toggle(S[source], status?.sources[source], enabled => action(c => c.setSource(source, enabled)))}</div>)}</>)}
     {group(S.accounts, <>

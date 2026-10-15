@@ -240,6 +240,7 @@ export const STRINGS = {
     "shareCodexLimits": "Share Codex limits",
     "shareClaudeTokens": "Share Claude Code tokens",
     "unknown": "Unknown",
+    "collectionPaused": "Collection paused",
     "appOnly": "Open settings inside the Observatory app to make changes.",
     "on": "On",
     "off": "Off",

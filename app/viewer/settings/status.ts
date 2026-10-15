@@ -10,6 +10,7 @@ export type BridgeStatus = {
   startup: boolean;
   appearance: 'system' | 'light' | 'dark';
   limitsConsent: boolean;
+  collectionPaused: boolean;
   pairing: { state: string; peerFingerprint: string | null; transport: string; invitationKept: boolean };
   sharing: Record<SharingChannel, { enabled: boolean; canEnable: boolean; reason: string; token: string | null }>;
 };
@@ -19,12 +20,12 @@ const hex = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{64}$/.te
 export function validateBridgeStatus(value: unknown): BridgeStatus | null {
   try {
     if (new TextEncoder().encode(JSON.stringify(value)).length > contract.status.maxBytes ||
-      !keys(value, ['version', 'app', 'sources', 'skin', 'deviceName', 'startup', 'appearance', 'limitsConsent', 'pairing', 'sharing'])) return null;
+      !keys(value, contract.status.fields)) return null;
     const { app, sources, skin, pairing, sharing } = value;
     if (value.version !== contract.status.version || !keys(app, ['version', 'build']) || typeof app.version !== 'string' ||
       !/^[A-Za-z0-9][A-Za-z0-9 .+-]*$/.test(app.version) || Array.from(app.version).length > contract.status.appVersionMaxLength || !Number.isSafeInteger(app.build) || (app.build as number) < 0 ||
       !keys(sources, ['activity', 'codex', 'claude', 'wispr', 'quota']) || Object.values(sources).some(v => typeof v !== 'boolean') ||
-      typeof value.startup !== 'boolean' || typeof value.limitsConsent !== 'boolean' ||
+      typeof value.startup !== 'boolean' || typeof value.limitsConsent !== 'boolean' || typeof value.collectionPaused !== 'boolean' ||
       !contract.values.appearance.includes(value.appearance as string) || !validateArgs('set-device-name', { name: value.deviceName }).ok) return null;
     const bundled = contract.actions['set-skin'].args.skin.bundled;
     if (!keys(skin, ['current', 'bundled', 'custom']) || !Array.isArray(skin.bundled) ||

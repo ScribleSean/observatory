@@ -33,7 +33,20 @@ export const BRIDGE_CONTRACT = {
     "version": 1,
     "maxBytes": 16384,
     "appVersionMaxLength": 32,
-    "customSkinsMax": 32
+    "customSkinsMax": 32,
+    "fields": [
+      "version",
+      "app",
+      "sources",
+      "skin",
+      "deviceName",
+      "startup",
+      "appearance",
+      "limitsConsent",
+      "collectionPaused",
+      "pairing",
+      "sharing"
+    ]
   },
   "dashboardFragments": [
     "limits",

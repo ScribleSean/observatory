@@ -10,6 +10,7 @@
 }
 .ob-dashboard * { box-sizing: border-box; }
 .ob-dashboard header { flex-wrap: wrap; }
+.ob-dashboard header .ob-meta { min-width: 0; overflow-wrap: anywhere; }
 .ob-dashboard h1, .ob-dashboard h2 { margin: 0; font-size: var(--ob-section-size); font-weight: 600; letter-spacing: var(--ob-section-tracking); }
 .ob-dashboard h1 { display: flex; align-items: center; gap: var(--ob-space-2); }
 .ob-dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-5); margin-top: var(--ob-space-5); }

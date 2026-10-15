@@ -240,6 +240,7 @@ enum ObservatoryStrings {
         static let `shareCodexLimits` = "Share Codex limits"
         static let `shareClaudeTokens` = "Share Claude Code tokens"
         static let `unknown` = "Unknown"
+        static let `collectionPaused` = "Collection paused"
         static let `appOnly` = "Open settings inside the Observatory app to make changes."
         static let `on` = "On"
         static let `off` = "Off"

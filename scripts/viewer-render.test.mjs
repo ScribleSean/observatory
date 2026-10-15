@@ -282,3 +282,12 @@ void test('Dashboard follows hashes in an effect and writes them from navigation
   assert.match(stateful, /onSetupFinished=\{\(\) => \{\s*setSection\('limits'\)\s*\W+\s*writeSectionHash\(window, 'limits'\)/);
   assert.equal((stateful.match(/writeSectionHash\(/g) ?? []).length, 2);
 });
+
+void test('dashboard paused note is in the header including setup', () => {
+  for (const section of ['limits', 'setup']) {
+    const html = dashboard({ section, collectionPaused: true });
+    assert.equal((html.match(/Collection paused/g) ?? []).length, 1);
+    assert.match(html, /<header[^>]*>[\s\S]*<span class="ob-meta warn">Collection paused<\/span>[\s\S]*<\/header>/);
+    assert.doesNotMatch(dashboard({ section, collectionPaused: false }), /Collection paused/);
+  }
+});

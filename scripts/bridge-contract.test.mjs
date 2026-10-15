@@ -209,6 +209,8 @@ test('generator rejects malformed data and checks normalized output', async () =
   const generator = await import(pathToFileURL(script).href);
   const mutations = [
     data => { data.extra = true; },
+    data => { data.status.fields.push('version'); },
+    data => { data.status.fields.push(1); },
     data => { delete data.codes; },
     data => { data.message.maxBytes = '4096'; },
     data => { data.message.maxDepth = 1.5; },
@@ -436,10 +438,10 @@ test('status limits are required positive integers and generated for every langu
   const swift = generated.get('native/BridgeContract.swift');
   const cs = generated.get('native/windows/BridgeContract.cs');
   assert.ok(swift.includes('static let status = data["status"]'));
-  for (const [key, value] of Object.entries(contract.status)) {
-    assert.ok(generated.get('lib/bridge-contract.generated.ts').includes(`"${key}": ${value}`));
-    assert.ok(swift.includes(`("${key}", BridgeNode("number", "${value}"))`));
-    assert.ok(cs.includes(`new KeyValuePair<string, BridgeNode>("${key}", new BridgeNode("number", "${value}"))`));
+  for (const [key, value] of Object.entries(contract.status).filter(([key]) => key !== 'fields')) {
+    assert.ok(generated.get('lib/bridge-contract.generated.ts').includes(`"${key}": ${String(value)}`));
+    assert.ok(swift.includes(`("${key}", BridgeNode("number", "${String(value)}"))`));
+    assert.ok(cs.includes(`new KeyValuePair<string, BridgeNode>("${key}", new BridgeNode("number", "${String(value)}"))`));
     const name = 'Status' + key[0].toUpperCase() + key.slice(1);
     assert.ok(cs.includes(`${name} = Data["status"]["${key}"].Number`));
     for (const invalid of [0, -1, 1.5, '1', null, Number.MAX_SAFE_INTEGER + 1, undefined]) {
@@ -471,4 +473,13 @@ test('contract numbers anywhere stay within nonnegative Int32 bounds', () => {
   const data = structuredClone(contract);
   data.limits.queue = 2147483647;
   assert.doesNotThrow(() => validateContract(data));
+});
+
+void test('status fields are exact and reject malformed lists', () => {
+  assert.deepEqual(contract.status.fields, ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing"]);
+  for (const fields of [undefined, [], ['version', 'version'], ['version', 1], ['Bad'], ['bad-key']]) {
+    const data = structuredClone(contract);
+    data.status.fields = fields;
+    assert.throws(() => validateContract(data), /Invalid bridge contract data/);
+  }
 });
