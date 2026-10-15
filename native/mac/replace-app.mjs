@@ -1,6 +1,6 @@
 import {appNames} from '../app-names.mjs';
 import {execFileSync} from 'node:child_process';
-import {readFileSync,realpathSync,lstatSync,openSync,closeSync,unlinkSync,writeFileSync,fsyncSync} from 'node:fs';
+import {readFileSync,realpathSync,lstatSync,openSync,closeSync,unlinkSync,writeFileSync,fsyncSync,mkdtempSync,renameSync} from 'node:fs';
 import path from 'node:path';
 import {replacePayload} from '../windows/replace-payload.mjs';
 import {verifyMacPackage} from './inspect-package.mjs';
@@ -21,7 +21,14 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
     if(typeof folder!=='string' || !path.isAbsolute(folder) || path.resolve(folder)!==realpathSync(folder) ||
       !lstatSync(folder).isDirectory() || lstatSync(folder).isSymbolicLink())throw Error('Canonical app directories are required');
   }
-  if(path.basename(installed)!==appNames.visible.macBundle || installed===staged || path.dirname(installed)!==path.dirname(staged))
+  const renameMode=path.basename(installed)===appNames.legacy.macBundle;
+  const target=path.join(path.dirname(installed),appNames.visible.macBundle);
+  const assertTargetMissing=()=>{
+    try {lstatSync(target);}catch(error){if(error.code==='ENOENT')return;throw error;}
+    throw Error('The new app bundle already exists.');
+  };
+  if(renameMode)assertTargetMissing();
+  if((!renameMode && path.basename(installed)!==appNames.visible.macBundle) || installed===staged || path.dirname(installed)!==path.dirname(staged))
     throw Error('Stage the candidate beside the installed app');
   for(const receipt of [previousManifest,candidateManifest]) {
     if(receipt?.schema!==1 || receipt.platform!=='macos-arm64' || !Array.isArray(receipt.files))
@@ -54,6 +61,33 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
         } finally { closeSync(descriptor); }
       }
     };
+    if(renameMode) {
+      const previousIdentity=verify(installed,'previous'),candidateIdentity=verify(staged,'candidate');
+      for(const identity of [previousIdentity,candidateIdentity]) {
+        if(!/^[a-f0-9]{40}$/.test(identity.sourceRevision) || !Number.isSafeInteger(identity.buildNumber) || identity.buildNumber<1)
+          throw Error('Verified payload identity is required');
+      }
+      if(candidateIdentity.buildNumber<=previousIdentity.buildNumber)throw Error('Payload build must advance');
+      assertStopped();assertTargetMissing();
+      const recovery=mkdtempSync(path.join(path.dirname(installed),'.observatory-update-'));
+      prepareRecovery(recovery);
+      const previous=path.join(recovery,'previous');
+      const journal=openSync(path.join(recovery,'transaction.jsonl'),'wx',0o600);
+      const record=state=>{writeFileSync(journal,JSON.stringify({state})+'\n');fsyncSync(journal);};
+      let retained=false,promoted=false;
+      try {
+        record('prepared');
+        renameSync(installed,previous);retained=true;
+        record('previous-retained');
+        assertTargetMissing();
+        renameSync(staged,target);promoted=true;
+        record('candidate-promoted');
+        return {state:'renamed',installed:target,recovery,sourceRevision:candidateIdentity.sourceRevision};
+      } catch(error) {
+        if(retained && !promoted)renameSync(previous,installed);
+        throw error;
+      } finally {closeSync(journal);}
+    }
     return replacePayload({installed,staged,verify,prepareRecovery});
   } finally {
     closeSync(handle);

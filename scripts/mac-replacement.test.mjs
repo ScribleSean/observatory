@@ -72,3 +72,25 @@ test('Mac replacement refuses altered candidate contents before any move',mac,t=
   assert.ok(existsSync(f.installed)&&existsSync(f.staged));
   assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
 });
+
+test('legacy app rename retains the earlier bundle and journals promotion',mac,t=>{
+  const f=setup(t),target=f.installed;
+  f.installed=path.join(f.root,appNames.legacy.macBundle);renameSync(target,f.installed);
+  const result=replaceMacApp(f);
+  assert.equal(result.state,'renamed');assert.equal(result.installed,target);
+  assert.equal(existsSync(f.installed),false);
+  assert.equal(readFileSync(path.join(result.recovery,'previous/Contents/Resources/LICENSE'),'utf8'),'fixture-0');
+  assert.equal(readFileSync(path.join(target,'Contents/Resources/LICENSE'),'utf8'),'fixture-1');
+  assert.deepEqual(readFileSync(path.join(result.recovery,'transaction.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line).state),
+    ['prepared','previous-retained','candidate-promoted']);
+  for(const name of ['previous-manifest.json','candidate-manifest.json'])assert.ok(existsSync(path.join(result.recovery,name)));
+});
+test('rename refuses an existing destination, a running app and unrelated basenames',mac,t=>{
+  const f=setup(t),target=f.installed;
+  f.installed=path.join(f.root,appNames.legacy.macBundle);renameSync(target,f.installed);
+  assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>'/synthetic/'+appNames.internal.macExecutable}),/Quit all/);
+  mkdirSync(target);
+  assert.throws(()=>replaceMacApp(f),/already exists/);
+  const g=setup(t),other=path.join(g.root,'Other.app');renameSync(g.installed,other);
+  assert.throws(()=>replaceMacApp({...g,installed:other}),/Stage the candidate/);
+});

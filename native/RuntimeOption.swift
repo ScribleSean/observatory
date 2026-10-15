@@ -6,7 +6,7 @@ enum RuntimeOption: Equatable {
     case runtime(URL, FileIdentity?)
     case refused(String)
 
-    static func parse(arguments: [String], realDataFolder: URL, userID: uid_t) -> RuntimeOption {
+    static func parse(arguments: [String], realDataFolder: URL, legacyDataFolder: URL? = nil, userID: uid_t) -> RuntimeOption {
         guard !arguments.contains(where: { $0.hasPrefix("--runtime") && $0 != "--runtime" }) else {
             return .refused("Use --runtime followed by the folder as a separate argument.")
         }
@@ -30,12 +30,15 @@ enum RuntimeOption: Equatable {
         let parts = path.split(separator: "/").map(String.init)
         let folder = URL(fileURLWithPath: "/" + parts.joined(separator: "/"), isDirectory: true)
         let candidate = folder.path.lowercased()
-        var realPaths = [realDataFolder.path]
-        var protected = [realDataFolder.standardizedFileURL.path.lowercased()]
-        if let resolved = realpath(realDataFolder.path, nil) {
-            realPaths.append(String(cString: resolved))
-            protected.append(String(cString: resolved).lowercased())
-            free(resolved)
+        let dataFolders = [realDataFolder] + (legacyDataFolder.map { [$0] } ?? [])
+        var realPaths = dataFolders.map { $0.path }
+        var protected = dataFolders.map { $0.standardizedFileURL.path.lowercased() }
+        for dataFolder in dataFolders {
+            if let resolved = realpath(dataFolder.path, nil) {
+                realPaths.append(String(cString: resolved))
+                protected.append(String(cString: resolved).lowercased())
+                free(resolved)
+            }
         }
         guard !protected.contains(where: { candidate == $0 || candidate.hasPrefix($0 + "/") }) else {
             return .refused("--runtime cannot use the real Observatory data folder or a folder inside it.")
@@ -85,7 +88,7 @@ enum RuntimeOption: Equatable {
         return .runtime(folder, candidateIdentity)
     }
 
-    static func createAndLock(_ folder: URL, realDataFolder: URL) throws -> (descriptor: Int32, createdIdentity: FileIdentity?) {
+    static func createAndLock(_ folder: URL, realDataFolder: URL, legacyDataFolder: URL? = nil) throws -> (descriptor: Int32, createdIdentity: FileIdentity?) {
         var createdIdentity: FileIdentity?
         var created = false
         var info = stat()
@@ -99,11 +102,14 @@ enum RuntimeOption: Equatable {
         guard fstat(directory, &info) == 0 else { throw CocoaError(.fileWriteNoPermission) }
         let identity = FileIdentity(info)
         if created { createdIdentity = identity }
-        var realIdentities = [FileIdentity.at(realDataFolder.path)]
-        if let parent = realpath(realDataFolder.deletingLastPathComponent().path, nil) {
-            let resolved = URL(fileURLWithPath: String(cString: parent)).appendingPathComponent(realDataFolder.lastPathComponent)
-            free(parent)
-            realIdentities.append(FileIdentity.at(resolved.path))
+        var realIdentities: [FileIdentity?] = []
+        for dataFolder in [realDataFolder] + (legacyDataFolder.map { [$0] } ?? []) {
+            realIdentities.append(FileIdentity.at(dataFolder.path))
+            if let parent = realpath(dataFolder.deletingLastPathComponent().path, nil) {
+                let resolved = URL(fileURLWithPath: String(cString: parent)).appendingPathComponent(dataFolder.lastPathComponent)
+                free(parent)
+                realIdentities.append(FileIdentity.at(resolved.path))
+            }
         }
         if realIdentities.contains(identity) {
             if createdIdentity == identity, FileIdentity.at(folder.path) == identity {

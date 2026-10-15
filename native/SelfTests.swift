@@ -434,8 +434,10 @@ func runRuntimeSetupSelfTests() {
     defer { try? files.removeItem(at: root) }
     let real = root.appendingPathComponent("real-assets")
     try! files.createDirectory(at: real, withIntermediateDirectories: false)
+    let legacy = root.appendingPathComponent("Workspace Observatory")
+    try! files.createDirectory(at: legacy, withIntermediateDirectories: false)
     func parse(_ args: [String], user: uid_t = getuid()) -> RuntimeOption {
-        RuntimeOption.parse(arguments: ["Observatory"] + args, realDataFolder: real, userID: user)
+        RuntimeOption.parse(arguments: ["Observatory"] + args, realDataFolder: real, legacyDataFolder: legacy, userID: user)
     }
     func refused(_ args: [String], user: uid_t = getuid()) {
         guard case .refused = parse(args, user: user) else { preconditionFailure("Unsafe runtime accepted") }
@@ -443,6 +445,10 @@ func runRuntimeSetupSelfTests() {
     func throwsError(_ action: () throws -> Void) {
         do { try action(); preconditionFailure("Unsafe setup accepted") } catch {}
     }
+    refused(["--runtime", legacy.path])
+    refused(["--runtime", legacy.path + "/child"])
+    refused(["--runtime", "/.nofollow" + legacy.path])
+    throwsError { _ = try RuntimeOption.createAndLock(legacy, realDataFolder: real, legacyDataFolder: legacy) }
     precondition(parse([]) == .none)
     refused(["--runtime"])
     precondition(parse(["--runtime=" + root.path + "/fresh"]) ==
