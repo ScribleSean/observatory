@@ -74,8 +74,6 @@ jobs:
           scripts/private-directory-policy.test.mjs
           scripts/private-path-acl.test.mjs
           scripts/mac-snapshot-archive.test.mjs
-          scripts/archive-retirement-recovery.test.mjs
-          scripts/refresh-allowances-retirement.test.mjs
           scripts/run-collector.test.mjs
           scripts/source-python-runner.test.mjs
           scripts/source-python-test-entry.test.mjs

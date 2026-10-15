@@ -145,6 +145,7 @@ async function model(t, { platform = 'darwin', reject = () => false } = {}) {
     const name = prefix + ++serial;
     events.push({ kind: 'mkdir', name });
     directory(name);
+    if (m.leafPatch) Object.assign(entries.get(name), m.leafPatch);
     return name;
   });
   t.mock.method(fs, 'open', async (name, flags) => {
@@ -214,60 +215,20 @@ test('modeled safe Mac preparation keeps distinct exact-byte archives', async (t
   assert.equal(byteWrites(m).length, 4);
 });
 
-test('modeled Mac retirement refuses unsafe ancestry before any private bytes', async (t) => {
-  const m = await model(t, { reject: ({ mode }) => mode === '--ancestor' });
-  await assert.rejects(
-    (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
-  );
-  assert.deepEqual(byteWrites(m), []);
-  assert.deepEqual(m.entries.get(m.file).bytes, sourceBytes);
-});
-test('modeled safe retirement preserves exact bytes and reuses its two-file checkpoint', async (t) => {
-  const m = await model(t);
-  const guard = await m.archive.retirementSnapshotGuard(m.runtime);
-  await guard.preserve();
-  await guard.preserve();
-  assert.deepEqual(
-    m.entries.get(path.join(m.folder, 'retirement-snapshot.json')).bytes,
-    sourceBytes,
-  );
-  assert.equal(byteWrites(m).length, 2);
-  assert.deepEqual(m.entries.get(m.file).bytes, sourceBytes);
-});
-
-for (const platform of ['darwin', 'win32'])
-  test(`modeled ${platform} retirement preflight rejects before directory creation`, async (t) => {
-    const m = await model(t, {
-      platform,
-      reject: ({ mode }) => mode === '--ancestor',
-    });
-    await assert.rejects(
-      (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
-    );
-    assert.equal(
-      m.events.some(
-        (event) => event.kind === 'mkdir' || event.kind === 'bytes',
-      ),
-      false,
-    );
-    assert.ok(m.events.some((event) => event.kind === 'verify'));
-  });
 for (const acl of [
-  'inherited-file-read',
   'inherited-directory-write',
   'query-failure',
   'unknown-format',
 ])
-  test(`modeled Mac ${acl} rejection blocks retirement before an exclusive open`, async (t) => {
+  test(`modeled Mac ${acl} rejection blocks Mac preparation before an exclusive open`, async (t) => {
     const m = await model(t, {
       reject: ({ name, mode, entries }) =>
         mode === '--private' && entries.get(name)?.acl === acl,
     });
     // Native --private is authoritative even when POSIX bits report 0700.
-    m.directory(m.folder);
-    m.entries.get(m.folder).acl = acl;
+    m.leafPatch = { acl };
     await assert.rejects(
-      (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
+      m.archive.archiveMacSnapshot(m.file, m.archiveRoot),
     );
     assert.equal(
       m.events.some((event) => event.kind === 'open' && event.flags === 'wx'),
@@ -281,10 +242,9 @@ for (const acl of [
   });
 test('modeled Mac private-leaf owner mismatch cannot authorize bytes', async (t) => {
   const m = await model(t);
-  m.directory(m.folder);
-  m.entries.get(m.folder).uid = 999;
+  m.leafPatch = { uid: 999 };
   await assert.rejects(
-    (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
+    m.archive.archiveMacSnapshot(m.file, m.archiveRoot),
     /Unsafe private/,
   );
   assert.deepEqual(byteWrites(m), []);
@@ -298,14 +258,14 @@ test('modeled ancestry identity change during native verification refuses before
     return result;
   };
   await assert.rejects(
-    (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
+    m.archive.archiveMacSnapshot(m.file, m.archiveRoot),
     /ancestry changed/,
   );
   assert.deepEqual(byteWrites(m), []);
 });
 test('modeled Mac verifier uses the configured isolated Python and exact CLI contract', async (t) => {
   const m = await model(t);
-  await (await m.archive.retirementSnapshotGuard(m.runtime)).preserve();
+  await m.archive.archiveMacSnapshot(m.file, m.archiveRoot);
   const calls = m.events.filter((event) => event.kind === 'verify');
   assert.ok(calls.some((call) => call.args.includes('--ancestor')));
   assert.ok(calls.some((call) => call.args.includes('--private')));
@@ -344,7 +304,7 @@ for (const result of [
     const m = await model(t);
     m.execute = async () => ({ stdout: result });
     await assert.rejects(
-      (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
+      m.archive.archiveMacSnapshot(m.file, m.archiveRoot),
       /access-control verification failed/,
     );
     assert.deepEqual(byteWrites(m), []);
@@ -369,7 +329,7 @@ test('modeled unavailable Python refuses without running a different executable'
   });
   syncBuiltinESMExports();
   await assert.rejects(
-    (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
+    m.archive.archiveMacSnapshot(m.file, m.archiveRoot),
     /access-control verification failed/,
   );
   assert.equal(
@@ -383,7 +343,7 @@ test('modeled missing ACL verifier refuses before writes', async (t) => {
     throw absent();
   };
   await assert.rejects(
-    (await m.archive.retirementSnapshotGuard(m.runtime)).preserve(),
+    m.archive.archiveMacSnapshot(m.file, m.archiveRoot),
     /access-control verification failed/,
   );
   assert.deepEqual(byteWrites(m), []);

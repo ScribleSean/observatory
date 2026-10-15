@@ -1,8 +1,8 @@
 import {constants} from 'node:fs';
-import {lstat,open,realpath,mkdtemp,mkdir} from 'node:fs/promises';
+import {lstat,open,realpath,mkdtemp} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
-import {privateCollectorDirectory,trustedDirectoryAncestry,verifyPrivateDirectory} from './peer-directory.mjs';
+import {trustedDirectoryAncestry,verifyPrivateDirectory} from './peer-directory.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
 
 const maximumBytes=16_000_000;
@@ -28,8 +28,7 @@ async function readEvidence(file,limit=maximumBytes,privateFile=false) {
       if(!bytesRead)break;
       total+=bytesRead;
     }
-    // Reused copies can be complete even when an earlier flush failed. Flush
-    // verified archive handles again before allowing the original to change.
+    // Flush verified archive handles before allowing the original to change.
     if(privateFile)await handle.sync();
     const after=await handle.stat({bigint:true}),named=await lstat(file,{bigint:true});
     if(total!==Number(before.size) || !same(before,after) || !same(before,named) ||
@@ -70,29 +69,26 @@ async function syncDirectory(folder) {
   try {await directory.sync();}finally {await directory.close();}
 }
 
-async function writeExclusive(file,bytes,reuse) {
-  let output;
-  try {output=await open(file,'wx',0o600);}
-  catch(error) {if(reuse && error.code==='EEXIST')return;throw error;}
+async function writeExclusive(file,bytes) {
+  const output=await open(file,'wx',0o600);
   try {await output.writeFile(bytes);await output.sync();}
   finally {await output.close();}
 }
 
-async function writeArchive(snapshot,folder,snapshotName,receiptName,provenance={},reuse=false) {
+async function writeArchive(snapshot,folder,snapshotName,receiptName) {
   const directory=await verifyPrivateDirectory(folder);
   const file=path.join(folder,snapshotName);
-  await writeExclusive(file,snapshot.data,reuse);
+  await writeExclusive(file,snapshot.data);
   const saved=await readSnapshot(file,true);
   const sha256=digest(snapshot.data);
   if(!saved.data.equals(snapshot.data))throw Error('Archive verification failed');
-  const expected={version:1,collectedAt:snapshot.collectedAt,bytes:snapshot.data.length,sha256,...provenance};
+  const expected={version:1,collectedAt:snapshot.collectedAt,bytes:snapshot.data.length,sha256};
   const receiptFile=path.join(folder,receiptName);
-  await writeExclusive(receiptFile,JSON.stringify(expected)+'\n',reuse);
+  await writeExclusive(receiptFile,JSON.stringify(expected)+'\n');
   const receiptEvidence=await readEvidence(receiptFile,8192,true);
   const receipt=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(receiptEvidence.data));
   if(!receipt || Object.keys(receipt).length!==Object.keys(expected).length ||
-    Object.entries(expected).some(([key,value])=>key==='archivedAt'
-      ? typeof receipt[key]!=='string' || !Number.isFinite(Date.parse(receipt[key])) : receipt[key]!==value))
+    Object.entries(expected).some(([key,value])=>receipt[key]!==value))
     throw Error('Archive receipt verification failed');
   await syncDirectory(folder);
   await syncDirectory(path.dirname(folder));
@@ -103,30 +99,6 @@ async function writeArchive(snapshot,folder,snapshotName,receiptName,provenance=
     !same(receiptEvidence.info,finalReceipt.info) || !finalReceipt.data.equals(receiptEvidence.data))
     throw Error('Archive changed during verification');
   return {file,...receipt};
-}
-
-function retiredEvidence(value) {
-  const retired=source=>source && !['Mac','Windows','Combined','All'].includes(source.host) &&
-    (source.status!=='not-connected' || Object.keys(source).some(key=>!['host','status'].includes(key)));
-  return ['tokens','settings','activity','activityHistory','providerTokenSources'].some(key=>
-    Array.isArray(value[key]) && value[key].some(retired)) || Boolean(retired(value.localModel));
-}
-
-// Called under the collector lock. A checkpoint plus retained source evidence
-// can be an interrupted retirement. Do not let quota publication change its
-// exact retry preimage, even when the checkpoint is incomplete or corrupt.
-export async function assertAllowanceRefreshAllowed(runtime,value) {
-  if(!retiredEvidence(value))return;
-  const control=path.join(runtime,'.runtime'),folder=path.join(control,'private-repair');
-  for(const directory of [control,folder]) {
-    let info;
-    try {info=await lstat(directory);}catch(error) {if(error.code==='ENOENT')return;throw error;}
-    if(!info.isDirectory() || info.isSymbolicLink())throw Error('Unsafe retirement checkpoint directory');
-  }
-  for(const name of ['retirement-snapshot.json','retirement-receipt.json']) {
-    try {await lstat(path.join(folder,name));}catch(error) {if(error.code==='ENOENT')continue;throw error;}
-    throw Error('Allowance refresh deferred until full collection retries source retirement');
-  }
 }
 
 async function optionalSnapshot(file) {
@@ -141,8 +113,8 @@ async function optionalSnapshot(file) {
 }
 
 // The platform caller already owns collection.lock or .runtime/collector.lock.
-// Do not acquire a second lock here. Read history and archive evidence from the
-// same stable source, then check it again immediately before the caller renames.
+// Do not acquire a second lock here. Read history from the same stable source,
+// then check it again immediately before the caller renames.
 export async function retirementSnapshotGuard(runtime) {
   if(!path.isAbsolute(runtime) || path.resolve(runtime)!==await realpath(runtime))
     throw Error('Canonical snapshot runtime required');
@@ -158,26 +130,6 @@ export async function retirementSnapshotGuard(runtime) {
   };
   return {history,preserve:async()=>{
     await unchanged();
-    if(snapshot && retiredEvidence(value)) {
-      // Keep recovery outside public data, peer state and Git's tracked tree.
-      // Reuse private-repair ACL policy beneath the ignored collector runtime,
-      // not the peer repair directory. Two fixed files bound this checkpoint.
-      const control=path.join(runtime,'.runtime');
-      await trustedDirectoryAncestry(runtime);
-      await mkdir(control,{mode:0o700}).catch(error=>{if(error.code!=='EEXIST')throw error;});
-      const folder=await privateCollectorDirectory(control,'private-repair',true);
-      const info=await lstat(folder);
-      const archived=await writeArchive(snapshot,folder,'retirement-snapshot.json','retirement-receipt.json',{
-        reason:'source-retirement',source:'public/local/usage.json',archivedAt:new Date().toISOString(),
-        sourceMtimeNs:String(snapshot.info.mtimeNs),sourceCtimeNs:String(snapshot.info.ctimeNs),
-        sourceBirthtimeNs:String(snapshot.info.birthtimeNs)},true);
-
-      await syncDirectory(runtime);
-      const after=await lstat(folder);
-      if(after.dev!==info.dev || after.ino!==info.ino || after.uid!==info.uid ||
-        !(await readSnapshot(archived.file,true)).data.equals(snapshot.data))
-        throw Error('Archive changed during verification');
-    }
     await unchanged();
   }};
 }

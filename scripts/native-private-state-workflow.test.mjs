@@ -15,8 +15,6 @@ const entryPoints = [
   'private-directory-policy',
   'private-path-acl',
   'mac-snapshot-archive',
-  'archive-retirement-recovery',
-  'refresh-allowances-retirement',
   'run-collector',
   'source-python-runner',
   'source-python-test-entry',
@@ -220,11 +218,7 @@ test('native gate contract rejects unsafe or incomplete workflow edits', () => {
       'process.env.LOCALAPPDATA : process.env.RUNNER_TEMP',
       'process.env.RUNNER_TEMP : process.env.RUNNER_TEMP',
     ],
-    ['scripts/archive-retirement-recovery.test.mjs', 'scripts/unused.test.mjs'],
-    [
-      'scripts/refresh-allowances-retirement.test.mjs',
-      'scripts/unused.test.mjs',
-    ],
+    ['scripts/mac-snapshot-archive.test.mjs', 'scripts/unused.test.mjs'],
     [
       '        shell: bash',
       '        continue-on-error: true\n        shell: bash',
