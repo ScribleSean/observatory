@@ -67,11 +67,11 @@ enum WebDashboardPage {
 
     static func section(for tab: String) -> String {
         if tab == "allowances" { return "limits" }
-        return sections.contains(where: { $0.0 == tab }) ? tab : "limits"
+        return (tab == "setup" || sections.contains(where: { $0.0 == tab })) ? tab : "limits"
     }
 
     static func url(section: String) -> URL {
-        precondition(sections.contains(where: { $0.0 == section }))
+        precondition(section == "setup" || sections.contains(where: { $0.0 == section }))
         return URL(string: "observatory://app/dashboard.html#\(section)")!
     }
 }

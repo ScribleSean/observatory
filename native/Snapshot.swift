@@ -10,9 +10,6 @@ func number(_ value: Any?) -> Double? {
 }
 
 func rows(_ value: Any?) -> [JSONObject] { value as? [JSONObject] ?? [] }
-func visibleQuotaWindows(_ value: Any?) -> [JSONObject] {
-    rows(value).filter { !["codex_bengalfox", "codex_spark", "spark"].contains(text($0["bucket"]).lowercased()) }
-}
 func text(_ value: Any?, fallback: String = "Unknown") -> String { value as? String ?? fallback }
 
 func readObject(_ url: URL) -> JSONObject? {
@@ -40,104 +37,14 @@ func parseDate(_ value: Any?) -> Date? {
     return formatter.date(from: value)
 }
 
-func formatted(_ value: Double?, compact: Bool = false) -> String {
-    guard let value, value.isFinite else { return "Unknown" }
-    if compact {
-        for (divisor, suffix) in [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")] {
-            if abs(value) >= divisor - divisor / 20000 {
-                return (value / divisor).formatted(.number.precision(.fractionLength(0...1))) + suffix
-            }
-        }
-    }
-    return value.formatted(.number.precision(.fractionLength(0...1)))
-}
-
-func formattedDuration(_ seconds: Double?) -> String {
-    guard let seconds, seconds.isFinite, seconds >= 0 else { return "Unknown" }
-    if seconds < 3600 { return "\(formatted(seconds / 60)) min" }
-    let minutes = floor(seconds / 60)
-    let days = floor(minutes / 1440), hours = floor(minutes.truncatingRemainder(dividingBy: 1440) / 60)
-    let remainder = minutes.truncatingRemainder(dividingBy: 60)
-    return (days > 0 ? "\(formatted(days))d " : "") + "\(formatted(hours))h \(formatted(remainder))m"
-}
-
 struct Snapshot {
     let object: JSONObject
     var collectedAt: Date? { parseDate(object["collectedAt"]) }
-    var quotaWindows: [JSONObject] {
-        guard let quota = object["quota"] as? JSONObject, text(quota["status"]) == "ok" else { return [] }
-        return visibleQuotaWindows(quota["windows"])
-    }
     var sourceCounts: (read: Int, total: Int) {
         var sources = ["activity", "tokens", "settings", "dictation", "providerTokenSources", "providerAllowances"].flatMap { rows(object[$0]) }
         sources += ["quota", "localModel", "agentSource"].compactMap { object[$0] as? JSONObject }
         sources = sources.filter { text($0["status"]) != "not-connected" }
         return (sources.filter { text($0["status"]) == "ok" }.count, sources.count)
-    }
-    func latest(_ key: String, host: String, source: String? = nil) -> JSONObject? {
-        days(key, host: host, source: source).last
-    }
-    func hasNativeAggregateScope(_ key: String) -> Bool {
-        guard ["activity", "tokens"].contains(key) else { return false }
-        let keys = key == "tokens" ? ["tokens", "settings"] : ["activity", "activityHistory"]
-        // Missing optional sources are valid. Present malformed sources cannot prove scope.
-        func scopeRows(_ field: String) -> [JSONObject]? {
-            guard let value = object[field] else { return [] }
-            return value as? [JSONObject]
-        }
-        guard let sources = scopeRows(keys[0]), let siblings = scopeRows(keys[1]) else { return false }
-        let retired = (sources + siblings).contains { row in
-            let host = text(row["host"])
-            return !["Mac", "Windows"].contains(host) && !(key == "activity" && host == "Combined") &&
-                (text(row["status"]) != "not-connected" || ["days", "profiles", "tools"].contains { field in
-                    guard let value = row[field] else { return false }
-                    return (value as? [Any])?.isEmpty != true
-                })
-        }
-        guard !retired else { return false }
-        // Activity's collector contract is native-only. Legacy token verification
-        // can cover another device too, so require the original native source set as well.
-        if key == "activity" { return true }
-        return ["Mac", "Windows"].allSatisfy { host in
-            let matches = sources.filter { text($0["host"]) == host }
-            return matches.count == 1 && text(matches[0]["status"]) == "ok" && matches[0]["days"] is [Any]
-        }
-    }
-    func activityArchive(host: String) -> JSONObject? {
-        let name = host == "All" ? "Combined" : host
-        return rows(object["activityHistory"]).first { text($0["host"]) == name }
-    }
-    func recordedDays(_ key: String, host: String) -> [JSONObject] {
-        if host == "All" && !hasNativeAggregateScope(key) { return [] }
-        // Archived activity is already sanitized and overlap-deduplicated by
-        // the collector. Keep its source status separate from saved records.
-        if key == "activity", let archive = activityArchive(host: host) {
-            guard text(archive["status"]) == "ok" else { return [] }
-            return rows(archive["days"])
-                .sorted { text($0["date"]) < text($1["date"]) }
-        }
-        return days(key, host: host)
-    }
-    func days(_ key: String, host: String, source: String? = nil) -> [JSONObject] {
-        let selected: JSONObject?
-        if host == "All" {
-            // Reuse collector-verified aggregates. Never sum device snapshots here.
-            guard hasNativeAggregateScope(key) else { return [] }
-            if key == "activity" { selected = object["combined"] as? JSONObject }
-            else if key == "tokens" {
-                let combined = object["combinedTokens"] as? JSONObject
-                guard let verification = combined?["verification"] as? JSONObject,
-                      text(verification["status"]) == "verified" else { return [] }
-                selected = combined
-            } else { return [] }
-        } else {
-            selected = rows(object[key]).first(where: {
-                text($0["host"]) == host && (source == nil || text($0["source"]) == source)
-            })
-        }
-        guard let item = selected, text(item["status"]) == "ok" else { return [] }
-        return rows(item["days"])
-            .sorted { text($0["date"]) < text($1["date"]) }
     }
 }
 

@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 import Darwin
 
 enum TailscaleReadiness {
@@ -65,33 +65,5 @@ enum TailscaleReadiness {
             guard process.terminationReason == .exit, process.terminationStatus == 0 else { throw CocoaError(.fileReadUnknown) }
             return try status(data)
         }.value
-    }
-}
-
-struct TailscaleReadinessView: View {
-    let enabled: Bool
-    @State private var checking = false
-    @State private var message = "Optional VPN connection. Tailscale has not been checked."
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(message).observatoryFont(.callout)
-            ObservatoryAdaptiveRow {
-                Button(checking ? "Checking Tailscale…" : "Check Tailscale") {
-                    checking = true
-                    Task { @MainActor in
-                        defer { checking = false }
-                        do {
-                            guard let resources = Bundle.main.resourceURL else { throw CocoaError(.fileReadNoSuchFile) }
-                            message = try await TailscaleReadiness.read(resources: resources)
-                        } catch { message = TailscaleReadiness.messages["unavailable"]! }
-                    }
-                }.disabled(checking || !enabled)
-                Link("Tailscale setup guide", destination: URL(string: "https://tailscale.com/docs/install")!)
-                    .disabled(!enabled)
-            }
-            Text("Sign in through Tailscale. This check does not pair devices, enable SSH or change sharing consent. Local-network code pairing is still being developed.")
-                .observatoryFont(.caption).foregroundStyle(.secondary)
-        }
     }
 }
