@@ -140,8 +140,8 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Agent receipts switch | Done | Missing | Remove | Since R1 (issue 82) a saved `receipts` or `benchmarks` value still loads and the Mac collector ignores it. |
 | Claude Code limits switch with consent text | Missing | Missing | Add | Calls `scripts/claude-statusline-install.mjs`. See the bridge section of the design direction for the text a person must see first. The shared viewer's Settings view shows that text before it sends `set-limits-consent` (B1-2, sample data only). No shell handles the action yet. |
 | Device connection actions | Differs | Differs | Change | Pairing starts from the Mac only. Windows offers details, disconnect and repair. |
-| Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow |
-| Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. |
+| Tailscale check | Done | Done | Change | Becomes part of the supported pairing flow. P1-1 (issue 110) added `tailscaleSelfAddresses()` to the shared script for pre-filling this device's own Tailscale address. Neither shell calls it yet. |
+| Direct device pairing | Done | Done | Change | Preview on both. Tested with synthetic data only. P1-0 (issue 110): a device that ran "Prepare pairing repair" can now pair over TLS (shared scripts, loopback tests only). The address check refuses IPv6 zone identifiers. |
 | Usage sharing, two channels | Done | Done | Change | Becomes one choice at pairing time. The shared viewer's Settings view keeps the two switches, one per `set-sharing` channel, until P1 changes the contract. |
 | Startup switch | Differs | Differs | Change | "Launch at login" on Mac. "Start at login" on Windows. Wording should match within each platform's convention. |
 | Version and Check for updates | Done | Done | Keep | |
