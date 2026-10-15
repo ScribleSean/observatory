@@ -1060,10 +1060,7 @@ internal sealed class BridgeHandler : IDisposable
         public bool CollectorBusy { get; set; }
         public bool CollectionPaused { get; set; }
         public bool RuntimeOverride { get; set; }
-        public void CompleteSetup()
-        {
-            if (FirstRunSetup.MarkComplete(runtime) && !CollectionPaused) StartCollector();
-        }
+        public void CompleteSetup() => ShellBridgeHost.CompleteSetup(runtime, () => CollectionPaused, StartCollector);
         public bool NativePairingOpen { get; set; }
         public bool NativeDialogOpen { get; set; }
         internal bool CopyThrows, ScriptThrows;

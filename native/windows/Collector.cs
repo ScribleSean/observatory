@@ -90,8 +90,9 @@ internal sealed class Collector : IDisposable
         {
             if (Interlocked.Exchange(ref released, 1) != 0) return;
             // Retain a collection pause if the owned helper may still be writing.
-            if (!exitVerified) pairingPaused = true;
+            pairingPaused = !exitVerified;
             operations.Complete();
+            if (exitVerified && FirstRunSetup.AllowsCollection(runtime)) Start();
         };
     }
 
@@ -121,6 +122,7 @@ internal sealed class Collector : IDisposable
             pairingPaused = false;
         }
         finally { operations.Complete(); }
+        if (FirstRunSetup.AllowsCollection(runtime)) Start();
     }
 
     internal void Configure(bool wispr = false, bool quota = false, bool activity = true, bool codex = true, bool claude = false)

@@ -13,9 +13,10 @@ internal sealed class ShellBridgeHost(
     public bool CollectorBusy => quitting() || collector.Busy;
     public bool CollectionPaused => collector.CollectionPaused;
     public bool RuntimeOverride => AppIdentity.RuntimeOverride is not null;
-    public void CompleteSetup()
+    public void CompleteSetup() => CompleteSetup(runtime, () => CollectionPaused, collector.Start);
+    internal static void CompleteSetup(string runtime, Func<bool> paused, Action start)
     {
-        if (FirstRunSetup.MarkComplete(runtime) && !CollectionPaused) collector.Start();
+        if (FirstRunSetup.MarkComplete(runtime) && !paused()) start();
     }
     public bool NativePairingOpen => nativePairingOpen();
     public bool NativeDialogOpen => nativeDialogOpen();

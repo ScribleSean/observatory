@@ -32,6 +32,10 @@ internal static class RuntimeOverride
             var missing = new Stack<string>();
             for (var path = full; !Directory.Exists(path); path = Path.GetDirectoryName(path) ?? throw new IOException())
                 missing.Push(path);
+            // An existing folder is checked in full. For a new folder only the rules it would inherit matter,
+            // because the parent's owner (often SYSTEM for a profile folder) does not pass to the child.
+            if (Directory.Exists(full)) CheckAccess(full);
+            else CheckInherited(Ancestors(full).First(Directory.Exists));
             while (missing.TryPop(out var directory))
             {
                 // Record only directories this call created.
@@ -145,6 +149,18 @@ internal static class RuntimeOverride
     [DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     private static extern uint GetShortPathName(string path, StringBuilder shortPath, uint capacity);
 
+    [DllImport("kernel32.dll", EntryPoint = "GetLongPathNameW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern uint GetLongPathName(string path, StringBuilder longPath, uint capacity);
+
+    private static string SelfTestTempPath()
+    {
+        var path = new StringBuilder(32768);
+        var length = GetLongPathName(Path.GetTempPath(), path, (uint)path.Capacity);
+        if (length == 0 || length >= path.Capacity || path.ToString().Contains('~'))
+            throw new IOException("Runtime self-test could not expand the temporary root to a long path without ~.");
+        return path.ToString();
+    }
+
     private static void CheckAccess(string path)
     {
         using var identity = WindowsIdentity.GetCurrent();
@@ -156,19 +172,37 @@ internal static class RuntimeOverride
     private static void CheckAccess(DirectorySecurity security, SecurityIdentifier user, SecurityIdentifier? tokenOwner = null)
     {
         var owner = security.GetOwner(typeof(SecurityIdentifier));
-        if (!user.Equals(owner) && (tokenOwner is null || !tokenOwner.Equals(owner))) throw new IOException();
-        var broad = new[] { WellKnownSidType.WorldSid, WellKnownSidType.AuthenticatedUserSid, WellKnownSidType.BuiltinUsersSid }
-            .Select(type => new SecurityIdentifier(type, null)).ToArray();
+        var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+        var creator = new SecurityIdentifier(WellKnownSidType.CreatorOwnerSid, null);
+        if (!user.Equals(owner) && !(administrators.Equals(owner) && administrators.Equals(tokenOwner)))
+            throw new IOException();
         const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
             FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
         foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
-            if (rule.AccessControlType == AccessControlType.Allow && broad.Any(sid => sid.Equals(rule.IdentityReference)) &&
+            if (rule.AccessControlType == AccessControlType.Allow &&
+                !user.Equals(rule.IdentityReference) && !Equals(owner, rule.IdentityReference) &&
+                !system.Equals(rule.IdentityReference) && !administrators.Equals(rule.IdentityReference) &&
+                !creator.Equals(rule.IdentityReference) &&
                 (rule.FileSystemRights & writes) != 0) throw new IOException();
+    }
+
+    private static void CheckInherited(string parent)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        if (identity.User is null) throw new IOException();
+        var allowed = new[] { identity.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), new SecurityIdentifier(WellKnownSidType.CreatorOwnerSid, null) };
+        const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
+            FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
+        foreach (FileSystemAccessRule rule in new DirectoryInfo(parent).GetAccessControl().GetAccessRules(true, true, typeof(SecurityIdentifier)))
+            if (rule.AccessControlType == AccessControlType.Allow && rule.InheritanceFlags.HasFlag(InheritanceFlags.ContainerInherit) &&
+                !allowed.Any(sid => sid.Equals(rule.IdentityReference)) && (rule.FileSystemRights & writes) != 0) throw new IOException();
     }
 
     internal static void SelfTest()
     {
-        var root = Path.Combine(Path.GetTempPath(), "observatory-runtime-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(SelfTestTempPath(), "observatory-runtime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var real = Path.Combine(root, "real");
         var test = Path.Combine(root, "test");
@@ -202,22 +236,72 @@ internal static class RuntimeOverride
             var shared = Path.Combine(root, "shared"); Directory.CreateDirectory(shared);
             var info = new DirectoryInfo(shared);
             var original = info.GetAccessControl();
-            var changed = info.GetAccessControl();
-            changed.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.WorldSid, null),
-                FileSystemRights.Write, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-            try
+            var sentinel = Path.Combine(shared, "existing.txt");
+            File.WriteAllText(sentinel, "synthetic");
+            foreach (var propagation in new[] { PropagationFlags.None, PropagationFlags.InheritOnly })
             {
-                info.SetAccessControl(changed); Refused(shared);
-                Refused(Path.Combine(shared, "created", "child"));
-                if (Directory.Exists(Path.Combine(shared, "created"))) throw new Exception("Refused runtime left created folders.");
+                var changed = info.GetAccessControl();
+                changed.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+                    FileSystemRights.Write, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, propagation, AccessControlType.Allow));
+                try
+                {
+                    info.SetAccessControl(changed); Refused(shared);
+                    Refused(Path.Combine(shared, "created", "child"));
+                    if (Directory.Exists(Path.Combine(shared, "created"))) throw new Exception("Refused runtime left created folders.");
+                    if (!Directory.Exists(shared) || File.ReadAllText(sentinel) != "synthetic")
+                        throw new Exception("Runtime refusal changed existing data.");
+                }
+                finally { info.SetAccessControl(original); }
             }
-            finally { info.SetAccessControl(original); }
-            using var identity = WindowsIdentity.GetCurrent();
-            var foreignOwner = new DirectorySecurity();
-            foreignOwner.SetOwner(new SecurityIdentifier(WellKnownSidType.WorldSid, null));
-            bool ownerRefused = false;
-            try { CheckAccess(foreignOwner, identity.User!); } catch (IOException) { ownerRefused = true; }
-            if (!ownerRefused) throw new Exception("Foreign runtime owner accepted.");
+            var user = new SecurityIdentifier("S-1-5-21-100-200-300-1001");
+            var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            var world = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+            DirectorySecurity Security(SecurityIdentifier owner)
+            {
+                var security = new DirectorySecurity();
+                security.SetOwner(owner);
+                return security;
+            }
+            void AccessRefused(DirectorySecurity security, SecurityIdentifier tokenOwner)
+            {
+                try { CheckAccess(security, user, tokenOwner); }
+                catch (IOException) { return; }
+                throw new Exception("Unsafe runtime ACL accepted.");
+            }
+            AccessRefused(Security(administrators), user);
+            CheckAccess(Security(administrators), user, administrators);
+            CheckAccess(Security(user), user, user);
+            AccessRefused(Security(world), user);
+            AccessRefused(Security(world), world);
+            var foreignWriter = Security(user);
+            foreignWriter.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier("S-1-5-21-100-200-300-1002"),
+                FileSystemRights.Write, AccessControlType.Allow));
+            AccessRefused(foreignWriter, user);
+            foreach (var type in new[] { WellKnownSidType.WorldSid, WellKnownSidType.AuthenticatedUserSid,
+                WellKnownSidType.BuiltinUsersSid, WellKnownSidType.InteractiveSid, WellKnownSidType.BuiltinGuestsSid })
+            {
+                foreach (var right in new[] { FileSystemRights.WriteData, FileSystemRights.AppendData,
+                    FileSystemRights.WriteAttributes, FileSystemRights.WriteExtendedAttributes, FileSystemRights.Delete,
+                    FileSystemRights.DeleteSubdirectoriesAndFiles, FileSystemRights.ChangePermissions, FileSystemRights.TakeOwnership })
+                {
+                    var security = Security(user);
+                    security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(type, null), right, AccessControlType.Allow));
+                    AccessRefused(security, user);
+                }
+            }
+            var inheritOnly = Security(user);
+            inheritOnly.AddAccessRule(new FileSystemAccessRule(world, FileSystemRights.Write,
+                InheritanceFlags.ContainerInherit, PropagationFlags.InheritOnly, AccessControlType.Allow));
+            AccessRefused(inheritOnly, user);
+            foreach (var principal in new[] { user, administrators, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null) })
+            {
+                var security = Security(user);
+                security.AddAccessRule(new FileSystemAccessRule(principal, FileSystemRights.FullControl, AccessControlType.Allow));
+                CheckAccess(security, user, user);
+            }
+            var denied = Security(user);
+            denied.AddAccessRule(new FileSystemAccessRule(world, FileSystemRights.FullControl, AccessControlType.Deny));
+            CheckAccess(denied, user, user);
             var fresh = Path.Combine(root, "fresh");
             if (Check(fresh, real, test) != fresh || !FirstRunSetup.Prepare(fresh)) throw new Exception("Fresh runtime rejected.");
             var suffix = AppIdentity.RuntimeSuffix(fresh);
