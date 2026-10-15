@@ -28,10 +28,8 @@ const absent = () =>
 async function model(t, { platform = 'darwin', reject = () => false } = {}) {
   const owned = await fs.mkdtemp(path.join(tmpdir(), 'observatory-boundary-'));
   const runtime = path.join(owned, 'runtime');
-  const archiveRoot = path.join(runtime, 'archives'),
-    control = path.join(runtime, '.runtime');
-  const folder = path.join(control, 'private-repair'),
-    file = path.join(runtime, 'public/local/usage.json');
+  const archiveRoot = path.join(runtime, 'archives');
+  const file = path.join(runtime, 'public/local/usage.json');
   const entries = new Map(),
     events = [];
   let ino = 1,
@@ -92,8 +90,6 @@ async function model(t, { platform = 'darwin', reject = () => false } = {}) {
   const m = {
     runtime,
     archiveRoot,
-    control,
-    folder,
     file,
     entries,
     events,
@@ -134,12 +130,6 @@ async function model(t, { platform = 'darwin', reject = () => false } = {}) {
   t.mock.method(fs, 'lstat', async (...args) => stat(...args));
   t.mock.method(fs, 'access', async (name) => {
     events.push({ kind: 'access', name });
-  });
-  t.mock.method(fs, 'mkdir', async (name) => {
-    events.push({ kind: 'mkdir', name });
-    if (entries.has(name))
-      throw Object.assign(Error('Exists'), { code: 'EEXIST' });
-    directory(name);
   });
   t.mock.method(fs, 'mkdtemp', async (prefix) => {
     const name = prefix + ++serial;

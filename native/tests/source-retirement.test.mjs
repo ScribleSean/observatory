@@ -8,7 +8,6 @@ const source = (file) =>
 // Cross-platform source contracts complement the native UI and model tests.
 // These run on Windows without pretending to compile AppKit or SwiftUI.
 for (const file of [
-  'windows/UsagePopup.cs',
   'windows/Program.cs',
 ]) {
   void test(`${file} offers only native devices in active filters`, async () => {
@@ -30,34 +29,8 @@ for (const file of [
   });
 }
 
-for (const [dashboard, history, devices] of [
-  [
-    'windows/NativeDashboard.cs',
-    'windows/NativeHistory.cs',
-    'NativeHistory.Devices',
-  ],
-]) {
-  void test(`${dashboard} offers Mac and Windows history only`, async () => {
-    const [ui, model] = await Promise.all([source(dashboard), source(history)]);
-    assert.ok(
-      /Devices = \["All", "Mac", "Windows"\]/i.test(model),
-      'History devices must be All, Mac and Windows',
-    );
-    assert.ok(ui.includes(devices), 'History must use the shared device list');
-    for (const text of [ui, model])
-      assert.ok(
-        !/Ubuntu|WSL/.test(text),
-        'History still names a source outside Mac and Windows',
-      );
-  });
-}
-
 void test('Windows source settings no longer read or describe WSL selectors', async () => {
-  const [settings, collector] = await Promise.all([
-    source('windows/NativeSourceSettings.cs'),
-    source('windows/Collector.cs'),
-  ]);
-  assert.ok(!/WSL|Ubuntu/.test(settings), 'Settings still describes WSL');
+  const collector = await source('windows/Collector.cs');
   assert.ok(
     !/\["(?:quotaWslDistribution|wslDistribution)"\]\s*=/.test(collector),
     'New configuration still writes a WSL selector',

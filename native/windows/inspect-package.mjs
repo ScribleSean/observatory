@@ -9,7 +9,7 @@ const root=process.argv[2];
 if(!root || !path.isAbsolute(root))throw Error('Absolute package directory required');
 const project=fileURLToPath(new URL('../..',import.meta.url));
 const required=['Fonts/InterTight.ttf','Fonts/OFL.txt','WorkspaceObservatory.exe','WorkspaceObservatory.dll','WorkspaceObservatory.runtimeconfig.json',
-  'Web/index.html','Runtime/node.exe','Runtime/python/python.exe','Runtime/python/python313._pth',
+  'Web/dashboard.html','Web/panel.html','Runtime/node.exe','Runtime/python/python.exe','Runtime/python/python313._pth',
   'Licenses/Node-LICENSE.txt','Licenses/Python-LICENSE.txt','Licenses/Dashboard-LICENSES.txt',
   'Licenses/Python-dependencies/LICENSE.openssl-3.txt','Licenses/Python-dependencies/LICENSE.sqlite.txt',
   'Runtime/python/observatory-python-manifest.json',

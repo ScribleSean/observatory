@@ -15,6 +15,8 @@ import {readPairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload} from './peer-store.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
+import {preparePairingRepair} from './peer-repair.mjs';
+import {readRepairConsent} from './peer-repair-consent.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 import {syncQuota} from './quota-sync.mjs';
@@ -89,6 +91,7 @@ async function main(address) {
     codex:[{host:pair.local.host,status:'not-connected'}],dictation:[{source:'Wispr Flow',status:'not-connected'}]},pair.local);
   async function run(command) {
     switch(command.action) {
+      case 'repair': return {status:(await preparePairingRepair(runtime)).status};
       case 'endpoint': return {endpoint,validFrom};
       case 'probe': {
         const target=decodeInvitation(command.invitation);
@@ -107,7 +110,7 @@ async function main(address) {
         return {invitation:encodeInvitation(listener.invitation)};
       case 'join':
         invitation=decodeInvitation(command.invitation);
-        return claimFromInvitation(invitation,await readDeviceIdentity(runtime));
+        return claimFromInvitation(invitation,await readDeviceIdentity(runtime),{repairNonce:await readRepairConsent(runtime)});
       case 'confirm':
         await listener.confirm(listener.pending()?.claimId,{localEndpoint:endpoint,peerEndpoint:command.peerEndpoint});
         return {status:'configuration-ready'};
