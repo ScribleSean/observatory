@@ -1,3 +1,6 @@
+// swiftc -parse-as-library -D OBSERVATORY_CHART_RENDER_TEST -framework AppKit \
+//   -framework Vision native/ChartRenderRegression.swift -o /path/to/check-chart-render
+// Run: /path/to/check-chart-render /absolute/path/to/rendered-fixtures
 #if OBSERVATORY_CHART_RENDER_TEST
 import AppKit
 import Vision

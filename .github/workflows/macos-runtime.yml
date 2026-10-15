@@ -114,6 +114,3 @@ jobs:
           path: ${{ runner.temp }}/observatory-package/
           retention-days: 1
           if-no-files-found: error
-      # Runtime-only mode does not execute downloaded binaries. The opt-in full
-      # build runs isolated native checks. No release publication, live collection,
-      # application installation or production signing keys are involved.

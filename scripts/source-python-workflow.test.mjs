@@ -96,8 +96,4 @@ test('Mac source-runtime wiring retains pinned preparation and opt-in build gate
     workflow,
     /npm run collect|scripts\/run-collector\.py|native\/install\.mjs/,
   );
-  assert.match(
-    workflow,
-    /Runtime-only mode does not execute downloaded binaries/,
-  );
 });

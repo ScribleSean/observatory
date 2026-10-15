@@ -4,9 +4,10 @@ namespace WorkspaceObservatory;
 // invokes default shell execution. Observatory must never return 0.
 internal sealed class UpdateInstallerCallback
 {
+    private const int Idle = 0, Preparing = 1, AcceptedState = 2, Uncertain = 3;
     private readonly Func<string, bool> prepareAndLaunch;
     private int state;
-    internal bool Accepted => Volatile.Read(ref state) == 2;
+    internal bool Accepted => Volatile.Read(ref state) == AcceptedState;
 
     internal UpdateInstallerCallback(Func<string, bool> prepareAndLaunch)
     {
@@ -16,23 +17,23 @@ internal sealed class UpdateInstallerCallback
     // Called on WinSparkle's thread, not the application UI thread.
     internal int Handle(string downloadedPath)
     {
-        if (Interlocked.CompareExchange(ref state, 1, 0) != 0) return -1;
+        if (Interlocked.CompareExchange(ref state, Preparing, Idle) != Idle) return -1;
         try
         {
             if (string.IsNullOrWhiteSpace(downloadedPath) || !Path.IsPathFullyQualified(downloadedPath) ||
                 !string.Equals(Path.GetExtension(downloadedPath), ".zip", StringComparison.OrdinalIgnoreCase))
                 return -1;
             if (!prepareAndLaunch(downloadedPath)) return -1;
-            Interlocked.Exchange(ref state, 2);
+            Interlocked.Exchange(ref state, AcceptedState);
             return 1;
         }
         catch
         {
             // Managed exceptions must not escape through the native callback.
-            Interlocked.Exchange(ref state, 3);
+            Interlocked.Exchange(ref state, Uncertain);
             return -1;
         }
-        finally { Interlocked.CompareExchange(ref state, 0, 1); }
+        finally { Interlocked.CompareExchange(ref state, Idle, Preparing); }
     }
 
     internal static void SelfTest()

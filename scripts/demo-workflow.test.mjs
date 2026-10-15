@@ -35,7 +35,6 @@ test('demo retains the full test and TypeScript gates before synthetic packaging
           cache: npm
       - run: npm ci
       - run: npm test && npx tsc --noEmit
-      # Fresh hosted checkout only. Never upload a workstation build.
       - run: npm run demo
       - run: npm run build
         env:

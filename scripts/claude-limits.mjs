@@ -10,6 +10,7 @@ export const CLAUDE_LIMITS_FILE='limits.json';
 export const CLAUDE_STATUSLINE_FILE='statusline.json';
 const windows={five_hour:300,seven_day:10080};
 const currentSeconds=10*60;
+const maxResetAheadSeconds=8*86400;
 
 const isObject=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 
@@ -17,7 +18,7 @@ function cleanWindow(raw,observedAt) {
   if(!isObject(raw))return null;
   const used=raw.used_percentage ?? raw.usedPercentage,resets=raw.resets_at ?? raw.resetsAt;
   if(typeof used!=='number' || !Number.isFinite(used) || used<0 || used>100)return null;
-  if(typeof resets!=='number' || !Number.isSafeInteger(Math.round(resets)) || resets<=observedAt || resets>observedAt+8*86400)return null;
+  if(typeof resets!=='number' || !Number.isSafeInteger(Math.round(resets)) || resets<=observedAt || resets>observedAt+maxResetAheadSeconds)return null;
   return {usedPercentage:Math.round(used*10)/10,resetsAt:Math.round(resets)};
 }
 
