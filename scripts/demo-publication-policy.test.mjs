@@ -23,9 +23,9 @@ test('manual demo publication still requires the current main revision', () => {
 });
 
 test('the demo artifact is built from fictional data in the hosted checkout', () => {
-  const fixture = workflow.indexOf('- run: npm run demo');
-  const build = workflow.indexOf('- run: npm run build');
+  const build = workflow.indexOf('- run: npx vite build --config native/vite.demo.config.mts');
+  const prepare = workflow.indexOf('- run: node scripts/prepare-pages.mjs');
   const upload = workflow.indexOf('actions/upload-pages-artifact@');
-  assert.ok(fixture >= 0 && fixture < build && build < upload);
+  assert.ok(build >= 0 && build < prepare && prepare < upload);
   assert.match(workflow, /path: dist\/pages/);
 });

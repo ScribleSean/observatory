@@ -91,7 +91,7 @@ See [private sync](docs/PRIVATE-SYNC.md) and [security](SECURITY.md).
 
 ## Scope
 
-WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. iPhone integration is later work and is not implemented. The [interactive demo](https://scriblesean.github.io/observatory/) uses fictional records and still shows the earlier web interface.
+WSL and Ubuntu tracking are out of scope, as is a standalone Linux app. iPhone integration is later work and is not implemented. The [interactive demo](https://scriblesean.github.io/observatory/) is built from the shared viewer with fictional sample data. The copy published today still shows the earlier web interface. It is replaced when the next release is published.
 
 ## Contributing
 

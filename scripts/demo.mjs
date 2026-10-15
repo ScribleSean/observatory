@@ -1,3 +1,6 @@
+import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
+export const DEMO_FIXTURE_TIME = '2026-10-14T12:00:00.000Z';
+export function demoFixture() { return sampleSnapshot(Date.parse(DEMO_FIXTURE_TIME)) }
 export { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -72,7 +75,7 @@ export function demoData() {
 export async function writeDemo(dir) {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   try {
-    await writeFile(path.join(dir, 'usage.json'), JSON.stringify(demoData()), {flag:'wx',mode:0o600});
+    await writeFile(path.join(dir, 'usage.json'), JSON.stringify(demoFixture()), {flag:'wx',mode:0o600});
   } catch (error) {
     if (error.code !== 'EEXIST') throw error;
     return {code:1,message:'Snapshot already exists. Not overwritten. Use a separate checkout to create a demo.'};

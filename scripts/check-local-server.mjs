@@ -17,6 +17,9 @@ function request(path, method = 'GET', headers = {}) {
 
 const cases = [
   ['home', '/', 'GET', {}, 200],
+  ['dashboard', '/dashboard.html', 'GET', {}, 200],
+  ['panel', '/panel.html', 'GET', {}, 200],
+  ['retired index', '/index.html', 'GET', {}, 404],
   ['head', '/', 'HEAD', {}, 200],
   ['private config', '/local.config.json', 'GET', {}, 404],
   ['private collector lock', '/.runtime/collector.lock', 'GET', {}, 404],

@@ -36,6 +36,8 @@ test('public documentation links resolve and the README states scope and limits'
   assert.match(readme,/There is no installer download yet/);
   assert.match(readme,/WSL and Ubuntu tracking are out of scope/);
   assert.match(readme,/iPhone integration is later work/);
+  assert.match(readme,/\[interactive demo\]\(https:\/\/scriblesean\.github\.io\/observatory\/\) is built from the shared viewer with fictional sample data/);
+  assert.doesNotMatch(readme,/uses fictional records and still shows the earlier web interface/);
   assert.doesNotMatch(readme,/>Get started<\/a>/);
   assert.match(readme,/\[desktop updates\]\(docs\/UPDATES\.md\)/);
   const guide=await readFile(path.join(root,'docs/GUIDE.md'),'utf8');
