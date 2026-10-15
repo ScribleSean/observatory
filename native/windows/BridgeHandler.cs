@@ -300,7 +300,13 @@ internal sealed class BridgeHandler : IDisposable
     // This is the not yet read state. The contract has no unknown sharing value.
     private readonly QuotaSharingStatus[] sharing = [new(false, false, "pairing-unavailable", null), new(false, false, "pairing-unavailable", null)];
 
-    internal BridgeHandler(IBridgeHost host, string runtime) { this.host = host; this.runtime = runtime; }
+    private readonly Action<string>? probe;
+    internal event Action<string, string>? ViewerChanged;
+    internal int ReceivedCount { get; private set; }
+    internal static bool PairingOpen { get { lock (ownerGate) return pairingOwner is not null; } }
+
+    internal BridgeHandler(IBridgeHost host, string runtime, Action<string>? probe = null)
+    { this.host = host; this.runtime = runtime; this.probe = probe; }
 
     private static bool Sender(string? source) => Uri.TryCreate(source, UriKind.Absolute, out var uri) &&
         uri.Scheme == "https" && uri.Host == "observatory.invalid" && uri.IsDefaultPort && uri.UserInfo.Length == 0 &&
@@ -309,7 +315,9 @@ internal sealed class BridgeHandler : IDisposable
     internal void Receive(string? text, string? source, long document, Action<string> post)
     {
         if (!Sender(source)) return;
+        ReceivedCount++;
         var validation = BridgeContract.Validate(text);
+        probe?.Invoke(validation.Outcome == "accepted" ? "accepted action=" + validation.Action : "refused");
         if (validation.Outcome == "ignore" || validation.Id is not int id) return;
         // Work that may open a native dialog starts after the lock is released.
         Request? cancel = null;
@@ -325,6 +333,12 @@ internal sealed class BridgeHandler : IDisposable
             }
             var request = new Request(id, validation.Action ?? "", validation.Args ?? new(), document, epoch, post);
             if (validation.Outcome == "refused" || ids.Contains((epoch, id))) { Post(request, new("refused")); return; }
+            if (probe is not null)
+            {
+                Post(request, request.Action == "status" ? Status() : request.Action == "tailscale-check"
+                    ? new("done", new JsonObject { ["status"] = tailscale }) : new("cancelled"));
+                return;
+            }
             if (request.Action == "status")
             {
                 ids.Add((epoch, id));
@@ -427,8 +441,8 @@ internal sealed class BridgeHandler : IDisposable
                 host.UpdateConfiguration(expected, desired); host.StartCollector(); break;
             case "set-skin":
                 if (!BridgeSettingsStore.Bundled.Contains(Text("skin"), StringComparer.Ordinal)) return new("refused");
-                host.Settings.WriteViewer(Text("skin"), host.Settings.ReadViewer().Appearance); break;
-            case "set-appearance": host.Settings.WriteViewer(host.Settings.ReadViewer().Skin, Text("mode")); break;
+                host.Settings.WriteViewer(Text("skin"), host.Settings.ReadViewer().Appearance); ApplyViewer(); break;
+            case "set-appearance": host.Settings.WriteViewer(host.Settings.ReadViewer().Skin, Text("mode")); ApplyViewer(); break;
             case "set-device-name": host.Settings.WriteDevice(request.Args["name"].Text); break;
             case "set-startup": host.SetStartup(Enabled()); break;
             case "set-limits-consent":
@@ -471,6 +485,12 @@ internal sealed class BridgeHandler : IDisposable
             default: return await Pairing(request);
         }
         return new("done");
+    }
+
+    private void ApplyViewer()
+    {
+        var viewer = host.Settings.ReadViewer();
+        ViewerChanged?.Invoke(viewer.Skin, viewer.Appearance);
     }
 
     private async Task<Result> Script(string name, params string[] arguments) =>
@@ -768,9 +788,11 @@ internal sealed class BridgeHandler : IDisposable
         while (queue.TryDequeue(out var request)) { ids.Remove((request.Epoch, request.Id)); actions.Remove(request.Action); }
         _ = EndSession();
     }
+    internal Task EndPairingAsync() => EndSession();
+    internal Task WhenIdle => drain;
     internal void DocumentReplaced() { lock (gate) { Replace(); document = null; } }
-    internal Task CloseAsync() { lock (gate) { closed = true; Replace(); return ending; } }
-    public void Dispose() { _ = CloseAsync(); }
+    internal Task CloseAsync() { lock (gate) { if (!closed) { closed = true; Replace(); } return ending; } }
+    public void Dispose() { lock (gate) { if (!closed) _ = CloseAsync(); } }
 
     internal static void SelfTest()
     {
@@ -893,6 +915,20 @@ internal sealed class BridgeHandler : IDisposable
         try
         {
             TestedActions.Clear();
+            var probeHost = new TestHost(runtime);
+            var lines = new List<string>();
+            var posts = new List<string>();
+            using (var probeHandler = new BridgeHandler(probeHost, runtime, lines.Add))
+            {
+                probeHandler.Receive("{\"id\":1,\"action\":\"refresh\",\"args\":{}}", TestDriver.Origin, 1, posts.Add);
+                Check(probeHost.Calls.IsEmpty && posts.Single().Contains("\"code\":\"cancelled\"") &&
+                    lines.SequenceEqual(new[] { "accepted action=refresh" }), "Probe action isolation");
+                probeHandler.Receive("{\"id\":2,\"action\":\"status\",\"args\":{}}", TestDriver.Origin, 1, posts.Add);
+                Check(JsonNode.Parse(posts.Last())!["bridgeResult"]!["value"]!["version"]!.GetValue<int>() == 1,
+                    "Probe status");
+                probeHandler.Receive("{\"id\":3,\"action\":\"tailscale-check\",\"args\":{}}", TestDriver.Origin, 1, posts.Add);
+                Check(!probeHost.Calls.Contains("tailscale") && !probeHost.Calls.Any(c => c.StartsWith("sharing:")), "Probe cache isolation");
+            }
             await TestMessages(runtime);
             await TestCache(runtime);
             await TestQueue(runtime);

@@ -1,5 +1,7 @@
 using Microsoft.Web.WebView2.Core;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Diagnostics;
 
 namespace WorkspaceObservatory;
 
@@ -17,6 +19,41 @@ internal static class WebHostsTests
     {
         using var context = new FixtureContext(folder);
         Application.Run(context);
+    }
+
+    internal sealed class FakeHost(string runtime) : IBridgeHost
+    {
+        internal int Calls;
+        internal TaskCompletionSource<bool>? RefreshWait;
+        internal bool RefreshStarted;
+        private readonly BridgeSettingsStore settings = new(runtime);
+        public BridgeSettingsStore Settings { get { Calls++; return settings; } }
+        public DateTimeOffset Now => new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+        public Version? AppVersion => new(1, 2, 3, 4);
+        public bool CollectorBusy => false;
+        public bool CollectionPaused => false;
+        public bool NativePairingOpen => false;
+        public bool Confirm(string title, string text) { Calls++; return false; }
+        public string? ChooseExportFile() { Calls++; return null; }
+        public void CopyInvitation(string invitation) => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task RefreshAllowancesThenAll()
+        { Calls++; RefreshStarted = true; return (Task?)RefreshWait?.Task ?? Task.CompletedTask; }
+        public Task Refresh() { Calls++; return Task.CompletedTask; }
+        public Task CheckUpdates() { Calls++; return Task.CompletedTask; }
+        public void OpenDashboard(string section) { Calls++; }
+        public JsonObject ReadConfiguration() { Calls++; return new() { ["activity"] = true }; }
+        public void UpdateConfiguration(JsonObject expected, JsonObject desired) => throw new InvalidOperationException("Unexpected fixture action.");
+        public void StartCollector() => throw new InvalidOperationException("Unexpected fixture action.");
+        public bool ReadStartup() { Calls++; return false; }
+        public void SetStartup(bool enabled) => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel)
+        { Calls++; return Task.FromResult(new QuotaSharingStatus(false, false, "pairing-unavailable", null)); }
+        public Action<bool> BeginDirectPairing() => throw new InvalidOperationException("Unexpected fixture action.");
+        public IBridgePairingSession CreatePairingSession() => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task DisconnectPairing() => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task PreparePairingRepair() => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task<BridgeScriptResult> RunScript(ProcessStartInfo start) => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task<string> ReadTailscaleStatus() { Calls++; return Task.FromResult("unavailable"); }
     }
 
     private sealed class FixtureContext : ApplicationContext
@@ -67,6 +104,7 @@ internal static class WebHostsTests
                 Passed();
 
                 step = "snapshot";
+                new BridgeSettingsStore(folder).WriteViewer("sage", "system");
                 var local = Path.Combine(folder, "public", "local");
                 Directory.CreateDirectory(local);
                 File.WriteAllText(Path.Combine(local, "usage.json"), """
@@ -110,7 +148,9 @@ internal static class WebHostsTests
                 Passed();
 
                 step = "dashboard-ready";
-                var dashboard = new WebDashboard(folder);
+                var host = new FakeHost(folder);
+                using var handler = new BridgeHandler(host, folder);
+                var dashboard = new WebDashboard(folder, handler);
                 forms.Add(dashboard);
                 dashboard.Show();
                 await Poll(async () => await dashboard.RunScriptForTest("window.observatoryDashboardReady === true") == "true", 15);
@@ -134,6 +174,49 @@ internal static class WebHostsTests
                 // This same-document change is not seen by NavigationStarting.
                 await dashboard.RunScriptForTest("location.hash = '#tokens'").WaitAsync(stop.Token);
                 await Poll(async () => await dashboard.RunScriptForTest("location.hash === '#tokens'") == "true", 3);
+                Passed();
+
+                step = "bridge-status";
+                const string listen = "window.bridgeResults = []; chrome.webview.addEventListener('message', event => { if (event.data?.bridgeResult) window.bridgeResults.push(event.data.bridgeResult); })";
+                await dashboard.RunScriptForTest(listen).WaitAsync(stop.Token);
+                await dashboard.RunScriptForTest("chrome.webview.postMessage(JSON.stringify({id:7,action:'status',args:{}}))").WaitAsync(stop.Token);
+                await Poll(async () => await dashboard.RunScriptForTest("window.bridgeResults.some(r => r.id === 7 && r.ok === true && r.code === 'done' && r.value?.version === 1)") == "true", 5);
+                Passed();
+
+                step = "bridge-ignored";
+                await dashboard.RunScriptForTest("""
+                    chrome.webview.postMessage({id:8,action:'status',args:{}});
+                    chrome.webview.postMessage(JSON.stringify({id:10,action:'status',args:{}}) + ' '.repeat(4097));
+                    chrome.webview.postMessage('{"id":9,"action":"quit","args":{}}');
+                    """).WaitAsync(stop.Token);
+                await Poll(async () => await dashboard.RunScriptForTest("window.bridgeResults.some(r => r.id === 9 && r.ok === false && r.code === 'refused')") == "true", 5);
+                await Task.Delay(300, stop.Token);
+                Require(await dashboard.RunScriptForTest("!window.bridgeResults.some(r => r.id === 8 || r.id === 10)").WaitAsync(stop.Token) == "true");
+                Passed();
+
+                step = "bridge-panel";
+                var bridgePanel = new WebPanel(folder, action => actions.Add(action)) { KeepOpen = true };
+                forms.Add(bridgePanel);
+                Require(await bridgePanel.ShowNearTray().WaitAsync(stop.Token));
+                var hostCalls = host.Calls;
+                var received = handler.ReceivedCount;
+                await bridgePanel.RunScriptForTest("chrome.webview.postMessage(JSON.stringify({id:7,action:'status',args:{}}))").WaitAsync(stop.Token);
+                await Task.Delay(300, stop.Token);
+                Require(host.Calls == hostCalls && handler.ReceivedCount == received);
+                bridgePanel.Retire();
+                Passed();
+
+                step = "bridge-document";
+                host.RefreshWait = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                await dashboard.RunScriptForTest("chrome.webview.postMessage(JSON.stringify({id:11,action:'refresh',args:{}}))").WaitAsync(stop.Token);
+                await Poll(() => Task.FromResult(host.RefreshStarted), 5);
+                await dashboard.RunScriptForTest("location.reload()").WaitAsync(stop.Token);
+                await Poll(async () => await dashboard.RunScriptForTest("window.observatoryDashboardReady === true && typeof window.bridgeResults === 'undefined'") == "true", 15);
+                await dashboard.RunScriptForTest(listen).WaitAsync(stop.Token);
+                host.RefreshWait.SetResult(true);
+                await handler.WhenIdle.WaitAsync(stop.Token);
+                await Task.Delay(300, stop.Token);
+                Require(await dashboard.RunScriptForTest("!window.bridgeResults.some(r => r.id === 11)").WaitAsync(stop.Token) == "true");
                 Passed();
 
                 step = "dashboard-release";

@@ -53,6 +53,7 @@ internal static class WebViewerPreferences
         var script = "document.documentElement.dataset.skin = \"" + skin + "\";";
         if (theme is not null)
             script += "\ndocument.documentElement.dataset.theme = \"" + theme + "\";";
+        else script += "\ndelete document.documentElement.dataset.theme;";
         return "(() => {\n" + script + "\n})();";
     }
 
@@ -80,8 +81,9 @@ internal static class WebViewerPreferences
         var invalid = DocumentStartScript("x\"; alert(1)", "dark\"");
         Check(invalid.Contains("dataset.skin = \"sage\""), "Invalid script skin must use Sage");
         Check(!invalid.Contains("alert"), "Script must exclude stored text");
-        Check(!invalid.Contains("dataset.theme"), "Invalid theme must not set an attribute");
-        Check(!DocumentStartScript("sage", null).Contains("dataset.theme"), "System theme must not set an attribute");
+        Check(invalid.Contains("delete document.documentElement.dataset.theme"), "Invalid theme removes the attribute");
+        Check(DocumentStartScript("sage", "system").Contains("delete document.documentElement.dataset.theme"), "System theme removes the attribute");
+        Check(DocumentStartScript("sage", null).Contains("delete document.documentElement.dataset.theme"), "Missing theme removes the attribute");
         var runtime = Path.Combine(Path.GetTempPath(), "observatory-viewer-test-" + Guid.NewGuid().ToString("N"));
         var registryKey = @"Software\WorkspaceObservatoryTests\Viewer-" + Guid.NewGuid().ToString("N");
         Directory.CreateDirectory(runtime);

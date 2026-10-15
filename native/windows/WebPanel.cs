@@ -17,7 +17,14 @@ internal sealed class WebPanel : Form
     private readonly string runtime;
     private readonly Action<string> act;
     private Task? started;
-    private bool failed;
+    private bool failed, drawn;
+    private bool failureVisible;
+    private string? viewerScript;
+    private Task viewerWork = Task.CompletedTask;
+    internal const string StoppedMessage = "The panel stopped. Open it again from the tray.";
+    internal static string? FailureMessage(bool drawn, bool visible, bool unattended) =>
+        unattended ? null : drawn ? (visible ? StoppedMessage : null) : RuntimeMessage;
+    internal string? FailureNotification(bool unattended) => FailureMessage(drawn, failureVisible, unattended);
     internal bool FailedToStart => failed;
     internal event Action? Failed;
     internal static bool ShowsFailure(bool failed, bool unattended) => failed && !unattended;
@@ -112,6 +119,7 @@ internal sealed class WebPanel : Form
             {
                 if (await web.CoreWebView2.ExecuteScriptAsync("window.observatoryPanelReady === true") == "true")
                 {
+                    drawn = true;
                     await FitContent();
                     return true;
                 }
@@ -119,6 +127,7 @@ internal sealed class WebPanel : Form
             }
             if (!IsDisposed && Visible)
             {
+                failureVisible = Visible;
                 failed = true;
                 Hide();
                 Retire();
@@ -126,6 +135,7 @@ internal sealed class WebPanel : Form
         }
         catch
         {
+            failureVisible = Visible;
             failed = true;
             if (!IsDisposed && !retire)
             {
@@ -158,6 +168,27 @@ internal sealed class WebPanel : Form
         // Keep the lower edge beside the tray while the height follows the page.
         Location = new Point(Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - Width)),
             Math.Clamp(bottom - Height, area.Top, Math.Max(area.Top, area.Bottom - Height)));
+    }
+
+    internal void ApplyViewer(string skin, string appearance)
+    {
+        var previous = viewerWork;
+        viewerWork = ReplaceViewer(previous, WebViewerPreferences.DocumentStartScript(skin, appearance));
+    }
+
+    private async Task ReplaceViewer(Task previous, string script)
+    {
+        try
+        {
+            await previous;
+            if (started is null) return;
+            await started;
+            if (IsDisposed || web.IsDisposed || web.CoreWebView2 is not { } core) return;
+            if (viewerScript is not null) core.RemoveScriptToExecuteOnDocumentCreated(viewerScript);
+            viewerScript = await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            if (!IsDisposed && !web.IsDisposed) await core.ExecuteScriptAsync(script);
+        }
+        catch { }
     }
 
     internal async Task<string> RunScriptForTest(string script)
@@ -217,6 +248,7 @@ internal sealed class WebPanel : Form
         var core = web.CoreWebView2;
         core.ProcessFailed += (_, _) =>
         {
+            failureVisible = Visible;
             failed = true;
             if (IsDisposed) return;
             if (InvokeRequired)
@@ -250,9 +282,9 @@ internal sealed class WebPanel : Form
         };
         // Browser shortcut settings do not stop accelerator events forwarded as KeyDown.
         web.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { e.Handled = true; Hide(); } };
-        // Read once per web view. Changes apply when the next panel is created.
+        // Seed new documents with the saved viewer choices.
         var (skin, theme) = WebViewerPreferences.Read(runtime);
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
+        viewerScript = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
         if (IsDisposed) return;
         core.Navigate(Origin + "/" + Page);
     }
@@ -357,18 +389,25 @@ internal sealed class WebPanel : Form
 
     internal static void Respond(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs e, string runtime, string page)
     {
+        var answer = Answer(e.Request.Method, e.Request.Uri, runtime, page);
+        e.Response = environment.CreateWebResourceResponse(new MemoryStream(answer.Body), answer.Status, answer.Reason, answer.Headers);
+    }
+
+    internal static (int Status, string Reason, string Headers, byte[] Body) Answer(
+        string method, string uri, string runtime, string page, string? webRoot = null)
+    {
         const string policy = "Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff";
         try
         {
-            if (e.Request.Method != "GET") throw new InvalidOperationException();
-            var relative = RequestPath(e.Request.Uri, page) ?? throw new InvalidOperationException();
-            var file = Resolve(runtime, relative, page) ?? throw new InvalidOperationException();
+            if (method != "GET") throw new InvalidOperationException();
+            var relative = RequestPath(uri, page) ?? throw new InvalidOperationException();
+            var file = Resolve(runtime, relative, page, webRoot) ?? throw new InvalidOperationException();
             var info = new FileInfo(file);
             if (!info.Exists || info.Length > Snapshot.MaxBytes || info.Attributes.HasFlag(FileAttributes.ReparsePoint)) throw new InvalidOperationException();
             var mime = MimeType(Path.GetExtension(file)) ?? throw new InvalidOperationException();
-            e.Response = environment.CreateWebResourceResponse(new MemoryStream(File.ReadAllBytes(file)), 200, "OK", "Content-Type: " + mime + "\r\n" + policy);
+            return (200, "OK", "Content-Type: " + mime + "\r\n" + policy, File.ReadAllBytes(file));
         }
-        catch { e.Response = environment.CreateWebResourceResponse(new MemoryStream(), 404, "Unavailable", policy); }
+        catch { return (404, "Unavailable", policy, Array.Empty<byte>()); }
     }
 
     protected override void Dispose(bool disposing)
@@ -380,6 +419,13 @@ internal sealed class WebPanel : Form
     internal static void SelfTest()
     {
         void Check(bool value, string message) { if (!value) throw new InvalidOperationException("Web panel contract failed: " + message); }
+        foreach (var row in new (bool Drawn, bool Visible, bool Unattended, string? Message)[]
+        {
+            (false, false, false, RuntimeMessage), (false, true, false, RuntimeMessage),
+            (false, false, true, null), (false, true, true, null),
+            (true, false, false, null), (true, true, false, StoppedMessage),
+            (true, false, true, null), (true, true, true, null)
+        }) Check(FailureMessage(row.Drawn, row.Visible, row.Unattended) == row.Message, "failure message table");
         foreach (var name in Actions) Check(ParseAction("{\"panelAction\":\"" + name + "\"}") == name, "accepts " + name);
         foreach (var rejected in new[] { "", "null", "\"refresh\"", "[]", "{}", "{\"panelAction\":\"quit\"}", "{\"panelAction\":\"Refresh\"}",
             "{\"panelAction\":\"refresh \"}", "{\"panelAction\":1}", "{\"panelAction\":null}", "{\"panelAction\":[\"refresh\"]}",
@@ -429,6 +475,19 @@ internal sealed class WebPanel : Form
             Directory.CreateDirectory(Path.Combine(root, "private-sync"));
             foreach (var name in new[] { "usage.json", "collector.json" })
                 File.WriteAllText(Path.Combine(runtime, "public", "local", name), "{}");
+            var html = Answer("GET", Origin + "/panel.html", runtime, Page, root);
+            Check(html.Status == 200 && html.Headers.Contains("Content-Type: text/html") &&
+                html.Headers.Contains("Content-Security-Policy:") && html.Body.Length > 0, "HTML response");
+            var asset = Answer("GET", Origin + "/assets/app.js", runtime, Page, root);
+            Check(asset.Status == 200 && asset.Headers.Contains("Content-Type: text/javascript"), "asset response");
+            var snapshot = Answer("GET", Origin + "/local/usage.json", runtime, Page, root);
+            Check(snapshot.Status == 200 && System.Text.Encoding.UTF8.GetString(snapshot.Body) == "{}", "snapshot response");
+            foreach (var request in new[] { ("POST", "/panel.html", Page), ("GET", "/private-sync/pairing.json", Page),
+                ("GET", "/dashboard.html?demo", WebDashboard.Page) })
+            {
+                var denied = Answer(request.Item1, Origin + request.Item2, runtime, request.Item3, root);
+                Check(denied.Status == 404 && denied.Body.Length == 0 && denied.Headers.Contains("Content-Security-Policy:"), "refused response");
+            }
             foreach (var name in new[] { "index.html", "assets/x.json", "assets/app.exe", "assets/DATA.JSON",
                 "assets/x.js", "assets/page.html", "local/collector.json", "local/setup.json", "private-sync/pairing.json",
                 "assets/X.JS", "assets/noextension", "assets/DATA~1.JSO", "assets/INNER~1.HTM" })
