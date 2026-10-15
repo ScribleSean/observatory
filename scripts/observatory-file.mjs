@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-// The .observatory file: one gzip-compressed JSON document holding the
-// history this device has, grouped by the device each record came from.
-// It is built from the sanitized snapshot only. It never reads pairing
-// state, credentials, comparison salts or any private folder.
 import {gunzipSync,gzipSync} from 'node:zlib';
 import {lstat,readFile,rename,unlink,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -63,9 +59,6 @@ function limits(source,provider) {
   return {provider,observedAt:source.checkedAt,windows,history,dailyTokens};
 }
 
-// Builds the export from a snapshot. Records stay with the device they came
-// from. Collector-verified combined rows are kept in their own section and
-// are never folded into a device.
 export function buildExport(snapshot,{appVersion='Unknown',now=new Date(),device}={}) {
   if(!isObject(snapshot))throw Error('A snapshot is required');
   if(!Object.hasOwn(platforms,device))throw Error('The exporting device must be Mac or Windows');
@@ -118,7 +111,6 @@ export function decodeExport(bytes) {
   return validateExport(document);
 }
 
-// Returns a clean copy with known fields only, or throws.
 export function validateExport(document) {
   if(!isObject(document) || document.format!==FORMAT)throw Error('Not an Observatory file');
   if(document.version!==VERSION)throw Error(`This Observatory file is version ${String(document.version).slice(0,8)}. This build reads version ${VERSION}.`);
@@ -180,7 +172,6 @@ export async function exportToFile({runtime,out,device,appVersion,now=new Date()
   const temporary=path.join(path.dirname(out),`.${path.basename(out)}-${randomUUID()}.tmp`);
   try {
     await writeFile(temporary,bytes,{flag:'wx',mode:0o600});
-    // Never replace a file that is already there.
     await lstat(out).then(()=>{throw Object.assign(Error('A file with that name already exists'),{code:'EEXIST'});},error=>{if(error.code!=='ENOENT')throw error;});
     await rename(temporary,out);
   } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}

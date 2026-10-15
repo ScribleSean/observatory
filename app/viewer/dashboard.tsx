@@ -72,11 +72,11 @@ export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo
   }, [load, demo]);
 
   useEffect(() => {
-    try { Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true }); } catch { /* The shell may already have defined the flag. */ }
+    if (Object.getOwnPropertyDescriptor(window, 'observatoryDashboardReady')) return;
+    Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true });
   }, []);
 
-  // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
-  return <DashboardView actionsAvailable={actionsAvailable} collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
+  return <DashboardView> actionsAvailable={actionsAvailable} collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
     section={section} onSectionChange={id => { setSection(id); writeSectionHash(window, id); }} onSkinChange={setSkinId} onSetupFinished={() => { setSection('limits'); writeSectionHash(window, 'limits'); }} />;
 }
 

@@ -1,8 +1,6 @@
 import test from 'node:test';
 import { execPython } from './test-python.mjs';
 
-// Children and POSIX locks are modeled. The Python suite never launches a
-// collector, contacts a provider or queries platform access-control state.
 test('source Python runner selection, isolation and fail-closed contracts', () => {
   execPython(
     [

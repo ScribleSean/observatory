@@ -26,15 +26,11 @@ final class PanelActionBridge: NSObject, WKScriptMessageHandler {
     }
 }
 
-// Shown in the menu-bar popover only with the --web-panel launch flag.
-// The web view is created on the first opening and kept afterward, so later
-// openings do not load the page again.
 @MainActor
 final class WebPanelController: NSViewController {
     static let width: CGFloat = 388
     private(set) var contentHeight: CGFloat = 520
     private let web: WKWebView
-    // Only the --test-web check uses this accessor.
     var webViewForTesting: WKWebView { web }
     private let navigation = LocalNavigation()
     private var loaded = false

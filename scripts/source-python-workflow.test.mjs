@@ -13,8 +13,6 @@ const step = (name) => {
   return matches[0];
 };
 
-// Source contracts only. These checks never run a workflow command or download
-// a runtime, build an application or dispatch CI.
 test('Mac source tests and build receive the extracted pinned Python explicitly', () => {
   const build = step('Build complete Apple Silicon application');
   const python = '${{ runner.temp }}/observatory-runtime/python/bin/python3';

@@ -32,7 +32,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         return self.previewRuntime == nil && !store.shuttingDown && !store.refreshing &&
             !store.pairingMaintenance && !store.collectionPausedForPairing
     }
-    // Keeps the SwiftUI panel and dashboard for one build and is removed with them.
     private var usesNativeViewer: Bool { CommandLine.arguments.contains("--native-viewer") }
     private var usesWebDashboard: Bool { !usesNativeViewer && !CommandLine.arguments.contains("--legacy-dashboard") }
     private var usesNativeDashboard: Bool { usesNativeViewer && !CommandLine.arguments.contains("--legacy-dashboard") }
@@ -126,7 +125,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         termination.setEventHandler { NSApp.terminate(nil) }
         termination.resume()
         terminationSignal = termination
-        // Lifecycle tests use empty private settings and never start collection.
         if lifecycleTest {
             if CommandLine.arguments.contains("--capture-dashboard") { captureDashboardScreenshots(); return }
             checkDashboardLifecycle(remaining: 3); return
@@ -285,7 +283,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 case .openDashboard: self.openDefault()
                 }
             }
-            // The page reloads its snapshot when a collection ends.
             collectionObserver = store.$refreshing.dropFirst().removeDuplicates().filter { !$0 }
                 .receive(on: DispatchQueue.main).sink { [weak self] _ in self?.webPanel?.snapshotChanged() }
         }
@@ -361,7 +358,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let window = NSPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
         window.title = "Observatory usage"
-        // The native panel is always dark. The web panel follows the system.
         if !usesWebPanel { window.appearance = NSAppearance(named: .darkAqua) }
         window.isFloatingPanel = true
         window.hidesOnDeactivate = true
@@ -424,7 +420,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             return
         }
         unreliableUsageAnchor = nil
-        // Every opening starts at all sources and all retained history.
         panelSize = size
         popover.contentViewController = usageContent(size: size)
         popover.contentSize = size

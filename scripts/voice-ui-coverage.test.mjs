@@ -75,7 +75,6 @@ const plain = (html) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-// This Swift source contract is not a substitute for a Mac compile or UI run.
 test('Mac Dictation does not offer unimplemented ChatGPT as an active filter', () => {
   const swift = readFileSync(
     path.join(root, 'native/NativeRecordedUsage.swift'),
@@ -104,8 +103,6 @@ test('Mac Dictation does not offer unimplemented ChatGPT as an active filter', (
   );
   assert.ok(swift.includes('More local speech detection coming soon.'));
 });
-
-// The Windows Forms Dictation view was removed in W2-4. The shared viewer's Dictation view is covered by its own tests.
 
 test('web Dictation offers supported choices and labels ChatGPT unimplemented', () => {
   const html = render([]);

@@ -5,8 +5,6 @@ const tools=['Wispr Flow','ChatGPT'];
 const validDay=value=>typeof value==='string' && /^\d{4}-\d\d-\d\d$/.test(value) &&
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10)===value;
 
-// A view projection, not a new collector. Never infer voice from app activity.
-// Aggregate-only Wispr stores lack evidence for cross-device deduplication.
 /**
  * @param {any[]} raw
  * @param {{host?:string,tool?:string,period?:string,date?:string|null}} options
@@ -39,7 +37,6 @@ export function voiceOverview(raw=[],{host='All',tool='All',period='week',date=n
       wordRecords:safe?totals.wordRecords:null,audioRecords:safe?totals.audioRecords:null};
   });
   return {version:1,host,tool,period,start,end,dates,sources:breakdown,
-    // No supported reader currently establishes all-tools speech-only time.
     voiceSeconds:null,coverage:'partial',reportingSources:breakdown.filter(source=>source.records!==null).length,
     daily:breakdown.flatMap(source=>source.days.map(day=>({host:source.host,source:source.source,date:day.date,
       audioSeconds:day.audioRecords>0?day.audioSeconds:null,words:day.wordRecords>0?day.words:null,records:day.transcriptions})))

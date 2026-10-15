@@ -3,7 +3,6 @@ using Microsoft.Web.WebView2.WinForms;
 
 namespace WorkspaceObservatory;
 
-// The shared viewer is the default main window.
 internal sealed class WebDashboard : Form
 {
     internal const string Page = "dashboard.html";
