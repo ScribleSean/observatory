@@ -20,5 +20,5 @@ export default defineConfig({
   }],
   resolve:{alias:{'@':fileURLToPath(new URL('..',import.meta.url))}},
   build:{outDir:fileURLToPath(new URL('../dist/pages',import.meta.url)),emptyOutDir:true,
-    rollupOptions:{input:{dashboard:fileURLToPath(new URL('./web/dashboard.html',import.meta.url)),panel:fileURLToPath(new URL('./web/panel.html',import.meta.url)),product:fileURLToPath(new URL('./web/product.html',import.meta.url))}}},
+    rolldownOptions:{input:{dashboard:fileURLToPath(new URL('./web/dashboard.html',import.meta.url)),panel:fileURLToPath(new URL('./web/panel.html',import.meta.url)),product:fileURLToPath(new URL('./web/product.html',import.meta.url))}}},
 });

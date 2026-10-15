@@ -21,7 +21,7 @@ async function output(t) {
 }
 const provenance = {revision: 'a'.repeat(40), dirty: false};
 
-test('synthetic output verifies with the exact fixture digest', async t => {
+void test('synthetic output verifies with the exact fixture digest', async t => {
   const dir = await output(t);
   await preparePages(dir, provenance);
   await checkDemoBuild(dir);
@@ -35,7 +35,7 @@ for (const [name, file, content] of [
   ['extra top-level page', 'dashboard.html', 'Unexpected page'],
   ['changed asset', 'assets/a.js', 'export default false'],
 ]) {
-  test(`rejects ${name}`, async t => {
+  void test(`rejects ${name}`, async t => {
     const dir = await output(t);
     await preparePages(dir, provenance);
     await writeFile(path.join(dir, file), content);
@@ -43,7 +43,7 @@ for (const [name, file, content] of [
   });
 }
 
-test('rejects a revision that is not 40 lowercase hex characters', async t => {
+void test('rejects a revision that is not 40 lowercase hex characters', async t => {
   const dir = await output(t);
   await assert.rejects(preparePages(dir, {...provenance, revision: 'invalid'}));
   await preparePages(dir, provenance);
@@ -53,7 +53,7 @@ test('rejects a revision that is not 40 lowercase hex characters', async t => {
   await assert.rejects(checkDemoBuild(dir));
 });
 
-test('preparation refuses to overwrite existing usage', async t => {
+void test('preparation refuses to overwrite existing usage', async t => {
   const dir = await output(t);
   await mkdir(path.join(dir, 'local'));
   await writeFile(path.join(dir, 'local/usage.json'), 'Existing fictional bytes');
@@ -61,7 +61,7 @@ test('preparation refuses to overwrite existing usage', async t => {
   assert.equal(await readFile(path.join(dir, 'local/usage.json'), 'utf8'), 'Existing fictional bytes');
 });
 
-test('demo fixture is deterministic and uses the shared sample', () => {
+void test('demo fixture is deterministic and uses the shared sample', () => {
   assert.deepEqual(demoFixture(), demoFixture());
   assert.deepEqual(demoFixture(), sampleSnapshot(Date.parse(DEMO_FIXTURE_TIME)));
 });

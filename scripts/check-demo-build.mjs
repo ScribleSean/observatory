@@ -23,7 +23,7 @@ export async function assetDigests(dir) {
     }
   }
   await walk('');
-  return Object.fromEntries(await Promise.all(files.sort().map(async file => [file, sha256(await readFile(path.join(dir, file)))])));
+  return Object.fromEntries(await Promise.all(files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).map(async file => [file, sha256(await readFile(path.join(dir, file)))])));
 }
 
 export async function checkDemoBuild(dir) {
