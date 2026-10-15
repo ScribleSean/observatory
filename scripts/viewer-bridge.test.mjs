@@ -9,6 +9,7 @@ const { createServer } = await load('vite');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent' });
 after(() => server.close());
 const { createBridge } = await server.ssrLoadModule('/app/viewer/bridge.ts');
+const { createSettingsController } = await server.ssrLoadModule('/app/viewer/settings/controller.ts');
 const { createFakeBridge } = await server.ssrLoadModule('/app/viewer/settings/fake-bridge.ts');
 const dispatch = (target, type, field, value) => {
   const event = new Event(type);
@@ -30,6 +31,17 @@ function fixture(kind) {
 const result = (win, id, more = {}) => dispatch(win, 'observatory:bridge-result', 'detail', { id, ok: true, code: 'done', ...more });
 
 for (const platform of ['mac', 'windows']) {
+  void test(`${platform} completes setup without arguments`, async () => {
+    const { win, posted } = fixture(platform);
+    const bridge = createBridge(win);
+    assert.deepEqual(await bridge.send('complete-setup', { extra: true }), { id: 0, ok: false, code: 'refused', local: true });
+    assert.deepEqual(posted, []);
+    const pending = bridge.send('complete-setup', {});
+    assert.deepEqual(posted, ['{"id":1,"action":"complete-setup","args":{}}']);
+    result(win, 1);
+    assert.deepEqual(await pending, { id: 1, ok: true, code: 'done' });
+    bridge.dispose();
+  });
   void test(`${platform} posts encoded text and resolves matching results`, async () => {
     const { win, posted } = fixture(platform);
     const bridge = createBridge(win);
@@ -53,7 +65,7 @@ for (const platform of ['mac', 'windows']) {
 void test('invalid messages never post and absent transports are unavailable', async () => {
   const { win, posted } = fixture('mac');
   const bridge = createBridge(win);
-  for (const [action, args] of [['unknown', {}], ['complete-setup', {}], ['set-source', { source: 'activity', enabled: 1 }]]) {
+  for (const [action, args] of [['unknown', {}], ['set-source', { source: 'activity', enabled: 1 }]]) {
     assert.deepEqual(await bridge.send(action, args), { id: 0, ok: false, code: 'refused', local: true });
   }
   assert.equal(posted.length, 0);
@@ -149,21 +161,29 @@ void test('fake bridge implements actions, copied status and pairing transitions
   const hosted = await send('pairing-host-start', { address: '100.64.0.1', port: 9090 });
   assert.equal(validateArgs('pairing-join-claim', hosted.value).ok, true);
   assert.equal((await status()).pairing.state, 'waiting');
-  assert.equal((await status()).pairing.state, 'awaiting-confirmation');
+  const claimed = await status();
+  assert.equal(claimed.pairing.state, 'confirming');
+  assert.equal(claimed.pairing.peerFingerprint, 'ab'.repeat(32));
   assert.equal((await status()).pairing.invitationKept, true);
   assert.equal((await send('pairing-copy-invitation')).code, 'done');
-  await send('pairing-host-confirm', { fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090 });
+  assert.equal((await send('pairing-host-confirm', { fingerprint: 'cd'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090 })).code, 'unavailable');
+  assert.equal((await status()).pairing.state, 'confirming');
+  assert.equal((await send('pairing-host-confirm', { fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090 })).code, 'done');
   assert.equal((await status()).pairing.state, 'paired');
   assert.equal((await status()).pairing.invitationKept, false);
   await send('pairing-disconnect'); assert.equal((await status()).pairing.state, 'unpaired');
   await send('pairing-repair-prepare'); assert.equal((await status()).pairing.state, 'idle');
-  await send('pairing-join-claim', hosted.value); assert.equal((await status()).pairing.state, 'confirming');
-  await send('pairing-join-confirm'); assert.equal((await status()).pairing.state, 'paired');
+  assert.equal((await send('pairing-join-confirm')).code, 'unavailable');
+  assert.equal((await send('pairing-join-claim', hosted.value)).code, 'done');
+  const joining = await status();
+  assert.equal(joining.pairing.state, 'awaiting-confirmation');
+  assert.equal(joining.pairing.peerFingerprint, null);
+  assert.equal((await send('pairing-join-confirm')).code, 'done'); assert.equal((await status()).pairing.state, 'paired');
   await send('pairing-cancel'); assert.equal((await status()).pairing.state, 'idle');
   assert.deepEqual((await send('tailscale-check')).value, { status: 'running' });
   for (const action of ['export-data', 'refresh', 'check-updates', 'open-settings']) assert.equal((await send(action)).code, 'done');
   assert.equal((await send('open-dashboard', { section: 'settings' })).code, 'done');
-  for (const [action, args] of [['complete-setup', {}], ['bogus', {}], ['set-startup', { enabled: 'yes' }], ['set-device-name', { name: 'bad/name' }]]) {
+  for (const [action, args] of [['bogus', {}], ['set-startup', { enabled: 'yes' }], ['set-device-name', { name: 'bad/name' }]]) {
     assert.equal(validateArgs(action, args).ok, false);
     assert.equal((await send(action, args)).code, 'refused');
   }
@@ -199,3 +219,30 @@ for (const platform of ['mac', 'windows']) {
     });
   }
 }
+
+void test('fake bridge completes setup without changing status or returning a value', async () => {
+  const bridge = createFakeBridge(sampleBridgeStatus(), 1);
+  const before = (await bridge.send('status', {})).value;
+  assert.deepEqual(await bridge.send('complete-setup', {}), { id: 2, ok: true, code: 'done' });
+  assert.deepEqual((await bridge.send('status', {})).value, before);
+  bridge.dispose();
+});
+void test('controller completes setup and reads status once after done', async () => {
+  const { win, posted } = fixture('mac');
+  const bridge = createBridge(win);
+  const controller = createSettingsController(bridge);
+  const pending = controller.completeSetup();
+  assert.deepEqual(posted, ['{"id":1,"action":"complete-setup","args":{}}']);
+  result(win, 1);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(posted, [
+    '{"id":1,"action":"complete-setup","args":{}}',
+    '{"id":2,"action":"status","args":{}}',
+  ]);
+  result(win, 2, { value: sampleBridgeStatus() });
+  assert.equal((await pending).code, 'done');
+  assert.equal(posted.length, 2);
+  assert.deepEqual(controller.getStatus(), sampleBridgeStatus());
+  controller.dispose();
+  bridge.dispose();
+});
