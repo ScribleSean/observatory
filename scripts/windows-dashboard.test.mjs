@@ -82,3 +82,16 @@ test('Codex hours stay local and leave the settings and peer projections unchang
   assert.deepEqual(after.data.settings,before.data.settings);
   for(const value of [after.data.settings,after.peer.payload.codex])assert.doesNotMatch(JSON.stringify(value),/"(?:hourTotals|hours)":/);
 });
+
+test('Codex guarded read refusal codes stay on local settings and tokens only',()=>{
+  for(const refusal of ['private-folder-refused','ancestor-refused','unknown',undefined]) {
+    const input=raw();input.localSettings={status:'unavailable',refusal,message:'PRIVATE'};
+    const result=windowsSnapshot(input,[],at,peerConfig);
+    for(const key of ['tokens','settings']) {
+      const row=result.data[key].find(row=>row.host==='Windows');assert.equal(row.status,'unavailable');
+      assert.equal(row.refusal,['private-folder-refused','ancestor-refused'].includes(refusal)?refusal:undefined);
+    }
+    assert.deepEqual(result.peer.payload.codex,[{host:'Windows',status:'unavailable'}]);
+    assert.doesNotMatch(JSON.stringify(result),/PRIVATE/);assert.doesNotMatch(JSON.stringify(result.peer.payload),/refusal/);
+  }
+});

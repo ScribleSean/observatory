@@ -1,3 +1,5 @@
+import {readDeviceName,attachDeviceName} from './device-name.mjs';
+import {captureLocalAdditions,reapplyLocalAdditions} from './local-additions.mjs';
 import {spawn} from 'node:child_process';
 import {realpathSync} from 'node:fs';
 import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
@@ -81,7 +83,11 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     wispr:()=>report('read-wispr.py',[homedir()]),
   },previous,new Date().toISOString(),pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
+  const additions=captureLocalAdditions(result.data,'Mac');
   await finalizePeerCollection(runtime,result,savedPairing,previous);
+  reapplyLocalAdditions(result.data,'Mac',additions);
+  const deviceName=await readDeviceName(runtime);
+  attachDeviceName(result.data,'Mac',deviceName);
   // Account-wide history belongs to the observing device, not the peer sum.
   let quota;
   try {quota=await readQuota();}
@@ -95,11 +101,12 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   else try {
     if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
     const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[claudeDirectory]);
-    claude=cleanClaudeTokenSource(raw,'Mac');
+    claude=cleanClaudeTokenSource(raw,'Mac',undefined,{hours:true});
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
   // Account-wide limits observed on this device. They are not shared with a paired device.
   attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachDeviceName(result.data,'Mac',deviceName);
   const {data,status}=result;
   await atomic('usage.json',data,replacement.preserve);
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});

@@ -1,3 +1,4 @@
+import {REFUSAL_CODES} from './peer-directory.mjs';
 import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
 import {attachTokenHours} from './token-hours.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
@@ -21,7 +22,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
   let peerActivity,peerCodex,hourTotals;
   const read=async(key,clean)=>{
     if(!config[key])return disconnected('Mac');
-    try{return {...clean(await readers[key]()),checkedAt:at};}catch{return unavailable('Mac');}
+    try{return {...clean(await readers[key]()),checkedAt:at};}catch(error){return {...unavailable('Mac'),...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})};}
   };
   const [activity,settings,wispr]=await Promise.all([
     read('activity',raw=>{
@@ -37,7 +38,7 @@ export async function macSnapshot(rawConfig,readers,previous=[],at=new Date().to
     }),
     read('wispr',raw=>cleanWispr(raw,'Mac')),
   ]);
-  let tokens=settings.status==='ok'?null:{host:'Mac',status:settings.status,checkedAt:at};
+  let tokens=settings.status==='ok'?null:{host:'Mac',status:settings.status,checkedAt:at,...(settings.refusal?{refusal:settings.refusal}:{})};
   if(!tokens)try{tokens={...attachTokenHours(tokensFromSettings(settings,'Mac'),hourTotals),checkedAt:at};}catch{tokens=unavailable('Mac');}
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[activity,disconnected('Windows')],combined:unavailable('Combined'),

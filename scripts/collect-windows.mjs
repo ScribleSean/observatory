@@ -1,3 +1,6 @@
+import {REFUSAL_CODES} from './peer-directory.mjs';
+import {readDeviceName,attachDeviceName} from './device-name.mjs';
+import {captureLocalAdditions,reapplyLocalAdditions} from './local-additions.mjs';
 import {spawn,execFile} from 'node:child_process';
 import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -73,7 +76,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   };
   await atomic('collector.json',{state:'running',startedAt,intervalSeconds:300,maxRunSeconds:240});
-  const guarded=async(host,action)=>{try{return {...await action(),checkedAt:new Date().toISOString()};}catch{return unavailable(host);}};
+  const guarded=async(host,action)=>{try{return {...await action(),checkedAt:new Date().toISOString()};}catch(error){return {...unavailable(host),...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})};}};
   const python=process.env.OBSERVATORY_PYTHON || path.join(process.env.SystemRoot || 'C:/Windows','py.exe');
   const pythonArgs=path.basename(python).toLowerCase()==='py.exe'?['-3','-B','-X','utf8','-']:['-B','-X','utf8','-'];
   const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
@@ -101,7 +104,11 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   const collectedAt=new Date().toISOString();
   const result=windowsSnapshot({localSettings,windows,wispr},previous,collectedAt,pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
+  const additions=captureLocalAdditions(result.data,'Windows');
   await finalizePeerCollection(runtime,result,savedPairing,previous);
+  reapplyLocalAdditions(result.data,'Windows',additions);
+  const deviceName=await readDeviceName(runtime);
+  attachDeviceName(result.data,'Windows',deviceName);
   let quota;
   try {quota=await readQuota();}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
@@ -114,12 +121,13 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   else try {
     if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
     const raw=JSON.parse(await run(python,[...pythonArgs,claudeDirectory],await readFile(path.join(scripts,'read-claude-usage.py'),'utf8')));
-    claude=cleanClaudeTokenSource(raw,'Windows');
+    claude=cleanClaudeTokenSource(raw,'Windows',undefined,{hours:true});
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   await attachProviderTokenSync(runtime,result,claude);
   signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
   attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  attachDeviceName(result.data,'Windows',deviceName);
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),

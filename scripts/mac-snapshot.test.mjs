@@ -108,3 +108,16 @@ test('Codex hours stay local and leave the settings and peer projections unchang
   assert.deepEqual(after.data.settings,before.data.settings);
   for(const value of [after.data.settings,after.peer.payload.codex])assert.doesNotMatch(JSON.stringify(value),/"(?:hourTotals|hours)":/);
 });
+
+test('Codex read refusal codes stay on local settings and tokens only',async()=>{
+  for(const refusal of ['private-folder-refused','ancestor-refused','unknown',undefined]) {
+    const result=await macSnapshot({activity:false},{codex:async()=>{throw Object.assign(Error('PRIVATE'),{refusal});}},[],at,
+      {host:'Mac',comparisonId:'a'.repeat(64),codexHosts:['Mac']});
+    for(const key of ['tokens','settings']) {
+      const row=result.data[key].find(row=>row.host==='Mac');assert.equal(row.status,'unavailable');
+      assert.equal(row.refusal,['private-folder-refused','ancestor-refused'].includes(refusal)?refusal:undefined);
+    }
+    assert.deepEqual(result.peer.payload.codex,[{host:'Mac',status:'unavailable'}]);
+    assert.doesNotMatch(JSON.stringify(result),/PRIVATE/);assert.doesNotMatch(JSON.stringify(result.peer.payload),/refusal/);
+  }
+});

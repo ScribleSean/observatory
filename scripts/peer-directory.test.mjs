@@ -190,3 +190,27 @@ for(const [target,right] of [['directory','list'],['file','read'],['ancestor','d
       // fixture(t) removes only this newly owned tree, with the ACE still set.
     });
 }
+
+test('POSIX private folder refusals carry a bounded code',{skip:process.platform==='win32'},async t=>{
+  const runtime=await fixture(t);await mkdir(path.join(runtime,'private-sync'),{mode:0o755});
+  await assert.rejects(privateSyncDirectory(runtime),{refusal:'private-folder-refused'});
+});
+test('Windows diagnostic failures expose only a refusal code',{skip:process.platform!=='win32'},async()=>{
+  const {windowsPermissions,REFUSAL_CODES}=await import('./peer-directory.mjs');
+  assert.equal(Object.isFrozen(REFUSAL_CODES),true);
+  for(const [stderr,refusal] of [['PRIVATE\nVerification stage: inspect-ancestry\r\n','ancestor-refused'],
+    ['PRIVATE\nVerification stage: inspect-leaf','private-folder-refused'],
+    [' Verification stage: inspect-ancestry','private-folder-refused'],
+    ['Verification stage: inspect-ancestry extra','private-folder-refused']]) {
+    let calls=0;
+    const run=async(executable,args)=>{
+      assert.ok(args.includes('-Diagnostic'));calls++;
+      throw Object.assign(Error('PRIVATE'),{code:calls===1?2:1,stderr,stdout:'PRIVATE'});
+    };
+    await assert.rejects(windowsPermissions('C:/fixture',false,false,run),error=>{
+      assert.equal(error.message,'Private sync access-control verification failed');assert.equal(error.refusal,refusal);
+      assert.deepEqual(Object.keys(error),['refusal']);assert.doesNotMatch(error.stack,/PRIVATE|Verification stage/);return true;
+    });
+    assert.equal(calls,2);
+  }
+});

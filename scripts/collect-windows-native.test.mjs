@@ -15,6 +15,7 @@ test('native Windows entry point preserves standalone collection without peer co
       {env:{...process.env,OBSERVATORY_RUNTIME:runtime},encoding:'utf8',timeout:20000});
     assert.deepEqual(JSON.parse(output),{state:'partial',sourcesRead:0,sourcesConfigured:0});
     const data=JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
+    assert.equal(Object.hasOwn(data,'deviceNames'),false);
     assert.equal(data.schema,2);assert.ok(data.tokens.every(source=>source.status==='not-connected'));
     assert.ok(data.activity.every(source=>source.status==='not-connected'));
     assert.equal(data.combinedTokens.status,'unavailable');
@@ -45,7 +46,11 @@ test('native Windows ignores retired source settings and preserves source files'
         {env,encoding:'utf8',timeout:20000});
       return JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
     };
+    await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:' Fixture PC '}));
     const enabled=await collect();
+    assert.deepEqual(enabled.deviceNames,{Windows:'Fixture PC'});
+    await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:'invalid/name'}));
+    assert.equal(Object.hasOwn(await collect(),'deviceNames'),false);
     const source=enabled.dictation.find(row=>row.source==='TypeWhisper');
     assert.equal(source,undefined);
     assert.ok(!JSON.stringify(enabled).includes('PRIVATE'));

@@ -1,3 +1,4 @@
+import {REFUSAL_CODES} from './peer-directory.mjs';
 import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
 import {attachTokenHours} from './token-hours.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
@@ -17,7 +18,7 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
     try {
       if(!accepted.includes(source?.status))throw Error('Source unavailable');
       return {...transform(source),checkedAt};
-    } catch {return {...unavailable(host),checkedAt};}
+    } catch {return {...unavailable(host),checkedAt,...(REFUSAL_CODES.includes(source?.refusal)?{refusal:source.refusal}:{})};}
   };
   const settingsSource=(source,host)=>clean(source,host,value=>{
     const safe=cleanSettings(value,host);tokensFromSettings(safe,host);return safe;
@@ -29,7 +30,7 @@ export function windowsSnapshot(raw,previous=[],at=new Date().toISOString(),peer
   });
   const wispr=clean(raw.wispr,'Windows',value=>cleanWispr(value,'Windows'),['ok','not-found','ambiguous','unavailable']);
   const tokenSource=source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:
-    {host:source.host,status:source.status,checkedAt:source.checkedAt};
+    {host:source.host,status:source.status,checkedAt:source.checkedAt,...(REFUSAL_CODES.includes(source.refusal)?{refusal:source.refusal}:{})};
   const data={schema:2,timezone:'America/New_York',collectedAt:at,
     activity:[disconnected('Mac'),windows],combined:unavailable('Combined'),
     tokens:[disconnected('Mac'),attachTokenHours(tokenSource(localSettings),hourTotals)],combinedTokens:unavailable('All'),

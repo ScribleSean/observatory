@@ -6,13 +6,15 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
+export const REFUSAL_CODES=Object.freeze(['private-folder-refused','ancestor-refused']);
+const refused=error=>{if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
 const execute=promisify(execFile);
-async function windowsPermissions(directory,initialize=false,ancestor=false) {
+export async function windowsPermissions(directory,initialize=false,ancestor=false,run=execute) {
   const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
   const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
   for(let attempt=0;attempt<2;attempt++) {
     try {
-      const {stdout}=await execute(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,
+      const {stdout}=await run(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,'-Diagnostic',
         ...(ancestor?['-Ancestor']:[]),...(initialize && attempt===0?['-Initialize']:[])],
       {windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
       if(stdout.trim()!=='private-sync-acl: ok')throw Error('Invalid verification result');
@@ -21,7 +23,9 @@ async function windowsPermissions(directory,initialize=false,ancestor=false) {
       // A transient child can disappear between enumeration and Get-Acl.
       // Retry the entire inspection once, including the root and every child.
       if(attempt===0 && error.code===2)continue;
-      throw Error('Private sync access-control verification failed');
+      const refusal=[error.stdout,error.stderr].filter(value=>typeof value==='string').join('\n').split('\n')
+        .some(line=>line.replace(/\r$/,'')==='Verification stage: inspect-ancestry')?'ancestor-refused':'private-folder-refused';
+      throw Object.assign(Error('Private sync access-control verification failed'),{refusal});
     }
   }
 }
@@ -72,23 +76,25 @@ async function verifiedDirectory(directory,privateLeaf) {
 
 // These checks exclude replacement by other local accounts, not compromise of
 // the process account or OS administrators. Neither validator repairs ACLs.
-export const trustedDirectoryAncestry=directory=>verifiedDirectory(directory,false);
-export const verifyPrivateDirectory=directory=>verifiedDirectory(directory,true);
+export const trustedDirectoryAncestry=directory=>verifiedDirectory(directory,false).catch(error=>{throw refused(error);});
+export const verifyPrivateDirectory=directory=>verifiedDirectory(directory,true).catch(error=>{throw refused(error);});
 
 export async function privateCollectorDirectory(runtime,name,create=false) {
   if(!['private-sync','private-codex','private-repair','private-quota','private-device-identity'].includes(name) &&
     !/^private-sync-retired-[a-f0-9]{64}$/.test(name))throw Error('Invalid private directory purpose');
-  await directoryChain(runtime);
-  const directory=path.join(runtime,name);
-  let info;
-  try {info=await lstat(directory);}catch(error){if(error.code!=='ENOENT' || !create)throw error;}
-  if(!info) {
-    await trustedDirectoryAncestry(runtime);
-    if(process.platform==='win32')await windowsPermissions(directory,true);
-    else await mkdir(directory,{mode:0o700}).catch(error=>{if(error.code!=='EEXIST')throw error;});
-  }
-  await verifyPrivateDirectory(directory);
-  return directory;
+  try {
+    await directoryChain(runtime);
+    const directory=path.join(runtime,name);
+    let info;
+    try {info=await lstat(directory);}catch(error){if(error.code!=='ENOENT' || !create)throw error;}
+    if(!info) {
+      await trustedDirectoryAncestry(runtime);
+      if(process.platform==='win32')await windowsPermissions(directory,true);
+      else await mkdir(directory,{mode:0o700}).catch(error=>{if(error.code!=='EEXIST')throw error;});
+    }
+    await verifyPrivateDirectory(directory);
+    return directory;
+  } catch(error) {throw refused(error);}
 }
 
 export const privateSyncDirectory=(runtime,create=false)=>privateCollectorDirectory(runtime,'private-sync',create);
