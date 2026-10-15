@@ -82,12 +82,12 @@ test('a source replaced after history was read is never archived as the original
   await assert.rejects(lstat(f.archive),{code:'ENOENT'});
 });
 
-test('a source changed during the second unchanged check refuses replacement',async t=>{
+test('a source changed during the final unchanged check refuses replacement',async t=>{
   const f=await retirementFixture(t),guard=await retirementSnapshotGuard(f.runtime),originalOpen=fsPromises.open;
   const changed=Buffer.from(retiredBytes.toString().replace('42','43'));
   let reads=0;
   fsPromises.open=async(file,...args)=>{
-    if(file===f.file && ++reads===3)await writeFile(f.file,changed);
+    if(file===f.file && ++reads===2)await writeFile(f.file,changed);
     return originalOpen(file,...args);
   };
   syncBuiltinESMExports();
@@ -191,3 +191,63 @@ test('saved localModel loads for history and full collection leaves leftover che
   assert.deepEqual(await readFile(f.archive),checkpoints[0]);
   assert.deepEqual(await readFile(f.receipt),checkpoints[1]);
 });
+
+test('a failed final rename preserves the snapshot and a retry publishes a new snapshot',nativeOptions,async t=>{
+  const f=await retirementFixture(t),before=await lstat(f.file,{bigint:true}),originalRename=fsPromises.rename;
+  let failed=false;
+  fsPromises.rename=async(from,to)=>{
+    if(to===f.file && !failed) {
+      failed=true;
+      throw Object.assign(Error('Synthetic final rename failure'),{code:'EIO'});
+    }
+    return originalRename(from,to);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(nativeCollect(f),{code:'EIO',message:'Synthetic final rename failure'});
+    assert.equal(failed,true);
+    assert.deepEqual(await readFile(f.file),retiredBytes);
+    const after=await lstat(f.file,{bigint:true});
+    for(const key of ['dev','ino','size','mtimeNs'])assert.equal(after[key],before[key]);
+    assert.deepEqual((await readdir(path.dirname(f.file))).sort(),['collector.json','usage.json']);
+    await nativeCollect(f);
+    const next=await readFile(f.file);
+    assert.notDeepEqual(next,retiredBytes);
+    assert.equal(JSON.parse(next).schema,2);
+    assert.notEqual(JSON.parse(next).collectedAt,JSON.parse(retiredBytes).collectedAt);
+    assert.deepEqual((await readdir(path.dirname(f.file))).sort(),['collector.json','usage.json']);
+  } finally {fsPromises.rename=originalRename;syncBuiltinESMExports();}
+});
+
+for(const damage of ['snapshot overwrite','receipt EIO','snapshot hardlink','receipt mismatch','snapshot broad permissions'])
+  test(`archive preparation refuses ${damage} during receipt publication`,options,async t=>{
+    const f=await fixture(t),originalOpen=fsPromises.open;
+    let injected=false;
+    fsPromises.open=async(file,...args)=>{
+      if(path.basename(file)==='receipt.json' && args[0]==='wx') {
+        injected=true;
+        const snapshot=path.join(path.dirname(file),'snapshot.json');
+        if(damage==='snapshot overwrite')await writeFile(snapshot,f.bytes.replace('42','43'));
+        if(damage==='receipt EIO')throw Object.assign(Error('Synthetic receipt failure'),{code:'EIO'});
+        if(damage==='snapshot hardlink')await fsPromises.link(snapshot,path.join(f.root,'archive-alias.json'));
+        if(damage==='snapshot broad permissions')await chmod(snapshot,0o640);
+        if(damage==='receipt mismatch') {
+          const handle=await originalOpen(file,...args),write=handle.writeFile.bind(handle);
+          handle.writeFile=async bytes=>write(JSON.stringify({...JSON.parse(bytes),bytes:0})+'\n');
+          return handle;
+        }
+      }
+      return originalOpen(file,...args);
+    };
+    syncBuiltinESMExports();
+    try {
+      const error=damage==='receipt EIO'?{code:'EIO',message:'Synthetic receipt failure'}:
+        damage==='receipt mismatch'?/Archive receipt verification failed/:
+        damage==='snapshot overwrite'?/Archive changed during verification/:
+        // The private-file ACL check runs first and refuses a linked or broad file before the byte read.
+        /Private path access-control verification failed|Invalid snapshot file/;
+      await assert.rejects(archiveMacSnapshot(f.file,f.archive),error);
+      assert.equal(injected,true);
+    } finally {fsPromises.open=originalOpen;syncBuiltinESMExports();}
+    assert.equal(await readFile(f.file,'utf8'),f.bytes);
+  });

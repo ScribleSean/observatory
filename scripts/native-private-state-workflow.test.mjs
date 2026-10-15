@@ -15,6 +15,7 @@ const entryPoints = [
   'private-directory-policy',
   'private-path-acl',
   'mac-snapshot-archive',
+  'private-archive-boundary',
   'run-collector',
   'source-python-runner',
   'source-python-test-entry',

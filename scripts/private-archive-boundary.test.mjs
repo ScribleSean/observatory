@@ -216,6 +216,7 @@ test('modeled safe Mac preparation keeps distinct exact-byte archives', async (t
 });
 
 for (const acl of [
+  'inherited-file-read',
   'inherited-directory-write',
   'query-failure',
   'unknown-format',

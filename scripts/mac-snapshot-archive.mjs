@@ -129,7 +129,7 @@ export async function retirementSnapshotGuard(runtime) {
       throw Error('Snapshot changed during collection');
   };
   return {history,preserve:async()=>{
-    await unchanged();
+    // This is the last check before the caller renames.
     await unchanged();
   }};
 }
