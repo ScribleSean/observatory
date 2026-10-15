@@ -126,7 +126,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Codex row | Done | Done | Keep | |
 | Claude Code row per device | Done | Done | Keep | |
 | ChatGPT and Cursor placeholder rows | Done | Done | Remove | |
-| Local benchmarks row | Done | Done | Remove | Since R1 (issue 82) the shared collectors always report this source as not connected. |
+| Local benchmarks row | Done | Done | Remove | Since R2-2 (issue 111) the shared collectors no longer write the `localModel` slot, so both apps show this card with "No source records". The card itself goes with M2 and W2. |
 | Agent receipts rows and "View Agents" button | Done | Done | Remove | Since R1 (issue 82) the shared collectors always report this source as not connected. |
 | Clear message when the private-folder check fails | Missing | Missing | Add | See issue 58 for Windows and issue 60 for Mac |
 
@@ -178,7 +178,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Snapshot format | Done | Done | Change | Add hourly tokens and Claude Code limits |
 | Day boundaries | Differs | Differs | Change | Both use America/New_York. Target is the device's time zone. |
 | Price table | Done | Done | Keep | `native/prices.json`, taken from LiteLLM's open table and checked on 2026-10-14. The packaged collectors read its generated twin `scripts/price-data.mjs`. `scripts/price-refresh.mjs` refreshes both by hand. |
-| Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together. R2 (issue 111): the pairing scripts and both apps' pairing requests no longer carry the Ubuntu slot, and saved pairings stay readable. The snapshot `localModel` slot (R2-2) remains. |
+| Ubuntu fields in pairing and snapshot | Done | Done | Remove | Both apps must change together. R2 (issue 111): the pairing scripts and both apps' pairing requests no longer carry the Ubuntu slot, and saved pairings stay readable. Since R2-2 the scripts no longer write the `localModel` slot or the retirement checkpoint, and saved snapshots that still hold `localModel` load. The native readers of `localModel` go with M2 and W2. |
 
 ## Shared web viewer (spike)
 
