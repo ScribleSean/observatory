@@ -214,6 +214,25 @@ internal static class RuntimeOverride
         }
         try
         {
+            try
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                var currentUser = identity.User ?? throw new IOException("Current user SID is unavailable.");
+                var rootAdministrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+                var security = new DirectorySecurity();
+                security.SetAccessRuleProtection(true, false);
+                security.SetOwner(identity.Owner is not null && rootAdministrators.Equals(identity.Owner) ? rootAdministrators : currentUser);
+                foreach (var principal in new[] { currentUser,
+                    new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), rootAdministrators })
+                    security.AddAccessRule(new FileSystemAccessRule(principal, FileSystemRights.FullControl,
+                        InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                        PropagationFlags.None, AccessControlType.Allow));
+                new DirectoryInfo(root).SetAccessControl(security);
+            }
+            catch (Exception error)
+            {
+                throw new IOException("Runtime self-test could not set a protected ACL on its temporary root.", error);
+            }
             Refused(@"\\?\" + real); Refused(@"\\.\" + real); Refused(@"\\localhost\C$\synthetic");
             Refused(real + "::$INDEX_ALLOCATION"); Refused(Path.Combine(root, "SHORT~1"));
             Refused(root);
