@@ -59,7 +59,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   let savedPairing=null,pairingFailed=false;
   if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
   let pairing=null;
-  try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Windows',peerConfig.codexHosts?.length===2?['Windows','Ubuntu']:['Windows']);}catch{}
+  try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Windows');}catch{}
   const folder=path.join(runtime,'public/local');
   await mkdir(folder,{recursive:true});
   if((await lstat(folder)).isSymbolicLink())throw Error('Unsafe runtime directory');

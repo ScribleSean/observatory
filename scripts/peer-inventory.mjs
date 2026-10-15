@@ -1,7 +1,7 @@
 import {combineTokens,verifyHostInventory} from './combine-tokens.mjs';
 
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
-const hosts=['Mac','Windows','Ubuntu'];
+const hosts=['Mac','Windows'];
 const fields=['version','comparisonId','host','status','keys','parents'];
 
 // Private peer evidence only. comparisonId identifies a shared salt generation,
@@ -20,7 +20,7 @@ export function validatePeerInventory(value,expectedHost,comparisonId) {
 export function combinePeerTokens(sources,evidence,comparisonId,expectedHosts,evidenceHosts=expectedHosts) {
   // Pairing defines metric coverage separately from ancestry-only evidence.
   if(!Array.isArray(expectedHosts) || !Array.isArray(evidenceHosts) ||
-    ![2,3].includes(evidenceHosts.length) || new Set(evidenceHosts).size!==evidenceHosts.length ||
+    evidenceHosts.length!==2 || new Set(evidenceHosts).size!==evidenceHosts.length ||
     evidenceHosts.some(host=>!hosts.includes(host)) || expectedHosts.some(host=>!evidenceHosts.includes(host)) ||
     !Array.isArray(evidence) || evidence.length!==evidenceHosts.length)
     return {host:'All',status:'unverified'};

@@ -16,9 +16,7 @@ const unavailableStatus=value=>['unavailable','not-connected'].includes(value);
 
 function configuration(config) {
   if(!config || !['Mac','Windows'].includes(config.host) || !/^[a-f0-9]{64}$/.test(config.comparisonId) ||
-    !Array.isArray(config.codexHosts) || ![1,2].includes(config.codexHosts.length) ||
-    new Set(config.codexHosts).size!==config.codexHosts.length || !config.codexHosts.includes(config.host) ||
-    config.codexHosts.some(host=>host!==config.host && !(config.host==='Windows' && host==='Ubuntu')))
+    (Object.hasOwn(config,'codexHosts') && (!Array.isArray(config.codexHosts) || config.codexHosts.length!==1 || config.codexHosts[0]!==config.host)))
     throw Error('Invalid peer payload configuration');
 }
 
@@ -57,9 +55,9 @@ function codex(raw,host,comparisonId) {
 // Only this private payload carries intervals and keyed comparison inventories.
 export function createPeerPayload(raw,config) {
   configuration(config);
-  if(!raw || !timestamp(raw.collectedAt) || !Array.isArray(raw.codex) || raw.codex.length!==config.codexHosts.length)
+  if(!raw || !timestamp(raw.collectedAt) || !Array.isArray(raw.codex) || raw.codex.length!==1)
     throw Error('Invalid peer payload');
-  const sources=config.codexHosts.map(host=>{
+  const sources=[config.host].map(host=>{
     const matches=raw.codex.filter(row=>row?.host===host);
     if(matches.length!==1)throw Error('Missing peer source');
     return codex(matches[0],host,config.comparisonId);
@@ -90,20 +88,16 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   if(localConfig.host===peerConfig.host || localConfig.comparisonId!==peerConfig.comparisonId)throw Error('Invalid peer pair');
   const payloads=[parsePeerPayload(JSON.stringify(local),localConfig,now),parsePeerPayload(JSON.stringify(peer),peerConfig,now)]
     .sort((a,b)=>a.host.localeCompare(b.host));
-  const checked=source=>({...source,checkedAt:payloads.find(p=>p.host===(source.host==='Ubuntu'?'Windows':source.host)).collectedAt});
+  const checked=source=>({...source,checkedAt:payloads.find(p=>p.host===source.host).collectedAt});
   const normalized=payloads.map(p=>checked(p.activity.status==='ok'?cleanActivity(p.activity,p.host):p.activity));
   const activity=normalized.map(({intervals,trackingIntervals,...safe})=>safe);
-  // Validate the entire legacy wire shape above, then project only native
-  // device scope. Never relabel Ubuntu counters as Windows or sum them here.
   const settings=payloads.flatMap(p=>p.codex.filter(row=>row.host===p.host).map(({inventory,...safe})=>checked(safe)));
   const tokens=settings.map(source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:{...absent(source.host,source.status),checkedAt:source.checkedAt});
   const expectedHosts=[localConfig.host,peerConfig.host];
-  // Retired counters are excluded above, but their ancestry can still connect
-  // native sessions. Require the full configured evidence scope, not fake usage.
-  const evidenceHosts=[...localConfig.codexHosts,...peerConfig.codexHosts];
+  const evidenceHosts=[localConfig.host,peerConfig.host];
   const evidence=payloads.flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
     version:1,comparisonId:p.comparisonId,host:row.host,...row.inventory,
-    // Preserve the nonempty-inventory guard for retired recorded usage too.
+    // Recorded usage requires a nonempty inventory.
     status:!row.inventory.keys.length && (row.profiles.some(profile=>profile.totalTokens>0) ||
       row.tokenProfiles?.some(profile=>profile.totalTokens>0))
       ?'incomplete':row.inventory.status})));

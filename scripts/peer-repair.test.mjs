@@ -15,7 +15,7 @@ import {revokePairing} from './peer-revocation.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,readPeerState,acceptPeerState} from './peer-store.mjs';
 
-const request={includeUbuntu:false,transport:{kind:'ssh-windows',hostAlias:'synthetic-host',
+const request={transport:{kind:'ssh-windows',hostAlias:'synthetic-host',
   remoteNode:'C:/Fixture/Runtime/node.exe',remoteScript:'C:/Fixture/Collector/peer-exchange.mjs',remoteRuntime:'C:/Fixture/Data'}};
 const sendTo=windows=>async(_transport,pairing)=>ensureWindowsPairing(windows,{version:1,pairing},'win32');
 const readiness=windows=>async()=> (await windowsRepairReadiness(windows,'win32')).nonce;
@@ -28,7 +28,7 @@ async function bytes(directory) {
 }
 const retired=async runtime=>(await readdir(runtime)).filter(name=>name.startsWith('private-sync-retired-'));
 const payload=config=>createPeerPayload({collectedAt:new Date().toISOString(),activity:{status:'not-connected'},
-  codex:config.codexHosts.map(host=>({host,status:'not-connected'})),
+  codex:[config.host].map(host=>({host,status:'not-connected'})),
   dictation:['Wispr Flow'].map(source=>({source,status:'not-connected'}))},config);
 
 test('both local retirements are required before authenticated setup replaces an existing pairing',async t=>{

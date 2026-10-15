@@ -7,20 +7,23 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 
 const pairing=()=>({pairId:'a'.repeat(64),deviceId:'b'.repeat(64),comparisonId:'c'.repeat(64),
-  comparisonSalt:'d'.repeat(64),host:'Windows',codexHosts:['Windows','Ubuntu']});
+  comparisonSalt:'d'.repeat(64),host:'Windows',codexHosts:['Windows']});
 
 test('paired source reader receives a bounded literal salt, projection configuration does not',()=>{
-  const value=pairing(),result=preparePeerCollection(value,'Windows',['Windows','Ubuntu']);
+  const value=pairing(),result=preparePeerCollection(value,'Windows',['Windows']);
   assert.equal(result.readerPrefix,`INVENTORY_SALT = '${value.comparisonSalt}'\n`);
   assert.ok(!JSON.stringify(result.config).includes(value.comparisonSalt));
   assert.equal(result.config.comparisonId,value.comparisonId);
-  value.codexHosts.pop();assert.deepEqual(result.config.codexHosts,['Windows','Ubuntu']);
+  assert.equal(Object.hasOwn(result.config,'codexHosts'),false);
+  const current={...value};delete current.codexHosts;
+  assert.deepEqual(preparePeerCollection(current,'Windows'),result);
+  assert.throws(()=>preparePeerCollection(value,'Windows',['Windows','Ubuntu']));
 });
 
 test('invalid salts, extra fields and host ownership mismatches are rejected',()=>{
   for(const changed of [{comparisonSalt:"'\nraise Exception('injection')"},{comparisonSalt:''},
-    {host:'Mac'},{codexHosts:['Windows']},{secret:'unexpected'},{pairId:3}])
-    assert.throws(()=>preparePeerCollection({...pairing(),...changed},'Windows',['Windows','Ubuntu']));
+    {host:'Mac'},{codexHosts:['Windows','Ubuntu']},{secret:'unexpected'},{pairId:3}])
+    assert.throws(()=>preparePeerCollection({...pairing(),...changed},'Windows'));
 });
 
 test('Mac pairing has exactly its own source and preserves the shared generation',()=>{
