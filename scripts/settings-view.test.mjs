@@ -51,15 +51,17 @@ void test('missing status renders Unknown and disables every setting', () => {
   assert.match(view, /Unknown/);
 });
 void test('paired, confirming, identity and awaiting-confirmation variants show the right controls', () => {
-  for (const [state, labels] of /** @type {Array<[string, string[]]>} */ ([['paired', ['Disconnect', 'Repair']], ['confirming', ['Confirm', 'Cancel']], ['identity-required', ['Create device identity', 'Cancel']], ['identity-ready', ['device&#x27;s address', 'device&#x27;s sync port', 'Start']]])) {
+  for (const [state, labels] of /** @type {Array<[string, string[]]>} */ ([['paired', ['Disconnect', 'Repair']], ['awaiting-confirmation', ['Confirm', 'Cancel', 'Confirm the invitation']], ['identity-required', ['Create device identity', 'Cancel']], ['identity-ready', ['device&#x27;s address', 'device&#x27;s sync port', 'Start']]])) {
     const status = sampleBridgeStatus(); status.pairing.state = state;
     const html = render(status);
     for (const label of labels) assert.ok(html.includes(label), `${state}: ${label}`);
+    if (state === 'awaiting-confirmation') assert.doesNotMatch(html, /Peer fingerprint|>Claim</);
   }
   const status = sampleBridgeStatus();
-  Object.assign(status.pairing, { state: 'awaiting-confirmation', peerFingerprint: 'ab'.repeat(32), invitationKept: true });
+  Object.assign(status.pairing, { state: 'confirming', peerFingerprint: 'ab'.repeat(32), invitationKept: true });
   const html = render(status);
-  for (const label of ['Peer fingerprint', 'Peer address', 'Peer port', 'Confirm', 'Cancel', 'ab'.repeat(32)]) assert.ok(html.includes(label));
+  assert.doesNotMatch(html, />Claim</);
+  for (const label of ['Peer fingerprint', 'Peer address', 'Peer port', 'Confirm the peer device', 'Confirm', 'Cancel', 'ab'.repeat(32)]) assert.ok(html.includes(label));
 });
 void test('host invitation is read-only with private sharing and clipboard warning', () => {
   const status = sampleBridgeStatus();
@@ -94,12 +96,26 @@ void test('status validator requires exact bounded shape and returns an independ
     s => { s.sharing['codex-limits'].extra = true; }, s => { s.app.version = 'x'.repeat(17000); },
     s => { s.deviceName = 'bad/name'; }, s => { s.skin.custom = ['sage']; }, s => { s.skin.custom = ['bad/name']; },
     s => { s.skin.bundled = ['sage']; }, s => { s.appearance = 'custom'; }, s => { s.sources.quota = 0; },
-    s => { s.pairing.peerFingerprint = 'ab'.repeat(32); }, s => { s.pairing.state = 'awaiting-confirmation'; },
+    s => { s.pairing.peerFingerprint = 'ab'.repeat(32); }, s => { s.pairing.state = 'confirming'; },
   ]) {
     const value = sampleBridgeStatus(); mutate(value); assert.equal(validateBridgeStatus(value), null);
   }
   const cyclic = sampleBridgeStatus(); cyclic.app = cyclic;
   assert.equal(validateBridgeStatus(cyclic), null);
+});
+void test('only confirming requires a lowercase peer fingerprint', () => {
+  for (const [state, peerFingerprint, valid] of [
+    ['confirming', 'ab'.repeat(32), true],
+    ['confirming', null, false],
+    ['confirming', 'AB'.repeat(32), false],
+    ['confirming', 'ab'.repeat(31), false],
+    ['awaiting-confirmation', 'ab'.repeat(32), false],
+    ['awaiting-confirmation', null, true],
+  ]) {
+    const status = sampleBridgeStatus();
+    Object.assign(status.pairing, { state, peerFingerprint });
+    assert.equal(validateBridgeStatus(status) !== null, valid);
+  }
 });
 function recordingBridge() {
   const messages = [];
@@ -306,4 +322,32 @@ void test('pairing timeout returns while its follow-up status is still pending',
   assert.deepEqual(posted.map(m => m.action), ['pairing-join-confirm', 'status']);
   assert.equal(statusSettled, false);
   controller.dispose(); bridge.dispose();
+});
+
+void test('collectionPaused is required and strictly boolean', () => {
+  for (const collectionPaused of [false, true]) assert.ok(validateBridgeStatus({ ...sampleBridgeStatus(), collectionPaused }));
+  for (const collectionPaused of [null, 0, 'false']) assert.equal(validateBridgeStatus({ ...sampleBridgeStatus(), collectionPaused }), null);
+  const missing = sampleBridgeStatus();
+  delete missing.collectionPaused;
+  assert.equal(validateBridgeStatus(missing), null);
+  assert.equal(validateBridgeStatus({ ...sampleBridgeStatus(), extra: true }), null);
+});
+for (const skinId of ['sage', 'almanac']) {
+  void test(`collection paused Settings note in ${skinId}`, () => {
+    assert.doesNotMatch(render(sampleBridgeStatus(), { skinId }), /Collection paused/);
+    assert.doesNotMatch(render(null, { skinId }), /Collection paused/);
+    const html = render({ ...sampleBridgeStatus(), collectionPaused: true }, { skinId });
+    assert.equal((html.match(/Collection paused/g) ?? []).length, 1);
+    assert.match(html, /<p class="ob-settings-paused" role="status">Collection paused<\/p><output/);
+  });
+}
+void test('fake bridge preserves collectionPaused through setting changes', async () => {
+  const bridge = createFakeBridge({ ...sampleBridgeStatus(), collectionPaused: true }, 0);
+  const controller = createSettingsController(bridge);
+  try {
+    await controller.status();
+    assert.equal(controller.getStatus().collectionPaused, true);
+    await controller.setStartup(false);
+    assert.equal(controller.getStatus().collectionPaused, true);
+  } finally { controller.dispose(); bridge.dispose(); }
 });

@@ -34,7 +34,8 @@ internal static class LaunchIsolationTests
         foreach (var args in new string[][] { [], ["--background"], ["--legacy-dashboard", "--background"],
             ["--native-dashboard", "--legacy-dashboard"], ["--self-test"], ["--test-launch-isolation"],
             ["--quit-for-update"], ["--test-update-ready", "fixture-event"], ["--web-panel"], ["--background", "--web-panel", "--panel-timing"],
-            ["--panel-timing", "--background"], ["--web-dashboard"], ["--web-dashboard", "--web-panel"] })
+            ["--native-viewer"], ["--native-viewer", "--background"],
+            ["--native-viewer", "--panel-timing"], ["--panel-timing"], ["--panel-timing", "--background"], ["--web-dashboard"], ["--web-dashboard", "--web-panel"] })
             Check(LaunchArguments.Valid(args) && LaunchArguments.ValidForTestInstallation(args));
         foreach (var args in new string[][] { ["--test-native-dashboard"], ["--test-native-dashboard", "x", "extra"],
             ["--test-web-hosts"], ["--test-web-hosts", "x", "extra"], ["--test-web-hosts", "--background"],
@@ -42,7 +43,9 @@ internal static class LaunchIsolationTests
             ["--test-unknown"], ["--test-identity"], ["--SELF-TEST"], ["--self-test=1"], ["--test-web", ""],
             ["--background", "--background"], ["--collect-once"], ["--apply-update"], ["unknown"], ["--web-panel", "--web-panel"],
             ["--web-panel", "panel.html"], ["--web-panel=1"], ["--self-test", "--web-panel"], ["--web-dashboard", "--web-dashboard"],
-            ["--web-dashboard", "dashboard.html"] })
+            ["--web-dashboard", "dashboard.html"], ["--native-viewer", "--native-viewer"],
+            ["--native-viewer", "--legacy-dashboard"], ["--native-viewer", "--web-panel"],
+            ["--native-viewer", "--web-dashboard"], ["--native-viewer", "x"], ["--native-viewer=1"] })
             Check(!LaunchArguments.Valid(args) && !LaunchArguments.ValidForTestInstallation(args));
         foreach (var args in new string[][] { ["--collect-once", "fixture-runtime"], ["--test-web", "fixture-runtime"],
             ["--test-web-hosts", "fixture-runtime"],

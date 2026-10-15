@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,readFile,writeFile,readdir} from 'node:fs/promises';
+import {cp,mkdtemp,realpath,rm,readFile,writeFile,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
@@ -9,7 +9,8 @@ import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
-import {cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {prices} from './price-table.mjs';
 import {createProviderTokenRecord} from './provider-token-peer.mjs';
 import {readProviderTokenState,updateProviderTokenSource,acceptProviderTokenReply,disableProviderTokenSharing} from './provider-token-store.mjs';
 import {providerTokenSharingControl} from './provider-token-sharing-control.mjs';
@@ -43,6 +44,47 @@ async function fixture(t,{enabled=true,tls=false}={}) {
   const request=async(_transport,input)=>{requests.push(structuredClone(input));return exchangeProviderTokens(runtime.Windows,input,now);};
   return {root,...runtime,pair,request,requests};
 }
+
+test('API estimates never reach the saved or exchanged Claude record',async t=>{
+  const estimated=await fixture(t);
+  const at=now+1,local=source('Mac',at);
+  assert.ok(Object.hasOwn(prices.models,'claude-opus-5-5'));
+  local.days[0].models[0].model='claude-opus-5-5';
+  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-sync-copy-')));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await cp(estimated.root,root,{recursive:true});
+  const plain=Object.fromEntries(['Mac','Windows'].map(host=>[host,path.join(root,path.relative(estimated.root,estimated[host]))]));
+  for(const run of [estimated,plain]) {
+    run.requests=[];
+    run.request=async(_transport,input)=>{
+      run.requests.push(structuredClone(input));
+      return exchangeProviderTokens(run.Windows,input,at);
+    };
+    run.result={data:{},status:{sourcesRead:0,sourcesConfigured:0,state:'partial'}};
+    await attachProviderTokenSync(run.Mac,run.result,local,{clock:()=>at,request:run.request});
+    assert.equal(run.result.providerTokenSync.status,'ok');
+    assert.deepEqual(run.requests.map(request=>request.action),['status','exchange']);
+    if(run===estimated)attachProviderTokenEstimates(run.result);
+  }
+  const day=estimated.result.data.providerTokenSources.find(row=>row.host==='Mac').days[0];
+  assert.ok(Number.isFinite(day.apiEstimate.usd) && day.apiEstimate.usd>0);
+  for(const request of estimated.requests)assert.equal(JSON.stringify(request).includes('apiEstimate'),false);
+  assert.equal(JSON.stringify(estimated.requests),JSON.stringify(plain.requests));
+  const stateBytes=runtime=>readFile(path.join(runtime,'private-sync','provider-tokens.sqlite'));
+  for(const host of ['Mac','Windows']) {
+    const actual=await stateBytes(estimated[host]);
+    assert.deepEqual(actual,await stateBytes(plain[host]));
+    assert.equal(actual.includes('apiEstimate'),false);
+  }
+  const firstExchange=JSON.stringify(estimated.requests[1].record);
+  estimated.requests.length=0;
+  await attachProviderTokenSync(estimated.Mac,estimated.result,local,{clock:()=>at,request:estimated.request});
+  assert.equal(estimated.result.providerTokenSync.status,'ok');
+  assert.deepEqual(estimated.requests.map(request=>request.action),['status','exchange']);
+  assert.equal(JSON.stringify(estimated.requests[1].record),firstExchange);
+  for(const request of estimated.requests)assert.equal(JSON.stringify(request).includes('apiEstimate'),false);
+  for(const host of ['Mac','Windows'])assert.equal((await stateBytes(estimated[host])).includes('apiEstimate'),false);
+});
 
 test('sharing starts off, is enabled by a current local confirmation, and probes carry no readings',async t=>{
   const {Mac,Windows,pair,requests,request}=await fixture(t,{enabled:false});

@@ -17,15 +17,32 @@ internal static class WebViewerPreferences
 
     internal static string? Theme(object? stored) => stored is string value && (value == "light" || value == "dark") ? value : null;
 
-    internal static (string Skin, string? Theme) Read()
+    internal static (string Skin, string? Theme) Read(string runtime) => Read(runtime, Key);
+
+    private static (string Skin, string? Theme) Read(string runtime, string registryKey)
     {
+        var store = new BridgeSettingsStore(runtime);
         try
         {
-            using var saved = Registry.CurrentUser.OpenSubKey(Key);
-            if (saved is null) return ("sage", null);
-            return (Skin(saved.GetValue("Skin")), Theme(saved.GetValue("Theme")));
+            if (!store.ViewerExists)
+            {
+                using var saved = Registry.CurrentUser.OpenSubKey(registryKey, writable: true);
+                if (saved is not null)
+                {
+                    var skin = saved.GetValue("Skin") as string;
+                    var theme = saved.GetValue("Theme") as string;
+                    if ((skin is not null && Skins.Contains(skin, StringComparer.Ordinal)) || theme is "light" or "dark" or "system")
+                    {
+                        store.WriteViewer(Skin(skin), Theme(theme) ?? "system", replace: false);
+                        saved.DeleteValue("Skin", throwOnMissingValue: false);
+                        saved.DeleteValue("Theme", throwOnMissingValue: false);
+                    }
+                }
+            }
         }
-        catch { return ("sage", null); }
+        catch { }
+        var value = store.ReadViewer();
+        return (value.Skin, Theme(value.Appearance));
     }
 
     internal static string DocumentStartScript(string skin, string? theme)
@@ -36,6 +53,7 @@ internal static class WebViewerPreferences
         var script = "document.documentElement.dataset.skin = \"" + skin + "\";";
         if (theme is not null)
             script += "\ndocument.documentElement.dataset.theme = \"" + theme + "\";";
+        else script += "\ndelete document.documentElement.dataset.theme;";
         return "(() => {\n" + script + "\n})();";
     }
 
@@ -63,8 +81,32 @@ internal static class WebViewerPreferences
         var invalid = DocumentStartScript("x\"; alert(1)", "dark\"");
         Check(invalid.Contains("dataset.skin = \"sage\""), "Invalid script skin must use Sage");
         Check(!invalid.Contains("alert"), "Script must exclude stored text");
-        Check(!invalid.Contains("dataset.theme"), "Invalid theme must not set an attribute");
-        Check(!DocumentStartScript("sage", null).Contains("dataset.theme"), "System theme must not set an attribute");
+        Check(invalid.Contains("delete document.documentElement.dataset.theme"), "Invalid theme removes the attribute");
+        Check(DocumentStartScript("sage", "system").Contains("delete document.documentElement.dataset.theme"), "System theme removes the attribute");
+        Check(DocumentStartScript("sage", null).Contains("delete document.documentElement.dataset.theme"), "Missing theme removes the attribute");
+        var runtime = Path.Combine(Path.GetTempPath(), "observatory-viewer-test-" + Guid.NewGuid().ToString("N"));
+        var registryKey = @"Software\WorkspaceObservatoryTests\Viewer-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(runtime);
+        try
+        {
+            using (var saved = Registry.CurrentUser.CreateSubKey(registryKey))
+            {
+                saved.SetValue("Skin", "almanac"); saved.SetValue("Theme", "dark"); saved.SetValue("Keep", "synthetic");
+            }
+            Check(Read(runtime, registryKey) == ("almanac", "dark"), "Migration reads old choices");
+            using (var saved = Registry.CurrentUser.OpenSubKey(registryKey, writable: true))
+            {
+                Check(saved is not null && saved.GetValue("Skin") is null && saved.GetValue("Theme") is null &&
+                    (string?)saved.GetValue("Keep") == "synthetic", "Migration removes only its values");
+                saved!.SetValue("Skin", "instrument");
+            }
+            Check(Read(runtime, registryKey) == ("almanac", "dark"), "Existing file wins");
+            File.WriteAllText(Path.Combine(runtime, "viewer.json"), "{}");
+            Check(Read(runtime, registryKey) == ("sage", null), "Invalid existing file does not migrate");
+            File.Delete(Path.Combine(runtime, "viewer.json"));
+            Check(Read(runtime, registryKey) == ("instrument", null), "Missing theme uses system");
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(registryKey, throwOnMissingSubKey: false); Directory.Delete(runtime, recursive: true); }
         Console.WriteLine("Web viewer preference contracts passed.");
     }
 }

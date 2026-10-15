@@ -4,7 +4,9 @@ import {spawnSync} from 'node:child_process';
 import {mkdtemp,mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenEstimates,attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {estimate} from './api-estimate.mjs';
+import {prices} from './price-table.mjs';
 import {pythonTestCommand} from './test-python.mjs';
 
 const counters={inputTokens:5,cacheReadTokens:2,cacheCreationTokens:0,outputTokens:3,totalTokens:10,requestCount:1};
@@ -21,6 +23,87 @@ test('hourly totals are opt-in and retained only when complete and reconciled',(
     [Number.MAX_SAFE_INTEGER+1,...Array(23).fill(0)],Array(24)]) {
     const result=cleanClaudeTokenSource({...raw,days:[{...raw.days[0],hours:invalid}]},'Mac',checkedAt,{hours:true});
     assert.equal(Object.hasOwn(result.days[0],'hours'),false);
+  }
+});
+
+test('estimates copy local and peer Claude rows without changing exchanged inputs',()=>{
+  const sources=['Mac','Windows'].map(host=>({provider:'claude-code',host,status:'ok',days:[{
+    date:'2026-09-24',
+    ...Object.fromEntries(Object.entries(counters).map(([key,value])=>[key,value*3])),
+    models:['claude-opus-5-5','claude-sonnet-4-20250514','unknown'].map(model=>({model,...counters})),
+  }]}));
+  const before=structuredClone(sources);
+  const result={data:{providerTokenSources:sources}};
+  assert.strictEqual(attachProviderTokenEstimates(result),result);
+  assert.notStrictEqual(result.data.providerTokenSources,sources);
+  for(const [index,row] of result.data.providerTokenSources.entries()) {
+    assert.notStrictEqual(row,sources[index]);
+    assert.notStrictEqual(row.days,sources[index].days);
+    for(const [dayIndex,day] of row.days.entries()) {
+      const original=sources[index].days[dayIndex];
+      assert.notStrictEqual(day,original);
+      assert.notStrictEqual(day.models,original.models);
+      for(const [modelIndex,model] of day.models.entries()) {
+        assert.notStrictEqual(model,original.models[modelIndex]);
+        assert.deepEqual(model.apiEstimate,estimate([original.models[modelIndex]]));
+        if(modelIndex===0) {
+          assert.notStrictEqual(model.apiEstimate.usd,null);
+          assert.strictEqual(model.apiEstimate.usd,estimate([original.models[modelIndex]]).usd);
+        } else {
+          assert.strictEqual(model.apiEstimate.usd,null);
+          assert.equal(model.apiEstimate.excluded,1);
+        }
+      }
+      assert.deepEqual(day.apiEstimate,{...estimate([original.models[0]]),excluded:2});
+      assert.equal(Object.hasOwn(original,'apiEstimate'),false);
+    }
+  }
+  assert.deepEqual(sources,before);
+  assert.equal(JSON.stringify(sources).includes('"apiEstimate"'),false);
+});
+
+test('a Claude day with only unpriced models has Unknown cost and parts',()=>{
+  const result={data:{providerTokenSources:[structuredClone(report)]}};
+  attachProviderTokenEstimates(result);
+  const day=result.data.providerTokenSources[0].days[0];
+  assert.strictEqual(day.apiEstimate.usd,null);
+  assert.strictEqual(day.apiEstimate.parts,null);
+  assert.equal(day.apiEstimate.excluded,1);
+});
+
+test('estimates preserve other providers and unavailable or incomplete rows by identity',()=>{
+  const sources=[
+    {...report,status:'not-connected'},
+    {...report,status:'unavailable'},
+    {...report,status:'stale'},
+    {...report,provider:'codex'},
+    {provider:'claude-code',status:'ok'},
+    {...report,days:null},
+  ];
+  const result={data:{providerTokenSources:sources}};
+  attachProviderTokenEstimates(result);
+  for(const [index,row] of sources.entries()) assert.strictEqual(result.data.providerTokenSources[index],row);
+});
+
+test('a malformed Claude day is kept without an estimate',()=>{
+  const day={date:'2026-09-24',...counters};
+  const result={data:{providerTokenSources:[{provider:'claude-code',host:'Mac',status:'ok',days:[day]}]}};
+  attachProviderTokenEstimates(result);
+  assert.strictEqual(result.data.providerTokenSources[0].days[0],day);
+});
+
+test('estimates always attach exactly the price source and checked date',()=>{
+  for(const data of [{},{providerTokenSources:[]},{providerTokenSources:[structuredClone(report)]}]) {
+    const result={data};
+    assert.strictEqual(attachProviderTokenEstimates(result),result);
+    assert.deepEqual(data.prices,{source:prices.source,checkedOn:prices.checkedOn});
+    assert.deepEqual(Object.keys(data.prices).sort(),['checkedOn','source']);
+  }
+});
+
+test('estimates require a data object',()=>{
+  for(const result of [undefined,{}, {data:null},{data:[]},{data:'invalid'},{data:1}]) {
+    assert.throws(()=>attachProviderTokenEstimates(result),/Invalid provider estimate attachment/);
   }
 });
 
