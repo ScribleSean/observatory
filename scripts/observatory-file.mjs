@@ -7,6 +7,7 @@ import {gunzipSync,gzipSync} from 'node:zlib';
 import {lstat,readFile,rename,unlink,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
+import {stripTokenHours} from './token-hours.mjs';
 
 export const FORMAT='observatory-export';
 export const VERSION=1;
@@ -73,7 +74,7 @@ export function buildExport(snapshot,{appVersion='Unknown',now=new Date(),device
   const records=[];
   const add=(kind,provider,host,source)=>{
     if(!Object.hasOwn(platforms,host) || !readable(source))return;
-    const list=days(source);
+    const list=days(kind==='tokens'?stripTokenHours(source):source);
     if(list.length)records.push({kind,provider,device:host,days:list});
   };
   const history=rows(snapshot.activityHistory);
@@ -89,7 +90,7 @@ export function buildExport(snapshot,{appVersion='Unknown',now=new Date(),device
   const combinedActivity=history.find(row=>row.host==='Combined');
   if(readable(combinedActivity) && days(combinedActivity).length)combined.push({kind:'activity',provider:'activitywatch',days:days(combinedActivity)});
   if(readable(snapshot.combinedTokens) && snapshot.combinedTokens.verification?.status==='verified' && days(snapshot.combinedTokens).length)
-    combined.push({kind:'tokens',provider:'codex',days:days(snapshot.combinedTokens)});
+    combined.push({kind:'tokens',provider:'codex',days:days(stripTokenHours(snapshot.combinedTokens))});
   return {
     format:FORMAT,version:VERSION,exportedAt:now.toISOString(),appVersion:String(appVersion).slice(0,40),
     exportedBy:device,timezone:typeof snapshot.timezone==='string'?snapshot.timezone.slice(0,64):'Unknown',

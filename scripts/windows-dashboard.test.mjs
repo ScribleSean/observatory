@@ -70,3 +70,15 @@ test('retired source input is omitted from local and peer projections',()=>{
   assert.equal(result.data.dictation[0].source,'Wispr Flow');
   assert.ok(!JSON.stringify(result).includes('PRIVATE'));
 });
+
+test('Codex hours stay local and leave the settings and peer projections unchanged',()=>{
+  const input=raw(),before=windowsSnapshot(input,[],at,peerConfig);
+  const hours=Array.from({length:24},(_,i)=>i===8?12:0);
+  input.localSettings.hourTotals=[{date:'2026-09-09',hours}];
+  const after=windowsSnapshot(input,[],at,peerConfig);
+  assert.deepEqual(after.data.tokens[1].days[0].hours,hours);
+  assert.equal(after.peer.status,'ready');assert.deepEqual(after.peer.payload,before.peer.payload);
+  assert.equal(JSON.stringify(after.peer.payload),JSON.stringify(before.peer.payload));
+  assert.deepEqual(after.data.settings,before.data.settings);
+  for(const value of [after.data.settings,after.peer.payload.codex])assert.doesNotMatch(JSON.stringify(value),/"(?:hourTotals|hours)":/);
+});
