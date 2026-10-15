@@ -40,7 +40,9 @@ function snapshot(root) {
   }
   visit('');return out;
 }
-test('full migration preserves nested permissions, timestamps and every legacy byte',t=>{
+// The Mac migration uses POSIX modes, owners and ps, so it runs only off Windows.
+const mac={skip:process.platform==='win32'};
+test('full migration preserves nested permissions, timestamps and every legacy byte',mac,t=>{
   const f=fixture(t),before=snapshot(f.legacy);
   const result=migrateDataFolder(f);
   assert.equal(result.state,'migrated');assert.equal(result.files,3);assert.equal(result.directories,2);
@@ -51,7 +53,7 @@ test('full migration preserves nested permissions, timestamps and every legacy b
   assert.equal(receipt.manifestSha256,result.manifestSha256);
   assert.equal(fs.statSync(path.join(f.target,'observatory-migration.json')).mode&0o777,0o600);
 });
-test('backup bundle links retain their text and report destinations outside Backups',t=>{
+test('backup bundle links retain their text and report destinations outside Backups',mac,t=>{
   const f=fixture(t),bundle='Backups/Old.app.backup',versions=bundle+'/Sparkle.framework/Versions';
   fs.mkdirSync(path.join(f.legacy,versions,'A'),{recursive:true});
   fs.writeFileSync(path.join(f.legacy,versions,'A/Sparkle'),'synthetic framework');
@@ -78,7 +80,7 @@ test('backup bundle links retain their text and report destinations outside Back
   assert.deepEqual(snapshot(f.legacy),before);
   assert.equal(migrateDataFolder(f).state,'already-migrated');
 });
-test('verification refuses changed staged link text',t=>{
+test('verification refuses changed staged link text',mac,t=>{
   const f=fixture(t),name='Backups/link';
   fs.mkdirSync(path.join(f.legacy,'Backups'));
   fs.symlinkSync('original',path.join(f.legacy,name));
@@ -91,7 +93,7 @@ test('verification refuses changed staged link text',t=>{
   }}}),/staging copy does not match/);
   assert.equal(fs.existsSync(f.target),false);
 });
-test('a file larger than three MiB copies and verifies every byte',t=>{
+test('a file larger than three MiB copies and verifies every byte',mac,t=>{
   const f=fixture(t),bytes=Buffer.alloc(3*1024*1024+137);
   for(let i=0;i<bytes.length;i++)bytes[i]=i%251;
   fs.writeFileSync(path.join(f.legacy,'large.bin'),bytes,{mode:0o640});
@@ -101,7 +103,7 @@ test('a file larger than three MiB copies and verifies every byte',t=>{
   assert.deepEqual(fs.readFileSync(path.join(f.target,'large.bin')),bytes);
   assert.equal(inspectDataMigration(f).target,'migrated');
 });
-test('the root mode and timestamps survive the marker write and switch',t=>{
+test('the root mode and timestamps survive the marker write and switch',mac,t=>{
   const f=fixture(t);
   fs.chmodSync(f.legacy,0o755);
   fs.utimesSync(f.legacy,1700000000,1700000001);
@@ -119,13 +121,13 @@ test('Swift uses the canonical legacy data folder literal',()=>{
   assert.ok(match,'The legacyDataFolder declaration must contain its folder literal.');
   assert.equal(match[1],appNames.legacy.dataFolder);
 });
-test('running or unverifiable processes refuse without writes',t=>{
+test('running or unverifiable processes refuse without writes',mac,t=>{
   const f=fixture(t),before=snapshot(f.root);
   for(const runningProcesses of [()=>'/fixture/'+appNames.internal.macExecutable,()=>null,()=>{throw Error('ps failed');}])
     assert.throws(()=>migrateDataFolder({...f,runningProcesses}),/Quit all|Cannot verify/);
   assert.deepEqual(snapshot(f.root),before);
 });
-test('occupied target and linked legacy entries refuse without staging',t=>{
+test('occupied target and linked legacy entries refuse without staging',mac,t=>{
   const f=fixture(t);fs.mkdirSync(f.target);fs.writeFileSync(path.join(f.target,'occupied'),'fixture');
   assert.throws(()=>migrateDataFolder(f),/already holds data/);
   assert.equal(fs.existsSync(f.stage),false);
@@ -133,7 +135,7 @@ test('occupied target and linked legacy entries refuse without staging',t=>{
   assert.throws(()=>migrateDataFolder(g),/Unsupported entries: "link"/);
   assert.equal(fs.existsSync(g.target),false);assert.equal(fs.existsSync(g.stage),false);
 });
-test('already migrated and inspection perform no writes',t=>{
+test('already migrated and inspection perform no writes',mac,t=>{
   const f=fixture(t),before=snapshot(f.root);
   assert.equal(inspectDataMigration(f).target,'missing');assert.deepEqual(snapshot(f.root),before);
   migrateDataFolder(f);const copied=snapshot(f.root);
@@ -141,19 +143,19 @@ test('already migrated and inspection perform no writes',t=>{
   assert.equal(inspectDataMigration(f).target,'migrated');
   assert.deepEqual(snapshot(f.root),copied);
 });
-test('interrupted staging resumes and removes only owned partial files',t=>{
+test('interrupted staging resumes and removes only owned partial files',mac,t=>{
   const f=fixture(t);let copied=0;
   assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(){if(++copied===2)throw Error('interrupted');}}}),/interrupted/);
   fs.writeFileSync(path.join(f.stage,'stale.observatory-partial'),'partial');
   assert.equal(migrateDataFolder(f).state,'migrated');
   assert.equal(fs.existsSync(path.join(f.target,'stale.observatory-partial')),false);
 });
-test('changed legacy refuses the switch',t=>{
+test('changed legacy refuses the switch',mac,t=>{
   const f=fixture(t);
   assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(){fs.writeFileSync(path.join(f.legacy,'new'),'changed');}}}),/earlier data folder changed/);
   assert.equal(fs.existsSync(f.target),false);
 });
-test('extra staging files refuse the switch',t=>{
+test('extra staging files refuse the switch',mac,t=>{
   const f=fixture(t);fs.mkdirSync(f.stage);fs.writeFileSync(path.join(f.stage,'extra'),'fixture');
   assert.throws(()=>migrateDataFolder(f),/staging copy does not match/);assert.equal(fs.existsSync(f.target),false);
 });
@@ -162,7 +164,7 @@ test('FIFO is skipped and reported',{skip:process.platform==='win32'},t=>{
   assert.deepEqual(inspectDataMigration(f).skipped,['pipe']);
   assert.deepEqual(migrateDataFolder(f).skipped,['pipe']);assert.equal(fs.existsSync(path.join(f.target,'pipe')),false);
 });
-test('pairing, quota, peer and settings survive migration and Windows paths update once',async t=>{
+test('pairing, quota, peer and settings survive migration and Windows paths update once',mac,async t=>{
   const f=fixture(t,{pairing:true}),now=1700000000000;
   await privateSyncDirectory(f.legacy,true);
   const pairing=createPairingConfigurations().Mac;
@@ -198,7 +200,7 @@ test('pairing, quota, peer and settings survive migration and Windows paths upda
   assert.deepEqual(await updateWindowsPeerPaths({runtime:f.target}),{state:'unchanged'});
 });
 
-test('empty destination can be replaced and linked folders are refused',t=>{
+test('empty destination can be replaced and linked folders are refused',mac,t=>{
   const f=fixture(t);fs.mkdirSync(f.target);
   assert.equal(migrateDataFolder(f).state,'migrated');
   for(const field of ['legacy','target','stage']) {
@@ -210,7 +212,7 @@ test('empty destination can be replaced and linked folders are refused',t=>{
   assert.throws(()=>migrateDataFolder({...g,legacy:path.join(alias,appNames.legacy.dataFolder),
     target:path.join(alias,appNames.visible.dataFolder),stage:path.join(alias,'.migration')}),/ancestor refused/);
 });
-test('Windows peer path updates preserve separators and require the exact parent segment',async t=>{
+test('Windows peer path updates preserve separators and require the exact parent segment',mac,async t=>{
   const f=fixture(t,{pairing:true});migrateDataFolder(f);
   const pairing=createPairingConfigurations().Mac;
   pairing.transport={kind:'ssh-windows',hostAlias:'synthetic-host',
