@@ -1,3 +1,6 @@
+import {estimate} from './api-estimate.mjs';
+import {prices} from './price-table.mjs';
+
 const counters=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens','requestCount'];
 // Accept known Claude family/version shapes, including dated stable releases,
 // but never carry arbitrary local model text into the dashboard.
@@ -68,5 +71,23 @@ export function attachProviderTokenSources(result,sources) {
   result.status.sourcesConfigured+=configured.length;
   result.status.sourcesRead+=configured.filter(source=>source.status==='ok').length;
   result.status.state=result.status.sourcesConfigured>0 && result.status.sourcesConfigured===result.status.sourcesRead?'ok':'partial';
+  return result;
+}
+
+export function attachProviderTokenEstimates(result) {
+  if(!result?.data || typeof result.data!=='object' || Array.isArray(result.data)) throw Error('Invalid provider estimate attachment');
+  if(Array.isArray(result.data.providerTokenSources)) {
+    result.data.providerTokenSources=result.data.providerTokenSources.map(row=>{
+      if(row?.provider!=='claude-code' || row.status!=='ok' || !Array.isArray(row.days)) return row;
+      const days=row.days.map(day=>{
+        // A day without a model list keeps no estimate rather than failing the collection.
+        if(!Array.isArray(day?.models)) return day;
+        const models=day.models.map(model=>({...model,apiEstimate:estimate([model])}));
+        return {...day,models,apiEstimate:estimate(models)};
+      });
+      return {...row,days};
+    });
+  }
+  result.data.prices={source:prices.source,checkedOn:prices.checkedOn};
   return result;
 }
