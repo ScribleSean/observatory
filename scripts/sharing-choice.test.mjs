@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
 import {mkdtemp,realpath,rm,lstat,readFile,writeFile,symlink,chmod,unlink,mkdir,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
-import {chooseSharing,applySharingChoice,readSharingChoice,clearSharingChoice} from './sharing-choice.mjs';
+import {chooseSharing,applySharingChoice,readSharingChoice,clearSharingChoice,markSharingChoiceApplied} from './sharing-choice.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
 import {readProviderTokenState,updateProviderTokenSource} from './provider-token-store.mjs';
@@ -42,6 +44,27 @@ async function controls(runtime) {
     assert.ok(reasons.includes(status.reason));
   }
 }
+for(const paired of [false,true])test(`missing intent with pairing ${paired} only checks the intent path`,async t=>{
+  const {runtime}=await fixture(t,paired);
+  const before=await readdir(runtime,{recursive:true});
+  const stat=t.mock.method(fs,'lstat');
+  syncBuiltinESMExports();
+  try {
+    await markSharingChoiceApplied(runtime,'codex-limits');
+    assert.deepEqual(stat.mock.calls.map(call=>call.arguments),[[filename(runtime)]]);
+  } finally {stat.mock.restore();syncBuiltinESMExports();}
+  assert.deepEqual(await readdir(runtime,{recursive:true}),before);
+});
+test('marking an existing choice applies only the requested channel',async t=>{
+  const {runtime}=await fixture(t);
+  await chooseSharing(runtime,{enabled:true});
+  const intent=JSON.parse(await readFile(filename(runtime),'utf8'));
+  for(const channel of channels) {
+    await markSharingChoiceApplied(runtime,channel);
+    intent.applied[channel]=true;
+    assert.deepEqual(JSON.parse(await readFile(filename(runtime),'utf8')),intent);
+  }
+});
 test('choice requires an active pairing and boolean consent',async t=>{
   const {runtime}=await fixture(t,false);
   await assert.rejects(chooseSharing(runtime,{enabled:true}));

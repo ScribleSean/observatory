@@ -70,6 +70,7 @@ export const chooseSharing=(runtime,{enabled})=>withPeerStateLock(runtime,async(
 });
 
 export async function markSharingChoiceApplied(runtime,channel) {
+  try {await lstat(path.join(runtime,'private-sync','sharing-choice.json'));}catch(error){if(error.code==='ENOENT')return;}
   try {await withPeerStateLock(runtime,async()=>{
     if(!channels.includes(channel))return;
     const pair=await readPairing(runtime),intent=pair?await readIntent(runtime,pair):null;
