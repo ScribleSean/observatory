@@ -32,7 +32,7 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
     recursive: true,
   });
   await writeFile(path.join(runtime, 'collector.config.json'), JSON.stringify({
-    activity: false, codex: false, claude: false, wispr: false, quota: false,
+    activity: true, codex: false, claude: false, wispr: false, quota: false,
     receipts: true, benchmarks: true,
   }));
   const receipts = path.join(runtime, 'receipts');
@@ -58,6 +58,7 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
     calls = [];
   const command = async (file, args) => {
     calls.push({ file, args });
+    if (file === '/usr/sbin/scutil') return { stdout: 'fixture-host\n' };
     throw Error('Unexpected fixture command');
   };
   childProcess.execFile = () => {
@@ -70,6 +71,10 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
   };
   globalThis.fetch = async (...args) => {
     calls.push({ file: 'fetch', args });
+    if (String(args[0]).endsWith('/api/0/buckets/'))
+      return new Response(JSON.stringify({}), {
+        headers: { 'Content-Type': 'application/json' },
+      });
     throw Error('Synthetic activity unavailable');
   };
   syncBuiltinESMExports();
@@ -78,13 +83,21 @@ test('bundled Mac collector honors its private runtime and ignores legacy hub se
       pathToFileURL(path.join(bundle, 'scripts/collect-mac.mjs'))
     );
     await collectMac(runtime, '/fixture/python3');
+    assert.ok(calls.some((call) => call.file === 'fetch'));
     const recorded = JSON.stringify(calls);
-    for (const value of ['/fixture/ccusage', 'retired-host', 'windows-host'])
+    for (const value of [
+      '/fixture/ccusage', 'retired-host', 'windows-host',
+      '/fictional/.codex', '/home/fixture/.codex', '/mnt/c/Users/fixture/.codex',
+      '/home/fixture/results', receipts,
+    ])
       assert.equal(recorded.includes(value), false);
     assert.deepEqual(await readdir(bundle), ['scripts']);
     const data = JSON.parse(
       await readFile(path.join(runtime, 'public/local/usage.json'), 'utf8'),
     );
+    const activity = data.activity.find((source) => source.host === 'Mac');
+    assert.ok(activity);
+    assert.ok(['ok', 'unavailable'].includes(activity.status));
     assert.equal(
       data.tokens.some((source) => source.host === 'Ubuntu'),
       false,
