@@ -175,7 +175,7 @@ void test('the invitation warning appears once before and after a failed status 
   await f.answer(f.last('check-updates'));
   assert.equal(f.container.querySelector('textarea[readonly]').value, invitation);
   assert.equal(warningCount(), 1);
-  assert.equal(f.container.querySelectorAll('input[aria-checked="mixed"]').length, 9);
+  assert.equal(f.container.querySelectorAll('input[aria-checked="mixed"]').length, 8);
   assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Copy invitation'));
 });
 
@@ -236,7 +236,7 @@ void test('host Confirm posts the status fingerprint and peer endpoint', async t
   await f.input(field('Peer port'), '9090');
   await f.click('Confirm');
   assert.deepEqual(f.last('pairing-host-confirm').args, {
-    fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090,
+    fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090, sharing: false,
   });
   assert.equal(f.last('pairing-join-confirm'), undefined);
   await f.answer(f.last('pairing-host-confirm'));
@@ -254,7 +254,7 @@ void test('join Confirm posts join confirmation and hides claimed invitation con
   assert.ok(!f.container.textContent.includes('Peer fingerprint'));
   assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Claim'));
   await f.click('Confirm');
-  assert.deepEqual(f.last('pairing-join-confirm').args, {});
+  assert.deepEqual(f.last('pairing-join-confirm').args, { sharing: false });
   assert.equal(f.last('pairing-host-confirm'), undefined);
   await f.answer(f.last('pairing-join-confirm'));
   for (const state of ['local-ready', 'acknowledged', 'paired']) {
@@ -284,3 +284,91 @@ for (const state of ['waiting', 'confirming', 'awaiting-confirmation', 'local-re
     assert.equal(count(), paired);
   });
 }
+
+const fieldFor = (f, label) => [...f.container.querySelectorAll('label')].find(node => node.textContent === label)?.querySelector('input');
+
+void test('opening host requests defaults once and fills editable fields with a port warning', async t => {
+  const f = await fixture(t, 'idle');
+  assert.equal(f.last('pairing-host-defaults'), undefined);
+  await f.click('Pair a device');
+  await f.click('Host on this device');
+  const request = f.last('pairing-host-defaults');
+  assert.ok(request);
+  await f.answer(request, { value: { address: '100.101.102.103', port: 43128, portAvailable: false } });
+  assert.equal(fieldFor(f, "This device's address").value, '100.101.102.103');
+  assert.equal(fieldFor(f, "This device's sync port").value, '43128');
+  assert.match(f.container.textContent, /This port is in use/);
+  await f.click('Check for updates');
+  await f.answer(f.last('check-updates'));
+  assert.equal(f.messages.filter(message => message.action === 'pairing-host-defaults').length, 1);
+  await f.input(fieldFor(f, "This device's sync port"), '43129');
+  assert.doesNotMatch(f.container.textContent, /This port is in use/);
+  await f.click('Start');
+  assert.deepEqual(f.last('pairing-host-start').args, { address: '100.101.102.103', port: 43129 });
+});
+
+for (const value of [
+  { address: '100.101.102.103', port: 43128, portAvailable: false, extra: true },
+  { address: 'example.test', port: 43128, portAvailable: true },
+  { address: '100.101.102.103', port: '43128', portAvailable: null },
+]) {
+  void test('invalid host defaults leave both fields empty', async t => {
+    const f = await fixture(t);
+    await f.answer(f.last('pairing-host-defaults'), { value });
+    assert.equal(fieldFor(f, "This device's address").value, '');
+    assert.equal(fieldFor(f, "This device's sync port").value, '');
+    assert.doesNotMatch(f.container.textContent, /This port is in use/);
+  });
+}
+
+void test('null defaults leave the address empty without a warning', async t => {
+  const f = await fixture(t);
+  await f.answer(f.last('pairing-host-defaults'), { value: { address: null, port: 43128, portAvailable: null } });
+  assert.equal(fieldFor(f, "This device's address").value, '');
+  assert.equal(fieldFor(f, "This device's sync port").value, '43128');
+  assert.doesNotMatch(f.container.textContent, /This port is in use/);
+});
+
+void test('delayed host defaults preserve edited fields', async t => {
+  const f = await fixture(t);
+  await f.input(fieldFor(f, "This device's address"), 'fd7a:115c:a1e0::1234');
+  await f.answer(f.last('pairing-host-defaults'), { value: { address: '100.101.102.103', port: 43128, portAvailable: true } });
+  assert.equal(fieldFor(f, "This device's address").value, 'fd7a:115c:a1e0::1234');
+});
+
+for (const host of [true, false]) {
+  void test(`pairing ${host ? 'host' : 'join'} sends the checked sharing choice`, async t => {
+    const f = await fixture(t, 'awaiting-confirmation');
+    if (host) {
+      Object.assign(f.status.pairing, { state: 'confirming', peerFingerprint: 'ab'.repeat(32) });
+      await f.click('Check for updates');
+      await f.answer(f.last('check-updates'));
+      await f.answer(f.last('pairing-peer-address'), { value: { peerAddress: 'fd7a:115c:a1e0::1234' } });
+      assert.equal(fieldFor(f, 'Peer address').value, 'fd7a:115c:a1e0::1234');
+      assert.equal(fieldFor(f, 'Peer port').value, '43128');
+      await f.click('Check for updates');
+      await f.answer(f.last('check-updates'));
+      assert.equal(f.messages.filter(message => message.action === 'pairing-peer-address').length, 1);
+    }
+    const boxes = [...f.container.querySelectorAll('label')].filter(node => node.textContent === 'Share usage records with the paired device');
+    const checkbox = boxes[0].querySelector('input');
+    assert.equal(checkbox.checked, false);
+    await act(async () => checkbox.click());
+    await f.click('Confirm');
+    assert.deepEqual(f.last(host ? 'pairing-host-confirm' : 'pairing-join-confirm').args, host ?
+      { fingerprint: 'ab'.repeat(32), peerAddress: 'fd7a:115c:a1e0::1234', peerPort: 43128, sharing: true } : { sharing: true });
+  });
+}
+
+void test('one sharing switch posts the choice and channel rows have no switches', async t => {
+  const f = await fixture(t, 'paired');
+  for (const label of ['Share Codex limits', 'Share Claude Code tokens']) assert.equal(fieldFor(f, label), undefined);
+  const choice = fieldFor(f, 'Share usage records with the paired device');
+  await act(async () => choice.click());
+  assert.deepEqual(f.last('set-sharing-choice').args, { enabled: true });
+  assert.equal(f.last('set-sharing'), undefined);
+  f.status.sharingChoice = { chosen: true, channels: { 'codex-limits': 'on', 'claude-code-tokens': 'waiting-for-reading' } };
+  await f.answer(f.last('set-sharing-choice'));
+  assert.equal(choice.checked, true);
+  assert.match(f.container.textContent, /Waiting for a reading/);
+});

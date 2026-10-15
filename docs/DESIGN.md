@@ -304,10 +304,10 @@ The real boundary is which documents the dashboard web view loads, because only 
 
 #### How many at once
 
-- `status` and `pairing-cancel` skip both limits below and are handled at once. `status` is answered from the cache. `pairing-cancel` writes `cancel` to the control pipe even while another pairing command is waiting for its reply, which the control process accepts.
+- `status`, `pairing-peer-address` and `pairing-cancel` skip both limits below and are handled at once. `status` and `pairing-peer-address` are answered from the cache. `pairing-cancel` writes `cancel` to the control pipe even while another pairing command is waiting for its reply, which the control process accepts.
 - For every other action, at most one message per action name is in flight. A repeat of a name that is in flight gets `busy`.
 - At most four of those messages wait in a queue behind the one being handled. A message that does not fit gets `busy`.
-- While a native dialog or save panel is open, every action except `status` and `pairing-cancel` gets `busy`, so two native dialogs are never open at once.
+- While a native dialog or save panel is open, every action except `status`, `pairing-peer-address` and `pairing-cancel` gets `busy`, so two native dialogs are never open at once.
 - `status` and `tailscale-check` never start a process per message. The shell refreshes the sharing and Tailscale parts of its own cache at most once every 5 seconds and answers from that cache.
 
 #### Results
@@ -326,7 +326,7 @@ The native pairing window today owns the control process and a collection reserv
 - A session that began on `pairing-identity-create` or `pairing-host-defaults` ends when that step returns. Hosting or joining then begins a new session.
 - The session ends, the control process is stopped and the collection reservation is released on a finished pairing, on `pairing-cancel`, on a failure, when the dashboard window closes, when the dashboard document is replaced, and when the 10 minute limit of the control process (`peer-tls-control.mjs`) runs out.
 - While a session is open, `refresh`, `set-sharing`, `set-sharing-choice`, `pairing-disconnect` and `pairing-repair-prepare` get `busy`. While any of those is running, or while the native direct pairing window or the SSH pairing item is open, a pairing action gets `busy`.
-- `pairing-cancel` and `status` never get `busy`.
+- `pairing-cancel`, `pairing-peer-address` and `status` never get `busy`.
 - The shell polls the control process itself, at the interval the native window uses today (2 seconds), and keeps the pairing state in its own cache. `status` reads that cache and never sends a command to the control process, so page polling cannot use up the control process's limit of 512 commands.
 - The shell numbers the commands it writes to the control pipe itself. It never forwards the page's `id`, because a reused id stops the control process.
 
