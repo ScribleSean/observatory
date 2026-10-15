@@ -30,6 +30,11 @@ const paths = [
   'native/DesignTokens.swift',
   'native/windows/DesignTokens.cs',
   'native/prices.json',
+  'native/design-tokens.json',
+  'native/skins/**',
+  'native/windows/runtime-assets.ps1',
+  'native/windows/runtime-assets.json',
+  '.gitattributes',
 ];
 
 test('script suite triggers are exactly pull requests, pushes and manual dispatch', () => {
@@ -48,7 +53,7 @@ test('manual dispatch has no inputs', () => {
 });
 
 for (const event of ['pull_request', 'push']) {
-  test(`${event} has exactly the fifteen script suite paths`, () => {
+  test(`${event} has exactly the twenty script suite paths`, () => {
     const block = triggers.match(new RegExp(`^  ${event}:\\n([\\s\\S]*?)(?=^  \\w|$(?![\\s\\S]))`, 'm'))?.[1];
     assert.deepEqual(
       [...block.matchAll(/^      - '([^']+)'$/gm)].map((match) => match[1]),

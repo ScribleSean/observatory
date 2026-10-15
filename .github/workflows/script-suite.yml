@@ -17,6 +17,11 @@ on:
       - 'native/DesignTokens.swift'
       - 'native/windows/DesignTokens.cs'
       - 'native/prices.json'
+      - 'native/design-tokens.json'
+      - 'native/skins/**'
+      - 'native/windows/runtime-assets.ps1'
+      - 'native/windows/runtime-assets.json'
+      - '.gitattributes'
   push:
     branches: [main]
     paths:
@@ -35,6 +40,11 @@ on:
       - 'native/DesignTokens.swift'
       - 'native/windows/DesignTokens.cs'
       - 'native/prices.json'
+      - 'native/design-tokens.json'
+      - 'native/skins/**'
+      - 'native/windows/runtime-assets.ps1'
+      - 'native/windows/runtime-assets.json'
+      - '.gitattributes'
   workflow_dispatch:
 permissions:
   contents: read
