@@ -3,23 +3,36 @@ using Microsoft.Web.WebView2.WinForms;
 
 namespace WorkspaceObservatory;
 
-// The shared viewer in the main window. Shown only with --web-dashboard. The
-// native dashboard stays the default and is not used or changed by this class.
+// The shared viewer is the default main window.
 internal sealed class WebDashboard : Form
 {
     internal const string Page = "dashboard.html";
-    private readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = DashboardPalette.Background(false) };
+    private readonly WebView2 web = new() { Dock = DockStyle.Fill };
     private readonly string runtime;
     private readonly Task started;
 
-    internal WebDashboard(string runtime)
+    private readonly BridgeHandler? handler;
+    private string? section;
+    private long documentNumber;
+    internal long DocumentNumber => documentNumber;
+    private bool drawn, bridgeClosed;
+    private string? viewerScript;
+    private Task viewerWork = Task.CompletedTask;
+    private const string RuntimeMessage = "The dashboard could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window.";
+
+    internal WebDashboard(string runtime, BridgeHandler? handler = null, string? section = null)
     {
         this.runtime = runtime;
+        this.handler = handler;
+        this.section = section is not null && Fragments.Contains(section, StringComparer.Ordinal) ? section : null;
+        FormClosing += (_, _) => CloseBridge();
         Text = "Observatory";
         Size = new Size(1150, 770);
         MinimumSize = new Size(800, 550);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = DashboardPalette.Background(false);
+        var light = WebHostColors.Light(WebViewerPreferences.Read(runtime).Theme ?? "system");
+        BackColor = web.DefaultBackgroundColor = WebHostColors.Background(light);
+        ForeColor = WebHostColors.Text(light);
         Controls.Add(web);
         started = Start();
     }
@@ -47,35 +60,114 @@ internal sealed class WebDashboard : Form
             core.Settings.IsPasswordAutosaveEnabled = false;
             core.Settings.IsGeneralAutofillEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
-            // No action reaches the app from this window until the settings
-            // bridge contract exists. The page only reads the snapshot.
-            core.Settings.IsWebMessageEnabled = false;
+            core.Settings.IsWebMessageEnabled = handler is not null;
+            if (handler is not null) core.WebMessageReceived += (_, e) =>
+            {
+                string? text;
+                try { text = e.TryGetWebMessageAsString(); }
+                catch (ArgumentException) { text = null; }
+                var source = e.Source;
+                var number = documentNumber;
+                // Handle the message after this event returns, because an action may open a native dialog.
+                BeginInvoke(new Action(() =>
+                {
+                    if (IsDisposed || Disposing || web.IsDisposed) return;
+                    handler.Receive(text, source, number, json =>
+                    {
+                        if (!IsDisposed && !Disposing && !web.IsDisposed) core.PostWebMessageAsJson(json);
+                    });
+                }));
+            };
+            core.ProcessFailed += (_, e) =>
+            {
+                // Other process kinds are restarted by WebView2 and keep the document.
+                if (e.ProcessFailedKind is not (CoreWebView2ProcessFailedKind.BrowserProcessExited or
+                    CoreWebView2ProcessFailedKind.RenderProcessExited or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)) return;
+                documentNumber++;
+                handler?.DocumentReplaced(documentNumber);
+                if (!IsDisposed && !web.IsDisposed)
+                    ShowError(drawn ? "The dashboard stopped. Close this window and open it again from the tray." : RuntimeMessage);
+            };
+            core.NavigationCompleted += async (_, _) =>
+            {
+                var number = documentNumber;
+                try
+                {
+                    for (var attempt = 0; attempt < 400 && !IsDisposed && !web.IsDisposed && number == documentNumber; attempt++)
+                    {
+                        if (await core.ExecuteScriptAsync("window.observatoryDashboardReady === true") == "true")
+                        { if (number == documentNumber) drawn = true; return; }
+                        await Task.Delay(25);
+                    }
+                }
+                catch { }
+            };
             core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
             core.WebResourceRequested += (_, e) => WebPanel.Respond(environment, e, runtime, Page);
-            core.NavigationStarting += (_, e) => { if (!AllowsNavigation(e.Uri)) e.Cancel = true; };
+            core.NavigationStarting += (_, e) =>
+            {
+                if (!AllowsNavigation(e.Uri)) e.Cancel = true;
+            };
+            core.ContentLoading += (_, _) => { documentNumber++; handler?.DocumentReplaced(documentNumber); };
             core.FrameNavigationStarting += (_, e) => e.Cancel = true;
             core.NewWindowRequested += (_, e) => e.Handled = true;
             core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
             core.DownloadStarting += (_, e) => e.Cancel = true;
-            // Read once per web view. Changes apply when the next window is created.
-            var (skin, theme) = WebViewerPreferences.Read();
-            await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
+            // Seed new documents with the saved viewer choices.
+            var (skin, theme) = WebViewerPreferences.Read(runtime);
+            viewerScript = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebViewerPreferences.DocumentStartScript(skin, theme));
             if (IsDisposed || web.IsDisposed) return;
-            core.Navigate(WebPanel.Origin + "/" + Page);
+            core.Navigate(WebPanel.Origin + "/" + Page + (section is null ? "" : "#" + section));
         }
         catch
         {
             if (IsDisposed || web.IsDisposed) return;
-            ShowError("The dashboard could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window.");
+            ShowError(RuntimeMessage);
         }
+    }
+
+    private void CloseBridge()
+    {
+        if (bridgeClosed) return;
+        bridgeClosed = true;
+        _ = handler?.CloseAsync();
+    }
+
+    // Only a fragment change, which keeps the document and any pairing session.
+    internal void ShowSection(string section)
+    {
+        if (!Fragments.Contains(section, StringComparer.Ordinal)) return;
+        this.section = section;
+        if (!IsDisposed && !web.IsDisposed && started.IsCompletedSuccessfully && web.CoreWebView2 is { } core)
+            _ = core.ExecuteScriptAsync("location.hash = '#" + section + "'");
     }
 
     private void ShowError(string message)
     {
         Controls.Remove(web);
         web.Dispose();
-        Controls.Add(new Label { Dock = DockStyle.Fill, ForeColor = DashboardPalette.Text(false), Padding = new Padding(30),
+        Controls.Add(new Label { Dock = DockStyle.Fill, ForeColor = this.ForeColor, Padding = new Padding(30),
             Text = message });
+    }
+
+    internal void ApplyViewer(string skin, string appearance)
+    {
+        var previous = viewerWork;
+        viewerWork = ReplaceViewer(previous, WebViewerPreferences.DocumentStartScript(skin, appearance));
+    }
+
+    private async Task ReplaceViewer(Task previous, string script)
+    {
+        try
+        {
+            await previous;
+            await started;
+            if (IsDisposed || web.IsDisposed || web.CoreWebView2 is not { } core) return;
+            if (viewerScript is not null) core.RemoveScriptToExecuteOnDocumentCreated(viewerScript);
+            viewerScript = await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            if (!IsDisposed && !web.IsDisposed) await core.ExecuteScriptAsync(script);
+        }
+        catch { }
     }
 
     internal async Task<string> RunScriptForTest(string script)
@@ -112,7 +204,7 @@ internal sealed class WebDashboard : Form
                   width: innerWidth, height: innerHeight, dark: matchMedia('(prefers-color-scheme: dark)').matches,
                   font: getComputedStyle(document.querySelector('main') ?? document.body).fontFamily, textLength: document.body.innerText.length})
                 """);
-            if (facts.Contains("\\\"ready\\\":true", StringComparison.Ordinal)) return facts;
+            if (facts.Contains("\\\"ready\\\":true", StringComparison.Ordinal)) { drawn = true; return facts; }
             await Task.Delay(50);
         }
         return IsDisposed || web.IsDisposed ? "unavailable" : "not ready";
@@ -200,7 +292,7 @@ internal sealed class WebDashboard : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) web.Dispose();
+        if (disposing) { CloseBridge(); web.Dispose(); }
         base.Dispose(disposing);
     }
 }

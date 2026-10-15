@@ -35,6 +35,7 @@ internal sealed class Collector : IDisposable
     }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
+    internal bool CollectionPaused => pairingPaused;
     internal bool SharingAvailable => !Busy && !pairingPaused && !lifetime.IsCancellationRequested;
 
     // Queue only. Never perform file or network work inside a power broadcast.
@@ -182,6 +183,15 @@ internal sealed class Collector : IDisposable
         catch { /* Missing or invalid state waits for the normal full refresh. */ }
     }
 
+    internal async Task RefreshAllowancesThenAll()
+    {
+        bool quota;
+        try { quota = ReadConfiguration()["quota"]?.GetValue<bool>() == true; }
+        catch { quota = false; }
+        if (quota) await Refresh(quotaOnly: true);
+        await Refresh(quotaOnly: false);
+    }
+
     internal Task Refresh() => Refresh(quotaOnly: false);
 
     private static void WriteAttemptStatus(string runtime, bool quotaOnly, string state)
@@ -209,16 +219,22 @@ internal sealed class Collector : IDisposable
             if (!File.Exists(node)) node = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "node.exe");
             var script = Path.Combine(AppContext.BaseDirectory, "Collector", "scripts", "collect-windows.mjs");
             if (!File.Exists(node) || !File.Exists(script)) throw new InvalidOperationException("Collector runtime unavailable");
+            var python = Path.Combine(AppContext.BaseDirectory, "Runtime", "python", "python.exe");
+            if (!File.Exists(python))
+            {
+                WriteAttemptStatus(runtime, quotaOnly, "failed");
+                return;
+            }
             if (quotaOnly) WriteAttemptStatus(runtime, true, "running");
             using var process = new Process { StartInfo = new ProcessStartInfo(node)
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true } };
+                    RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = runtime } };
             process.StartInfo.ArgumentList.Add(script);
             process.StartInfo.ArgumentList.Add("--native-owner-lease");
             if (quotaOnly) process.StartInfo.ArgumentList.Add("--quota-only");
-            process.StartInfo.Environment["OBSERVATORY_RUNTIME"] = runtime;
-            var python = Path.Combine(AppContext.BaseDirectory, "Runtime", "python", "python.exe");
-            if (File.Exists(python)) process.StartInfo.Environment["OBSERVATORY_PYTHON"] = python;
+            process.StartInfo.Environment.Clear();
+            foreach (var entry in BuildLaunchEnvironment(runtime, python))
+                process.StartInfo.Environment[entry.Key] = entry.Value;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             timeout.CancelAfter(TimeSpan.FromSeconds(240));
             timeout.Token.ThrowIfCancellationRequested();
@@ -253,6 +269,34 @@ internal sealed class Collector : IDisposable
     }
 
     public void Dispose() { trustedSync.RequestStop(); timer.Stop(); timer.Dispose(); allowanceTimer.Stop(); allowanceTimer.Dispose(); lifetime.Cancel(); lifetime.Dispose(); }
+
+    internal static Dictionary<string, string> BuildLaunchEnvironment(string runtime, string python)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[] { "SystemRoot", "windir", "SystemDrive", "PATH", "PATHEXT", "TEMP", "TMP",
+            "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "ProgramData", "ProgramFiles",
+            "ProgramFiles(x86)", "ProgramW6432", "CommonProgramFiles", "USERNAME", "USERDOMAIN", "COMPUTERNAME",
+            "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "TZ", "CLAUDE_CONFIG_DIR" })
+            if (Environment.GetEnvironmentVariable(name) is { } value) result[name] = value;
+        result["OBSERVATORY_RUNTIME"] = runtime;
+        result["OBSERVATORY_PYTHON"] = python;
+        return result;
+    }
+
+    internal static void LaunchSelfTest()
+    {
+        var names = new[] { "NODE_OPTIONS", "PYTHONPATH", "PYTHONHOME", "SystemRoot" };
+        var previous = names.Select(Environment.GetEnvironmentVariable).ToArray();
+        try
+        {
+            foreach (var name in names) Environment.SetEnvironmentVariable(name, "synthetic");
+            var environment = BuildLaunchEnvironment("synthetic-runtime", "synthetic-python");
+            if (names.Take(3).Any(environment.ContainsKey) || environment["SystemRoot"] != "synthetic" ||
+                environment["OBSERVATORY_RUNTIME"] != "synthetic-runtime" || environment["OBSERVATORY_PYTHON"] != "synthetic-python")
+                throw new InvalidOperationException("Collector launch environment failed.");
+        }
+        finally { for (int i = 0; i < names.Length; i++) Environment.SetEnvironmentVariable(names[i], previous[i]); }
+    }
 
     internal static void ShutdownSelfTest()
     {
