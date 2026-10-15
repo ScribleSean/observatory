@@ -72,6 +72,7 @@ export function createSettingsController(bridge: Bridge, getGeneration: () => nu
     tailscaleCheck: () => send('tailscale-check'),
     checkUpdates: () => send('check-updates'),
     exportData: () => send('export-data'),
+    completeSetup: () => send('complete-setup'),
     dispose() { disposed = true; stopLate(); listeners.clear(); lateListeners.clear(); requestGenerations.clear(); },
   };
 }
