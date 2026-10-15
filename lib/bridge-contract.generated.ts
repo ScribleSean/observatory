@@ -33,7 +33,20 @@ export const BRIDGE_CONTRACT = {
     "version": 1,
     "maxBytes": 16384,
     "appVersionMaxLength": 32,
-    "customSkinsMax": 32
+    "customSkinsMax": 32,
+    "fields": [
+      "version",
+      "app",
+      "sources",
+      "skin",
+      "deviceName",
+      "startup",
+      "appearance",
+      "limitsConsent",
+      "collectionPaused",
+      "pairing",
+      "sharing"
+    ]
   },
   "dashboardFragments": [
     "limits",
@@ -331,13 +344,12 @@ export const BRIDGE_CONTRACT = {
       "value": true
     },
     "complete-setup": {
-      "args": {},
-      "reserved": true
+      "args": {}
     }
   }
 } as const;
 
-export type BridgeAction = "refresh" | "check-updates" | "open-dashboard" | "open-settings" | "set-source" | "set-skin" | "set-device-name" | "set-startup" | "set-appearance" | "set-limits-consent" | "set-sharing" | "pairing-identity-create" | "pairing-host-start" | "pairing-copy-invitation" | "pairing-host-confirm" | "pairing-join-claim" | "pairing-join-confirm" | "pairing-cancel" | "pairing-disconnect" | "pairing-repair-prepare" | "tailscale-check" | "export-data" | "status";
+export type BridgeAction = "refresh" | "check-updates" | "open-dashboard" | "open-settings" | "set-source" | "set-skin" | "set-device-name" | "set-startup" | "set-appearance" | "set-limits-consent" | "set-sharing" | "pairing-identity-create" | "pairing-host-start" | "pairing-copy-invitation" | "pairing-host-confirm" | "pairing-join-claim" | "pairing-join-confirm" | "pairing-cancel" | "pairing-disconnect" | "pairing-repair-prepare" | "tailscale-check" | "export-data" | "status" | "complete-setup";
 export type BridgeArgs = {
   "refresh": Record<string, never>;
   "check-updates": Record<string, never>;
@@ -362,6 +374,7 @@ export type BridgeArgs = {
   "tailscale-check": Record<string, never>;
   "export-data": Record<string, never>;
   "status": Record<string, never>;
+  "complete-setup": Record<string, never>;
 };
 export type BridgeCode = "done" | "refused" | "busy" | "cancelled" | "unavailable" | "expired";
 export type BridgeResultDetail = { id: number; ok: boolean; code: BridgeCode; value?: unknown };

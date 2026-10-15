@@ -18,7 +18,8 @@
     "version": 1,
     "maxBytes": 16384,
     "appVersionMaxLength": 32,
-    "customSkinsMax": 32
+    "customSkinsMax": 32,
+    "fields": ["version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing"]
   },
   "dashboardFragments": ["limits", "activity", "tokens", "dictation", "sources", "settings", "setup"],
   "whiteSpace": [9, 10, 11, 12, 13, 32, 133, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288],
@@ -109,6 +110,6 @@
     "tailscale-check": { "args": {}, "value": true },
     "export-data": { "args": {} },
     "status": { "args": {}, "immediate": true, "value": true },
-    "complete-setup": { "args": {}, "reserved": true }
+    "complete-setup": { "args": {} }
   }
 }

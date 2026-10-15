@@ -221,3 +221,66 @@ void test('disclosure confirmation obeys the single action gate', async t => {
   assert.equal(f.container.querySelector('.ob-settings-disclosure'), null);
   await f.answer(f.last('set-limits-consent'));
 });
+
+void test('host Confirm posts the status fingerprint and peer endpoint', async t => {
+  const f = await fixture(t);
+  await f.hosted();
+  Object.assign(f.status.pairing, { state: 'confirming', peerFingerprint: 'ab'.repeat(32) });
+  await f.click('Check for updates');
+  await f.answer(f.last('check-updates'));
+  const field = label => [...f.container.querySelectorAll('label')].find(node => node.textContent === label)?.querySelector('input');
+  assert.equal(field('Peer fingerprint').value, 'ab'.repeat(32));
+  assert.equal(field("This device's address"), undefined);
+  assert.equal(field("This device's sync port"), undefined);
+  await f.input(field('Peer address'), '100.64.0.2');
+  await f.input(field('Peer port'), '9090');
+  await f.click('Confirm');
+  assert.deepEqual(f.last('pairing-host-confirm').args, {
+    fingerprint: 'ab'.repeat(32), peerAddress: '100.64.0.2', peerPort: 9090,
+  });
+  assert.equal(f.last('pairing-join-confirm'), undefined);
+  await f.answer(f.last('pairing-host-confirm'));
+});
+
+void test('join Confirm posts join confirmation and hides claimed invitation controls', async t => {
+  const f = await fixture(t, 'idle');
+  await f.click('Pair a device');
+  await f.click('Join with an invitation');
+  await f.input(f.container.querySelector('textarea'), invitation);
+  await f.click('Claim');
+  Object.assign(f.status.pairing, { state: 'awaiting-confirmation', peerFingerprint: null });
+  await f.answer(f.last('pairing-join-claim'));
+  assert.equal(f.container.querySelector('textarea'), null);
+  assert.ok(!f.container.textContent.includes('Peer fingerprint'));
+  assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Claim'));
+  await f.click('Confirm');
+  assert.deepEqual(f.last('pairing-join-confirm').args, {});
+  assert.equal(f.last('pairing-host-confirm'), undefined);
+  await f.answer(f.last('pairing-join-confirm'));
+  for (const state of ['local-ready', 'acknowledged', 'paired']) {
+    f.status.pairing.state = state;
+    await f.click('Check for updates');
+    await f.answer(f.last('check-updates'));
+    assert.equal(f.container.querySelector('textarea'), null);
+    assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Claim'));
+  }
+});
+
+for (const state of ['waiting', 'confirming', 'awaiting-confirmation', 'local-ready', 'acknowledged']) {
+  void test(`pairing polls in ${state} and stops when paired`, async t => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const f = await fixture(t, 'waiting');
+    Object.assign(f.status.pairing, { state, peerFingerprint: state === 'confirming' ? 'ab'.repeat(32) : null });
+    const count = () => f.messages.filter(message => message.action === 'status').length;
+    const tick = async () => act(async () => t.mock.timers.tick(10000));
+    await tick();
+    const before = count();
+    await tick();
+    assert.ok(count() > before);
+    Object.assign(f.status.pairing, { state: 'paired', peerFingerprint: null });
+    await tick();
+    const paired = count();
+    await tick();
+    assert.equal(count(), paired);
+  });
+}

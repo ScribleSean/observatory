@@ -550,6 +550,8 @@ internal sealed class BridgeHandler : IDisposable
                 }
                 finally { lock (gate) working = false; }
                 break;
+            // First-run completion is implemented with O1-2. Until then it changes nothing.
+            case "complete-setup": return new("unavailable");
             default: return await Pairing(request);
         }
         return new("done");
@@ -591,6 +593,9 @@ internal sealed class BridgeHandler : IDisposable
                     ["bundled"] = new JsonArray(BridgeSettingsStore.Bundled.Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()), ["custom"] = new JsonArray() },
                 ["deviceName"] = files.Device, ["startup"] = files.Startup, ["appearance"] = viewer.Appearance,
                 ["limitsConsent"] = files.LimitsConsent,
+                // Held while a pairing session reserves collection, while disconnect or repair runs,
+                // and while collection stays paused after unverified pairing work.
+                ["collectionPaused"] = session is not null || working || host.CollectionPaused,
                 ["pairing"] = new JsonObject { ["state"] = state, ["peerFingerprint"] = state == "confirming" ? fingerprint : null,
                     ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
                 ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) }
@@ -1069,7 +1074,7 @@ internal sealed class BridgeHandler : IDisposable
             await TestDialogReload(runtime);
             await TestPairing(runtime);
             await TestStorageAndProcesses(runtime);
-            Check(BridgeContract.Actions.Entries.Where(a => a.Key != "complete-setup").All(a => TestedActions.Contains(a.Key)), "Missing action coverage");
+            Check(BridgeContract.Actions.Entries.All(a => TestedActions.Contains(a.Key)), "Missing action coverage");
             Console.WriteLine("Settings bridge contracts passed.");
         }
         finally { Directory.Delete(runtime, recursive: true); }
@@ -1133,15 +1138,16 @@ internal sealed class BridgeHandler : IDisposable
         Check(test.Posts.Count == 0, "Ignored messages posted");
         foreach (var text in new[] { "{\"id\":7,\"action\":\"unknown\",\"args\":{}}",
             "{\"id\":7,\"action\":\"status\",\"args\":{},\"extra\":true}",
-            "{\"id\":7,\"action\":\"set-startup\",\"args\":{\"enabled\":true,\"enabled\":false}}",
-            "{\"id\":7,\"action\":\"complete-setup\",\"args\":{}}" })
+            "{\"id\":7,\"action\":\"set-startup\",\"args\":{\"enabled\":true,\"enabled\":false}}" })
         {
             test.Handler.Receive(text, TestDriver.Origin, 1, test.Posts.Add);
             Check(test.Posts[^1] == "{\"bridgeResult\":{\"id\":7,\"ok\":false,\"code\":\"refused\"}}", "Refused envelope");
         }
         test.Host.CollectorBusy = true;
         var status = (await test.Run("status"))["value"]!.AsObject();
-        Check(status.Select(p => p.Key).Order().SequenceEqual(new[] { "version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "pairing", "sharing" }.Order()), "Status keys");
+        Check(status.Select(p => p.Key).Order().SequenceEqual(new[] { "version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing" }.Order()), "Status keys");
+        Check(BridgeContract.Data["status"]["fields"].Items.Select(i => i.Text).Order().SequenceEqual(status.Select(p => p.Key).Order()), "Status keys match the contract");
+        Check(!status["collectionPaused"]!.GetValue<bool>(), "Collection not paused at rest");
         Check(Encoding.UTF8.GetByteCount(status.ToJsonString()) <= 16384 && !status.ToJsonString().Contains("\"invitation\""), "Status privacy");
         foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
             Check(status["sharing"]![channel]!.ToJsonString() == "{\"enabled\":false,\"canEnable\":false,\"reason\":\"pairing-unavailable\",\"token\":null}", "Unread sharing state");
@@ -1182,6 +1188,7 @@ internal sealed class BridgeHandler : IDisposable
         test.Host.ScriptExit = 1;
         await test.Run("export-data", code: "unavailable");
         await test.Run("set-skin", new() { ["skin"] = "custom" }, "refused");
+        await test.Run("complete-setup", code: "unavailable");
         foreach (var call in new[] { "refresh-all", "updates", "open:tokens", "open:settings", "config-write", "start", "startup-write", "settings",
             "script:claude-limits-consent.mjs", "script:observatory-file.mjs", "sharing:enable:Quota", "sharing:disable:Quota" })
             Check(test.Host.Calls.Contains(call), "Missing host action " + call);
@@ -1340,7 +1347,8 @@ internal sealed class BridgeHandler : IDisposable
         test.Host.InDialog = () => test.Host.CollectorBusy = true;
         await test.Run("pairing-disconnect", code: "busy");
         Check(test.Host.CollectionPaused, "Busy maintenance lost pause");
-        Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "unavailable", "Pause status");
+        var paused = (await test.Run("status"))["value"]!;
+        Check(paused["pairing"]!["state"]!.GetValue<string>() == "unavailable" && paused["collectionPaused"]!.GetValue<bool>(), "Pause status");
     }
 
     private static async Task TestDialogReload(string runtime)
@@ -1386,6 +1394,7 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("pairing-copy-invitation"); Check(test.Host.Calls.Contains("copy"), "Clipboard host call");
         var state = (await test.Run("status"))["value"]!;
         Check(state["pairing"]!["state"]!.GetValue<string>() == "waiting" && !state.ToJsonString().Contains("observatory-pair:"), "Hosting status privacy");
+        Check(state["collectionPaused"]!.GetValue<bool>(), "Hosting holds collection");
         foreach (var action in new[] { "refresh", "set-sharing", "pairing-disconnect", "pairing-repair-prepare" })
             await test.Run(action, action == "set-sharing" ? ShareArgs(false) : null, "busy");
         session.PollState = "confirming"; await test.Handler.PollAsync();
