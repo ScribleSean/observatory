@@ -47,7 +47,7 @@ final class WebPanelController: NSViewController {
         config.userContentController.addScriptMessageHandler(SnapshotBridge(runtime: runtime), contentWorld: .page, name: "snapshot")
         config.userContentController.add(PanelActionBridge(perform: perform), contentWorld: .page, name: "panelAction")
         config.userContentController.addUserScript(WKUserScript(source: WebViewerPreferences.documentStartScript(
-            skin: WebViewerPreferences.skin(), theme: WebViewerPreferences.theme()),
+            skin: WebViewerPreferences.skin(runtime: runtime), theme: WebViewerPreferences.theme(runtime: runtime)),
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController.addUserScript(WKUserScript(source: snapshotFetchScript,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -67,6 +67,10 @@ final class WebPanelController: NSViewController {
         guard !loaded else { return }
         loaded = true
         web.load(URLRequest(url: URL(string: "observatory://app/panel.html")!))
+    }
+
+    func applyPreferences(skin: String, theme: String?) {
+        applyViewerPreferences(web, skin: skin, theme: theme)
     }
 
     func snapshotChanged() {

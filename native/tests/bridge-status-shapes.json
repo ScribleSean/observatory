@@ -1,0 +1,198 @@
+[
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": true,
+    "pairing": {
+      "state": "confirming",
+      "peerFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "transport": "none",
+      "invitationKept": true
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      }
+    }
+  },
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": true,
+    "pairing": {
+      "state": "awaiting-confirmation",
+      "peerFingerprint": null,
+      "transport": "none",
+      "invitationKept": false
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      }
+    }
+  },
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": true,
+    "pairing": {
+      "state": "local-ready",
+      "peerFingerprint": null,
+      "transport": "none",
+      "invitationKept": false
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      }
+    }
+  },
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": true,
+    "pairing": {
+      "state": "acknowledged",
+      "peerFingerprint": null,
+      "transport": "none",
+      "invitationKept": false
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      }
+    }
+  }
+]
