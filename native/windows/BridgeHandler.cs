@@ -383,6 +383,9 @@ internal sealed class BridgeHandler : IDisposable
             if (this.document != document) return;
             var request = new Request(id, validation.Action ?? "", validation.Args ?? new(), document, epoch, post);
             if (validation.Outcome == "refused" || ids.Contains((epoch, id))) { Post(request, new("refused")); return; }
+            if (request.Action is "pairing-host-defaults" or "pairing-peer-address" or "set-sharing-choice" ||
+                (request.Action is "pairing-host-confirm" or "pairing-join-confirm" && request.Args["sharing"].Boolean))
+            { Post(request, new("unavailable")); return; }
             if (probe is not null)
             {
                 Post(request, request.Action == "status" ? Status() : request.Action == "tailscale-check"
@@ -598,7 +601,9 @@ internal sealed class BridgeHandler : IDisposable
                 ["collectionPaused"] = session is not null || working || host.CollectionPaused,
                 ["pairing"] = new JsonObject { ["state"] = state, ["peerFingerprint"] = state == "confirming" ? fingerprint : null,
                     ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
-                ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) }
+                ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) },
+                ["sharingChoice"] = new JsonObject { ["chosen"] = false, ["channels"] = new JsonObject {
+                    ["codex-limits"] = "unavailable", ["claude-code-tokens"] = "unavailable" } }
             };
             return Encoding.UTF8.GetByteCount(value.ToJsonString()) <= 16384 ? new("done", value) : new("unavailable");
         }
@@ -1143,10 +1148,17 @@ internal sealed class BridgeHandler : IDisposable
             test.Handler.Receive(text, TestDriver.Origin, 1, test.Posts.Add);
             Check(test.Posts[^1] == "{\"bridgeResult\":{\"id\":7,\"ok\":false,\"code\":\"refused\"}}", "Refused envelope");
         }
+        var callsBeforeUnavailable = test.Host.Calls.Count;
+        test.Host.NativeDialogOpen = true;
+        foreach (var action in new[] { "pairing-host-defaults", "pairing-peer-address", "set-sharing-choice" })
+            await test.Run(action, action == "set-sharing-choice" ? new() { ["enabled"] = true } : null, "unavailable");
+        Check(test.Host.Calls.Count == callsBeforeUnavailable && !test.Host.Reserved && !test.Host.CollectionPaused, "Unavailable actions called host");
+        test.Host.NativeDialogOpen = false;
         test.Host.CollectorBusy = true;
         var status = (await test.Run("status"))["value"]!.AsObject();
-        Check(status.Select(p => p.Key).Order().SequenceEqual(new[] { "version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing" }.Order()), "Status keys");
+        Check(status.Select(p => p.Key).Order().SequenceEqual(new[] { "version", "app", "sources", "skin", "deviceName", "startup", "appearance", "limitsConsent", "collectionPaused", "pairing", "sharing", "sharingChoice" }.Order()), "Status keys");
         Check(BridgeContract.Data["status"]["fields"].Items.Select(i => i.Text).Order().SequenceEqual(status.Select(p => p.Key).Order()), "Status keys match the contract");
+        Check(JsonNode.DeepEquals(status["sharingChoice"], JsonNode.Parse("""{"chosen":false,"channels":{"codex-limits":"unavailable","claude-code-tokens":"unavailable"}}""")), "Unknown sharing choice");
         Check(!status["collectionPaused"]!.GetValue<bool>(), "Collection not paused at rest");
         Check(Encoding.UTF8.GetByteCount(status.ToJsonString()) <= 16384 && !status.ToJsonString().Contains("\"invitation\""), "Status privacy");
         foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
@@ -1399,8 +1411,13 @@ internal sealed class BridgeHandler : IDisposable
             await test.Run(action, action == "set-sharing" ? ShareArgs(false) : null, "busy");
         session.PollState = "confirming"; await test.Handler.PollAsync();
         Check((await test.Run("status"))["value"]!["pairing"]!["peerFingerprint"]!.GetValue<string>() == new string('a', 64), "Poll fingerprint");
+        var commandsBeforeSharing = session.Commands.Count;
+        var callsBeforeSharing = test.Host.Calls.Count;
+        await test.Run("pairing-host-confirm", new() { ["sharing"] = true, ["fingerprint"] = new string('a', 64), ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 }, "unavailable");
+        await test.Run("pairing-join-confirm", new() { ["sharing"] = true }, "unavailable");
+        Check(session.Commands.Count == commandsBeforeSharing && test.Host.Calls.Count == callsBeforeSharing && !session.Disposed && test.Host.Reserved && test.Handler.pairingState == "confirming", "Sharing confirmation changed session");
         session.HeldConfirm = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        int confirming = test.Send("pairing-host-confirm", new() { ["fingerprint"] = new string('a', 64), ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 });
+        int confirming = test.Send("pairing-host-confirm", new() { ["sharing"] = false, ["fingerprint"] = new string('a', 64), ["peerAddress"] = "192.168.1.3", ["peerPort"] = 43129 });
         session.PollState = "configuration-ready";
         await test.Handler.PollAsync();
         Check(!session.Disposed && test.Host.Reserved, "Poll ended active confirmation");
@@ -1411,8 +1428,8 @@ internal sealed class BridgeHandler : IDisposable
         Check(command.Count == 4 && command["localEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"192.168.1.2\",\"port\":43128}" && session.Disposed && !test.Host.Reserved, "Host confirmation endpoint");
         await test.Run("pairing-join-claim", new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" });
         session = test.Host.Session!; session.JoinState = "local-ready";
-        await test.Run("pairing-join-confirm", code: "unavailable"); Check(!session.Disposed, "Join retry ended session");
-        session.JoinState = "acknowledged"; await test.Run("pairing-join-confirm");
+        await test.Run("pairing-join-confirm", new() { ["sharing"] = false }, code: "unavailable"); Check(!session.Disposed, "Join retry ended session");
+        session.JoinState = "acknowledged"; await test.Run("pairing-join-confirm", new() { ["sharing"] = false });
         Check(session.Disposed && session.Commands.Last().Count == 1, "Join completion");
         await test.Run("pairing-host-start", HostArgs());
         session = test.Host.Session!; await test.Run("pairing-cancel");

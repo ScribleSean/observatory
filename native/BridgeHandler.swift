@@ -5,6 +5,11 @@ import WebKit
 
 enum BridgeCode: String { case done, refused, busy, cancelled, unavailable }
 
+func bridgeActionUnavailable(_ action: String, _ args: [String: BridgeValue]) -> Bool {
+    ["pairing-host-defaults", "pairing-peer-address", "set-sharing-choice"].contains(action) ||
+        (["pairing-host-confirm", "pairing-join-confirm"].contains(action) && args["sharing"] == .bool(true))
+}
+
 struct BridgeResult {
     let id: Int
     let code: BridgeCode
@@ -54,12 +59,16 @@ final class BridgeAdmission {
             (state.pairingBlocked && ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action))
     }
 
-    func submit(id: Int, action: String, document: UUID,
+    func submit(id: Int, action: String, args: [String: BridgeValue] = [:], document: UUID,
                 run: @escaping (@escaping (BridgeCode, Any?) -> Void) -> Void,
                 reply: @escaping (BridgeResult) -> Void) {
         let entries = waiting + Array(immediate.values) + (running.map { [$0] } ?? [])
         if entries.contains(where: { !$0.ended && $0.document == document && $0.id == id }) {
             reply(BridgeResult(id: id, code: .refused, value: nil))
+            return
+        }
+        if bridgeActionUnavailable(action, args) {
+            reply(BridgeResult(id: id, code: .unavailable, value: nil))
             return
         }
         let entry = Entry(document: document, id: id, action: action, run: run, reply: reply)
@@ -154,7 +163,7 @@ final class BridgeHandler: NSObject, WKScriptMessageHandler {
         case .refused(let id): reply(BridgeResult(id: id, code: .refused, value: nil))
         case .accepted(let id, let action, let args):
             guard host != nil else { reply(BridgeResult(id: id, code: .unavailable, value: nil)); return }
-            admission.submit(id: id, action: action, document: document, run: { [weak self] completion in
+            admission.submit(id: id, action: action, args: args, document: document, run: { [weak self] completion in
                 guard let host = self?.host else { completion(.unavailable, nil); return }
                 host.perform(action: action, args: args, completion: completion)
             }, reply: reply)
@@ -343,7 +352,7 @@ struct BridgeStatusInput {
             "deviceName": input.deviceName as Any? ?? NSNull(), "startup": input.startup, "appearance": input.appearance,
             "limitsConsent": input.limitsConsent, "collectionPaused": input.collectionPaused, "pairing": ["state": input.pairingState,
                 "peerFingerprint": input.peerFingerprint as Any? ?? NSNull(), "transport": input.transport, "invitationKept": input.invitationKept],
-            "sharing": sharing]
+            "sharing": sharing, "sharingChoice": ["chosen": false, "channels": ["codex-limits": "unavailable", "claude-code-tokens": "unavailable"]]]
         guard let data = try? JSONSerialization.data(withJSONObject: result), data.count <= BridgeContract.status["maxBytes"].number else { return nil }
         return result
     }
@@ -369,6 +378,8 @@ func runBridgeSelfTests() {
     """#
     let expected = try! JSONSerialization.jsonObject(with: Data(expectedShapes.utf8)) as! [[String: Any]]
     for (value, fixture) in zip(bridgeSyntheticStatusShapes(), expected) {
+        var fixture = fixture
+        fixture["sharingChoice"] = ["chosen": false, "channels": ["codex-limits": "unavailable", "claude-code-tokens": "unavailable"]]
         precondition(try! JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) ==
             JSONSerialization.data(withJSONObject: fixture, options: [.sortedKeys]))
     }
@@ -398,6 +409,10 @@ func runBridgeSelfTests() {
             }, reply: { results[id] = $0 })
         }
         modal = true
+        for (offset, action) in ["pairing-host-defaults", "pairing-peer-address", "set-sharing-choice", "pairing-host-confirm", "pairing-join-confirm"].enumerated() {
+            admission.submit(id: 90 + offset, action: action, args: ["enabled": .bool(true), "sharing": .bool(true)], document: document,
+                run: { _ in preconditionFailure("Unavailable action called host") }, reply: { precondition($0.code == .unavailable) })
+        }
         submit(80, "set-skin")
         submit(81, "status")
         submit(82, "pairing-cancel")
@@ -595,6 +610,8 @@ func runBridgeSelfTests() {
     keys(status["sources"], ["activity", "codex", "claude", "wispr", "quota"])
     keys(status["skin"], ["current", "bundled", "custom"])
     keys(status["pairing"], ["state", "peerFingerprint", "transport", "invitationKept"])
+    precondition(NSDictionary(dictionary: status["sharingChoice"] as! [String: Any]).isEqual(to:
+        ["chosen": false, "channels": ["codex-limits": "unavailable", "claude-code-tokens": "unavailable"]]))
     keys(status["sharing"], ["codex-limits", "claude-code-tokens"])
     for value in (status["sharing"] as! [String: Any]).values { keys(value, ["enabled", "canEnable", "reason", "token"]) }
     func invalidStatus(_ change: (inout BridgeStatusInput) -> Void) {
