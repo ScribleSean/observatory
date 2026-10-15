@@ -969,6 +969,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
+#if OBSERVATORY_PREVIEW_ONLY
+// UI tools may relaunch a closed app without preserving its launch arguments.
+// Preview-only builds must never fall through to the installed data runtime.
+let previewArguments = Array(CommandLine.arguments.dropFirst())
+let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
+    ["--test-popup"], ["--test-popup", "--force-offscreen-popup"], ["--test-quota-archive"]]
+guard allowedPreviewArguments.contains(previewArguments) else {
+    print("Preview-only build requires an explicit isolated preview mode")
+    exit(64)
+}
+#endif
+
 let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments,
     realDataFolder: FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Workspace Observatory"), userID: getuid())
@@ -988,18 +1000,6 @@ if CommandLine.arguments.dropFirst().contains(where: { removedArguments.contains
     fputs("This option was removed.\n", stderr)
     exit(64)
 }
-
-#if OBSERVATORY_PREVIEW_ONLY
-// UI tools may relaunch a closed app without preserving its launch arguments.
-// Preview-only builds must never fall through to the installed data runtime.
-let previewArguments = Array(CommandLine.arguments.dropFirst())
-let allowedPreviewArguments = [["--self-test"], ["--preview"], ["--preview", "--preview-setup"],
-    ["--test-popup"], ["--test-popup", "--force-offscreen-popup"], ["--test-quota-archive"]]
-guard allowedPreviewArguments.contains(previewArguments) else {
-    print("Preview-only build requires an explicit isolated preview mode")
-    exit(64)
-}
-#endif
 
 if let selectedRuntime {
     do { runtimeLockDescriptor = try RuntimeOption.createAndLock(selectedRuntime) }
