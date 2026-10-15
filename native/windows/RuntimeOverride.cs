@@ -8,6 +8,10 @@ namespace WorkspaceObservatory;
 
 internal static class RuntimeOverride
 {
+    private const FileSystemRights WriteRights = FileSystemRights.Write | FileSystemRights.Delete |
+        FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions |
+        FileSystemRights.TakeOwnership | (FileSystemRights)0x50000000;
+
     internal static string Check(string folder) => Check(folder,
         new AppIdentity(false).DefaultRuntime, new AppIdentity(true).DefaultRuntime);
 
@@ -177,14 +181,12 @@ internal static class RuntimeOverride
         var creator = new SecurityIdentifier(WellKnownSidType.CreatorOwnerSid, null);
         if (!user.Equals(owner) && !(administrators.Equals(owner) && tokenOwner is not null && administrators.Equals(tokenOwner)))
             throw new IOException();
-        const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
-            FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
         foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
             if (rule.AccessControlType == AccessControlType.Allow &&
                 !user.Equals(rule.IdentityReference) && !Equals(owner, rule.IdentityReference) &&
                 !system.Equals(rule.IdentityReference) && !administrators.Equals(rule.IdentityReference) &&
                 !creator.Equals(rule.IdentityReference) &&
-                (rule.FileSystemRights & writes) != 0) throw new IOException();
+                (rule.FileSystemRights & WriteRights) != 0) throw new IOException();
     }
 
     private static void CheckInherited(string parent)
@@ -193,11 +195,9 @@ internal static class RuntimeOverride
         if (identity.User is null) throw new IOException();
         var allowed = new[] { identity.User, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
             new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), new SecurityIdentifier(WellKnownSidType.CreatorOwnerSid, null) };
-        const FileSystemRights writes = FileSystemRights.Write | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
-            FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
         foreach (FileSystemAccessRule rule in new DirectoryInfo(parent).GetAccessControl().GetAccessRules(true, true, typeof(SecurityIdentifier)))
             if (rule.AccessControlType == AccessControlType.Allow && rule.InheritanceFlags.HasFlag(InheritanceFlags.ContainerInherit) &&
-                !allowed.Any(sid => sid.Equals(rule.IdentityReference)) && (rule.FileSystemRights & writes) != 0) throw new IOException();
+                !allowed.Any(sid => sid.Equals(rule.IdentityReference)) && (rule.FileSystemRights & WriteRights) != 0) throw new IOException();
     }
 
     internal static void SelfTest()
@@ -253,6 +253,25 @@ internal static class RuntimeOverride
                 }
                 finally { info.SetAccessControl(original); }
             }
+            var genericWrite = info.GetAccessControl();
+            var descriptor = new RawSecurityDescriptor(genericWrite.GetSecurityDescriptorBinaryForm(), 0);
+            var acl = descriptor.DiscretionaryAcl ?? throw new Exception("Runtime test folder has no DACL.");
+            var genericRule = new RawSecurityDescriptor("D:(A;OICIIO;GW;;;WD)");
+            var insertion = 0;
+            while (insertion < acl.Count && (acl[insertion].AceFlags & AceFlags.Inherited) == 0) insertion++;
+            acl.InsertAce(insertion, genericRule.DiscretionaryAcl![0]);
+            genericWrite.SetSecurityDescriptorSddlForm(descriptor.GetSddlForm(AccessControlSections.Access), AccessControlSections.Access);
+            try
+            {
+                info.SetAccessControl(genericWrite);
+                Refused(shared);
+                var child = Path.Combine(shared, "generic-child");
+                Refused(child);
+                if (Directory.Exists(child)) throw new Exception("Generic-write refusal left a created folder.");
+                if (!Directory.Exists(shared) || File.ReadAllText(sentinel) != "synthetic")
+                    throw new Exception("Generic-write refusal changed existing data.");
+            }
+            finally { info.SetAccessControl(original); }
             var user = new SecurityIdentifier("S-1-5-21-100-200-300-1001");
             var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
             var world = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
@@ -293,6 +312,12 @@ internal static class RuntimeOverride
             inheritOnly.AddAccessRule(new FileSystemAccessRule(world, FileSystemRights.Write,
                 InheritanceFlags.ContainerInherit, PropagationFlags.InheritOnly, AccessControlType.Allow));
             AccessRefused(inheritOnly, user);
+            foreach (var genericRight in new[] { "GW", "GA" })
+            {
+                var security = Security(user);
+                security.SetSecurityDescriptorSddlForm($"D:(A;OICIIO;{genericRight};;;WD)", AccessControlSections.Access);
+                AccessRefused(security, user);
+            }
             foreach (var principal in new[] { user, administrators, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null) })
             {
                 var security = Security(user);
