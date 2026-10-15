@@ -12,7 +12,7 @@ internal sealed class WebPanel : Form
     internal const string RuntimeMessage = "The panel could not start. Check that Microsoft Edge WebView2 Runtime is installed. Collection is separate from this window.";
     private const int PanelWidth = 388;
     internal static readonly string[] Actions = ["refresh", "check-updates", "open-settings", "open-dashboard"];
-    private readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = DashboardPalette.Background(false) };
+    private readonly WebView2 web = new() { Dock = DockStyle.Fill };
     private readonly string runtime;
     private readonly Action<string> act;
     private Task? started;
@@ -36,7 +36,9 @@ internal sealed class WebPanel : Form
         release.Interval = (int)Math.Clamp((releaseAfter ?? DefaultReleaseAfter).TotalMilliseconds, 100, int.MaxValue);
         Text = "Observatory";
         AccessibleName = "Observatory usage overview";
-        BackColor = DashboardPalette.Background(false);
+        var light = WebHostColors.Light(WebViewerPreferences.Read(runtime).Theme ?? "system");
+        BackColor = web.DefaultBackgroundColor = WebHostColors.Background(light);
+        ForeColor = WebHostColors.Text(light);
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false; StartPosition = FormStartPosition.Manual;
         // A tray panel stays above other windows while it is shown.
@@ -418,6 +420,8 @@ internal sealed class WebPanel : Form
     internal static void SelfTest()
     {
         void Check(bool value, string message) { if (!value) throw new InvalidOperationException("Web panel contract failed: " + message); }
+        Check(WebHostColors.Light("light"), "explicit light appearance");
+        Check(!WebHostColors.Light("dark"), "explicit dark appearance");
         foreach (var row in new (bool Drawn, bool Visible, bool Unattended, string? Message)[]
         {
             (false, false, false, RuntimeMessage), (false, true, false, RuntimeMessage),
@@ -543,5 +547,24 @@ internal sealed class WebPanel : Form
         Check(capped.Length == 2048 && capped.EndsWith("...[truncated]", StringComparison.Ordinal), "page text capped");
         Check(Untrusted("a\r\nb") == "a  b" && Untrusted("a\0\tb") == "a  b", "page controls removed");
         Console.WriteLine("Web panel action, page and file contracts passed.");
+    }
+}
+
+internal static class WebHostColors
+{
+    internal static Color Background(bool light) => DashboardPalette.Background(light);
+    internal static Color Text(bool light) => DashboardPalette.Text(light);
+
+    internal static bool Light(string appearance)
+    {
+        if (appearance == "light") return true;
+        if (appearance != "system") return false;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            return key?.GetValue("AppsUseLightTheme") is int value && value == 1;
+        }
+        catch { return false; }
     }
 }

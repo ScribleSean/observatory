@@ -322,6 +322,7 @@ internal static class Program
                 PowerResumeWindow.SelfTest();
                 TailscaleReadiness.SelfTest();
                 QuotaArchive.SelfTest();
+                QuotaArchiveWindow.SelfTest();
                 DeviceIdentity.SelfTest();
                 TlsSetupReply.SelfTest();
                 foreach (var (flags, expected) in new (string[], ViewerMode)[]

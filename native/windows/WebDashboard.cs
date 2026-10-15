@@ -7,7 +7,7 @@ namespace WorkspaceObservatory;
 internal sealed class WebDashboard : Form
 {
     internal const string Page = "dashboard.html";
-    private readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = DashboardPalette.Background(false) };
+    private readonly WebView2 web = new() { Dock = DockStyle.Fill };
     private readonly string runtime;
     private readonly Task started;
 
@@ -29,7 +29,9 @@ internal sealed class WebDashboard : Form
         Size = new Size(1150, 770);
         MinimumSize = new Size(800, 550);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = DashboardPalette.Background(false);
+        var light = WebHostColors.Light(WebViewerPreferences.Read(runtime).Theme ?? "system");
+        BackColor = web.DefaultBackgroundColor = WebHostColors.Background(light);
+        ForeColor = WebHostColors.Text(light);
         Controls.Add(web);
         started = Start();
     }
@@ -143,7 +145,7 @@ internal sealed class WebDashboard : Form
     {
         Controls.Remove(web);
         web.Dispose();
-        Controls.Add(new Label { Dock = DockStyle.Fill, ForeColor = DashboardPalette.Text(false), Padding = new Padding(30),
+        Controls.Add(new Label { Dock = DockStyle.Fill, ForeColor = this.ForeColor, Padding = new Padding(30),
             Text = message });
     }
 
