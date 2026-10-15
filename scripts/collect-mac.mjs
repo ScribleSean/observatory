@@ -100,8 +100,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   if(!config.claude) claude=unavailableClaudeTokenSource('Mac',new Date().toISOString(),'not-connected');
   else try {
     if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
+    const claudeStartedAt=new Date().toISOString();
     const raw=await pythonReport(python,await readFile(path.join(scripts,'read-claude-usage.py'),'utf8'),[claudeDirectory]);
-    claude=cleanClaudeTokenSource(raw,'Mac',undefined,{hours:true});
+    claude=cleanClaudeTokenSource(raw,'Mac',claudeStartedAt,{hours:true});
   } catch {claude=unavailableClaudeTokenSource('Mac');}
   await attachProviderTokenSync(runtime,result,claude);
   attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.

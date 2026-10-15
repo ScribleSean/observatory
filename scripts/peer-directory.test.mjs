@@ -195,7 +195,7 @@ test('POSIX private folder refusals carry a bounded code',{skip:process.platform
   const runtime=await fixture(t);await mkdir(path.join(runtime,'private-sync'),{mode:0o755});
   await assert.rejects(privateSyncDirectory(runtime),{refusal:'private-folder-refused'});
 });
-test('Windows diagnostic failures expose only a refusal code',{skip:process.platform!=='win32'},async()=>{
+test('Windows diagnostic failures expose only a refusal code',async()=>{
   const {windowsPermissions,REFUSAL_CODES}=await import('./peer-directory.mjs');
   assert.equal(Object.isFrozen(REFUSAL_CODES),true);
   for(const [stderr,refusal] of [['PRIVATE\nVerification stage: inspect-ancestry\r\n','ancestor-refused'],

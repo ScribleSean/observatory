@@ -8,7 +8,7 @@ import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 export {REFUSAL_CODES};
-const refused=error=>{if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
+const refused=error=>{if(!error || typeof error!=='object')error=Error('Private directory verification failed');if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
 const execute=promisify(execFile);
 export async function windowsPermissions(directory,initialize=false,ancestor=false,run=execute) {
   const executable=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');

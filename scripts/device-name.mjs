@@ -9,12 +9,12 @@ export async function readDeviceName(runtime) {
     if(!before.isFile() || before.isSymbolicLink() || before.size>1024)return null;
     file=await open(target,constants.O_RDONLY | (constants.O_NOFOLLOW??0) | constants.O_NONBLOCK);
     const info=await file.stat();
-    if(!info.isFile() || info.dev!==before.dev || info.ino!==before.ino || info.size>1024)return null;
+    if(!info.isFile() || info.nlink!==1 || info.dev!==before.dev || info.ino!==before.ino || info.size>1024)return null;
     const buffer=Buffer.alloc(1025),{bytesRead}=await file.read(buffer,0,1025,0);
     if(bytesRead>1024)return null;
     const value=JSON.parse(buffer.subarray(0,bytesRead).toString('utf8'));
     if(!value || Array.isArray(value) || typeof value!=='object' || Object.keys(value).length!==1 || typeof value.name!=='string')return null;
-    const name=value.name.replace(/^[\s\u0085]+|[\s\u0085]+$/gu,'');
+    const name=value.name.replace(/^\p{White_Space}+|\p{White_Space}+$/gu,'');
     if(!name || name.length>32 || /[\p{Cc}\p{Cf}\p{Cs}/\\:]/u.test(name))return null;
     return name;
   } catch {return null;}

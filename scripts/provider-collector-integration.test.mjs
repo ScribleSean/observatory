@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
 import {mkdtemp,mkdir,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {collectMac} from './collect-mac.mjs';
 import {collectWindows} from './collect-windows.mjs';
 import {execPython} from './test-python.mjs';
@@ -31,7 +34,25 @@ test('native collector publishes a separate Claude reading and counts its health
     }
     const collect=process.platform==='darwin'?()=>collectMac(runtime,python):()=>collectWindows(runtime);
     await writeFile(path.join(runtime,'device.json'),JSON.stringify({name:' Fixture desk '}));
-    const result=await collect();
+    const marker=path.join(runtime,'reader-start.json'),originalReadFile=fs.readFile;
+    t.mock.method(fs,'readFile',async(file,...args)=>{
+      const source=await originalReadFile(file,...args);
+      if(file===fileURLToPath(new URL('./read-claude-usage.py',import.meta.url)))return `import time, json
+with open(${JSON.stringify(marker)}, 'w') as marker:
+    json.dump(time.time() * 1000, marker)
+time.sleep(0.02)
+`+source;
+      return source;
+    });
+    syncBuiltinESMExports();
+    t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+    const before=Date.now(),result=await collect();
+    const checkedAt=Date.parse(result.data.providerTokenSources[0].checkedAt);
+    const readerAt=JSON.parse(await readFile(marker,'utf8'));
+    const collector=JSON.parse(await readFile(path.join(runtime,'public/local/collector.json'),'utf8'));
+    assert.ok(before<=Date.parse(collector.startedAt));
+    assert.ok(Date.parse(collector.startedAt)<=checkedAt);
+    assert.ok(checkedAt<=readerAt,'Claude reading time must precede the fixture reader');
     assert.deepEqual(result.data.deviceNames,{[process.platform==='darwin'?'Mac':'Windows']:'Fixture desk'});
     assert.equal(result.providerTokenSync.status,'disabled');
     assert.equal(result.data.providerTokenSources.length,1);

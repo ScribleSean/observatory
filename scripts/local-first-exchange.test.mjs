@@ -60,14 +60,18 @@ test('an older peer still accepts what this device sends with local additions',a
   const providerCounts={inputTokens:10,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:2,totalTokens:12,requestCount:1};
   const plain=cleanClaudeTokenSource({provider:'claude-code',status:'ok',days:[{date,...providerCounts,
     models:[{model:'claude-sonnet-4',...providerCounts}]}]},'Mac',providerAt);
-  await collectProviderTokenSources(runtime,plain,{clock:()=>providerNow});
+  assert.equal((await collectProviderTokenSources(runtime,plain,{clock:()=>providerNow})).status,'disabled');
   const control=await providerTokenSharingControl(runtime,{action:'status'},providerNow);
   await providerTokenSharingControl(runtime,{action:'enable',token:control.token},providerNow);
   const stored=(await readProviderTokenState(runtime,providerNow)).local;
   assert.ok(stored);
-  const withHours=structuredClone(plain);withHours.days[0].hours=hours;
-  const result=await collectProviderTokenSources(runtime,withHours,{clock:()=>providerNow});
+  const laterNow=providerNow+1000,laterAt=new Date(laterNow).toISOString();
+  const withHours=structuredClone(plain);withHours.days[0].hours=hours;withHours.checkedAt=laterAt;
+  const result=await collectProviderTokenSources(runtime,withHours,{clock:()=>laterNow});
+  assert.equal(result.status,'passive');
   assert.deepEqual(result.sources[0].days[0].hours,hours);
-  assert.deepEqual((await readProviderTokenState(runtime,providerNow)).local,stored);
-  assert.doesNotMatch(JSON.stringify(stored),/"(?:deviceNames|refusal|hours)":/);
+  const updated=(await readProviderTokenState(runtime,laterNow)).local;
+  assert.equal(updated.payload.source.checkedAt,laterAt);
+  assert.notDeepEqual(updated,stored);
+  assert.doesNotMatch(JSON.stringify(updated),/"(?:deviceNames|refusal|hours)":/);
 });

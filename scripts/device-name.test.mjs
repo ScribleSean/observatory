@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm,symlink,mkdir} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm,symlink,link,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
@@ -19,7 +19,7 @@ test('device names accept trimmed Unicode whitespace and count UTF-16 units',asy
 test('missing and invalid device names are refused',async t=>{
   const runtime=await fixture(t);
   assert.equal(await readDeviceName(runtime),null);
-  for(const name of ['', '\u0085\u00a0\u2028\u3000','x'.repeat(33),'😀'.repeat(32),'a\nb','a\u200bb','a\ud800b','a\udc00b','a/b','a\\b','a:b',42]) {
+  for(const name of ['\uFEFFDesk','', '\u0085\u00a0\u2028\u3000','x'.repeat(33),'😀'.repeat(32),'a\nb','a\u200bb','a\ud800b','a\udc00b','a/b','a\\b','a:b',42]) {
     await writeFile(path.join(runtime,'device.json'),JSON.stringify({name}));
     assert.equal(await readDeviceName(runtime),null);
   }
@@ -34,6 +34,11 @@ test('non-regular device files are refused',async t=>{
 test('linked device files are refused',{skip:process.platform==='win32'},async t=>{
   const runtime=await fixture(t);await writeFile(path.join(runtime,'target.json'),'{"name":"Desk"}');
   await symlink(path.join(runtime,'target.json'),path.join(runtime,'device.json'));
+  assert.equal(await readDeviceName(runtime),null);
+});
+test('hard-linked device files are refused',{skip:process.platform==='win32'},async t=>{
+  const runtime=await fixture(t);await writeFile(path.join(runtime,'target.json'),'{"name":"Desk"}');
+  await link(path.join(runtime,'target.json'),path.join(runtime,'device.json'));
   assert.equal(await readDeviceName(runtime),null);
 });
 test('attachment keeps only a valid own-host key or leaves names absent',()=>{
