@@ -125,15 +125,63 @@ function DisplayPath([string]$Relative) {
     }
     return ($Relative -replace '[\r\n]', '?')
 }
-function TargetsDataFolder([string]$CommandLine) {
+function CommandTargetsFolder([string]$CommandLine, [string]$Folder) {
     $command = $CommandLine.Replace('/', '\')
-    foreach ($folder in @($Legacy, $Target)) {
-        if ($command.IndexOf($folder.Replace('/', '\'), [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    $path = $Folder.Replace('/', '\').TrimEnd([char]92)
+    $pattern = [regex]::Escape($path) + '(?=[\\\s\x22\x27\u2018\u2019\u201a\u201b\u201c\u201d]|$)'
+    foreach ($match in [regex]::Matches($command, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+        $end = $match.Index + $match.Length
+        if ($end -lt $command.Length -and [char]::IsWhiteSpace($command[$end])) {
+            # Spaces inside a quoted argument continue its path, including Installer Test folder names.
+            $quote = [char]0
+            for ($i = 0; $i -lt $match.Index; $i++) {
+                $character = $command[$i]
+                if ([int]$character -in @(0x2018, 0x2019, 0x201a, 0x201b)) { $character = [char]39 }
+                if ([int]$character -in @(0x201c, 0x201d)) { $character = [char]34 }
+                if ($character -eq $quote) { $quote = [char]0 }
+                elseif ($quote -eq [char]0 -and [int]$character -in @(34, 39)) { $quote = $character }
+            }
+            if ($quote -ne [char]0) { continue }
+        }
+        return $true
     }
     return $false
 }
-function LoginRepair([string]$Reason) {
-    return ($Reason + ' in .' + $names.visible.dataFolder + '-migration-login.json. Restore it to {"schema":1,"loginWasOn":true} or false as it was, do not delete it.')
+function TargetsDataFolder([string]$CommandLine) {
+    foreach ($folder in @($Legacy, $Target)) {
+        if (CommandTargetsFolder $CommandLine $folder) { return $true }
+    }
+    return $false
+}
+function LoginRepair([string]$Reason, [string]$Path) {
+    $message = $Reason + ' in ' + $Path + '. Restore it to {"schema":1,"loginWasOn":true} or false as it was, do not delete it.'
+    if ($Path -ne $carriedLoginPath) {
+        $message += ' Writing .' + $names.visible.dataFolder + '-migration-login.json with the right value overrides it.'
+    }
+    return $message
+}
+function CollectionLock {
+    $script:step = 'running'
+    SafeDirectory $Legacy $true
+    $collectionLock = Join-Path $Legacy 'collection.lock'
+    $entry = Item $collectionLock
+    if ($entry) {
+        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { Refuse 'The earlier collection.lock is a link.' }
+        try {
+            $handle = [IO.File]::Open($collectionLock, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+            $handle.Dispose()
+        } catch { Refuse "The earlier app's collector is still running. Quit it and run again." }
+    }
+}
+function MoveCarriedLogin {
+    try {
+        $destination = Join-Path $Target 'login-state-carried.json'
+        if ((Item $carriedLoginPath) -and -not (Item $destination)) {
+            [IO.File]::Move($carriedLoginPath, $destination)
+        }
+    } catch {
+        $result.note = 'The login state file stayed beside the data folder.'
+    }
 }
 function CheckRunning {
     $script:step = 'running'
@@ -148,7 +196,14 @@ function CheckRunning {
         $running = [Threading.Semaphore]::TryOpenExisting(('Local\' + $appId + '.InUse'), [ref]$semaphore) -or $running
         $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
         foreach ($process in @(Get-CimInstance Win32_Process)) {
-            if ([string]$process.CommandLine -like '*claude-statusline-bridge.mjs*' -and (TargetsDataFolder ([string]$process.CommandLine))) { $running = $true }
+            # Real runs refuse every bridge. Only tests scope bridges to our folders so parallel fixtures stay isolated.
+            if ([string]$process.CommandLine -like '*claude-statusline-bridge.mjs*') {
+                if (-not $testEnvironment -or (TargetsDataFolder ([string]$process.CommandLine))) { $running = $true }
+            }
+            foreach ($product in @($names.legacy.productName, $names.visible.productName)) {
+                $scripts = Join-Path (Join-Path (Join-Path $Parent 'Programs') $product) 'Collector\scripts'
+                if (CommandTargetsFolder ([string]$process.CommandLine) $scripts) { $running = $true }
+            }
             if ($process.Name -ieq 'node.exe' -and $process.ExecutablePath) {
                 foreach ($product in @($names.legacy.productName, $names.visible.productName)) {
                     $runtime = (Join-Path (Join-Path (Join-Path $Parent 'Programs') $product) 'Runtime').TrimEnd('\') + '\'
@@ -157,13 +212,6 @@ function CheckRunning {
             }
         }
         if ($running -or $processes.Count) { Refuse 'Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again.' }
-        $collectionLock = Join-Path $Legacy 'collection.lock'
-        if (Item $collectionLock) {
-            try {
-                $handle = [IO.File]::Open($collectionLock, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
-                $handle.Dispose()
-            } catch { Refuse "The earlier app's collector is still running. Quit it and run again." }
-        }
         $waitMs = 30000
         if ($testEnvironment -and $env:OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS) {
             if (-not [int]::TryParse($env:OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS, [ref]$waitMs) -or $waitMs -lt 0) {
@@ -212,10 +260,13 @@ function SaveJson([string]$Path, $Value) {
 function SaveLogin([string]$Path, $Value) {
     # Publish a flushed sibling file atomically so a crash cannot truncate saved intent.
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Compress))
-    # A rerun reads its intent from this same file, so an existing copy must already hold these bytes.
+    # Compare saved intent, allowing JSON whitespace and a UTF-8 BOM.
     if (Item $Path) {
-        $existing = [IO.File]::ReadAllBytes($Path)
-        if ([Convert]::ToBase64String($existing) -cne [Convert]::ToBase64String($bytes)) { Refuse ('The saved login state in .' + $names.visible.dataFolder + '-migration-login.json does not match this run. Restore it to {"schema":1,"loginWasOn":true} or false as it was, do not delete it.') }
+        try { $existing = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json }
+        catch { Refuse (LoginRepair 'Invalid saved login state' $Path) }
+        if ($existing.schema -ne 1 -or $existing.loginWasOn -isnot [bool] -or $existing.loginWasOn -ne $Value.loginWasOn) {
+            Refuse (LoginRepair 'The saved login state does not match this run' $Path)
+        }
         return
     }
     $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N')
@@ -321,6 +372,8 @@ public static class MigrationFileLinks {
     CheckRunning
     $step = 'folders'
     SafeDirectory $Legacy $true
+    CollectionLock
+    $step = 'folders'
     SafeDirectory $Target $false
     SafeDirectory $Stage $false
     $receipt = 'updates\installed-envelope.json'
@@ -363,8 +416,8 @@ public static class MigrationFileLinks {
     elseif (Item (Join-Path $Stage $marker)) { $savedLoginPath = Join-Path $Stage $marker }
     if ($savedLoginPath) {
         try { $login = Get-Content -LiteralPath $savedLoginPath -Raw -Encoding UTF8 | ConvertFrom-Json }
-        catch { Refuse (LoginRepair 'Invalid saved login state') }
-        if ($login.schema -ne 1 -or $login.loginWasOn -isnot [bool]) { Refuse (LoginRepair 'Invalid saved login state') }
+        catch { Refuse (LoginRepair 'Invalid saved login state' $savedLoginPath) }
+        if ($login.schema -ne 1 -or $login.loginWasOn -isnot [bool]) { Refuse (LoginRepair 'Invalid saved login state' $savedLoginPath) }
         $loginWasOn = $login.loginWasOn
     } else { $loginWasOn = ReadLogin }
     $ssh = [ordered]@{ from = (SshPaths $names.legacy); to = (SshPaths $names.visible) }
@@ -375,7 +428,10 @@ public static class MigrationFileLinks {
         $result.nextStep = 'Run the status line install again with the new data folder.'
     }
     if ($Action -eq 'status' -or $state -eq 'already-migrated') {
-        if ($state -eq 'already-migrated') { $result.loginWasOn = $saved.loginWasOn }
+        if ($state -eq 'already-migrated') {
+            $result.loginWasOn = $saved.loginWasOn
+            if ($Action -eq 'copy') { MoveCarriedLogin }
+        }
         $result | ConvertTo-Json -Depth 8 -Compress
         exit 0
     }
@@ -467,6 +523,7 @@ public static class MigrationFileLinks {
         [IO.Directory]::SetLastWriteTimeUtc((Join-Path $Stage $entry.path), [DateTime]::new($entry.ticks, [DateTimeKind]::Utc))
     }
     ExchangeLock
+    CollectionLock
     CheckRunning
     $step = 'manifest'
     $second = @(Manifest $Legacy)
@@ -495,6 +552,7 @@ public static class MigrationFileLinks {
         if ($state -eq 'installer-receipt-only') { $suffix = 'installer-receipt' }
         $record.aside = '.' + $names.visible.dataFolder + '-' + $suffix + '-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
     }
+    CollectionLock
     CheckRunning
     $step = 'switch'
     SaveJson $recordPath $record
@@ -504,7 +562,7 @@ public static class MigrationFileLinks {
     }
     [IO.File]::Delete($loginPath)
     [IO.Directory]::Move($Stage, $Target)
-    [IO.File]::Move($carriedLoginPath, (Join-Path $Target 'login-state-carried.json'))
+    MoveCarriedLogin
     $result.state = 'migrated'
     $result.ssh = $ssh
     $result | ConvertTo-Json -Depth 8 -Compress
