@@ -7,7 +7,7 @@ import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {CLAUDE_STATUSLINE_FILE,claudeLimitsConsent,ensureClaudeLimitsFolder,writeJsonAtomic} from './claude-limits.mjs';
+import {CLAUDE_STATUSLINE_FILE,readClaudeStatuslineMarker,claudeLimitsConsent,ensureClaudeLimitsFolder,writeJsonAtomic} from './claude-limits.mjs';
 
 const bridgeName='claude-statusline-bridge.mjs';
 const isObject=value=>value!==null && typeof value==='object' && !Array.isArray(value);
@@ -74,16 +74,19 @@ export async function installStatusline({runtime,settingsPath=defaultSettingsPat
   const folder=await ensureClaudeLimitsFolder(runtime);
   const {text,settings}=await readSettings(settingsPath);
   const marker=path.join(folder,CLAUDE_STATUSLINE_FILE);
-  let previous=settings.statusLine===undefined?null:settings.statusLine;
+  // Only an object can be restored as a status line. Any other value is dropped, and the backup
+  // written below keeps it only until the next install replaces that backup.
+  let previous=isObject(settings.statusLine)?settings.statusLine:null;
   if(isOurs(previous)) {
     // Reinstalling keeps the status line saved by the first install.
-    try {previous=JSON.parse(await readFile(marker,'utf8')).previous ?? null;}catch{previous=null;}
+    const saved=(await readClaudeStatuslineMarker(runtime))?.previous;
+    previous=isObject(saved)?saved:null;
   }
   if(text!==null)await copyFile(settingsPath,settingsPath+'.observatory-backup');
   await writeJsonAtomic(marker,{installedAt:now.toISOString(),settingsPath,previous});
   try {await writeSettings(settingsPath,{...settings,statusLine:{type:'command',command}},text);}
   catch(error) {if(!isOurs(settings.statusLine))await unlink(marker).catch(()=>{});throw error;}
-  return {installed:true,replacedStatusLine:previous!==null,settingsPath};
+  return {installed:true,replacedStatusLine:previous!==null || (settings.statusLine!==undefined && settings.statusLine!==null && !isOurs(settings.statusLine)),settingsPath};
 }
 
 export async function uninstallStatusline({runtime,settingsPath=defaultSettingsPath()}) {
@@ -91,8 +94,8 @@ export async function uninstallStatusline({runtime,settingsPath=defaultSettingsP
   const marker=path.join(folder,CLAUDE_STATUSLINE_FILE);
   const {text,settings}=await readSettings(settingsPath);
   let previous=null;
-  try {previous=JSON.parse(await readFile(marker,'utf8')).previous ?? null;}catch{}
   if(isOurs(settings.statusLine)) {
+    previous=(await readClaudeStatuslineMarker(runtime))?.previous ?? null;
     const next={...settings};
     if(isObject(previous))next.statusLine=previous;else delete next.statusLine;
     await writeSettings(settingsPath,next,text);
