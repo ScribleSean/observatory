@@ -668,8 +668,9 @@ final class MacBridgeHost: BridgeHost {
                     if !hasConsentScript { return false }
                     return try? await readConsent(arguments: ["status"])
                 }
-                guard let shared = await shared, let limits = await limits,
-                      let sources = try? CollectorConfiguration.read(runtime: store.runtime),
+                let sharingStatus = await shared
+                let limitsConsent = await limits
+                guard let sources = try? CollectorConfiguration.read(runtime: store.runtime),
                       let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
                       let buildText = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String, let build = Int(buildText) else {
                     completion(.unavailable, nil); return
@@ -680,10 +681,10 @@ final class MacBridgeHost: BridgeHost {
                 let input = BridgeStatusInput(appVersion: version, appBuild: build,
                     sources: sources.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
-                    startup: loginItemIsOn(), appearance: viewer.appearance, limitsConsent: limits,
+                    startup: loginItemIsOn(), appearance: viewer.appearance, limitsConsent: limitsConsent,
                     collectionPaused: store.collectionPausedForPairing || store.pairingMaintenance,
                     pairingState: paired.state, peerFingerprint: visible?.fingerprint,
-                    transport: paired.transport, invitationKept: visible?.invitation != nil, sharing: shared.channels, sharingChoice: shared.choice)
+                    transport: paired.transport, invitationKept: visible?.invitation != nil, sharing: sharingStatus.channels, sharingChoice: sharingStatus.choice)
                 let value = BridgeStatusInput.bridgeStatusValue(input)
                 completion(value == nil ? .unavailable : .done, value)
             }
@@ -716,7 +717,7 @@ final class MacBridgeHost: BridgeHost {
         return try BridgeSharingChoice.parse(await bridgeRun(resources: resources, runtime: store.runtime,
             script: "sharing-choice.mjs", arguments: ["--runtime", "<runtime>"], timeout: 15, inputData: data))
     }
-    private func readSharing() async -> (channels: [String: QuotaSharingStatus], choice: BridgeSharingChoice)? {
+    private func readSharing() async -> (channels: [String: QuotaSharingStatus?], choice: BridgeSharingChoice) {
         async let choice = sharingChoice.read { [self] in try? await runSharingChoice() }
         async let quota = quotaSharing.read { [self] in
             guard let resources else { return nil }
@@ -727,8 +728,9 @@ final class MacBridgeHost: BridgeHost {
             return try? await QuotaSharing.run(runtime: store.runtime, resources: resources, action: "status", token: nil, channel: .providerTokens)
         }
         let chosen = await choice ?? .unavailable
-        guard let quota = await quota, let tokens = await tokens else { return nil }
-        return (["codex-limits": quota, "claude-code-tokens": tokens], chosen)
+        let quotaStatus = await quota
+        let tokenStatus = await tokens
+        return (["codex-limits": quotaStatus, "claude-code-tokens": tokenStatus], chosen)
     }
     private func maintenance(repair: Bool, completion: @escaping (BridgeCode, Any?) -> Void) {
         guard !preview, let resources else { completion(.unavailable, nil); return }
