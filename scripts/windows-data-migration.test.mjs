@@ -339,6 +339,27 @@ test('Unicode and bracket paths copy literally and SSH uses install product name
   assert.equal(await readFile(path.join(f.target,'資料 [folder]','café [a].txt'),'utf8'),'synthetic unicode');
 });
 
+// The canonical manifest text the migration script must produce, computed independently.
+async function canonicalDigest(root) {
+  const {createHash} = await import('node:crypto');
+  const {stat} = await import('node:fs/promises');
+  const lines = [];
+  async function walk(relative) {
+    for (const name of await readdir(path.join(root,relative))) {
+      const rel = relative ? relative+'\\'+name : name, full = path.join(root,rel);
+      const info = await stat(full,{bigint:true});
+      const ticks = (info.mtimeNs/100n+621355968000000000n).toString();
+      const hex = Buffer.from(rel,'utf8').toString('hex');
+      if (info.isDirectory()) { lines.push([hex,'directory','0',ticks,''].join('\t')); await walk(rel); }
+      else lines.push([hex,'file',info.size.toString(),ticks,createHash('sha256').update(await readFile(full)).digest('hex')].join('\t'));
+    }
+  }
+  await walk('');
+  lines.sort((a,b)=>a<b?-1:a>b?1:0);
+  const text = lines.join('\n');
+  return {text,digest:createHash('sha256').update(text,'utf8').digest('hex')};
+}
+
 test('PowerShell editions produce identical canonical digest',windows,async t => {
   if (spawnSync('pwsh',['-NoProfile','-Command','$PSVersionTable.PSVersion.ToString()']).status !== 0) {
     t.skip('PowerShell 7 is unavailable'); return;
@@ -346,9 +367,11 @@ test('PowerShell editions produce identical canonical digest',windows,async t =>
   const f = await fixture(t);
   await mkdir(path.join(f.legacy,'資料 [folder]'));
   await writeFile(path.join(f.legacy,'資料 [folder]','café.txt'),'synthetic');
+  const expected = await canonicalDigest(f.legacy);
   const old = success(run(f,{action:'status'}),'missing');
   const modern = success(run(f,{action:'status',shell:'pwsh'}),'missing');
-  assert.equal(old.manifestSha256,modern.manifestSha256);
+  assert.equal(old.manifestSha256,expected.digest,'Windows PowerShell 5.1 digest differs from the canonical text:\n'+expected.text+'\n'+JSON.stringify(old));
+  assert.equal(modern.manifestSha256,expected.digest,'PowerShell 7 digest differs from the canonical text:\n'+expected.text+'\n'+JSON.stringify(modern));
 });
 
 test('saved login intent survives an interrupted copy and a stale stage',windows,async t => {
