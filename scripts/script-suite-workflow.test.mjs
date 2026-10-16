@@ -73,7 +73,7 @@ test('workflow contains no write permission text', () => {
 
 test('matrix contains exactly the ordered platform parts', () => {
   const expected = [
-    ...['general', 'tls-1', 'tls-2', 'tls-3', 'tls-4', 'sync-1', 'sync-2', 'sync-3'].map((part) => ['windows-latest', part]),
+    ...['general', 'tls-1', 'tls-2', 'tls-3', 'tls-4', 'tls-5', 'sync-1', 'sync-2', 'sync-3'].map((part) => ['windows-latest', part]),
     ...['general', 'tls'].map((part) => ['macos-14', part]),
   ];
   assert.equal(workflow.match(/      matrix:\n([\s\S]*?)    runs-on:/)[1],
@@ -177,24 +177,24 @@ test('suite invokes Node through the source runtime preload', () => {
 });
 
 const shards = {
-  'tls-1': ['peer-tls-trust.test.mjs', 'peer-pairing.test.mjs', 'peer-tls-service.test.mjs'],
-  'tls-2': ['peer-repair.test.mjs', 'peer-tls-sync.test.mjs'],
-  'tls-3': ['peer-setup.test.mjs', 'peer-tls-repair.test.mjs', 'peer-tls-client.test.mjs'],
-  'tls-4': ['quota-sync.test.mjs', 'provider-token-tls.test.mjs', 'quota-tls.test.mjs', 'peer-tls-control.test.mjs'],
+  'tls-1': ['peer-tls-trust.test.mjs'],
+  'tls-2': ['peer-repair.test.mjs', 'peer-pairing.test.mjs'],
+  'tls-3': ['peer-tls-repair.test.mjs', 'quota-tls.test.mjs', 'peer-tls-service.test.mjs', 'peer-tls-control.test.mjs'],
+  'tls-4': ['peer-setup.test.mjs', 'provider-token-tls.test.mjs'],
+  'tls-5': ['quota-sync.test.mjs', 'peer-tls-client.test.mjs', 'peer-tls-sync.test.mjs'],
 };
 const syncNames = {
   'sync-1': [
     'local hours stay on the dashboard while stored and exchanged records remain identical',
-    'collection off disables sharing and failed reads replace totals with Unknown',
-    'concurrent TLS roles exchange without holding a network lock and preserve local collection on errors',
+    'pairing revoke, corruption and retirement fence transport while local disable remains available',
+    'wrong identity, older, conflicting and regressing revisions cannot replace a peer record',
     'native sharing CLI exposes only bounded status and confirmation fields',
   ],
   'sync-2': [
     'duplicate deliveries keep source and receipt time, newer snapshots replace instead of sum',
-    'pairing revoke, corruption and retirement fence transport while local disable remains available',
-    'sharing starts off, is enabled by a current local confirmation, and probes carry no readings',
-    'private provider database rejects extra schema and mismatched saved bindings',
-    'private provider database rejects file symlinks',
+    'disable or disable-reenable during readiness prevents sending provider readings',
+    'collection off disables sharing and failed reads replace totals with Unknown',
+    'concurrent TLS roles exchange without holding a network lock and preserve local collection on errors',
   ],
 };
 
@@ -281,7 +281,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
       const result = runSuite(t, part, platform, files);
       assert.equal(result.status, 0, result.stderr);
       const selected = part === 'general' ? general.toSorted() : part === 'tls' ? [...tls, 'peer-tls-new.test.mjs'].sort()
-        : part.startsWith('sync-') ? [syncFile] : [...shards[part], ...(part === 'tls-4' ? ['peer-tls-new.test.mjs'] : [])];
+        : part.startsWith('sync-') ? [syncFile] : [...shards[part], ...(part === 'tls-3' ? ['peer-tls-new.test.mjs'] : [])];
       const batches = part === 'general' ? [selected] : selected.map((name) => [name]);
       assert.deepEqual(result.calls, batches.map((batch) => ({
         executable: 'synthetic-node', options: { stdio: 'inherit' },
