@@ -239,7 +239,7 @@ class WalkTests(unittest.TestCase):
             with self.subTest(attribute=attribute), self.assertRaises(policy.UnsafePath):
                 self.verify(reader)
 
-    def test_registration_precedes_first_fstat_and_acl_for_every_object(self):
+    def test_registration_precedes_directory_observations_and_file_fd_checks(self):
         for private in (False, True):
             reader = FakeReader()
             calls = []
@@ -251,10 +251,29 @@ class WalkTests(unittest.TestCase):
                 self.assertEqual(event.flags, reader.select.KQ_EV_ADD | reader.select.KQ_EV_CLEAR)
                 self.assertEqual(event.fflags, 127)
             for path in reader.opened:
+                if stat.S_ISDIR(reader.nodes[path].st_mode):
+                    self.assertLess(calls.index(("register", path)), calls.index(("named_stat", path)))
+                else:
+                    self.assertLess(calls.index(("named_stat", path)), calls.index(("open", path)))
                 self.assertLess(calls.index(("open", path)), calls.index(("register", path)))
                 self.assertLess(calls.index(("register", path)), calls.index(("fstat", path)))
                 self.assertLess(calls.index(("register", path)), calls.index(("acl", path)))
             self.assertTrue(reader.select.closed)
+
+    def test_ancestor_attrib_at_first_named_stat_refuses_without_stat_change(self):
+        for private in (False, True):
+            reader = FakeReader()
+            emitted = []
+            def mutate(event, path):
+                if event == "named_stat" and path == "/safe" and not emitted:
+                    fd = next(fd for fd, name in reader.handles.items() if name == path)
+                    self.assertIn(fd, [entry.ident for entry in reader.select.registrations])
+                    reader.select.emit(path, reader.select.KQ_NOTE_ATTRIB)
+                    emitted.append(path)
+            reader.hook = mutate
+            with self.subTest(private=private), self.assertRaises(policy.UnsafePath):
+                self.verify(reader, private=private)
+            self.assertEqual(emitted, ["/safe"])
 
     def test_ancestor_entry_churn_passes_but_security_fields_refuse(self):
         churn = ("st_mtime_ns", "st_ctime_ns", "st_nlink", "st_size")
@@ -263,7 +282,7 @@ class WalkTests(unittest.TestCase):
             ancestors = ("/", "/safe") if private else ("/", "/safe", "/safe/private")
             for target in ancestors:
                 for attribute in churn + security:
-                    for bits in (2, 18):
+                    for bits in ((2, 18) if attribute in churn else (0,)):
                         with self.subTest(private=private, path=target, attribute=attribute, bits=bits):
                             reader = FakeReader()
                             def mutate(event, path):
@@ -271,7 +290,8 @@ class WalkTests(unittest.TestCase):
                                     values = vars(reader.nodes[path]).copy()
                                     values[attribute] += 1
                                     reader.nodes[path] = types.SimpleNamespace(**values)
-                                    reader.select.emit(path, bits)
+                                    if attribute in churn:
+                                        reader.select.emit(path, bits)
                             reader.hook = mutate
                             if attribute in churn:
                                 self.verify(reader, private=private)

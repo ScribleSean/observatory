@@ -5,8 +5,10 @@ directories with mode 0700. This is a metadata preflight, not an atomic lease
 against the current account or root changing the tree after it returns.
 
 Ancestors compare identity, mode, owner, group and flags, ignoring entry churn.
-A vnode watcher catches every attribute change, including changes undone before
-rechecking. Private objects retain every fingerprint field and reject any event.
+Directories are opened and watched before their first metadata observation.
+The watcher catches every attribute change after registration, including changes
+undone before rechecking. Private objects retain every fingerprint field and
+reject any event.
 
 CLI: [--ancestor|--private] ABSOLUTE_DIRECTORY, default --private. Success is
 exit 0 and exactly 'private-path-acl: ok' on stdout, with no newline. All other
@@ -445,9 +447,12 @@ def verify_directory(path, *, private=True, reader=None):
     """Verify held root-to-leaf descriptors, then recheck names and metadata.
 
     Ancestors compare identity, mode, owner, group and flags to ignore entry
-    churn. The watcher catches every attribute change, including one undone
-    during inspection. Private objects keep every fingerprint field and reject
-    every vnode event.
+    churn. Directories open and start their watch before every observation,
+    including the first named stat. The watcher catches attribute changes undone
+    during inspection. Private files are checked before opening to exclude
+    special files, then watched immediately. Their full fingerprint includes
+    ctime to catch changes before registration. Private objects reject every
+    vnode event.
 
     --ancestor inspects only the directory chain. --private additionally
     inspects the owner-only leaf and at most ten immediate, single-link,
@@ -469,19 +474,26 @@ def verify_directory(path, *, private=True, reader=None):
         watcher = reader.watcher()
         handles.callback(watcher.close)
         def inspect(name, parent, directory, private_object):
+            if directory:
+                # O_SEARCH requires a directory and O_NOFOLLOW refuses links.
+                # Start the watch before any directory metadata observation.
+                fd = reader.open(name, parent, True)
+                handles.callback(reader.close, fd)
+                watcher.register(fd, private_object)
             before = reader.named_stat(name, parent)
             if not (stat.S_ISDIR(before.st_mode) if directory else stat.S_ISREG(before.st_mode)):
                 raise UnsafePath()
             if before.st_nlink < 1 or (not directory and before.st_nlink != 1):
                 raise UnsafePath()
-            # Reject obviously unsafe objects before opening them. Actual ACL
-            # checks follow on the opened descriptor, not on a pathname.
+            # Private files must pass these checks before O_EVTONLY opens them.
+            # Actual ACL checks use the watched descriptor, not a pathname.
             check_access(before.st_mode, before.st_uid, ACL(), reader.uid, private=private_object)
             compare = fingerprint if private_object else ancestor_fingerprint
             identity = compare(before)
-            fd = reader.open(name, parent, directory)
-            handles.callback(reader.close, fd)
-            watcher.register(fd, private_object)
+            if not directory:
+                fd = reader.open(name, parent, False)
+                handles.callback(reader.close, fd)
+                watcher.register(fd, private_object)
             if compare(reader.fstat(fd)) != identity:
                 raise UnsafePath()
             filesystem = reader.filesystem(fd)

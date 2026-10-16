@@ -1,4 +1,5 @@
 """Kernel vnode checks on disposable synthetic folders only."""
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import select
@@ -109,6 +110,128 @@ class KernelWatcherTests(unittest.TestCase):
 
     def test_delete(self):
         self.observe(lambda folder: folder.rmdir(), allowed=False)
+
+
+@contextmanager
+def private_tree():
+    with tempfile.TemporaryDirectory(dir=os.path.realpath(tempfile.gettempdir())) as base:
+        ancestor = Path(base) / "ancestor"
+        ancestor.mkdir(mode=0o700)
+        private = ancestor / "leaf"
+        private.mkdir(mode=0o700)
+        (private / "fictional.txt").touch(mode=0o600)
+        try:
+            yield ancestor, private
+        finally:
+            os.chmod(ancestor, 0o700)
+            os.chmod(private, 0o700)
+
+
+class ActionReader(policy.NativeReader):
+    """Run one synchronous action at the selected observation of one folder."""
+    def __init__(self, stage, action, target="ancestor"):
+        super().__init__()
+        self.stage = stage
+        self.action = action
+        self.target = target
+        self.target_fd = None
+        self.action_calls = 0
+
+    def open(self, name, parent, directory):
+        fd = super().open(name, parent, directory)
+        if name == self.target:
+            self.target_fd = fd
+        return fd
+
+    def run_action(self, stage, selected):
+        if self.stage == stage and selected and not self.action_calls:
+            self.action_calls += 1
+            self.action()
+
+    def named_stat(self, name, parent):
+        self.run_action("named_stat", name == self.target)
+        return super().named_stat(name, parent)
+
+    def acl(self, fd):
+        self.run_action("acl", fd == self.target_fd)
+        return super().acl(fd)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "Darwin full verifier checks required")
+class KernelVerificationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with private_tree() as (_, private):
+            try:
+                policy.verify_directory(os.path.realpath(private), private=True,
+                                        reader=policy.NativeReader())
+            except (OSError, policy.UnsafePath) as error:
+                raise unittest.SkipTest(
+                    "Untouched synthetic tree failed NativeReader verification "
+                    "(filesystem or ancestor policy unsupported): "
+                    f"{type(error).__name__}: {error}") from error
+
+    def verify_action(self, action, *, allowed, target="ancestor"):
+        for stage in ("named_stat", "acl"):
+            with self.subTest(stage=stage), private_tree() as (ancestor, private):
+                reader = ActionReader(stage, lambda: action(ancestor, private), target)
+                if allowed:
+                    policy.verify_directory(os.path.realpath(private), private=True, reader=reader)
+                else:
+                    with self.assertRaises(policy.UnsafePath):
+                        policy.verify_directory(os.path.realpath(private), private=True, reader=reader)
+                self.assertEqual(reader.action_calls, 1)
+
+    @staticmethod
+    def file_churn(folder):
+        child = folder / "temporary.txt"
+        child.touch(mode=0o600)
+        child.unlink()
+
+    def test_ancestor_file_churn_passes(self):
+        self.verify_action(lambda ancestor, private: self.file_churn(ancestor), allowed=True)
+
+    def test_ancestor_subfolder_creation_passes(self):
+        self.verify_action(lambda ancestor, private: (ancestor / "child").mkdir(mode=0o700),
+                           allowed=True)
+
+    def test_ancestor_chmod_and_back_refuses(self):
+        def action(ancestor, private):
+            try:
+                os.chmod(ancestor, 0o777)
+            finally:
+                os.chmod(ancestor, 0o700)
+        self.verify_action(action, allowed=False)
+
+    def test_ancestor_acl_and_back_refuses(self):
+        def action(ancestor, private):
+            subprocess.run(["/bin/chmod", "+a", "everyone allow add_file,delete_child",
+                            str(ancestor)], check=True)
+            subprocess.run(["/bin/chmod", "-a#", "0", str(ancestor)], check=True)
+        self.verify_action(action, allowed=False)
+
+    def test_ancestor_chflags_and_back_refuses(self):
+        def action(ancestor, private):
+            original = ancestor.stat().st_flags
+            try:
+                os.chflags(ancestor, original | stat.UF_HIDDEN)
+            finally:
+                os.chflags(ancestor, original)
+        self.verify_action(action, allowed=False)
+
+    def test_ancestor_rename_and_back_refuses(self):
+        def action(ancestor, private):
+            renamed = ancestor.with_name("renamed")
+            ancestor.rename(renamed)
+            renamed.rename(ancestor)
+        self.verify_action(action, allowed=False)
+
+    def test_private_file_churn_refuses(self):
+        # A change inside the private folder before its own watch starts is
+        # outside the check, as it was before ancestor churn was ignored. Run
+        # it at the private folder's own first stat and ACL read instead.
+        self.verify_action(lambda ancestor, private: self.file_churn(private), allowed=False,
+                           target="leaf")
 
 
 if __name__ == "__main__":
