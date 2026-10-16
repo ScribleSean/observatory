@@ -5,7 +5,7 @@ extension ObservatoryTheme {
     static let background = color(0xEDEAE5, 0x1C1D1B)
     static let surface = color(0xF4F1EC, 0x272825)
     static let text = color(0x292D28, 0xF0EEE8)
-    static let muted = color(0x64695F, 0xB3B7AC)
+    static let muted = color(0x5B6056, 0xB3B7AC)
     static let strong = color(0x364632, 0xDCE6D2)
     static let accent = color(0x586F50, 0xADC29D)
     static let track = color(0xDADBD3, 0x3B3E37)

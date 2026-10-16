@@ -155,7 +155,7 @@ A skin changes how the shared viewer looks. It never changes what a number means
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
 - **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
-- **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails.
+- **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails. Since issue 153 Sage also keeps its secondary text at 4.5:1 or more on the track colour, which is the hover background of an unselected filter button, in light and dark. The other bundled skins do not meet that rule yet (Almanac light measures 3.63:1), so the shared check does not apply it to them.
 - **Where skins live.** Bundled skins sit beside `native/design-tokens.json`, which becomes the default skin (Sage). A person's own skins are files in the app's data folder, chosen in Settings.
 
 Bundled skins, in `native/skins/`:
