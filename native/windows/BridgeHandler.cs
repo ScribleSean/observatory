@@ -1511,8 +1511,10 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("set-device-name", new() { ["name"] = null });
         await test.Run("set-limits-consent", new() { ["enabled"] = true });
         await test.Run("set-limits-consent", new() { ["enabled"] = false });
-        Check(test.Host.Scripts[0].ArgumentList.Skip(1).SequenceEqual(new[] { "set", "--runtime", runtime, "--consent" }) &&
-            test.Host.Scripts[1].ArgumentList.Skip(1).SequenceEqual(new[] { "clear", "--runtime", runtime }), "Consent arguments");
+        // The sharing choice cache also runs a script, so pick the consent runs by name.
+        var consentRuns = test.Host.Scripts.Where(s => Path.GetFileName(s.ArgumentList[0]) == "claude-limits-consent.mjs").ToArray();
+        Check(consentRuns.Length == 2 && consentRuns[0].ArgumentList.Skip(1).SequenceEqual(new[] { "set", "--runtime", runtime, "--consent" }) &&
+            consentRuns[1].ArgumentList.Skip(1).SequenceEqual(new[] { "clear", "--runtime", runtime }), "Consent arguments");
         await test.Run("set-sharing", ShareArgs(true)); await test.Run("set-sharing", ShareArgs(false));
         var provider = ShareArgs(true); provider["channel"] = "claude-code-tokens";
         await test.Run("set-sharing", provider);
@@ -1520,7 +1522,7 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("export-data", code: "cancelled");
         test.Host.ExportFile = Path.Combine(runtime, "synthetic.observatory");
         await test.Run("export-data");
-        Check(test.Host.Scripts[^1].ArgumentList.Skip(1).SequenceEqual(new[] { "export", "--runtime", runtime, "--out", test.Host.ExportFile }), "Export arguments");
+        Check(test.Host.Scripts.Last(s => Path.GetFileName(s.ArgumentList[0]) == "observatory-file.mjs").ArgumentList.Skip(1).SequenceEqual(new[] { "export", "--runtime", runtime, "--out", test.Host.ExportFile }), "Export arguments");
         Check(test.Posts.All(p => !p.Contains(runtime) && !p.Contains("Synthetic output")), "Export privacy");
         test.Host.ScriptExit = 1;
         await test.Run("export-data", code: "unavailable");
