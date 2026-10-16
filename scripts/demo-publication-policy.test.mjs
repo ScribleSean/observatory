@@ -22,10 +22,31 @@ test('manual demo publication still requires the current main revision', () => {
   assert.ok(workflow.includes("if: steps.current.outputs.current == 'true'"));
 });
 
-test('the demo artifact is built from fictional data in the hosted checkout', () => {
-  const build = workflow.indexOf('- run: npx vite build --config native/vite.demo.config.mts');
-  const prepare = workflow.indexOf('- run: node scripts/prepare-pages.mjs');
-  const upload = workflow.indexOf('actions/upload-pages-artifact@');
-  assert.ok(build >= 0 && build < prepare && prepare < upload);
+test('the demo artifact is checked and built from fictional data in the hosted checkout', () => {
+  const steps = [
+    '- run: npm ci',
+    '- run: node --test scripts/demo.test.mjs scripts/demo-build.test.mjs scripts/demo-workflow.test.mjs scripts/demo-publication-policy.test.mjs scripts/documentation.test.mjs',
+    '- run: npx vite build --config native/vite.demo.config.mts',
+    '- run: node scripts/prepare-pages.mjs',
+    '- run: node scripts/check-demo-build.mjs',
+    'actions/upload-pages-artifact@',
+  ];
+  let previous = -1;
+  for (const step of steps) {
+    const position = workflow.indexOf(step);
+    assert.ok(position > previous, step);
+    previous = position;
+  }
   assert.match(workflow, /path: dist\/pages/);
+});
+
+test('only the deploy job declares publication write permissions', () => {
+  const build = workflow.match(/^  build:\r?\n([\s\S]*?)^  deploy:\r?\n/m)?.[1];
+  assert.ok(build);
+  assert.doesNotMatch(build, /^\s*(?:pages|id-token): write\s*$/m);
+  const deploy = workflow.slice(workflow.indexOf('  deploy:'));
+  for (const permission of ['pages: write', 'id-token: write']) {
+    assert.equal(workflow.split(permission).length - 1, 1);
+    assert.ok(deploy.includes(permission));
+  }
 });

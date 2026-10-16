@@ -8,20 +8,25 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    # The full test suite requires native Windows or macOS permissions.
-    runs-on: windows-latest
-    timeout-minutes: 15
+    # The full script suite runs on every pull request and on main in script-suite.yml.
+    # This job runs only the checks for the fictional demo it uploads.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '24.21.0'
           cache: npm
       - run: npm ci
-      - run: npm test && npx tsc --noEmit
+      - run: npx tsc --noEmit
+      - run: node --test scripts/demo.test.mjs scripts/demo-build.test.mjs scripts/demo-workflow.test.mjs scripts/demo-publication-policy.test.mjs scripts/documentation.test.mjs
       # Fresh hosted checkout only. Never upload a workstation build.
       - run: npx vite build --config native/vite.demo.config.mts
       - run: node scripts/prepare-pages.mjs
+      - run: node scripts/check-demo-build.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/pages
