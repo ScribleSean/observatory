@@ -17,6 +17,9 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
   const retry=privateRefusalBudget(options);
   const status=request.action==='status';
   const read=operation=>status?operation():retry(operation);
+  // A status pairing refusal leaves the lock so the outer retry can try again.
+  // If the budget ends first, one last attempt reads it as no pairing, as before the retry existed.
+  let lastAttempt=false;
   const locked=()=>withPeerStateLock(runtime,async()=>{
     if(request.action==='disable') {
       await markSharingChoiceApplied(runtime,'claude-code-tokens');
@@ -25,7 +28,7 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     let pair;
     try {pair=await read(()=>readPairing(runtime));}
     catch(error) {
-      if(status && retry.canRetry(error))throw error;
+      if(status && !lastAttempt && retry.canRetry(error))throw Object.assign(error,{pairingRefusal:true});
       pair=null;
     }
     let state=pair?await read(()=>readProviderTokenState(runtime,now)):null;
@@ -37,7 +40,12 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     return {version:1,enabled:Boolean(pair && state?.generation),canEnable,
       reason:!pair?'pairing-unavailable':canEnable?'ready':'source-unavailable',token:canEnable?token(state,pair):null};
   });
-  return status?retry(locked):locked();
+  if(!status)return locked();
+  return retry(locked).catch(error=>{
+    if(!error?.pairingRefusal)throw error;
+    lastAttempt=true;
+    return locked();
+  });
 }
 
 async function main() {

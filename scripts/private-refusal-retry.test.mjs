@@ -221,6 +221,31 @@ for(const [name,control] of [['quota',quotaSharingControl],['provider-token',pro
     }
   });
 
+  test(`${name} status still answers when the budget ends during a pairing retry`,darwinOnly,async t=>{
+    const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-status-expiry-')));
+    const originalPython=process.env.OBSERVATORY_PYTHON;
+    let wrappers;
+    try {
+      const python=await fixturePython(t,runtime);
+      if(!python)return;
+      await pairedRuntime(runtime);
+      const expected=await control(runtime);
+      wrappers=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-expiry-wrapper-')));
+      const {wrapper,counter}=await refusalWrapper(wrappers,python,'private-sync');
+      process.env.OBSERVATORY_PYTHON=wrapper;
+      // The clock passes the deadline during the only wait, after the pairing read asked for a retry.
+      let clock=0;
+      const actual=await control(runtime,{action:'status'},Date.now(),{now:()=>clock,wait:async()=>{clock=2000;}});
+      await access(counter);
+      assert.deepEqual(actual,expected);
+    } finally {
+      if(originalPython===undefined)delete process.env.OBSERVATORY_PYTHON;
+      else process.env.OBSERVATORY_PYTHON=originalPython;
+      if(wrappers)await rm(wrappers,{recursive:true,force:true});
+      await rm(runtime,{recursive:true,force:true});
+    }
+  });
+
   test(`${name} status releases the peer lock during retry wait`,darwinOnly,async t=>{
     const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-status-lock-')));
     const originalPython=process.env.OBSERVATORY_PYTHON;

@@ -25,6 +25,9 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
   const retry=privateRefusalBudget(options);
   const status=request.action==='status';
   const read=operation=>status?operation():retry(operation);
+  // A status pairing refusal leaves the lock so the outer retry can try again.
+  // If the budget ends first, one last attempt reads it as no pairing, as before the retry existed.
+  let lastAttempt=false;
   const locked=()=>withPeerStateLock(runtime,async()=>{
     // Disabling must remain available even if the pairing file is corrupt.
     if(request.action==='disable') {
@@ -34,7 +37,7 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
     let pair;
     try {pair=await read(()=>readPairing(runtime));}
     catch(error) {
-      if(status && retry.canRetry(error))throw error;
+      if(status && !lastAttempt && retry.canRetry(error))throw Object.assign(error,{pairingRefusal:true});
       pair=null;
     }
     let state;
@@ -54,7 +57,12 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
     return {version:1,enabled,canEnable,reason:!pair?'pairing-unavailable':canEnable?'ready':'account-unavailable',
       token:canEnable?token(state,pair):null};
   });
-  return status?retry(locked):locked();
+  if(!status)return locked();
+  return retry(locked).catch(error=>{
+    if(!error?.pairingRefusal)throw error;
+    lastAttempt=true;
+    return locked();
+  });
 }
 
 async function main() {
