@@ -108,7 +108,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
 | Section present | Done | Done | Change | Show only when a dictation source is enabled. The shared viewer does this since V1 and draws the view since V5 (issue 100). |
-| Tool, device and period filters | Done | Done | Keep | The shared viewer's Dictation view (V5, issue 100) has tool, device and period (Day, Week, Month, All time) filters and never adds devices or tools together. Checked in a browser from the built files with sample data, not inside either host. |
+| Tool, device and period filters | Done | Done | Keep | The shared viewer's Dictation view (V5, issue 100) has tool, device and period (Day, Week, Month, All time) filters and never adds devices or tools together. Since issue 152 a tool that is not implemented (a ChatGPT row, or any row with the status `not-supported`) is never a tool filter choice, and its card reads "Not implemented" instead of Unknown. Checked in a browser from the built files with sample data, not inside either host. |
 | Layout | Differs | Differs | Change | Windows uses tables and a chart titled "Voice over time" |
 | ChatGPT voice placeholder row | Done | Done | Remove | "Not implemented" row on both |
 

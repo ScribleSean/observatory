@@ -165,6 +165,7 @@ internal static class ObservatoryStrings
     }
     internal static class Dictation
     {
+        internal const string NotImplemented = "Not implemented";
         internal const string AllTools = "All tools";
         internal const string AllDevices = "All devices";
         internal const string Tool = "Tool";

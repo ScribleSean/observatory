@@ -59,6 +59,27 @@ const day = { date: '2026-10-14', transcriptions: 4, wordRecords: 4, words: 120,
 const source = { host: 'Mac', source: 'Synthetic A', status: 'ok', days: [day] };
 const snapshot = sources => ({ timezone: 'UTC', dictation: sources });
 const card = row => dictationView(snapshot([row]), {}, now).cards[0];
+void test('unimplemented dictation rows remain labelled cards without tool choices or zero values', () => {
+  for (const row of [
+    { host: 'Mac', source: 'ChatGPT', status: 'not-supported', days: [] },
+    { ...source, source: 'ChatGPT' },
+    { ...source, source: 'Synthetic B', status: 'not-supported', refusal: 'ancestor-refused' },
+  ]) {
+    const value = snapshot([source, row]);
+    const view = dictationView(value, { tool: 'all' }, now);
+    assert.deepEqual(view.tools, ['Synthetic A']);
+    assert.equal(view.cards.length, 2);
+    const result = view.cards[1];
+    assert.deepEqual([result.statusWord, result.records, result.words, result.audio], Array(4).fill('Not implemented'));
+    assert.equal(result.refusal, null);
+    assert.deepEqual(result.chart, []);
+    assert.ok(!Object.values(result).includes(0));
+    assert.ok(!Object.values(result).includes('0'));
+    assert.deepEqual(dictationView(value, { tool: 'ChatGPT' }, now).cards, []);
+    assert.deepEqual(dictationView(value, { tool: row.source }, now).cards, []);
+    assert.deepEqual(dictationView(value, { tool: 'Synthetic A' }, now).cards, [view.cards[0]]);
+  }
+});
 void test('dictation visibility requires a supported host and connected string status', () => {
   const value = snapshot([source, { ...source, host: 'Other' }, { ...source, status: 1 }, { ...source, status: 'not-connected' }]);
   assert.deepEqual(dictationSources(value), [source]);

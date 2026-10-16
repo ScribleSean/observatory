@@ -149,6 +149,7 @@ enum ObservatoryStrings {
         static let `namedDevice` = "{name} ({platform})"
     }
     enum Dictation {
+        static let `notImplemented` = "Not implemented"
         static let `allTools` = "All tools"
         static let `allDevices` = "All devices"
         static let `tool` = "Tool"
