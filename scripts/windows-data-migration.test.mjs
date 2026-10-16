@@ -58,7 +58,7 @@ async function fixture(t) {
 function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe',spawnProcess=spawnSync,testOptions=true,allowElevated=true}={}) {
   return spawnProcess(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
     '-Action',action,'-Parent',f.parent,...(testOptions?['-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,...(extra.includes('-SettingsPath')?[]:['-SettingsPath',path.join(f.parent,'claude-settings.json')])]:[]),...(allowElevated?['-AllowElevatedTestRun']:[]),...(confirm?['-ConfirmAppQuit']:[]),...extra],
-  {encoding:'utf8',input:'',env:{...process.env,OBSERVATORY_MIGRATION_TEST:'1',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'',OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'',...env},timeout:120000});
+  {encoding:'utf8',input:'',env:{...process.env,OBSERVATORY_MIGRATION_TEST:'1',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'',OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'',OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'',...env},timeout:120000});
 }
 function success(result,state) {
   assert.equal(result.status,0,result.stderr || result.error?.message);
@@ -300,6 +300,30 @@ test('exclusive operation database handle refuses',windows,async t => {
   await new Promise(resolve => child.once('exit',resolve));
 });
 
+test('exclusive collection lock refuses',windows,async t => {
+  const f = await fixture(t);
+  const database = path.join(f.legacy,'collection.lock');
+  const file = await open(database,'w');
+  await file.close();
+  const ready = path.join(f.parent,'ready');
+  const child = spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+    `$h=[IO.File]::Open(${quote(database)},'Open','ReadWrite','None')\ntry { [IO.File]::WriteAllText(${quote(ready)},'ready')\n[Console]::ReadLine() | Out-Null } finally { $h.Dispose() }`],{stdio:['pipe','pipe','pipe']});
+  t.after(() => {
+    // Release every handle so a failed assertion cannot keep the test process alive.
+    child.stdin.destroy();child.stdout.destroy();child.stderr.destroy();
+    child.kill();child.unref();
+  });
+  let prepared = false;
+  for (let i=0;i<100;i++) {
+    try { await readFile(ready); prepared=true; break; } catch {}
+    await new Promise(resolve => setTimeout(resolve,100));
+  }
+  assert.ok(prepared,'exclusive holder became ready');
+  refused(run(f),/Migration refused \(running\): The earlier app's collector is still running\. Quit it and run again\./);
+  child.stdin.end('\n');
+  await new Promise(resolve => child.once('exit',resolve));
+});
+
 test('receipt switch crash recovers from retained receipt',windows,async t => {
   const f = await fixture(t);
   await mkdir(path.join(f.target,'updates'),{recursive:true});
@@ -437,6 +461,8 @@ test('saved login intent survives an interrupted copy and a stale stage',windows
   await assert.rejects(lstat(f.stage),{code:'ENOENT'});
   assert.equal(success(run(f),'migrated').loginWasOn,true);
   assert.equal(JSON.parse(await readFile(path.join(f.target,'observatory-migration.json'),'utf8')).loginWasOn,true);
+  assert.deepEqual(JSON.parse(await readFile(path.join(f.target,'login-state-carried.json'),'utf8')),{schema:1,loginWasOn:true});
+  await assert.rejects(lstat(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json')),{code:'ENOENT'});
   await assert.rejects(lstat(path.join(f.target,'login-state.json')),{code:'ENOENT'});
 });
 
@@ -448,12 +474,12 @@ test('test options and interruption hooks are gated and running checks surround 
     assert.ok(source.includes("'"+option+"'"));
   }
   assert.match(source,/if \(-not \$testEnvironment -and \$PSBoundParameters.ContainsKey\(\$option\)\) \{ Refuse 'Test-only options need the test environment\.'/);
-  for (const hook of ['STOP_AFTER','STOP_BEFORE_SWITCH','TOUCH_TARGET','STOP_AFTER_ASIDE']) {
-    assert.match(source,new RegExp('if \\(\\$testEnvironment -and \\$env:OBSERVATORY_MIGRATION_'+hook+'(?: | -and)'));
+  for (const hook of ['STOP_AFTER','STOP_BEFORE_SWITCH','TOUCH_TARGET','STOP_AFTER_ASIDE','WEBVIEW_WAIT_MS']) {
+    assert.match(source,new RegExp('if \\(\\$testEnvironment -and \\$env:OBSERVATORY_MIGRATION_'+hook+'(?: | -and|\\))'));
   }
   assert.equal(source.match(/^    CheckRunning$/gm)?.length,3);
   assert.match(source,/ExchangeLock\r?\n    CheckRunning\r?\n    \$step = 'manifest'/);
-  assert.match(source,/CheckRunning\r?\n    \$step = 'switch'\r?\n    if \(\$state -ne 'missing'\) \{\r?\n        \[IO.Directory\]::Move/);
+  assert.match(source,/CheckRunning\r?\n    \$step = 'switch'\r?\n    SaveJson \$recordPath \$record\r?\n    if \(\$state -ne 'missing'\) \{\r?\n        \[IO.Directory\]::Move/);
   assert.match(source,/Get-CimInstance Win32_Process/);
   assert.match(source,/StartsWith\(\$runtime, \[StringComparison\]::OrdinalIgnoreCase\)/);
   assert.ok(source.indexOf('SaveLogin $carriedLoginPath') < source.indexOf('[IO.Directory]::Move($Stage, $stale)'));
@@ -492,11 +518,11 @@ test('leftover target hook without the test environment completes with stdin clo
   await writeFile(path.join(f.parent,'.claude','settings.json'),'{}');
   // A saved false intent avoids reading or changing the real startup registry key.
   await writeFile(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json'),'{"schema":1,"loginWasOn":false}');
-  success(run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1'}}),'migrated');
+  success(run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1',OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'invalid'}}),'migrated');
 });
 
-for (const variant of ['legacy runtime','visible runtime','status line']) {
-  test(`running check refuses a synthetic ${variant} node process`,windows,async t => {
+for (const variant of ['legacy runtime','visible runtime','status line','unrelated status line','web view']) {
+  test(`running check scopes a synthetic ${variant} process`,windows,async t => {
     let child;
     t.after(async () => {
       if (child && child.exitCode === null && child.signalCode === null) {
@@ -507,21 +533,35 @@ for (const variant of ['legacy runtime','visible runtime','status line']) {
     });
     const f = await fixture(t);
     let executable = process.execPath;
-    const childScript = path.join(f.parent,variant === 'status line'?'claude-statusline-bridge.mjs':'wait.mjs');
+    const childScript = path.join(f.parent,variant.includes('status line')?'claude-statusline-bridge.mjs':'wait.mjs');
     await writeFile(childScript,"process.stdout.write('ready\\n')\nsetTimeout(() => {}, 120000)\n");
-    if (variant !== 'status line') {
+    if (variant === 'legacy runtime' || variant === 'visible runtime') {
       executable = path.join(f.parent,'Programs',variant === 'legacy runtime'?appNames.legacy.productName:appNames.visible.productName,'Runtime','node.exe');
       await mkdir(path.dirname(executable),{recursive:true});
       await copyFile(process.execPath,executable);
     }
-    child = spawn(executable,[childScript],{stdio:['ignore','pipe','pipe']});
+    if (variant === 'web view') {
+      executable = path.join(f.parent,'msedgewebview2.exe');
+      await copyFile(process.execPath,executable);
+    }
+    const runtime = variant === 'unrelated status line' ? path.join(f.parent,'unrelated') : f.legacy;
+    child = spawn(executable,[childScript,'--runtime',runtime.replaceAll('\\','/').toUpperCase()],{stdio:['ignore','pipe','pipe']});
     await new Promise((resolve,reject) => {
       child.once('error',reject);
       child.once('exit',() => reject(new Error('Synthetic process exited before readiness')));
       child.stdout.once('data',resolve);
     });
     const before = await snapshot(f.parent);
-    refused(run(f),/^Migration refused \(running\): Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again\.\r?\n?$/);
+    if (variant === 'unrelated status line') {
+      success(run(f,{action:'status'}),'missing');
+    } else if (variant === 'web view') {
+      const started = Date.now();
+      refused(run(f,{env:{OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'500'}}),/The earlier app's web view is still closing\. Wait a minute and run again\./);
+      assert.ok(Date.now()-started >= 500,'matching web view receives a grace period');
+      assert.ok(Date.now()-started < 30000,'test override avoids the production wait');
+    } else {
+      refused(run(f),/^Migration refused \(running\): Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again\.\r?\n?$/);
+    }
     assert.deepEqual(await snapshot(f.parent),before);
   });
 }
@@ -540,6 +580,8 @@ for (const [label,settings,expected] of [
       await writeFile(settingsPath,typeof value === 'string'?value:JSON.stringify(value));
     }
     assert.equal(success(run(f,{action:'status',extra:['-SettingsPath',settingsPath]}),'missing').statusLineTargetsEarlierFolder,expected);
+    const copied = success(run(f,{extra:['-SettingsPath',settingsPath]}),'migrated');
+    assert.equal(copied.nextStep,expected === true ? 'Run the status line install again with the new data folder.' : undefined);
   });
 }
 
@@ -555,3 +597,21 @@ test('ordinary hard links become separate copied files',windows,async t => {
   assert.equal(await readFile(path.join(f.target,'second.txt'),'utf8'),'synthetic linked data');
   assert.equal(await readFile(path.join(f.legacy,'first.txt'),'utf8'),'synthetic linked data');
 });
+
+for (const [label,content,reason] of [
+  ['invalid schema','{"schema":2,"loginWasOn":true}','Invalid saved login state'],
+  ['invalid JSON','invalid','Invalid saved login state'],
+  ['mismatched bytes','{ "schema":1,"loginWasOn":true }','does not match this run'],
+]) {
+  test(`saved login refusal names the repair file for ${label}`,windows,async t => {
+    const f = await fixture(t);
+    const name = '.'+appNames.visible.dataFolder+'-migration-login.json';
+    await writeFile(path.join(f.parent,name),content);
+    const result = run(f);
+    refused(result);
+    assert.ok(result.stderr.includes(reason));
+    assert.ok(result.stderr.includes(name));
+    assert.ok(result.stderr.includes('Restore it to {"schema":1,"loginWasOn":true} or false as it was, do not delete it.'));
+    assert.equal(await readFile(path.join(f.parent,name),'utf8'),content);
+  });
+}
