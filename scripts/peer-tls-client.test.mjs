@@ -1,6 +1,7 @@
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
+import net from 'node:net';
 import {X509Certificate,createHash} from 'node:crypto';
 import {mkdtempSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {realpath} from 'node:fs/promises';
@@ -100,6 +101,86 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
     listener.listen=(binding,ready)=>listen({...binding,host:'127.0.0.1'},ready);
     return listener;
   };
+  await t.test('acknowledgement survives a durable save slower than the eight-second input deadline',async()=>{
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer,
+      onAcknowledged:async()=>{
+        await new Promise(resolve=>setTimeout(resolve,9000));
+        return {version:1,status:'acknowledged'};
+      }});
+    try {
+      await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+      const pair=createPairingConfigurations().Windows;
+      pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+      listener.confirmSetup(listener.pending().claimId,pair);
+      const response=await requestPeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,{host:'Windows'},{connect});
+      const started=performance.now();
+      assert.deepEqual(await acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,response.pairing,{connect}),
+        {status:'acknowledged'});
+      assert.ok(performance.now()-started>=8500);
+      assert.equal(listener.status(),'acknowledged');
+    } finally {await listener.cancel();}
+  });
+  await t.test('a stalled acknowledgement save still ends at the client deadline',async()=>{
+    let release, saving=false;
+    const saved=new Promise(resolve=>{release=resolve;});
+    const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer,
+      onAcknowledged:()=>{saving=true;return saved;}});
+    try {
+      await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+      const pair=createPairingConfigurations().Windows;
+      pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+      listener.confirmSetup(listener.pending().claimId,pair);
+      const response=await requestPeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,{host:'Windows'},{connect});
+      await assert.rejects(acknowledgePeerSetup(listener.invitation,serverIdentity.cert,clientIdentity,response.pairing,
+        {connect,timeoutMs:300}),{message:'Authenticated pairing connection unavailable'});
+      assert.equal(saving,true);assert.equal(listener.status(),'configuration-ready');
+      let deadline;
+      try {
+        await Promise.race([listener.cancel(),new Promise((_,reject)=>{
+          deadline=setTimeout(()=>reject(Error('Listener cancellation stalled')),2000);
+        })]);
+      } finally {clearTimeout(deadline);}
+    } finally {await listener.cancel();release({version:1,status:'acknowledged'});}
+  });
+  await t.test('handshake deadline stays short for a long acknowledgement deadline',async()=>{
+    const stalledSockets=new Set();
+    const stalled=net.createServer(socket=>{
+      stalledSockets.add(socket);socket.on('error',()=>{});
+      socket.once('close',()=>stalledSockets.delete(socket));
+    });
+    stalled.listen(0,'127.0.0.1');await once(stalled,'listening');
+    try {
+      const pair=createPairingConfigurations().Windows;
+      pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+      const started=performance.now();
+      await assert.rejects(acknowledgePeerSetup({...invitation,port:stalled.address().port},serverIdentity.cert,clientIdentity,pair,
+        {connect,timeoutMs:24000,handshakeTimeoutMs:150}),{message:'Authenticated pairing connection unavailable'});
+      assert.ok(performance.now()-started<5000);
+    } finally {
+      for(const socket of stalledSockets)socket.destroy();
+      await new Promise(resolve=>stalled.close(resolve));
+    }
+  });
+  await t.test('deadline caps are per request',async()=>{
+    const pair=createPairingConfigurations().Windows;
+    pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+    let dialed=false;
+    const recordDial=()=>{dialed=true;throw Error('Synthetic dial');};
+    await assert.rejects(requestPeerClaim(invitation,serverIdentity.cert,clientIdentity,
+      {connect:recordDial,timeoutMs:8001}),{message:'Authenticated pairing connection unavailable'});
+    assert.equal(dialed,false);
+    await assert.rejects(requestPeerSetup(invitation,serverIdentity.cert,clientIdentity,{host:'Windows'},
+      {connect:recordDial,timeoutMs:8001}),{message:'Authenticated pairing connection unavailable'});
+    assert.equal(dialed,false);
+    for(const bounds of [{timeoutMs:24001},{handshakeTimeoutMs:8001}]) {
+      await assert.rejects(acknowledgePeerSetup(invitation,serverIdentity.cert,clientIdentity,pair,
+        {connect:recordDial,...bounds}),{message:'Authenticated pairing connection unavailable'});
+      assert.equal(dialed,false);
+    }
+    await assert.rejects(acknowledgePeerSetup(invitation,serverIdentity.cert,clientIdentity,pair,
+      {connect:recordDial,timeoutMs:24000}),{message:'Authenticated pairing connection unavailable'});
+    assert.equal(dialed,true);
+  });
   await t.test('host controller persists its offer and actual TLS acknowledgement',
     {skip:!['darwin','win32'].includes(process.platform)},async()=>{
       const runtime=await realpath(mkdtempSync(path.join(root,'hosting-')));
