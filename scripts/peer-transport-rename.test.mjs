@@ -126,7 +126,11 @@ test('repair fields and backslash separator style survive',mac,async t=>{
 
 test('process guards never write pairing bytes or mtimes',mac,async t=>{
   const runtime=await fixture(t);
-  for(const line of ['/tmp/WorkspaceObservatory --fixture','/tmp/Workspace Observatory.app/Contents/helper',
+  for(const line of ['/tmp/WorkspaceObservatory --fixture',
+    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
+    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
+    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
+'/tmp/Workspace Observatory.app/Contents/helper',
     '/tmp/Observatory.app/Contents/helper','node /tmp/claude-statusline-bridge.mjs'])
     await refuses(runtime,{runningProcesses:()=>line,fetchReceipt:()=>assert.fail('Must not fetch')},/Quit/);
   await refuses(runtime,{fetchReceipt:async()=>({...receipt(),windowsAppRunning:true})});
@@ -213,4 +217,25 @@ test('interrupted atomic writes resume without changing pair identity',mac,async
   const partial={...original,transport:{...original.transport,remoteRuntime:updated.transport.remoteRuntime}};
   await write(runtime,partial,'setup.pending.json');
   await refuses(runtime,{fetchReceipt:()=>assert.fail('Must not fetch')},/Conflicting pending/);
+});
+
+test('harmless process arguments allow the operation',mac,async t=>{
+  const f=await fixture(t);
+  assert.equal((await run(f,{runningProcesses:()=>'/usr/bin/vim notes about WorkspaceObservatory.txt'})).state,'updated');
+});
+
+test('interrupted rename resumes with lowercase paths and either separator',mac,async t=>{
+  for(const separator of ['/',String.fromCharCode(92)]) {
+    const runtime=await fixture(t),original=pair();
+    for(const key of fields)original.transport[key]=original.transport[key].toLowerCase().replaceAll('/',separator);
+    await write(runtime,original);
+    await write(runtime,original,'setup.pending.json');
+    await assert.rejects(run(runtime,{hooks:{afterFirstWrite:()=>{throw Error('synthetic crash');}}}),/synthetic crash/);
+    assert.deepEqual(JSON.parse(await readFile(file(runtime),'utf8')),original);
+    assert.deepEqual(await run(runtime),{state:'updated',fields});
+    const updated=JSON.parse(await readFile(file(runtime),'utf8'));
+    assert.deepEqual(await readFile(file(runtime)),await readFile(file(runtime,'setup.pending.json')));
+    assert.deepEqual({...updated,transport:original.transport},original);
+    for(const key of fields)assert.equal(updated.transport[key],receipt().ssh.to[key].replaceAll(String.fromCharCode(92),separator));
+  }
 });

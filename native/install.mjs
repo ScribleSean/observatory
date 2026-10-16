@@ -1,3 +1,4 @@
+import {runningProcessArgs} from './mac/migrate-data.mjs';
 import {checkInstallTarget} from './mac/install-guard.mjs';
 import {appNames} from './app-names.mjs';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -14,7 +15,7 @@ const applications=path.join(home,'Applications');
 const app=path.join(applications,appNames.visible.macBundle);
 const {legacyBundles}=checkInstallTarget({applicationsFolders:[applications,'/Applications'],
   dataParent:path.dirname(runtime),
-  runningProcesses:()=>execFileSync('/bin/ps',['-axo','args='],{encoding:'utf8',timeout:10000})});
+  runningProcesses:runningProcessArgs});
 const {bundle:source}=JSON.parse(readFileSync(path.join(root,'.native-build/app.json'),'utf8'));
 if(typeof source!=='string' || !source.startsWith(path.join(tmpdir(),'observatory-build-')) || path.basename(source)!==appNames.visible.macBundle)throw Error('Invalid build artifact');
 const binary=`Contents/MacOS/${appNames.internal.macExecutable}`;

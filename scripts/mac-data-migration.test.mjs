@@ -5,7 +5,7 @@ import path from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {appNames} from '../native/app-names.mjs';
-import {migrateDataFolder,inspectDataMigration} from '../native/mac/migrate-data.mjs';
+import {migrateDataFolder,inspectDataMigration,runningProcessArgs,assertObservatoryStopped} from '../native/mac/migrate-data.mjs';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {readPairing,createPairingConfigurations} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
@@ -258,6 +258,10 @@ test('free space refusal happens before staging',mac,t=>{
 test('ps arguments cover executables, bundled helpers and the status line bridge',mac,t=>{
   const f=fixture(t),before=snapshot(f.root);
   for(const output of ['/fixture/'+appNames.internal.macExecutable+' --runtime fixture',
+    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
+    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
+    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
+
     '/usr/bin/python /fixture/'+appNames.legacy.macBundle+'/Contents/collector.py',
     '/usr/bin/node /fixture/'+appNames.visible.macBundle+'/Contents/collector.mjs',
     '/usr/bin/node /fixture/claude-statusline-bridge.mjs']) {
@@ -316,4 +320,23 @@ test('a receipted but damaged stage is retained before recopying',mac,t=>{
   assert.equal(staleFolders(f).length,1);
   assert.equal(fs.readFileSync(path.join(staleFolders(f)[0],'settings.json'),'utf8'),'damaged stage');
   assert.equal(fs.readFileSync(path.join(f.target,'settings.json'),'utf8'),'{"synthetic":true}');
+});
+
+test('process reader removes only its own PID and preserves complete arguments',()=>{
+  const own='/fixture/Observatory copy.app/Contents/Resources/Runtime/node/bin/node native/mac/migrate-data.mjs';
+  const other='/fixture/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background';
+  const harmless='/usr/bin/vim notes about WorkspaceObservatory.txt';
+  const output=runningProcessArgs((command,args,options)=>{
+    assert.equal(command,'/bin/ps');
+    assert.deepEqual(args,['-axo','pid=,args=']);
+    assert.equal(options.encoding,'utf8');
+    return `  ${process.pid} ${own}\n  ${process.pid+1} ${other}\n  ${process.pid+2} ${harmless}\n`;
+  });
+  assert.equal(output,`${other}\n${harmless}\n`);
+  assert.throws(()=>assertObservatoryStopped(()=>output,'running'),/running/);
+  assert.doesNotThrow(()=>assertObservatoryStopped(()=>runningProcessArgs(()=>` ${process.pid} ${own}\n ${process.pid+1} ${harmless}`),'running'));
+});
+test('harmless process arguments allow migration',mac,t=>{
+  const f=fixture(t);
+  assert.doesNotThrow(()=>migrateDataFolder({...f,runningProcesses:()=>'/usr/bin/vim notes about WorkspaceObservatory.txt'}));
 });

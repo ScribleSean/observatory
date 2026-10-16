@@ -140,6 +140,10 @@ test('bundled collectors and status line bridges refuse replacement in both mode
       renameSync(f.installed,legacy);f.installed=legacy;
     }
     for(const line of [
+
+    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
+    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
+    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
       '/Users/x/Applications/Workspace Observatory.app/Contents/Resources/Runtime/python/bin/python3 --synthetic',
       '/Users/x/Applications/Observatory.app/Contents/Resources/Runtime/python/bin/python3 --synthetic',
       '/synthetic/node /synthetic/claude-statusline-bridge.mjs --synthetic']) {
@@ -150,4 +154,9 @@ test('bundled collectors and status line bridges refuse replacement in both mode
       assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
     }
   }
+});
+
+test('harmless process arguments allow the operation',mac,t=>{
+  const f=setup(t);
+  assert.doesNotThrow(()=>replaceMacApp({...f,runningProcesses:()=>'/usr/bin/vim notes about WorkspaceObservatory.txt'}));
 });

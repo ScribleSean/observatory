@@ -427,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.isEnabled = previewRuntime == nil && selectedRuntime == nil
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        login.state = [.enabled, .requiresApproval].contains(SMAppService.mainApp.status) ? .on : .off
         menu.addItem(withTitle: "Login settings…", action: #selector(loginSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -439,7 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !store.shuttingDown else { return }
         guard previewRuntime == nil, selectedRuntime == nil else { return }
         do {
-            if SMAppService.mainApp.status == .enabled {
+            if [.enabled, .requiresApproval].contains(SMAppService.mainApp.status) {
                 UserDefaults.standard.set(false, forKey: "loginItemWanted")
                 try SMAppService.mainApp.unregister()
             }

@@ -1,3 +1,4 @@
+import {quote} from './powershell-quote.mjs';
 import {appNames} from '../app-names.mjs';
 import {readFileSync,writeFileSync,mkdirSync,mkdtempSync,existsSync,cpSync,rmSync,realpathSync} from 'node:fs';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
@@ -27,7 +28,6 @@ const run=(exe,args,options={})=>{
 const ps=code=>run('powershell.exe',['-NoProfile','-Command',code]);
 ps(`if (Test-Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${appNames.internal.windowsTestSetupId}') { throw 'Existing test registration' }`);
 const scratch=realpathSync(mkdtempSync(path.join(tmpdir(),'observatory-full-receipt-cycle-')));
-const quote=text=>"'"+text.replaceAll("'","''")+"'";
 ps(`Expand-Archive -LiteralPath ${quote(archive)} -DestinationPath ${quote(path.join(scratch,'compiler'))}`);
 const compiler=path.join(scratch,'compiler','nsis-3.12','makensis.exe');
 const app=path.join(scratch,'payload');mkdirSync(app);mkdirSync(path.join(app,'Runtime'));

@@ -1,4 +1,4 @@
-import {assertObservatoryStopped} from './migrate-data.mjs';
+import {assertObservatoryStopped,runningProcessArgs} from './migrate-data.mjs';
 import {appNames} from '../app-names.mjs';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,realpathSync,lstatSync,openSync,closeSync,unlinkSync,writeFileSync,fsyncSync,mkdtempSync,renameSync} from 'node:fs';
@@ -8,14 +8,13 @@ import {verifyMacPackage} from './inspect-package.mjs';
 
 const signature=folder=>execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',folder],
   {stdio:'pipe',timeout:30000});
-const processes=()=>execFileSync('/bin/ps',['-axo','args='],{encoding:'utf8',timeout:10000});
 
 // Trusted local installer entry point, not a downloaded update endpoint. Receipts
 // must be authenticated independently. Never derive them from untrusted input.
 // The caller first stages a sibling bundle and requests normal application quit.
 // This function never launches a bundle or accesses the collection runtime.
 export function replaceMacApp({installed,staged,previousManifest,candidateManifest,
-  verifySignature=signature,runningProcesses=processes}) {
+  verifySignature=signature,runningProcesses=runningProcessArgs}) {
   if(process.platform!=='darwin')throw Error('Mac app replacement requires macOS');
   if(typeof verifySignature!=='function' || typeof runningProcesses!=='function')throw Error('Mac verification is required');
   for(const folder of [installed,staged]) {

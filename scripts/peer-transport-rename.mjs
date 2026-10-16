@@ -25,7 +25,7 @@ const processes=async()=>(await execute('/bin/ps',['-axo','pid=,args='],{maxBuff
 
 function checkProcesses(text) {
   if(typeof text!=='string')throw Error('Mac process check unavailable.');
-  if(text.split('\n').some(line=>line.trim().split(/\s+/)[0].endsWith('/WorkspaceObservatory') ||
+  if(text.split('\n').some(line=>/\/WorkspaceObservatory(\s|$)/.test(line) || /\.app\/Contents\/Resources\/Runtime\//.test(line) ||
     line.includes('/'+renameNames.legacyProductName+'.app/') || line.includes('/'+renameNames.visibleProductName+'.app/') ||
     line.includes('claude-statusline-bridge.mjs')))throw Error('Quit the Mac app and its helpers before updating pairing.');
 }
@@ -61,7 +61,9 @@ function interruptedPair(active,pending) {
     for(const key of ['remoteNode','remoteScript'])
       transport[key]=transport[key].replace(/([\\/]Programs[\\/])Workspace Observatory(?=[\\/])/i,
         (_,prefix)=>prefix+renameNames.visibleProductName);
-    if(isDeepStrictEqual({...earlier,transport},updated))return {earlier,updated};
+    const normalized=value=>({...value,transport:{...value.transport,
+      ...Object.fromEntries(fields.map(key=>[key,normalize(value.transport[key])]))}});
+    if(isDeepStrictEqual(normalized({...earlier,transport}),normalized(updated)))return {earlier,updated};
   }
   return null;
 }

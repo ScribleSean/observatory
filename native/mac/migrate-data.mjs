@@ -35,11 +35,16 @@ function readSource(file,expected,destination) {
     if(out!==undefined)fs.closeSync(out);
   }
 }
+export function runningProcessArgs(readPs=execFileSync) {
+  return readPs('/bin/ps',['-axo','pid=,args='],{encoding:'utf8',timeout:10000})
+    .split('\n').filter(line=>Number(line.trim().split(/\s+/)[0])!==process.pid)
+    .map(line=>line.trim().replace(/^\d+\s+/,'')).join('\n');
+}
 export function assertObservatoryStopped(runningProcesses,message) {
   let output;
   try{output=runningProcesses();}catch{throw Error('Cannot verify application shutdown.');}
   if(typeof output!=='string' || output.length>8*1024*1024)throw Error('Cannot verify application shutdown.');
-  if(output.split('\n').some(line=>line.trim().split(/\s+/)[0].endsWith('/'+appNames.internal.macExecutable) ||
+  if(output.split('\n').some(line=>/\/WorkspaceObservatory(\s|$)/.test(line) || /\.app\/Contents\/Resources\/Runtime\//.test(line) ||
     line.includes('/'+appNames.legacy.macBundle+'/') || line.includes('/'+appNames.visible.macBundle+'/') || line.includes('claude-statusline-bridge.mjs')))
     throw Error(message);
 }
@@ -234,7 +239,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(path.resolve(process.argv[
     const options={legacy:path.join(parent,appNames.legacy.dataFolder),target:path.join(parent,appNames.visible.dataFolder),
       stage:path.join(parent,'.'+appNames.visible.dataFolder+'-migration')};
     const result=command==='status'?inspectDataMigration({...options,settingsPath:path.join(homedir(),'.claude','settings.json')}):migrateDataFolder({...options,
-        runningProcesses:()=>execFileSync('/bin/ps',['-axo','args='],{encoding:'utf8',timeout:10000})});
+        runningProcesses:runningProcessArgs});
     console.log(JSON.stringify(result,(key,value)=>
       ['refused','skipped','linksOutsideBackups'].includes(key) && Array.isArray(value)?value.map(safePath):value));
   } catch(error) {

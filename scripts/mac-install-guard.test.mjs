@@ -20,6 +20,10 @@ test('guard creates nothing on a clean install',mac,t=>{
 test('guard refuses all Observatory writers without creating folders',mac,t=>{
   const f=fixture(t);
   for(const output of ['/fixture/'+appNames.internal.macExecutable+' --flag',
+    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
+    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
+    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
+
     'python /fixture/'+appNames.legacy.macBundle+'/collector.py',
     'node /fixture/'+appNames.visible.macBundle+'/collector.mjs',
     'node claude-statusline-bridge.mjs']) {
@@ -42,4 +46,9 @@ test('guard refuses unmigrated data and accepts migrated data with both legacy b
   assert.deepEqual(checkInstallTarget(f),{legacyBundles});
   assert.deepEqual(fs.readdirSync(target),['observatory-migration.json']);
   for(const bundle of legacyBundles)assert.deepEqual(fs.readdirSync(bundle),[]);
+});
+
+test('harmless process arguments allow the operation',mac,t=>{
+  const f=fixture(t);
+  assert.doesNotThrow(()=>checkInstallTarget({...f,runningProcesses:()=>'/usr/bin/vim notes about WorkspaceObservatory.txt'}));
 });
