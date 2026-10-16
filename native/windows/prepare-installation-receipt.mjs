@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {readFileSync,lstatSync,realpathSync,mkdirSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
@@ -34,7 +35,7 @@ export function prepareInstallationReceipt(root,build) {
   };
   const manifestSha256=hashFile('package-manifest.json',4_000_000);
   if(manifestSha256!==build.packageManifestSha256)throw Error('Staged manifest differs from trusted build');
-  const receipt={schema:1,product:'WorkspaceObservatorySetup',platform:'windows-x64',
+  const receipt={schema:1,product:appNames.internal.receiptProduct,platform:'windows-x64',
     sourceRevision:build.sourceRevision,buildNumber:build.buildNumber,manifestSha256,
     ownerSha256:hashFile('installer-owner.ini',4096),uninstallerSha256:hashFile('Uninstall.exe',20_000_000)};
   // Reuse the actual updater's full file inventory and owner verification.

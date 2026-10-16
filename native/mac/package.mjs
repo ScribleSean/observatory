@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {execFileSync} from 'node:child_process';
 import {writeFileSync,mkdirSync,mkdtempSync,cpSync,symlinkSync,existsSync,realpathSync,rmSync} from 'node:fs';
 import {homedir,tmpdir} from 'node:os';
@@ -16,7 +17,7 @@ const source=sourceState(root);
 if(source.dirty)throw Error('Commit reviewed changes before creating a distribution');
 const buildRoots=[root,realpathSync(root),homedir(),tmpdir(),path.dirname(bundle),path.dirname(realpathSync(bundle))];
 const manifest=inspectMacPackage(bundle,{revision:source.revision,buildRoots});
-const binary=app=>path.join(app,'Contents/MacOS/WorkspaceObservatory');
+const binary=app=>path.join(app,`Contents/MacOS/${appNames.internal.macExecutable}`);
 const check=app=>{
   execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'inherit',timeout:30000});
   for(const flag of ['--self-test','--test-quota-archive','--test-collector','--test-web','--test-lifecycle'])
@@ -27,18 +28,18 @@ mkdirSync(output,{mode:0o755});
 const stage=mkdtempSync(path.join(tmpdir(),'observatory-distribution-'));
 const contents=path.join(stage,'contents');
 mkdirSync(contents);
-const app=path.join(contents,'Workspace Observatory.app');
+const app=path.join(contents,appNames.visible.macBundle);
 execFileSync('/usr/bin/ditto',['--norsrc','--noextattr','--noacl',bundle,app],{stdio:'inherit'});
 verifyMacPackage(app,manifest,{buildRoots});
 cpSync(path.join(root,'native/mac/INSTALL.txt'),path.join(contents,'Read me.txt'));
 symlinkSync('/Applications',path.join(contents,'Applications'));
-const name=`Workspace-Observatory-${manifest.version}-macos-arm64`;
+const name=`${appNames.visible.artifactPrefix}-${manifest.version}-macos-arm64`;
 const zip=path.join(output,name+'.zip');
 execFileSync('/usr/bin/ditto',['-c','-k','--norsrc','--noextattr','--noacl','--keepParent',app,zip],{stdio:'inherit',timeout:120000});
 const extracted=path.join(stage,'zip-check');
 mkdirSync(extracted);
 execFileSync('/usr/bin/ditto',['-x','-k',zip,extracted],{stdio:'inherit',timeout:120000});
-const extractedApp=path.join(extracted,'Workspace Observatory.app');
+const extractedApp=path.join(extracted,appNames.visible.macBundle);
 verifyMacPackage(extractedApp,manifest,{buildRoots});
 check(extractedApp);
 const zipArtifact=recordVerifiedZip(output,manifest,zip);
@@ -56,7 +57,7 @@ try {
   // hdiutil can remain inside AuthorizationCopyRights after SIGTERM. Creation
   // has not attached our image, so bound this child without touching any mounts.
   // Leave source-volume ownership unchanged. 'off' can attempt a source remount.
-  execFileSync('/usr/bin/hdiutil',['create','-srcfolder',contents,'-volname','Workspace Observatory',
+  execFileSync('/usr/bin/hdiutil',['create','-srcfolder',contents,'-volname',appNames.visible.productName,
     '-format','UDZO','-fs','HFS+','-nospotlight','-srcowners','any',dmg],
   {stdio:'inherit',timeout:120000,killSignal:'SIGKILL'});
 } catch(error) {
@@ -70,10 +71,10 @@ let mounted=false;
 try {
   execFileSync('/usr/bin/hdiutil',['attach',dmg,'-readonly','-nobrowse','-mountpoint',mount],{stdio:'inherit',timeout:60000});
   mounted=true;
-  verifyMacPackage(path.join(mount,'Workspace Observatory.app'),manifest,{buildRoots});
-  execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',path.join(mount,'Workspace Observatory.app')],{stdio:'inherit',timeout:30000});
+  verifyMacPackage(path.join(mount,appNames.visible.macBundle),manifest,{buildRoots});
+  execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',path.join(mount,appNames.visible.macBundle)],{stdio:'inherit',timeout:30000});
 } finally {
-  if(mounted || existsSync(path.join(mount,'Workspace Observatory.app')))
+  if(mounted || existsSync(path.join(mount,appNames.visible.macBundle)))
     execFileSync('/usr/bin/hdiutil',['detach',mount],{stdio:'inherit',timeout:30000});
 }
 const artifacts=[zipArtifact,describeArtifact(dmg)];

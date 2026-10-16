@@ -13,7 +13,9 @@ internal static class RuntimeOverride
         FileSystemRights.TakeOwnership | (FileSystemRights)0x50000000;
 
     internal static string Check(string folder) => Check(folder,
-        new AppIdentity(false).DefaultRuntime, new AppIdentity(true).DefaultRuntime);
+        new AppIdentity(false).DefaultRuntime, new AppIdentity(true).DefaultRuntime,
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppIdentity.LegacyDataName),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppIdentity.LegacyTestName));
 
     internal static string Check(string folder, params string[] realFolders)
     {
@@ -206,14 +208,22 @@ internal static class RuntimeOverride
         Directory.CreateDirectory(root);
         var real = Path.Combine(root, "real");
         var test = Path.Combine(root, "test");
+        var legacy = Path.Combine(root, AppIdentity.LegacyDataName);
+        var legacyTest = Path.Combine(root, AppIdentity.LegacyTestName);
         void Refused(string folder)
         {
-            try { Check(folder, real, test); }
+            try { Check(folder, real, test, legacy, legacyTest); }
             catch (IOException) { return; }
             throw new Exception("Unsafe runtime folder accepted.");
         }
         try
         {
+            foreach (var folder in new[] { legacy, legacyTest })
+            {
+                Refused(folder);
+                Refused(Path.Combine(folder, "child"));
+                if (Directory.Exists(folder)) throw new Exception("Legacy runtime refusal created a folder.");
+            }
             try
             {
                 using var identity = WindowsIdentity.GetCurrent();

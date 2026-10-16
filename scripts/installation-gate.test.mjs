@@ -1,3 +1,4 @@
+import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -16,7 +17,8 @@ test('Mac update gate runs before the collection store is created',()=>{
 test('native startup uses the installer mutex until the singleton exists',()=>{
   const program=read('Program.cs'),gate=read('InstallationGate.cs');
   assert.match(gate,/Name = "Local\\\\WorkspaceObservatorySetup"/);
-  assert.match(read('generate-installer.mjs'),/'WorkspaceObservatorySetup'/);
+  assert.match(read('generate-installer.mjs'),/appNames\.internal\.windowsSetupId/);
+  assert.equal(appNames.internal.windowsSetupId,'WorkspaceObservatorySetup');
   assert.match(read('installer.nsi'),/CreateMutexW\(p 0, i 0, w "Local\\\$\{SETUP_ID\}"\)/);
   const acquire=program.indexOf('using var installationGate = TryEnterInstallation();');
   const singleton=program.indexOf('using var singleton = new Mutex');

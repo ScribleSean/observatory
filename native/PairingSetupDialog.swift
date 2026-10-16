@@ -26,7 +26,7 @@ enum PairingSetupDialog {
         let script = field("Windows exchange script", value: target?.remoteScript,
             placeholder: "C:/Apps/Observatory/Collector/scripts/peer-exchange.mjs", y: 112)
         let runtime = field("Windows app data directory", value: target?.remoteRuntime,
-            placeholder: "C:/Users/Example/AppData/Local/Workspace Observatory", y: 56)
+            placeholder: "C:/Users/Example/AppData/Local/Observatory", y: 56)
 
         let pasteAction = PairingDetailsPasteAction(apply: { details in
             node.stringValue = details.remoteNode

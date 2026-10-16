@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {readFileSync,readdirSync,lstatSync,mkdirSync,copyFileSync,writeFileSync,realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
@@ -33,7 +34,7 @@ export function retainCandidate(release,output,{revision,dirty,version,buildNumb
   const folders=prefix=>children.filter(name=>name.startsWith(prefix)).map(name=>directory(path.join(release,name)));
   const candidates=folders('candidate-');
   if(candidates.length!==1)throw Error('Expected exactly one original candidate');
-  const app=directory(path.join(candidates[0],'Workspace Observatory'));
+  const app=directory(path.join(candidates[0],appNames.internal.windowsPackageFolder));
   const manifest=verifyManifest(app);
   const manifestBytes=file(path.join(app,'package-manifest.json'));
   if(manifest.sourceRevision!==revision)throw Error('Candidate source revision mismatch');
@@ -49,7 +50,7 @@ export function retainCandidate(release,output,{revision,dirty,version,buildNumb
   const receiptKeys=['schema','version','buildNumber','testIdentity','installerName','installerSource',
     'sourceRevision','sourceDirty','packageManifestSha256','updateEnvelopeSha256'].sort();
   for(const {build} of receipts) {
-    const name=`Workspace-Observatory-${version}-windows-x64${build.testIdentity?'-TEST':''}-setup.exe`;
+    const name=`${appNames.visible.artifactPrefix}-${version}-windows-x64${build.testIdentity?'-TEST':''}-setup.exe`;
     if(JSON.stringify(Object.keys(build).sort())!==JSON.stringify(receiptKeys) || build.schema!==1 ||
       build.version!==version || build.buildNumber!==buildNumber || build.installerName!==name ||
       build.sourceRevision!==revision || build.sourceDirty!==false ||
