@@ -84,7 +84,7 @@ void test('Claude Code limits requires disclosure and clears on cancel and pageh
   const f = await fixture(t);
   await f.toggle('Claude Code limits');
   assert.equal(f.messages.length, 1);
-  for (const key of ['disclosureHints', 'disclosureReadings', 'disclosureSharing']) assert.ok(f.container.textContent.includes(strings.settings[key]));
+  for (const key of ['disclosureCommand', 'disclosureStorage', 'disclosureOff']) assert.ok(f.container.textContent.includes(strings.settings[key]));
   await f.click('Cancel'); assert.equal(f.messages.length, 1); assert.equal(f.container.querySelector('.ob-settings-disclosure'), null);
   await f.toggle('Claude Code limits'); await f.click('Turn on');
   await f.toggle('Claude Code limits');
