@@ -1,3 +1,6 @@
+import {runningProcessArgs} from './mac/migrate-data.mjs';
+import {checkInstallTarget} from './mac/install-guard.mjs';
+import {appNames} from './app-names.mjs';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {cpSync,existsSync,mkdirSync,writeFileSync,readFileSync,lstatSync,renameSync,chmodSync} from 'node:fs';
 import {homedir,tmpdir} from 'node:os';
@@ -7,12 +10,15 @@ import {fileURLToPath} from 'node:url';
 if (!process.argv.includes('--install')) throw Error('Pass --install to install the verified local app and migrate its collector.');
 const root=fileURLToPath(new URL('..',import.meta.url));
 const home=homedir();
-const runtime=path.join(home,'Library/Application Support/Workspace Observatory');
+const runtime=path.join(home,'Library/Application Support',appNames.visible.dataFolder);
 const applications=path.join(home,'Applications');
-const app=path.join(applications,'Workspace Observatory.app');
+const app=path.join(applications,appNames.visible.macBundle);
+const {legacyBundles}=checkInstallTarget({applicationsFolders:[applications,'/Applications'],
+  dataParent:path.dirname(runtime),
+  runningProcesses:runningProcessArgs});
 const {bundle:source}=JSON.parse(readFileSync(path.join(root,'.native-build/app.json'),'utf8'));
-if(typeof source!=='string' || !source.startsWith(path.join(tmpdir(),'observatory-build-')) || path.basename(source)!=='Workspace Observatory.app')throw Error('Invalid build artifact');
-const binary='Contents/MacOS/WorkspaceObservatory';
+if(typeof source!=='string' || !source.startsWith(path.join(tmpdir(),'observatory-build-')) || path.basename(source)!==appNames.visible.macBundle)throw Error('Invalid build artifact');
+const binary=`Contents/MacOS/${appNames.internal.macExecutable}`;
 for(const folder of [runtime,applications]) {
   if(existsSync(folder) && lstatSync(folder).isSymbolicLink())throw Error('Installation folders must not be symlinks');
 }
@@ -27,21 +33,11 @@ const backups=path.join(runtime,'Backups');
 mkdirSync(backups,{recursive:true,mode:0o700});
 const stamp=new Date().toISOString().replaceAll(':','-');
 if(existsSync(app)) {
-  if(!process.argv.includes('--update'))throw Error('An app is already installed. Use --update with an explicit running process ID.');
-  const index=process.argv.indexOf('--pid');
-  const pid=Number(process.argv[index+1]);
-  if(index<0 || !Number.isSafeInteger(pid) || pid<2)throw Error('An exact app process ID is required');
-  const command=execFileSync('/bin/ps',['-p',String(pid),'-o','comm='],{encoding:'utf8'}).trim();
-  if(command!==path.join(app,binary))throw Error('The process does not match the installed app');
-  process.kill(pid,'SIGTERM');
-  let exited=false;
-  for(let tries=0;tries<50;tries++) {
-    try{process.kill(pid,0);}catch{exited=true;break;}
-    await new Promise(resolve=>setTimeout(resolve,100));
-  }
-  if(!exited)throw Error('App did not exit. Installation left unchanged.');
-  renameSync(app,path.join(backups,`Workspace Observatory-${stamp}.app.backup`));
+  if(!process.argv.includes('--update'))throw Error('An app is already installed. Use --update after quitting Observatory.');
+  renameSync(app,path.join(backups,`${appNames.visible.productName}-${stamp}.app.backup`));
 }
+for(const legacy of legacyBundles)if(path.dirname(legacy)===applications)
+  renameSync(legacy,path.join(backups,`${appNames.legacy.productName}-${stamp}.app.backup`));
 cpSync(source,app,{recursive:true,errorOnExist:true,force:false});
 execFileSync('/usr/bin/codesign',['--verify','--strict',app]);
 cpSync(path.join(app,'Contents/Resources/Collector/scripts'),path.join(runtime,'scripts'),{recursive:true});
@@ -61,5 +57,5 @@ if(existsSync(old)) {
   renameSync(old,path.join(backups,`collector-${stamp}.plist`));
 }
 const login=spawnSync(path.join(app,binary),['--enable-login'],{encoding:'utf8'});
-console.log(JSON.stringify({app,runtime,login:login.stdout?.trim() || 'registration-failed',legacyCollector:'backed-up-if-present'}));
+console.log(JSON.stringify({app,runtime,legacyBundlesLeft:legacyBundles.filter(bundle=>path.dirname(bundle)!==applications),login:login.stdout?.trim() || 'registration-failed',legacyCollector:'backed-up-if-present'}));
 execFileSync('/usr/bin/open',['-a',app,'--args','--show']);

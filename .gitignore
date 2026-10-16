@@ -12,6 +12,7 @@
 !.yarn/versions
 
 # testing
+/.test-runtime/
 /coverage
 
 # next.js

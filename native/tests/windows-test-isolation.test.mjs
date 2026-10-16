@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -41,7 +42,7 @@ void test('TEST application selects an installation identity before dispatch or 
     'A single identity owner is required',
   );
   const identity = read('AppIdentity.cs');
-  assert.match(identity, /Workspace Observatory Installer Test/);
+  assert.match(identity, new RegExp(appNames.visible.windowsTestName));
   assert.match(identity, /WorkspaceObservatoryInstallerTest/);
   assert.match(identity, /installer-owner\.ini/);
   assert.match(identity, /FileAttributes.ReparsePoint/);
@@ -96,7 +97,7 @@ void test('all default IPC callers use the selected identity, including update h
   );
   assert.match(
     read('generate-installer.mjs'),
-    /APP_ID:testIdentity\?'WorkspaceObservatoryInstallerTest.App':'WorkspaceObservatory'/,
+    /APP_ID:testIdentity\?appNames\.internal\.windowsTestAppId:appNames\.internal\.windowsAppId/,
   );
   assert.match(
     read('installer.nsi'),
@@ -284,7 +285,7 @@ void test('generated TEST metadata separates setup, singleton, startup and unins
   );
   assert.equal(
     definitions.get('APP_NAME'),
-    'Workspace Observatory Installer Test',
+    appNames.visible.windowsTestName,
   );
   assert.equal(
     definitions.get('APP_ID'),
@@ -327,4 +328,11 @@ void test('Windows sources hold no double-encoded text', () => {
     for (const broken of [Buffer.from([0xc3, 0xa2, 0xe2, 0x82, 0xac]), Buffer.from([0xc3, 0x82, 0xc2])])
       assert.equal(bytes.includes(broken), false, `${name} has text saved through the wrong encoding`);
   }
+});
+
+void test('data migration removes only the named startup value', () => {
+  const source = read('migrate-data.ps1');
+  assert.doesNotMatch(source, /\b(?:Set|New)-ItemProperty\b/i);
+  assert.deepEqual(source.split('\n').filter(line => /\bRemove-ItemProperty\b/i.test(line)).map(line => line.trim()),
+    ['Remove-ItemProperty -LiteralPath $RunKey -Name $names.internal.windowsStartupName']);
 });

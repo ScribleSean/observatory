@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,mkdir,readdir,symlink,stat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {createPeerPayload} from './peer-payload.mjs';
 import {createPeerRecord,acceptPeerState,readPeerState,publishLocalPayload} from './peer-store.mjs';
@@ -14,8 +14,10 @@ const config={host:'Windows',codexHosts:['Windows'],pairId:'a'.repeat(64),device
 const payload=()=>createPeerPayload({collectedAt:'2026-09-09T12:59:00.000Z',activity:{status:'not-connected'},
   codex:[{host:'Windows',status:'not-connected'}],dictation:[{source:'Wispr Flow',status:'not-connected'}]},config);
 const record=sequence=>createPeerRecord(payload(),config,sequence,now);
+const runtimeBase=await testRuntimeBase('peer-store');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-peer-store-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-peer-store-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
 

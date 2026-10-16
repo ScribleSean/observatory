@@ -1,3 +1,4 @@
+import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,mkdtempSync,mkdirSync,writeFileSync,existsSync,realpathSync,rmSync} from 'node:fs';
@@ -27,7 +28,10 @@ test('installer generator retains authenticated receipt input and isolates test 
   const input=path.join(root,'envelope.json'),output=path.join(root,'generated');writeFileSync(input,envelope);
   generateInstaller(app,output,{testIdentity:true,installationEnvelope:input,updatePublicKey:publicKey});
   assert.deepEqual(readFileSync(path.join(output,'installer-update-envelope.json')),envelope);
-  assert.match(readFileSync(path.join(output,'metadata.nsh'),'utf8'),/!define UPDATE_DATA_NAME "Workspace Observatory Installer Test"/);
+  assert.match(readFileSync(path.join(output,'metadata.nsh'),'utf8'),new RegExp(`!define UPDATE_DATA_NAME "${appNames.visible.windowsTestName}"`));
+  const metadata=readFileSync(path.join(output,'metadata.nsh'),'utf8');
+  assert.ok(metadata.includes(`!define APP_NAME "${appNames.visible.windowsTestName}"`));
+  assert.ok(metadata.includes(`!define PUBLISHER "${appNames.visible.publisher}"`));
   const build=JSON.parse(readFileSync(path.join(output,'artifacts/installer-build.json')));
   assert.equal(build.updateEnvelopeSha256,digest(envelope));
   const rejected=path.join(root,'rejected');

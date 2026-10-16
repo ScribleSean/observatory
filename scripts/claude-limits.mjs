@@ -86,14 +86,14 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
 
 const folderOf=runtime=>path.join(runtime,CLAUDE_LIMITS_FOLDER);
 
-async function plainFile(file,limit) {
+async function plainText(file,limit) {
   let handle;
   try {
     const before=await lstat(file);
-    if(!before.isFile() || before.isSymbolicLink() || before.size>limit)throw Error('Unsafe Claude limits file');
+    if(!before.isFile() || before.isSymbolicLink() || before.nlink>1 || before.size>limit)throw Error('Unsafe Claude limits file');
     handle=await open(file,constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
     const info=await handle.stat();
-    if(!info.isFile() || info.size>limit || info.dev!==before.dev || info.ino!==before.ino)throw Error('Unsafe Claude limits file');
+    if(!info.isFile() || info.nlink>1 || info.size>limit || info.dev!==before.dev || info.ino!==before.ino)throw Error('Unsafe Claude limits file');
     const buffer=Buffer.alloc(limit+1);
     let size=0;
     while(size<buffer.length) {
@@ -102,8 +102,76 @@ async function plainFile(file,limit) {
       size+=bytesRead;
     }
     if(size>limit)throw Error('Unsafe Claude limits file');
-    return JSON.parse(buffer.toString('utf8',0,size));
+    return buffer.toString('utf8',0,size);
   } finally {await handle?.close().catch(()=>{});}
+}
+
+async function plainFile(file,limit) {
+  return JSON.parse(await plainText(file,limit));
+}
+
+// Count member separators only after JSON.parse has validated the text.
+function topLevelMembers(text,allDepths=false) {
+  let depth=0,string=false,escaped=false,count=0;
+  for(const character of text) {
+    if(string) {
+      if(escaped)escaped=false;
+      else if(character==='\\')escaped=true;
+      else if(character==='"')string=false;
+    } else if(character==='"')string=true;
+    else if(character==='{' || character==='[')depth++;
+    else if(character==='}' || character===']')depth--;
+    else if(character===':' && (allDepths || depth===1))count++;
+  }
+  return count;
+}
+
+export async function readClaudeStatuslineMarker(runtime) {
+  const unsafe=()=>Error('Unsafe saved status line file');
+  if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw unsafe();
+  let text;
+  try {
+    const info=await lstat(folderOf(runtime));
+    if(!info.isDirectory() || info.isSymbolicLink())throw unsafe();
+    text=await plainText(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384);
+  } catch(error) {
+    if(error.code==='ENOENT')return null;
+    throw unsafe();
+  }
+  try {
+    if(text.startsWith('\uFEFF'))throw unsafe();
+    const marker=JSON.parse(text);
+    if(!isObject(marker))throw unsafe();
+    const keys=Object.keys(marker);
+    if(keys.length!==3 || !['installedAt','settingsPath','previous'].every(key=>keys.includes(key)))throw unsafe();
+    if(typeof marker.installedAt!=='string' || typeof marker.settingsPath!=='string')throw unsafe();
+    let members=0;
+    const pending=[marker];
+    while(pending.length) {
+      const value=pending.pop();
+      if(value===null || typeof value!=='object')continue;
+      if(!Array.isArray(value)) {
+        if(Object.hasOwn(value,'__proto__'))throw unsafe();
+        members+=Object.keys(value).length;
+      }
+      for(const child of Object.values(value))pending.push(child);
+    }
+    if(topLevelMembers(text,true)!==members)throw unsafe();
+    if(marker.previous?.type==='command' && typeof marker.previous.command!=='string')throw unsafe();
+    return marker;
+  } catch {throw unsafe();}
+}
+
+export function parseLimitsConsentMarker(text) {
+  try {
+    const marker=JSON.parse(text);
+    if(!isObject(marker))return false;
+    const keys=Object.keys(marker);
+    if(keys.length!==2 || !keys.includes('consent') || !keys.includes('givenAt') || topLevelMembers(text)!==keys.length)return false;
+    if(marker.consent!==true || typeof marker.givenAt!=='string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(marker.givenAt))return false;
+    // Years 0001 to 9999 only, the range a .NET DateTime holds, so both apps read the same marker.
+    return !marker.givenAt.startsWith('0000') && new Date(marker.givenAt).toISOString()===marker.givenAt;
+  } catch {return false;}
 }
 
 export async function ensureClaudeLimitsFolder(runtime) {
@@ -149,8 +217,7 @@ export async function claudeLimitsConsent(runtime) {
   if(!await plainLimitsFolder(runtime))return {given:false,consentMarker:false,statusLine:false};
   let consentMarker=false;
   try {
-    const marker=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096);
-    consentMarker=isObject(marker) && marker.consent===true;
+    consentMarker=parseLimitsConsentMarker(await plainText(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096));
   } catch {}
   const statusLine=await claudeStatuslineInstalled(runtime);
   return {given:consentMarker || statusLine,consentMarker,statusLine};

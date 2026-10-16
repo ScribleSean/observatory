@@ -1,3 +1,4 @@
+import {appNames} from '../app-names.mjs';
 import {readFileSync,writeFileSync,mkdirSync,copyFileSync,existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
@@ -48,25 +49,25 @@ export function generateInstaller(packageRoot,output,{testIdentity=false,install
   const installerSource=sourceState(fileURLToPath(new URL('../..',import.meta.url)));
   if(!testIdentity && (installerSource.dirty || installerSource.revision!==manifest.sourceRevision))
     throw Error('Release installer source must be clean and match the package revision');
-  for(const required of ['WorkspaceObservatory.exe','Runtime/node.exe','LICENSE'])
+  for(const required of [appNames.internal.windowsExecutable,'Runtime/node.exe','LICENSE'])
     if(!manifest.files.some(file=>file.path===required))throw Error('Missing application component');
   const {version,buildNumber}=desktopReleaseVersion();
   if(Boolean(installationEnvelope)!==Boolean(updatePublicKey))throw Error('Receipt envelope and trusted public key must be supplied together');
   const envelope=installationEnvelope?readReceiptFile(installationEnvelope):null;
   if(envelope)validateInstallerEnvelope(envelope,updatePublicKey,manifest,readFileSync(path.join(packageRoot,'package-manifest.json')),buildNumber);
-  const name=testIdentity?'Workspace Observatory Installer Test':'Workspace Observatory';
-  const setupId=testIdentity?'WorkspaceObservatoryInstallerTest':'WorkspaceObservatorySetup';
-  const installerName=`Workspace-Observatory-${version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
+  const name=testIdentity?appNames.visible.windowsTestName:appNames.visible.productName;
+  const setupId=testIdentity?appNames.internal.windowsTestSetupId:appNames.internal.windowsSetupId;
+  const installerName=`${appNames.visible.artifactPrefix}-${version}-windows-x64${testIdentity?'-TEST':''}-setup.exe`;
   const artifacts=path.join(output,'artifacts');
-  const values={APP_NAME:name,SETUP_ID:setupId,APP_VERSION:version,SOURCE_REVISION:manifest.sourceRevision,
-    APP_ID:testIdentity?'WorkspaceObservatoryInstallerTest.App':'WorkspaceObservatory',
-    STARTUP_NAME:testIdentity?'WorkspaceObservatoryInstallerTest':'WorkspaceObservatory',
+  const values={APP_NAME:name,PUBLISHER:appNames.visible.publisher,SETUP_ID:setupId,APP_VERSION:version,SOURCE_REVISION:manifest.sourceRevision,
+    APP_ID:testIdentity?appNames.internal.windowsTestAppId:appNames.internal.windowsAppId,
+    STARTUP_NAME:testIdentity?appNames.internal.windowsTestStartupName:appNames.internal.windowsStartupName,
     UNINSTALL_KEY:`Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${setupId}`,
     INSTALLER_OUTPUT:path.join(artifacts,installerName),APP_ICON:fileURLToPath(new URL('telescope.ico',import.meta.url)),
     APP_LICENSE:path.join(packageRoot,'LICENSE')};
   if(envelope) {
     values.UPDATE_ENVELOPE=path.join(output,'installer-update-envelope.json');
-    values.UPDATE_DATA_NAME=name;
+    values.UPDATE_DATA_NAME=testIdentity?appNames.visible.windowsTestName:appNames.visible.dataFolder;
   }
   const lists=payloadLists(manifest,packageRoot);
   mkdirSync(output,{recursive:false});

@@ -55,7 +55,7 @@ internal static class WebHostsTests
         public IBridgePairingSession CreatePairingSession() => throw new InvalidOperationException("Unexpected fixture action.");
         public Task DisconnectPairing() => throw new InvalidOperationException("Unexpected fixture action.");
         public Task PreparePairingRepair() => throw new InvalidOperationException("Unexpected fixture action.");
-        public Task<BridgeScriptResult> RunScript(ProcessStartInfo start) => throw new InvalidOperationException("Unexpected fixture action.");
+        public Task<BridgeScriptResult> RunScript(ProcessStartInfo start, string? input = null) => throw new InvalidOperationException("Unexpected fixture action.");
         public Task<string> ReadTailscaleStatus() { Calls++; return Task.FromResult("unavailable"); }
     }
 
