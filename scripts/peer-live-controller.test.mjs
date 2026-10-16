@@ -581,7 +581,7 @@ test('quota repeat uses the passing joining reply after a second exchange',async
     assert.equal(await runSequence(run),repeatSamples===4);
     assert.ok(run.lines.includes('step quota-exchange: ok'));
     assert.ok(run.lines.includes(repeatSamples===4?'step quota-repeat: ok':'step quota-repeat: failed (joining side, status ok, peer reading present)'));
-    assert.equal(run.lines.at(-2),`second exchanges used: ${repeatSamples===4?1:2}`);
+    assert.equal(run.lines.at(-2),'second exchanges used: 1');
   }
 });
 test('every other request keeps the stop rule',async()=>{
@@ -646,7 +646,6 @@ test('quota diagnostics report fixed words on either side and reject malformed o
 
 for(const [step,side,action,target] of [
   ['quota-repeat','join','quota-exchange',2],
-  ['quota-disable-host','host','quota-disable',1],
   ['quota-disable-host','join','quota-exchange',3],
   ['quota-disable-host','host','quota-exchange',2],
 ])for(const passes of [true,false])test(`${step} ${side} ${action} retries once and ${passes?'continues':'stops'}`,async()=>{
@@ -669,14 +668,13 @@ for(const [step,side,action,target] of [
   }
 });
 
-test('fixture quota diagnostics map the last socket without network access',async()=>{
+test('fixture quota diagnostics map each request without network access',async()=>{
   for(const request of ['status','exchange'])for(const stage of ['none','connect','tls','response']) {
     let ticks=0,calls=0;
     const sockets=[];
     const result=await diagnosticQuotaSync('synthetic-runtime',{
       clock:()=>ticks++?1249:0,
       connect:()=>{
-        if(stage==='none')throw Error('Synthetic connection failure');
         const socket=new EventEmitter();
         sockets.push(socket);
         return socket;
@@ -690,6 +688,7 @@ test('fixture quota diagnostics map the last socket without network access',asyn
           socket.emit('connect');socket.emit('secureConnect');socket.emit('data');
           return {status:'ready',record:null};
         }
+        if(stage==='none')throw Error('Synthetic failure before socket creation');
         const socket=connect();
         if(['tls','response'].includes(stage))socket.emit('connect');
         if(stage==='response')socket.emit('secureConnect');
@@ -704,7 +703,7 @@ test('fixture quota diagnostics map the last socket without network access',asyn
         return {status:'unavailable',peer:null};
       },
     });
-    const expectedRequest=stage==='none'?'status':request;
+    const expectedRequest=request;
     assert.equal(calls,expectedRequest==='status'?1:2);
     assert.deepEqual(result,{status:'unavailable',peer:null,
       failure:{stage,code:stage==='none'?'none':'ECONNREFUSED',request:expectedRequest},elapsedMs:1200});
@@ -718,4 +717,36 @@ test('fixture quota diagnostics map the last socket without network access',asyn
     clock:()=>0,
   });
   assert.deepEqual(result,{status:'unavailable',failure:{stage:'connect',code:'other',request:'other'},elapsedMs:0});
+});
+
+test('quota disable failure stops without a further request',async()=>{
+  for(const reply of [{sharing:true},{status:'unavailable'}]) {
+    const run=fakes((_role,{action})=>action==='quota-disable'?reply:undefined);
+    assert.equal(await runSequence(run),false);
+    assert.equal(run.commands.filter(({command})=>command.action==='quota-disable').length,1);
+    assert.deepEqual(run.commands.at(-1),{role:'host',command:{action:'quota-disable'}});
+    assert.equal(run.lines.at(-2),'second exchanges used: 0');
+    assert.equal(run.lines.at(-1),'result: stopped at quota-disable-host');
+  }
+});
+
+for(const [step,side,action,target,reply] of [
+  ...['exchange','repeat-exchange','exchange-after-restart'].flatMap((step,index)=>
+    ['host','join'].map(side=>[step,side,'exchange',index+1,{status:'waiting',transport:'ok'}])),
+  ['quota-exchange','join','quota-exchange',1,{status:'ok',peerRemaining:null,peerSamples:1}],
+  ['quota-exchange','host','quota-exchange',1,{status:'ok',peerRemaining:70,peerSamples:-1}],
+  ['quota-repeat','join','quota-exchange',2,{status:'ok',peerRemaining:70,peerSamples:2}],
+  ['quota-disable-host','join','quota-exchange',3,{status:'ok',peerRemaining:70,localRemaining:40}],
+  ['quota-disable-host','host','quota-exchange',2,{status:'ok',peerRemaining:null,localRemaining:40}],
+])test(`${step} on ${side} stops after a correctness failure`,async()=>{
+  let count=0;
+  const run=fakes((role,command)=>{
+    if(role===side && command.action===action && ++count===target)return reply;
+  });
+  assert.equal(await runSequence(run),false);
+  assert.equal(count,target);
+  assert.deepEqual(run.commands.at(-1),{role:side,command:{action}});
+  assert.equal(run.lines.at(-2),'second exchanges used: 0');
+  assert.equal(run.lines.at(-1),`result: stopped at ${step}`);
+  assert.equal(run.lines.filter(line=>line.includes(': second exchange (')).length,0);
 });

@@ -44,11 +44,10 @@ export async function diagnosticQuotaSync(runtime,{sync=syncQuota,quotaRequest=t
   let events={},request='other';
   const started=clock();
   const result=await sync(runtime,{request:(transport,input)=>{
-    const action=['status','exchange'].includes(input.action)?input.action:'other';
-    if(!events.socketCreated)request=action;
+    events={};
+    request=['status','exchange'].includes(input.action)?input.action:'other';
     return quotaRequest(runtime,transport,input,{connect:(...args)=>{
       const socket=connect(...args);
-      events={};request=action;
       return observeSocket(socket,events);
     }});
   }});

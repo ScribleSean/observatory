@@ -146,7 +146,8 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
     let reply=await receive(link,()=>link.send(command));
     try {checkReply(reply,check,link);}
     catch (error) {
-      if(!valid(reply) || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep))throw error;
+      const deliveryFailure=action==='exchange'?reply?.transport!=='ok':action==='quota-exchange' && reply?.status==='unavailable';
+      if(!valid(reply) || !deliveryFailure || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep))throw error;
       log(`step ${activeStep}: second exchange (${replyFailure})`);
       secondExchanges++;
       replyFailure=null;
