@@ -589,7 +589,7 @@ void test('revoked offers repair instead of a new pairing', async t => {
   assert.ok(f.last('pairing-repair-prepare'));
 });
 
-const resultUnknown = 'The pairing result is unknown. The pairing state above shows the latest answer from the app.';
+const resultUnknown = 'The pairing result is unknown. Pairing under Devices and sharing shows the latest state from the app.';
 
 void test('a failed status read after a done retry reports an unknown result', async t => {
   const f = await fixture(t, 'local-ready');
@@ -623,6 +623,11 @@ for (const order of ['poll-first', 'action-first', 'probe-b', 'stale-poll']) {
       });
       assert.equal(f.container.querySelector('output').textContent, 'This change could not be made.');
       assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+    } else if (order === 'probe-b') {
+      await f.answer(actionRead, reply('establishing-trust'));
+      assert.equal(f.container.querySelector('output').textContent, 'Done');
+      await f.answer(pollRead, reply('local-ready'));
+      assert.equal(f.container.querySelector('output').textContent, 'Done');
     } else {
       await f.answer(pollRead, reply(order === 'stale-poll' ? 'local-ready' : 'establishing-trust'));
       assert.equal(f.container.querySelector('output').textContent, 'Working');

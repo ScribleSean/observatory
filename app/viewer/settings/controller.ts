@@ -1,6 +1,6 @@
 import { contract, validateArgs } from '../../../lib/bridge-contract.mjs';
 import type { Bridge, BridgeOutcome } from '../bridge';
-import { validateBridgeStatus, type BridgeStatus } from './status';
+import { pairedStates, validateBridgeStatus, type BridgeStatus } from './status';
 
 // Settings adds presentation metadata without changing the bridge outcome contract.
 export type SettingsOutcome = BridgeOutcome & { unknown?: boolean };
@@ -8,7 +8,7 @@ export type SettingsOutcome = BridgeOutcome & { unknown?: boolean };
 export function joinConfirmOutcome(result: BridgeOutcome, after: BridgeStatus | null): { outcome: BridgeOutcome; unknown: boolean } {
   if (result.timedOut || result.code !== 'done') return { outcome: result, unknown: false };
   const state = after?.pairing.state;
-  if (state && ['acknowledged', 'paired', 'establishing-trust', 'active-sync', 'sync-stale'].includes(state)) {
+  if (state && (state === 'acknowledged' || pairedStates.has(state))) {
     return { outcome: result, unknown: false };
   }
   return { outcome: { ...result, ok: false, code: 'unavailable' }, unknown: state !== 'local-ready' };

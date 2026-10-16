@@ -308,7 +308,7 @@
     "pairJoinConfirm": "Confirm the invitation",
     "pairHostConfirm": "Confirm the peer device",
     "pairLocalReady": "Local device ready",
-    "pairResultUnknown": "The pairing result is unknown. The pairing state above shows the latest answer from the app.",
+    "pairResultUnknown": "The pairing result is unknown. Pairing under Devices and sharing shows the latest state from the app.",
     "pairLocalReadyHelp": "This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again.",
     "pairRetry": "Try again",
     "pairAcknowledged": "Peer acknowledged",

@@ -1,5 +1,7 @@
 import { contract, validateArgs } from '../../../lib/bridge-contract.mjs';
 
+export const pairedStates = new Set(['paired', 'establishing-trust', 'active-sync', 'sync-stale']);
+
 export type SharingChannel = 'codex-limits' | 'claude-code-tokens';
 export type BridgeStatus = {
   version: 1;
