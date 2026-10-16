@@ -99,7 +99,7 @@ Your data folder is kept, so the new copy opens with your settings and history a
 
 ### Move from Workspace Observatory
 
-Development builds made before the rename were called Workspace Observatory and kept their data in `~/Library/Application Support/Workspace Observatory`. No release was published under that name. The renamed app does not read the earlier folder, and an earlier build never offers the renamed app as an update. If you have an earlier build and want to keep its history, settings and pairing, move the data once, before you open `Observatory.app` for the first time. The copy refuses to run once the new folder holds data.
+Development builds made before the rename were called Workspace Observatory and kept their data in `~/Library/Application Support/Workspace Observatory`. No release was published under that name. The renamed app does not read the earlier folder, and an earlier build never offers the renamed app as an update. If you have an earlier build and want to keep its history, settings and pairing, move the data once, before you open `Observatory.app` for the first time. The copy refuses to run once the new folder holds data. If you already opened the renamed app, quit it, move `~/Library/Application Support/Observatory` to the Trash (it holds only what that first run created, and the earlier folder is not touched), then follow the steps below.
 
 You need a checkout of the release's source revision and Node.js 22.13 or later. From the checkout, in this order:
 
@@ -114,7 +114,7 @@ You need a checkout of the release's source revision and Node.js 22.13 or later.
    ```
 
    The copy checks every file against the earlier folder by SHA-256 and never changes the earlier folder. It refuses while the earlier app, its collector or the status line bridge is running.
-5. If the Mac reaches the PC over the earlier SSH pairing, update the saved Windows paths, with both apps quit:
+5. If the Mac reaches the PC over the earlier SSH pairing, update the saved Windows paths. Observatory must be quit on this Mac and on the PC, because the update refuses while the PC app runs:
 
    ```sh
    node scripts/peer-transport-rename.mjs --runtime "$HOME/Library/Application Support/Observatory"

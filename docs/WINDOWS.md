@@ -100,7 +100,7 @@ The new copy opens with your settings and history and does not show the setup sc
 
 ### Move from Workspace Observatory
 
-Development builds made before the rename were called Workspace Observatory and kept their data in `%LOCALAPPDATA%\Workspace Observatory`. No release was published under that name. The renamed app does not read the earlier folder, and an earlier build never offers the renamed app as an update. The renamed installer keeps the earlier uninstall registration, so it refuses to install while the earlier version is installed. If you have an earlier build and want to keep its history, settings and pairing, move the data once, before you start Observatory for the first time. The copy refuses to run once the new folder holds data.
+Development builds made before the rename were called Workspace Observatory and kept their data in `%LOCALAPPDATA%\Workspace Observatory`. No release was published under that name. The renamed app does not read the earlier folder, and an earlier build never offers the renamed app as an update. The renamed installer keeps the earlier uninstall registration, so it refuses to install while the earlier version is installed. If you have an earlier build and want to keep its history, settings and pairing, move the data once, before you start Observatory for the first time. The copy refuses to run once the new folder holds data. If you already started the renamed app, quit it, move `%LOCALAPPDATA%\Observatory` to the Recycle Bin (it holds only what that first run created, and the earlier folder is not touched), then follow the steps below.
 
 You need a checkout of the release's source revision. From the checkout, in this order:
 
@@ -116,7 +116,7 @@ You need a checkout of the release's source revision. From the checkout, in this
    `-ExecutionPolicy Bypass` applies only to that one PowerShell process. The copy re-creates each private folder with its restricted permissions, checks every file by SHA-256 and never changes the earlier folder. It refuses while the earlier app or the status line bridge is running, and each refusal prints `Migration refused` with a stage and a reason. If Start at login was on, it records that, turns off the earlier login entry, and the renamed app turns Start at login on again the first time it runs.
 4. Uninstall Workspace Observatory from Settings, Apps, Installed apps. Your data folders are kept.
 5. Install Observatory as described above and start it from the Start menu. It should open with your history and settings, not the setup screen.
-6. If a Mac reaches this PC over the earlier SSH pairing, update the Mac next, as the [Mac guide](MAC.md#move-from-workspace-observatory) describes. The copy in step 3 recorded the new paths the Mac needs.
+6. If a Mac reaches this PC over the earlier SSH pairing, quit Observatory on this PC from its tray icon, then update the Mac as the [Mac guide](MAC.md#move-from-workspace-observatory) describes. The update refuses while the PC app runs. The copy in step 3 recorded the new paths the Mac needs. Start Observatory again from the Start menu afterwards.
 7. If you installed the Claude Code status line bridge, install it again for the new folder, as the [guide](GUIDE.md#claude-code-status-line-bridge) describes.
 
 Keep the earlier data folder and the backup until you are sure nothing is missing.

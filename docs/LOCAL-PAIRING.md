@@ -34,8 +34,9 @@ restricts traffic needs a rule that allows `tcp:43128` between the person's own
 devices. On a Mac with the firewall on, macOS asks the first time the bundled
 `node` listens, because that `node` is signed ad hoc and is not allowed
 automatically. The person chooses Allow. On Windows, Windows Defender Firewall
-may ask the same for the bundled `node.exe`, and the earlier two-device attempt
-below timed out on firewall rules.
+may ask the same for the bundled `node.exe`. The earlier two-device attempt
+below timed out on sandbox-managed outbound firewall rules, which is a
+different cause from that prompt.
 
 The modules themselves do nothing when imported. Importing them does not listen
 on a port, contact a device, save credentials or change sharing consent.
