@@ -149,6 +149,7 @@ export const STRINGS = {
     "namedDevice": "{name} ({platform})"
   },
   "dictation": {
+    "notImplemented": "Not implemented",
     "allTools": "All tools",
     "allDevices": "All devices",
     "tool": "Tool",
