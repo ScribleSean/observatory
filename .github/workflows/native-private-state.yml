@@ -72,7 +72,7 @@ jobs:
           & $env:OBSERVATORY_PYTHON -I -S -B -c "import sys"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # The preload and test-python receive this selected Python explicitly.
-      # run-collector.test.mjs still uses PATH python3 on Mac, not a child pin.
+      # run-collector.test.mjs starts the runner with this selected Python on Mac.
       # Windows skips POSIX runner cases, Mac skips Windows DACL models.
       # Python FakeLib/FakeReader remain modeled tests.
       - name: Verify fictional native private-state contracts
