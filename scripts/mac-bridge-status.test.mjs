@@ -34,3 +34,16 @@ test('joiner awaiting confirmation refuses a fingerprint', () => {
   shape.pairing.peerFingerprint = 'a'.repeat(64);
   assert.equal(validateBridgeStatus(shape), null);
 });
+
+test('active sync carries the sharing choice and channel progress', () => {
+  const shape = shapes.find(shape => shape.pairing.state === 'active-sync');
+  assert.ok(shape);
+  assert.deepEqual(shape.sharingChoice, { chosen: true, channels: {
+    'codex-limits': 'on', 'claude-code-tokens': 'waiting-for-reading',
+  } });
+  for (const invalid of [null, { chosen: 1, channels: shape.sharingChoice.channels },
+    { chosen: true, channels: { 'codex-limits': 'on' } },
+    { chosen: true, channels: { ...shape.sharingChoice.channels, 'codex-limits': 'bad' } }]) {
+    assert.equal(validateBridgeStatus({ ...shape, sharingChoice: invalid }), null);
+  }
+});
