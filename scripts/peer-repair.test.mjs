@@ -173,12 +173,14 @@ test('process death releases the repair lock without deleting a lock file',async
   const code=`import {withPeerStateLock} from ${JSON.stringify(module)};
     globalThis.diagRegistry=new FinalizationRegistry(()=>process.stderr.write('DIAG lease-frame-collected '+Date.now()+'\\n'));
     await withPeerStateLock(process.argv[1],async()=>{const token={};globalThis.diagRegistry.register(token,1);
-      process.stdout.write('ready');await new Promise(()=>{});console.log(token);});`;
+      process.stdout.write('\\nDIAG-READY\\n');await new Promise(()=>{});console.log(token);});`;
   // The interval keeps the synthetic lock owner alive until this test kills it.
   const child=spawn(process.execPath,['--trace-gc','--input-type=module','-e','setInterval(()=>{},1000);'+code,runtime],{stdio:['ignore','pipe','pipe']});
-  let diagErr='';child.stderr.on('data',chunk=>{diagErr+=chunk;});
+  let diagErr='',diagOut='';child.stderr.on('data',chunk=>{diagErr+=chunk;});
+  // --trace-gc writes to stdout, so readiness waits for the marker rather than any stdout data.
+  const readyMarker=new Promise(resolve=>child.stdout.on('data',chunk=>{diagOut+=chunk;if(diagOut.includes('DIAG-READY'))resolve();}));
   t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
-  await Promise.race([once(child.stdout,'data'),once(child,'exit').then(()=>{throw Error('Lock owner exited');})]);
+  await Promise.race([readyMarker,once(child,'exit').then(()=>{throw Error('Lock owner exited');})]);
   const readyAt=Date.now();
   const diag=label=>`DIAG ${label} t+${Date.now()-readyAt}ms exitCode=${child.exitCode} signal=${child.signalCode} pid=${child.pid}`;
   const before=diag('before-parent-attempt');
@@ -186,8 +188,8 @@ test('process death releases the repair lock without deleting a lock file',async
   try {await withPeerStateLock(runtime,()=>{});outcome='parent-acquired';}
   catch(error) {outcome='parent-refused '+error.message;}
   await new Promise(resolve=>setTimeout(resolve,300));
-  const report=[before,diag('after-parent-attempt'),'DIAG outcome '+outcome,'DIAG child stderr:',diagErr].join('\n');
-  t.diagnostic(report.split('\n').filter(line=>line.startsWith('DIAG')).join(' | ')+' | DIAG child gc events '+(diagErr.match(/(Scavenge|Mark-Compact|Mark-sweep|Minor)/gi)??[]).length);
+  const report=[before,diag('after-parent-attempt'),'DIAG outcome '+outcome,'DIAG child stderr:',diagErr,'DIAG child stdout:',diagOut].join('\n');
+  t.diagnostic(report.split('\n').filter(line=>line.startsWith('DIAG')).join(' | ')+' | DIAG child gc events '+(diagOut.match(/(Scavenge|Mark-Compact|Mark-sweep|Minor)/gi)??[]).length+' gc events after ready '+(diagOut.split('DIAG-READY')[1]?.match(/(Scavenge|Mark-Compact|Mark-sweep|Minor)/gi)??[]).length);
   assert.match(outcome,/locked/,report);
   const exited=once(child,'exit');child.kill('SIGKILL');await exited;
   await withPeerStateLock(runtime,async()=>{});
