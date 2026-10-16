@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Source contracts only. Do not execute collectors, permissions or deployment.
 const workflow = readFileSync(
@@ -12,16 +12,13 @@ const manifest = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 );
 
-test('demo runs the full native suite on a supported hosted platform', () => {
-  assert.match(
-    build,
-    /^    runs-on: (?:windows|macos)-latest$/m,
-    'The full suite includes native private-directory positives. Linux is intentionally unsupported.',
-  );
-  assert.doesNotMatch(build, /^\s*(?:if|continue-on-error|container):/m);
+test('demo build runs only its checks on a bounded Ubuntu host', () => {
+  assert.match(build, /^    runs-on: ubuntu-latest$/m);
+  assert.match(build, /^    timeout-minutes: 10$/m);
+  assert.doesNotMatch(build, /^\s*(?:if|continue-on-error|container|permissions|env):/m);
 });
 
-test('demo retains the full test and TypeScript gates before synthetic packaging', () => {
+test('demo pins its checks and TypeScript gate before synthetic packaging', () => {
   assert.equal(
     manifest.scripts.test,
     'node --import ./native/tests/test-source-runtime.mjs --test scripts/*.test.mjs',
@@ -30,20 +27,35 @@ test('demo retains the full test and TypeScript gates before synthetic packaging
     build.slice(build.indexOf('    steps:\n')),
     `    steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '24.21.0'
           cache: npm
       - run: npm ci
-      - run: npm test && npx tsc --noEmit
+      - run: npx tsc --noEmit
+      - run: node --test scripts/demo.test.mjs scripts/demo-build.test.mjs scripts/demo-workflow.test.mjs scripts/demo-publication-policy.test.mjs scripts/documentation.test.mjs
       # Fresh hosted checkout only. Never upload a workstation build.
       - run: npx vite build --config native/vite.demo.config.mts
       - run: node scripts/prepare-pages.mjs
+      - run: node scripts/check-demo-build.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/pages
 `,
   );
+  const testFiles = build.match(/^      - run: node --test (.+)$/m)?.[1].split(' ');
+  assert.deepEqual(testFiles, [
+    'scripts/demo.test.mjs',
+    'scripts/demo-build.test.mjs',
+    'scripts/demo-workflow.test.mjs',
+    'scripts/demo-publication-policy.test.mjs',
+    'scripts/documentation.test.mjs',
+  ]);
+  for (const file of testFiles) {
+    assert.ok(existsSync(new URL(`../${file}`, import.meta.url)), file);
+  }
 });
 
 test('demo retains manual-only publication and read-only workflow permissions', () => {

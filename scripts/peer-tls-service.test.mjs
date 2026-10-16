@@ -11,7 +11,7 @@ const binding=port=>({pairing:{localEndpoint:{kind:'tls',address:'10.0.0.2',port
 function fixture() {
   let current=null,starts=0,closes=0,scheduled=0;
   const live=[];
-  const service=createTrustedSyncService('/synthetic',{read:async()=>current,
+  const service=createTrustedSyncService('/synthetic',{writeStatus:async()=>{},read:async()=>current,
     start:async(_runtime,endpoint,options)=>{
       assert.deepEqual(endpoint,options.expectedPairing.localEndpoint);starts++;
       const value={open:true,isListening(){return this.open;},async close(){if(this.open)closes++;this.open=false;}};
@@ -43,7 +43,7 @@ test('service retries a dead listener and never accepts setup commands',async()=
 test('cancellation drains a late start without leaving its listener alive',async()=>{
   let resolveStart,closed=0;
   const started=new Promise(resolve=>resolveStart=resolve);
-  const service=createTrustedSyncService('/synthetic',{read:async()=>binding(43128),start:()=>started});
+  const service=createTrustedSyncService('/synthetic',{writeStatus:async()=>{},read:async()=>binding(43128),start:()=>started});
   const opening=service.reconcile();await Promise.resolve();await Promise.resolve();
   const closing=service.cancel();
   resolveStart({isListening:()=>true,close:async()=>closed++});
@@ -51,7 +51,7 @@ test('cancellation drains a late start without leaving its listener alive',async
 });
 test('failed revalidation closes the just-created listener',async()=>{
   let reads=0,closed=0;
-  const service=createTrustedSyncService('/synthetic',{
+  const service=createTrustedSyncService('/synthetic',{writeStatus:async()=>{},
     read:async()=>{if(++reads>1)throw Error('changed');return binding(43128);},
     start:async()=>({isListening:()=>true,close:async()=>closed++})});
   assert.deepEqual(await service.reconcile(),{status:'unavailable'});
@@ -70,4 +70,39 @@ test('native-owned child stays inert without pairing and exits on parent EOF',{t
     assert.deepEqual(await reply,{id:1,status:'sync-disabled'});
     child.stdin.end();assert.deepEqual(await exit,{code:0,signal:null});
   } finally {if(child.exitCode===null)child.kill();await rm(runtime,{recursive:true,force:true});}
+});
+
+test('status writes follow the first reconcile and timer ticks without changing replies',async t=>{
+  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-status-service-')));
+  t.after(()=>rm(runtime,{recursive:true,force:true}));
+  let tick,writes=0,closes=0,listening=false;
+  const service=createTrustedSyncService(runtime,{read:async()=>binding(43128),
+    start:async()=>{listening=true;return {isListening:()=>listening,close:async()=>{listening=false;closes++;}};},
+    schedule:callback=>{tick=callback;return 1;},unschedule:()=>{},
+    writeStatus:async location=>{assert.equal(location,runtime);assert.equal(listening,true);writes++;throw Error('Synthetic write failure');}});
+  try {
+    assert.deepEqual(await service.run({action:'status'}),{status:'sync-listening'});
+    assert.equal(writes,1);assert.equal(closes,0);
+    tick();assert.deepEqual(await service.reconcile(),{status:'sync-listening'});
+    assert.equal(writes,2);assert.equal(closes,0);assert.equal(listening,true);
+    assert.deepEqual(await service.cancel(),{status:'sync-disabled'});
+    tick();assert.deepEqual(await service.reconcile(),{status:'sync-disabled'});
+    assert.equal(writes,2);assert.equal(closes,1);
+  } finally {await service.cancel();}
+});
+
+test('pending status write never delays replies and only one write runs',async()=>{
+  let finish,writes=0,tick;
+  const blocked=new Promise(resolve=>finish=resolve);
+  const service=createTrustedSyncService('/synthetic',{read:async()=>null,
+    schedule:callback=>{tick=callback;return 1;},unschedule:()=>{},
+    writeStatus:()=>{writes++;return blocked;}});
+  try {
+    assert.deepEqual(await service.run({action:'status'}),{status:'sync-disabled'});
+    assert.equal(writes,1);
+    tick();assert.deepEqual(await service.reconcile(),{status:'sync-disabled'});
+    assert.equal(writes,1);
+    finish();await new Promise(resolve=>setImmediate(resolve));
+    tick();await service.reconcile();assert.equal(writes,2);
+  } finally {finish();await service.cancel();}
 });

@@ -6,6 +6,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
+import {readPairingStatusFile,writePairingStatus} from './peer-pairing-status.mjs';
 import {revokePairing,assertPeerNotRevoked} from './peer-revocation.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,readPeerState,acceptPeerState,createPeerRecord} from './peer-store.mjs';
@@ -29,10 +30,14 @@ test('revocation is durable, idempotent, and preserves existing private state',a
   const local=payload(pair.local),remote=createPeerRecord(payload(pair.peer),pair.peer,1);
   await publishLocalPayload(runtime,local,pair.local);
   await acceptPeerState(runtime,remote,pair.peer);
+  await writePairingStatus(runtime);
+  assert.equal((await readPairingStatusFile(runtime)).state,'active-sync');
   const pairingPath=path.join(runtime,'private-sync/pairing.json'),dbPath=path.join(runtime,'private-sync/state.sqlite');
   const pairingBefore=await readFile(pairingPath),dbBefore=await readFile(dbPath);
   assert.deepEqual(await revokePairing(runtime),{status:'revoked'});
+  assert.deepEqual(await readPairingStatusFile(runtime),{version:1,state:'revoked'});
   assert.deepEqual(await revokePairing(runtime),{status:'revoked'});
+  assert.deepEqual(await readPairingStatusFile(runtime),{version:1,state:'revoked'});
   await assert.rejects(readPairing(runtime),/revoked/);
   await assert.rejects(readPeerState(runtime,pair.peer),/revoked/);
   await assert.rejects(publishLocalPayload(runtime,local,pair.local),/revoked/);
@@ -124,5 +129,13 @@ test('CLI also runs when its script is reached through a filesystem alias',{skip
   await symlink(fileURLToPath(new URL('./peer-revocation.mjs',import.meta.url)),alias);
   const output=execFileSync(process.execPath,[alias,'--runtime',runtime,'--revoke'],{encoding:'utf8',timeout:20000});
   assert.match(output,/disabled locally/);
+  await assert.rejects(readPairing(runtime),/revoked/);
+});
+
+test('status write failure does not fail revocation',async t=>{
+  const runtime=await fixture(t);
+  await initializePairing(runtime,createPairingConfigurations().Mac);
+  await mkdir(path.join(runtime,'pairing-status.json'));
+  assert.deepEqual(await revokePairing(runtime),{status:'revoked'});
   await assert.rejects(readPairing(runtime),/revoked/);
 });

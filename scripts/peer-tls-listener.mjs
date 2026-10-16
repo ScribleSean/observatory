@@ -7,6 +7,10 @@ import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {validRepairNonce} from './peer-repair-consent.mjs';
 
 const failure=()=>Error('Pairing listener unavailable');
+export function pairingPeerAddress(value) {
+  const address=typeof value==='string'?value.replace(/^::ffff:(?=[0-9]+\.)/i,''):value;
+  return isPairingAddress(address)?address:null;
+}
 function deviceCertificate(raw) {
   if(!raw || raw.length>16384)throw failure();
   const cert=new X509Certificate(raw),now=Date.now();
@@ -90,7 +94,8 @@ export async function startPairingListener({address,port=0,identity},
           if(!request || Object.keys(request).length!==(Object.hasOwn(request,'repair')?4:3) || request.version!==1 ||
             request.action!=='claim' || !Object.hasOwn(request,'secret') ||
             (Object.hasOwn(request,'repair') && !validRepairNonce(request.repair)))throw failure();
-          pending={...session.claim(request.secret,peerFingerprint),peerCertificate,peerRepairNonce:request.repair??null};claimed=true;
+          pending={...session.claim(request.secret,peerFingerprint),peerCertificate,peerRepairNonce:request.repair??null,
+            peerAddress:pairingPeerAddress(socket.remoteAddress)};claimed=true;
           socket.end(JSON.stringify({version:1,status:'awaiting-confirmation'}),()=>{acknowledged=true;});
         } catch {socket.destroy();}
       });

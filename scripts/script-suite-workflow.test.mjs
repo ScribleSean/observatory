@@ -71,9 +71,24 @@ test('workflow contains no write permission text', () => {
   assert.doesNotMatch(workflow, /write/i);
 });
 
-test('matrix contains exactly the runner and suite part axes', () => {
-  assert.match(workflow, /      matrix:\n        os: \[windows-latest, macos-14\]\n        part: \[general, tls-1, tls-2, tls-3\]\n    runs-on: \$\{\{ matrix.os \}\}/);
+test('matrix contains exactly the ordered platform parts', () => {
+  const expected = [
+    ...['general', 'tls-1', 'tls-2', 'tls-3', 'tls-4', 'tls-5', 'sync-1', 'sync-2', 'sync-3'].map((part) => ['windows-latest', part]),
+    ...['general', 'tls'].map((part) => ['macos-14', part]),
+  ];
+  assert.equal(workflow.match(/      matrix:\n([\s\S]*?)    runs-on:/)[1],
+    '        include:\n' + expected.map(([os, part]) => `          - os: ${os}\n            part: ${part}\n`).join(''));
+  assert.ok(workflow.includes('      fail-fast: false\n'));
+  assert.ok(workflow.includes('    runs-on: ${{ matrix.os }}\n'));
 });
+
+for (const prefix of ['script-suite', 'native-compile', 'native-private-state', 'update-safety']) {
+  test(`${prefix} cancels only superseded pull requests`, () => {
+    const text = readFileSync(new URL(`../.github/workflows/${prefix}.yml`, import.meta.url), 'utf8');
+    assert.equal(text.match(/^concurrency:\n([\s\S]*?)^jobs:/m)[1],
+      "  group: " + prefix + "-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}\n  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n");
+  });
+}
 
 test('workflow has exactly the existing if lines in order', () => {
   assert.deepEqual(workflow.match(/^\s*if:.*$/gm), [
@@ -162,24 +177,44 @@ test('suite invokes Node through the source runtime preload', () => {
 });
 
 const shards = {
-  'tls-1': ['provider-token-sync.test.mjs'],
-  'tls-2': ['peer-pairing.test.mjs', 'peer-repair.test.mjs', 'peer-setup.test.mjs', 'peer-tls-service.test.mjs', 'peer-tls-trust.test.mjs'],
-  'tls-3': ['peer-tls-client.test.mjs', 'peer-tls-sync.test.mjs', 'provider-token-tls.test.mjs', 'quota-sync.test.mjs', 'quota-tls.test.mjs'],
+  'tls-1': ['peer-tls-trust.test.mjs'],
+  'tls-2': ['peer-repair.test.mjs', 'peer-pairing.test.mjs'],
+  'tls-3': ['peer-tls-repair.test.mjs', 'quota-tls.test.mjs', 'peer-tls-service.test.mjs', 'peer-tls-control.test.mjs'],
+  'tls-4': ['peer-setup.test.mjs', 'provider-token-tls.test.mjs'],
+  'tls-5': ['quota-sync.test.mjs', 'peer-tls-client.test.mjs', 'peer-tls-sync.test.mjs'],
 };
-const tls = Object.values(shards).flat();
-const parts = ['general', ...Object.keys(shards)];
-const workflowShards = [...suite.matchAll(/^            '(tls-\d+)': (\[[^\n]+\]),$/gm)]
-  .map((match) => [match[1], JSON.parse(match[2].replaceAll("'", '"'))]);
+const syncNames = {
+  'sync-1': [
+    'local hours stay on the dashboard while stored and exchanged records remain identical',
+    'pairing revoke, corruption and retirement fence transport while local disable remains available',
+    'wrong identity, older, conflicting and regressing revisions cannot replace a peer record',
+    'native sharing CLI exposes only bounded status and confirmation fields',
+  ],
+  'sync-2': [
+    'duplicate deliveries keep source and receipt time, newer snapshots replace instead of sum',
+    'disable or disable-reenable during readiness prevents sending provider readings',
+    'collection off disables sharing and failed reads replace totals with Unknown',
+    'concurrent TLS roles exchange without holding a network lock and preserve local collection on errors',
+  ],
+};
+
+const syncFile = 'provider-token-sync.test.mjs';
+const tls = [...Object.values(shards).flat(), syncFile];
+const parts = ['general', ...Object.keys(shards), 'sync-1', 'sync-2', 'sync-3'];
+const platformParts = (platform) => platform === 'win32' ? parts : ['general', 'tls'];
+const providerSource = readFileSync(new URL('./provider-token-sync.test.mjs', import.meta.url), 'utf8');
 const general = ['z-synthetic.test.mjs', 'a-synthetic.test.mjs'];
 const args = ['--import', './native/tests/test-source-runtime.mjs', '--test'];
 const suiteScript = suite.split('        run: |\n')[1]
   .split('\n').map((line) => line.slice(10)).join('\n');
-
-function runSuite(t, part, platform = 'win32', names = [...tls, ...general], status = 0, script = suiteScript) {
+const escape = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const patterns = (part) => (part === 'sync-3' ? Object.values(syncNames).flat() : syncNames[part])
+  .map((name) => `${part === 'sync-3' ? '--test-skip-pattern' : '--test-name-pattern'}=^${escape(name)}$`);
+function runSuite(t, part, platform = 'win32', names = [...tls, ...general], status = 0, script = suiteScript, provider = providerSource) {
   const root = mkdtempSync(join(tmpdir(), 'script-suite-workflow-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, 'scripts'));
-  for (const name of names) writeFileSync(join(root, 'scripts', name), '');
+  for (const name of names) writeFileSync(join(root, 'scripts', name), name === syncFile ? provider : '');
   writeFileSync(join(root, 'scripts', 'ignored.mjs'), '');
   mkdirSync(join(root, 'scripts', 'directory.test.mjs'));
   const shim = `
@@ -212,115 +247,157 @@ function runSuite(t, part, platform = 'win32', names = [...tls, ...general], sta
   };
 }
 
-test('TLS shards contain exactly the specified files in order', () => {
-  assert.deepEqual(workflowShards, Object.entries(shards));
+
+test('workflow pins the file groups and sync names', () => {
+  const extract = (key) => JSON.parse(suiteScript.match(new RegExp(`const ${key} = ([\\s\\S]*?);`))[1].replaceAll("'", '"').replace(/,\s*([\]}])/g, '$1'));
+  assert.deepEqual(extract('shards'), shards);
+  assert.deepEqual(extract('syncNames'), syncNames);
+  const names = Object.values(syncNames).flat();
+  assert.equal(new Set(names).size, names.length);
+  for (const name of names) {
+    assert.equal(providerSource.split("test('" + name + "'").length - 1, 1, name);
+    assert.equal(providerSource.split("\ntest('" + name + "'").length - 1, 1, name);
+  }
+  assert.match(suite, /shell: node \{0\}/);
+  assert.match(suite, /env:\n          SUITE_PART: \$\{\{ matrix.part \}\}\n        run: \|/);
+  assert.doesNotMatch(suiteScript, /--test-shard/);
 });
 
-test('TLS selection pins the patterns and sends unlisted matches to tls-3', () => {
-  const patterns = suite.match(/const tlsPatterns = \[\n([\s\S]*?)\n          \];/)?.[1];
-  assert.deepEqual(patterns?.trim().split('\n').map((line) => line.trim()), [
+test('TLS patterns remain unchanged', () => {
+  assert.deepEqual(suiteScript.match(/const tlsPatterns = \[\n([\s\S]*?)\n\];/)[1].trim().split('\n').map((line) => line.trim()), [
     String.raw`/^peer-tls-.*\.test\.mjs$/,`,
     String.raw`/^peer-(pairing|repair|setup)\.test\.mjs$/,`,
     String.raw`/^provider-token-(sync|tls)\.test\.mjs$/,`,
     String.raw`/^quota-(sync|tls)\.test\.mjs$/,`,
   ]);
-  assert.ok(suite.includes('const isTls = (name) => tlsPatterns.some((pattern) => pattern.test(name));'));
-  assert.ok(suite.includes("shards['tls-3'].push(...files.filter((name) => isTls(name) && !tls.includes(name)));"));
+  assert.ok(suiteScript.includes('const isTls = (name) => tlsPatterns.some((pattern) => pattern.test(name));'));
 });
 
-test('new TLS files run only in tls-3 while tls-1 keeps provider-token-sync alone', (t) => {
-  const newFiles = ['peer-tls-new.test.mjs', 'peer-tls-repair.test.mjs'];
-  for (const platform of ['win32', 'darwin']) {
-    for (const part of parts) {
-      const result = runSuite(t, part, platform, [...newFiles.toReversed(), ...tls, ...general]);
+for (const platform of ['win32', 'darwin', 'linux']) {
+  test(`${platform} covers all files with exact arguments and future TLS routing`, (t) => {
+    const files = [...tls, ...general, 'peer-tls-new.test.mjs'];
+    const owners = new Map();
+    for (const part of platformParts(platform)) {
+      const result = runSuite(t, part, platform, files);
       assert.equal(result.status, 0, result.stderr);
-      const selected = result.calls.flatMap((call) => call.args.filter((arg) => arg.startsWith('scripts/')));
-      const expected = part === 'general' ? general.toSorted()
-        : part === 'tls-3' ? [...shards[part], ...newFiles] : shards[part];
-      assert.deepEqual(selected, expected.map((name) => `scripts/${name}`));
+      const selected = part === 'general' ? general.toSorted() : part === 'tls' ? [...tls, 'peer-tls-new.test.mjs'].sort()
+        : part.startsWith('sync-') ? [syncFile] : [...shards[part], ...(part === 'tls-3' ? ['peer-tls-new.test.mjs'] : [])];
+      const batches = part === 'general' ? [selected] : selected.map((name) => [name]);
+      assert.deepEqual(result.calls, batches.map((batch) => ({
+        executable: 'synthetic-node', options: { stdio: 'inherit' },
+        args: [...args, part === 'general' ? '--test-timeout=300000' : '--test-timeout=900000',
+          ...(part !== 'general' || platform === 'darwin' ? ['--test-concurrency=1'] : []),
+          ...(part.startsWith('sync-') ? patterns(part) : []), ...batch.map((name) => `scripts/${name}`)],
+      })));
+      for (const file of selected) owners.set(file, [...(owners.get(file) ?? []), part]);
     }
+    assert.deepEqual([...owners.keys()].sort(), files.sort());
+    for (const [file, assigned] of owners) {
+      if (file === syncFile && platform === 'win32') assert.deepEqual(assigned, ['sync-1', 'sync-2', 'sync-3']);
+      else assert.equal(assigned.length, 1, file);
+    }
+  });
+}
+
+test('sync skip patterns equal both inclusion lists', (t) => {
+  const get = (part) => runSuite(t, part).calls[0].args.filter((arg) => arg.startsWith('--test-') && arg.includes('pattern='));
+  assert.deepEqual(get('sync-3'), [...get('sync-1'), ...get('sync-2')].map((arg) => arg.replace('--test-name-pattern', '--test-skip-pattern')));
+});
+
+test('real Node runs every synthetic name exactly once and later tests in sync-3', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'sync-name-behavior-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const names = [...providerSource.matchAll(/^test\('([^']+)'/gm)].map((match) => match[1]);
+  assert.equal(names.length, 13);
+  names.push('a later test');
+  const file = join(root, 'synthetic.test.mjs');
+  const log = join(root, 'names.jsonl');
+  writeFileSync(file, "import test from 'node:test';\nimport { appendFileSync } from 'node:fs';\n" +
+    names.map((name) => `test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(log)}, JSON.stringify(${JSON.stringify(name)}) + '\\n'));`).join('\n'));
+  const observed = [];
+  for (const part of ['sync-1', 'sync-2', 'sync-3']) {
+    writeFileSync(log, '');
+    const produced = runSuite(t, part).calls[0].args;
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync(process.execPath, [...produced.slice(2, -1), file], { encoding: 'utf8', env });
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    const ran = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+    assert.equal(ran.includes('a later test'), part === 'sync-3', JSON.stringify({ part, ran, stdout: result.stdout }));
+    observed.push(...ran);
   }
+  assert.deepEqual(observed.sort(), names.sort());
 });
 
-test('no TLS file is listed in two shards in the workflow', () => {
-  const files = workflowShards.flatMap(([, names]) => names);
-  assert.equal(new Set(files).size, files.length);
-});
-
-test('every part refuses duplicate shard files before launching tests', (t) => {
-  const script = suiteScript.replace("'tls-1': [", "'tls-1': ['peer-pairing.test.mjs', ");
-  assert.notEqual(script, suiteScript);
-  for (const part of parts) {
-    const result = runSuite(t, part, 'win32', [...tls, ...general], 0, script);
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /Duplicate TLS test file across shards/);
-    assert.deepEqual(result.calls, []);
-  }
-});
-
-test('suite step sets only SUITE_PART from matrix.part', () => {
-  assert.match(suite, /        env:\n          SUITE_PART: \$\{\{ matrix.part \}\}\n        run: \|\n/);
-});
-
-test('suite refuses an unknown part before launching tests', (t) => {
-  for (const part of ['unknown', 'tls', 'toString', '__proto__', '']) {
-    const result = runSuite(t, part);
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /SUITE_PART must be general or one of: tls-1, tls-2, tls-3/);
-    assert.deepEqual(result.calls, []);
-  }
-});
-
-test('every part refuses a missing shard file before launching tests', (t) => {
-  for (const part of parts) {
-    for (const missing of tls) {
-      const result = runSuite(t, part, 'win32', [...tls, ...general].filter((name) => name !== missing));
+test('invalid parts refuse before spawning with platform-specific guidance', (t) => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    for (const part of ['unknown', 'toString', '__proto__', '', ...(platform === 'win32' ? ['tls'] : ['tls-1', 'sync-1'])]) {
+      const result = runSuite(t, part, platform);
       assert.equal(result.status, 1);
-      assert.ok(result.stderr.includes(missing));
+      assert.equal(result.stderr.trim(), 'SUITE_PART must be general or one of: ' + platformParts(platform).slice(1).join(', '));
       assert.deepEqual(result.calls, []);
     }
   }
 });
 
-for (const [part, files] of Object.entries(shards)) {
-  test(`${part} runs one file per invocation in order with concurrency one on every runner`, (t) => {
-    for (const platform of ['win32', 'darwin']) {
-      const result = runSuite(t, part, platform);
-      assert.equal(result.status, 0, result.stderr);
-      assert.deepEqual(result.calls, files.map((name) => ({
-        executable: 'synthetic-node',
-        args: [...args, '--test-timeout=900000', '--test-concurrency=1', `scripts/${name}`],
-        options: { stdio: 'inherit' },
-      })));
+test('every part refuses missing files and duplicate files or names before spawning', (t) => {
+  const mutations = [
+    [suiteScript.replace("'tls-2': [", "'tls-2': ['peer-pairing.test.mjs', "), /Duplicate TLS/],
+    [suiteScript.replace("'sync-2': [", "'sync-2': ['" + syncNames['sync-1'][0] + "', "), /Duplicate sync/],
+    [suiteScript.replace("'sync-1': [", "'sync-1': ['" + syncNames['sync-1'][0] + "', "), /Duplicate sync/],
+  ];
+  for (const platform of ['win32', 'darwin']) for (const part of platformParts(platform)) {
+    for (const missing of tls) {
+      const result = runSuite(t, part, platform, [...tls, ...general].filter((name) => name !== missing));
+      assert.equal(result.status, 1);
+      assert.ok(result.stderr.includes(missing));
+      assert.deepEqual(result.calls, []);
+    }
+    for (const [script, message] of mutations) {
+      assert.notEqual(script, suiteScript);
+      const result = runSuite(t, part, platform, [...tls, ...general], 0, script);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, message);
+      assert.deepEqual(result.calls, []);
+    }
+  }
+});
+
+test('sync parts refuse missing or repeated provider names before spawning', (t) => {
+  for (const part of ['sync-1', 'sync-2', 'sync-3']) for (const provider of ['', providerSource + providerSource]) {
+    const result = runSuite(t, part, 'win32', [...tls, ...general], 0, suiteScript, provider);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Expected exactly one top-level sync test/);
+    assert.deepEqual(result.calls, []);
+  }
+});
+
+for (const prefix of ['  await t.', '// ']) {
+  test(`sync parts refuse a provider name appearing only after ${JSON.stringify(prefix)}`, (t) => {
+    const name = syncNames['sync-1'][0];
+    const provider = providerSource.replace("test('" + name + "'", prefix + "test('" + name + "'");
+    assert.notEqual(provider, providerSource);
+    for (const part of ['sync-1', 'sync-2', 'sync-3']) {
+      const result = runSuite(t, part, 'win32', [...tls, ...general], 0, suiteScript, provider);
+      assert.equal(result.status, 1);
+      assert.equal(result.stderr.trim(), `Expected exactly one top-level sync test: ${name}`);
+      assert.deepEqual(result.calls, []);
     }
   });
 }
 
-test('general runs one sorted batch and keeps concurrency one only on darwin', (t) => {
-  for (const platform of ['win32', 'darwin']) {
-    const result = runSuite(t, 'general', platform);
+test('sync parts accept provider source with CRLF line endings', (t) => {
+  const provider = providerSource.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
+  for (const part of ['sync-1', 'sync-2', 'sync-3']) {
+    const result = runSuite(t, part, 'win32', [...tls, ...general], 0, suiteScript, provider);
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.calls, [{
-      executable: 'synthetic-node',
-      args: [...args, '--test-timeout=300000', ...(platform === 'darwin' ? ['--test-concurrency=1'] : []),
-        ...general.toSorted().map((name) => `scripts/${name}`)],
-      options: { stdio: 'inherit' },
-    }]);
+    assert.equal(result.calls.length, 1);
   }
 });
 
-test('general plus the three shards covers every synthetic test file exactly once', (t) => {
-  const results = parts.map((part) => runSuite(t, part));
-  for (const result of results) assert.equal(result.status, 0, result.stderr);
-  const files = results.flatMap((result) => result.calls.flatMap((call) =>
-    call.args.filter((arg) => arg.startsWith('scripts/'))));
-  assert.deepEqual(files.sort(), [...tls, ...general].map((name) => `scripts/${name}`).sort());
-  assert.equal(new Set(files).size, files.length);
-});
-
 test('suite stops at the first nonzero child exit', (t) => {
-  for (const part of parts) {
-    const result = runSuite(t, part, 'win32', [...tls, ...general], 7);
+  for (const platform of ['win32', 'darwin']) for (const part of platformParts(platform)) {
+    const result = runSuite(t, part, platform, [...tls, ...general], 7);
     assert.equal(result.status, 7);
     assert.equal(result.calls.length, 1);
   }
@@ -345,7 +422,7 @@ test('general runs Windows test isolation checks after the full suite on both ru
         options: { stdio: 'inherit' },
       }]);
     }
-    for (const part of Object.keys(shards)) {
+    for (const part of platformParts(platform).slice(1)) {
       const result = runSuite(t, part, platform, [], 7, script);
       assert.equal(result.status, 0);
       assert.deepEqual(result.calls, []);

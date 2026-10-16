@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {readPairing} from './peer-pairing.mjs';
+import {writePairingStatus} from './peer-pairing-status.mjs';
 import {readPeerTrust} from './peer-tls-trust.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {startTrustedSyncListener} from './peer-tls-sync.mjs';
@@ -23,8 +24,8 @@ async function readBinding(runtime) {
 // Owned by the native app through a private stdin pipe. No identity creation,
 // setup operations, public bind, discovery or independent startup registration.
 export function createTrustedSyncService(runtime,{read=readBinding,start=startTrustedSyncListener,
-  schedule=callback=>setInterval(callback,30000),unschedule=clearInterval}={}) {
-  let listener=null,binding=null,pending=null,timer=null,closed=false,status='sync-disabled';
+  schedule=callback=>setInterval(callback,30000),unschedule=clearInterval,writeStatus=writePairingStatus}={}) {
+  let listener=null,binding=null,pending=null,statusWrite=null,timer=null,closed=false,status='sync-disabled';
   async function stopListener() {
     const old=listener;listener=null;binding=null;
     if(old)await old.close();
@@ -46,7 +47,11 @@ export function createTrustedSyncService(runtime,{read=readBinding,start=startTr
         if(closed || !isDeepStrictEqual(await read(runtime),next)) {await stopListener();status='sync-disabled';return;}
         listener=created;binding=next;status='sync-listening';
       } catch {await stopListener();status='unavailable';}
-    })().then(()=>({status})).finally(()=>{pending=null;});
+    })().then(()=>{
+      const reply={status};
+      if(!closed && !statusWrite)statusWrite=Promise.resolve().then(()=>writeStatus(runtime)).catch(()=>{}).finally(()=>{statusWrite=null;});
+      return reply;
+    }).finally(()=>{pending=null;});
     return pending;
   }
   async function cancel() {

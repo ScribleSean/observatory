@@ -54,8 +54,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-private-state-\${{ github.ref }}
-  cancel-in-progress: true
+  group: native-private-state-\${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: \${{ github.event_name == 'pull_request' }}
 jobs:
   contracts:
     strategy:

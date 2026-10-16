@@ -147,7 +147,7 @@ To verify only that download, run `native/windows/installer.ps1 -VerifyCompilerO
 
 `-SkipWebBuild` is a development shortcut for packaging-only changes after a successful web build. Do not use it for release verification. `package.ps1 -BuildPython C:\path\to\python.exe` selects the build interpreter explicitly. Its default remains the Windows Python launcher, with `-3` added only for `py.exe`. This interpreter prepares the pinned packaged Python runtime, rather than replacing it.
 
-The manually dispatched `Clean Windows package` workflow uses a fresh standard Windows runner, an explicit build Python and the complete packaging command without `-SkipWebBuild`. It exercises dependency restoration, the web build, source tests, runtime preparation and packaged checks. It does not install the application, collect live records, use signing secrets or publish artifacts.
+The manually dispatched `Clean Windows package` workflow uses a fresh standard Windows runner, an explicit build Python and the packaging command without `-SkipWebBuild`. It first requires a successful `Script suite` run (a push or manual dispatch) on the same commit and fails when none exists, then passes `-SkipScriptSuite` so the full script suite does not run a second time. It exercises dependency restoration, dashboard build, native self-tests, runtime preparation and packaged checks. `-SkipScriptSuite` is for that workflow only. Local builds keep running the full suite. It does not install the application, collect live records, use signing secrets or publish artifacts. A successful run is clean-build evidence, not a clean first-launch or release-publication result.
 
 ### Build and test the installer
 

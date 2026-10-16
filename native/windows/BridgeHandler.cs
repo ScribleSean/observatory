@@ -530,7 +530,7 @@ internal sealed class BridgeHandler : IDisposable
                 if (host.RuntimeOverride) return new("unavailable");
                 host.SetStartup(Enabled()); break;
             case "set-limits-consent":
-                if (Enabled() && !Confirm(request, "Claude Code limits", "Claude Code hides most of its footer keyboard hints while any custom status line is configured. Turn on Claude Code limits?")) return new("cancelled");
+                if (Enabled() && !Confirm(request, "Claude Code limits", "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times. Turn on Claude Code limits?")) return new("cancelled");
                 var consentArgs = Enabled() ? new[] { "set", "--runtime", runtime, "--consent" } : new[] { "clear", "--runtime", runtime };
                 return await Script("claude-limits-consent.mjs", consentArgs);
             case "set-sharing":

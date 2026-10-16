@@ -390,7 +390,7 @@ final class MacBridgeHost: BridgeHost {
             guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             guard hasConsentScript else { completion(.unavailable, nil); return }
             if enabled {
-                let code = confirm("Turn on Claude Code limits?", "Claude Code hides most of its footer keyboard hints while any custom status line is configured.", ["Turn on", "Cancel"])
+                let code = confirm("Turn on Claude Code limits?", "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times.", ["Turn on", "Cancel"])
                 guard code == .done else { completion(code, nil); return }
             }
             Task {

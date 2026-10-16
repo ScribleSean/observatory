@@ -1,3 +1,4 @@
+import {applySharingChoice} from './sharing-choice.mjs';
 import {isDeepStrictEqual} from 'node:util';
 import {readPairing} from './peer-pairing.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
@@ -85,6 +86,7 @@ export async function collectProviderTokenSources(runtime,source,options={}) {
   try {
     if(!await readPairing(runtime))return {status:'disabled',sources:[dashboard]};
     await updateProviderTokenSource(runtime,local,now);
+    try {await applySharingChoice(runtime,'claude-code-tokens',now);}catch {}
     const result=await syncProviderTokens(runtime,options);
     return {status:result.status,sources:[dashboard,...(result.peer?[result.peer]:[])]};
   } catch {return {status:'unavailable',sources:[dashboard]};}

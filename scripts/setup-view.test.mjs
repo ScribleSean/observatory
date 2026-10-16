@@ -24,7 +24,7 @@ for (const skinId of ['sage', 'almanac']) void test(`wizard renders all steps in
   assert.equal((source.match(/type="checkbox"/g) ?? []).length, 6);
   assert.doesNotMatch(source, / checked=""|>Finish<|<a\b/);
   for (const row of [...SETUP_SOURCES, { label: strings.settings.claudeLimits, hint: strings.setup.claudeLimitsHint }]) {
-    assert.ok(source.includes(row.label)); assert.ok(source.includes(row.hint));
+    assert.ok(source.includes(row.label)); assert.ok(source.includes(renderToStaticMarkup(row.hint)));
   }
   const pairing = render(1);
   assert.ok(pairing.includes('later, in Settings'));
