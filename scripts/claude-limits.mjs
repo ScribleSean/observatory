@@ -111,7 +111,7 @@ async function plainFile(file,limit) {
 }
 
 // Count member separators only after JSON.parse has validated the text.
-function topLevelMembers(text) {
+function topLevelMembers(text,allDepths=false) {
   let depth=0,string=false,escaped=false,count=0;
   for(const character of text) {
     if(string) {
@@ -121,9 +121,42 @@ function topLevelMembers(text) {
     } else if(character==='"')string=true;
     else if(character==='{' || character==='[')depth++;
     else if(character==='}' || character===']')depth--;
-    else if(character===':' && depth===1)count++;
+    else if(character===':' && (allDepths || depth===1))count++;
   }
   return count;
+}
+
+export async function readClaudeStatuslineMarker(runtime) {
+  const unsafe=()=>Error('Unsafe saved status line file');
+  if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw unsafe();
+  let text;
+  try {
+    const info=await lstat(folderOf(runtime));
+    if(!info.isDirectory() || info.isSymbolicLink())throw unsafe();
+    text=await plainText(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384);
+  } catch(error) {
+    if(error.code==='ENOENT')return null;
+    throw unsafe();
+  }
+  try {
+    if(text.startsWith('\uFEFF'))throw unsafe();
+    const marker=JSON.parse(text);
+    if(!isObject(marker))throw unsafe();
+    const keys=Object.keys(marker);
+    if(keys.length!==3 || !['installedAt','settingsPath','previous'].every(key=>keys.includes(key)))throw unsafe();
+    if(typeof marker.installedAt!=='string' || typeof marker.settingsPath!=='string' || (marker.previous!==null && !isObject(marker.previous)))throw unsafe();
+    let members=0;
+    const pending=[marker];
+    while(pending.length) {
+      const value=pending.pop();
+      if(value===null || typeof value!=='object')continue;
+      if(!Array.isArray(value))members+=Object.keys(value).length;
+      for(const child of Object.values(value))pending.push(child);
+    }
+    if(topLevelMembers(text,true)!==members)throw unsafe();
+    if(marker.previous?.type==='command' && typeof marker.previous.command!=='string')throw unsafe();
+    return marker;
+  } catch {throw unsafe();}
 }
 
 export function parseLimitsConsentMarker(text) {
