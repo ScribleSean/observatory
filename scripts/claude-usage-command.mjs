@@ -25,16 +25,13 @@ export function parseResetTime(text,now=Date.now()) {
   hour=hour%12+(match[6].toLowerCase()==='pm'?12:0);
   try {
     const calendar=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'numeric',day:'numeric'});
-    // Only a date without a year can retry in the next year in its time zone.
+    // A date without a year is in the current year of its printed time zone because Claude Code prints the year otherwise.
     const year=match[3]===undefined?Number(calendar.formatToParts(new Date(now)).find(part=>part.type==='year').value):Number(match[3]);
-    const years=match[3]===undefined?[year,year+1]:[year];
-    for(const year of years) {
-      let instant=Date.UTC(year,month,day,hour,minute);
-      for(let pass=0;pass<2;pass++)instant=Date.UTC(year,month,day,hour,minute)-offsetMinutes(instant,zone)*60000;
-      const date=Object.fromEntries(calendar.formatToParts(new Date(instant)).map(part=>[part.type,Number(part.value)]));
-      if(date.year!==year || date.month!==month+1 || date.day!==day)continue;
-      if(instant>now-86400000 && instant<now+9*86400000)return Math.round(instant/1000);
-    }
+    let instant=Date.UTC(year,month,day,hour,minute);
+    for(let pass=0;pass<2;pass++)instant=Date.UTC(year,month,day,hour,minute)-offsetMinutes(instant,zone)*60000;
+    const date=Object.fromEntries(calendar.formatToParts(new Date(instant)).map(part=>[part.type,Number(part.value)]));
+    if(date.year!==year || date.month!==month+1 || date.day!==day)return null;
+    if(instant>now-86400000 && instant<now+9*86400000)return Math.round(instant/1000);
   } catch {return null;}
   return null;
 }

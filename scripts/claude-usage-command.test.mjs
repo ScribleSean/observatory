@@ -20,7 +20,8 @@ test('reset times are read in their own time zone, with and without minutes', ()
   assert.equal(parseResetTime('Oct 16 at 6pm (America/New_York)',now),Date.parse('2026-10-16T22:00:00Z')/1000);
   assert.equal(parseResetTime('Oct 14 at 12am (UTC)',now),Date.parse('2026-10-14T00:00:00Z')/1000);
   assert.equal(parseResetTime('Oct 14 at 12:30pm (Asia/Kolkata)',now),Date.parse('2026-10-14T07:00:00Z')/1000);
-  assert.equal(parseResetTime('Jan 2 at 9am (UTC)',Date.parse('2026-12-30T10:00:00Z')),Date.parse('2027-01-02T09:00:00Z')/1000);
+  assert.equal(parseResetTime('Jan 2 at 9am (UTC)',Date.parse('2026-12-30T10:00:00Z')),null);
+  assert.equal(parseResetTime('Jan 2, 9am (UTC)',Date.parse('2026-12-30T10:00:00Z')),null);
   for(const bad of ['tomorrow','Oct 13 at 25pm (UTC)','Oct 13 at 11:99pm (UTC)','Zzz 13 at 1pm (UTC)','Oct 13 at 1pm (Not/A_Zone)','Mar 1 at 1pm (UTC)',undefined])
     assert.equal(parseResetTime(bad,now),null,String(bad));
 });
@@ -49,6 +50,7 @@ test('omitted years follow the printed time zone across New Year', () => {
   const auckland=Date.parse('2026-12-31T12:00:00Z');
   for(const input of ['Jan 1 at 2am (Pacific/Auckland)','Jan 1, 2027, 2am (Pacific/Auckland)'])
     assert.equal(parseResetTime(input,auckland),Date.parse('2026-12-31T13:00:00Z')/1000,input);
+  assert.equal(parseResetTime('Dec 31 at 11pm (UTC)',auckland),Date.parse('2026-12-31T23:00:00Z')/1000);
 });
 
 test('explicit years across New Year are used without a next-year retry', () => {
