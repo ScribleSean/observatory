@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
 import {registerHooks} from 'node:module';
-import {mkdtemp,mkdir,realpath,rm,writeFile,readFile,stat,symlink} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {after} from 'node:test';
+import {mkdir,rm,writeFile,readFile,stat,symlink} from 'node:fs/promises';
 import path from 'node:path';
 import {renameWindowsTransport,renameNames} from './peer-transport-rename.mjs';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import {appNames} from '../native/app-names.mjs';
 import {privateSyncDirectory,privateCollectorDirectory} from './peer-directory.mjs';
 import {readPairing,validatePairing} from './peer-pairing.mjs';
@@ -29,8 +30,17 @@ const pair=()=>{
 };
 const file=(runtime,name='pairing.json')=>path.join(runtime,'private-sync',name);
 const write=(runtime,value,name)=>writeFile(file(runtime,name),JSON.stringify(value),{mode:0o600});
+// The private-path check needs Python 3.10 or later. Use the test Python that the
+// person selected, never a PATH python3, when no runtime Python was given.
+if(process.env.OBSERVATORY_PYTHON===undefined && process.env.OBSERVATORY_TEST_PYTHON)
+  process.env.OBSERVATORY_PYTHON=process.env.OBSERVATORY_TEST_PYTHON;
+// Runtimes live under the shared test base so their ancestors stay stable for the private-path check.
+const runtimeBase=await testRuntimeBase('peer-transport-rename');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+let fixtureCount=0;
 async function fixture(t,name='Observatory') {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'transport-rename-')));
+  const root=path.join(runtimeBase,'case-'+(++fixtureCount));
+  await mkdir(root,{mode:0o700});
   t.after(()=>rm(root,{recursive:true,force:true}));
   const runtime=path.join(root,name);await mkdir(runtime,{mode:0o700});
   await privateSyncDirectory(runtime,true);await write(runtime,pair());
