@@ -34,7 +34,7 @@ function setup(t) {
   }
   const history=path.join(root,'history.sqlite');writeFileSync(history,'newer private observations');
   return {root,installed,staged,history,previousManifest:receipts[0],candidateManifest:receipts[1],
-    runningProcesses:()=>'/usr/bin/other\n',verifySignature:()=>{}};
+    runningProcesses:()=>'/usr/bin/other --synthetic\n',verifySignature:()=>{}};
 }
 const mac={skip:process.platform!=='darwin'};
 
@@ -51,7 +51,7 @@ test('Mac replacement verifies relocated bundles, retains previous app and leave
 });
 test('running Mac app or occupied installer lock prevents all moves',mac,t=>{
   const f=setup(t);
-  assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>f.installed+'/Contents/MacOS/WorkspaceObservatory\n'}),/Quit all/);
+  assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>f.installed+'/Contents/MacOS/WorkspaceObservatory --synthetic\n'}),/Quit all/);
   const lock=path.join(f.root,'.observatory-install.lock');writeFileSync(lock,'other installer');
   assert.throws(()=>replaceMacApp(f),{code:'EEXIST'});
   assert.equal(readFileSync(lock,'utf8'),'other installer');
@@ -129,4 +129,25 @@ test('rename preserves the promotion error and attaches a rollback error',mac,t=
   assert.ok(existsSync(f.staged));
   assert.ok(existsSync(path.join(failure.recovery,'previous')));
   assert.match(readFileSync(path.join(failure.recovery,'transaction.jsonl'),'utf8'),/recovery-required/);
+});
+
+
+test('bundled collectors and status line bridges refuse replacement in both modes',mac,t=>{
+  for(const renameMode of [false,true]) {
+    const f=setup(t);
+    if(renameMode) {
+      const legacy=path.join(f.root,appNames.legacy.macBundle);
+      renameSync(f.installed,legacy);f.installed=legacy;
+    }
+    for(const line of [
+      '/Users/x/Applications/Workspace Observatory.app/Contents/Resources/Runtime/python/bin/python3 --synthetic',
+      '/Users/x/Applications/Observatory.app/Contents/Resources/Runtime/python/bin/python3 --synthetic',
+      '/synthetic/node /synthetic/claude-statusline-bridge.mjs --synthetic']) {
+      assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>line}),
+        {message:'Quit all Observatory app copies before replacement'});
+      assert.ok(existsSync(f.installed)&&existsSync(f.staged));
+      assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
+      assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
+    }
+  }
 });

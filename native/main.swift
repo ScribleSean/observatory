@@ -79,13 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             do {
                 if SMAppService.mainApp.status == .enabled &&
                     defaults.string(forKey: "loginItemBundlePath") != Bundle.main.bundlePath {
-                    try SMAppService.mainApp.unregister()
                     defaults.set(true, forKey: "loginItemWanted")
+                    try SMAppService.mainApp.unregister()
                 }
                 if defaults.bool(forKey: "loginItemWanted") && SMAppService.mainApp.status != .enabled {
                     try SMAppService.mainApp.register()
-                    defaults.set(false, forKey: "loginItemWanted")
-                    defaults.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                    if SMAppService.mainApp.status == .enabled {
+                        defaults.set(false, forKey: "loginItemWanted")
+                        defaults.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                    } else { showLoginAttention() }
                 }
             } catch { showLoginAttention() }
         }
@@ -442,9 +444,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 try SMAppService.mainApp.unregister()
             }
             else {
+                UserDefaults.standard.set(true, forKey: "loginItemWanted")
                 try SMAppService.mainApp.register()
-                UserDefaults.standard.set(false, forKey: "loginItemWanted")
-                UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                if SMAppService.mainApp.status == .enabled {
+                    UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                    UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                } else { showLoginAttention() }
             }
         } catch { showLoginAttention() }
     }

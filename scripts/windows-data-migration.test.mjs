@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync,spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,realpath,mkdir,writeFile,readFile,readdir,lstat,rm,symlink,link,open} from 'node:fs/promises';
+import {mkdtemp,realpath,mkdir,writeFile,readFile,readdir,lstat,rm,symlink,link,open,copyFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {appNames} from '../native/app-names.mjs';
@@ -55,17 +55,17 @@ async function fixture(t) {
   await writeFile(path.join(legacy,'settings.json'),'{"synthetic":true}\n');
   return {parent,legacy,target,stage,runKey,appId:'MigrationTest'+randomUUID(),processName:'MigrationTest'+randomUUID()};
 }
-function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe',spawnProcess=spawnSync}={}) {
+function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe',spawnProcess=spawnSync,testOptions=true,allowElevated=true}={}) {
   return spawnProcess(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
-    '-Action',action,'-Parent',f.parent,'-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,'-AllowElevatedTestRun',...(confirm?['-ConfirmAppQuit']:[]),...extra],
-  {encoding:'utf8',env:{...process.env,OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'',...env},timeout:120000});
+    '-Action',action,'-Parent',f.parent,...(testOptions?['-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,...(extra.includes('-SettingsPath')?[]:['-SettingsPath',path.join(f.parent,'claude-settings.json')])]:[]),...(allowElevated?['-AllowElevatedTestRun']:[]),...(confirm?['-ConfirmAppQuit']:[]),...extra],
+  {encoding:'utf8',input:'',env:{...process.env,OBSERVATORY_MIGRATION_TEST:'1',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'',OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'',...env},timeout:120000});
 }
 function success(result,state) {
   assert.equal(result.status,0,result.stderr || result.error?.message);
   assert.equal(result.stderr,'');
   const output = JSON.parse(result.stdout);
   assert.equal(output.state,state);
-  assert.equal(output.notes,'alternate data streams are not copied');
+  assert.equal(output.notes,'alternate data streams are not copied. Hard links outside private-* are copied as separate files');
   return output;
 }
 function refused(result,pattern) {
@@ -157,7 +157,7 @@ test('legacy junction is refused without following it',windows,async t => {
   assert.deepEqual(await snapshot(f.parent),before);
 });
 
-test('interrupted copy resumes and removes only abandoned partial files',windows,async t => {
+test('interrupted copy resumes with the abandoned stage moved aside',windows,async t => {
   const f = await fixture(t);
   await writeFile(path.join(f.legacy,'a'),'synthetic a');
   await writeFile(path.join(f.legacy,'b'),'synthetic b');
@@ -167,6 +167,8 @@ test('interrupted copy resumes and removes only abandoned partial files',windows
   success(run(f),'migrated');
   assert.deepEqual(await snapshot(f.legacy),before);
   await assert.rejects(readFile(path.join(f.target,'stale.observatory-partial')),{code:'ENOENT'});
+  const stale = (await readdir(f.parent)).find(name => name.includes('-migration-stale-'));
+  assert.equal(await readFile(path.join(f.parent,stale,'stale.observatory-partial'),'utf8'),'synthetic partial');
   for(const name of ['a','b','settings.json'])assert.deepEqual(await readFile(path.join(f.target,name)),before[name].bytes);
 });
 
@@ -223,12 +225,14 @@ for (const folder of ['target','stage']) {
   });
 }
 
-test('resuming replaces stale bytes and restores write times',windows,async t => {
+test('resuming moves the stale stage aside and restores write times',windows,async t => {
   const f = await fixture(t);
   await mkdir(f.stage);
   await writeFile(path.join(f.stage,'settings.json'),'stale synthetic bytes');
   const before = await snapshot(f.legacy);
   success(run(f),'migrated');
+  const stale = (await readdir(f.parent)).find(name => name.includes('-migration-stale-'));
+  assert.equal(await readFile(path.join(f.parent,stale,'settings.json'),'utf8'),'stale synthetic bytes');
   assert.deepEqual((await snapshot(f.target))['settings.json'],before['settings.json']);
   assert.deepEqual(await snapshot(f.legacy),before);
 });
@@ -261,12 +265,15 @@ for (const relative of ['private-unknown','nested/private-sync','Private-Sync','
   });
 }
 
-test('journal refuses before manifest',windows,async t => {
+for (const suffix of ['-journal','-wal']) {
+test(`leftover ${suffix} has its own refusal reason`,windows,async t => {
   const f = await fixture(t);
   await mkdir(path.join(f.legacy,'private-repair'));
-  await writeFile(path.join(f.legacy,'private-repair','operation.sqlite-journal'),'synthetic');
-  refused(run(f),/Migration refused \(lock\): The Mac pairing exchange/);
+  await writeFile(path.join(f.legacy,'private-repair','operation.sqlite'+suffix),'synthetic');
+  refused(run(f),/^Migration refused \(lock\): An earlier pairing exchange left an unfinished database journal in the earlier folder\. Start and quit the Mac app once, then run again\.\r?\n?$/);
 });
+
+}
 
 test('exclusive operation database handle refuses',windows,async t => {
   const f = await fixture(t);
@@ -425,7 +432,126 @@ test('saved login intent survives an interrupted copy and a stale stage',windows
   assert.equal(ps(`Get-ItemPropertyValue -LiteralPath ${quote(f.runKey)} -Name Unrelated`).stdout.trim(),'preserved');
   assert.equal(success(run(f,{action:'status'}),'missing').loginWasOn,true);
   await writeFile(path.join(f.legacy,'settings.json'),'changed synthetic data');
+  refused(run(f,{env:{OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1'}}),/interrupted after moving the stage aside/);
+  assert.equal(JSON.parse(await readFile(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json'),'utf8')).loginWasOn,true);
+  await assert.rejects(lstat(f.stage),{code:'ENOENT'});
   assert.equal(success(run(f),'migrated').loginWasOn,true);
   assert.equal(JSON.parse(await readFile(path.join(f.target,'observatory-migration.json'),'utf8')).loginWasOn,true);
   await assert.rejects(lstat(path.join(f.target,'login-state.json')),{code:'ENOENT'});
+});
+
+
+test('test options and interruption hooks are gated and running checks surround the switch', async () => {
+  const source = await readFile(script,'utf8');
+  assert.match(source,/\$testEnvironment = \$env:OBSERVATORY_MIGRATION_TEST -ceq '1'/);
+  for (const option of ['AllowElevatedTestRun','AppIdOverride','ProcessNameOverride','RunKey','AclScript','SettingsPath']) {
+    assert.ok(source.includes("'"+option+"'"));
+  }
+  assert.match(source,/if \(-not \$testEnvironment -and \$PSBoundParameters.ContainsKey\(\$option\)\) \{ Refuse 'Test-only options need the test environment\.'/);
+  for (const hook of ['STOP_AFTER','STOP_BEFORE_SWITCH','TOUCH_TARGET','STOP_AFTER_ASIDE']) {
+    assert.match(source,new RegExp('if \\(\\$testEnvironment -and \\$env:OBSERVATORY_MIGRATION_'+hook+'(?: | -and)'));
+  }
+  assert.equal(source.match(/^    CheckRunning$/gm)?.length,3);
+  assert.match(source,/ExchangeLock\r?\n    CheckRunning\r?\n    \$step = 'manifest'/);
+  assert.match(source,/CheckRunning\r?\n    \$step = 'switch'\r?\n    if \(\$state -ne 'missing'\) \{\r?\n        \[IO.Directory\]::Move/);
+  assert.match(source,/Get-CimInstance Win32_Process/);
+  assert.match(source,/StartsWith\(\$runtime, \[StringComparison\]::OrdinalIgnoreCase\)/);
+  assert.ok(source.indexOf('SaveLogin $carriedLoginPath') < source.indexOf('[IO.Directory]::Move($Stage, $stale)'));
+  assert.match(await readFile('native/windows/package.ps1','utf8'),/Join-Path \$candidate \$names.internal.windowsPackageFolder/);
+  assert.match(await readFile('native/windows/app-names.ps1','utf8'),/'windowsPackageFolder'/);
+});
+
+function elevated() {
+  const result = ps('([Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)');
+  assert.equal(result.status,0,result.stderr);
+  return result.stdout.trim() === 'True';
+}
+
+test('elevated migration without the test allowance refuses without writes',windows,async t => {
+  if (!elevated()) { t.skip('This process is not elevated, so the administrator refusal cannot be exercised'); return; }
+  const f = await fixture(t),before = await snapshot(f.parent);
+  const result = run(f,{allowElevated:false});
+  refused(result,/^Migration refused \(input\): Run without administrator rights\.\r?\n?$/);
+  assert.deepEqual(await snapshot(f.parent),before);
+});
+
+test('test-only parameters without the test environment refuse without writes',windows,async t => {
+  const f = await fixture(t),before = await snapshot(f.parent);
+  for (const extra of [['-AllowElevatedTestRun'],['-AppIdOverride',f.appId],['-ProcessNameOverride',f.processName],['-RunKey',f.runKey],['-AclScript',path.join(f.parent,'unused.ps1')],['-SettingsPath',path.join(f.parent,'unused.json')]]) {
+    refused(run(f,{testOptions:false,allowElevated:false,extra,env:{OBSERVATORY_MIGRATION_TEST:''}}),/^Migration refused \(input\): Test-only options need the test environment\.\r?\n?$/);
+  }
+  assert.deepEqual(await snapshot(f.parent),before);
+});
+
+test('leftover target hook without the test environment completes with stdin closed',windows,async t => {
+  if (elevated()) { t.skip('A production-mode run requires a non-elevated Windows process'); return; }
+  const f = await fixture(t);
+  await mkdir(f.target);
+  // Redirect default user paths as well as the explicit data parent to synthetic folders.
+  await mkdir(path.join(f.parent,'.claude'));
+  await writeFile(path.join(f.parent,'.claude','settings.json'),'{}');
+  // A saved false intent avoids reading or changing the real startup registry key.
+  await writeFile(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json'),'{"schema":1,"loginWasOn":false}');
+  success(run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1'}}),'migrated');
+});
+
+for (const variant of ['legacy runtime','visible runtime','status line']) {
+  test(`running check refuses a synthetic ${variant} node process`,windows,async t => {
+    let child;
+    t.after(async () => {
+      if (child && child.exitCode === null && child.signalCode === null) {
+        const exited = new Promise(resolve => child.once('close',resolve));
+        child.kill();
+        await exited;
+      }
+    });
+    const f = await fixture(t);
+    let executable = process.execPath;
+    const childScript = path.join(f.parent,variant === 'status line'?'claude-statusline-bridge.mjs':'wait.mjs');
+    await writeFile(childScript,"process.stdout.write('ready\\n')\nsetTimeout(() => {}, 120000)\n");
+    if (variant !== 'status line') {
+      executable = path.join(f.parent,'Programs',variant === 'legacy runtime'?appNames.legacy.productName:appNames.visible.productName,'Runtime','node.exe');
+      await mkdir(path.dirname(executable),{recursive:true});
+      await copyFile(process.execPath,executable);
+    }
+    child = spawn(executable,[childScript],{stdio:['ignore','pipe','pipe']});
+    await new Promise((resolve,reject) => {
+      child.once('error',reject);
+      child.once('exit',() => reject(new Error('Synthetic process exited before readiness')));
+      child.stdout.once('data',resolve);
+    });
+    const before = await snapshot(f.parent);
+    refused(run(f),/^Migration refused \(running\): Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again\.\r?\n?$/);
+    assert.deepEqual(await snapshot(f.parent),before);
+  });
+}
+
+for (const [label,settings,expected] of [
+  ['earlier folder',f => ({statusLine:{command:`node "${path.join(f.legacy,'claude-statusline-bridge.mjs')}"`}}),true],
+  ['new folder',f => ({statusLine:{command:`node "${path.join(f.target,'claude-statusline-bridge.mjs')}"`}}),false],
+  ['unrelated command',f => ({statusLine:{command:`echo "${f.legacy}"`}}),false],
+  ['missing',null,'Unknown'],
+  ['unreadable JSON',() => 'invalid','Unknown'],
+]) {
+  test(`status line reports ${label}`,windows,async t => {
+    const f = await fixture(t),settingsPath = path.join(f.parent,'synthetic-settings.json');
+    if (settings) {
+      const value = settings(f);
+      await writeFile(settingsPath,typeof value === 'string'?value:JSON.stringify(value));
+    }
+    assert.equal(success(run(f,{action:'status',extra:['-SettingsPath',settingsPath]}),'missing').statusLineTargetsEarlierFolder,expected);
+  });
+}
+
+
+test('ordinary hard links become separate copied files',windows,async t => {
+  const f = await fixture(t);
+  await writeFile(path.join(f.legacy,'first.txt'),'synthetic linked data');
+  await link(path.join(f.legacy,'first.txt'),path.join(f.legacy,'second.txt'));
+  success(run(f),'migrated');
+  assert.equal((await lstat(path.join(f.target,'first.txt'))).nlink,1);
+  assert.equal((await lstat(path.join(f.target,'second.txt'))).nlink,1);
+  await writeFile(path.join(f.target,'first.txt'),'synthetic changed data');
+  assert.equal(await readFile(path.join(f.target,'second.txt'),'utf8'),'synthetic linked data');
+  assert.equal(await readFile(path.join(f.legacy,'first.txt'),'utf8'),'synthetic linked data');
 });

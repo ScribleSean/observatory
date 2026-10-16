@@ -7,7 +7,7 @@ function Read-AppNames {
             $keys = switch ($group) {
                 'visible' { @('productName','dataFolder','windowsTestName') }
                 'legacy' { @('productName','dataFolder') }
-                'internal' { @('windowsExecutable','windowsAppId','windowsStartupName') }
+                'internal' { @('windowsExecutable','windowsAppId','windowsStartupName','windowsPackageFolder') }
             }
             foreach ($key in $keys) {
                 $value = $names.$group.$key

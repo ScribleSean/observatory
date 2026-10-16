@@ -44,6 +44,27 @@ function replacement(transport,record) {
   return {...transport,...Object.fromEntries(fields.map(key=>[key,transport[key].includes('/')?
     record.ssh.to[key].replaceAll('\\','/'):record.ssh.to[key].replaceAll('/','\\')]))};
 }
+function visibleLayout(transport,dataFolder=renameNames.visibleDataFolder,productName=renameNames.visibleProductName) {
+  return transport?.kind==='ssh-windows' &&
+    path.win32.basename(transport.remoteRuntime).toLowerCase()===dataFolder.toLowerCase() &&
+    ['remoteNode','remoteScript'].every(key=>normalize(transport[key]).split('\\').some((part,index,parts)=>
+      part==='programs' && parts[index+1]===productName.toLowerCase() && index+2<parts.length));
+}
+function interruptedPair(active,pending) {
+  if(!active || !pending)return null;
+  for(const [earlier,updated] of [[active,pending],[pending,active]]) {
+    if(!visibleLayout(earlier.transport,renameNames.legacyDataFolder,renameNames.legacyProductName) ||
+      !visibleLayout(updated.transport))continue;
+    const transport={...earlier.transport};
+    if(path.win32.basename(transport.remoteRuntime).toLowerCase()!==renameNames.legacyDataFolder.toLowerCase())continue;
+    transport.remoteRuntime=transport.remoteRuntime.slice(0,-renameNames.legacyDataFolder.length)+renameNames.visibleDataFolder;
+    for(const key of ['remoteNode','remoteScript'])
+      transport[key]=transport[key].replace(/([\\/]Programs[\\/])Workspace Observatory(?=[\\/])/i,
+        (_,prefix)=>prefix+renameNames.visibleProductName);
+    if(isDeepStrictEqual({...earlier,transport},updated))return {earlier,updated};
+  }
+  return null;
+}
 async function rawPair(directory,name,safe,validatePairing) {
   const file=await open(path.join(directory,name),constants.O_RDONLY|constants.O_NOFOLLOW);
   try {
@@ -66,7 +87,7 @@ async function atomicWrite(directory,name,value) {
     try {await folder.sync();}finally {await folder.close();}
   } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
 }
-export async function renameWindowsTransport({runtime,fetchReceipt=sshMigrationReceipt,runningProcesses=processes}) {
+export async function renameWindowsTransport({runtime,fetchReceipt=sshMigrationReceipt,runningProcesses=processes,hooks={}}) {
   if(typeof runtime!=='string' || !path.isAbsolute(runtime) || runtime!==path.resolve(runtime) ||
     runtime!==await realpath(runtime) || path.basename(runtime)!==renameNames.visibleDataFolder)
     throw Error('Canonical Observatory Mac runtime required.');
@@ -76,30 +97,41 @@ export async function renameWindowsTransport({runtime,fetchReceipt=sshMigrationR
   const {withPeerStateLock}=await import('./peer-lock.mjs');
   async function read() {
     const active=await readPairing(runtime),pending=await readPendingPairing(runtime);
-    if(active && pending && !isDeepStrictEqual(active,pending))throw Error('Conflicting pending pairing.');
+    if(active && pending && !isDeepStrictEqual(active,pending) && !interruptedPair(active,pending))
+      throw Error('Conflicting pending pairing.');
     return {active,pending};
   }
   const initial=await read();
   if(initial.active?.transport?.kind!=='ssh-windows')return {state:'unchanged',reason:'not-ssh'};
-  const record=await fetchReceipt(initial.active.transport);
-  checkReceipt(record,initial.active.transport);
-  if(!replacement(initial.active.transport,record))return {state:'unchanged',reason:'already-updated'};
+  const interrupted=interruptedPair(initial.active,initial.pending);
+  if(!interrupted && visibleLayout(initial.active.transport))return {state:'unchanged',reason:'already-updated'};
+  const earlier=interrupted?.earlier ?? initial.active;
+  const record=await fetchReceipt(earlier.transport);
+  checkReceipt(record,earlier.transport);
+  const nextTransport=replacement(earlier.transport,record);
+  if(interrupted && !isDeepStrictEqual(nextTransport,interrupted.updated.transport))throw Error('Conflicting pending pairing.');
+  if(!nextTransport)return {state:'unchanged',reason:'already-updated'};
   return withPeerStateLock(runtime,async()=>{
     checkProcesses(await runningProcesses());
     const current=await read();
     if(!isDeepStrictEqual(current,initial))throw Error('Pairing changed during rename.');
-    const transport=replacement(current.active.transport,record);
+    const transport=nextTransport;
     const directory=await privateSyncDirectory(runtime);
     const names=current.pending?['setup.pending.json','pairing.json']:['pairing.json'];
-    const updates=[];
+    const updates=[],rawPairs=[];
     for(const name of names) {
-      const raw=await rawPair(directory,name,current.active,validatePairing);
+      const raw=await rawPair(directory,name,name==='pairing.json'?current.active:current.pending,validatePairing);
+      rawPairs.push(raw);
       const updated={...raw,transport};
       validatePairing(updated);
       if(Buffer.byteLength(JSON.stringify(updated))>4096)throw Error('Private pairing size limit');
-      updates.push([name,updated]);
+      if(!isDeepStrictEqual(raw,updated))updates.push([name,updated]);
     }
-    for(const [name,updated] of updates)await atomicWrite(directory,name,updated);
+    if(interrupted && !interruptedPair(...rawPairs))throw Error('Conflicting pending pairing.');
+    for(const [index,[name,updated]] of updates.entries()) {
+      await atomicWrite(directory,name,updated);
+      if(index===0)await hooks.afterFirstWrite?.();
+    }
     return {state:'updated',fields:[...fields]};
   });
 }

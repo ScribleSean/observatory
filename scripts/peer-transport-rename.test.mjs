@@ -11,7 +11,7 @@ import {privateSyncDirectory,privateCollectorDirectory} from './peer-directory.m
 import {readPairing,validatePairing} from './peer-pairing.mjs';
 import {complementaryWindowsPairing,setupPairing} from './peer-setup.mjs';
 import {ensureWindowsPairing} from './peer-setup-endpoint.mjs';
-import {sshPeerExchange} from './peer-transport.mjs';
+import {sshPeerExchange,sshMigrationReceipt} from './peer-transport.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,acceptPeerState,readPeerState} from './peer-store.mjs';
 import {writeRepairConsent} from './peer-repair-consent.mjs';
@@ -168,4 +168,49 @@ test('TLS and absent pairing return not-ssh without fetching',mac,async t=>{
   assert.deepEqual(await snapshot(runtime),before);
   const empty=path.join(path.dirname(runtime),'empty','Observatory');await mkdir(empty,{recursive:true,mode:0o700});
   assert.deepEqual(await run(empty,{fetchReceipt:()=>assert.fail('Must not fetch')}),{state:'unchanged',reason:'not-ssh'});
+});
+
+
+test('real receipt helper fetches once and updated layouts never fetch again',mac,async t=>{
+  const runtime=await fixture(t);
+  let calls=0;
+  const fakeInvoke=async()=>{calls++;return JSON.stringify({running:false,record:receipt()});};
+  const options={fetchReceipt:transport=>sshMigrationReceipt(transport,fakeInvoke)};
+  assert.deepEqual(await run(runtime,options),{state:'updated',fields});
+  assert.equal(calls,1);
+  calls=0;
+  assert.deepEqual(await run(runtime,options),{state:'unchanged',reason:'already-updated'});
+  assert.equal(calls,0);
+  const updated=JSON.parse(await readFile(file(runtime),'utf8'));
+  for(const separator of ['/',String.fromCharCode(92)]) {
+    for(const key of fields)updated.transport[key]=updated.transport[key].replaceAll('/',separator)
+      .replaceAll('Programs','PROGRAMS').replaceAll('Observatory','OBSERVATORY');
+    await write(runtime,updated);
+    assert.deepEqual(await run(runtime,options),{state:'unchanged',reason:'already-updated'});
+    assert.equal(calls,0);
+  }
+});
+
+test('interrupted atomic writes resume without changing pair identity',mac,async t=>{
+  const runtime=await fixture(t),original=pair();
+  await write(runtime,original,'setup.pending.json');
+  const fetchReceipt=transport=>sshMigrationReceipt(transport,async()=>JSON.stringify({running:false,record:receipt()}));
+  await assert.rejects(run(runtime,{fetchReceipt,hooks:{afterFirstWrite:()=>{throw Error('synthetic crash');}}}),/synthetic crash/);
+  const updated=JSON.parse(await readFile(file(runtime,'setup.pending.json'),'utf8'));
+  assert.deepEqual(JSON.parse(await readFile(file(runtime),'utf8')),original);
+  assert.notDeepEqual(updated.transport,original.transport);
+  assert.deepEqual(await run(runtime,{fetchReceipt}),{state:'updated',fields});
+  assert.deepEqual(JSON.parse(await readFile(file(runtime),'utf8')),updated);
+  assert.deepEqual(JSON.parse(await readFile(file(runtime,'setup.pending.json'),'utf8')),updated);
+  assert.deepEqual({...updated,transport:original.transport},original);
+  // The active file can also be the one that already holds the new transport.
+  await write(runtime,original,'setup.pending.json');
+  assert.deepEqual(await run(runtime,{fetchReceipt}),{state:'updated',fields});
+  assert.deepEqual(JSON.parse(await readFile(file(runtime,'setup.pending.json'),'utf8')),updated);
+  const different={...original,local:{...original.local,deviceId:'f'.repeat(64)}};
+  await write(runtime,different,'setup.pending.json');
+  await refuses(runtime,{fetchReceipt:()=>assert.fail('Must not fetch')},/Conflicting pending/);
+  const partial={...original,transport:{...original.transport,remoteRuntime:updated.transport.remoteRuntime}};
+  await write(runtime,partial,'setup.pending.json');
+  await refuses(runtime,{fetchReceipt:()=>assert.fail('Must not fetch')},/Conflicting pending/);
 });

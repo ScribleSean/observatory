@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validatePeerTransport,sshPeerExchange,sshPeerSetup,sshPeerRepairReadiness,sshProviderTokenRequest} from './peer-transport.mjs';
+import {validatePeerTransport,sshPeerExchange,sshPeerSetup,sshPeerRepairReadiness,sshProviderTokenRequest,sshMigrationReceipt} from './peer-transport.mjs';
 import {createPairingConfigurations,validatePairing} from './peer-pairing.mjs';
 
 const transport=()=>({kind:'ssh-windows',hostAlias:'windows-codex',remoteNode:'C:/Apps/Observatory/node.exe',
@@ -138,4 +138,53 @@ test('migration receipt uses only the derived runtime and fixed SSH options',asy
   for(const response of [{running:false,record,extra:true},{record},{running:0,record},[],null,{running:false,record:[]}])
     await assert.rejects(sshMigrationReceipt(target,async()=>JSON.stringify(response)));
   await assert.rejects(sshMigrationReceipt(transport(),async()=>assert.fail('Must not invoke SSH')),/Legacy Windows runtime/);
+});
+
+
+function checkQuotedToken(command,start,value) {
+  const quotes="'‘’‚‛";
+  assert.equal(command[start],"'");
+  let decoded='',index=start+1;
+  while(index<command.length) {
+    const c=command[index++];
+    if(quotes.includes(c)) {
+      if(command[index]===c) { decoded+=c;index++;continue; }
+      assert.equal(c,"'");
+      assert.equal(decoded,value);
+      const expected="'"+[...value].map(c=>quotes.includes(c)?c+c:c).join('')+"'";
+      assert.equal(command.slice(start,index),expected);
+      assert.equal(index,start+expected.length);
+      return index;
+    }
+    decoded+=c;
+  }
+  assert.fail('Unterminated PowerShell token');
+}
+
+test('SSH commands double all PowerShell quote characters within a single token',async()=>{
+  const folder="C:/Users/Example'‘’‚‛ Account";
+  const target={...transport(),remoteScript:folder+'/Collector/peer-exchange.mjs',
+    remoteRuntime:folder+'/Workspace Observatory'};
+  const decode=args=>Buffer.from(args.at(-1).split(' ').at(-1),'base64').toString('utf16le');
+  await sshPeerExchange(target,{},async args=>{
+    const command=decode(args);
+    let end=checkQuotedToken(command,2,target.remoteNode);
+    assert.equal(command[end],' ');
+    end=checkQuotedToken(command,end+1,target.remoteScript);
+    assert.equal(command[end],' ');
+    end=checkQuotedToken(command,end+1,target.remoteRuntime);
+    assert.equal(command.slice(end),String.fromCharCode(59)+' exit $LASTEXITCODE');
+    return JSON.stringify({version:1,record:{}});
+  });
+  await sshMigrationReceipt(target,async args=>{
+    const command=decode(args);
+    const value=(folder+'/Observatory/observatory-migration.json').replaceAll('/',String.fromCharCode(92));
+    for(const [prefix,suffix] of [['Test-Path -LiteralPath ',') {'],['Get-Content -LiteralPath ',' -Raw']]) {
+      const start=command.indexOf(prefix)+prefix.length;
+      assert.ok(start>=prefix.length);
+      const end=checkQuotedToken(command,start,value);
+      assert.equal(command.slice(end,end+suffix.length),suffix);
+    }
+    return JSON.stringify({running:false,record:{schema:1}});
+  });
 });
