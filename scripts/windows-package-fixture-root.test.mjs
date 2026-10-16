@@ -91,6 +91,12 @@ void test('failure diagnostics use the same account-volume fixture root without 
 });
 
 const packageSteps = workflow().split(/^      - /m).slice(1);
+test('Windows package checkout does not persist credentials', () => {
+  assert.deepEqual(packageSteps.filter((step) => step.startsWith('uses: actions/checkout@')), [
+    'uses: actions/checkout@v4\n        with:\n          persist-credentials: false\n',
+  ]);
+});
+
 const gate = packageSteps.find((step) => step.startsWith('name: Require a passing script suite on this commit\n'));
 const gateScript = gate.split('        run: |\n')[1].split('\n').map((line) => line.slice(10)).join('\n');
 

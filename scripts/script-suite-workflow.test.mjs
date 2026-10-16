@@ -372,6 +372,29 @@ test('sync parts refuse missing or repeated provider names before spawning', (t)
   }
 });
 
+for (const prefix of ['  await t.', '// ']) {
+  test(`sync parts refuse a provider name appearing only after ${JSON.stringify(prefix)}`, (t) => {
+    const name = syncNames['sync-1'][0];
+    const provider = providerSource.replace("test('" + name + "'", prefix + "test('" + name + "'");
+    assert.notEqual(provider, providerSource);
+    for (const part of ['sync-1', 'sync-2', 'sync-3']) {
+      const result = runSuite(t, part, 'win32', [...tls, ...general], 0, suiteScript, provider);
+      assert.equal(result.status, 1);
+      assert.equal(result.stderr.trim(), `Expected exactly one top-level sync test: ${name}`);
+      assert.deepEqual(result.calls, []);
+    }
+  });
+}
+
+test('sync parts accept provider source with CRLF line endings', (t) => {
+  const provider = providerSource.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
+  for (const part of ['sync-1', 'sync-2', 'sync-3']) {
+    const result = runSuite(t, part, 'win32', [...tls, ...general], 0, suiteScript, provider);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.calls.length, 1);
+  }
+});
+
 test('suite stops at the first nonzero child exit', (t) => {
   for (const platform of ['win32', 'darwin']) for (const part of platformParts(platform)) {
     const result = runSuite(t, part, platform, [...tls, ...general], 7);

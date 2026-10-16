@@ -208,8 +208,9 @@ jobs:
             let source;
             try { source = readFileSync(`scripts/${syncFile}`, 'utf8'); }
             catch { refuse('Unable to read provider sync test file'); }
+            source = '\n' + source.replaceAll('\r\n', '\n');
             for (const name of names) {
-              if (source.split("test('" + name + "'").length - 1 !== 1) {
+              if (source.split("\ntest('" + name + "'").length - 1 !== 1) {
                 refuse(`Expected exactly one top-level sync test: ${name}`);
               }
             }

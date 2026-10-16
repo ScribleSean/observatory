@@ -25,6 +25,8 @@ jobs:
       DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Use the account volume for private-state fixtures
         if: '!inputs.verify_compiler_only'
         shell: pwsh
