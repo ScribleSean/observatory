@@ -51,7 +51,7 @@ test('a collection with consent stores the command reading and one without conse
   assert.equal(Object.hasOwn(disconnected,'usageCommand'),false);
   assert.equal(runs,0);
   await mkdir(path.join(runtime,'claude-limits'));
-  await writeFile(path.join(runtime,'claude-limits/statusline.json'),'{"previous":null}');
+  await writeFile(path.join(runtime,'claude-limits/statusline.json'),JSON.stringify({installedAt:new Date(now).toISOString(),settingsPath:'/synthetic/settings.json',previous:null}));
   const source=await readClaudeLimits(runtime,{now,readUsage});
   assert.equal(runs,1);
   assert.equal(source.status,'ok');

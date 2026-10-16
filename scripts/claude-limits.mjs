@@ -86,6 +86,18 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
 
 const folderOf=runtime=>path.join(runtime,CLAUDE_LIMITS_FOLDER);
 
+async function readInPlainLimitsFolder(runtime,read,{afterRead}={}) {
+  if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw Error('Unsafe Claude limits folder');
+  const folder=folderOf(runtime),before=await lstat(folder);
+  if(!before.isDirectory() || before.isSymbolicLink())throw Error('Unsafe Claude limits folder');
+  const result=await read();
+  if(afterRead)await afterRead();
+  let after;
+  try {after=await lstat(folder);}catch {throw Error('Unsafe Claude limits folder');}
+  if(!after.isDirectory() || after.isSymbolicLink() || after.dev!==before.dev || after.ino!==before.ino)throw Error('Unsafe Claude limits folder');
+  return result;
+}
+
 async function plainText(file,limit) {
   let handle;
   try {
@@ -126,14 +138,12 @@ function topLevelMembers(text,allDepths=false) {
   return count;
 }
 
-export async function readClaudeStatuslineMarker(runtime) {
+export async function readClaudeStatuslineMarker(runtime,options={}) {
   const unsafe=()=>Error('Unsafe saved status line file');
   if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw unsafe();
   let text;
   try {
-    const info=await lstat(folderOf(runtime));
-    if(!info.isDirectory() || info.isSymbolicLink())throw unsafe();
-    text=await plainText(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384);
+    text=await readInPlainLimitsFolder(runtime,()=>plainText(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384),options);
   } catch(error) {
     if(error.code==='ENOENT')return null;
     throw unsafe();
@@ -201,26 +211,22 @@ export async function recordClaudeLimits(runtime,input,now=Date.now()) {
   return merged;
 }
 
-async function plainLimitsFolder(runtime) {
-  if(typeof runtime!=='string' || !path.isAbsolute(runtime))return false;
-  try {const info=await lstat(folderOf(runtime));return info.isDirectory() && !info.isSymbolicLink();}
+export async function claudeStatuslineInstalled(runtime,options={}) {
+  try {return await readClaudeStatuslineMarker(runtime,options)!==null;}
   catch {return false;}
 }
 
-export async function claudeStatuslineInstalled(runtime) {
-  if(!await plainLimitsFolder(runtime))return false;
-  try {return isObject(await plainFile(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384));}
-  catch {return false;}
-}
-
-export async function claudeLimitsConsent(runtime) {
-  if(!await plainLimitsFolder(runtime))return {given:false,consentMarker:false,statusLine:false};
-  let consentMarker=false;
+export async function claudeLimitsConsent(runtime,options={}) {
   try {
-    consentMarker=parseLimitsConsentMarker(await plainText(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096));
-  } catch {}
-  const statusLine=await claudeStatuslineInstalled(runtime);
-  return {given:consentMarker || statusLine,consentMarker,statusLine};
+    return await readInPlainLimitsFolder(runtime,async()=>{
+      let consentMarker=false;
+      try {
+        consentMarker=parseLimitsConsentMarker(await plainText(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096));
+      } catch {}
+      const statusLine=await claudeStatuslineInstalled(runtime);
+      return {given:consentMarker || statusLine,consentMarker,statusLine};
+    },options);
+  } catch {return {given:false,consentMarker:false,statusLine:false};}
 }
 
 const base={provider:'Claude Code',scope:'account'};
