@@ -1,17 +1,20 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,lstat,readdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {readQuotaState,updateQuotaState,readQuotaArchive,inspectQuotaArchive,deleteQuotaArchive,setQuotaSharing} from './quota-store.mjs';
+
+const runtimeBase=await testRuntimeBase('quota-archive');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 
 const start=Date.parse('2025-01-01T12:00:00Z'),scope='a'.repeat(64),other='b'.repeat(64);
 const sample=(at=start)=>({status:'ok',checkedAt:new Date(at).toISOString(),privateToken:'not-retained',
   windows:[{bucket:'codex',window:'primary',remainingPercent:75}],
   accountUsage:{status:'ok',checkedAt:new Date(at).toISOString(),dailyUsageBuckets:[{startDate:'2025-01-01',tokens:123,secret:'not-retained'}]}});
 async function fixture(t) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-archive-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-archive-')));
   t.after(()=>rm(root,{recursive:true,force:true}));return root;
 }
 async function save(root,at,options={}) {

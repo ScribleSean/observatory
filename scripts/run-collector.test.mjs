@@ -1,10 +1,13 @@
-import nodeTest from 'node:test';
+import nodeTest,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, writeFile, readFile, rm, realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {collectQuota} from './collect-quota.mjs';
+
+const runtimeBase=await testRuntimeBase('run-collector');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 // This runner uses POSIX process groups and flock. Windows uses Collector.cs,
 // whose contracts are exercised by the native Windows build and live checks.
 const test=(name,fn)=>nodeTest(name,{skip:process.platform==='win32'?'POSIX runner only; Windows uses the native collector':false},fn);
@@ -16,7 +19,7 @@ const success=`require('fs').writeFileSync('public/local/usage.json',JSON.string
 // Shell exec preserves the fixture PID and exact Node path, including spaces and quotes.
 const nodeLauncher=`#!/bin/sh\n':' //; exec '${process.execPath.replaceAll("'", "'\\''")}' "$0" "$@"`;
 async function fixture(t,script) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'dashboard-runner-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'dashboard-runner-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   await mkdir(path.join(root,'scripts'));
   await writeFile(path.join(root,'scripts/collect-mac.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${script}`);

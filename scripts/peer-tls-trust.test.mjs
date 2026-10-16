@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {X509Certificate} from 'node:crypto';
 import {mkdtemp,realpath,rm,readFile,writeFile,link,readdir,stat} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
@@ -15,11 +15,14 @@ import {saveConfirmedPeerTrust,readPeerTrust} from './peer-tls-trust.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-tls-trust');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 const fingerprint=pem=>new X509Certificate(pem).fingerprint256.replaceAll(':','').toLowerCase();
 test('TLS trust is bound to persistent identities and pairing generation',
   {skip:!['darwin','win32'].includes(process.platform) || !existsSync(openssl)},async t=>{
-    const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-trust-test-')));
+    const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-trust-test-')));
     t.after(()=>rm(root,{recursive:true,force:true}));
     async function identity(name) {
       const key=path.join(root,name+'.key'),cert=path.join(root,name+'.pem');

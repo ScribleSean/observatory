@@ -1,12 +1,15 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,stat,symlink,writeFile,readFile,mkdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {readQuotaState,updateQuotaState,setQuotaSharing} from './quota-store.mjs';
+
+const runtimeBase=await testRuntimeBase('quota-store');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.parse('2026-09-09T12:00:00Z'),scope='a'.repeat(64);
 const observation={status:'ok',checkedAt:new Date(now).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:75}]};
-async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
+async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
 test('quota store survives reopen with private permissions and persisted retry deadline',async()=>fixture(async runtime=>{
   const initial=await readQuotaState(runtime,now);
   const result=await updateQuotaState(runtime,{revision:initial.revision,scope,observation,nextAttemptAt:now+300000},now);

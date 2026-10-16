@@ -1,17 +1,20 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readdir,symlink,mkdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {quotaArchiveControl} from './quota-archive-control.mjs';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
 
+const runtimeBase=await testRuntimeBase('quota-archive-control');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const start=Date.parse('2025-01-01T12:00:00Z');
 const cli=fileURLToPath(new URL('./quota-archive-control.mjs',import.meta.url));
 async function fixture(t) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-archive-control-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-archive-control-')));
   t.after(()=>rm(root,{recursive:true,force:true}));return root;
 }
 async function save(root,scope,at,enabled=true) {
