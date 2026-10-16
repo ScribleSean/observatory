@@ -32,14 +32,21 @@ function SafeDirectory([string]$Path, [bool]$Required) {
     }
 }
 function Manifest([string]$Root) {
+    $rootPath = [IO.Path]::GetFullPath((Item $Root).FullName)
+    $prefix = $rootPath.TrimEnd([char]92) + '\'
     $pending = New-Object 'System.Collections.Generic.Stack[string]'
-    $pending.Push($Root)
+    $pending.Push($rootPath)
     $entries = New-Object 'System.Collections.Generic.List[object]'
     $links = New-Object 'System.Collections.Generic.List[string]'
     while ($pending.Count) {
         $directory = $pending.Pop()
         foreach ($entry in @(Get-ChildItem -LiteralPath $directory -Force)) {
-            $relative = $entry.FullName.Substring($Root.TrimEnd('\').Length + 1)
+            [string]$fullPath = [IO.Path]::GetFullPath($entry.FullName)
+            if (-not $fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+                Refuse 'An entry is outside the manifest root.'
+            }
+            [string]$relative = $fullPath.Substring($prefix.Length)
+            $entry.Refresh()
             if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
                 $links.Add((DisplayPath $relative))
                 continue
@@ -57,14 +64,14 @@ function Manifest([string]$Root) {
                 if ((PrivateFolder ($relative.Split('\')[0])) -and [MigrationFileLinks]::Count($entry.FullName) -ne 1) {
                     Refuse ('Hard links are not allowed at relative path: ' + (DisplayPath $relative))
                 }
-                $size = $entry.Length
+                $size = [long]$entry.Length
                 $hash = (Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             }
             $entries.Add([pscustomobject][ordered]@{
                 path = $relative
                 type = $kind
                 size = $size
-                ticks = $entry.LastWriteTimeUtc.Ticks
+                ticks = [long]$entry.LastWriteTimeUtc.Ticks
                 sha256 = $hash
             })
         }
@@ -72,20 +79,36 @@ function Manifest([string]$Root) {
     if ($links.Count) { Refuse ('Reparse points are not allowed at relative paths: ' + ($links -join ', ') + '.') }
     $entries
 }
+function Hex([byte[]]$Bytes) {
+    $text = New-Object Text.StringBuilder
+    foreach ($value in $Bytes) {
+        [void]$text.Append($value.ToString('x2', [Globalization.CultureInfo]::InvariantCulture))
+    }
+    return $text.ToString()
+}
 function Digest($Entries, [switch]$IgnoreDirectoryTimes) {
     $lines = New-Object 'System.Collections.Generic.List[string]'
     foreach ($entry in $Entries) {
-        $hex = ([BitConverter]::ToString([Text.Encoding]::UTF8.GetBytes($entry.path))).Replace('-', '').ToLowerInvariant()
-        # Target directories are compared by path and type because NTFS enumeration can return stale times.
-        if ($IgnoreDirectoryTimes -and $entry.type -eq 'directory') {
-            $lines.Add(($hex, $entry.type -join "`t"))
-        } else {
-            $lines.Add(($hex, $entry.type, $entry.size.ToString([Globalization.CultureInfo]::InvariantCulture), $entry.ticks.ToString([Globalization.CultureInfo]::InvariantCulture), $entry.sha256 -join "`t"))
-        }
+        [string]$hex = Hex ([Text.Encoding]::UTF8.GetBytes([string]$entry.path))
+        [long]$size = $entry.size
+        [long]$ticks = $entry.ticks
+        [string[]]$fields = @(
+            $hex
+            [string]$entry.type
+            $size.ToString('D', [Globalization.CultureInfo]::InvariantCulture)
+            $ticks.ToString('D', [Globalization.CultureInfo]::InvariantCulture)
+            [string]$entry.sha256
+        )
+        # The target check compares its directories by path and type only. Files keep size, time and hash.
+        if ($IgnoreDirectoryTimes -and $entry.type -eq 'directory') { [string[]]$fields = @($hex, [string]$entry.type) }
+        # String separators select overloads available in both .NET runtimes.
+        $lines.Add([string]::Join([string][char]9, $fields))
     }
-    $lines.Sort([StringComparer]::Ordinal)
+    [string[]]$sorted = $lines.ToArray()
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    [string]$canonical = [string]::Join([string][char]10, $sorted)
     $sha = [Security.Cryptography.SHA256]::Create()
-    try { ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($lines -join "`n"))))).Replace('-', '').ToLowerInvariant() }
+    try { Hex ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))) }
     finally { $sha.Dispose() }
 }
 function PrivateFolder([string]$Relative) {
