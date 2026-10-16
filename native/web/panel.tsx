@@ -6,5 +6,5 @@ import '../../app/viewer/panel/panel.css';
 
 const query = new URLSearchParams(location.search);
 const skin = skinIdFrom(location.search, document.documentElement);
-createRoot(document.getElementById('root')!).render(<Panel demo={query.has('demo')} initialSkin={skin}/>);
+createRoot(document.getElementById('root')!).render(<Panel demo={import.meta.env.MODE === 'demo' || query.has('demo')} initialSkin={skin}/>);
 Object.defineProperty(window,'observatoryPanelReady',{value:true});

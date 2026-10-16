@@ -110,3 +110,14 @@ test('export writes one file, refuses to overwrite and inspect reads it back', a
   await assert.rejects(exportToFile({runtime,out:path.join(target,'history.json'),device:'Mac',now}),/\.observatory/);
   await assert.rejects(exportToFile({runtime:'relative',out,device:'Mac',now}),/Absolute/);
 });
+
+test('exports remove every token hour array and preserve activity hours',()=>{
+  const input=snapshot();
+  for(const row of [...input.tokens,...input.providerTokenSources,input.combinedTokens])
+    for(const day of row.days)day.hours=Array.from({length:24},(_,i)=>i===8?day.totalTokens:0);
+  const before=structuredClone(input),document=decodeExport(encodeExport(buildExport(input,{device:'Mac',now})));
+  for(const record of [...document.records,...document.combined].filter(row=>row.kind==='tokens'))
+    for(const day of record.days)assert.equal(Object.hasOwn(day,'hours'),false);
+  assert.deepEqual(document.records.find(row=>row.kind==='activity' && row.device==='Mac').days[1].hours,[0,60]);
+  assert.deepEqual(input,before);
+});

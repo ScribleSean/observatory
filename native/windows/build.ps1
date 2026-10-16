@@ -3,6 +3,16 @@ param(
     [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache')
 )
 $ErrorActionPreference = 'Stop'
+# Timestamped phase markers for build timing (issue 106). They only write to the host.
+$buildPhase = @{ Name = $null; Start = $null }
+function Write-BuildPhase([string]$Name) {
+    $now = Get-Date
+    $stamp = $now.ToString('yyyy-MM-ddTHH:mm:ss.fffzzz')
+    if ($buildPhase.Name) { Write-Host ('{0} build phase end {1} after {2:N1} s' -f $stamp, $buildPhase.Name, ($now - $buildPhase.Start).TotalSeconds) }
+    if ($Name) { Write-Host ('{0} build phase start {1}' -f $stamp, $Name) }
+    $buildPhase.Name = $Name
+    $buildPhase.Start = $now
+}
 . (Join-Path $PSScriptRoot 'runtime-assets.ps1')
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not [IO.Path]::IsPathRooted($CacheRoot)) { throw 'CacheRoot must be absolute.' }
@@ -23,17 +33,22 @@ try {
     $env:PATH = "$nodeRoot;$previousPath"
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
+    Write-BuildPhase 'dependencies'
     & $node $npm ci --cache (Join-Path $CacheRoot 'npm') --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed.' }
+    Write-BuildPhase 'web bundle'
     & $node scripts/build-brand.mjs
     if ($LASTEXITCODE -ne 0) { throw 'Brand generation failed.' }
     & $node node_modules/vite/bin/vite.js build --config native/vite.config.mts
     if ($LASTEXITCODE -ne 0) { throw 'Dashboard build failed.' }
     if (Test-Path '.native-build/web/local') { throw 'Private snapshots must not enter the build.' }
+    Write-BuildPhase 'restore'
     & $Dotnet restore native/windows/WorkspaceObservatory.csproj --locked-mode
     if ($LASTEXITCODE -ne 0) { throw 'Locked Windows dependency restore failed.' }
+    Write-BuildPhase 'compile'
     & $Dotnet build native/windows/WorkspaceObservatory.csproj -c Release --no-restore
     if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
+    Write-BuildPhase 'self-test'
     & $Dotnet native/windows/bin/Release/net10.0-windows/WorkspaceObservatory.dll --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Windows self-tests failed.' }
     # Keep permission-heavy CLI/TLS fixtures out of the parallel suite. Their
@@ -42,14 +57,18 @@ try {
     $contractTests = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File |
         Where-Object { $_.Name -notin $isolatedTests } | Sort-Object Name |
         ForEach-Object { $_.FullName })
+    Write-BuildPhase 'script suite'
     & $node --test @contractTests
     if ($LASTEXITCODE -ne 0) { throw 'Windows JavaScript and reader contract tests failed.' }
     foreach ($isolatedTest in $isolatedTests) {
+        Write-BuildPhase ('isolated ' + $isolatedTest)
         & $node --test (Join-Path 'scripts' $isolatedTest)
         if ($LASTEXITCODE -ne 0) { throw ('Windows isolated contract failed: ' + $isolatedTest) }
     }
+    Write-BuildPhase $null
     Write-Output 'Windows development build passed. This is not a self-contained release or installer.'
 } finally {
+    Write-BuildPhase $null
     Pop-Location
     $env:PATH = $previousPath
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = $previousTelemetry

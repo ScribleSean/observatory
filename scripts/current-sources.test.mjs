@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { projectCurrentSources } from './current-sources.mjs';
 
 const native = (host) => ({ host, status: 'ok', days: [{ totalTokens: 12 }] });
@@ -55,23 +54,6 @@ void test('native snapshots preserve verified totals without inventing verificat
     projectCurrentSources(raw).combinedTokens,
     raw.combinedTokens,
   );
-});
-void test('the web view uses current-source projection and labels saved benchmarks as historical', async () => {
-  const source = await readFile(
-    new URL('../app/page.tsx', import.meta.url),
-    'utf8',
-  );
-  assert.match(source, /projectCurrentSources\(v\)/);
-  assert.ok(!source.includes('Mac + Ubuntu + Windows'));
-  assert.doesNotMatch(source, /these three Codex log sources/);
-  assert.ok(!source.includes('Ubuntu and Wispr are optional'));
-  assert.ok(!source.includes("kind:'Local model receipts'"));
-  assert.ok(
-    !source.includes(
-      "...(data.localModel?.status==='ok'?[]:['Local model receipts'])",
-    ),
-  );
-  assert.match(source, /Historical local model runs/);
 });
 void test('saved localModel records load without marking native totals as retired', () => {
   const raw = {

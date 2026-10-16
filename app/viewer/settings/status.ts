@@ -12,6 +12,7 @@ export type BridgeStatus = {
   limitsConsent: boolean;
   collectionPaused: boolean;
   pairing: { state: string; peerFingerprint: string | null; transport: string; invitationKept: boolean };
+  sharingChoice: { chosen: boolean; channels: Record<SharingChannel, 'on' | 'waiting-for-reading' | 'off' | 'unavailable'> };
   sharing: Record<SharingChannel, { enabled: boolean; canEnable: boolean; reason: string; token: string | null }>;
 };
 const keys = (value: unknown, names: string[]): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value) &&
@@ -21,7 +22,7 @@ export function validateBridgeStatus(value: unknown): BridgeStatus | null {
   try {
     if (new TextEncoder().encode(JSON.stringify(value)).length > contract.status.maxBytes ||
       !keys(value, contract.status.fields)) return null;
-    const { app, sources, skin, pairing, sharing } = value;
+    const { app, sources, skin, pairing, sharingChoice, sharing } = value;
     if (value.version !== contract.status.version || !keys(app, ['version', 'build']) || typeof app.version !== 'string' ||
       !/^[A-Za-z0-9][A-Za-z0-9 .+-]*$/.test(app.version) || Array.from(app.version).length > contract.status.appVersionMaxLength || !Number.isSafeInteger(app.build) || (app.build as number) < 0 ||
       !keys(sources, ['activity', 'codex', 'claude', 'wispr', 'quota']) || Object.values(sources).some(v => typeof v !== 'boolean') ||
@@ -37,6 +38,9 @@ export function validateBridgeStatus(value: unknown): BridgeStatus | null {
       !contract.values.pairingState.includes(pairing.state as string) || !contract.values.transport.includes(pairing.transport as string) ||
       typeof pairing.invitationKept !== 'boolean' ||
       (pairing.state === 'confirming' ? !hex(pairing.peerFingerprint) : pairing.peerFingerprint !== null)) return null;
+    if (!keys(sharingChoice, ['chosen', 'channels']) || typeof sharingChoice.chosen !== 'boolean' ||
+      !keys(sharingChoice.channels, ['codex-limits', 'claude-code-tokens']) ||
+      Object.values(sharingChoice.channels).some(state => !contract.values.sharingChoiceState.includes(state as string))) return null;
     if (!keys(sharing, ['codex-limits', 'claude-code-tokens'])) return null;
     for (const [channel, item] of Object.entries(sharing)) {
       if (!keys(item, ['enabled', 'canEnable', 'reason', 'token']) || typeof item.enabled !== 'boolean' || typeof item.canEnable !== 'boolean' ||

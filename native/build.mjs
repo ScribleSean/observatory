@@ -29,7 +29,7 @@ if(!webSource || !path.isAbsolute(webSource))throw Error('Use an absolute web bu
 mkdirSync(output,{recursive:true});
 if (process.argv.includes('--native-only') || webIndex>=0) {
   // Explicit opt-in for Swift-only edits. The packaged web smoke test still runs.
-  if (!existsSync(path.join(webSource,'index.html'))) throw Error('Build the web bundle first');
+  if (!existsSync(path.join(webSource,'dashboard.html'))) throw Error('Build the web bundle first');
   console.log('Reusing the existing web bundle for a native-only change.');
 } else {
   execFileSync(path.join(root,'node_modules/.bin/vite'),['build','--config','native/vite.config.mts'],{cwd:root,stdio:'inherit'});

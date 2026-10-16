@@ -34,7 +34,7 @@ export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedB
   const names=new Set(files.map(file=>file.path));
   for(const required of [`Contents/MacOS/${appNames.internal.macExecutable}`,'Contents/Info.plist',
     'Contents/Resources/LICENSE','Contents/Resources/THIRD-PARTY-NOTICES.md',
-    'Contents/Resources/Web/index.html','Contents/Resources/Web/assets/third-party-licenses.txt',
+    'Contents/Resources/Web/dashboard.html','Contents/Resources/Web/assets/third-party-licenses.txt',
     'Contents/Resources/Runtime/node/bin/node','Contents/Resources/Runtime/node/LICENSE',
     'Contents/Resources/Runtime/python/bin/python3.13','Contents/Resources/Runtime/python/licenses/LICENSE.cpython.txt',
     'Contents/Resources/Collector/scripts/run-collector.py','Contents/Resources/Collector/scripts/collect-mac.mjs',

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,mkdir,chmod,writeFile,lstat} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,mkdir,chmod,writeFile,lstat,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {privateSyncDirectory} from './peer-directory.mjs';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 async function fixture(t) {
@@ -190,3 +190,60 @@ for(const [target,right] of [['directory','list'],['file','read'],['ancestor','d
       // fixture(t) removes only this newly owned tree, with the ACE still set.
     });
 }
+
+test('POSIX private folder refusals carry a bounded code',{skip:process.platform==='win32'},async t=>{
+  const runtime=await fixture(t);await mkdir(path.join(runtime,'private-sync'),{mode:0o755});
+  await assert.rejects(privateSyncDirectory(runtime),{refusal:'private-folder-refused'});
+});
+test('Windows diagnostic failures expose only a refusal code',async()=>{
+  const {windowsPermissions,REFUSAL_CODES}=await import('./peer-directory.mjs');
+  assert.equal(Object.isFrozen(REFUSAL_CODES),true);
+  for(const [stderr,refusal] of [['PRIVATE\nVerification stage: inspect-ancestry\r\n','ancestor-refused'],
+    ['PRIVATE\nVerification stage: inspect-leaf','private-folder-refused'],
+    [' Verification stage: inspect-ancestry','private-folder-refused'],
+    ['Verification stage: inspect-ancestry extra','private-folder-refused']]) {
+    let calls=0;
+    const run=async(executable,args)=>{
+      assert.ok(args.includes('-Diagnostic'));calls++;
+      throw Object.assign(Error('PRIVATE'),{code:calls===1?2:1,stderr,stdout:'PRIVATE'});
+    };
+    await assert.rejects(windowsPermissions('C:/fixture',false,false,run),error=>{
+      assert.equal(error.message,'Private sync access-control verification failed');assert.equal(error.refusal,refusal);
+      assert.deepEqual(Object.keys(error),['refusal']);assert.doesNotMatch(error.stack,/PRIVATE|Verification stage/);return true;
+    });
+    assert.equal(calls,2);
+  }
+});
+test('the PowerShell start counter is off unless its file is named, then appends one line at exit',
+  {skip:process.platform!=='win32',timeout:120000},async t=>{
+    const runtime=await fixture(t);
+    const countFile=path.join(runtime,'powershell-count.txt');
+    const module=pathToFileURL(fileURLToPath(new URL('./peer-directory.mjs',import.meta.url))).href;
+    // The check may refuse a temporary folder. The counter records starts, not results.
+    const child=`const {trustedDirectoryAncestry}=await import(${JSON.stringify(module)});
+      try {await trustedDirectoryAncestry(${JSON.stringify(runtime)});} catch {}`;
+    const {OBSERVATORY_COUNT_POWERSHELL:unused,...environment}=process.env;
+    const run=extra=>spawnSync(process.execPath,['--input-type=module','-e',child],
+      {env:{...environment,...extra},encoding:'utf8',timeout:60000});
+    assert.equal(run({}).status,0);
+    await assert.rejects(lstat(countFile),{code:'ENOENT'});
+    assert.equal(run({OBSERVATORY_COUNT_POWERSHELL:'relative-count.txt'}).status,0);
+    await assert.rejects(lstat(countFile),{code:'ENOENT'});
+    await assert.rejects(lstat('relative-count.txt'),{code:'ENOENT'});
+    assert.equal(run({OBSERVATORY_COUNT_POWERSHELL:countFile}).status,0);
+    const lines=(await readFile(countFile,'utf8')).trim().split('\n');
+    assert.equal(lines.length,1);
+    assert.match(lines[0],/^private-sync-acl [1-9]\d*$/);
+  });
+test('the PowerShell start counter counts each diagnostic call, retries included',async t=>{
+  const runtime=await fixture(t),countFile=path.join(runtime,'powershell-count.txt');
+  const directoryModule=pathToFileURL(fileURLToPath(new URL('./peer-directory.mjs',import.meta.url))).href;
+  // The injected runner needs no PowerShell, so this runs on every platform.
+  const child=`const {windowsPermissions}=await import(${JSON.stringify(directoryModule)});let calls=0;
+    const run=async(executable,args)=>{if(!args.includes('-Diagnostic'))process.exit(3);calls++;throw Object.assign(Error('synthetic'),{code:calls===1?2:1,stderr:''});};
+    try {await windowsPermissions('C:/fixture',false,false,run);} catch {}`;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',child],
+    {env:{...process.env,OBSERVATORY_COUNT_POWERSHELL:countFile},encoding:'utf8',timeout:60000});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal((await readFile(countFile,'utf8')).trim(),'private-sync-acl 2');
+});

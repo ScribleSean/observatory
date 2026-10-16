@@ -292,7 +292,7 @@ internal static class ObservatoryStrings
         internal const string Confirm = "Confirm";
         internal const string Claim = "Claim";
         internal const string Disconnect = "Disconnect";
-        internal const string Repair = "Repair";
+        internal const string Repair = "Prepare pairing repair";
         internal const string Sharing = "Sharing";
         internal const string StartAtLogin = "Start at login";
         internal const string Version = "Version";
@@ -332,6 +332,13 @@ internal static class ObservatoryStrings
         internal const string PairConfigurationReady = "Configuration ready";
         internal const string PairWorking = "Pairing in progress";
         internal const string PairCancelled = "Pairing cancelled";
+        internal const string PairEstablishingTrust = "Establishing trust";
+        internal const string PairActiveSync = "Active sync";
+        internal const string PairSyncStale = "No recent record from the other device";
+        internal const string PairRevoked = "Revoked";
+        internal const string ShareUsage = "Share usage records with the paired device";
+        internal const string SharingWaiting = "Waiting for a reading";
+        internal const string PortInUse = "This port is in use. Choose another port.";
         internal const string PairPaired = "Paired";
         internal const string PairUnpaired = "Unpaired";
         internal const string PairUnavailable = "Pairing unavailable";

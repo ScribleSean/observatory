@@ -112,6 +112,7 @@ final class BridgePairingSession {
 
     func perform(action: String, args: [String: BridgeValue], identityOnly: Bool = false,
                  completion: @escaping (BridgeCode, Any?) -> Void) {
+        if bridgeActionUnavailable(action, args) { completion(.unavailable, nil); return }
         func string(_ key: String) -> String { if case .string(let value) = args[key] { return value }; return "" }
         func integer(_ key: String) -> Int { if case .integer(let value) = args[key] { return value }; return 0 }
         var command: [String: Any]
@@ -313,6 +314,7 @@ final class MacBridgeHost: BridgeHost {
             return
         }
         func string(_ key: String) -> String { if case .string(let value) = args[key] { return value }; return "" }
+        if bridgeActionUnavailable(action, args) { completion(.unavailable, nil); return }
         let enabled = args["enabled"] == .bool(true)
         if action == "pairing-copy-invitation" {
             guard !preview else { completion(.unavailable, nil); return }
@@ -579,14 +581,20 @@ func runBridgeActionSelfTests() {
         precondition(session.state == "confirming" && session.fingerprint == fingerprint)
         fake.reply("waiting"); session.poll()
         precondition(session.state == "waiting" && session.fingerprint == nil)
+        let commandsBeforeSharing = fake.commands.count
+        for action in ["pairing-host-confirm", "pairing-join-confirm"] {
+            session.perform(action: action, args: ["sharing": .bool(true)], completion: result)
+            precondition(code == .unavailable && fake.commands.count == commandsBeforeSharing && !session.closed)
+            precondition(session.state == "waiting" && session.invitation == invitation && ended == 0)
+        }
         fake.reply("configuration-ready")
-        session.perform(action: "pairing-host-confirm", args: ["fingerprint": .string(fingerprint), "peerAddress": .string("10.0.0.2"), "peerPort": .integer(43129)], completion: result)
+        session.perform(action: "pairing-host-confirm", args: ["sharing": .bool(false), "fingerprint": .string(fingerprint), "peerAddress": .string("10.0.0.2"), "peerPort": .integer(43129)], completion: result)
         let expected: [String: Any] = ["action": "host-confirm", "peerCertificateSha256": fingerprint,
             "localEndpoint": ["kind": "tls", "address": "10.0.0.1", "port": 43128],
             "peerEndpoint": ["kind": "tls", "address": "10.0.0.2", "port": 43129]]
         precondition(code == .done && NSDictionary(dictionary: fake.commands.last!).isEqual(to: expected))
         fake.replies.append(.failure(CocoaError(.fileReadUnknown)))
-        session.perform(action: "pairing-join-confirm", args: [:], completion: result)
+        session.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
         precondition(code == .unavailable && session.closed && session.invitation == nil && session.address == nil && session.port == nil && session.fingerprint == nil)
         session.end(); precondition(ended == 1 && fake.closed == 1)
         precondition(fake.commands.allSatisfy { $0["id"] == nil })
@@ -597,13 +605,13 @@ func runBridgeActionSelfTests() {
         joining.perform(action: "pairing-join-claim", args: ["invitation": .string(invitation)], completion: result)
         precondition(code == .done && NSDictionary(dictionary: join.commands.last!).isEqual(to: ["action": "join-claim", "invitation": invitation]))
         join.reply("local-ready")
-        joining.perform(action: "pairing-join-confirm", args: [:], completion: result)
+        joining.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
         precondition(code == .done && !joining.closed)
         join.reply("awaiting-confirmation")
-        joining.perform(action: "pairing-join-confirm", args: [:], completion: result)
+        joining.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
         precondition(code == .unavailable && !joining.closed)
         join.reply("acknowledged")
-        joining.perform(action: "pairing-join-confirm", args: [:], completion: result)
+        joining.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
         precondition(code == .done && joining.closed && join.closed == 1)
         precondition(NSDictionary(dictionary: join.commands.last!).isEqual(to: ["action": "join-confirm"]))
 
@@ -620,7 +628,7 @@ func runBridgeActionSelfTests() {
         cancelling.perform(action: "pairing-host-start", args: ["address": .string("10.0.0.1"), "port": .integer(43128)], completion: result)
         cancel.delay = true
         var commandFinished = false
-        cancelling.perform(action: "pairing-host-confirm", args: [:]) { code, _ in
+        cancelling.perform(action: "pairing-host-confirm", args: ["sharing": .bool(false)]) { code, _ in
             precondition(code == .unavailable); commandFinished = true
         }
         let beforePoll = cancel.commands.count

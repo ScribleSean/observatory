@@ -87,26 +87,35 @@ function forceStop(child,platform) {
 // cannot hold up a collection.
 function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
   return new Promise(resolve=>{
-    let output='',done=false,child;
-    const finish=value=>{
+    let output='',bytes=0,done=false,child;
+    const finish=ending=>{
       if(done)return;done=true;clearTimeout(timer);
-      if(value===null && child) {forceStop(child,platform);child.stdout?.destroy();child.unref();}
-      resolve(value);
+      if(ending!=='read' && child) {forceStop(child,platform);child.stdout?.destroy();child.unref();}
+      resolve({output:ending==='read'?output:null,ending});
     };
-    const timer=setTimeout(()=>finish(null),timeoutMs);
+    const timer=setTimeout(()=>finish('timed-out'),timeoutMs);
     try {child=spawn(executable,args,{cwd,env:environment,stdio:['ignore','pipe','ignore'],windowsHide:true});}
-    catch {finish(null);return;}
-    child.once('error',()=>finish(null));
+    catch {finish('failed');return;}
+    child.once('error',()=>finish('failed'));
     child.stdout.setEncoding('utf8');
-    child.stdout.on('data',text=>{output+=text;if(output.length>1024*1024)finish(null);});
-    child.once('close',code=>finish(code===0?output:null));
+    child.stdout.on('data',text=>{output+=text;bytes+=Buffer.byteLength(text);if(bytes>1024*1024)finish('failed');});
+    child.once('close',(code,signal)=>finish(code===0 && !signal?'read':'failed'));
   });
 }
 
-export async function runClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000,environment=usageEnvironment(),platform=process.platform}={}) {
-  const executable=await find();
-  if(!executable || !path.isAbsolute(cwd ?? ''))return null;
-  const output=await runBounded(executable,['-p','/usage','--output-format','json','--no-session-persistence'],{cwd,timeoutMs,environment,platform});
-  if(!output)return null;
-  try {return parseClaudeUsage(JSON.parse(output),now);}catch {return null;}
+export async function readClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000,environment=usageEnvironment(),platform=process.platform}={}) {
+  if(typeof cwd!=='string' || !path.isAbsolute(cwd))return {status:'failed',usage:null};
+  try {
+    const executable=await find();
+    if(!executable)return {status:'not-found',usage:null};
+    const {output,ending}=await runBounded(executable,['-p','/usage','--output-format','json','--no-session-persistence'],{cwd,timeoutMs,environment,platform});
+    if(ending!=='read')return {status:ending,usage:null};
+    let usage=null;
+    try {usage=parseClaudeUsage(JSON.parse(output),now);}catch {}
+    return {status:usage?'read':'unrecognized',usage};
+  } catch {return {status:'failed',usage:null};}
+}
+
+export async function runClaudeUsage(options) {
+  return (await readClaudeUsage(options)).usage;
 }

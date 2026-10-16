@@ -7,4 +7,4 @@ import '../../app/viewer/dashboard.css';
 
 const query = new URLSearchParams(location.search);
 const skin = skinIdFrom(location.search, document.documentElement);
-createRoot(document.getElementById('root')!).render(<Dashboard demo={query.has('demo')} initialSkin={skin}/>);
+createRoot(document.getElementById('root')!).render(<Dashboard demo={import.meta.env.MODE === 'demo' || query.has('demo')} initialSkin={skin}/>);

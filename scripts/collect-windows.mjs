@@ -1,3 +1,6 @@
+import {REFUSAL_CODES} from './refusal-codes.mjs';
+import {readDeviceName,attachDeviceName} from './device-name.mjs';
+import {finalizeWithLocalAdditions} from './local-additions.mjs';
 import {spawn,execFile} from 'node:child_process';
 import {readFile,writeFile,mkdir,rename,lstat,unlink} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -10,7 +13,6 @@ import {windowsCollectorConfig} from './windows-snapshot.mjs';
 import {windowsSnapshot} from './windows-dashboard.mjs';
 import {preparePeerCollection} from './peer-collection.mjs';
 import {readPairing} from './peer-pairing.mjs';
-import {finalizePeerCollection} from './peer-finalize.mjs';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
@@ -19,7 +21,7 @@ import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
-import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,withinTime} from './claude-limits.mjs';
+import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,claudeLimitsConsent,withinTime} from './claude-limits.mjs';
 import {windowsCollectorLease} from './windows-collector-lease.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +45,7 @@ function run(file,args,input='',environment=process.env) {
   });
 }
 
-export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits,signal,
+export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits,limitsTimeoutMs=20000,signal,
   readConfiguration=()=>readFile(path.join(runtime,'collector.config.json'),'utf8')}={}) {
   if(process.platform!=='win32' || !path.isAbsolute(runtime))throw Error('Native Windows runtime required');
   signal?.throwIfAborted();
@@ -73,13 +75,14 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   };
   await atomic('collector.json',{state:'running',startedAt,intervalSeconds:300,maxRunSeconds:240});
-  const guarded=async(host,action)=>{try{return {...await action(),checkedAt:new Date().toISOString()};}catch{return unavailable(host);}};
+  const guarded=async(host,action)=>{const checkedAt=new Date().toISOString();try{return {...await action(),checkedAt};}catch(error){return {...unavailable(host),...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})};}};
   const python=process.env.OBSERVATORY_PYTHON || path.join(process.env.SystemRoot || 'C:/Windows','py.exe');
   const pythonArgs=path.basename(python).toLowerCase()==='py.exe'?['-3','-B','-X','utf8','-']:['-B','-X','utf8','-'];
   const configuredClaudeDirectory=process.env.CLAUDE_CONFIG_DIR;
   const claudeDirectory=configuredClaudeDirectory === undefined || configuredClaudeDirectory === '' ? path.join(homedir(),'.claude') :
     path.isAbsolute(configuredClaudeDirectory) ? configuredClaudeDirectory : null;
   const settingsScript=(pairing?.readerPrefix??'')+await readFile(path.join(scripts,'read-settings.py'),'utf8');
+  const collectedAt=new Date().toISOString();
   const [localSettings,windows,wispr]=await Promise.all([guarded('Windows',async()=>{
     if(!config.codex)return disconnected('Windows');
     const cache=await privateCollectorDirectory(runtime,'private-codex',true);
@@ -98,10 +101,11 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   })]);
   const replacement=await retirementSnapshotGuard(runtime);
   const previous=replacement.history;
-  const collectedAt=new Date().toISOString();
   const result=windowsSnapshot({localSettings,windows,wispr},previous,collectedAt,pairing?.config??null);
   if((peerConfig && !pairing) || pairingFailed)result.peer={status:'unavailable'};
-  await finalizePeerCollection(runtime,result,savedPairing,previous);
+  await finalizeWithLocalAdditions(runtime,result,savedPairing,previous,'Windows');
+  const deviceName=await readDeviceName(runtime);
+  attachDeviceName(result.data,'Windows',deviceName);
   let quota;
   try {quota=await readQuota();}
   catch {quota={status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]};}
@@ -113,14 +117,18 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   if(!config.claude) claude=unavailableClaudeTokenSource('Windows',new Date().toISOString(),'not-connected');
   else try {
     if(!claudeDirectory)throw Error('Invalid Claude configuration directory');
+    const claudeStartedAt=new Date().toISOString();
     const raw=JSON.parse(await run(python,[...pythonArgs,claudeDirectory],await readFile(path.join(scripts,'read-claude-usage.py'),'utf8')));
-    claude=cleanClaudeTokenSource(raw,'Windows');
+    claude=cleanClaudeTokenSource(raw,'Windows',claudeStartedAt,{hours:true});
   } catch {claude=unavailableClaudeTokenSource('Windows');}
   await attachProviderTokenSync(runtime,result,claude);
   attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
   signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  const {given:enabled}=await claudeLimitsConsent(runtime).catch(()=>({given:false}));
+  attachClaudeLimits(result,await withinTime(readLimits(runtime),limitsTimeoutMs).catch(()=>({
+    ...claudeLimitsSource(null,{enabled}),...(enabled?{usageCommand:'timed-out'}:{})})));
+  attachDeviceName(result.data,'Windows',deviceName);
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),
