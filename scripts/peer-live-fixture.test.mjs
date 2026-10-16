@@ -1,5 +1,6 @@
 // Opt-in two-device fixture. Never included in an installed collector bundle.
 import {mkdtemp,realpath,readFile,rm,lstat} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -218,7 +219,7 @@ export function parseFixtureArguments(args) {
   }
   return options;
 }
-if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))) {
   const options=parseFixtureArguments(process.argv.slice(2));
   if(options)main(options.address,options.port,options.workerLifetime).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
 }
