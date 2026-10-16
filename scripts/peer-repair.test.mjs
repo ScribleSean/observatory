@@ -169,13 +169,26 @@ test('retirement waits for a peer operation and preserves state when the lock re
 test('process death releases the repair lock without deleting a lock file',async t=>{
   const runtime=await fixture(t);
   const module=new URL('./peer-lock.mjs',import.meta.url).href;
+  // TEMPORARY DIAGNOSTICS (issue 204): report GC events and whether the suspended lease frame was collected.
   const code=`import {withPeerStateLock} from ${JSON.stringify(module)};
-    await withPeerStateLock(process.argv[1],async()=>{process.stdout.write('ready');await new Promise(()=>{});});`;
+    globalThis.diagRegistry=new FinalizationRegistry(()=>process.stderr.write('DIAG lease-frame-collected '+Date.now()+'\\n'));
+    await withPeerStateLock(process.argv[1],async()=>{const token={};globalThis.diagRegistry.register(token,1);
+      process.stdout.write('ready');await new Promise(()=>{});console.log(token);});`;
   // The interval keeps the synthetic lock owner alive until this test kills it.
-  const child=spawn(process.execPath,['--input-type=module','-e','setInterval(()=>{},1000);'+code,runtime],{stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,['--trace-gc','--input-type=module','-e','setInterval(()=>{},1000);'+code,runtime],{stdio:['ignore','pipe','pipe']});
+  let diagErr='';child.stderr.on('data',chunk=>{diagErr+=chunk;});
   t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
   await Promise.race([once(child.stdout,'data'),once(child,'exit').then(()=>{throw Error('Lock owner exited');})]);
-  await assert.rejects(withPeerStateLock(runtime,()=>{}),/locked/);
+  const readyAt=Date.now();
+  const diag=label=>`DIAG ${label} t+${Date.now()-readyAt}ms exitCode=${child.exitCode} signal=${child.signalCode} pid=${child.pid}`;
+  const before=diag('before-parent-attempt');
+  let outcome;
+  try {await withPeerStateLock(runtime,()=>{});outcome='parent-acquired';}
+  catch(error) {outcome='parent-refused '+error.message;}
+  await new Promise(resolve=>setTimeout(resolve,300));
+  const report=[before,diag('after-parent-attempt'),'DIAG outcome '+outcome,'DIAG child stderr:',diagErr].join('\n');
+  t.diagnostic(report.split('\n').filter(line=>line.startsWith('DIAG')).join(' | ')+' | DIAG child gc events '+(diagErr.match(/(Scavenge|Mark-Compact|Mark-sweep|Minor)/gi)??[]).length);
+  assert.match(outcome,/locked/,report);
   const exited=once(child,'exit');child.kill('SIGKILL');await exited;
   await withPeerStateLock(runtime,async()=>{});
   await access(path.join(runtime,'private-repair/operation.sqlite'));
