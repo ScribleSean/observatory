@@ -3,7 +3,7 @@ import {constants,realpathSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {privateSyncDirectory} from './peer-directory.mjs';
+import {privateSyncDirectory,privateRefusalBudget} from './peer-directory.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {recent} from './quota-sharing-control.mjs';
@@ -126,8 +126,9 @@ export const applySharingChoice=(runtime,channel,now=Date.now())=>withPeerStateL
   return {status:'applied'};
 });
 
-export async function readSharingChoice(runtime,now=Date.now()) {
-  try {return await withPeerStateLock(runtime,async()=>{
+export async function readSharingChoice(runtime,now=Date.now(),options={}) {
+  const retry=privateRefusalBudget(options);
+  try {return await retry(()=>withPeerStateLock(runtime,async()=>{
     let directory;
     try {directory=await privateSyncDirectory(runtime);}catch(error){if(error.code==='ENOENT')return result();throw error;}
     if(await exists(path.join(directory,'revoked')))return result();
@@ -138,7 +139,7 @@ export async function readSharingChoice(runtime,now=Date.now()) {
     for(const channel of channels)status.channels[channel]=(channel==='codex-limits'?quotaOn(quota,pair):Boolean(provider?.generation))?
       'on':intent && !intent.applied[channel]?'waiting-for-reading':'off';
     return status;
-  });}catch {return result(false,'unavailable');}
+  }));}catch {return result(false,'unavailable');}
 }
 
 export const clearSharingChoice=runtime=>withPeerStateLock(runtime,async()=>{

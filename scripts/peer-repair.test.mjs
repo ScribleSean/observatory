@@ -178,10 +178,20 @@ test('process death releases the repair lock without deleting a lock file',async
     });`;
   // The interval keeps the synthetic lock owner alive until this test kills it.
   const child=spawn(process.execPath,['--expose-gc','--input-type=module','-e','setInterval(()=>{},1000);'+code,runtime],{stdio:['ignore','pipe','pipe']});
-  let stdout='';
+  let stdout='',stderr='';
+  child.stderr.on('data',chunk=>{stderr+=chunk;});
   const readyMarker=new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('ready'))resolve();}));
   t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
-  await Promise.race([readyMarker,once(child,'exit').then(()=>{throw Error('Lock owner exited');})]);
+  let timer;
+  try {
+    await Promise.race([
+      readyMarker,
+      once(child,'exit').then(()=>{throw Error(`Lock owner exited: ${stderr}`);}),
+      new Promise((resolve,reject)=>{
+        timer=setTimeout(()=>reject(Error('Lock owner did not become ready')),30000);
+      }),
+    ]);
+  } finally {clearTimeout(timer);}
   await assert.rejects(withPeerStateLock(runtime,()=>{}),/locked/);
   assert.equal(child.exitCode,null);
   assert.equal(child.signalCode,null);
