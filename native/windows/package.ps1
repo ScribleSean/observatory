@@ -25,6 +25,8 @@ if ($PSBoundParameters.ContainsKey('UpdatePublicKey')) {
     $updateTrust = @{ schema=1; platform='windows-x64';
         feedUrl='https://scriblesean.github.io/observatory/updates/windows-x64.xml'; publicKey=$UpdatePublicKey } | ConvertTo-Json -Compress
 }
+. (Join-Path $PSScriptRoot 'app-names.ps1')
+$names = Read-AppNames
 . (Join-Path $PSScriptRoot 'runtime-assets.ps1')
 $sourceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $assets = Get-Content (Join-Path $PSScriptRoot 'runtime-assets.json') -Raw | ConvertFrom-Json
@@ -49,7 +51,7 @@ try {
     $updaterArchive = Get-ObservatoryArchive -Name updater -CacheRoot $CacheRoot
     $candidateName = 'candidate-' + [guid]::NewGuid().ToString('N')
     $candidate = Join-Path $PSScriptRoot "release\$candidateName"
-    $app = Join-Path $candidate 'Workspace Observatory'
+    $app = Join-Path $candidate $names.internal.windowsPackageFolder
     New-Item -ItemType Directory -Path $app -Force | Out-Null
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'

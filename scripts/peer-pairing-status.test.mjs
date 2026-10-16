@@ -1,9 +1,9 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {withPeerStateLock} from './peer-lock.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,readdir,lstat,symlink,link,mkdir,open,chmod} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -17,9 +17,12 @@ import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,acceptPeerState} from './peer-store.mjs';
 import {createTrustedSyncService} from './peer-tls-service.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-pairing-status');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const status=state=>({version:1,state});
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-pairing-status-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-pairing-status-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
 async function paired(t) {

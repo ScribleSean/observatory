@@ -3,7 +3,7 @@ Observatory for Apple Silicon Macs
 Requires macOS 14 or later. ActivityWatch must already be running for screen time.
 
 Install
-1. Drag Workspace Observatory.app to Applications, or to your own Applications folder.
+1. Drag Observatory.app to Applications, or to your own Applications folder.
 2. Launch it from the destination folder and complete the first-run wizard.
 3. Choose sources before collection starts. All sources begin disabled on fresh installs.
 4. Use Settings in the native main window to change sources or launch at login.
@@ -19,7 +19,7 @@ Building from source is also supported. No paid service or hosted account is nee
 Updates and removal
 Quit the app before replacing or moving it. Disable Launch at login before removal.
 Move the app to Trash to uninstall. Settings and snapshots remain in:
-~/Library/Application Support/Workspace Observatory
+~/Library/Application Support/Observatory
 Keep a private backup before changing versions. A source-configured older preview
 keeps its existing cross-device collector. This release does not silently replace it.
 

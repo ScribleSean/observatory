@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,realpath,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
@@ -14,11 +14,14 @@ import {syncQuota} from './quota-sync.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 
+const runtimeBase=await testRuntimeBase('quota-tls');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 // Windows verifies private-directory ACLs through PowerShell for each state access.
 // Allow the sequential fixture to finish without changing individual I/O deadlines.
 test('pinned TLS allowance exchange sends only consented sanitized readings',
   {skip:!['darwin','win32'].includes(process.platform),timeout:process.platform==='win32'?300000:120000},async t=>{
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-tls-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-tls-')));
   const sockets=new Set();let server;
   try {
     const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';

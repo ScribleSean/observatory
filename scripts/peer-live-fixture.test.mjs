@@ -1,10 +1,12 @@
 // Opt-in two-device fixture. Never included in an installed collector bundle.
 import {mkdtemp,realpath,readFile,rm,lstat} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
 import net from 'node:net';
+import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {isPairingAddress,encodeInvitation,decodeInvitation} from './peer-invitation.mjs';
 import {initializeDeviceIdentity,readDeviceIdentity} from './peer-device-identity.mjs';
@@ -15,11 +17,43 @@ import {readPairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload} from './peer-store.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
+import {tlsPeerExchange,tlsQuotaRequest} from './peer-tls-outbound.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 import {syncQuota} from './quota-sync.mjs';
+
+export function exchangeFailure({socketCreated=false,connected=false,secureConnected=false,errorSeen=false,errorCode}={}) {
+  const stage=!socketCreated?'none':!connected?'connect':!secureConnected?'tls':'response';
+  const code=!errorSeen?'none':['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED']
+    .includes(errorCode)?errorCode:'other';
+  return {stage,code};
+}
+
+function observeSocket(socket,events) {
+  events.socketCreated=true;
+  socket.once('connect',()=>{events.connected=true;});
+  socket.once('secureConnect',()=>{events.secureConnected=true;});
+  socket.once('data',()=>{events.dataReceived=true;});
+  socket.once('error',error=>{events.errorSeen=true;events.errorCode=error.code;});
+  return socket;
+}
+
+export async function diagnosticQuotaSync(runtime,{sync=syncQuota,quotaRequest=tlsQuotaRequest,connect=tls.connect,clock=()=>performance.now()}={}) {
+  let events={},request='other';
+  const started=clock();
+  const result=await sync(runtime,{request:(transport,input)=>{
+    events={};
+    request=['status','exchange'].includes(input.action)?input.action:'other';
+    return quotaRequest(runtime,transport,input,{connect:(...args)=>{
+      const socket=connect(...args);
+      return observeSocket(socket,events);
+    }});
+  }});
+  if(result.status!=='unavailable')return result;
+  return {...result,failure:{...exchangeFailure(events),request},elapsedMs:Math.round((clock()-started)/100)*100};
+}
 
 // Only called with the fixture's owned temporary runtime. No provider is read.
 export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
@@ -50,21 +84,21 @@ export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
       if((await summary()).sharing)await revokeQuotaSharing(runtime);
       return summary();
     case 'quota-exchange': {
-      const result=await syncQuota(runtime,{request});
-      return {status:result.status,...await summary()};
+      const result=request===undefined?await diagnosticQuotaSync(runtime):await syncQuota(runtime,{request});
+      return {status:result.status,...await summary(),...(result.failure?{failure:result.failure,elapsedMs:result.elapsedMs}:{})};
     }
     default: throw Error('Unknown synthetic quota action');
   }
 }
 
-async function main(address) {
+async function main(address,port=0,workerLifetime=300) {
   if(!['darwin','win32'].includes(process.platform) || !isPairingAddress(address))throw Error('Invalid fixture host');
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-live-fixture-')));
   let listener=null,invitation=null,service=null,serviceExit=null,statusId=0,closing=false,validFrom=0;
   let serviceBuffer='',serviceReply=null;
   const key=path.join(runtime,'synthetic.key'),cert=path.join(runtime,'synthetic.pem');
   const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
-  const endpoint={kind:'tls',address,port:0};
+  const endpoint={kind:'tls',address,port};
   const send=value=>process.stdout.write(JSON.stringify(value)+'\n');
   async function stopService() {
     if(!service)return;
@@ -106,7 +140,7 @@ async function main(address) {
       }
       case 'host':
         if(listener)throw Error('Already hosting');
-        listener=await startHostTLSSetup(runtime,{address});
+        listener=await startHostTLSSetup(runtime,{address,port});
         return {invitation:encodeInvitation(listener.invitation)};
       case 'join':
         invitation=decodeInvitation(command.invitation);
@@ -116,6 +150,9 @@ async function main(address) {
         return {status:'configuration-ready'};
       case 'finish': return receiveConfirmedTLSPairing(runtime,invitation);
       case 'acknowledged': return {acknowledged:(await readHostTLSSetup(runtime)).acknowledged};
+      case 'host-close':
+        await listener?.cancel();listener=null;
+        return {status:'closed'};
       case 'service':
         if(service)throw Error('Already running');
         service=spawn(process.execPath,[fileURLToPath(new URL('./peer-tls-service.mjs',import.meta.url)),'--runtime',runtime],{stdio:['pipe','pipe','ignore']});
@@ -136,7 +173,17 @@ async function main(address) {
       }
       case 'exchange': {
         const pair=await readPairing(runtime);
-        return (await finalizePeerCollection(runtime,{data:[],peer:{status:'ready',payload:payload(pair)}},pair)).peer;
+        const events={socketCreated:false,connected:false,secureConnected:false,dataReceived:false,errorSeen:false};
+        const connect=(...args)=>{
+          const socket=tls.connect(...args);
+          return observeSocket(socket,events);
+        };
+        const exchangeTLS=(runtime,transport,record)=>tlsPeerExchange(runtime,transport,record,{connect});
+        const started=performance.now(),now=Date.now(),previous=[];
+        const result={data:[],peer:{status:'ready',payload:payload(pair)}};
+        const reply=(await finalizePeerCollection(runtime,result,pair,previous,now,{exchangeTLS})).peer;
+        if(reply.transport==='ok')return reply;
+        return {...reply,failure:exchangeFailure(events),elapsedMs:Math.round((performance.now()-started)/100)*100};
       }
       case 'revoke': await revokePairing(runtime);return {status:'revoked'};
       case 'quota-enable': case 'quota-status': case 'quota-disable': case 'quota-exchange':
@@ -152,10 +199,10 @@ async function main(address) {
     await initializeDeviceIdentity(runtime,{version:1,key:await readFile(key,'utf8'),cert:certificate});
     await rm(key);await rm(cert);
     const probe=net.createServer();
-    await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen({host:address,port:0,exclusive:true},resolve);});
+    await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen({host:address,port,exclusive:true},resolve);});
     endpoint.port=probe.address().port;
     await new Promise(resolve=>probe.close(resolve));
-    timer=setTimeout(()=>process.stdin.destroy(),300000);
+    timer=setTimeout(()=>process.stdin.destroy(),workerLifetime*1000);
     let buffer='',pending=Promise.resolve(),count=0;
     const ended=new Promise(resolve=>{process.stdin.once('end',resolve);process.stdin.once('close',resolve);});
     process.stdin.on('data',chunk=>{
@@ -178,5 +225,20 @@ async function main(address) {
     send({ready:true});await ended;closing=true;await pending;
   } finally {clearTimeout(timer);await cleanup();}
 }
-if(process.argv.length===4 && process.argv[2]==='--live-peer')
-  main(process.argv[3]).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
+export function parseFixtureArguments(args) {
+  if(args[0]!=='--live-peer' || typeof args[1]!=='string')return null;
+  const options={address:args[1]};
+  for(let i=2;i<args.length;i+=2) {
+    const key=args[i]==='--port'?'port':args[i]==='--worker-lifetime'?'workerLifetime':null;
+    const value=args[i+1];
+    if(!key || Object.hasOwn(options,key) || typeof value!=='string' || !value || /[^0-9]/.test(value))return null;
+    const n=Number(value),min=key==='port'?1024:60,max=key==='port'?65535:1200;
+    if(n<min || n>max)return null;
+    options[key]=n;
+  }
+  return options;
+}
+if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))) {
+  const options=parseFixtureArguments(process.argv.slice(2));
+  if(options)main(options.address,options.port,options.workerLifetime).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
+}

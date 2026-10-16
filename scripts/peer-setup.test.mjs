@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,access} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {setupPairing,complementaryWindowsPairing,setupStatus} from './peer-setup.mjs';
 import {ensureWindowsPairing} from './peer-setup-endpoint.mjs';
@@ -11,8 +11,11 @@ import {revokePairing} from './peer-revocation.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-setup');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-setup-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-setup-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
 const request=()=>({transport:{kind:'ssh-windows',hostAlias:'fixture-host',

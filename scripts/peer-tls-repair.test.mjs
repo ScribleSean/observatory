@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {existsSync} from 'node:fs';
 import {mkdtemp,realpath,readFile,readdir,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
@@ -16,6 +16,9 @@ import {startPairingListener} from './peer-tls-listener.mjs';
 import {requestPeerClaim,claimFromInvitation,requestPeerSetup} from './peer-tls-client.mjs';
 import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
+
+const runtimeBase=await testRuntimeBase('peer-tls-repair');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 const host=process.platform==='darwin'?'Mac':'Windows',peer=host==='Mac'?'Windows':'Mac';
@@ -30,7 +33,7 @@ const endpoints={localEndpoint:{kind:'tls',address:'10.0.0.2',port:43128},
   peerEndpoint:{kind:'tls',address:'10.0.0.3',port:43128}};
 
 test('TLS repair consent',{skip:!existsSync(openssl) || !['darwin','win32'].includes(process.platform)},async t=>{
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-tls-repair-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-tls-repair-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   async function identity(name) {
     const key=path.join(root,name+'.key'),cert=path.join(root,name+'.pem');

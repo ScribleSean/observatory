@@ -3,9 +3,8 @@
 // windows for Observatory, then prints what the person's earlier status line
 // command prints. It must stay fast and must never fail the status line.
 import {spawn} from 'node:child_process';
-import {readFile,lstat} from 'node:fs/promises';
 import path from 'node:path';
-import {CLAUDE_LIMITS_FOLDER,CLAUDE_STATUSLINE_FILE,extractClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
+import {readClaudeStatuslineMarker,extractClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
 
 const limit=1024*1024;
 
@@ -21,10 +20,7 @@ function readInput() {
 
 async function previousCommand(runtime) {
   try {
-    const file=path.join(runtime,CLAUDE_LIMITS_FOLDER,CLAUDE_STATUSLINE_FILE);
-    const info=await lstat(file);
-    if(!info.isFile() || info.isSymbolicLink() || info.size>16384)return null;
-    const saved=JSON.parse(await readFile(file,'utf8'));
+    const saved=await readClaudeStatuslineMarker(runtime);
     const command=saved?.previous?.type==='command'?saved.previous.command:null;
     return typeof command==='string' && command.trim() && !command.includes('claude-statusline-bridge.mjs')?command:null;
   } catch {return null;}

@@ -5,6 +5,11 @@ import SwiftUI
 import ServiceManagement
 import WebKit
 
+func loginItemIsOn() -> Bool {
+    UserDefaults.standard.bool(forKey: "loginItemWanted") ||
+        [.enabled, .requiresApproval].contains(SMAppService.mainApp.status)
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
@@ -71,7 +76,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             runtime = temporary
         } else {
             runtime = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support/Workspace Observatory")
+                .appendingPathComponent("Library/Application Support/Observatory")
+        }
+        if selectedRuntime == nil && previewRuntime == nil &&
+            !CommandLine.arguments.contains(where: { $0.hasPrefix("--test-") || $0 == "--self-test" }) {
+            let defaults = UserDefaults.standard
+            do {
+                if SMAppService.mainApp.status == .enabled &&
+                    defaults.string(forKey: "loginItemBundlePath") != Bundle.main.bundlePath {
+                    defaults.set(true, forKey: "loginItemWanted")
+                    try SMAppService.mainApp.unregister()
+                }
+                if defaults.bool(forKey: "loginItemWanted") && SMAppService.mainApp.status != .enabled {
+                    try SMAppService.mainApp.register()
+                    if SMAppService.mainApp.status == .enabled {
+                        defaults.set(false, forKey: "loginItemWanted")
+                        defaults.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                    } else { showLoginAttention() }
+                }
+            } catch { showLoginAttention() }
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
         if let identity = selectedRuntimeIdentity, let selectedRuntime {
@@ -409,7 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.isEnabled = previewRuntime == nil && selectedRuntime == nil
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        login.state = loginItemIsOn() ? .on : .off
         menu.addItem(withTitle: "Login settings…", action: #selector(loginSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -421,14 +444,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !store.shuttingDown else { return }
         guard previewRuntime == nil, selectedRuntime == nil else { return }
         do {
-            if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
-            else { try SMAppService.mainApp.register() }
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Launch at login needs attention"
-            alert.informativeText = "Open Login Items in System Settings to allow Observatory."
-            alert.runModal()
-        }
+            if loginItemIsOn() {
+                UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                if SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
+            }
+            else {
+                UserDefaults.standard.set(true, forKey: "loginItemWanted")
+                try SMAppService.mainApp.register()
+                if SMAppService.mainApp.status == .enabled {
+                    UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                    UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                } else { showLoginAttention() }
+            }
+        } catch { showLoginAttention() }
+    }
+    private func showLoginAttention() {
+        let alert = NSAlert()
+        alert.messageText = "Launch at login needs attention"
+        alert.informativeText = "Open Login Items in System Settings to allow Observatory."
+        alert.runModal()
     }
     @objc private func loginSettings() {
         guard previewRuntime == nil, selectedRuntime == nil else { return }
@@ -987,8 +1021,9 @@ guard allowedPreviewArguments.contains(previewArguments) else {
 #endif
 
 let realDataFolder = FileManager.default.homeDirectoryForCurrentUser
-    .appendingPathComponent("Library/Application Support/Workspace Observatory")
-let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments, realDataFolder: realDataFolder, userID: getuid())
+    .appendingPathComponent("Library/Application Support/Observatory")
+let legacyDataFolder = realDataFolder.deletingLastPathComponent().appendingPathComponent("Workspace Observatory")
+let runtimeOption = RuntimeOption.parse(arguments: CommandLine.arguments, realDataFolder: realDataFolder, legacyDataFolder: legacyDataFolder, userID: getuid())
 let selectedRuntime: URL?
 var runtimeLockDescriptor: Int32 = -1
 var runtimeDirectoryDescriptor: Int32 = -1
@@ -1012,7 +1047,7 @@ if CommandLine.arguments.dropFirst().contains(where: { removedArguments.contains
 
 if let selectedRuntime {
     do {
-        let locked = try RuntimeOption.createAndLock(selectedRuntime, realDataFolder: realDataFolder)
+        let locked = try RuntimeOption.createAndLock(selectedRuntime, realDataFolder: realDataFolder, legacyDataFolder: legacyDataFolder)
         runtimeLockDescriptor = locked.descriptor
         if selectedRuntimeIdentity == nil { selectedRuntimeIdentity = locked.createdIdentity }
     }
@@ -1029,7 +1064,7 @@ if let selectedRuntime {
     runtimeDirectoryDescriptor = open(selectedRuntime.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
     guard let identity = selectedRuntimeIdentity,
           FileIdentity.matches(descriptor: runtimeDirectoryDescriptor, path: selectedRuntime.path, expected: identity),
-          FileIdentity.at(realDataFolder.path) != identity else {
+          FileIdentity.at(realDataFolder.path) != identity, FileIdentity.at(legacyDataFolder.path) != identity else {
         fputs("The runtime folder changed while it was being checked.\n", stderr)
         exit(64)
     }
@@ -1090,6 +1125,7 @@ if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--test-trust
     }
     do {
         try SMAppService.mainApp.register()
+        UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
         print(SMAppService.mainApp.status == .enabled ? "enabled" : "approval-required")
     } catch {
         print("registration-failed")

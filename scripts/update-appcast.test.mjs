@@ -1,3 +1,4 @@
+import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
@@ -13,7 +14,7 @@ function fixture() {
     const suffix=platform==='macos-arm64'?'macos-arm64.zip':'windows-x64-update.zip';
     return {...release,platform,data,sha256:createHash('sha256').update(data).digest('hex'),
       edSignature:sign(null,data,privateKey).toString('base64'),
-      url:`https://github.com/ScribleSean/observatory/releases/download/v0.3.2-build.8/Workspace-Observatory-0.3.2-${suffix}`};
+      url:`https://github.com/ScribleSean/observatory/releases/download/v0.3.2-build.8/${appNames.visible.artifactPrefix}-0.3.2-${suffix}`};
   });
   return {release,artifacts,publicKeys};
 }

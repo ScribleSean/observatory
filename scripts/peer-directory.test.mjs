@@ -1,15 +1,18 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,mkdir,chmod,writeFile,lstat,readFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-directory');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-private-acl-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-private-acl-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
 function grantEveryoneScript(file,{writeGrant=true,wrongOwner=false,wrongInheritance=false}={}) {

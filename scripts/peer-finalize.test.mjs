@@ -1,14 +1,17 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-finalize');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 test('configured peer transport failure counts unavailable peer sources without enabling excluded hosts',async t=>{
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-peer-finalize-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-peer-finalize-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const base=createPairingConfigurations().Mac;
   const pairing={...base,transport:{kind:'tls',address:'10.0.0.2',port:3210}};
@@ -28,7 +31,7 @@ test('configured peer transport failure counts unavailable peer sources without 
 for(const wrongHost of [false,true]) {
   test(wrongHost?'local payload failure marks peer sources unavailable without enabling excluded hosts':
     'configured peer without transport counts unavailable peer sources without enabling excluded hosts',async t=>{
-    const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-peer-finalize-')));
+    const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-peer-finalize-')));
     t.after(()=>rm(runtime,{recursive:true,force:true}));
     const pairing=createPairingConfigurations().Mac;
     await initializePairing(runtime,pairing);

@@ -1,16 +1,19 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 import {syncQuota,attachQuotaSync} from './quota-sync.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
 import {sshQuotaRequest} from './peer-transport.mjs';
+
+const runtimeBase=await testRuntimeBase('quota-sync');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.now();
 async function fixture(t,{tls=false}={}) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-sync-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-sync-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const pair=createPairingConfigurations();
   pair.Mac.transport={kind:'ssh-windows',hostAlias:'synthetic',remoteNode:'C:/App/node.exe',remoteScript:'C:/App/peer-exchange.mjs',remoteRuntime:'C:/Runtime'};

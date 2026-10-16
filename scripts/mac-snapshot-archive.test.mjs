@@ -1,14 +1,17 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,writeFile,readFile,mkdir,lstat,symlink,readdir,rm,chmod,unlink} from 'node:fs/promises';
 import fsPromises from 'node:fs/promises';
 import {syncBuiltinESMExports} from 'node:module';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {archiveMacSnapshot,retirementSnapshotGuard} from './mac-snapshot-archive.mjs';
+
+const runtimeBase=await testRuntimeBase('mac-snapshot-archive');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const options={skip:process.platform!=='darwin'};
 async function fixture(t) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-snapshot-archive-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-snapshot-archive-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const archive=path.join(root,'archives'),file=path.join(root,'usage.json');
   await mkdir(archive,{mode:0o700});
@@ -22,7 +25,7 @@ const retiredBytes=Buffer.from(JSON.stringify({schema:2,collectedAt:'2026-09-09T
   settings:[{host:'Ubuntu',status:'ok',profiles:[{model:'fixture',totalTokens:42}],tools:[]}],
   localModel:{host:'Ubuntu',status:'ok',records:[{model:'fixture',recordedAt:'2026-09-09T11:00:00.000Z',seconds:1,input:10,output:2}]}},null,2)+'\r\n');
 async function retirementFixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-retirement-snapshot-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-retirement-snapshot-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const file=path.join(runtime,'public/local/usage.json');
   await mkdir(path.dirname(file),{recursive:true,mode:0o700});

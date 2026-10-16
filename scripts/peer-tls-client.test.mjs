@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate,createHash} from 'node:crypto';
 import {mkdtempSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {once} from 'node:events';
@@ -19,10 +19,13 @@ import {startHostTLSSetup,readHostTLSSetup} from './peer-tls-host.mjs';
 import {startPairingListener} from './peer-tls-listener.mjs';
 import {generateMacDeviceIdentity} from './generate-mac-device-identity.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-tls-client');
+after(()=>rmSync(runtimeBase,{recursive:true,force:true}));
+
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 
 test('real TLS pins certificates before sending invitation bytes',{skip:!existsSync(openssl)},async t=>{
-  const root=mkdtempSync(path.join(tmpdir(),'observatory-test-tls-'));
+  const root=mkdtempSync(path.join(runtimeBase,'observatory-test-tls-'));
   t.after(()=>rmSync(root,{recursive:true,force:true}));
   const makeIdentity=name=>{
     const key=path.join(root,name+'.key'),cert=path.join(root,name+'.pem');

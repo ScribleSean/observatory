@@ -1,26 +1,31 @@
-import nodeTest from 'node:test';
+import nodeTest,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, writeFile, readFile, rm, realpath} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {collectQuota} from './collect-quota.mjs';
+
+const runtimeBase=await testRuntimeBase('run-collector');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 // This runner uses POSIX process groups and flock. Windows uses Collector.cs,
 // whose contracts are exercised by the native Windows build and live checks.
 const test=(name,fn)=>nodeTest(name,{skip:process.platform==='win32'?'POSIX runner only; Windows uses the native collector':false},fn);
+// Start the runner with the selected test Python, as the app uses its bundled runtime, because PATH python3 can be older than the collector's private-folder check supports.
+const python=process.env.OBSERVATORY_PYTHON || 'python3';
 const reader=path.resolve('scripts/run-collector.py');
 const code=`import importlib.util,sys\ns=importlib.util.spec_from_file_location('runner',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nprint(m.run_collection(sys.argv[2],sys.argv[3],300,float(sys.argv[4])))`;
 const success=`require('fs').writeFileSync('public/local/usage.json',JSON.stringify({collectedAt:new Date().toISOString(),activity:[{status:'ok'}],tokens:[],settings:[]}));`;
 // Shell exec preserves the fixture PID and exact Node path, including spaces and quotes.
 const nodeLauncher=`#!/bin/sh\n':' //; exec '${process.execPath.replaceAll("'", "'\\''")}' "$0" "$@"`;
 async function fixture(t,script) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'dashboard-runner-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'dashboard-runner-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   await mkdir(path.join(root,'scripts'));
   await writeFile(path.join(root,'scripts/collect-mac.mjs'),`import {createRequire} from 'node:module';const require=createRequire(import.meta.url);${script}`);
   return root;
 }
-const run=(root,timeout=5)=>execFileSync('python3',['-c',code,reader,root,process.execPath,String(timeout)],{encoding:'utf8'}).trim();
+const run=(root,timeout=5)=>execFileSync(python,['-c',code,reader,root,process.execPath,String(timeout)],{encoding:'utf8'}).trim();
 const status=root=>readFile(path.join(root,'public/local/collector.json'),'utf8').then(JSON.parse);
 
 test('runner publishes only safe status metadata after a successful collection',async t=>{
@@ -71,7 +76,7 @@ test('a timed-out reader is stopped and the operating-system lock is released',a
 });
 test('overlapping collection is skipped without replacing running status',async t=>{
   const root=await fixture(t,`setTimeout(()=>{${success}},800);`);
-  const child=spawn('python3',['-c',code,reader,root,process.execPath,'5']);
+  const child=spawn(python,['-c',code,reader,root,process.execPath,'5']);
   const finished=new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});
   t.after(()=>{if(child.exitCode===null)child.kill();});
   for(let i=0;i<100;i++) {
@@ -87,7 +92,7 @@ test('packaged runner keeps writable state separate from the bundled script',asy
   const runtime=await fixture(t,'');
   const entry=path.join(bundle,'scripts','collect-mac.mjs');
   await writeFile(entry,`import fs from 'node:fs';if(process.env.OBSERVATORY_RUNTIME!==process.cwd() || !process.env.OBSERVATORY_PYTHON.startsWith('/'))throw Error('Invalid packaged environment');fs.writeFileSync('public/local/usage.json',JSON.stringify({collectedAt:new Date().toISOString(),activity:[{status:'ok'}]}));`);
-  const output=JSON.parse(execFileSync('python3',[reader,'--node',process.execPath,'--runtime',runtime,'--collector',entry,'--interval','300'],{encoding:'utf8'}));
+  const output=JSON.parse(execFileSync(python,[reader,'--node',process.execPath,'--runtime',runtime,'--collector',entry,'--interval','300'],{encoding:'utf8'}));
   assert.equal(output.collection,'ok');assert.equal((await status(runtime)).state,'ok');
   await assert.rejects(status(bundle));
 });
@@ -100,7 +105,7 @@ test('allowance-only runner keeps full collection status and timestamps unchange
   await writeFile(path.join(root,'public/local/collector.json'),'preserved full status');
   const entry=path.join(root,'scripts/collect-mac.mjs');
   await writeFile(entry,"if(!process.argv.includes('--quota-only'))throw Error('Wrong mode');");
-  const result=JSON.parse(execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,'--collector',entry,'--quota-only'],{encoding:'utf8'}));
+  const result=JSON.parse(execFileSync(python,[reader,'--node',process.execPath,'--runtime',root,'--collector',entry,'--quota-only'],{encoding:'utf8'}));
   assert.equal(result.collection,'ok');
   assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'preserved full status');
   assert.deepEqual(JSON.parse(await readFile(path.join(root,'public/local/usage.json'),'utf8')),previous);
@@ -116,7 +121,7 @@ test('failed allowance-only child reports separately and preserves previous data
   await writeFile(path.join(root,'public/local/usage.json'),'saved data');
   const entry=path.join(root,'scripts/collect-mac.mjs');
   await writeFile(entry,"throw Error('PRIVATE');");
-  assert.throws(()=>execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,'--collector',entry,'--quota-only'],{encoding:'utf8'}));
+  assert.throws(()=>execFileSync(python,[reader,'--node',process.execPath,'--runtime',root,'--collector',entry,'--quota-only'],{encoding:'utf8'}));
   const attempt=await readFile(path.join(root,'public/local/allowance-collector.json'),'utf8');
   assert.equal(JSON.parse(attempt).state,'failed');assert.equal(attempt.includes('PRIVATE'),false);
   assert.equal(await readFile(path.join(root,'public/local/collector.json'),'utf8'),'full status');
@@ -125,6 +130,10 @@ test('failed allowance-only child reports separately and preserves previous data
 
 test('real native allowance-only entry runs under the lock without rescanning saved data',async t=>{
   if(process.platform!=='darwin')return;
+  if(execFileSync(python,['-I','-S','-B','-c','import sys;print(sys.version_info>=(3,10))'],{encoding:'utf8'}).trim()==='False') {
+    t.skip('the private-folder check needs Python 3.10 or newer');
+    return;
+  }
   const root=await fixture(t,'');
   await mkdir(path.join(root,'public/local'),{recursive:true});
   await writeFile(path.join(root,'collector.config.json'),JSON.stringify({activity:false,codex:false,wispr:false,quota:true}));
@@ -135,7 +144,7 @@ test('real native allowance-only entry runs under the lock without rescanning sa
   const saved={schema:2,collectedAt:'2026-01-01T00:00:00Z',activity:[{seconds:12}],tokens:[{totalTokens:34}],dictation:[{words:56}],quota,peerQuota:null};
   await writeFile(path.join(root,'public/local/usage.json'),JSON.stringify(saved));
   await writeFile(path.join(root,'public/local/collector.json'),'saved full collection status');
-  const output=JSON.parse(execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,
+  const output=JSON.parse(execFileSync(python,[reader,'--node',process.execPath,'--runtime',root,
     '--collector',path.resolve('scripts/collect-mac.mjs'),'--quota-only'],{encoding:'utf8'}));
   assert.equal(output.collection,'ok');
   const after=JSON.parse(await readFile(path.join(root,'public/local/usage.json'),'utf8'));
@@ -151,7 +160,7 @@ test('runner refuses an explicit absolute collect-dashboard.mjs entry without la
   const entry=path.join(root,'scripts/collect-dashboard.mjs');
   const marker=path.join(root,'child-ran');
   await writeFile(entry,"import fs from 'node:fs';fs.writeFileSync('child-ran','unexpected');");
-  assert.throws(()=>execFileSync('python3',[reader,'--node',process.execPath,'--runtime',root,'--collector',entry],{encoding:'utf8'}),error=>{
+  assert.throws(()=>execFileSync(python,[reader,'--node',process.execPath,'--runtime',root,'--collector',entry],{encoding:'utf8'}),error=>{
     assert.equal(error.status,1);
     assert.equal(JSON.parse(error.stdout).collection,'failed');
     return true;

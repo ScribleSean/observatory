@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,writeFile,readFile,symlink} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -11,8 +11,11 @@ import {createPeerPayload} from './peer-payload.mjs';
 import {createPeerRecord,acceptPeerState,readPeerState} from './peer-store.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-pairing');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 async function fixture(t,settled=()=>undefined) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-pairing-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-pairing-')));
   t.after(async()=>{
     // Cancellation can leave the current ACL operation settling asynchronously.
     await Promise.resolve(settled()).catch(()=>{});

@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,realpath,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
@@ -17,9 +17,12 @@ import {updateProviderTokenSource,readProviderTokenState,disableProviderTokenSha
 import {providerTokenSharingControl} from './provider-token-sharing-control.mjs';
 import {syncProviderTokens} from './provider-token-sync.mjs';
 
+const runtimeBase=await testRuntimeBase('provider-token-tls');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 test('provider channel uses pinned TLS and fences disable after handshake',
   {skip:!['darwin','win32'].includes(process.platform),timeout:process.platform==='win32'?300000:120000},async t=>{
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-tls-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-provider-tls-')));
   let listener,trusted;
   const sockets=new Set();
   try {

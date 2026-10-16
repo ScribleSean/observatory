@@ -1092,7 +1092,8 @@ internal sealed class BridgeHandler : IDisposable
             if (action == "pairing-join-confirm" && reply.Status is ("local-ready" or "awaiting-confirmation")) return new("unavailable");
             if (action == "pairing-identity-create" && reply.Status == "identity-ready")
             { lock (gate) identityState = null; return new("done"); }
-            bool finished = (action == "pairing-host-confirm" && reply.Status is "configuration-ready" or "acknowledged") ||
+            if (action == "pairing-host-confirm" && reply.Status == "configuration-ready") return new("done");
+            bool finished = (action == "pairing-host-confirm" && reply.Status == "acknowledged") ||
                 (action == "pairing-join-confirm" && reply.Status == "acknowledged");
             await EndSession();
             return new(finished ? "done" : "unavailable");
@@ -1126,7 +1127,7 @@ internal sealed class BridgeHandler : IDisposable
                 var pending = await current.Send(new JsonObject { ["action"] = "pending-peer" });
                 lock (gate) if (current == session && generation == sessionGeneration) peerAddress = pending.PeerAddress;
             }
-            if (reply.Status is "acknowledged" or "configuration-ready" or "unavailable" or "cancelled" || pairingState == "unavailable") await EndPolledSession(current);
+            if (reply.Status is "acknowledged" or "unavailable" or "inactive" or "cancelled" || pairingState == "unavailable") await EndPolledSession(current);
         }
         catch { await EndPolledSession(current); }
         finally { lock (gate) polling = false; }
@@ -1906,9 +1907,17 @@ internal sealed class BridgeHandler : IDisposable
         Check(!session.Disposed && test.Host.Reserved, "Poll ended active confirmation");
         session.HeldConfirm.SetResult(new(1, "configuration-ready", null, null));
         await test.Handler.drain;
-        Check(test.Result(confirming)["code"]!.GetValue<string>() == "done", "Active confirmation result");
+        Check(test.Result(confirming)["code"]!.GetValue<string>() == "done" && !session.Disposed && test.Host.Reserved, "Active confirmation result");
+        var readyStatus = (await test.Run("status"))["value"]!.AsObject();
+        Check(ValidStatusShape(readyStatus) && readyStatus["pairing"]!["state"]!.GetValue<string>() == "configuration-ready" &&
+            readyStatus["collectionPaused"]!.GetValue<bool>(), "Host configuration ready status");
         var command = session.Commands.Last(c => c["action"]!.GetValue<string>() == "host-confirm");
-        Check(command.Count == 5 && !command["sharing"]!.GetValue<bool>() && command["localEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"100.64.0.1\",\"port\":43128}" && session.Disposed && !test.Host.Reserved, "Host confirmation endpoint");
+        Check(command.Count == 5 && !command["sharing"]!.GetValue<bool>() && command["localEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"100.64.0.1\",\"port\":43128}", "Host confirmation endpoint");
+        await test.Handler.PollAsync();
+        Check(!session.Disposed && test.Host.Reserved, "Configuration ready poll keeps session");
+        session.PollState = "acknowledged";
+        await test.Handler.PollAsync();
+        Check(session.Disposed && !test.Host.Reserved, "Acknowledged poll releases host session");
         await test.Run("pairing-join-claim", new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" });
         var joinStatus = (await test.Run("status"))["value"]!.AsObject();
         Check(joinStatus["pairing"]!["state"]!.GetValue<string>() == "awaiting-confirmation" && ValidStatusShape(joinStatus), "Join status shape");
@@ -1918,6 +1927,33 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("pairing-join-confirm", new() { ["sharing"] = false }, code: "unavailable"); Check(!session.Disposed, "Join retry ended session");
         session.JoinState = "acknowledged"; await test.Run("pairing-join-confirm", new() { ["sharing"] = false });
         Check(session.Disposed && session.Commands.Last().Count == 2 && !session.Commands.Last()["sharing"]!.GetValue<bool>(), "Join completion");
+        await test.Run("pairing-host-start", HostArgs());
+        session = test.Host.Session!;
+        session.HeldConfirm = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.HeldConfirm.SetResult(new(1, "acknowledged", null, null));
+        await test.Run("pairing-host-confirm", new() { ["sharing"] = false, ["fingerprint"] = new string('a', 64),
+            ["peerAddress"] = "100.64.0.2", ["peerPort"] = 43129 });
+        Check(session.Disposed && !test.Host.Reserved, "Acknowledged host confirmation releases session");
+        await test.Run("pairing-host-start", HostArgs());
+        session = test.Host.Session!;
+        await test.Run("pairing-host-confirm", new() { ["sharing"] = false, ["fingerprint"] = new string('a', 64),
+            ["peerAddress"] = "100.64.0.2", ["peerPort"] = 43129 });
+        Check(!session.Disposed && test.Host.Reserved, "Configuration ready keeps host session");
+        foreach (var action in new[] { "refresh", "set-sharing", "set-sharing-choice", "pairing-disconnect", "pairing-repair-prepare" })
+            await test.Run(action, action == "set-sharing" ? ShareArgs(false) :
+                action == "set-sharing-choice" ? new JsonObject { ["enabled"] = false } : null, "busy");
+        await test.Run("pairing-host-start", HostArgs(), "busy");
+        await test.Run("pairing-cancel");
+        Check(session.Disposed && !test.Host.Reserved && session.Commands.Last()["action"]!.GetValue<string>() == "cancel",
+            "Configuration ready cancel releases session");
+        await test.Run("pairing-host-start", HostArgs());
+        session = test.Host.Session!;
+        await test.Run("pairing-host-confirm", new() { ["sharing"] = false, ["fingerprint"] = new string('a', 64),
+            ["peerAddress"] = "100.64.0.2", ["peerPort"] = 43129 });
+        Check(!session.Disposed && test.Host.Reserved, "Configuration ready keeps session before inactive poll");
+        session.PollState = "inactive";
+        await test.Handler.PollAsync();
+        Check(session.Disposed && !test.Host.Reserved, "Inactive poll releases host session");
         await test.Run("pairing-host-start", HostArgs());
         session = test.Host.Session!; await test.Run("pairing-cancel");
         Check(session.Disposed && !test.Host.Reserved && session.Commands.Last()["action"]!.GetValue<string>() == "cancel", "Cancel reservation");
@@ -2158,6 +2194,10 @@ internal sealed class BridgeHandler : IDisposable
         Check(command.Select(p => p.Key).ToHashSet().SetEquals(new[] { "action", "peerCertificateSha256", "localEndpoint", "peerEndpoint", "sharing" }) &&
             command["sharing"]!.GetValue<bool>() && command["peerCertificateSha256"]!.GetValue<string>() == new string('a', 64) &&
             command["peerEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"100.64.0.2\",\"port\":43128}", "Host sharing command");
+        Check(!session.Disposed && test.Host.Reserved, "Host sharing confirmation keeps session");
+        session.PollState = "acknowledged";
+        await test.Handler.PollAsync();
+        Check(session.Disposed && !test.Host.Reserved, "Host sharing acknowledgement releases session");
         Check((await test.Run("pairing-peer-address"))["value"]!["peerAddress"] is null, "Peer cleared at session end");
         await test.Run("pairing-join-claim", new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" });
         session = test.Host.Session!; test.Host.Consent = false; before = session.Commands.Count;

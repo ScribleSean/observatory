@@ -1,16 +1,19 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,lstat,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {quotaSharingControl} from './quota-sharing-control.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
+
+const runtimeBase=await testRuntimeBase('quota-sharing-control');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.now(),scope='a'.repeat(64);
 async function fixture(t,ready=true) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-sharing-control-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-sharing-control-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const pair=createPairingConfigurations().Mac;
   if(ready) {

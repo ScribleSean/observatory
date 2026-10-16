@@ -15,7 +15,7 @@ internal static class LaunchIsolationTests
         Check(!ordinary.IsTest && AppIdentity.Select("installed", ordinaryOwner) == ordinary);
         Check(test.IsTest && AppIdentity.Select("relocated-test", testOwner) == test);
         Check(AppIdentity.Select(AppIdentity.TestName.ToUpperInvariant(), testOwner.Replace("\n", "\r\n")) == test);
-        Check(ordinary.DataName == "Workspace Observatory" && ordinary.StartupName == "WorkspaceObservatory");
+        Check(ordinary.DataName == "Observatory" && ordinary.StartupName == "WorkspaceObservatory");
         Check(ordinary.SingletonName == @"Local\WorkspaceObservatory" && ordinary.SetupName == InstallationGate.Name);
         Check(ordinary.QuitName == UpdateQuit.RequestName && ordinary.ActivationName == @"Local\WorkspaceObservatory.Open");
         Check(test.DataName == AppIdentity.TestName && test.StartupName == AppIdentity.TestId);
@@ -31,6 +31,9 @@ internal static class LaunchIsolationTests
             try { AppIdentity.Select(AppIdentity.TestName, invalid); } catch (IOException) { rejected = true; }
             Check(rejected);
         }
+        var legacyRejected = false;
+        try { AppIdentity.Select(AppIdentity.LegacyTestName, null); } catch (IOException) { legacyRejected = true; }
+        Check(legacyRejected);
         foreach (var args in new string[][] { [], ["--background"], ["--native-dashboard"], ["--self-test"], ["--test-launch-isolation"],
             ["--quit-for-update"], ["--test-update-ready", "fixture-event"], ["--web-panel"], ["--background", "--web-panel", "--panel-timing"],
             ["--panel-timing"], ["--panel-timing", "--background"], ["--web-dashboard"], ["--web-dashboard", "--web-panel"] })

@@ -2,7 +2,7 @@
 
 The product name is **Observatory**. The repository and package name are `observatory`.
 
-Existing data directories, bundle paths and installation identifiers may retain the former Workspace Observatory name for upgrade compatibility. These are storage and installation details, not the public brand. Do not rename them without a tested migration that preserves saved history and settings.
+[native/app-names.json](../native/app-names.json) lists every name the apps use. Its `visible` names are what a person sees: the app file `Observatory.app`, the data folder `Observatory` on both platforms, the Start menu entry and install folder `Observatory`, and release files named `Observatory-<version>-...`. Its `internal` names are identifiers that stay as they were so that settings, login items, privacy approvals and Windows installation receipts keep working: the Mac bundle identifier `io.workspace-observatory.app`, the executables `WorkspaceObservatory` and `WorkspaceObservatory.exe`, the Windows mutex and setup names, the uninstall registry key, the login Run value name and the receipt product string. The owner chose to keep them on 2026-10-14. Its `legacy` names are the former visible names, used only to find an earlier install and its data folder. An earlier data folder named `Workspace Observatory` is copied to the new folder by the tested migration, and the earlier folder is kept until the owner confirms the copy.
 
 The canonical mark is [the telescope](../public/brand/telescope.svg). It represents observation rather than control. Use this same silhouette in the menu bar, application icon, dashboard, favicon and documentation. The favicon and native icons are generated from it, not redrawn independently.
 

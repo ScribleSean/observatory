@@ -10,7 +10,7 @@ SetDatablockOptimize on
 Name "${APP_NAME}"
 OutFile "${INSTALLER_OUTPUT}"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
-BrandingText "Workspace Observatory"
+BrandingText "${APP_NAME}"
 ShowInstDetails show
 ShowUninstDetails show
 !define MUI_ICON "${APP_ICON}"
@@ -60,7 +60,7 @@ Function ${PREFIX}CheckRunning
   IntPtrCmp $0 0 not_running
   running:
     System::Call 'kernel32::CloseHandle(p r0)'
-    MessageBox MB_OK|MB_ICONSTOP "Quit Workspace Observatory from its tray menu, then try again." /SD IDOK
+    MessageBox MB_OK|MB_ICONSTOP "Quit ${APP_NAME} from its tray menu, then try again." /SD IDOK
     SetErrorLevel 10
     Quit
   not_running:
@@ -168,7 +168,7 @@ Section "Install"
   IfErrors install_failed
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${APP_NAME}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "Workspace Observatory contributors"
+  WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "${PUBLISHER}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\WorkspaceObservatory.exe"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'

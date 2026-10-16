@@ -4,11 +4,13 @@ namespace WorkspaceObservatory;
 // flag. Shortcuts, direct launches and login startup therefore select alike.
 internal sealed record AppIdentity(bool IsTest)
 {
-    internal const string TestName = "Workspace Observatory Installer Test";
+    internal const string TestName = "Observatory Installer Test";
+    internal const string LegacyDataName = "Workspace Observatory";
+    internal const string LegacyTestName = "Workspace Observatory Installer Test";
     internal const string TestId = "WorkspaceObservatoryInstallerTest";
     private static readonly Lazy<AppIdentity> selected = new(() => Read(AppContext.BaseDirectory));
     internal static AppIdentity Current => selected.Value;
-    internal string DataName => IsTest ? TestName : "Workspace Observatory";
+    internal string DataName => IsTest ? TestName : "Observatory";
     internal string StartupName => IsTest ? TestId : "WorkspaceObservatory";
     internal string SingletonName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + OverrideSuffix;
     internal string InUseName => "Local\\" + (IsTest ? TestId + ".App" : StartupName) + ".InUse";
@@ -49,7 +51,7 @@ internal sealed record AppIdentity(bool IsTest)
         var testDirectory = string.Equals(directoryName, TestName, StringComparison.OrdinalIgnoreCase);
         if (owner is null)
         {
-            if (testDirectory) throw new IOException("TEST installation identity is missing.");
+            if (testDirectory || string.Equals(directoryName, LegacyTestName, StringComparison.OrdinalIgnoreCase)) throw new IOException("TEST installation identity is missing.");
             return new(false); // Uninstalled source builds retain the ordinary identity.
         }
         var lines = owner.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');

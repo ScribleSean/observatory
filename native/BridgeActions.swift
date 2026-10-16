@@ -585,8 +585,18 @@ final class MacBridgeHost: BridgeHost {
         case "set-startup":
             guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             do {
-                if enabled && SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
-                else if !enabled && SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
+                if enabled && SMAppService.mainApp.status != .enabled {
+                    UserDefaults.standard.set(true, forKey: "loginItemWanted")
+                    try SMAppService.mainApp.register()
+                    if SMAppService.mainApp.status == .enabled {
+                        UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                        UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                    }
+                }
+                else if !enabled {
+                    UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                    if SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
+                }
                 let status = SMAppService.mainApp.status
                 completion(status != .requiresApproval && (status == .enabled) == enabled ? .done : .unavailable, nil)
             } catch { completion(.unavailable, nil) }
@@ -670,7 +680,7 @@ final class MacBridgeHost: BridgeHost {
                 let input = BridgeStatusInput(appVersion: version, appBuild: build,
                     sources: sources.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
-                    startup: SMAppService.mainApp.status == .enabled, appearance: viewer.appearance, limitsConsent: limits,
+                    startup: loginItemIsOn(), appearance: viewer.appearance, limitsConsent: limits,
                     collectionPaused: store.collectionPausedForPairing || store.pairingMaintenance,
                     pairingState: paired.state, peerFingerprint: visible?.fingerprint,
                     transport: paired.transport, invitationKept: visible?.invitation != nil, sharing: shared.channels, sharingChoice: shared.choice)
