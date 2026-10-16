@@ -4,9 +4,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 // macOS and other non-Windows platforms use the repository folder because the macOS
-// private-path check compares every ancestor's metadata before and after.
-// Each test file has its own stable folder so other test files starting or
-// finishing do not change the ancestors of its runtimes.
+// private-path check compares identity, mode, owner, group and flags on every
+// ancestor and watches each folder for attribute changes. It compares every
+// field, including times, on the private folder. A private folder in the system
+// temp folder sits beside unrelated files and other tests. A stable per-file
+// folder keeps runtimes apart.
 // Windows keeps the temp folder because CI places it on the account volume and
 // the Windows check does not compare timestamps.
 export async function testRuntimeBase(name) {
