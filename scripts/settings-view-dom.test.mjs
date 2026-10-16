@@ -27,6 +27,7 @@ async function fixture(t, state = 'identity-ready', placeholder = false) {
   const messages = [];
   const listeners = new Set();
   let failStatus = false;
+  let holdStatus = false;
   const bridge = {
     available: true,
     send(action, args) {
@@ -35,7 +36,7 @@ async function fixture(t, state = 'identity-ready', placeholder = false) {
       const promise = new Promise(done => { resolve = done; });
       const request = { id, action, args, answer: (more = {}) => resolve({ id, ok: true, code: 'done', ...more }) };
       messages.push(request);
-      if (action === 'status') request.answer(failStatus ? { ok: false, code: 'unavailable' } : { value: structuredClone(status) });
+      if (action === 'status' && !holdStatus) request.answer(failStatus ? { ok: false, code: 'unavailable' } : { value: structuredClone(status) });
       return promise;
     },
     onLateResult(listener) { listeners.add(listener); return () => listeners.delete(listener); },
@@ -92,6 +93,7 @@ async function fixture(t, state = 'identity-ready', placeholder = false) {
   });
   return { win, container, status, messages, button, click, input, last, answer, late, host, hosted, hide,
     failStatus: () => { failStatus = true; },
+    holdStatus: () => { holdStatus = true; },
     remount: async () => act(async () => { root.unmount(); root = createRoot(container); mount(); }),
   };
 }
@@ -270,6 +272,77 @@ void test('join Confirm posts join confirmation and hides claimed invitation con
     assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Claim'));
   }
 });
+
+const localReadyHelp = 'This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again.';
+
+void test('local-ready retry reports failure when done leaves pairing unconfirmed', async t => {
+  const f = await fixture(t, 'local-ready');
+  await refresh(f);
+  await f.click('Try again');
+  await f.answer(f.last('pairing-join-confirm'), { ok: true, code: 'done' });
+  const output = f.container.querySelector('output').textContent;
+  assert.equal(output, 'This change could not be made.');
+  assert.ok(!output.includes('Done'));
+  assert.equal(f.button('Try again').disabled, false);
+  assert.ok(f.container.textContent.includes(localReadyHelp));
+});
+
+void test('local-ready retry ending the session shows pairing repair controls', async t => {
+  const f = await fixture(t, 'local-ready');
+  await refresh(f);
+  await f.click('Try again');
+  f.status.pairing.state = 'establishing-trust';
+  await f.answer(f.last('pairing-join-confirm'), { ok: false, code: 'unavailable' });
+  assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+  assert.ok(!f.container.textContent.includes(localReadyHelp));
+  assert.equal(f.button('Disconnect').disabled, false);
+  assert.equal(f.button('Prepare pairing repair').disabled, false);
+});
+
+void test('local-ready retry reports success after acknowledgement', async t => {
+  const f = await fixture(t, 'local-ready');
+  await refresh(f);
+  await f.click('Try again');
+  f.status.pairing.state = 'acknowledged';
+  await f.answer(f.last('pairing-join-confirm'), { ok: true, code: 'done' });
+  assert.equal(f.container.querySelector('output').textContent, 'Done');
+});
+
+void test('local-ready retries without sharing after a checked confirmation and remains retryable until acknowledged', async t => {
+  const f = await fixture(t, 'awaiting-confirmation');
+  const checkbox = fieldFor(f, 'Share usage records with the paired device');
+  await act(async () => checkbox.click());
+  assert.equal(checkbox.checked, true);
+  await f.click('Confirm');
+  assert.deepEqual(f.last('pairing-join-confirm').args, { sharing: true });
+  await f.answer(f.last('pairing-join-confirm'));
+  f.status.pairing.state = 'local-ready';
+  await refresh(f);
+  assert.ok([...f.container.querySelectorAll('p')].some(node => node.textContent === localReadyHelp));
+  assert.equal(f.button('Try again').disabled, false);
+  assert.equal(f.button('Cancel').disabled, false);
+  const before = f.messages.length;
+  await f.click('Try again');
+  assert.deepEqual(f.messages.slice(before).map(({ action, args }) => ({ action, args })), [
+    { action: 'pairing-join-confirm', args: { sharing: false } },
+  ]);
+  assert.equal(f.button('Try again').disabled, true);
+  await f.answer(f.last('pairing-join-confirm'), { ok: false, code: 'unavailable' });
+  assert.equal(f.button('Try again').disabled, false);
+  assert.ok(f.container.textContent.includes(localReadyHelp));
+  f.status.pairing.state = 'acknowledged';
+  await refresh(f);
+  assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+  assert.ok(!f.container.textContent.includes(localReadyHelp));
+});
+
+for (const state of ['awaiting-confirmation', 'acknowledged', 'configuration-ready', 'paired']) {
+  void test(`pairing ${state} does not show local-ready recovery`, async t => {
+    const f = await fixture(t, state);
+    assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+    assert.ok(!f.container.textContent.includes(localReadyHelp));
+  });
+}
 
 for (const state of ['waiting', 'confirming', 'awaiting-confirmation', 'local-ready', 'acknowledged']) {
   void test(`pairing polls in ${state} and stops when paired`, async t => {
@@ -514,4 +587,75 @@ void test('revoked offers repair instead of a new pairing', async t => {
   assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Pair a device'));
   await f.click('Prepare pairing repair');
   assert.ok(f.last('pairing-repair-prepare'));
+});
+
+const resultUnknown = 'The pairing result is unknown. Pairing under Devices and sharing shows the latest state from the app.';
+
+void test('a failed status read after a done retry reports an unknown result', async t => {
+  const f = await fixture(t, 'local-ready');
+  await f.click('Try again');
+  f.failStatus();
+  await f.answer(f.last('pairing-join-confirm'));
+  assert.equal(f.container.querySelector('output').textContent, resultUnknown);
+});
+
+for (const order of ['poll-first', 'action-first', 'probe-b', 'stale-poll']) {
+  void test(`retry uses its own status read with ${order} replies`, async t => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const f = await fixture(t, 'local-ready');
+    await f.click('Try again');
+    f.holdStatus();
+    f.status.pairing.state = 'establishing-trust';
+    await f.answer(f.last('pairing-join-confirm'));
+    const actionRead = f.last('status');
+    await act(async () => t.mock.timers.tick(2000));
+    const pollRead = f.last('status');
+    assert.notEqual(actionRead.id, pollRead.id);
+    const reply = state => {
+      const value = structuredClone(f.status);
+      value.pairing.state = state;
+      return { value };
+    };
+    if (order === 'action-first') {
+      await act(async () => {
+        actionRead.answer(reply('local-ready'));
+        pollRead.answer(reply('working'));
+      });
+      assert.equal(f.container.querySelector('output').textContent, 'This change could not be made.');
+      assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+    } else if (order === 'probe-b') {
+      await f.answer(actionRead, reply('establishing-trust'));
+      assert.equal(f.container.querySelector('output').textContent, 'Done');
+      await f.answer(pollRead, reply('local-ready'));
+      assert.equal(f.container.querySelector('output').textContent, 'Done');
+    } else {
+      await f.answer(pollRead, reply(order === 'stale-poll' ? 'local-ready' : 'establishing-trust'));
+      assert.equal(f.container.querySelector('output').textContent, 'Working');
+      await f.answer(actionRead, reply('establishing-trust'));
+      assert.equal(f.container.querySelector('output').textContent, 'Done');
+    }
+  });
+}
+
+for (const state of ['local-ready', 'acknowledged', 'working', null]) {
+  void test(`late done retry with ${state} follows its status read`, async t => {
+    const f = await fixture(t, 'local-ready');
+    await f.click('Try again');
+    const request = f.last('pairing-join-confirm');
+    await f.answer(request, { ok: false, code: 'unavailable', timedOut: true });
+    assert.equal(f.container.querySelector('output').textContent, 'No answer from the app yet.');
+    if (state === null) f.failStatus();
+    else f.status.pairing.state = state;
+    await f.late(request);
+    assert.equal(f.container.querySelector('output').textContent,
+      state === 'local-ready' ? 'This change could not be made.' : state === 'acknowledged' ? 'Done' : resultUnknown);
+  });
+}
+
+void test('first Confirm reports failure when done leaves pairing local-ready', async t => {
+  const f = await fixture(t, 'awaiting-confirmation');
+  await f.click('Confirm');
+  f.status.pairing.state = 'local-ready';
+  await f.answer(f.last('pairing-join-confirm'));
+  assert.equal(f.container.querySelector('output').textContent, 'This change could not be made.');
 });

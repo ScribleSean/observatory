@@ -6,8 +6,8 @@ import { sampleBridgeStatus } from '../../../lib/sample-snapshot.mjs';
 import { Card, Row } from '../components';
 import { createBridge, type Bridge, type BridgeOutcome } from '../bridge';
 import { createFakeBridge } from './fake-bridge';
-import { changeAppearance, limitsConsentFlow, createSettingsController, type SettingsController } from './controller';
-import { validateBridgeStatus, type BridgeStatus, type SharingChannel } from './status';
+import { changeAppearance, limitsConsentFlow, createSettingsController, type SettingsController, type SettingsOutcome } from './controller';
+import { pairedStates, validateBridgeStatus, type BridgeStatus, type SharingChannel } from './status';
 import './settings.css';
 
 const S = STRINGS.settings;
@@ -28,15 +28,14 @@ const tailscaleWords: Record<string, string> = {
 const reasons: Record<string, string> = { ready: S.ready, 'pairing-unavailable': S.pairingUnavailable, 'account-unavailable': S.accountUnavailable, 'source-unavailable': S.sourceUnavailable };
 const sharingWords: Record<string, string> = { on: S.on, 'waiting-for-reading': S.sharingWaiting, off: S.off, unavailable: S.unknown };
 const skinNames: Record<string, string> = { sage: S.sage, almanac: S.almanac, instrument: S.instrument, 'amber-crt': S.amberCrt };
-const pairedStates = new Set(['paired', 'establishing-trust', 'active-sync', 'sync-stale']);
 const terminal = new Set(['paired', 'unpaired', 'idle', 'cancelled', 'unavailable', 'inactive', 'identity-recovery-required', 'establishing-trust', 'active-sync', 'sync-stale', 'revoked']);
-type Task = () => Promise<BridgeOutcome>;
+type Task = () => Promise<SettingsOutcome>;
 type Run = (task: Task, options?: { pairing?: boolean; host?: boolean; skin?: string; name?: boolean; tailscale?: boolean; cancel?: boolean }) => void;
 
-export function presentResult(result: BridgeOutcome, action: string, status: BridgeStatus | null) {
+export function presentResult(result: SettingsOutcome, action: string, status: BridgeStatus | null) {
   const value = result.value as { invitation?: unknown; status?: unknown } | undefined;
   return {
-    message: result.timedOut ? S.timedOut : S[result.code],
+    message: result.unknown ? S.pairResultUnknown : result.timedOut ? S.timedOut : S[result.code],
     invitation: action === 'pairing-host-start' && result.ok && value && typeof value === 'object' && !Array.isArray(value) &&
       Reflect.ownKeys(value).length === 1 && validateArgs('pairing-join-claim', { invitation: value.invitation }).ok &&
       status?.pairing.invitationKept ? value.invitation as string : undefined,
@@ -113,7 +112,7 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
     running.current = true; setBusy(true); setMessage('');
     void task().then(result => {
       if (ticket !== generation.current) return;
-      setMessage(result.timedOut ? S.timedOut : result.local && result.code === 'refused' ? (options.name ? S.nameError : S.fieldError) : S[result.code]);
+      setMessage(result.unknown ? S.pairResultUnknown : result.timedOut ? S.timedOut : result.local && result.code === 'refused' ? (options.name ? S.nameError : S.fieldError) : S[result.code]);
       if (options.pairing && ['unavailable', 'expired'].includes(result.code)) setInvitation('');
       const presented = presentResult(result, options.host ? 'pairing-host-start' : options.tailscale ? 'tailscale-check' : '', controller?.getStatus() ?? null);
       if (presented.invitation !== undefined) setInvitation(presented.invitation);
@@ -259,6 +258,10 @@ export function SettingsContent({ status: raw, controller, available = true, bus
         {button(S.claim, () => pairingAction(async c => { try { return await c.pairingJoinClaim(joinText); } finally { onJoinTextChange(''); } }))}
       </>}
       {state === 'awaiting-confirmation' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm(choiceKnown && sharing)))}
+      {state === 'local-ready' && <>
+        <p>{S.pairLocalReadyHelp}</p>
+        {button(S.pairRetry, () => pairingAction(c => c.pairingJoinConfirm(false)))}
+      </>}
       {state && pairedStates.has(state) && <Row>{button(S.disconnect, () => pairingAction(c => c.pairingDisconnect()))}{button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}</Row>}
       {state === 'revoked' && button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}
       {(flow || (state && !terminal.has(state))) && button(S.cancel, () => {
