@@ -1,3 +1,4 @@
+import {checkInstallTarget} from './mac/install-guard.mjs';
 import {appNames} from './app-names.mjs';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {existsSync,mkdirSync,writeFileSync,readFileSync,renameSync} from 'node:fs';
@@ -12,6 +13,9 @@ if(!help.includes('--no-gui'))throw Error('This installation does not offer head
 const home=homedir(),label=appNames.internal.macActivityWatchLabel;
 const target=path.join(home,'Library/LaunchAgents',`${label}.plist`);
 const backup=path.join(home,'Library/Application Support',appNames.visible.dataFolder,'Backups');
+checkInstallTarget({applicationsFolders:[path.join(home,'Applications'),'/Applications'],
+  dataParent:path.join(home,'Library/Application Support'),
+  runningProcesses:()=>execFileSync('/bin/ps',['-axo','args='],{encoding:'utf8',timeout:10000})});
 mkdirSync(backup,{recursive:true,mode:0o700});
 if(existsSync(target)) {
   if(!readFileSync(target,'utf8').includes(executable))throw Error('Unexpected existing startup job');
