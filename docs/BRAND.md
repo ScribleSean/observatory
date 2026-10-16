@@ -6,7 +6,7 @@ Existing data directories, bundle paths and installation identifiers may retain 
 
 The canonical mark is [the telescope](../public/brand/telescope.svg). It represents observation rather than control. Use this same silhouette in the menu bar, application icon, dashboard, favicon and documentation. The favicon and native icons are generated from it, not redrawn independently.
 
-Use an earthy space palette with one sage accent family per view. Dark mode uses background `#1c1d1b`, raised surfaces `#272825`, text `#f0eee8`, secondary text `#b3b7ac` and sage `#adc29d`. Light mode uses background `#edeae5`, surfaces `#f4f1ec`, text `#292d28`, secondary text `#64695f` and sage `#586f50`. Appearance follows the system setting by default, with a manual switch. Both modes must remain readable.
+Use an earthy space palette with one sage accent family per view. Dark mode uses background `#1c1d1b`, raised surfaces `#272825`, text `#f0eee8`, secondary text `#b3b7ac` and sage `#adc29d`. Light mode uses background `#edeae5`, surfaces `#f4f1ec`, text `#292d28`, secondary text `#5b6056` and sage `#586f50`. Appearance follows the system setting by default, with a manual switch. Both modes must remain readable.
 
 [native/design-tokens.json](../native/design-tokens.json) owns the Mac and Windows palette, type sizes, spacing, card dimensions and shadow strength. Run `node scripts/build-design-tokens.mjs` after changing it. The checked-in Swift and C# constants need no runtime parser, and the theme tests reject stale generated files. Native renderers use their own shadow and text drawing APIs.
 

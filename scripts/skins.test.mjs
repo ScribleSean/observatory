@@ -17,6 +17,14 @@ test('Sage uses the shared token colours', () => {
   assert.deepEqual(read('sage.json').colors,tokens);
 });
 
+test('Sage muted text meets 4.5:1 contrast on filter hover, surface and background in light and dark', () => {
+  const {colors}=read('sage.json');
+  for(const [index,mode] of ['light','dark'].entries()) {
+    for(const background of ['track','surface','background'])
+      assert.ok(contrast(colors.muted[index],colors[background][index])>=4.5,`${mode} muted on ${background}`);
+  }
+});
+
 test('every bundled skin passes the contrast check in light and dark', () => {
   for(const file of files) assert.deepEqual(skinContrastProblems(read(file)),[],file);
   assert.equal(Math.round(contrast('000000','ffffff')),21);
