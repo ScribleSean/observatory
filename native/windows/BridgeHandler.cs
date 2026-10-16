@@ -1378,6 +1378,7 @@ internal sealed class BridgeHandler : IDisposable
             await TestDialogReload(runtime);
             await TestPairing(runtime);
             await TestNewPairingActions(runtime);
+            await TestIdentityDefaults(runtime);
             await TestStorageAndProcesses(runtime);
             Check(BridgeContract.Actions.Entries.All(a => TestedActions.Contains(a.Key)), "Missing action coverage");
             Console.WriteLine("Settings bridge contracts passed.");
@@ -1971,6 +1972,68 @@ internal sealed class BridgeHandler : IDisposable
         Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Document pairing cleanup");
         test.Document++; await test.Run("pairing-host-start", HostArgs()); await test.Handler.CloseAsync();
         Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Close pairing cleanup");
+    }
+
+    private static async Task TestIdentityDefaults(string runtime)
+    {
+        bool createIdentity = true;
+        foreach (var identity in new[] { "identity-required", "identity-recovery-required" })
+        foreach (var action in new[] { "pairing-host-start", "pairing-join-claim" })
+        {
+            using var test = new TestDriver(runtime);
+            bool wasPaused = test.Host.CollectionPaused;
+            try
+            {
+                test.Host.MakeSession = () => new TestSession { IdentityState = identity };
+                await test.Run(action, action == "pairing-host-start" ? HostArgs() : new() { ["invitation"] = "observatory-pair:v1:c3ludGhldGlj" }, "unavailable");
+                var pairing = (await test.Run("status"))["value"]!["pairing"]!;
+                Check(pairing["state"]!.GetValue<string>() == identity && pairing["transport"]!.GetValue<string>() == "none",
+                    "Defaults identity baseline");
+                var beforePairing = pairing.ToJsonString();
+                foreach (var outcome in new[] { "ready", "throw", "refuse", "malformed" })
+                {
+                    var temporary = new TestSession
+                    {
+                        ThrowDefaults = outcome == "throw",
+                        RefuseDefaults = outcome == "refuse",
+                        DefaultsRaw = outcome == "malformed"
+                            ? "{\"id\":1,\"status\":\"ready\",\"address\":null,\"port\":1,\"portAvailable\":null}" : null
+                    };
+                    test.Host.MakeSession = () => temporary;
+                    await test.Run("pairing-host-defaults", code: outcome == "ready" ? "done" : "unavailable");
+                    Check((await test.Run("status"))["value"]!["pairing"]!.ToJsonString() == beforePairing,
+                        "Defaults identity JSON " + outcome);
+                    Check(test.Handler.identityState == identity, "Defaults identity kept " + outcome);
+                    Check(temporary.Disposed && !test.Host.Reserved, "Defaults identity cleanup " + outcome);
+                }
+                await test.Run("pairing-cancel");
+                Check((await test.Run("status"))["value"]!["pairing"]!.ToJsonString() == beforePairing &&
+                    test.Handler.identityState == identity, "Defaults identity survives cancel");
+                test.Host.MakeSession = null;
+                if (createIdentity)
+                {
+                    await test.Run("pairing-identity-create");
+                    Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() != identity &&
+                        test.Handler.identityState is null, "Defaults identity creation clears state");
+                }
+                else
+                {
+                    await test.Run("pairing-host-start", HostArgs());
+                    Check(test.Handler.identityState is null &&
+                        (await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "waiting",
+                        "Defaults real start clears identity");
+                    await test.Run("pairing-cancel");
+                }
+                createIdentity = !createIdentity;
+                Check(!test.Host.Reserved && test.Host.CollectionPaused == wasPaused, "Defaults identity host restored");
+            }
+            finally
+            {
+                test.Host.MakeSession = null;
+                await test.Handler.CloseAsync();
+                test.Host.CollectionPaused = wasPaused;
+            }
+        }
     }
 
     // Creating a symbolic link needs Developer Mode or an elevated account on Windows.
