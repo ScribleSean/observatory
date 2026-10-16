@@ -36,6 +36,111 @@ func bridgePairingFiles(runtime: URL) -> (state: String, transport: String) {
     } catch { return ("unavailable", "none") }
 }
 
+struct BridgeSharingChoice: Decodable {
+    let version: Int
+    let chosen: Bool
+    let channels: [String: String]
+    static let unavailable = BridgeSharingChoice(version: 1, chosen: false,
+        channels: ["codex-limits": "unavailable", "claude-code-tokens": "unavailable"])
+    var valid: Bool {
+        version == 1 && Set(channels.keys) == ["codex-limits", "claude-code-tokens"] &&
+            channels.values.allSatisfy { BridgeContract.values["sharingChoiceState"].strings.contains($0) }
+    }
+    var value: [String: Any] { ["chosen": chosen, "channels": channels] }
+    static func parse(_ data: Data) throws -> BridgeSharingChoice {
+        guard data.count <= 4096, let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              Set(object.keys) == ["version", "chosen", "channels"] else { throw CocoaError(.fileReadCorruptFile) }
+        let value = try JSONDecoder().decode(Self.self, from: data)
+        guard value.valid else { throw CocoaError(.fileReadCorruptFile) }
+        return value
+    }
+}
+
+func bridgePairingStatus(runtime: URL, now: Date = Date()) -> String {
+    let file = runtime.appendingPathComponent("pairing-status.json")
+    func valid(_ info: stat) -> Bool {
+        (info.st_mode & S_IFMT) == S_IFREG && info.st_size >= 0 && info.st_size <= 1024 &&
+            info.st_nlink == 1 && info.st_mode & 0o077 == 0 && info.st_uid == getuid()
+    }
+    func same(_ a: stat, _ b: stat) -> Bool {
+        a.st_dev == b.st_dev && a.st_ino == b.st_ino && a.st_size == b.st_size &&
+            a.st_mtimespec.tv_sec == b.st_mtimespec.tv_sec && a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
+            a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec && a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec &&
+            a.st_mode == b.st_mode && a.st_nlink == b.st_nlink && a.st_uid == b.st_uid
+    }
+    var before = stat(), opened = stat(), after = stat(), named = stat()
+    guard lstat(file.path, &before) == 0, valid(before) else { return "unavailable" }
+    let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+    guard descriptor >= 0 else { return "unavailable" }
+    defer { _ = Darwin.close(descriptor) }
+    guard fstat(descriptor, &opened) == 0, valid(opened), same(before, opened) else { return "unavailable" }
+    var bytes = [UInt8](repeating: 0, count: 1025)
+    var count: Int
+    repeat { count = bytes.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress!, $0.count) } }
+    while count < 0 && errno == EINTR
+    guard count == before.st_size, count <= 1024,
+          fstat(descriptor, &after) == 0, valid(after), same(before, after),
+          lstat(file.path, &named) == 0, valid(named), same(before, named),
+          let text = String(bytes: bytes.prefix(count), encoding: .utf8),
+          let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+          Set(object.keys) == ["version", "state", "checkedAt"],
+          let version = object["version"] as? NSNumber, CFGetTypeID(version) != CFBooleanGetTypeID(), version == 1,
+          let state = object["state"] as? String,
+          ["unpaired", "revoked", "establishing-trust", "active-sync", "sync-stale", "unavailable"].contains(state),
+          let checkedAt = object["checkedAt"] as? String else { return "unavailable" }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    var date = formatter.date(from: checkedAt)
+    if date == nil { formatter.formatOptions = [.withInternetDateTime]; date = formatter.date(from: checkedAt) }
+    guard let date, now.timeIntervalSince(date) <= 120, now.timeIntervalSince(date) >= -60 else { return "unavailable" }
+    return state
+}
+
+func bridgeStoredPairingState(runtime: URL, fallback: String) -> String {
+    bridgeReportedPairingState(sessionState: nil, maintenance: false, identityState: nil, paused: false,
+        fileState: bridgePairingStatus(runtime: runtime), fallback: fallback)
+}
+
+func bridgeReportedPairingState(sessionState: String?, maintenance: Bool, identityState: String?, paused: Bool, fileState: String, fallback: String) -> String {
+    if let sessionState { return sessionState }
+    if maintenance { return fallback }
+    if let identityState { return identityState }
+    if paused { return fallback }
+    return fileState == "unavailable" ? fallback : fileState
+}
+
+@MainActor
+func bridgeSessionPairingState(session: BridgePairingSession?, maintenance: Bool, identityState: String?, paused: Bool, fileState: String, fallback: String) -> String {
+    let visible = session?.defaultsOnly == true ? nil : session
+    return bridgeReportedPairingState(sessionState: visible?.state,
+        maintenance: maintenance && session?.defaultsOnly != true, identityState: identityState, paused: paused,
+        fileState: fileState, fallback: fallback)
+}
+
+@MainActor
+func bridgeStatusPairing(session: BridgePairingSession?, maintenance: Bool, paused: Bool, identityState: String?, fileState: String,
+                         fallback: (state: String, transport: String)) -> (state: String, transport: String) {
+    let state = bridgeSessionPairingState(session: session, maintenance: maintenance, identityState: identityState,
+        paused: paused, fileState: fileState, fallback: fallback.state)
+    return (state, state == identityState ? "none" : fallback.transport)
+}
+
+@MainActor
+func bridgePairingStartBusy(action: String, session: BridgePairingSession?) -> Bool {
+    session != nil && (action == "pairing-host-defaults" || session?.defaultsOnly == true)
+}
+
+struct BridgePairingIdentity {
+    private(set) var state: String?
+    mutating func sessionBegan(action: String) {
+        if action != "pairing-host-defaults" { state = nil }
+    }
+    mutating func finished(action: String, code: BridgeCode, missingIdentity: String?) {
+        if ["pairing-host-start", "pairing-join-claim"].contains(action), let missingIdentity { state = missingIdentity }
+        if action == "pairing-identity-create", code == .done { state = nil }
+    }
+}
+
 @MainActor
 final class BridgePairingSession {
     private let bridge: DirectPairingBridge
@@ -43,17 +148,24 @@ final class BridgePairingSession {
     private var timer: Timer?
     private var expiry: Timer?
     private var pending: [UUID: (TLSSetupReply?) -> Void] = [:]
+    private(set) var missingIdentity: String?
     private(set) var closed = false
+    private(set) var defaultsOnly = false
     private(set) var state = "working"
     private(set) var invitation: String?
     private(set) var address: String?
     private(set) var port: Int?
     private(set) var fingerprint: String?
+    private(set) var peerAddress: String?
+    private var peerClaim: String?
+    private var sharingApproved = false
+    private let confirmSharing: () -> BridgeCode
 
     init(factory: () throws -> DirectPairingBridge, pollInterval: TimeInterval = 2,
-         limit: TimeInterval = 600, ended: @escaping (Bool) -> Void) throws {
+         limit: TimeInterval = 600, confirmSharing: @escaping () -> BridgeCode = { .cancelled }, ended: @escaping (Bool) -> Void) throws {
         bridge = try factory()
         self.ended = ended
+        self.confirmSharing = confirmSharing
         timer = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
@@ -72,6 +184,7 @@ final class BridgePairingSession {
         timer?.invalidate(); expiry?.invalidate()
         timer = nil; expiry = nil
         invitation = nil; address = nil; port = nil; fingerprint = nil
+        peerAddress = nil; peerClaim = nil; sharingApproved = false
         let callbacks = Array(pending.values)
         pending.removeAll()
         if let process = bridge as? TLSSetupProcess {
@@ -88,8 +201,14 @@ final class BridgePairingSession {
             MainActor.assumeIsolated {
                 guard let self, !self.closed, let callback = self.pending.removeValue(forKey: ticket) else { return }
                 guard case .success(let reply) = result else { self.end(); callback(nil); return }
-                self.state = BridgeStatusInput.pairingState(controlStatus: reply.status)
-                self.fingerprint = reply.status == "confirming" ? reply.peerCertificateSha256 : nil
+                if command["action"] as? String != "pending-peer", command["action"] as? String != "host-defaults",
+                   command["action"] as? String != "identity-status" {
+                    self.state = BridgeStatusInput.pairingState(controlStatus: reply.status)
+                    self.fingerprint = reply.status == "confirming" ? reply.peerCertificateSha256 : nil
+                    if let fingerprint = self.fingerprint, fingerprint != self.peerClaim {
+                        self.peerAddress = nil
+                    }
+                }
                 callback(reply)
             }
         }
@@ -101,7 +220,15 @@ final class BridgePairingSession {
         guard !closed, pending.isEmpty else { return }
         send(["action": "status"]) { [weak self] reply in
             guard let self else { return }
-            if reply == nil || ["acknowledged", "unavailable", "inactive", "cancelled"].contains(reply!.status) { self.end() }
+            if reply == nil || ["acknowledged", "unavailable", "inactive", "cancelled"].contains(reply!.status) { self.end(); return }
+            if reply?.status == "confirming", let claim = self.fingerprint, self.peerClaim != claim {
+                self.peerClaim = claim
+                self.peerAddress = nil
+                self.send(["action": "pending-peer"]) { [weak self] reply in
+                    guard let self, !self.closed, self.peerClaim == claim else { return }
+                    self.peerAddress = reply?.peerAddress.flatMap { BridgeContract.address($0) ? $0 : nil }
+                }
+            }
         }
     }
 
@@ -112,31 +239,52 @@ final class BridgePairingSession {
 
     func perform(action: String, args: [String: BridgeValue], identityOnly: Bool = false,
                  completion: @escaping (BridgeCode, Any?) -> Void) {
-        if bridgeActionUnavailable(action, args) { completion(.unavailable, nil); return }
         func string(_ key: String) -> String { if case .string(let value) = args[key] { return value }; return "" }
         func integer(_ key: String) -> Int { if case .integer(let value) = args[key] { return value }; return 0 }
+        if action == "pairing-peer-address" {
+            completion(.done, ["peerAddress": peerAddress as Any? ?? NSNull()]); return
+        }
+        guard !closed else { completion(.unavailable, nil); return }
+        let sharing = args["sharing"] == .bool(true)
+        if ["pairing-host-confirm", "pairing-join-confirm"].contains(action), sharing, !sharingApproved {
+            let code = confirmSharing()
+            guard code == .done else { completion(code, nil); return }
+            guard !closed else { completion(.unavailable, nil); return }
+            sharingApproved = true
+        }
         var command: [String: Any]
         switch action {
+        case "pairing-host-defaults": command = ["action": "host-defaults"]
         case "pairing-identity-create": command = [:]
         case "pairing-host-start": command = ["action": "host-start", "address": string("address"), "port": 0]
         case "pairing-host-confirm":
             guard let address, let port else { completion(.unavailable, nil); return }
             command = ["action": "host-confirm", "peerCertificateSha256": string("fingerprint"),
                        "localEndpoint": ["kind": "tls", "address": address, "port": port],
-                       "peerEndpoint": ["kind": "tls", "address": string("peerAddress"), "port": integer("peerPort")]]
+                       "peerEndpoint": ["kind": "tls", "address": string("peerAddress"), "port": integer("peerPort")], "sharing": sharing]
         case "pairing-join-claim": command = ["action": "join-claim", "invitation": string("invitation")]
-        case "pairing-join-confirm": command = ["action": "join-confirm"]
+        case "pairing-join-confirm": command = ["action": "join-confirm", "sharing": sharing]
         case "pairing-cancel": command = ["action": "cancel"]
         default: completion(.refused, nil); return
         }
         let keptAddress = string("address"), keptPort = integer("port")
-        send(command, identity: action == "pairing-identity-create") { [weak self] reply in
+        if action == "pairing-host-defaults", identityOnly { defaultsOnly = true }
+        let receive: (TLSSetupReply?) -> Void = { [weak self] reply in
             guard let self else { completion(.unavailable, nil); return }
             if action == "pairing-cancel" { self.end(); completion(.done, nil); return }
             guard let reply else { completion(.unavailable, nil); return }
             var code: BridgeCode = .unavailable
             var value: Any?
             switch action {
+            case "pairing-host-defaults":
+                if reply.status == "ready", reply.port == 43128,
+                   reply.address.map(BridgeContract.address) ?? true,
+                   (reply.address == nil) == (reply.portAvailable == nil) {
+                    code = .done
+                    value = ["address": reply.address as Any? ?? NSNull(), "port": 43128,
+                             "portAvailable": reply.portAvailable as Any? ?? NSNull()]
+                }
+                if identityOnly { self.end() }
             case "pairing-identity-create":
                 if reply.status == "identity-ready" { code = .done }
                 if identityOnly || code != .done { self.end() }
@@ -158,11 +306,23 @@ final class BridgePairingSession {
             }
             completion(code, value)
         }
+        if ["pairing-host-start", "pairing-join-claim"].contains(action) {
+            send(["action": "identity-status"]) { [weak self] reply in
+                guard let self, let reply, !self.closed else { completion(.unavailable, nil); return }
+                guard reply.status == "identity-ready" else {
+                    self.missingIdentity = ["identity-required", "identity-recovery-required"].contains(reply.status) ? reply.status : nil
+                    self.end()
+                    completion(.unavailable, nil)
+                    return
+                }
+                self.send(command, completion: receive)
+            }
+        } else { send(command, identity: action == "pairing-identity-create", completion: receive) }
     }
 }
 
 private func bridgeRun(resources: URL, runtime: URL, script: String, arguments: [String],
-                       timeout: TimeInterval, capture: Bool = true) async throws -> Data {
+                       timeout: TimeInterval, capture: Bool = true, inputData: Data? = nil) async throws -> Data {
     try await Task.detached(priority: .utility) {
         let values = try runtime.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true,
@@ -173,22 +333,31 @@ private func bridgeRun(resources: URL, runtime: URL, script: String, arguments: 
         guard FileManager.default.isExecutableFile(atPath: node.path), FileManager.default.fileExists(atPath: file.path) else {
             throw CocoaError(.fileReadNoSuchFile)
         }
-        let process = Process(), output = Pipe()
+        let process = Process(), output = Pipe(), input = Pipe()
         process.environment = bridgeChildEnvironment()
         process.executableURL = node
         process.arguments = [file.path] + arguments.map { $0 == "<runtime>" ? String(cString: resolved) : $0 }
         process.currentDirectoryURL = runtime
-        process.standardInput = FileHandle.nullDevice
+        process.standardInput = inputData == nil ? FileHandle.nullDevice : input
         process.standardOutput = capture ? output : FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
         let deadline = DispatchWorkItem { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-        defer { deadline.cancel() }
+        defer {
+            deadline.cancel()
+            try? input.fileHandleForWriting.close()
+            try? output.fileHandleForReading.close()
+            if process.isRunning { kill(process.processIdentifier, SIGKILL); process.waitUntilExit() }
+        }
+        if let inputData {
+            try input.fileHandleForWriting.write(contentsOf: inputData)
+            try input.fileHandleForWriting.close()
+        }
         var data = Data()
         if capture {
             while true {
-                let chunk = output.fileHandleForReading.readData(ofLength: 4096)
+                let chunk = output.fileHandleForReading.readData(ofLength: min(4096, 4097 - data.count))
                 if chunk.isEmpty { break }
                 data.append(chunk)
                 if data.count > 4096 {
@@ -258,18 +427,27 @@ final class MacBridgeHost: BridgeHost {
     private let isolatedRuntime: Bool
     private let handler: BridgeHandler
     private let hooks: MacBridgeHooks
+    private let pairingControl: (() throws -> DirectPairingBridge)?
+    private var pairingIdentity = BridgePairingIdentity()
     private var session: BridgePairingSession?
     private var operationRunning = false
     private var documentGeneration = 0
     private let quotaSharing = BridgeCache<QuotaSharingStatus>()
     private let tokenSharing = BridgeCache<QuotaSharingStatus>()
+    private let sharingChoice = BridgeCache<BridgeSharingChoice>()
     private let consent = BridgeCache<Bool>()
     private let tailscale = BridgeCache<String>()
+    var reportedPairing: (state: String, transport: String) {
+        bridgeStatusPairing(session: session, maintenance: store.pairingMaintenance, paused: store.collectionPausedForPairing,
+            identityState: pairingIdentity.state, fileState: bridgePairingStatus(runtime: store.runtime),
+            fallback: bridgePairingFiles(runtime: store.runtime))
+    }
     var sessionOpen: Bool { session != nil }
     var pairingBlocked: Bool {
         store.refreshing || (store.pairingMaintenance && session?.closed != false) || hooks.directPairingOpen() || operationRunning
     }
-    init(store: ObservatoryStore, resources: URL?, preview: Bool, handler: BridgeHandler, hooks: MacBridgeHooks, isolatedRuntime: Bool = false) {
+    init(store: ObservatoryStore, resources: URL?, preview: Bool, handler: BridgeHandler, hooks: MacBridgeHooks, isolatedRuntime: Bool = false, pairingControl: (() throws -> DirectPairingBridge)? = nil) {
+        self.pairingControl = pairingControl
         self.isolatedRuntime = isolatedRuntime
         self.store = store; self.resources = resources; self.preview = preview; self.handler = handler; self.hooks = hooks
     }
@@ -288,10 +466,20 @@ final class MacBridgeHost: BridgeHost {
         return generation == documentGeneration && response == (second ? .alertSecondButtonReturn : .alertFirstButtonReturn) ? .done : .cancelled
     }
 
+    private func confirmSharing() -> BridgeCode {
+        confirm("Share usage records?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.", ["Enable sharing", "Cancel"])
+    }
+
     private func beginSession() throws -> BridgePairingSession {
         if let session { return session }
-        guard let resources else { throw CocoaError(.fileReadNoSuchFile) }
-        let created = try BridgePairingSession(factory: { try TLSSetupProcess(runtime: store.runtime, resources: resources) }) { [weak self] stopped in
+        let factory: () throws -> DirectPairingBridge
+        if let pairingControl { factory = pairingControl }
+        else {
+            guard let resources else { throw CocoaError(.fileReadNoSuchFile) }
+            factory = { try TLSSetupProcess(runtime: self.store.runtime, resources: resources) }
+        }
+        let created = try BridgePairingSession(factory: factory,
+            confirmSharing: { [weak self] in self?.confirmSharing() ?? .cancelled }) { [weak self] stopped in
             guard let self else { return }
             if !stopped { self.store.collectionPausedForPairing = true }
             self.store.pairingMaintenance = false
@@ -308,15 +496,17 @@ final class MacBridgeHost: BridgeHost {
             completion(.unavailable, nil)
             return
         }
-        if isolatedRuntime && ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm",
+        if (isolatedRuntime || preview) && ["set-sharing-choice", "pairing-host-defaults", "pairing-peer-address", "pairing-identity-create", "pairing-host-start", "pairing-host-confirm",
             "pairing-join-claim", "pairing-join-confirm", "pairing-copy-invitation", "pairing-cancel",
             "set-sharing", "set-limits-consent", "pairing-disconnect", "pairing-repair-prepare"].contains(action) {
             completion(.unavailable, nil)
             return
         }
         func string(_ key: String) -> String { if case .string(let value) = args[key] { return value }; return "" }
-        if bridgeActionUnavailable(action, args) { completion(.unavailable, nil); return }
         let enabled = args["enabled"] == .bool(true)
+        if action == "pairing-peer-address" {
+            completion(.done, ["peerAddress": session?.peerAddress as Any? ?? NSNull()]); return
+        }
         if action == "pairing-copy-invitation" {
             guard !preview else { completion(.unavailable, nil); return }
             let code = session?.copyInvitation { invitation in
@@ -331,7 +521,11 @@ final class MacBridgeHost: BridgeHost {
             else { completion(.done, nil) }
             return
         }
-        if ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action) {
+        if ["pairing-host-defaults", "pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action) {
+            if bridgePairingStartBusy(action: action, session: session) {
+                completion(.busy, nil)
+                return
+            }
             guard !isolatedRuntime, !preview, !store.shuttingDown else { completion(.unavailable, nil); return }
             guard !pairingBlocked else { completion(.busy, nil); return }
             if action == "pairing-identity-create" {
@@ -339,9 +533,18 @@ final class MacBridgeHost: BridgeHost {
                 guard code == .done else { completion(code, nil); return }
             }
             guard !pairingBlocked, !store.shuttingDown else { completion(.busy, nil); return }
-            let identityOnly = action == "pairing-identity-create" && session == nil
+            guard !bridgePairingStartBusy(action: action, session: session) else { completion(.busy, nil); return }
+            let identityOnly = ["pairing-identity-create", "pairing-host-defaults"].contains(action) && session == nil
             if session == nil && ["pairing-host-confirm", "pairing-join-confirm"].contains(action) { completion(.unavailable, nil); return }
-            do { try beginSession().perform(action: action, args: args, identityOnly: identityOnly, completion: completion) }
+            do {
+                let starting = session == nil
+                let current = try beginSession()
+                if starting { pairingIdentity.sessionBegan(action: action) }
+                current.perform(action: action, args: args, identityOnly: identityOnly) { [self] code, value in
+                    pairingIdentity.finished(action: action, code: code, missingIdentity: current.missingIdentity)
+                    completion(code, value)
+                }
+            }
             catch { completion(.unavailable, nil) }
             return
         }
@@ -407,11 +610,29 @@ final class MacBridgeHost: BridgeHost {
                     consent.set(value); completion(value == enabled ? .done : .unavailable, nil)
                 } catch { consent.set(nil); completion(.unavailable, nil) }
             }
+        case "set-sharing-choice":
+            guard !isolatedRuntime, !preview, resources != nil else { completion(.unavailable, nil); return }
+            guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
+            if enabled {
+                let code = confirmSharing()
+                guard code == .done else { completion(code, nil); return }
+            }
+            guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
+            operationRunning = true; store.pairingMaintenance = true
+            Task {
+                var code: BridgeCode = .unavailable
+                do {
+                    let value = try await runSharingChoice(enabled: enabled)
+                    sharingChoice.set(value); code = .done
+                } catch { sharingChoice.set(nil) }
+                operationRunning = false; store.pairingMaintenance = false
+                completion(code, nil)
+            }
         case "set-sharing":
             guard !isolatedRuntime, !preview, let resources else { completion(.unavailable, nil); return }
             guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
             if enabled {
-                let code = confirm("Share usage records?", "Share these usage records with the paired device? Enable sharing there separately. Credentials stay on their owning device.", ["Enable sharing", "Cancel"])
+                let code = confirmSharing()
                 guard code == .done else { completion(code, nil); return }
             }
             guard !sessionOpen, !store.refreshing, !store.pairingMaintenance, !store.shuttingDown else { completion(.busy, nil); return }
@@ -451,14 +672,15 @@ final class MacBridgeHost: BridgeHost {
                     completion(.unavailable, nil); return
                 }
                 let viewer = ViewerSettingsFile.read(runtime: store.runtime)
-                let paired = bridgePairingFiles(runtime: store.runtime)
+                let paired = reportedPairing
+                let visible = session?.defaultsOnly == true ? nil : session
                 let input = BridgeStatusInput(appVersion: version, appBuild: build,
                     sources: sources.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
                     startup: SMAppService.mainApp.status == .enabled, appearance: viewer.appearance, limitsConsent: limits,
                     collectionPaused: store.collectionPausedForPairing || store.pairingMaintenance,
-                    pairingState: session?.state ?? paired.state, peerFingerprint: session?.fingerprint,
-                    transport: paired.transport, invitationKept: session?.invitation != nil, sharing: shared)
+                    pairingState: paired.state, peerFingerprint: visible?.fingerprint,
+                    transport: paired.transport, invitationKept: visible?.invitation != nil, sharing: shared.channels, sharingChoice: shared.choice)
                 let value = BridgeStatusInput.bridgeStatusValue(input)
                 completion(value == nil ? .unavailable : .done, value)
             }
@@ -483,7 +705,16 @@ final class MacBridgeHost: BridgeHost {
         return try bridgeSwitchConsent(await bridgeRun(resources: resources, runtime: store.runtime, script: "claude-limits-consent.mjs",
                                                 arguments: arguments + ["--runtime", "<runtime>"], timeout: 20))
     }
-    private func readSharing() async -> [String: QuotaSharingStatus]? {
+    private func runSharingChoice(enabled: Bool? = nil) async throws -> BridgeSharingChoice {
+        guard let resources else { throw CocoaError(.fileReadNoSuchFile) }
+        var request: [String: Any] = ["action": "status"]
+        if let enabled { request = ["action": "choose", "enabled": enabled] }
+        let data = try JSONSerialization.data(withJSONObject: request)
+        return try BridgeSharingChoice.parse(await bridgeRun(resources: resources, runtime: store.runtime,
+            script: "sharing-choice.mjs", arguments: ["--runtime", "<runtime>"], timeout: 15, inputData: data))
+    }
+    private func readSharing() async -> (channels: [String: QuotaSharingStatus], choice: BridgeSharingChoice)? {
+        async let choice = sharingChoice.read { [self] in try? await runSharingChoice() }
         async let quota = quotaSharing.read { [self] in
             guard let resources else { return nil }
             return try? await QuotaSharing.run(runtime: store.runtime, resources: resources, action: "status", token: nil)
@@ -492,8 +723,9 @@ final class MacBridgeHost: BridgeHost {
             guard let resources else { return nil }
             return try? await QuotaSharing.run(runtime: store.runtime, resources: resources, action: "status", token: nil, channel: .providerTokens)
         }
+        let chosen = await choice ?? .unavailable
         guard let quota = await quota, let tokens = await tokens else { return nil }
-        return ["codex-limits": quota, "claude-code-tokens": tokens]
+        return (["codex-limits": quota, "claude-code-tokens": tokens], chosen)
     }
     private func maintenance(repair: Bool, completion: @escaping (BridgeCode, Any?) -> Void) {
         guard !preview, let resources else { completion(.unavailable, nil); return }
@@ -575,28 +807,109 @@ func runBridgeActionSelfTests() {
         var code: BridgeCode?
         var value: Any?
         func result(_ result: BridgeCode, _ output: Any?) { code = result; value = output }
+        for action in ["pairing-host-start", "pairing-join-claim"] {
+            for status in ["identity-required", "identity-recovery-required", "cancelled"] {
+                let control = BridgeActionFake()
+                let starting = try! BridgePairingSession(factory: { control }, pollInterval: 60) { _ in }
+                control.reply(status)
+                starting.perform(action: action, args: [:], completion: result)
+                precondition(code == .unavailable && value == nil && starting.closed && control.closed == 1)
+                precondition(control.commands.count == 1 && NSDictionary(dictionary: control.commands[0]).isEqual(to: ["action": "identity-status"]))
+                precondition(starting.missingIdentity == (status == "cancelled" ? nil : status))
+            }
+            let failed = BridgeActionFake()
+            let failing = try! BridgePairingSession(factory: { failed }, pollInterval: 60) { _ in }
+            failed.replies.append(.failure(CocoaError(.fileReadUnknown)))
+            failing.perform(action: action, args: [:], completion: result)
+            precondition(code == .unavailable && value == nil && failing.closed && failing.missingIdentity == nil)
+            precondition(failed.commands.count == 1 && NSDictionary(dictionary: failed.commands[0]).isEqual(to: ["action": "identity-status"]))
+
+            let delayed = BridgeActionFake()
+            delayed.delay = true
+            let probing = try! BridgePairingSession(factory: { delayed }, pollInterval: 60) { _ in }
+            probing.perform(action: action, args: [:], completion: result)
+            precondition(probing.state == "working" && probing.fingerprint == nil && delayed.commands.count == 1)
+            delayed.deferred[0](.success(TLSSetupReply(id: 1, status: "identity-ready", invitation: nil, peerCertificateSha256: fingerprint)))
+            precondition(probing.state == "working" && probing.fingerprint == nil && delayed.commands.count == 2)
+            probing.end()
+            precondition(code == .unavailable && value == nil)
+
+            let cancelled = BridgeActionFake()
+            cancelled.delay = true
+            let stopped = try! BridgePairingSession(factory: { cancelled }, pollInterval: 60) { _ in }
+            stopped.perform(action: action, args: [:], completion: result)
+            stopped.end()
+            cancelled.deferred[0](.success(TLSSetupReply(id: 1, status: "identity-ready", invitation: nil, peerCertificateSha256: nil)))
+            precondition(code == .unavailable && value == nil && cancelled.commands.count == 1)
+        }
+        for status in ["identity-required", "identity-recovery-required"] {
+            for action in ["pairing-host-start", "pairing-join-claim"] {
+                var identity = BridgePairingIdentity()
+                precondition(identity.state == nil)
+                identity.finished(action: action, code: .unavailable, missingIdentity: status)
+                precondition(identity.state == status)
+                for unrelated in ["pairing-cancel", "pairing-disconnect", "pairing-repair-prepare", "pairing-host-confirm"] {
+                    identity.finished(action: unrelated, code: .done, missingIdentity: nil)
+                    precondition(identity.state == status)
+                }
+                identity.sessionBegan(action: "pairing-host-defaults")
+                precondition(identity.state == status)
+                for code in [BridgeCode.unavailable, .cancelled] {
+                    identity.finished(action: "pairing-identity-create", code: code, missingIdentity: nil)
+                    precondition(identity.state == status)
+                }
+                identity.finished(action: action, code: .unavailable, missingIdentity: nil)
+                precondition(identity.state == status)
+                identity.finished(action: "pairing-identity-create", code: .done, missingIdentity: nil)
+                precondition(identity.state == nil)
+                for start in ["pairing-host-start", "pairing-join-claim", "pairing-identity-create"] {
+                    identity.finished(action: action, code: .unavailable, missingIdentity: status)
+                    identity.sessionBegan(action: start)
+                    precondition(identity.state == nil)
+                }
+            }
+            for fileState in ["establishing-trust", "active-sync", "sync-stale", "revoked", "unpaired", "unavailable"] {
+                for paused in [false, true] {
+                    precondition(bridgeReportedPairingState(sessionState: "working", maintenance: true, identityState: status,
+                        paused: paused, fileState: fileState, fallback: "paired") == "working")
+                    precondition(bridgeReportedPairingState(sessionState: nil, maintenance: true, identityState: status,
+                        paused: paused, fileState: fileState, fallback: "paired") == "paired")
+                    precondition(bridgeReportedPairingState(sessionState: nil, maintenance: false, identityState: status,
+                        paused: paused, fileState: fileState, fallback: "paired") == status)
+                    precondition(bridgeReportedPairingState(sessionState: nil, maintenance: false, identityState: nil,
+                        paused: paused, fileState: fileState, fallback: "paired") == (paused || fileState == "unavailable" ? "paired" : fileState))
+                }
+            }
+        }
         precondition(session.copyInvitation { _ in preconditionFailure() } == .unavailable)
+        fake.reply("identity-ready")
         fake.reply("hosting", invitation: invitation)
         session.perform(action: "pairing-host-start", args: ["address": .string("10.0.0.1"), "port": .integer(43128), "id": .integer(900)], completion: result)
         precondition(code == .done && (value as? [String: String])?["invitation"] == invitation)
         precondition(NSDictionary(dictionary: fake.commands.last!).isEqual(to: ["action": "host-start", "address": "10.0.0.1", "port": 0]))
+        precondition(fake.commands.count == 2 && NSDictionary(dictionary: fake.commands[0]).isEqual(to: ["action": "identity-status"]))
         precondition(session.invitation == invitation && session.address == "10.0.0.1" && session.port == 43128)
+        precondition(bridgeSessionPairingState(session: session, maintenance: true, identityState: nil, paused: false,
+            fileState: "active-sync", fallback: "paired") == "waiting")
+        precondition(bridgeSessionPairingState(session: nil, maintenance: true, identityState: nil, paused: false,
+            fileState: "active-sync", fallback: "paired") == "paired")
         precondition(session.copyInvitation { $0 == invitation } == .done)
+        fake.reply("confirming", fingerprint: fingerprint)
+        fake.replies.append(.success(TLSSetupReply(id: 1, status: "confirming", invitation: nil, peerCertificateSha256: nil, peerAddress: "100.64.0.2")))
+        session.poll()
+        precondition(session.peerAddress == "100.64.0.2")
+        precondition(NSDictionary(dictionary: fake.commands.last!).isEqual(to: ["action": "pending-peer"]))
+        let afterPeer = fake.commands.count
         fake.reply("confirming", fingerprint: fingerprint); session.poll()
+        precondition(fake.commands.count == afterPeer + 1 && session.peerAddress == "100.64.0.2")
         precondition(session.state == "confirming" && session.fingerprint == fingerprint)
         fake.reply("waiting"); session.poll()
         precondition(session.state == "waiting" && session.fingerprint == nil)
-        let commandsBeforeSharing = fake.commands.count
-        for action in ["pairing-host-confirm", "pairing-join-confirm"] {
-            session.perform(action: action, args: ["sharing": .bool(true)], completion: result)
-            precondition(code == .unavailable && fake.commands.count == commandsBeforeSharing && !session.closed)
-            precondition(session.state == "waiting" && session.invitation == invitation && ended == 0)
-        }
         fake.reply("configuration-ready")
         session.perform(action: "pairing-host-confirm", args: ["sharing": .bool(false), "fingerprint": .string(fingerprint), "peerAddress": .string("10.0.0.2"), "peerPort": .integer(43129)], completion: result)
         let expected: [String: Any] = ["action": "host-confirm", "peerCertificateSha256": fingerprint,
             "localEndpoint": ["kind": "tls", "address": "10.0.0.1", "port": 43128],
-            "peerEndpoint": ["kind": "tls", "address": "10.0.0.2", "port": 43129]]
+            "peerEndpoint": ["kind": "tls", "address": "10.0.0.2", "port": 43129], "sharing": false]
         precondition(code == .done && NSDictionary(dictionary: fake.commands.last!).isEqual(to: expected))
         fake.replies.append(.failure(CocoaError(.fileReadUnknown)))
         session.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
@@ -606,9 +919,11 @@ func runBridgeActionSelfTests() {
 
         let join = BridgeActionFake()
         let joining = try! BridgePairingSession(factory: { join }, pollInterval: 60) { _ in }
+        join.reply("identity-ready")
         join.reply("awaiting-confirmation")
         joining.perform(action: "pairing-join-claim", args: ["invitation": .string(invitation)], completion: result)
         precondition(code == .done && NSDictionary(dictionary: join.commands.last!).isEqual(to: ["action": "join-claim", "invitation": invitation]))
+        precondition(join.commands.count == 2 && NSDictionary(dictionary: join.commands[0]).isEqual(to: ["action": "identity-status"]))
         join.reply("local-ready")
         joining.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
         precondition(code == .done && !joining.closed)
@@ -618,7 +933,126 @@ func runBridgeActionSelfTests() {
         join.reply("acknowledged")
         joining.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)], completion: result)
         precondition(code == .done && joining.closed && join.closed == 1)
-        precondition(NSDictionary(dictionary: join.commands.last!).isEqual(to: ["action": "join-confirm"]))
+        precondition(NSDictionary(dictionary: join.commands.last!).isEqual(to: ["action": "join-confirm", "sharing": false]))
+
+        for allowed in [false, true] {
+            let control = BridgeActionFake()
+            var dialogs = 0
+            let consentSession = try! BridgePairingSession(factory: { control }, pollInterval: 60, confirmSharing: {
+                dialogs += 1
+                return allowed ? .done : .cancelled
+            }) { _ in }
+            for _ in 0..<2 {
+                if allowed { control.reply("local-ready") }
+                let before = control.commands.count
+                consentSession.perform(action: "pairing-join-confirm", args: ["sharing": .bool(true)], completion: result)
+                precondition(code == (allowed ? .done : .cancelled))
+                precondition(control.commands.count == before + (allowed ? 1 : 0))
+                if allowed { precondition(NSDictionary(dictionary: control.commands.last!).isEqual(to: ["action": "join-confirm", "sharing": true])) }
+            }
+            precondition(dialogs == (allowed ? 1 : 2))
+            consentSession.end()
+        }
+        let hostConsent = BridgeActionFake()
+        var hostDialogs = 0
+        let hostSession = try! BridgePairingSession(factory: { hostConsent }, pollInterval: 60, confirmSharing: {
+            hostDialogs += 1
+            return .done
+        }) { _ in }
+        hostConsent.reply("identity-ready")
+        hostConsent.reply("hosting", invitation: invitation)
+        hostSession.perform(action: "pairing-host-start", args: ["address": .string("10.0.0.1"), "port": .integer(43128)], completion: result)
+        for _ in 0..<2 {
+            hostConsent.reply("configuration-ready")
+            hostSession.perform(action: "pairing-host-confirm", args: ["sharing": .bool(true), "fingerprint": .string(fingerprint),
+                "peerAddress": .string("10.0.0.2"), "peerPort": .integer(43129)], completion: result)
+            var sharingExpected = expected
+            sharingExpected["sharing"] = true
+            precondition(code == .done && NSDictionary(dictionary: hostConsent.commands.last!).isEqual(to: sharingExpected))
+        }
+        precondition(hostDialogs == 1)
+        hostSession.end()
+
+        let startActions = ["pairing-host-defaults", "pairing-identity-create", "pairing-host-start",
+                            "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"]
+        let pendingDefaultsControl = BridgeActionFake()
+        pendingDefaultsControl.delay = true
+        let pendingDefaults = try! BridgePairingSession(factory: { pendingDefaultsControl }, pollInterval: 60) { _ in }
+        pendingDefaults.perform(action: "pairing-host-defaults", args: [:], identityOnly: true, completion: result)
+        precondition(pendingDefaults.defaultsOnly && !pendingDefaults.closed && pendingDefaultsControl.deferred.count == 1)
+        for action in startActions {
+            precondition(bridgePairingStartBusy(action: action, session: pendingDefaults))
+            precondition(!bridgePairingStartBusy(action: action, session: nil))
+        }
+        precondition(pendingDefaultsControl.commands.count == 1 &&
+            NSDictionary(dictionary: pendingDefaultsControl.commands[0]).isEqual(to: ["action": "host-defaults"]))
+        for state in ["identity-required", "identity-recovery-required"] {
+            precondition(bridgeSessionPairingState(session: pendingDefaults, maintenance: true, identityState: state, paused: true,
+                fileState: "active-sync", fallback: "paired") == state)
+        }
+        pendingDefaults.end()
+
+        for valid in [true, false] {
+            let control = BridgeActionFake()
+            var stopped = false
+            let defaults = try! BridgePairingSession(factory: { control }, pollInterval: 60) { stopped = $0 }
+            control.replies.append(.success(TLSSetupReply(id: 1, status: "ready", invitation: nil, peerCertificateSha256: nil,
+                address: valid ? "100.64.0.1" : "bad", port: 43128, portAvailable: true)))
+            defaults.perform(action: "pairing-host-defaults", args: [:], identityOnly: true, completion: result)
+            precondition(defaults.defaultsOnly && defaults.state == "working")
+            for fileState in ["unavailable", "revoked", "active-sync"] {
+                precondition(bridgeSessionPairingState(session: defaults, maintenance: true, identityState: nil, paused: false,
+                    fileState: fileState, fallback: "unpaired") == bridgeSessionPairingState(session: nil,
+                    maintenance: false, identityState: nil, paused: false, fileState: fileState, fallback: "unpaired"))
+            }
+            precondition(bridgeSessionPairingState(session: defaults, maintenance: true, identityState: nil, paused: true,
+                fileState: "active-sync", fallback: "unpaired") == "unpaired")
+            precondition(code == (valid ? .done : .unavailable) && defaults.closed && stopped && control.closed == 1)
+            precondition(control.commands.count == 1 && NSDictionary(dictionary: control.commands[0]).isEqual(to: ["action": "host-defaults"]))
+            if valid { precondition(NSDictionary(dictionary: value as! [String: Any]).isEqual(to: ["address": "100.64.0.1", "port": 43128, "portAvailable": true])) }
+            else { precondition(value == nil) }
+        }
+        let defaultsControl = BridgeActionFake()
+        let existingSession = try! BridgePairingSession(factory: { defaultsControl }, pollInterval: 60) { _ in }
+        for action in startActions {
+            precondition(bridgePairingStartBusy(action: action, session: existingSession) == (action == "pairing-host-defaults"))
+        }
+        defaultsControl.replies.append(.success(TLSSetupReply(id: 1, status: "ready", invitation: nil, peerCertificateSha256: nil, port: 43128)))
+        let stateBeforeDefaults = existingSession.state
+        existingSession.perform(action: "pairing-host-defaults", args: [:], completion: result)
+        precondition(existingSession.state == stateBeforeDefaults && !existingSession.defaultsOnly)
+        precondition(code == .done && !existingSession.closed)
+        precondition(NSDictionary(dictionary: value as! [String: Any]).isEqual(to: ["address": NSNull(), "port": 43128, "portAvailable": NSNull()]))
+        defaultsControl.reply("unavailable")
+        existingSession.perform(action: "pairing-host-defaults", args: [:], completion: result)
+        precondition(code == .unavailable && value == nil && !existingSession.closed && defaultsControl.closed == 0)
+        let beforeDecline = defaultsControl.commands.count
+        existingSession.perform(action: "pairing-host-confirm", args: ["sharing": .bool(true)], completion: result)
+        precondition(code == .cancelled && defaultsControl.commands.count == beforeDecline && !existingSession.closed)
+        existingSession.end()
+
+        let cachedControl = BridgeActionFake()
+        let cached = try! BridgePairingSession(factory: { cachedControl }, pollInterval: 60) { _ in }
+        for (claim, address) in [(fingerprint, "100.64.0.2"), (String(repeating: "b", count: 64), "bad")] {
+            cachedControl.reply("confirming", fingerprint: claim)
+            cachedControl.replies.append(.success(TLSSetupReply(id: 1, status: "confirming", invitation: nil, peerCertificateSha256: nil, peerAddress: address)))
+            cached.poll()
+            precondition(cached.peerAddress == (address == "bad" ? nil : address))
+        }
+        let admission = BridgeAdmission(modalOpen: { true }) { (true, true) }
+        admission.dialogOpen = true
+        let document = UUID()
+        cachedControl.delay = true
+        cached.perform(action: "pairing-join-confirm", args: ["sharing": .bool(false)]) { _, _ in }
+        let beforeCached = cachedControl.commands.count
+        admission.submit(id: 1, action: "pairing-peer-address", document: document, run: { done in
+            cached.perform(action: "pairing-peer-address", args: [:], completion: done)
+        }, reply: { result in
+            precondition(result.code == .done && (result.value as! [String: Any])["peerAddress"] is NSNull)
+        })
+        precondition(cachedControl.commands.count == beforeCached)
+        cached.end()
+        precondition(cached.peerAddress == nil)
 
         let identity = BridgeActionFake()
         let creating = try! BridgePairingSession(factory: { identity }, pollInterval: 60) { _ in }
@@ -629,6 +1063,7 @@ func runBridgeActionSelfTests() {
 
         let cancel = BridgeActionFake()
         let cancelling = try! BridgePairingSession(factory: { cancel }, pollInterval: 60) { _ in }
+        cancel.reply("identity-ready")
         cancel.reply("hosting", invitation: invitation)
         cancelling.perform(action: "pairing-host-start", args: ["address": .string("10.0.0.1"), "port": .integer(43128)], completion: result)
         cancel.delay = true
@@ -657,6 +1092,7 @@ func runBridgeActionSelfTests() {
             let control = BridgeActionFake()
             var stopped = false
             let polling = try! BridgePairingSession(factory: { control }, pollInterval: 60) { stopped = $0 }
+            control.reply("identity-ready")
             control.reply("hosting", invitation: invitation)
             polling.perform(action: "pairing-host-start", args: ["address": .string("10.0.0.1"), "port": .integer(43128)], completion: result)
             precondition(polling.invitation == invitation)
@@ -689,7 +1125,132 @@ func runBridgeActionSelfTests() {
         let runtime = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-bridge-actions-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: runtime) }
         try! FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
+        let hooks = MacBridgeHooks(openDashboard: { _ in preconditionFailure() }, checkForUpdates: { preconditionFailure() },
+            directPairingOpen: { preconditionFailure() }, applyViewerPreferences: { _, _ in preconditionFailure() })
+        let store = ObservatoryStore(runtime: runtime, collectionAllowed: false)
+        for (preview, isolated) in [(true, false), (false, true)] {
+            let host = MacBridgeHost(store: store, resources: nil, preview: preview, handler: BridgeHandler(), hooks: hooks, isolatedRuntime: isolated)
+            for action in ["pairing-host-defaults", "pairing-peer-address", "set-sharing-choice"] {
+                var answered = false
+                host.perform(action: action, args: ["enabled": .bool(true)]) { code, value in
+                    precondition(code == .unavailable && value == nil)
+                    answered = true
+                }
+                precondition(answered && !host.sessionOpen)
+            }
+        }
+        let host = MacBridgeHost(store: store, resources: nil, preview: false, handler: BridgeHandler(), hooks: hooks)
+        host.perform(action: "pairing-peer-address", args: [:]) { code, value in
+            precondition(code == .done && (value as! [String: Any])["peerAddress"] is NSNull)
+        }
         precondition(bridgePairingFiles(runtime: runtime) == ("unpaired", "none"))
+        precondition(bridgeReportedPairingState(sessionState: "waiting", maintenance: false, identityState: nil, paused: false,
+            fileState: "active-sync", fallback: "paired") == "waiting")
+        precondition(bridgeReportedPairingState(sessionState: nil, maintenance: true, identityState: nil, paused: false,
+            fileState: "active-sync", fallback: "paired") == "paired")
+        precondition(bridgeReportedPairingState(sessionState: nil, maintenance: false, identityState: nil, paused: false,
+            fileState: "active-sync", fallback: "paired") == "active-sync")
+        precondition(bridgeReportedPairingState(sessionState: nil, maintenance: false, identityState: nil, paused: false,
+            fileState: "unavailable", fallback: "paired") == "paired")
+        let now = Date()
+        let statusFile = runtime.appendingPathComponent("pairing-status.json")
+        func putStatus(_ state: String, offset: TimeInterval = 0, extra: Bool = false) {
+            var object: [String: Any] = ["version": 1, "state": state,
+                "checkedAt": ISO8601DateFormatter().string(from: now.addingTimeInterval(offset))]
+            if extra { object["extra"] = true }
+            try! JSONSerialization.data(withJSONObject: object).write(to: statusFile)
+            precondition(chmod(statusFile.path, 0o600) == 0)
+        }
+        let pairingHooks = MacBridgeHooks(openDashboard: { _ in preconditionFailure() }, checkForUpdates: { preconditionFailure() },
+            directPairingOpen: { false }, applyViewerPreferences: { _, _ in preconditionFailure() })
+        for status in ["identity-required", "identity-recovery-required"] {
+            for action in ["pairing-host-start", "pairing-join-claim"] {
+                var controls: [BridgeActionFake] = []
+                var queuedReplies: [Result<TLSSetupReply, Error>] = []
+                let pairingHost = MacBridgeHost(store: store, resources: nil, preview: false, handler: BridgeHandler(), hooks: pairingHooks,
+                    pairingControl: {
+                        let control = BridgeActionFake()
+                        control.replies = queuedReplies
+                        queuedReplies.removeAll()
+                        controls.append(control)
+                        return control
+                    })
+                let args: [String: BridgeValue] = action == "pairing-host-start"
+                    ? ["address": .string("10.0.0.1"), "port": .integer(43128)]
+                    : ["invitation": .string(invitation)]
+                @MainActor func perform(_ action: String, args: [String: BridgeValue] = [:], expected: BridgeCode) {
+                    var answered = false
+                    pairingHost.perform(action: action, args: args) { code, _ in
+                        precondition(!answered && code == expected)
+                        answered = true
+                    }
+                    precondition(answered)
+                }
+                queuedReplies = [.success(TLSSetupReply(id: 1, status: status, invitation: nil, peerCertificateSha256: nil))]
+                perform(action, args: args, expected: .unavailable)
+                precondition(!pairingHost.sessionOpen && controls.count == 1)
+                precondition(controls[0].commands.count == 1 && NSDictionary(dictionary: controls[0].commands[0]).isEqual(to: ["action": "identity-status"]))
+                precondition(pairingHost.reportedPairing == (status, "none"))
+                putStatus("active-sync")
+                precondition(bridgePairingStatus(runtime: runtime) == "active-sync")
+                precondition(pairingHost.reportedPairing.state == status)
+                try! FileManager.default.removeItem(at: statusFile)
+                perform("pairing-cancel", expected: .done)
+                precondition(pairingHost.reportedPairing.state == status)
+                queuedReplies = [.success(TLSSetupReply(id: 1, status: "ready", invitation: nil, peerCertificateSha256: nil, address: nil, port: 43128, portAvailable: nil))]
+                perform("pairing-host-defaults", expected: .done)
+                precondition(!pairingHost.sessionOpen && pairingHost.reportedPairing.state == status)
+                queuedReplies = [
+                    .success(TLSSetupReply(id: 1, status: "identity-ready", invitation: nil, peerCertificateSha256: nil)),
+                    .success(TLSSetupReply(id: 2, status: action == "pairing-host-start" ? "hosting" : "awaiting-confirmation",
+                        invitation: action == "pairing-host-start" ? invitation : nil, peerCertificateSha256: nil))
+                ]
+                perform(action, args: args, expected: .done)
+                precondition(pairingHost.sessionOpen && controls.count == 3)
+                controls[2].reply("cancelled")
+                perform("pairing-cancel", expected: .done)
+                precondition(pairingHost.reportedPairing.state == bridgePairingFiles(runtime: runtime).state)
+                precondition(pairingHost.reportedPairing.state == "unpaired")
+                precondition(!pairingHost.sessionOpen && !store.pairingMaintenance && !store.collectionPausedForPairing)
+                precondition(controls.allSatisfy { $0.closed == 1 && $0.replies.isEmpty })
+            }
+        }
+        precondition(bridgePairingStatus(runtime: runtime, now: now) == "unavailable")
+        for state in ["unpaired", "revoked", "establishing-trust", "active-sync", "sync-stale", "unavailable"] {
+            putStatus(state)
+            precondition(bridgePairingStatus(runtime: runtime, now: now) == state)
+            precondition(bridgeStoredPairingState(runtime: runtime, fallback: "paired") == (state == "unavailable" ? "paired" : state))
+        }
+        for offset: TimeInterval in [-121, 62] {
+            putStatus("active-sync", offset: offset)
+            precondition(bridgePairingStatus(runtime: runtime, now: now) == "unavailable")
+        }
+        putStatus("active-sync", extra: true)
+        precondition(bridgePairingStatus(runtime: runtime, now: now) == "unavailable")
+        try! Data(repeating: 32, count: 2000).write(to: statusFile)
+        precondition(bridgePairingStatus(runtime: runtime, now: now) == "unavailable")
+        putStatus("active-sync")
+        precondition(chmod(statusFile.path, 0o644) == 0)
+        precondition(bridgePairingStatus(runtime: runtime, now: now) == "unavailable")
+        precondition(chmod(statusFile.path, 0o600) == 0)
+        let linkedRuntime = runtime.appendingPathComponent("linked")
+        try! FileManager.default.createDirectory(at: linkedRuntime, withIntermediateDirectories: true)
+        try! FileManager.default.createSymbolicLink(at: linkedRuntime.appendingPathComponent("pairing-status.json"), withDestinationURL: statusFile)
+        precondition(bridgePairingStatus(runtime: linkedRuntime, now: now) == "unavailable")
+        let hardLink = runtime.appendingPathComponent("hard-link")
+        precondition(link(statusFile.path, hardLink.path) == 0)
+        precondition(bridgePairingStatus(runtime: runtime, now: now) == "unavailable")
+        for text in [
+            #"{"version":1,"chosen":true,"channels":{"codex-limits":"on","claude-code-tokens":"waiting-for-reading"}}"#,
+            #"{"version":1,"chosen":false,"channels":{"codex-limits":"off","claude-code-tokens":"unavailable"}}"#
+        ] { precondition((try? BridgeSharingChoice.parse(Data(text.utf8))) != nil) }
+        for text in [
+            #"{"version":true,"chosen":true,"channels":{"codex-limits":"on","claude-code-tokens":"off"}}"#,
+            #"{"version":1,"chosen":1,"channels":{"codex-limits":"on","claude-code-tokens":"off"}}"#,
+            #"{"version":1,"chosen":true,"channels":{"codex-limits":"on"}}"#,
+            #"{"version":1,"chosen":true,"channels":{"codex-limits":"bad","claude-code-tokens":"off"}}"#,
+            #"{"version":1,"chosen":true,"extra":0,"channels":{"codex-limits":"on","claude-code-tokens":"off"}}"#
+        ] { precondition((try? BridgeSharingChoice.parse(Data(text.utf8))) == nil) }
         let folder = runtime.appendingPathComponent("private-sync")
         try! FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         try! Data().write(to: folder.appendingPathComponent("pairing.json"))
