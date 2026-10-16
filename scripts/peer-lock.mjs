@@ -8,6 +8,26 @@ import {privateCollectorDirectory} from './peer-directory.mjs';
 
 const held=new AsyncLocalStorage();
 
+export async function checkLockSidecars(filename,{stat=lstat,wait=delay,boundMs=1000}={}) {
+  for(const suffix of ['-journal','-wal','-shm']) {
+    let deadline;
+    for(;;) {
+      let info;
+      try {info=await stat(filename+suffix);}
+      catch(error) {if(error.code==='ENOENT')break;throw error;}
+      if(suffix!=='-journal' || !info.isFile() || info.isSymbolicLink() ||
+        (info.nlink!==0 && info.nlink!==1) || info.size>65536 ||
+        (process.platform!=='win32' && (info.mode&0o077)))throw Error('Unsafe pairing lock sidecar');
+      if(info.nlink===1)break;
+      // SQLite can unlink the journal between path lookup and stat, leaving nlink at zero.
+      // Wait briefly for removal to finish before checking the path again.
+      deadline??=performance.now()+boundMs;
+      if(performance.now()>=deadline)throw Error('Unsafe pairing lock sidecar');
+      await wait(20);
+    }
+  }
+}
+
 // SQLite supplies a process-crash-safe local mutex outside the directory that
 // repair retires. No pairing records or credentials are stored in this file.
 // Short contention waits asynchronously. Longer operations fail within a bound
@@ -36,14 +56,7 @@ export async function withPeerStateLock(runtime,action) {
   const before=await lstat(filename);
   if(!before.isFile() || before.isSymbolicLink() || before.nlink!==1 || before.size>4096 ||
     (process.platform!=='win32' && (before.mode&0o077)))throw Error('Unsafe pairing operation lock');
-  for(const suffix of ['-journal','-wal','-shm']) {
-    try {
-      const info=await lstat(filename+suffix);
-      if(suffix!=='-journal' || !info.isFile() || info.isSymbolicLink() || info.nlink!==1 || info.size>65536 ||
-        (process.platform!=='win32' && (info.mode&0o077)))throw Error('Unsafe pairing lock sidecar');
-    }
-    catch(error) {if(error.code!=='ENOENT')throw error;}
-  }
+  await checkLockSidecars(filename);
   let database;
   const lease={active:false};
   try {
