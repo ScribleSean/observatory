@@ -36,6 +36,8 @@ export function checkSyncPort(address,port) {
 
 // One controller belongs to one native setup child process. It never returns
 // keys, pairing configurations, comparison salts or internal claim handles.
+// Sharing choice is recorded only after pairing commits. A recording failure
+// leaves sharing off without failing the committed confirmation.
 export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,readIdentity=readDeviceIdentity,
   claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent,
   selfAddresses=tailscaleSelfAddresses,checkPort=checkSyncPort,choose=chooseSharing}={}) {
@@ -92,7 +94,7 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         if(!pending || pending.peerCertificateSha256!==request.peerCertificateSha256)throw fail();
         await host.confirm(pending.claimId,{localEndpoint:request.localEndpoint,
           peerEndpoint:request.peerEndpoint});
-        if(token===epoch && request.sharing===true)try {await choose(runtime,{enabled:true});}catch {throw fail();}
+        if(token===epoch && request.sharing===true)try {await choose(runtime,{enabled:true});}catch {}
         return {status:token===epoch?'configuration-ready':'cancelled'};
       }
       if(exact(request,['action','invitation']) && request.action==='join-claim') {
@@ -114,7 +116,7 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         if(token!==epoch)return {status:'cancelled'};
         if(!['awaiting-confirmation','local-ready','acknowledged'].includes(result.status))throw fail();
         joining=result.status;
-        if(['local-ready','acknowledged'].includes(joining) && request.sharing===true)try {await choose(runtime,{enabled:true});}catch {throw fail();}
+        if(['local-ready','acknowledged'].includes(joining) && request.sharing===true)try {await choose(runtime,{enabled:true});}catch {}
         return {status:token===epoch?joining:'cancelled'};
       }
       throw fail();
