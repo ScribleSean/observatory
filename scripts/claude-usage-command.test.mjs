@@ -42,6 +42,15 @@ test('reset formats from both ICU variants map to exact epoch seconds', () => {
   assert.equal(parseResetTime('Oct 16, 6 PM (UTC)',now),Date.parse('2026-10-16T18:00:00Z')/1000);
 });
 
+test('omitted years follow the printed time zone across New Year', () => {
+  const newYork=Date.parse('2027-01-01T03:00:00Z');
+  for(const input of ['Dec 31 at 11pm (America/New_York)','Dec 31, 11pm (America/New_York)'])
+    assert.equal(parseResetTime(input,newYork),Date.parse('2027-01-01T04:00:00Z')/1000,input);
+  const auckland=Date.parse('2026-12-31T12:00:00Z');
+  for(const input of ['Jan 1 at 2am (Pacific/Auckland)','Jan 1, 2027, 2am (Pacific/Auckland)'])
+    assert.equal(parseResetTime(input,auckland),Date.parse('2026-12-31T13:00:00Z')/1000,input);
+});
+
 test('explicit years across New Year are used without a next-year retry', () => {
   const december=Date.parse('2026-12-30T10:00:00Z');
   for(const separator of [' at ', ', ']) {

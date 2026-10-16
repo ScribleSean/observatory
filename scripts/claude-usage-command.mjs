@@ -24,9 +24,10 @@ export function parseResetTime(text,now=Date.now()) {
   if(month<0 || day<1 || day>31 || hour<1 || hour>12 || minute>59)return null;
   hour=hour%12+(match[6].toLowerCase()==='pm'?12:0);
   try {
-    // Only a date without a year can retry in the next year.
-    const years=match[3]===undefined?[new Date(now).getUTCFullYear(),new Date(now).getUTCFullYear()+1]:[Number(match[3])];
     const calendar=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'numeric',day:'numeric'});
+    // Only a date without a year can retry in the next year in its time zone.
+    const year=match[3]===undefined?Number(calendar.formatToParts(new Date(now)).find(part=>part.type==='year').value):Number(match[3]);
+    const years=match[3]===undefined?[year,year+1]:[year];
     for(const year of years) {
       let instant=Date.UTC(year,month,day,hour,minute);
       for(let pass=0;pass<2;pass++)instant=Date.UTC(year,month,day,hour,minute)-offsetMinutes(instant,zone)*60000;
