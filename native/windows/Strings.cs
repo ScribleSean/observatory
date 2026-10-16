@@ -264,8 +264,8 @@ internal static class ObservatoryStrings
         internal const string On = "On";
         internal const string Off = "Off";
         internal const string Working = "Working";
-        internal const string DisclosureCommand = "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times. The command gets a small fixed set of environment variables, and nothing else from it is kept.";
-        internal const string DisclosureStorage = "The readings stay in this device's data folder and are not sent to a paired device. A session cost is recorded only when the optional status line bridge reports one.";
+        internal const string DisclosureCommand = "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times. The command uses the installed Claude Code sign-in and a small fixed set of environment variables, and nothing else from it is kept. If Claude Code reports no limits for the account, they show as Unknown.";
+        internal const string DisclosureStorage = "The readings are kept in this device's data folder and are not sent to a paired device. Export data includes them. A session cost is recorded only when the optional status line bridge reports one.";
         internal const string DisclosureOff = "Nothing is added to Claude Code's settings. Turn this switch off to stop the readings. If the status line bridge was installed separately, readings continue until it is removed.";
         internal const string TurnOn = "Turn on";
         internal const string Cancel = "Cancel";
@@ -368,7 +368,7 @@ internal static class ObservatoryStrings
         internal const string ClaudeHint = "Token use from saved Claude Code sessions.";
         internal const string WisprHint = "Dictation statistics from Wispr Flow.";
         internal const string QuotaHint = "Codex account limits, read online through the installed Codex sign-in without making model requests.";
-        internal const string ClaudeLimitsHint = "Claude Code account limits, read by Claude Code's own usage command during each collection. Read the notes before turning it on.";
+        internal const string ClaudeLimitsHint = "Claude Code account limits, read by Claude Code's own usage command through its installed sign-in during each collection. Read the notes before turning it on.";
         internal const string PairingTitle = "Other devices";
         internal const string PairingIntro = "Pairing a second device is optional. You can pair later, in Settings.";
         internal const string PairingHow = "One device creates an invitation in Settings, and the other device pastes it. Observatory works on this device alone until then.";

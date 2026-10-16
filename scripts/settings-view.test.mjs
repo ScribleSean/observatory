@@ -256,6 +256,17 @@ void test('limits disclosure requests and cancellation send nothing, confirmatio
   assert.match(cancelledHtml, /<input[^>]*aria-checked="false"[^>]*\/>Claude Code limits/);
   controller.dispose();
 });
+void test('native limits dialogs quote the first disclosure sentence', () => {
+  const strings = JSON.parse(readFileSync(new URL('../lib/strings.json', import.meta.url), 'utf8'));
+  const disclosure = strings.settings.disclosureCommand;
+  const sentenceEnd = disclosure.indexOf('. ');
+  assert.ok(sentenceEnd >= 0);
+  const sentence = disclosure.slice(0, sentenceEnd + 1);
+  const swift = readFileSync(new URL('../native/BridgeActions.swift', import.meta.url), 'utf8');
+  const csharp = readFileSync(new URL('../native/windows/BridgeHandler.cs', import.meta.url), 'utf8');
+  assert.ok(swift.includes(`"${sentence}"`));
+  assert.ok(csharp.includes(`"${sentence} Turn on Claude Code limits?"`));
+});
 void test('unknown switches have mixed semantics', () => {
   assert.equal((render(null).match(/aria-checked="mixed"/g) ?? []).length, 9);
 });
