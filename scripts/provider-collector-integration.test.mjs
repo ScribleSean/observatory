@@ -121,7 +121,7 @@ for(const platform of ['darwin','win32'])for(const consent of [false,true])test(
       claude:false,wispr:false,quota:false}));
     if(consent) {
       await mkdir(path.join(runtime,'claude-limits'));
-      await writeFile(path.join(runtime,'claude-limits/consent.json'),'{"consent":true}');
+      await writeFile(path.join(runtime,'claude-limits/consent.json'),'{"consent":true,"givenAt":"2026-10-14T00:00:00.000Z"}');
     }
     const options={readLimits:()=>new Promise(()=>{}),limitsTimeoutMs:10};
     const keepAlive=setInterval(()=>{},1000);
