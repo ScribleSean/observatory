@@ -7,10 +7,12 @@ import re
 import sys
 from zoneinfo import ZoneInfo
 
-MAX_FILES = 2_000
-MAX_TOTAL_BYTES = 128 * 1024 * 1024
+# These limits bound time and memory within the collectors' 60 second reader limit.
+# A history over any limit reads unavailable, never partial.
+MAX_FILES = 10_000
+MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_LINE_BYTES = 4 * 1024 * 1024
-MAX_LINES = 1_000_000
+MAX_LINES = 10_000_000
 MAX_SAFE = 2**53 - 1
 FIELDS = ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens')
 MODEL = re.compile(r'^claude-[a-z0-9][a-z0-9.-]{0,98}$')
