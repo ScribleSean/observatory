@@ -276,8 +276,9 @@ final class WebSmokeTest: NSObject {
         return value as? Bool == true
     }
     private func checkBridge(_ view: WKWebView, host: SmokeBridgeHost, bridge: BridgeHandler, resources: URL) async throws -> Bool {
-        // Only actions other than status are compared, because the page also reads status on its own.
-        func others() -> [String] { host.actions.filter { $0 != "status" } }
+        // Only actions the test sends are compared. The page reads status on its own, and asks for the
+        // claimed device's address while a status shows a host confirming a claim.
+        func others() -> [String] { host.actions.filter { $0 != "status" && $0 != "pairing-peer-address" } }
         guard try await bridgeCheck(view, script: """
         post(9001);
         if (!await expect(9001)) return false;

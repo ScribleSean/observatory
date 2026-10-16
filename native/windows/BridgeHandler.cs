@@ -398,6 +398,7 @@ internal sealed class BridgeHandler : IDisposable
     private static readonly object ownerGate = new();
     private static BridgeHandler? pairingOwner;
     private IBridgePairingSession? session;
+    private bool defaultsOnly;
     private Action<bool>? release;
     private long sessionGeneration;
     private DateTimeOffset began;
@@ -506,6 +507,9 @@ internal sealed class BridgeHandler : IDisposable
         (action == "complete-setup" && host.CollectorBusy);
 
     private static bool Exclusive(string action) => action is "refresh" or "set-sharing" or "set-sharing-choice" or "pairing-disconnect" or "pairing-repair-prepare";
+    private static bool PairingStart(string action) => action is "pairing-host-defaults" or "pairing-identity-create" or
+        "pairing-host-start" or "pairing-join-claim" or "pairing-host-confirm" or "pairing-join-confirm";
+
     private bool PairingBusy(string action) =>
         (Exclusive(action) && (session is not null || !ending.IsCompleted)) ||
         (action.StartsWith("pairing-", StringComparison.Ordinal) &&
@@ -684,9 +688,10 @@ internal sealed class BridgeHandler : IDisposable
             if (versionText.Length > 32) return new("unavailable");
             var viewer = files.Viewer;
             var pair = files.Pairing;
-            var state = working ? "working" : session is not null ? pairingState : identityState is not null ? identityState : host.CollectionPaused ? "unavailable" : pair.State;
+            var open = session is not null && !defaultsOnly;
+            var state = working ? "working" : open ? pairingState : identityState is not null ? identityState : host.CollectionPaused ? "unavailable" : pair.State;
             var now = host.Now;
-            if (!working && session is null && identityState is null && !host.CollectionPaused &&
+            if (!working && !open && identityState is null && !host.CollectionPaused &&
                 files.PairingStatus != "unavailable" && files.PairingStatusAt is DateTimeOffset checkedAt &&
                 now - checkedAt <= TimeSpan.FromMinutes(2) && checkedAt - now <= TimeSpan.FromMinutes(1))
                 state = files.PairingStatus;
@@ -703,7 +708,7 @@ internal sealed class BridgeHandler : IDisposable
                 // and while collection stays paused after unverified pairing work.
                 ["collectionPaused"] = session is not null || working || host.CollectionPaused,
                 ["pairing"] = new JsonObject { ["state"] = state, ["peerFingerprint"] = state == "confirming" ? fingerprint : null,
-                    ["transport"] = session is not null || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
+                    ["transport"] = open || identityState is not null || working || host.CollectionPaused ? "none" : pair.Transport, ["invitationKept"] = invitation is not null },
                 ["sharing"] = new JsonObject { ["codex-limits"] = SharingValue(sharing[0]), ["claude-code-tokens"] = SharingValue(sharing[1]) },
                 ["sharingChoice"] = sharingChoice.DeepClone()
             };
@@ -851,7 +856,7 @@ internal sealed class BridgeHandler : IDisposable
         try { value = value with { Pairing = host.Settings.ReadPairing(strict: true) }; } catch { }
         lock (gate)
         {
-            var record = session is null ? host.Settings.ReadPairingStatusRecord(host.Now) : (State: "unavailable", CheckedAt: (DateTimeOffset?)null);
+            var record = session is null || defaultsOnly ? host.Settings.ReadPairingStatusRecord(host.Now) : (State: "unavailable", CheckedAt: (DateTimeOffset?)null);
             value = value with { PairingStatus = record.State, PairingStatusAt = record.CheckedAt };
         }
         return value;
@@ -935,7 +940,7 @@ internal sealed class BridgeHandler : IDisposable
         finally { lock (gate) sharingReading[index] = false; }
     }
 
-    private bool BeginSession()
+    private bool BeginSession(bool onlyDefaults = false)
     {
         lock (gate)
         {
@@ -951,8 +956,10 @@ internal sealed class BridgeHandler : IDisposable
             try
             {
                 session = host.CreatePairingSession(); began = host.Now; sessionGeneration++; choiceRevision++;
-                pairingState = "idle"; identityState = null;
-                if (SynchronizationContext.Current is System.Windows.Forms.WindowsFormsSynchronizationContext)
+                defaultsOnly = onlyDefaults;
+                pairingState = "idle";
+                if (!defaultsOnly) identityState = null;
+                if (!onlyDefaults && SynchronizationContext.Current is System.Windows.Forms.WindowsFormsSynchronizationContext)
                 {
                     timer = new System.Windows.Forms.Timer { Interval = BridgeContract.Limits["pairingPollSeconds"].Number * 1000 };
                     timer.Tick += async (_, _) => await PollAsync(); timer.Start();
@@ -991,6 +998,8 @@ internal sealed class BridgeHandler : IDisposable
             catch { return new("unavailable"); }
             return new("done");
         }
+        // Guard for direct calls. The action queue runs page requests one at a time, so a page pairing start waits behind the lookup and does not reach this check.
+        lock (gate) if (defaultsOnly && PairingStart(action)) return new("busy");
         bool temporary = false;
         if (action == "pairing-identity-create")
         {
@@ -1010,9 +1019,10 @@ internal sealed class BridgeHandler : IDisposable
             lock (gate)
             {
                 if (request.Epoch != epoch || closed) return new("unavailable");
-                if (session is not null && action != "pairing-identity-create") return new("busy");
+                // Guard for direct calls. The action queue runs page requests one at a time, so a page pairing start waits behind the lookup and does not reach this check.
+                if (defaultsOnly || (session is not null && action != "pairing-identity-create")) return new("busy");
+                if (!BeginSession(action == "pairing-host-defaults")) return new("busy");
             }
-            if (!BeginSession()) return new("busy");
         }
         IBridgePairingSession current;
         long generation;
@@ -1149,7 +1159,7 @@ internal sealed class BridgeHandler : IDisposable
             if (expected is not null && session != expected) return Task.CompletedTask;
             if (session is null) return ending;
             var current = session; var callback = release;
-            session = null; release = null; sessionGeneration++;
+            session = null; defaultsOnly = false; release = null; sessionGeneration++;
             peerAddress = null; peerAddressRead = false; sharingConfirmed = false;
             invitation = null; endpoint = null; fingerprint = null; pairingState = "idle";
             timer?.Stop(); timer?.Dispose(); timer = null;
@@ -1201,6 +1211,7 @@ internal sealed class BridgeHandler : IDisposable
         internal bool VerifyExit = true, RefuseDefaults, ThrowDefaults;
         internal string? DefaultsRaw;
 
+        internal TaskCompletionSource<TlsSetupReply>? HeldDefaults;
         internal TaskCompletionSource<TlsSetupReply>? HeldConfirm;
         internal TaskCompletionSource<TlsSetupReply>? HeldStatus;
         internal TaskCompletionSource<TlsSetupReply>? Held;
@@ -1211,6 +1222,7 @@ internal sealed class BridgeHandler : IDisposable
             Commands.Add(command.DeepClone().AsObject());
             Check(!command.ContainsKey("id"), "Page id entered control command");
             var action = command["action"]!.GetValue<string>();
+            if (action == "host-defaults" && HeldDefaults is not null) return HeldDefaults.Task;
             if (action == "host-confirm" && HeldConfirm is not null) return HeldConfirm.Task;
             if (action == "host-start" && Held is not null) return Held.Task;
             if (action == "status" && HeldStatus is not null) return HeldStatus.Task;
@@ -1973,6 +1985,61 @@ internal sealed class BridgeHandler : IDisposable
         Check(defaults.ToJsonString() == "{\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}" &&
             test.Host.Session!.Disposed && test.Host.Releases == 1 && !test.Host.Reserved &&
             test.Host.Session.Commands.Single().ToJsonString() == "{\"action\":\"host-defaults\"}", "Host defaults lifecycle");
+        async Task HeldDefaultsCheck()
+        {
+            var beforePairing = (await test.Run("status"))["value"]!["pairing"]!.ToJsonString();
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() != "idle", "Defaults baseline is not idle");
+            test.Host.MakeSession = () => new() { VerifyExit = !test.Host.CollectionPaused,
+                HeldDefaults = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+            int pendingDefaults = test.Send("pairing-host-defaults");
+            var held = test.Host.Session!;
+            test.Handler.RefreshFilesNow();
+            var during = test.Result(test.Send("status"))["value"]!;
+            Check(during["pairing"]!.ToJsonString() == beforePairing && during["collectionPaused"]!.GetValue<bool>(),
+                "Defaults preserve pairing status while holding collection");
+            Check(held.Commands.Single().ToJsonString() == "{\"action\":\"host-defaults\"}", "Status sent no control command");
+            held.HeldDefaults!.SetResult(TlsSetupReply.Parse("{\"id\":1,\"status\":\"ready\",\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}"));
+            await test.Handler.drain;
+            var answer = test.Result(pendingDefaults);
+            Check(held.Disposed && !test.Host.Reserved && !test.Handler.defaultsOnly && answer["code"]!.GetValue<string>() == "done" &&
+                answer["value"]!.ToJsonString() == defaults.ToJsonString(), "Held defaults complete and release session");
+            Check((await test.Run("status"))["value"]!["pairing"]!.ToJsonString() == beforePairing, "Defaults preserve final pairing status");
+            test.Host.MakeSession = null;
+        }
+        await HeldDefaultsCheck();
+        foreach (var identity in new[] { "identity-required", "identity-recovery-required" })
+        {
+            test.Handler.identityState = identity;
+            await HeldDefaultsCheck();
+        }
+        test.Handler.identityState = null;
+        test.Host.CollectionPaused = true;
+        await HeldDefaultsCheck();
+        test.Host.CollectionPaused = false;
+        test.Host.MakeSession = () => new() { HeldDefaults = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        int queuedDefaults = test.Send("pairing-host-defaults");
+        var queuedHeld = test.Host.Session!;
+        int queuedStart = test.Send("pairing-host-start", HostArgs());
+        Check(queuedHeld.Commands.Single().ToJsonString() == "{\"action\":\"host-defaults\"}", "Queued start waits for defaults");
+        test.Host.MakeSession = null;
+        queuedHeld.HeldDefaults!.SetResult(TlsSetupReply.Parse("{\"id\":1,\"status\":\"ready\",\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}"));
+        await test.Handler.drain;
+        Check(test.Result(queuedDefaults)["code"]!.GetValue<string>() == "done" && queuedHeld.Disposed &&
+            test.Result(queuedStart)["code"]!.GetValue<string>() == "done" && test.Handler.session is not null &&
+            test.Handler.session != queuedHeld && !test.Handler.defaultsOnly, "Queued start runs in its own session after defaults");
+        Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "waiting", "Queued start reports its state");
+        await test.Run("pairing-cancel");
+        Task<Result>? dialogDefaults = null;
+        test.Host.MakeSession = () => new() { HeldDefaults = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        test.Host.InDialog = () => dialogDefaults = test.Handler.Pairing(new Request(0, "pairing-host-defaults", new(),
+            test.Document, test.Handler.epoch, _ => { }));
+        await test.Run("pairing-identity-create", code: "busy");
+        test.Host.InDialog = null;
+        var dialogSession = test.Host.Session!;
+        Check(dialogDefaults is not null && !dialogDefaults.IsCompleted &&
+            dialogSession.Commands.Single()["action"]!.GetValue<string>() == "host-defaults", "Defaults block identity after consent");
+        dialogSession.HeldDefaults!.SetResult(TlsSetupReply.Parse("{\"id\":1,\"status\":\"ready\",\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}"));
+        Check((await dialogDefaults!).Code == "done" && dialogSession.Disposed, "Dialog defaults release session");
         test.Host.MakeSession = () => new() { ThrowDefaults = true };
         await test.Run("pairing-host-defaults", code: "unavailable");
         Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Faulted defaults release temporary session");
@@ -1983,6 +2050,9 @@ internal sealed class BridgeHandler : IDisposable
         Check(test.Handler.session == hosting && !hosting.Disposed && test.Host.Reserved &&
             !hosting.Commands.Any(c => c["action"]!.GetValue<string>() == "host-defaults"), "Defaults preserve hosting session");
         Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "waiting", "Defaults preserve hosting status");
+        await test.Run("pairing-identity-create");
+        Check(test.Handler.session == hosting && !hosting.Disposed && hosting.Commands.Last()["action"]!.GetValue<string>() == "identity-create",
+            "Identity creation joins normal hosting session");
         await test.Run("pairing-cancel");
         test.Host.MakeSession = () => new() { RefuseDefaults = true };
         await test.Run("pairing-host-defaults", code: "unavailable");
@@ -2072,6 +2142,8 @@ internal sealed class BridgeHandler : IDisposable
                 Check(status["pairing"]!["state"]!.GetValue<string>() == state && ValidStatusShape(status), "Pairing file state: " + state);
             }
             File.WriteAllText(path, Record("active-sync").ToJsonString()); test.Handler.RefreshFilesNow();
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "active-sync", "Status reads current pairing file");
+            await HeldDefaultsCheck();
             test.Handler.identityState = "identity-required";
             Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "identity-required", "Identity state overrides pairing file");
             test.Handler.identityState = null;

@@ -9,7 +9,7 @@ import {syncBuiltinESMExports} from 'node:module';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {claudeLimitsConsent,claudeStatuslineInstalled,attachClaudeLimits,claudeLimitsSource,extractClaudeLimits,mergeClaudeLimits,readClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
+import {parseLimitsConsentMarker,claudeLimitsConsent,claudeStatuslineInstalled,attachClaudeLimits,claudeLimitsSource,extractClaudeLimits,mergeClaudeLimits,readClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
 import {ownLine} from './claude-statusline-bridge.mjs';
 import {bridgeCommand,installStatusline,statuslineStatus,uninstallStatusline} from './claude-statusline-install.mjs';
 
@@ -25,6 +25,8 @@ async function folder(t) {
   t.after(()=>rm(root,{recursive:true,force:true}));
   return root;
 }
+
+const consentText=JSON.stringify({consent:true,givenAt:'2026-10-14T00:00:00.000Z'});
 
 const realBridge=realpathSync(fileURLToPath(new URL('./claude-statusline-bridge.mjs',import.meta.url)));
 
@@ -276,11 +278,25 @@ test('invalid consent markers do not grant consent', async t => {
   const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
   await mkdir(directory);
   const file=path.join(directory,'consent.json');
-  for(const text of ['{"consent":false}','{bad','[]','null','{"consent":"true"}','{"consent":true}'+ ' '.repeat(4096)]) {
+  for(const text of ['{"consent":false}','{bad','[]','null','{"consent":"true"}',
+    '{"consent":true}',
+    '{"consent":true,"givenAt":"2026-10-14T00:00:00.000Z","extra":1}',
+    '{"consent":true,"consent":true,"givenAt":"2026-10-14T00:00:00.000Z"}',
+    '{"givenAt":"2026-10-14T00:00:00.000Z","consent":false,"consent":true}',
+    '{"consent":true,"conse\\u006et":true,"givenAt":"2026-10-14T00:00:00.000Z"}',
+    '{"givenAt":{"x":":"},"consent":true,"givenAt":"2026-10-14T00:00:00.000Z"}',
+    '{"consent":true,"givenAt":"a\\":\\"","givenAt":"2026-10-14T00:00:00.000Z"}',
+    ...['2026-13-01T00:00:00.000Z','2026-02-30T00:00:00.000Z','2026-10-14',1,'a,b:c{}','a"b\\c',
+      null,{},[]].map(givenAt=>JSON.stringify({consent:true,givenAt})),
+    ...[false,1,'true'].map(consent=>JSON.stringify({consent,givenAt:'2026-10-14T00:00:00.000Z'})),
+    '﻿'+consentText,consentText.padEnd(4097,' ')]) {
     await writeFile(file,text);
-    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false},text);
+    let runs=0;
+    assert.equal((await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'failed',usage:null};}})).status,'not-connected');
+    assert.equal(runs,0);
   }
-  await writeFile(file,'{"consent":true}'.padEnd(4096,' '));
+  await writeFile(file,(' \t\r\n'+consentText+'\n').padEnd(4096,' '));
   assert.equal((await limitsConsentStatus({runtime})).given,true);
   assert.deepEqual(await claudeLimitsConsent(null),{given:false,consentMarker:false,statusLine:false});
 });
@@ -288,13 +304,13 @@ test('invalid consent markers do not grant consent', async t => {
 test('linked consent is ignored and cannot be cleared', {skip:process.platform==='win32'}, async t => {
   const runtime=await folder(t),target=path.join(await folder(t),'marker.json');
   await mkdir(path.join(runtime,'claude-limits'));
-  await writeFile(target,'{"consent":true}');
+  await writeFile(target,consentText);
   const file=path.join(runtime,'claude-limits/consent.json');
   await symlink(target,file);
   assert.equal((await limitsConsentStatus({runtime})).given,false);
   await assert.rejects(clearLimitsConsent({runtime}),/plain file/);
   assert.equal((await lstat(file)).isSymbolicLink(),true);
-  assert.equal(await readFile(target,'utf8'),'{"consent":true}');
+  assert.equal(await readFile(target,'utf8'),consentText);
 });
 
 test('a directory consent marker is ignored and cannot be cleared', async t => {
@@ -452,7 +468,7 @@ test('consent replaced by a link is no longer honoured',{skip:process.platform==
   await setLimitsConsent({runtime,consent:true});
   assert.equal((await claudeLimitsConsent(runtime)).given,true);
   const file=path.join(runtime,'claude-limits/consent.json');
-  await writeFile(target,'{"consent":true}');
+  await writeFile(target,consentText);
   await rm(file);
   await symlink(target,file);
   assert.equal((await claudeLimitsConsent(runtime)).given,false);
@@ -461,7 +477,7 @@ test('consent replaced by a link is no longer honoured',{skip:process.platform==
 test('consent swapped for a link after lstat is refused',{skip:process.platform==='win32'},async t=>{
   const runtime=await folder(t),target=path.join(await folder(t),'consent.json');
   await setLimitsConsent({runtime,consent:true});
-  await writeFile(target,'{"consent":true}');
+  await writeFile(target,consentText);
   const file=path.join(runtime,'claude-limits/consent.json'),original=fs.lstat;
   let swapped=false;
   const mocked=t.mock.method(fs,'lstat',async (...args)=>{
@@ -484,7 +500,7 @@ test('plain marker size bounds include the exact limit',async t=>{
   const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
   await mkdir(directory);
   for(const [name,limit,content,read] of [
-    ['consent.json',4096,'{"consent":true}',async()=>(await claudeLimitsConsent(runtime)).given],
+    ['consent.json',4096,consentText,async()=>(await claudeLimitsConsent(runtime)).given],
     ['statusline.json',16384,'{}',()=>claudeStatuslineInstalled(runtime)]]) {
     const file=path.join(directory,name);
     await writeFile(file,content.padEnd(limit,' '));
@@ -492,4 +508,68 @@ test('plain marker size bounds include the exact limit',async t=>{
     await writeFile(file,content.padEnd(limit+1,' '));
     assert.equal(await read(),false);
   }
+});
+
+test('consent parser accepts canonical dates and escaped member names',()=>{
+  for(const givenAt of ['0001-01-01T00:00:00.000Z','9999-12-31T23:59:59.999Z','2024-02-29T12:34:56.789Z'])
+    assert.equal(parseLimitsConsentMarker(JSON.stringify({givenAt,consent:true})),true);
+  assert.equal(parseLimitsConsentMarker(JSON.stringify({consent:true,givenAt:'0000-12-31T23:59:59.999Z'})),false);
+  assert.equal(parseLimitsConsentMarker('{"consent":true,"givenAt":"2026-10-14T00:00:00.000\\u005a"}'),true);
+  for(const givenAt of ['2026-10-14T24:00:00.000Z','2026-10-14T00:00:60.000Z'])
+    assert.equal(parseLimitsConsentMarker(JSON.stringify({consent:true,givenAt})),false);
+  assert.equal(parseLimitsConsentMarker('{"conse\\u006et":true,"givenAt":"2026-10-14T00:00:00.000Z"}'),true);
+});
+
+async function hardLink(t,file,second) {
+  try {await fs.link(file,second);return true;}
+  catch(error) {
+    if(process.platform==='win32' && ['EPERM','ENOTSUP'].includes(error.code)) {t.skip(`Hard links unavailable: ${error.code}`);return false;}
+    throw error;
+  }
+}
+
+test('hard-linked consent is refused until its second name is removed',async t=>{
+  const runtime=await folder(t),file=path.join(runtime,'claude-limits/consent.json'),second=path.join(runtime,'second.json');
+  await setLimitsConsent({runtime,consent:true,now:new Date(now)});
+  if(!await hardLink(t,file,second))return;
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+  await fs.unlink(second);
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:true,consentMarker:true,statusLine:false});
+});
+
+test('hard-linked statusline and stored limits are refused',async t=>{
+  const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
+  await recordClaudeLimits(runtime,input(),now);
+  const statusline=path.join(directory,'statusline.json'),second=path.join(runtime,'second.json');
+  await writeFile(statusline,'{}');
+  if(!await hardLink(t,statusline,second))return;
+  assert.equal(await claudeStatuslineInstalled(runtime),false);
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+  await fs.unlink(second);
+  assert.equal(await claudeStatuslineInstalled(runtime),true);
+  if(!await hardLink(t,path.join(directory,'limits.json'),second))return;
+  const options={now,readUsage:async()=>({status:'unrecognized',usage:null})};
+  assert.deepEqual(await readClaudeLimits(runtime,options),
+    {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'unrecognized'});
+  await fs.unlink(second);
+  assert.equal((await readClaudeLimits(runtime,options)).windows.length,2);
+});
+
+test('a hard link created after lstat is refused by the opened handle check',async t=>{
+  const runtime=await folder(t),file=path.join(runtime,'claude-limits/consent.json'),second=path.join(runtime,'second.json');
+  await setLimitsConsent({runtime,consent:true,now:new Date(now)});
+  if(!await hardLink(t,file,second))return;
+  await fs.unlink(second);
+  const original=fs.lstat;
+  let linked=false;
+  const mocked=t.mock.method(fs,'lstat',async (...args)=>{
+    const info=await original(...args);
+    if(args[0]===file && !linked) {await fs.link(file,second);linked=true;}
+    return info;
+  });
+  syncBuiltinESMExports();
+  try {
+    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+    assert.equal(linked,true);
+  } finally {mocked.mock.restore();syncBuiltinESMExports();}
 });
