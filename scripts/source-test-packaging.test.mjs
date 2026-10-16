@@ -20,6 +20,7 @@ const testSetup = [
   'scripts/test-python.mjs',
   'scripts/peer-live-controller.mjs',
 ];
+const developerTools = ['scripts/price-refresh.mjs'];
 
 test('Mac Collector/scripts excludes source-test support', () => {
   const loops = [
@@ -47,6 +48,8 @@ test('Mac Collector/scripts excludes source-test support', () => {
     },
   });
   assert.ok(selected.includes(path.join(root, 'scripts/run-collector.py')));
+  assert.ok(selected.includes(path.join(root, 'scripts/price-data.mjs')));
+  assert.ok(selected.includes(path.join(root, 'scripts/price-table.mjs')));
   assert.ok(
     !selected.includes(
       path.join(root, 'scripts/source-test-packaging.test.mjs'),
@@ -56,6 +59,11 @@ test('Mac Collector/scripts excludes source-test support', () => {
     testSetup.filter((file) => selected.includes(path.resolve(root, file))),
     [],
     'Source-test support is packaged',
+  );
+  assert.deepEqual(
+    developerTools.filter((file) => selected.includes(path.resolve(root, file))),
+    [],
+    'Developer tools are packaged',
   );
 });
 
@@ -90,10 +98,17 @@ test('Windows Collector/scripts excludes source-test support', () => {
     );
   };
   assert.ok(selected('scripts/run-collector.py'));
+  assert.ok(selected('scripts/price-data.mjs'));
+  assert.ok(selected('scripts/price-table.mjs'));
   assert.ok(!selected('scripts/source-test-packaging.test.mjs'));
   assert.deepEqual(
     testSetup.filter(selected),
     [],
     'Source-test support is packaged',
+  );
+  assert.deepEqual(
+    developerTools.filter(selected),
+    [],
+    'Developer tools are packaged',
   );
 });
