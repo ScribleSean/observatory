@@ -6,17 +6,40 @@ using System.Text.RegularExpressions;
 
 namespace WorkspaceObservatory;
 
-internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, string? PeerCertificateSha256)
+internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, string? PeerCertificateSha256,
+    string? Address = null, int? Port = null, bool? PortAvailable = null, string? PeerAddress = null)
 {
     internal static TlsSetupReply Parse(string raw)
     {
         if (Encoding.UTF8.GetByteCount(raw) > 8192 || JsonNode.Parse(raw) is not JsonObject value ||
-            value.Any(field => field.Key is not ("id" or "status" or "invitation" or "peerCertificateSha256")) ||
             value["id"] is not JsonValue idValue || !idValue.TryGetValue<int>(out var id) || id < 1 ||
-            value["status"]?.GetValue<string>() is not string status ||
-            status is not ("idle" or "working" or "waiting" or "confirming" or "inactive" or "hosting" or "cancelled" or
+            value["status"]?.GetValue<string>() is not string status)
+            throw new InvalidOperationException("Invalid setup reply.");
+        static bool Keys(JsonObject obj, params string[] keys) => obj.Count == keys.Length && keys.All(obj.ContainsKey);
+        static bool AddressValid(JsonNode? node) => node is null || node is JsonValue text &&
+            text.TryGetValue<string>(out var address) && BridgeContract.Validate(new JsonObject {
+                ["id"] = 1, ["action"] = "pairing-host-start", ["args"] = new JsonObject {
+                    ["address"] = address, ["port"] = 43128 } }.ToJsonString()).Outcome == "accepted";
+        if (status == "ready")
+        {
+            if (!Keys(value, "id", "status", "address", "port", "portAvailable") || !AddressValid(value["address"]) ||
+                value["port"] is not JsonValue portValue || !portValue.TryGetValue<int>(out var port) || port is < 1024 or > 65535 ||
+                (value["address"] is null) != (value["portAvailable"] is null) ||
+                value["portAvailable"] is not null && (value["portAvailable"] is not JsonValue available || !available.TryGetValue<bool>(out _)))
+                throw new InvalidOperationException("Invalid setup defaults.");
+            return new(id, status, null, null, value["address"]?.GetValue<string>(), port, value["portAvailable"]?.GetValue<bool>());
+        }
+        if (status is not ("idle" or "working" or "waiting" or "confirming" or "inactive" or "hosting" or "cancelled" or
                 "configuration-ready" or "awaiting-confirmation" or "local-ready" or "acknowledged" or "unavailable" or
                 "identity-ready" or "identity-required" or "identity-recovery-required"))
+            throw new InvalidOperationException("Invalid setup reply.");
+        if (value.ContainsKey("peerAddress"))
+        {
+            if (!Keys(value, "id", "status", "peerAddress") || !AddressValid(value["peerAddress"]))
+                throw new InvalidOperationException("Invalid pending peer.");
+            return new(id, status, null, null, PeerAddress: value["peerAddress"]?.GetValue<string>());
+        }
+        if (value.Any(field => field.Key is not ("id" or "status" or "invitation" or "peerCertificateSha256")))
             throw new InvalidOperationException("Invalid setup reply.");
         var invitation = value["invitation"]?.GetValue<string>();
         var fingerprint = value["peerCertificateSha256"]?.GetValue<string>();
@@ -36,6 +59,41 @@ internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, 
             var rejected = false;
             try { Parse(raw); } catch { rejected = true; }
             if (!rejected) throw new Exception("Unsafe setup reply accepted.");
+        }
+        foreach (var address in new string?[] { null, "100.64.0.1", "fd00::1" })
+        foreach (bool available in new[] { false, true })
+        {
+            var defaults = new JsonObject { ["id"] = 1, ["status"] = "ready", ["address"] = address,
+                ["port"] = 43128, ["portAvailable"] = address is null ? null : JsonValue.Create(available) };
+            var parsed = Parse(defaults.ToJsonString());
+            if (parsed.Address != address || parsed.Port != 43128 || parsed.PortAvailable != (address is null ? (bool?)null : available))
+                throw new Exception("Setup defaults validation failed.");
+            var pending = new JsonObject { ["id"] = 1, ["status"] = "confirming", ["peerAddress"] = address };
+            if (Parse(pending.ToJsonString()).PeerAddress != address) throw new Exception("Pending peer validation failed.");
+        }
+        var goodDefaults = new JsonObject { ["id"] = 1, ["status"] = "ready", ["address"] = "100.64.0.1", ["port"] = 43128, ["portAvailable"] = true };
+        var goodPeer = new JsonObject { ["id"] = 1, ["status"] = "confirming", ["peerAddress"] = "100.64.0.2" };
+        var invalid = new List<JsonObject>();
+        foreach (var good in new[] { goodDefaults, goodPeer })
+        {
+            foreach (var key in good.Select(p => p.Key))
+            { if (good == goodPeer && key == "peerAddress") continue; var bad = good.DeepClone().AsObject(); bad.Remove(key); invalid.Add(bad); }
+            var extra = good.DeepClone().AsObject(); extra["extra"] = true; invalid.Add(extra);
+            var mixed = good.DeepClone().AsObject(); mixed["peerCertificateSha256"] = new string('a', 64); invalid.Add(mixed);
+            foreach (var address in new JsonNode?[] { JsonValue.Create("203.0.113.1"), JsonValue.Create("100.064.0.1"), JsonValue.Create("fd00::1%3"), JsonValue.Create(true) })
+            { var bad = good.DeepClone().AsObject(); bad[good == goodDefaults ? "address" : "peerAddress"] = address?.DeepClone(); invalid.Add(bad); }
+        }
+        foreach (var port in new JsonNode?[] { null, JsonValue.Create(1023), JsonValue.Create(65536), JsonValue.Create(43128.5), JsonValue.Create("43128"), JsonValue.Create(true) })
+        { var bad = goodDefaults.DeepClone().AsObject(); bad["port"] = port; invalid.Add(bad); }
+        foreach (var available in new JsonNode?[] { null, JsonValue.Create("true"), JsonValue.Create(1) })
+        { var bad = goodDefaults.DeepClone().AsObject(); bad["portAvailable"] = available; invalid.Add(bad); }
+        var nullAddress = goodDefaults.DeepClone().AsObject(); nullAddress["address"] = null; invalid.Add(nullAddress);
+        var wrongStatus = goodDefaults.DeepClone().AsObject(); wrongStatus["status"] = "idle"; invalid.Add(wrongStatus);
+        foreach (var bad in invalid)
+        {
+            bool refused = false;
+            try { Parse(bad.ToJsonString()); } catch { refused = true; }
+            if (!refused) throw new Exception("Unsafe pairing reply accepted.");
         }
         Console.WriteLine("Native setup reply validation passed.");
     }
