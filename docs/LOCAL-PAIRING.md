@@ -16,16 +16,34 @@ These are source regression checks, not installer or live-device sync proof.
 
 ## Current boundary
 
-The installed application still uses the existing authenticated SSH transport.
-The local-network modules have synthetic client/listener integration tests,
-but are not an operational pairing wizard. Importing them does not listen on a
-port, contact a device, save credentials or change sharing consent.
+Updated on 2026-10-16. Since P1-5 part 2 (pull requests 166 and 167) both apps
+offer TLS pairing in Settings, under Devices and sharing: the host fills in this
+device's Tailscale address and port 43128, creates the invitation, and confirms
+the claimed device with its fingerprint, address and port. The joining device
+pastes the invitation, claims it and confirms. Each side can choose to share
+usage records while confirming. The steps a person follows are in
+[the guide](GUIDE.md#pair-two-devices). The live controller passed the full
+sequence in both hosting directions with synthetic fixtures (P1-4, recorded in
+[the state record](STATE.md)). Installed apps have not yet paired this way
+(P1-6). The existing SSH pairing keeps working.
+
+What the network must allow: the host's setup listener and each device's sync
+service listen on the configured address and port, 43128 by default, so the two
+devices need TCP on that port in both directions. A tailnet whose access policy
+restricts traffic needs a rule that allows `tcp:43128` between the person's own
+devices. On a Mac with the firewall on, macOS asks the first time the bundled
+`node` listens, because that `node` is signed ad hoc and is not allowed
+automatically. The person chooses Allow. On Windows, Windows Defender Firewall
+may ask the same for the bundled `node.exe`. The earlier two-device attempt
+below timed out on sandbox-managed outbound firewall rules, which is a
+different cause from that prompt.
+
+The modules themselves do nothing when imported. Importing them does not listen
+on a port, contact a device, save credentials or change sharing consent.
 
 The existing SSH setup entrypoints reject TLS transports before creating any
-pending pairing or contacting the peer. TLS setup needs its own complementary
-configuration and acknowledgement flow. It must not reuse SSH pending setup.
-The current native setup status contract is still SSH-only and must be extended
-before TLS configurations are enabled in installed apps.
+pending pairing or contacting the peer. TLS setup has its own complementary
+configuration and acknowledgement flow and does not reuse SSH pending setup.
 
 First-release setup targets the same local network or an existing trusted VPN.
 Optional Tailscale guidance should open the owning Tailscale client for sign-in
@@ -199,7 +217,7 @@ their exact request and reply keys, which both shells check.
   IPv6 form is reduced to IPv4) when it passes `isPairingAddress`, otherwise null.
   It does not take the busy slot, like `status`.
 
-Neither action prints or logs an address. No shell sends them yet (P1-5).
+Neither action prints or logs an address. Both shells send them since P1-5 part 2 (pull requests 166 and 167).
 
 ### One sharing choice (P1-3)
 
