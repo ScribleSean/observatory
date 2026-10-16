@@ -460,6 +460,7 @@ class SearchOnlyTraversalTests(unittest.TestCase):
     def verify(self, fake, *, private):
         reader = policy.NativeReader.__new__(policy.NativeReader)
         reader.os = fake
+        reader.select = fake.tree.select
         reader.uid = fake.tree.uid
         reader.native_fs = types.SimpleNamespace(read=fake.tree.filesystem)
         reader.native_acl = types.SimpleNamespace(read=fake.tree.acl)
