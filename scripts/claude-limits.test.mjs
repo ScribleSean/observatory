@@ -284,6 +284,8 @@ test('invalid consent markers do not grant consent', async t => {
     '{"consent":true,"consent":true,"givenAt":"2026-10-14T00:00:00.000Z"}',
     '{"givenAt":"2026-10-14T00:00:00.000Z","consent":false,"consent":true}',
     '{"consent":true,"conse\\u006et":true,"givenAt":"2026-10-14T00:00:00.000Z"}',
+    '{"givenAt":{"x":":"},"consent":true,"givenAt":"2026-10-14T00:00:00.000Z"}',
+    '{"consent":true,"givenAt":"a\\":\\"","givenAt":"2026-10-14T00:00:00.000Z"}',
     ...['2026-13-01T00:00:00.000Z','2026-02-30T00:00:00.000Z','2026-10-14',1,'a,b:c{}','a"b\\c',
       null,{},[]].map(givenAt=>JSON.stringify({consent:true,givenAt})),
     ...[false,1,'true'].map(consent=>JSON.stringify({consent,givenAt:'2026-10-14T00:00:00.000Z'})),
@@ -512,6 +514,9 @@ test('consent parser accepts canonical dates and escaped member names',()=>{
   for(const givenAt of ['0001-01-01T00:00:00.000Z','9999-12-31T23:59:59.999Z','2024-02-29T12:34:56.789Z'])
     assert.equal(parseLimitsConsentMarker(JSON.stringify({givenAt,consent:true})),true);
   assert.equal(parseLimitsConsentMarker(JSON.stringify({consent:true,givenAt:'0000-12-31T23:59:59.999Z'})),false);
+  assert.equal(parseLimitsConsentMarker('{"consent":true,"givenAt":"2026-10-14T00:00:00.000\\u005a"}'),true);
+  for(const givenAt of ['2026-10-14T24:00:00.000Z','2026-10-14T00:00:60.000Z'])
+    assert.equal(parseLimitsConsentMarker(JSON.stringify({consent:true,givenAt})),false);
   assert.equal(parseLimitsConsentMarker('{"conse\\u006et":true,"givenAt":"2026-10-14T00:00:00.000Z"}'),true);
 });
 
