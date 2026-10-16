@@ -65,6 +65,6 @@ internal sealed class ShellBridgeHost(
     public IBridgePairingSession CreatePairingSession() => new BridgePairingSession(runtime);
     public Task DisconnectPairing() => collector.DisconnectPairing();
     public Task PreparePairingRepair() => collector.PreparePairingRepair();
-    public Task<BridgeScriptResult> RunScript(ProcessStartInfo start) => BridgeProcesses.Run(start);
+    public Task<BridgeScriptResult> RunScript(ProcessStartInfo start, string? input = null) => BridgeProcesses.Run(start, input);
     public Task<string> ReadTailscaleStatus() => TailscaleReadiness.ReadStatus(runtime);
 }
