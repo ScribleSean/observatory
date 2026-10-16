@@ -204,12 +204,13 @@ private func bridgeRun(resources: URL, runtime: URL, script: String, arguments: 
     }.value
 }
 
-private func bridgeConsent(_ data: Data) throws -> Bool {
+// The switch shows only the consent.json marker because the separately installed status line bridge keeps consent given after the switch is turned off.
+private func bridgeSwitchConsent(_ data: Data) throws -> Bool {
     guard data.count <= 4096, let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
           Set(object.keys) == ["given", "consentMarker", "statusLine"],
           object.values.allSatisfy({ ($0 as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } == true }),
-          let given = object["given"] as? Bool else { throw CocoaError(.fileReadCorruptFile) }
-    return given
+          let consentMarker = object["consentMarker"] as? Bool else { throw CocoaError(.fileReadCorruptFile) }
+    return consentMarker
 }
 
 @MainActor
@@ -472,7 +473,7 @@ final class MacBridgeHost: BridgeHost {
     }
     private func readConsent(arguments: [String]) async throws -> Bool {
         guard let resources else { throw CocoaError(.fileReadNoSuchFile) }
-        return try bridgeConsent(await bridgeRun(resources: resources, runtime: store.runtime, script: "claude-limits-consent.mjs",
+        return try bridgeSwitchConsent(await bridgeRun(resources: resources, runtime: store.runtime, script: "claude-limits-consent.mjs",
                                                 arguments: arguments + ["--runtime", "<runtime>"], timeout: 20))
     }
     private func readSharing() async -> [String: QuotaSharingStatus]? {
@@ -690,8 +691,14 @@ func runBridgeActionSelfTests() {
         precondition(bridgePairingFiles(runtime: runtime) == ("paired", "tls"))
         try! Data().write(to: folder.appendingPathComponent("revoked"))
         precondition(bridgePairingFiles(runtime: runtime) == ("unpaired", "none"))
-        precondition((try? bridgeConsent(Data(#"{"given":true,"consentMarker":false,"statusLine":true}"#.utf8))) == true)
-        precondition((try? bridgeConsent(Data(#"{"given":1,"consentMarker":false,"statusLine":true}"#.utf8))) == nil)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":false,"statusLine":true}"#.utf8))) == false)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":true,"statusLine":false}"#.utf8))) == true)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":true,"statusLine":true}"#.utf8))) == true)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":false,"consentMarker":false,"statusLine":false}"#.utf8))) == false)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":1,"consentMarker":false,"statusLine":true}"#.utf8))) == nil)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":"yes","statusLine":false}"#.utf8))) == nil)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":true}"#.utf8))) == nil)
+        precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":true,"statusLine":false,"extra":true}"#.utf8))) == nil)
         precondition((try? BridgePairingSession(factory: { throw CocoaError(.fileReadUnknown) }, ended: { _ in preconditionFailure() })) == nil)
         var cacheFinished = false
         Task { @MainActor in
