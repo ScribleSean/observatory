@@ -268,7 +268,8 @@ class KernelVerificationTests(unittest.TestCase):
             sibling = ancestor.with_name("swap")
             sibling.mkdir(mode=0o700)
             swap(sibling, ancestor)
-            swap(sibling, ancestor)
+            # Keep the ancestor path as the swap target both times.
+            swap(ancestor, sibling)
         self.verify_action(action, allowed=False)
 
     def test_private_file_churn_refuses(self):
