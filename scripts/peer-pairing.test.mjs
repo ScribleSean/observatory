@@ -55,7 +55,7 @@ test('linked pairing file is rejected without reading its target', {skip:process
   await symlink(path.join(other,'private.json'),file);await assert.rejects(readPairing(runtime));
 });
 // On hosted Windows runners the first paired collection phase took 8 s to 21 s across 61 jobs (median about 15 s).
-// Each paired collector run makes about 23 serial private-folder checks and each one starts PowerShell, so each phase allows 60 s.
+// Each paired collector run makes 23 serial private-folder checks (counted on Windows CI run 38856761302) and each one starts PowerShell, so each phase allows 60 s.
 const lifecyclePhaseTimeout=60000;
 test('normal native CLI loads pairing, publishes local state and merges a validated peer',
   {skip:!['darwin','win32'].includes(process.platform),timeout:5*lifecyclePhaseTimeout},async t=>{
