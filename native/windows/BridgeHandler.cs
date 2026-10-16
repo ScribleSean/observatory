@@ -2257,6 +2257,8 @@ internal sealed class BridgeHandler : IDisposable
             validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-13-01T00:00:00.000Z"),
             validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-02-30T00:00:00.000Z"),
             validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-10-14"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-10-14T24:00:00.000Z"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-10-14T00:00:60.000Z"),
             validConsent.Replace("\"2026-10-14T00:00:00.000Z\"", "1"),
             "\ufeff" + validConsent, "[]", "{bad", new string(' ', 4097),
             "{\"consen\\u0074\":true,\"consent\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}" })
@@ -2268,6 +2270,10 @@ internal sealed class BridgeHandler : IDisposable
         File.WriteAllText(consent, validConsent.Replace("2026-10-14", "0000-02-29")); InvalidConsent("Year zero consent");
         File.WriteAllText(consent, validConsent.Replace("2026-10-14", "0001-01-01"));
         Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Year one consent");
+        File.WriteAllText(consent, validConsent.Replace("000Z", "000\\u005a"));
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Escaped givenAt consent");
+        File.WriteAllText(consent, validConsent.Replace("2026-10-14T00:00:00.000Z", "9999-12-31T23:59:59.999Z"));
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Year 9999 consent");
         File.WriteAllText(consent, validConsent.Replace("2026-10-14", "2024-02-29"));
         Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Leap day consent");
         File.WriteAllText(consent, validConsent);
