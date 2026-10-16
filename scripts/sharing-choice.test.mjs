@@ -1,10 +1,13 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
+import {writeFileSync,unlinkSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
 import fs from 'node:fs/promises';
 import {syncBuiltinESMExports} from 'node:module';
 import {mkdtemp,realpath,rm,lstat,readFile,writeFile,symlink,chmod,unlink,mkdir,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {chooseSharing,applySharingChoice,readSharingChoice,clearSharingChoice,markSharingChoiceApplied} from './sharing-choice.mjs';
@@ -20,8 +23,16 @@ import {attachQuotaSync} from './quota-sync.mjs';
 import {collectProviderTokenSources} from './provider-token-sync.mjs';
 const now=Date.now(),channels=['codex-limits','claude-code-tokens'];
 const filename=runtime=>path.join(runtime,'private-sync/sharing-choice.json');
+// macOS and other non-Windows platforms use the repository folder because the macOS
+// private-path check compares every ancestor's metadata before and after.
+// Windows keeps the temp folder because CI places it on the account volume and
+// the Windows check does not compare timestamps.
+const runtimeRoot=process.platform==='win32'?tmpdir():fileURLToPath(new URL('../.test-runtime/',import.meta.url));
+if(process.platform!=='win32')await mkdir(runtimeRoot,{recursive:true,mode:0o700});
+const runtimeBase=await realpath(await mkdtemp(path.join(runtimeRoot,'sharing-choice-')));
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 async function fixture(t,paired=true) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-choice-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-choice-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const pair=createPairingConfigurations().Mac;
   if(paired)await initializePairing(runtime,pair);
@@ -123,6 +134,34 @@ for(const revoke of [false,true])test(`${revoke?'revocation':'choosing false'} d
   await assert.rejects(lstat(filename(runtime)),{code:'ENOENT'});
   assert.equal((await readSharingChoice(runtime,now)).chosen,false);
   await clearSharingChoice(runtime);await controls(runtime);
+});
+test('revocation succeeds while other processes change the system temp folder',async t=>{
+  const {runtime}=await fixture(t);
+  const churnFile=path.join(tmpdir(),`observatory-choice-churn-${randomUUID()}`);
+  let churnIterations=0,churnError;
+  const timer=setInterval(()=>{
+    try {
+      writeFileSync(churnFile,'synthetic',{mode:0o600,flag:'wx'});
+      unlinkSync(churnFile);
+      churnIterations++;
+    } catch(error) {churnError=error;clearInterval(timer);}
+  },1);
+  try {
+    await chooseSharing(runtime,{enabled:true});await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+    for(const channel of channels)await applySharingChoice(runtime,channel,now);
+    await revokePairing(runtime);
+    assert.equal((await readQuotaState(runtime,now)).sharing.enabled,false);
+    const db=new DatabaseSync(path.join(runtime,'private-sync/provider-tokens.sqlite'));
+    try {assert.equal(JSON.parse(db.prepare('SELECT record FROM provider_token_state').get().record).generation,null);}finally{db.close();}
+    await assert.rejects(lstat(filename(runtime)),{code:'ENOENT'});
+    assert.equal((await readSharingChoice(runtime,now)).chosen,false);
+    await clearSharingChoice(runtime);await controls(runtime);
+    assert.ifError(churnError);
+    assert.ok(churnIterations>0,'The system temp folder changed during revocation');
+  } finally {
+    clearInterval(timer);
+    await rm(churnFile,{force:true});
+  }
 });
 for(const kind of ['corrupt','oversized','linked','hardlinked','group-readable'])test(`${kind} intent fails closed and apply leaves it intact`,
   {skip:kind==='group-readable' && process.platform==='win32'},async t=>{
