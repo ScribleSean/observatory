@@ -196,26 +196,6 @@ test('process death releases the repair lock without deleting a lock file',async
   await access(path.join(runtime,'private-repair/operation.sqlite'));
 });
 
-// TEMPORARY DIAGNOSTICS (issue 204): does a forced GC release the lock of a live child whose lease frame is unreachable?
-for(const rooted of [false,true])test(`DIAG forced GC in a live lock owner, rooted=${rooted}`,async t=>{
-  const runtime=await fixture(t);
-  const module=new URL('./peer-lock.mjs',import.meta.url).href;
-  const wait=rooted?'new Promise(resolve=>{globalThis.keep=resolve;})':'new Promise(()=>{})';
-  const code=`import {withPeerStateLock} from ${JSON.stringify(module)};
-    await withPeerStateLock(process.argv[1],async()=>{
-      setTimeout(()=>{globalThis.gc();setTimeout(()=>{globalThis.gc();process.stdout.write('DIAG-READY');},100);},0);
-      await ${wait};});`;
-  const child=spawn(process.execPath,['--expose-gc','--input-type=module','-e','setInterval(()=>{},1000);'+code,runtime],{stdio:['ignore','pipe','pipe']});
-  let out='';const ready=new Promise(resolve=>child.stdout.on('data',chunk=>{out+=chunk;if(out.includes('DIAG-READY'))resolve();}));
-  t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
-  await Promise.race([ready,once(child,'exit').then(()=>{throw Error('Lock owner exited');})]);
-  let outcome;
-  try {await withPeerStateLock(runtime,()=>{});outcome='parent-acquired';}
-  catch(error) {outcome='parent-refused '+error.message;}
-  t.diagnostic(`DIAG forced-gc rooted=${rooted} outcome=${outcome} childExit=${child.exitCode} childSignal=${child.signalCode}`);
-  const exited=once(child,'exit');child.kill('SIGKILL');await exited;
-});
-
 test('detached async work cannot inherit a lease after its operation has returned',async t=>{
   const runtime=await fixture(t);let resume,detached;
   await withPeerStateLock(runtime,async()=>{
