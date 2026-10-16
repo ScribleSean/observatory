@@ -328,6 +328,8 @@ internal static class ObservatoryStrings
         internal const string PairJoinConfirm = "Confirm the invitation";
         internal const string PairHostConfirm = "Confirm the peer device";
         internal const string PairLocalReady = "Local device ready";
+        internal const string PairLocalReadyHelp = "This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again. If the other device has closed pairing, make a new invitation there and join with it.";
+        internal const string PairRetry = "Try again";
         internal const string PairAcknowledged = "Peer acknowledged";
         internal const string PairConfigurationReady = "Configuration ready";
         internal const string PairWorking = "Pairing in progress";

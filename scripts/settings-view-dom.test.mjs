@@ -271,6 +271,44 @@ void test('join Confirm posts join confirmation and hides claimed invitation con
   }
 });
 
+const localReadyHelp = 'This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again. If the other device has closed pairing, make a new invitation there and join with it.';
+
+void test('local-ready retries without sharing after a checked confirmation and remains retryable until acknowledged', async t => {
+  const f = await fixture(t, 'awaiting-confirmation');
+  const checkbox = fieldFor(f, 'Share usage records with the paired device');
+  await act(async () => checkbox.click());
+  assert.equal(checkbox.checked, true);
+  await f.click('Confirm');
+  assert.deepEqual(f.last('pairing-join-confirm').args, { sharing: true });
+  await f.answer(f.last('pairing-join-confirm'));
+  f.status.pairing.state = 'local-ready';
+  await refresh(f);
+  assert.ok([...f.container.querySelectorAll('p')].some(node => node.textContent === localReadyHelp));
+  assert.equal(f.button('Try again').disabled, false);
+  assert.equal(f.button('Cancel').disabled, false);
+  const before = f.messages.length;
+  await f.click('Try again');
+  assert.deepEqual(f.messages.slice(before).map(({ action, args }) => ({ action, args })), [
+    { action: 'pairing-join-confirm', args: { sharing: false } },
+  ]);
+  assert.equal(f.button('Try again').disabled, true);
+  await f.answer(f.last('pairing-join-confirm'), { ok: false, code: 'unavailable' });
+  assert.equal(f.button('Try again').disabled, false);
+  assert.ok(f.container.textContent.includes(localReadyHelp));
+  f.status.pairing.state = 'acknowledged';
+  await refresh(f);
+  assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+  assert.ok(!f.container.textContent.includes(localReadyHelp));
+});
+
+for (const state of ['awaiting-confirmation', 'acknowledged', 'configuration-ready', 'paired']) {
+  void test(`pairing ${state} does not show local-ready recovery`, async t => {
+    const f = await fixture(t, state);
+    assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+    assert.ok(!f.container.textContent.includes(localReadyHelp));
+  });
+}
+
 for (const state of ['waiting', 'confirming', 'awaiting-confirmation', 'local-ready', 'acknowledged']) {
   void test(`pairing polls in ${state} and stops when paired`, async t => {
     t.mock.timers.enable({ apis: ['setInterval'] });

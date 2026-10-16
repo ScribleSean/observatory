@@ -309,6 +309,8 @@ export const STRINGS = {
     "pairJoinConfirm": "Confirm the invitation",
     "pairHostConfirm": "Confirm the peer device",
     "pairLocalReady": "Local device ready",
+    "pairLocalReadyHelp": "This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again. If the other device has closed pairing, make a new invitation there and join with it.",
+    "pairRetry": "Try again",
     "pairAcknowledged": "Peer acknowledged",
     "pairConfigurationReady": "Configuration ready",
     "pairWorking": "Pairing in progress",

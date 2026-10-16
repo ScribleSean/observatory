@@ -259,6 +259,10 @@ export function SettingsContent({ status: raw, controller, available = true, bus
         {button(S.claim, () => pairingAction(async c => { try { return await c.pairingJoinClaim(joinText); } finally { onJoinTextChange(''); } }))}
       </>}
       {state === 'awaiting-confirmation' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm(choiceKnown && sharing)))}
+      {state === 'local-ready' && <>
+        <p>{S.pairLocalReadyHelp}</p>
+        {button(S.pairRetry, () => pairingAction(c => c.pairingJoinConfirm(false)))}
+      </>}
       {state && pairedStates.has(state) && <Row>{button(S.disconnect, () => pairingAction(c => c.pairingDisconnect()))}{button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}</Row>}
       {state === 'revoked' && button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}
       {(flow || (state && !terminal.has(state))) && button(S.cancel, () => {
