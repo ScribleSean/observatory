@@ -116,6 +116,11 @@ func bridgeSessionPairingState(session: BridgePairingSession?, maintenance: Bool
 }
 
 @MainActor
+func bridgePairingStartBusy(action: String, session: BridgePairingSession?) -> Bool {
+    session != nil && (action == "pairing-host-defaults" || session?.defaultsOnly == true)
+}
+
+@MainActor
 final class BridgePairingSession {
     private let bridge: DirectPairingBridge
     private let ended: (Bool) -> Void
@@ -468,7 +473,7 @@ final class MacBridgeHost: BridgeHost {
             return
         }
         if ["pairing-host-defaults", "pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action) {
-            if action == "pairing-host-defaults", session != nil {
+            if bridgePairingStartBusy(action: action, session: session) {
                 completion(.busy, nil)
                 return
             }
@@ -479,6 +484,7 @@ final class MacBridgeHost: BridgeHost {
                 guard code == .done else { completion(code, nil); return }
             }
             guard !pairingBlocked, !store.shuttingDown else { completion(.busy, nil); return }
+            guard !bridgePairingStartBusy(action: action, session: session) else { completion(.busy, nil); return }
             let identityOnly = ["pairing-identity-create", "pairing-host-defaults"].contains(action) && session == nil
             if session == nil && ["pairing-host-confirm", "pairing-join-confirm"].contains(action) { completion(.unavailable, nil); return }
             do { try beginSession().perform(action: action, args: args, identityOnly: identityOnly, completion: completion) }
@@ -826,6 +832,21 @@ func runBridgeActionSelfTests() {
         precondition(hostDialogs == 1)
         hostSession.end()
 
+        let startActions = ["pairing-host-defaults", "pairing-identity-create", "pairing-host-start",
+                            "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"]
+        let pendingDefaultsControl = BridgeActionFake()
+        pendingDefaultsControl.delay = true
+        let pendingDefaults = try! BridgePairingSession(factory: { pendingDefaultsControl }, pollInterval: 60) { _ in }
+        pendingDefaults.perform(action: "pairing-host-defaults", args: [:], identityOnly: true, completion: result)
+        precondition(pendingDefaults.defaultsOnly && !pendingDefaults.closed && pendingDefaultsControl.deferred.count == 1)
+        for action in startActions {
+            precondition(bridgePairingStartBusy(action: action, session: pendingDefaults))
+            precondition(!bridgePairingStartBusy(action: action, session: nil))
+        }
+        precondition(pendingDefaultsControl.commands.count == 1 &&
+            NSDictionary(dictionary: pendingDefaultsControl.commands[0]).isEqual(to: ["action": "host-defaults"]))
+        pendingDefaults.end()
+
         for valid in [true, false] {
             let control = BridgeActionFake()
             var stopped = false
@@ -848,6 +869,9 @@ func runBridgeActionSelfTests() {
         }
         let defaultsControl = BridgeActionFake()
         let existingSession = try! BridgePairingSession(factory: { defaultsControl }, pollInterval: 60) { _ in }
+        for action in startActions {
+            precondition(bridgePairingStartBusy(action: action, session: existingSession) == (action == "pairing-host-defaults"))
+        }
         defaultsControl.replies.append(.success(TLSSetupReply(id: 1, status: "ready", invitation: nil, peerCertificateSha256: nil, port: 43128)))
         let stateBeforeDefaults = existingSession.state
         existingSession.perform(action: "pairing-host-defaults", args: [:], completion: result)
