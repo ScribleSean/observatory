@@ -108,13 +108,22 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
       throw failed();
     }
   }
-  function checkReply(reply,check) {
+  function checkReply(reply,check,link) {
     if(object(reply) && Object.hasOwn(reply,'error'))replyFailure='worker error';
     else if(valid(reply) && check(reply))return;
     else if(['exchange','repeat-exchange','exchange-after-restart'].includes(activeStep)) {
       const status=['merged','waiting','unavailable'].includes(reply?.status)?reply.status:'other';
       const transport=['ok','unavailable','not-configured'].includes(reply?.transport)?reply.transport:'other';
-      replyFailure=`status ${status}, transport ${transport}`;
+      replyFailure=`${link===H?'hosting':'joining'} side, status ${status}, transport ${transport}`;
+      const failure=reply?.failure;
+      if(object(failure) && Object.keys(failure).length===2 && Object.hasOwn(failure,'stage') && Object.hasOwn(failure,'code')) {
+        const stage=['connect','tls','response','none'].includes(failure.stage)?failure.stage:'other';
+        const code=['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED','other','none']
+          .includes(failure.code)?failure.code:'other';
+        const elapsed=number(reply.elapsedMs) && reply.elapsedMs>=0 && Number.isSafeInteger(Math.round(reply.elapsedMs/1000))?
+          Math.round(reply.elapsedMs/1000):'other';
+        replyFailure+=`, stage ${stage}, code ${code}, elapsed ${elapsed} s`;
+      }
     } else if(['quota-enable','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep)) {
       const status=['ok','passive','disabled','peer-disabled','unavailable'].includes(reply?.status)?reply.status:'other';
       replyFailure=(object(reply) && Object.hasOwn(reply,'status')?`status ${status}, `:'')+
@@ -124,7 +133,7 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
   }
   async function send(link,action,check,extra={}) {
     const reply=await receive(link,()=>link.send({action,...extra}));
-    checkReply(reply,check);
+    checkReply(reply,check,link);
     return reply;
   }
   async function both(action,check,links=[H,J]) {for(const link of links)await send(link,action,check);}

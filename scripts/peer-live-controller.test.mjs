@@ -5,7 +5,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes,workerArguments} from './peer-live-controller.mjs';
 
-import {parseFixtureArguments} from './peer-live-fixture.test.mjs';
+import {parseFixtureArguments,exchangeFailure} from './peer-live-fixture.test.mjs';
 
 const invitation='observatory-pair:v1:fictional-secret';
 const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','service','publish',
@@ -416,10 +416,69 @@ test('exchange reasons allow only fixed status and transport words at every exch
         assert.equal(await runSequence(run),false);
         const safeStatus=['merged','waiting','unavailable'].includes(status)?status:'other';
         const safeTransport=['ok','unavailable','not-configured'].includes(transport)?transport:'other';
-        assert.ok(run.lines.includes(`step ${step}: failed (status ${safeStatus}, transport ${safeTransport})`));
+        assert.ok(run.lines.includes(`step ${step}: failed (joining side, status ${safeStatus}, transport ${safeTransport})`));
         assert.ok(run.lines.every(line=>!line.includes(invitation)));
       }
     }
+  }
+});
+test('exchange diagnostics name both senders and sanitize every diagnostic field',async()=>{
+  for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'].entries()) {
+    for(const side of ['host','join']) {
+      for(const stage of ['connect','tls','response','none',invitation,{}]) {
+        for(const code of ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED','none','other',invitation,{}]) {
+          let count=0;
+          const run=fakes((role,command)=>command.action==='exchange' && role===side && ++count===index+1?
+            {status:'merged',transport:'unavailable',failure:{stage,code},elapsedMs:1499,private:invitation}:undefined);
+          assert.equal(await runSequence(run),false);
+          const safeStage=typeof stage==='string' && stage!==invitation?stage:'other';
+          const safeCode=typeof code==='string' && code!==invitation?code:'other';
+          assert.deepEqual(run.lines.slice(-3),[
+            `step ${step}: failed (${side==='host'?'hosting':'joining'} side, status merged, transport unavailable, stage ${safeStage}, code ${safeCode}, elapsed 1 s)`,
+            'step cleanup: ok',`result: stopped at ${step}`,
+          ]);
+          assert.equal(run.cleaned,1);
+          assert.ok(run.lines.every(line=>!line.includes(invitation)));
+        }
+      }
+    }
+  }
+});
+test('missing or malformed failure objects omit diagnostics',async()=>{
+  for(const failure of [undefined,null,invitation,[],{}, {stage:'tls'}, {code:'none'},
+    {stage:'tls',code:'none',private:invitation}]) {
+    const run=fakes((role,command)=>command.action==='exchange'?
+      {status:'merged',transport:'unavailable',failure,elapsedMs:invitation}:undefined);
+    assert.equal(await runSequence(run),false);
+    assert.deepEqual(run.lines.slice(-3),[
+      'step exchange: failed (joining side, status merged, transport unavailable)',
+      'step cleanup: ok','result: stopped at exchange',
+    ]);
+  }
+});
+test('elapsed diagnostics round seconds and never print arbitrary values',async()=>{
+  for(const [elapsedMs,expected] of [[0,0],[1500,2],[30000,30],[-1,'other'],[Infinity,'other'],
+    [NaN,'other'],[1e30,'other'],[invitation,'other'],[{},'other'],[undefined,'other']]) {
+    const run=fakes((role,command)=>command.action==='exchange'?
+      {status:'merged',transport:'unavailable',failure:{stage:'response',code:'none'},elapsedMs}:undefined);
+    assert.equal(await runSequence(run),false);
+    assert.equal(run.lines.at(-3),`step exchange: failed (joining side, status merged, transport unavailable, stage response, code none, elapsed ${expected} s)`);
+  }
+});
+test('fixture event mapping identifies the failed stage without network access',()=>{
+  assert.deepEqual(exchangeFailure(),{stage:'none',code:'none'});
+  for(const [events,stage] of [
+    [{socketCreated:false},'none'],
+    [{socketCreated:true},'connect'],
+    [{socketCreated:true,connected:true},'tls'],
+    [{socketCreated:true,connected:true,secureConnected:true},'response'],
+    [{socketCreated:true,connected:true,secureConnected:true,dataReceived:true},'response'],
+  ]) {
+    assert.deepEqual(exchangeFailure(events),{stage,code:'none'});
+    for(const code of ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED'])
+      assert.deepEqual(exchangeFailure({...events,errorSeen:true,errorCode:code}),{stage,code});
+    for(const errorCode of [undefined,null,invitation,{},'none'])
+      assert.deepEqual(exchangeFailure({...events,errorSeen:true,errorCode}),{stage,code:'other'});
   }
 });
 test('quota reasons allow only fixed status words and peer reading presence',async()=>{

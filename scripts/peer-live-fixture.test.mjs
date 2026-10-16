@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
 import net from 'node:net';
+import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {isPairingAddress,encodeInvitation,decodeInvitation} from './peer-invitation.mjs';
 import {initializeDeviceIdentity,readDeviceIdentity} from './peer-device-identity.mjs';
@@ -15,11 +16,19 @@ import {readPairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload} from './peer-store.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
+import {tlsPeerExchange} from './peer-tls-outbound.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 import {syncQuota} from './quota-sync.mjs';
+
+export function exchangeFailure({socketCreated=false,connected=false,secureConnected=false,errorSeen=false,errorCode}={}) {
+  const stage=!socketCreated?'none':!connected?'connect':!secureConnected?'tls':'response';
+  const code=!errorSeen?'none':['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED']
+    .includes(errorCode)?errorCode:'other';
+  return {stage,code};
+}
 
 // Only called with the fixture's owned temporary runtime. No provider is read.
 export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
@@ -139,7 +148,22 @@ async function main(address,port=0,workerLifetime=300) {
       }
       case 'exchange': {
         const pair=await readPairing(runtime);
-        return (await finalizePeerCollection(runtime,{data:[],peer:{status:'ready',payload:payload(pair)}},pair)).peer;
+        const events={socketCreated:false,connected:false,secureConnected:false,dataReceived:false,errorSeen:false};
+        const connect=(...args)=>{
+          const socket=tls.connect(...args);
+          events.socketCreated=true;
+          socket.once('connect',()=>{events.connected=true;});
+          socket.once('secureConnect',()=>{events.secureConnected=true;});
+          socket.once('data',()=>{events.dataReceived=true;});
+          socket.once('error',error=>{events.errorSeen=true;events.errorCode=error.code;});
+          return socket;
+        };
+        const exchangeTLS=(runtime,transport,record)=>tlsPeerExchange(runtime,transport,record,{connect});
+        const started=performance.now(),now=Date.now(),previous=[];
+        const result={data:[],peer:{status:'ready',payload:payload(pair)}};
+        const reply=(await finalizePeerCollection(runtime,result,pair,previous,now,{exchangeTLS})).peer;
+        if(reply.transport==='ok')return reply;
+        return {...reply,failure:exchangeFailure(events),elapsedMs:Math.round((performance.now()-started)/100)*100};
       }
       case 'revoke': await revokePairing(runtime);return {status:'revoked'};
       case 'quota-enable': case 'quota-status': case 'quota-disable': case 'quota-exchange':
