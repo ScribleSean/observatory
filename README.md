@@ -53,9 +53,11 @@ An interactive demo with fictional sample data is built from the same pages. Its
 
 On first launch the app opens a setup screen that asks which sources to read. Every source starts off, and nothing is collected until you finish setup. You can change the sources later in Settings. See the [guide](docs/GUIDE.md) and [source coverage](docs/SOURCE-COVERAGE.md).
 
+If you used a development build from before the app was renamed to Observatory, move its data before you open the new app for the first time. The install guides describe the steps.
+
 ## Pairing a second device
 
-Pairing a Mac and a Windows PC is optional, and a single device gets the complete app. To pair, install [Tailscale](https://tailscale.com/) on both devices and sign in to the same account. Then copy an invitation in Settings on the first device, paste it in Settings on the second, and confirm the pairing on both devices. Tailscale is used only to reach the other device. Trust comes from the invitation, and records travel directly between the two devices over an encrypted connection. Sharing Codex limits or Claude Code tokens with the other device needs consent on both devices. See the [guide](docs/GUIDE.md#pair-two-devices).
+Pairing a Mac and a Windows PC is optional, and a single device gets the complete app. To pair, install [Tailscale](https://tailscale.com/) on both devices and sign in to the same account. Then copy an invitation in Settings on the first device, paste it in Settings on the second, and confirm the pairing on both devices. Tailscale is used only to reach the other device. Trust comes from the invitation, and records travel directly between the two devices over an encrypted connection. Sharing Codex limits or Claude Code tokens with the other device needs consent on both devices. The devices connect on TCP port 43128 by default. If your tailnet's access rules restrict traffic, allow that port between your own two devices. The first time a device listens for the other one, the Mac firewall (when it is on) or Windows Firewall may ask whether to allow the app's bundled `node` runtime, and you need to allow it. See the [guide](docs/GUIDE.md#pair-two-devices).
 
 ## Data and privacy
 
@@ -78,7 +80,7 @@ See [private sync](docs/PRIVATE-SYNC.md) and [security](SECURITY.md).
 
 - Builds are not signed by an identified developer, and there are no automatic updates. Check for updates in the panel says that updates are not available in this build. To update, download the newer release and replace the app as the install guide describes.
 - The Mac app runs only on Apple Silicon with macOS 14 or later. The Windows app runs only on x64. There is no Linux app, and WSL and Ubuntu tracking are out of scope. iPhone integration is later work and is not implemented.
-- Claude Code limits are read only after you turn them on in Settings and accept the notes shown there. They are account-wide and are not sent to a paired device. When a new reading cannot be taken, the app shows the earlier reading with the time it was observed.
+- Claude Code limits are read only after you turn them on in Settings and accept the notes shown there. They are read by Claude Code's own usage command with its installed sign-in. They are account-wide and are not sent to a paired device. If Claude Code reports no limits for the account, they show as Unknown. When a new reading cannot be taken, the app shows the earlier reading with the time it was observed.
 - Screen time needs ActivityWatch on each device you want to track. Observatory does not install it.
 - Collection runs every five minutes while the app is running.
 - Days are counted in the America/New_York time zone on every device.

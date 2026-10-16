@@ -54,15 +54,17 @@ Settings offers four skins (Sage, Almanac, Instrument and Amber CRT) and an appe
 Pairing a Mac and a Windows PC is optional. Each device works alone without it.
 
 1. Install [Tailscale](https://tailscale.com/) on both devices and sign in to the same account. Observatory uses the installed Tailscale client only to reach the other device. It does not include or configure Tailscale.
-2. On both devices, open Settings, then Devices and sharing, and choose Check Tailscale. It should read "Tailscale is running."
-3. On the first device, choose Pair a device, then Host on this device. If the app asks, choose Create device identity first. Check this device's address and sync port, which the app fills in from Tailscale where it can, and choose Start.
-4. Copy the invitation. Share it privately, because clipboard managers may keep copies. It expires within ten minutes.
-5. On the second device, choose Pair a device, then Join with an invitation. Paste the invitation and choose Claim.
-6. The first device shows the second device's fingerprint, address and port. Check them and choose Confirm.
-7. The second device asks you to confirm too. Choose Confirm there.
-8. Choose what to share with the other device, either while confirming or later under Sharing. Sharing Codex limits or Claude Code tokens needs consent on both devices.
+2. Make sure your tailnet lets the two devices reach each other on TCP port 43128, the default sync port, in both directions. Tailscale's default access policy allows all traffic between devices in a tailnet, so this needs no change unless you have restricted it. If you have, add a rule in the tailnet policy that allows `tcp:43128` between your own two devices.
+3. On both devices, open Settings, then Devices and sharing, and choose Check Tailscale. It should read "Tailscale is running."
+4. On the first device, choose Pair a device, then Host on this device. If the app asks, choose Create device identity first. Check this device's address and sync port, which the app fills in from Tailscale where it can, and choose Start. If the app says the port is in use, choose another port.
+5. Copy the invitation. Share it privately, because clipboard managers may keep copies. It expires within ten minutes.
+6. On the second device, choose Pair a device, then Join with an invitation. Paste the invitation and choose Claim.
+7. The first device shows the second device's fingerprint, address and port. Check them, tick Share usage records with the paired device if you want to share, and choose Confirm.
+8. The second device asks you to confirm too. Tick the same box there if you want to share, and choose Confirm.
 
-The devices then exchange sanitized records directly over an encrypted connection after each collection. Disconnect in Settings on either device ends the pairing. Windows Firewall may ask whether the bundled `node.exe` may listen on the Tailscale network. Allow it only for that network.
+Codex limits and Claude Code tokens are exchanged only while both devices have chosen to share. Each one starts once that device has a recent reading of it. You can change the choice later under Sharing, and turning it off on either device stops the exchange. The devices then exchange sanitized records directly over an encrypted connection after each collection. Disconnect in Settings on either device ends the pairing.
+
+The first time a device listens for the other one, its firewall may ask whether to allow the bundled `node` runtime. On a Mac with the firewall on, choose Allow. See [the Mac guide](MAC.md#pairing-and-the-mac-firewall) and [the Windows guide](WINDOWS.md#pairing-and-windows-firewall).
 
 Pairings made over SSH by earlier builds keep working. [Pairing maintenance](PAIRING-MAINTENANCE.md) describes that route, and [local pairing](LOCAL-PAIRING.md) records the earlier direct-connection tests.
 
@@ -79,6 +81,16 @@ Dates use America/New_York on every device. Week covers the seven calendar days 
 The API-equivalent estimate uses standard short-context list prices from the price table in `native/prices.json`, which is taken from [LiteLLM's open price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json). The app shows the date the table was last checked and never fetches prices. A maintainer refreshes the table by hand with `node scripts/price-refresh.mjs --write`, which prints the changes before saving. The estimate is a hypothetical token-price scenario, not a bill or a subscription savings claim. A model with no entry in the table is left out and its estimate shows Unknown. Prices are looked up by exact model name, so a dated name or a `-latest` name also shows Unknown unless the table lists it. Claude model names the collector does not recognise, including Claude Fable, are counted under `unknown` and stay unpriced. Long-context premiums, Fast mode, tool charges and unreported cache writes are not included. The table's cache-write price is the standard short-lived cache rate, so longer cache writes are underestimated.
 
 Claude Code reports its own session cost to a status line command. Observatory shows that cost as "Session cost (estimate)", separate from the API-equivalent estimate, only when its status line bridge is installed. A release does not install the bridge, and turning on Claude Code limits in Settings does not add it, so an installed release shows Unknown for session cost.
+
+### Claude Code status line bridge
+
+The bridge is optional. It replaces Claude Code's status line with a command that records the session cost and the limit readings Claude Code passes to it in Observatory's data folder. It changes Claude Code's own settings file, so nothing installs it automatically. From a checkout, with Node.js 22.13 or later, name the data folder and give consent explicitly:
+
+```sh
+node scripts/claude-statusline-install.mjs install --runtime "<data folder>" --consent
+```
+
+The data folder is `$HOME/Library/Application Support/Observatory` on a Mac and `%LOCALAPPDATA%\Observatory` on Windows. Install saves your earlier status line and a copy of the settings file, and it stops without writing if Claude Code changes the settings file at the same time. `status` reports whether the bridge is installed. `uninstall` with the same `--runtime` puts the earlier status line back. The bridge writes only to the folder named in its command, so after moving data from Workspace Observatory, run install again with the new folder. If the record that install saved in the data folder is no longer exactly the file it wrote, a reinstall or uninstall stops before writing anything, and the bridge prints its own line instead of the earlier one. While the bridge is installed it keeps recording, even with Claude Code limits turned off in Settings, until you uninstall it.
 
 Codex tokens and screen time for All add the two paired devices only after the collector confirms that no session is counted twice. Claude Code tokens are shown per device. Dictation stays per device because synced history may overlap.
 

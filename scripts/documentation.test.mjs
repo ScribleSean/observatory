@@ -40,6 +40,8 @@ test('README states the native app scope and release limits',async()=>{
   assert.match(readme,/Builds are unsigned/);
   assert.match(readme,/copy an invitation in Settings on the first device, paste it in Settings on the second/);
   assert.match(readme,/Tailscale/);
+  assert.match(readme,/43128/);
+  assert.match(readme,/If Claude Code reports no limits for the account, they show as Unknown/);
   assert.match(readme,/WSL and Ubuntu tracking are out of scope/);
   assert.match(readme,/iPhone integration is later work/);
   assert.match(readme,/href="docs\/MAC\.md"/);
@@ -54,6 +56,10 @@ test('guide leads with native setup and invitation pairing',async()=>{
   const guide=await readFile(path.join(root,'docs/GUIDE.md'),'utf8');
   assert.ok(guide.indexOf('## Native app setup') !== -1 && guide.indexOf('## Native app setup') < guide.indexOf('## Try the demo'));
   assert.match(guide,/^## Pair two devices$/m);
+  assert.match(guide,/tcp:43128/);
+  assert.match(guide,/^### Claude Code status line bridge$/m);
+  assert.ok(guide.includes('claude-statusline-install.mjs install --runtime'));
+  assert.ok(guide.includes('Share usage records with the paired device'));
   assert.doesNotMatch(guide,/Reload snapshot/);
   assert.doesNotMatch(guide,/legacy fallback/i);
   assert.doesNotMatch(guide,/## Legacy developer appendix: SSH hub/);
@@ -67,15 +73,21 @@ test('platform guides lead with release installation and retain build instructio
     assert.equal(contents.split(/\r?\n/).find(line=>line.startsWith('## ')),'## Install a release',`${name}: first section`);
     const install=contents.indexOf('## Install a release'),build=contents.indexOf('## Build from source');
     assert.ok(install !== -1 && build !== -1 && install < build,`${name}: install before build`);
+    assert.ok(contents.indexOf('### Move from Workspace Observatory') > install && contents.indexOf('### Move from Workspace Observatory') < build,`${name}: migration between install and build`);
     for(const text of ['SHA256SUMS.txt','Observatory-<version>-macos-arm64.zip','Observatory-<version>-windows-x64-setup.exe'])
       assert.ok(contents.includes(text),`${name}: missing ${text}`);
     assert.doesNotMatch(contents,/Reload snapshot/,`${name}: retired reload wording`);
     assert.doesNotMatch(contents,/--legacy-dashboard/,`${name}: retired dashboard flag`);
     const required=name==='docs/MAC.md'
-      ? ['shasum -a 256','~/Library/Application Support/Observatory','Open Anyway','MacOSX26.5.sdk','env -i HOME=']
-      : ['Get-FileHash','%LOCALAPPDATA%\\Observatory','Run anyway','Win32_Process'];
+      ? ['shasum -a 256','~/Library/Application Support/Observatory','Open Anyway','MacOSX26.5.sdk','env -i HOME=',
+        '### Move from Workspace Observatory','node native/mac/migrate-data.mjs copy --confirm-app-quit',
+        'node scripts/peer-transport-rename.mjs --runtime','### Pairing and the Mac firewall','Choose Allow','43128']
+      : ['Get-FileHash','%LOCALAPPDATA%\\Observatory','Run anyway','Win32_Process',
+        '### Move from Workspace Observatory','migrate-data.ps1 -Action copy -ConfirmAppQuit',
+        'Uninstall Workspace Observatory','### Pairing and Windows Firewall','43128'];
     for(const text of required)assert.ok(contents.includes(text),`${name}: missing ${text}`);
     if(name==='docs/WINDOWS.md')assert.match(contents,/packaged app such as Claude desktop/,`${name}: independent launch guidance`);
+    if(name==='docs/WINDOWS.md')assert.ok(contents.indexOf('Uninstall Workspace Observatory') > contents.indexOf('migrate-data.ps1 -Action copy -ConfirmAppQuit') && contents.indexOf('Uninstall Workspace Observatory') < contents.indexOf('Install Observatory as described above'),`${name}: copy before uninstall before install`);
   }
 });
 test('public guides follow the writing rules',async()=>{

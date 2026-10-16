@@ -81,6 +81,12 @@ Settings, snapshots and history live in `%LOCALAPPDATA%\Observatory`. The app ke
 
 Original records stay with the tools that wrote them: ActivityWatch, Codex, Claude Code and Wispr Flow. Observatory only reads them.
 
+### Pairing and Windows Firewall
+
+Pairing is optional. The steps are in the [guide](GUIDE.md#pair-two-devices). Pairing listens for the other device on TCP port 43128 by default, on this PC's Tailscale address, through the `node.exe` bundled in the install folder.
+
+Windows Defender Firewall may ask whether to allow `node.exe` the first time the PC listens for the other device. That happens when the PC hosts pairing, or when its sync service starts after pairing. Allow it, and limit it to the network type Windows shows for the Tailscale connection. Allowing it can need an administrator's approval. If the firewall blocks it without asking, the other device's connection times out, and an inbound rule for that `node.exe` or for TCP port 43128 on the Tailscale connection is needed.
+
 ### Replace with a newer release
 
 There are no automatic updates. Check for updates in the panel or the tray menu says that updates are not available in this build. The installer refuses to install over an existing copy, so replace it in this order:
@@ -92,11 +98,32 @@ There are no automatic updates. Check for updates in the panel or the tray menu 
 
 The new copy opens with your settings and history and does not show the setup screen again.
 
-Builds up to 0.3.14 build 41 were named Workspace Observatory and kept their data in `%LOCALAPPDATA%\Workspace Observatory`. The renamed app does not read that folder and installs beside the earlier app instead of replacing it. Moving that data is a one-time step run from a checkout with `native/windows/migrate-data.ps1`. It copies the data into the new folder and keeps the earlier folder and the earlier app until you remove them.
+### Move from Workspace Observatory
+
+Development builds made before the rename were called Workspace Observatory and kept their data in `%LOCALAPPDATA%\Workspace Observatory`. No release was published under that name. The renamed app does not read the earlier folder, and an earlier build never offers the renamed app as an update. The renamed installer keeps the earlier uninstall registration, so it refuses to install while the earlier version is installed. If you have an earlier build and want to keep its history, settings and pairing, move the data once, before you start Observatory for the first time. The copy refuses to run once the new folder holds data.
+
+You need a checkout of the release's source revision. From the checkout, in this order:
+
+1. Back up `%LOCALAPPDATA%\Workspace Observatory` and check that the backup matches.
+2. Quit Workspace Observatory from its tray icon, and close any Claude Code session that shows the Observatory status line.
+3. In PowerShell, without administrator rights, check what will be copied, then copy it:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File native\windows\migrate-data.ps1 -Action status
+   powershell -NoProfile -ExecutionPolicy Bypass -File native\windows\migrate-data.ps1 -Action copy -ConfirmAppQuit
+   ```
+
+   `-ExecutionPolicy Bypass` applies only to that one PowerShell process. The copy re-creates each private folder with its restricted permissions, checks every file by SHA-256 and never changes the earlier folder. It refuses while the earlier app or the status line bridge is running, and each refusal prints `Migration refused` with a stage and a reason. If Start at login was on, it records that, turns off the earlier login entry, and the renamed app turns Start at login on again the first time it runs.
+4. Uninstall Workspace Observatory from Settings, Apps, Installed apps. Your data folders are kept.
+5. Install Observatory as described above and start it from the Start menu. It should open with your history and settings, not the setup screen.
+6. If a Mac reaches this PC over the earlier SSH pairing, update the Mac next, as the [Mac guide](MAC.md#move-from-workspace-observatory) describes. The copy in step 3 recorded the new paths the Mac needs.
+7. If you installed the Claude Code status line bridge, install it again for the new folder, as the [guide](GUIDE.md#claude-code-status-line-bridge) describes.
+
+Keep the earlier data folder and the backup until you are sure nothing is missing.
 
 ### Remove
 
-1. If you turned on Claude Code limits, turn them off in Settings, so that no record of your consent stays in the data folder you may keep.
+1. If you turned on Claude Code limits, turn them off in Settings, so that no record of your consent stays in the data folder you may keep. If you installed the status line bridge, remove it as the [guide](GUIDE.md#claude-code-status-line-bridge) describes.
 2. If Start at login is on, turn it off in Settings under Startup.
 3. Right-click the tray icon and choose Quit Observatory.
 4. Uninstall Observatory from Settings, Apps, Installed apps.

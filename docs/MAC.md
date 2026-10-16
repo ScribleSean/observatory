@@ -70,6 +70,12 @@ Settings, snapshots and history live in `~/Library/Application Support/Observato
 
 Original records stay with the tools that wrote them: ActivityWatch, Codex, Claude Code and Wispr Flow. Observatory only reads them.
 
+### Pairing and the Mac firewall
+
+Pairing is optional. The steps are in the [guide](GUIDE.md#pair-two-devices). Pairing listens for the other device on TCP port 43128 by default, on this Mac's Tailscale address.
+
+If the macOS firewall is on, macOS asks whether `node` may accept incoming network connections the first time the Mac listens for the other device. That happens when the Mac hosts pairing, or when its sync service starts after pairing. `node` is the runtime bundled inside `Observatory.app`. Because it is signed ad hoc, the firewall does not allow it automatically as it does for apps from identified developers. Choose Allow. If you choose Deny, the other device cannot reach this Mac until you allow `node` in System Settings, Network, Firewall, Options. A new copy of the app can ask again.
+
 ### Start the app from a terminal
 
 Open the app from Applications for normal use. If you start it from a terminal that runs inside another tool's session, such as Claude Code or Claude desktop, the app inherits that session's environment. Start it with a minimal environment instead:
@@ -91,11 +97,37 @@ There are no automatic updates. Check for updates in the panel or the app menu s
 
 Your data folder is kept, so the new copy opens with your settings and history and does not show the setup screen again.
 
-Builds up to 0.3.14 build 41 were named Workspace Observatory and kept their data in `~/Library/Application Support/Workspace Observatory`. The renamed app does not read that folder. Moving that data is a one-time developer step, described under [Moving data from Workspace Observatory](#moving-data-from-workspace-observatory).
+### Move from Workspace Observatory
+
+Development builds made before the rename were called Workspace Observatory and kept their data in `~/Library/Application Support/Workspace Observatory`. No release was published under that name. The renamed app does not read the earlier folder, and an earlier build never offers the renamed app as an update. If you have an earlier build and want to keep its history, settings and pairing, move the data once, before you open `Observatory.app` for the first time. The copy refuses to run once the new folder holds data.
+
+You need a checkout of the release's source revision and Node.js 22.13 or later. From the checkout, in this order:
+
+1. Back up `~/Library/Application Support/Workspace Observatory` and check that the backup matches.
+2. Quit Workspace Observatory from its menu-bar icon, and close any Claude Code session that shows the Observatory status line.
+3. If this Mac is paired with a PC that also runs an earlier build, move the PC's data first, as the [Windows guide](WINDOWS.md#move-from-workspace-observatory) describes.
+4. Check what will be copied, then copy it:
+
+   ```sh
+   node native/mac/migrate-data.mjs status
+   node native/mac/migrate-data.mjs copy --confirm-app-quit
+   ```
+
+   The copy checks every file against the earlier folder by SHA-256 and never changes the earlier folder. It refuses while the earlier app, its collector or the status line bridge is running.
+5. If the Mac reaches the PC over the earlier SSH pairing, update the saved Windows paths, with both apps quit:
+
+   ```sh
+   node scripts/peer-transport-rename.mjs --runtime "$HOME/Library/Application Support/Observatory"
+   ```
+
+   It reads the PC's migration record over the saved SSH connection and changes all three saved Windows paths or none.
+6. If you installed the Claude Code status line bridge, install it again for the new folder, as the [guide](GUIDE.md#claude-code-status-line-bridge) describes.
+7. Install `Observatory.app` as described above and open it. It should open with your history and settings, not the setup screen. If Start at login was on, check it in Settings under Startup.
+8. Do not open Workspace Observatory again, because it would keep writing to the earlier folder. Move `Workspace Observatory.app` to the Trash once the new app works. Keep the earlier data folder and the backup until you are sure nothing is missing.
 
 ### Remove
 
-1. If you turned on Claude Code limits, turn them off in Settings, so that no record of your consent stays in the data folder you may keep.
+1. If you turned on Claude Code limits, turn them off in Settings, so that no record of your consent stays in the data folder you may keep. If you installed the status line bridge, remove it as the [guide](GUIDE.md#claude-code-status-line-bridge) describes.
 2. If Start at login is on, turn it off in Settings under Startup.
 3. Right-click the menu-bar icon and choose Quit Observatory.
 4. Move `Observatory.app` to the Trash.
@@ -162,9 +194,9 @@ DMG creation is bounded to two minutes. macOS may request authorization. Handle 
 
 `native/mac/replace-app.mjs` replaces an installed app with a staged candidate beside it, after both package receipts and signatures are checked and no copy of the app is running. The previous bundle is kept. Back up the data folder and match it by checksum before replacing an app you use. See [desktop updates](UPDATES.md).
 
-### Moving data from Workspace Observatory
+### Installing over Workspace Observatory from a checkout
 
-`node native/mac/migrate-data.mjs status` reports whether `~/Library/Application Support/Workspace Observatory` has been copied to `~/Library/Application Support/Observatory`. With every copy of the app quit, `node native/mac/migrate-data.mjs copy --confirm-app-quit` copies it, checks every file by SHA-256 and never changes the earlier folder. Keep the earlier folder until the new app has run with your data. `replace-app.mjs` accepts a one-time install from `Workspace Observatory.app` to `Observatory.app` and keeps the earlier bundle.
+Run the data copy in [Move from Workspace Observatory](#move-from-workspace-observatory) first. `native/install.mjs` and the ActivityWatch helper refuse until the data folder has been copied, and `install.mjs` moves an earlier `~/Applications/Workspace Observatory.app` into the data folder's `Backups` folder. `replace-app.mjs` accepts a one-time install from `Workspace Observatory.app` to `Observatory.app` and keeps the earlier bundle.
 
 ### Independent local collector
 
