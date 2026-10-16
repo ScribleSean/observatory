@@ -444,9 +444,11 @@ test('exchange diagnostics name both senders and sanitize every diagnostic field
           assert.equal(await runSequence(run),false);
           const safeStage=typeof stage==='string' && stage!==invitation?stage:'other';
           const safeCode=typeof code==='string' && code!==invitation?code:'other';
+          const retries=['connect','tls','response','none'].includes(stage) && typeof code==='string' &&
+            code!==invitation && (['connect','tls'].includes(stage) || code!=='none');
           assert.deepEqual(run.lines.slice(-4),[
             `step ${step}: failed (${side==='host'?'hosting':'joining'} side, status merged, transport unavailable, stage ${safeStage}, code ${safeCode}, elapsed 1 s)`,
-            'step cleanup: ok','second exchanges used: 1',`result: stopped at ${step}`,
+            'step cleanup: ok',`second exchanges used: ${retries?1:0}`,`result: stopped at ${step}`,
           ]);
           assert.equal(run.cleaned,1);
           assert.ok(run.lines.every(line=>!line.includes(invitation)));
@@ -463,7 +465,7 @@ test('missing or malformed failure objects omit diagnostics',async()=>{
     assert.equal(await runSequence(run),false);
     assert.deepEqual(run.lines.slice(-4),[
       'step exchange: failed (joining side, status merged, transport unavailable)',
-      'step cleanup: ok','second exchanges used: 1','result: stopped at exchange',
+      'step cleanup: ok','second exchanges used: 0','result: stopped at exchange',
     ]);
   }
 });
@@ -531,13 +533,15 @@ for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'
       const run=fakes((role,command)=>{
         if(role!==side || command.action!==action)return;
         count++;
-        if(count===target)return {status:'unavailable',transport:'unavailable',private:invitation};
+        if(count===target)return {status:'unavailable',transport:'unavailable',private:invitation,
+          failure:{stage:'connect',code:'ETIMEDOUT',...(index===3?{request:'exchange'}:{})},elapsedMs:1000};
         if(count===target+1) {
           assert.equal(run.lines.at(-1),`step ${step}: second exchange (${reason})`);
           if(!passes)return {status:'waiting',transport:'not-configured',private:invitation};
         }
       });
-      const reason=index===3?`${label}, status unavailable, peer reading absent`:`${label}, status unavailable, transport unavailable`;
+      const reason=(index===3?`${label}, status unavailable, peer reading absent`:`${label}, status unavailable, transport unavailable`)+
+        `, stage connect, code ETIMEDOUT${index===3?', request exchange':''}, elapsed 1 s`;
       assert.equal(await runSequence(run),passes);
       const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
       assert.deepEqual(requests[target-1],requests[target]);
@@ -563,7 +567,8 @@ test('counts second requests on both sides across every eligible step',async()=>
     const key=role+action,count=(counts.get(key)??0)+1;
     counts.set(key,count);
     if(action==='exchange' && count%2===1 || action==='quota-exchange' && count===1)
-      return {status:'unavailable',transport:'unavailable'};
+      return {status:'unavailable',transport:'unavailable',
+        failure:{stage:'connect',code:'ETIMEDOUT',...(action==='quota-exchange'?{request:'exchange'}:{})}};
   });
   assert.equal(await runSequence(run),true);
   assert.equal(run.lines.at(-2),'second exchanges used: 8');
@@ -575,7 +580,8 @@ test('quota repeat uses the passing joining reply after a second exchange',async
       if(action!=='quota-exchange')return;
       if(role==='host')return ++hostCount===1?{status:'ok',peerRemaining:70,peerSamples:99}:undefined;
       count++;
-      if(count===1)return {status:'unavailable',peerRemaining:70,peerSamples:100};
+      if(count===1)return {status:'unavailable',peerRemaining:70,peerSamples:100,
+        failure:{stage:'connect',code:'ETIMEDOUT',request:'exchange'}};
       if(count<=3 || (count===4 && repeatSamples===5))return {status:'ok',peerRemaining:70,peerSamples:count===2?4:repeatSamples};
     });
     assert.equal(await runSequence(run),repeatSamples===4);
@@ -639,7 +645,7 @@ test('quota diagnostics report fixed words on either side and reject malformed o
       reason+=`, stage ${safe.stage}, code ${safe.code}, request ${safe.request}, elapsed 2 s`;
     }
     assert.ok(run.lines.includes(`step quota-exchange: failed (${reason})`));
-    assert.ok(run.lines.includes(`step quota-exchange: second exchange (${reason})`));
+    assert.equal(run.lines.includes(`step quota-exchange: second exchange (${reason})`),failure?.stage==='tls');
     assert.ok(run.lines.every(line=>!line.includes(invitation)));
   }
 });
@@ -647,22 +653,22 @@ test('quota diagnostics report fixed words on either side and reject malformed o
 for(const [step,side,action,target] of [
   ['quota-repeat','join','quota-exchange',2],
   ['quota-disable-host','join','quota-exchange',3],
-  ['quota-disable-host','host','quota-exchange',2],
 ])for(const passes of [true,false])test(`${step} ${side} ${action} retries once and ${passes?'continues':'stops'}`,async()=>{
   let count=0;
   const run=fakes((role,command)=>{
     if(role!==side || command.action!==action)return;
     count++;
-    if(count===target || (!passes && count===target+1))return {status:'unavailable'};
+    if(count===target || (!passes && count===target+1))return {status:'unavailable',
+      failure:{stage:'connect',code:'ETIMEDOUT',request:'exchange'},elapsedMs:1000};
   });
   assert.equal(await runSequence(run),passes);
   const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
   assert.deepEqual(requests[target-1],requests[target]);
   const label=side==='host'?'hosting':'joining';
-  assert.ok(run.lines.includes(`step ${step}: second exchange (${label} side, status unavailable, peer reading absent)`));
+  assert.ok(run.lines.includes(`step ${step}: second exchange (${label} side, status unavailable, peer reading absent, stage connect, code ETIMEDOUT, request exchange, elapsed 1 s)`));
   assert.equal(run.lines.at(-2),'second exchanges used: 1');
   if(!passes) {
-    assert.equal(run.lines.at(-4),`step ${step}: failed (${label} side, status unavailable, peer reading absent)`);
+    assert.equal(run.lines.at(-4),`step ${step}: failed (${label} side, status unavailable, peer reading absent, stage connect, code ETIMEDOUT, request exchange, elapsed 1 s)`);
     assert.equal(requests.length,target+1);
     assert.deepEqual(run.commands.at(-1),requests.at(-1));
   }
@@ -738,10 +744,14 @@ for(const [step,side,action,target,reply] of [
   ['quota-repeat','join','quota-exchange',2,{status:'ok',peerRemaining:70,peerSamples:2}],
   ['quota-disable-host','join','quota-exchange',3,{status:'ok',peerRemaining:70,localRemaining:40}],
   ['quota-disable-host','host','quota-exchange',2,{status:'ok',peerRemaining:null,localRemaining:40}],
+  ['quota-disable-host','host','quota-exchange',2,{status:'unavailable',sharing:true,
+    failure:{stage:'connect',code:'ETIMEDOUT',request:'exchange'}}],
 ])test(`${step} on ${side} stops after a correctness failure`,async()=>{
   let count=0;
   const run=fakes((role,command)=>{
-    if(role===side && command.action===action && ++count===target)return reply;
+    if(role===side && command.action===action && ++count===target)return {
+      failure:{stage:'connect',code:'ETIMEDOUT',...(action==='quota-exchange'?{request:'exchange'}:{})},...reply,
+    };
   });
   assert.equal(await runSequence(run),false);
   assert.equal(count,target);
@@ -749,4 +759,42 @@ for(const [step,side,action,target,reply] of [
   assert.equal(run.lines.at(-2),'second exchanges used: 0');
   assert.equal(run.lines.at(-1),`result: stopped at ${step}`);
   assert.equal(run.lines.filter(line=>line.includes(': second exchange (')).length,0);
+});
+
+for(const action of ['exchange','quota-exchange'])test(`${action} requires a well formed connection failure for a further request`,async()=>{
+  const diagnostic=(stage,code)=>({stage,code,...(action==='quota-exchange'?{request:'exchange'}:{})});
+  for(const [failure,eligible] of [
+    [diagnostic('connect','none'),true],
+    [diagnostic('tls','none'),true],
+    [diagnostic('connect','ETIMEDOUT'),true],
+    [diagnostic('response','ECONNRESET'),true],
+    [diagnostic('response','other'),true],
+    [diagnostic('none','ETIMEDOUT'),true],
+    [diagnostic('response','none'),false],
+    [diagnostic('none','none'),false],
+    [undefined,false],[null,false],[[],false],[{},false],
+    [{stage:'connect'},false],[{code:'ETIMEDOUT'},false],
+    [diagnostic({},'ETIMEDOUT'),false],[diagnostic('connect',{}),false],
+    [diagnostic('invalid','ETIMEDOUT'),false],[diagnostic('connect','invalid'),false],
+    [{...diagnostic('connect','ETIMEDOUT'),private:invitation},false],
+    ...(action==='quota-exchange'?[
+      [{stage:'connect',code:'ETIMEDOUT'},false],
+      [{...diagnostic('connect','ETIMEDOUT'),request:{}},false],
+      [{...diagnostic('connect','ETIMEDOUT'),request:'invalid'},false],
+    ]:[]),
+  ]) {
+    let count=0;
+    const run=fakes((role,command)=>{
+      if(role==='join' && command.action===action && ++count===1)
+        return {status:'unavailable',transport:'unavailable',failure};
+    });
+    assert.equal(await runSequence(run),eligible);
+    assert.equal(run.lines.at(-2),`second exchanges used: ${eligible?1:0}`);
+    if(!eligible) {
+      assert.equal(count,1);
+      assert.deepEqual(run.commands.at(-1),{role:'join',command:{action}});
+      assert.equal(run.lines.at(-1),`result: stopped at ${action}`);
+    }
+    assert.equal(run.cleaned,1);
+  }
 });

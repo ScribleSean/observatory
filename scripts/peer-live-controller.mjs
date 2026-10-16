@@ -147,7 +147,14 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
     try {checkReply(reply,check,link);}
     catch (error) {
       const deliveryFailure=action==='exchange'?reply?.transport!=='ok':action==='quota-exchange' && reply?.status==='unavailable';
-      if(!valid(reply) || !deliveryFailure || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep))throw error;
+      const failure=reply?.failure,keys=action==='quota-exchange'?['stage','code','request']:['stage','code'];
+      const connectionFailure=object(failure) && Object.keys(failure).length===keys.length &&
+        keys.every(key=>Object.hasOwn(failure,key)) && ['none','connect','tls','response'].includes(failure.stage) &&
+        ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED','other','none'].includes(failure.code) &&
+        (action!=='quota-exchange' || ['status','exchange','other'].includes(failure.request)) &&
+        (['connect','tls'].includes(failure.stage) || failure.code!=='none');
+      if(activeStep==='quota-disable-host' && link===H)throw error;
+      if(!valid(reply) || !deliveryFailure || !connectionFailure || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep))throw error;
       log(`step ${activeStep}: second exchange (${replyFailure})`);
       secondExchanges++;
       replyFailure=null;
