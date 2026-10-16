@@ -178,7 +178,7 @@ test('join sharing waits for a ready pairing and also records acknowledged succe
   }
 });
 
-async function choiceFixture(t,mode) {
+async function choiceFixture(t,mode,receive=async()=>({status:'local-ready'})) {
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-control-choice-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   await initializePairing(runtime,createPairingConfigurations().Mac);
@@ -187,7 +187,7 @@ async function choiceFixture(t,mode) {
     startHost:async()=>({invitation:invite(),pending:()=>({claimId:'synthetic',peerCertificateSha256:'b'.repeat(64)}),
       status:()=> 'configuration-ready',confirm:async()=>{},cancel:async()=>{}}),
     readRepair:async()=>null,readIdentity:async()=>({}),claim:async()=>({status:'awaiting-confirmation'}),
-    receive:async()=>({status:'local-ready'})});
+    receive});
   t.after(()=>controller.cancel());
   if(mode==='host')await controller.run({action:'host-start',address:'10.0.0.2',port:0});
   else await controller.run({action:'join-claim',invitation:encodeInvitation(invite())});
@@ -219,5 +219,29 @@ for(const sharing of [true,false,undefined])test(`host committed confirmation re
   const {runtime,controller,command}=await choiceFixture(t,'host');
   if(sharing!==undefined)command.sharing=sharing;
   assert.deepEqual(await controller.run(command),{status:'configuration-ready'});
+  assert.equal((await readSharingChoice(runtime)).chosen,sharing===true);
+});
+
+test('join retry records real sharing after a lock timeout',async t=>{
+  let received=0;
+  const {runtime,controller,command}=await choiceFixture(t,'join',async()=>({status:++received===1?'local-ready':'acknowledged'}));
+  let acquired,release;
+  const ready=new Promise(resolve=>{acquired=resolve;}),held=new Promise(resolve=>{release=resolve;});
+  // Start confirmation outside the lock context so it cannot reuse the lease.
+  const locking=withPeerStateLock(runtime,async()=>{acquired();await held;});
+  try {
+    await Promise.race([ready,locking]);
+    assert.deepEqual(await controller.run({...command,sharing:true}),{status:'local-ready'});
+  } finally {release();await locking;}
+  assert.deepEqual(await readSharingChoice(runtime),{version:1,chosen:false,channels:{'codex-limits':'off','claude-code-tokens':'off'}});
+  assert.deepEqual(await controller.run({...command,sharing:true}),{status:'acknowledged'});
+  assert.equal((await readSharingChoice(runtime)).chosen,true);
+  assert.equal(received,2);
+});
+
+for(const sharing of [true,false,undefined])test(`join committed confirmation records real sharing only for true with choice ${sharing}`,async t=>{
+  const {runtime,controller,command}=await choiceFixture(t,'join');
+  if(sharing!==undefined)command.sharing=sharing;
+  assert.deepEqual(await controller.run(command),{status:'local-ready'});
   assert.equal((await readSharingChoice(runtime)).chosen,sharing===true);
 });
