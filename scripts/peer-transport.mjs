@@ -25,9 +25,9 @@ export function validatePeerTransport(value) {
   return Object.fromEntries(fields.map(key=>[key,value[key]]));
 }
 
-function runSSH(args,input) {
+function runSSH(args,input,maxBuffer=17_000_000) {
   return new Promise((resolve,reject)=>{
-    const child=execFile('/usr/bin/ssh',args,{timeout:30000,killSignal:'SIGKILL',maxBuffer:17_000_000},(error,stdout)=>{
+    const child=execFile('/usr/bin/ssh',args,{timeout:30000,killSignal:'SIGKILL',maxBuffer},(error,stdout)=>{
       if(error)reject(Error('Private SSH exchange unavailable'));else resolve(stdout);
     });
     child.stdin.on('error',()=>{});child.stdin.end(input);
@@ -91,4 +91,37 @@ export async function sshPeerRepairReadiness(transport,invoke=runSSH) {
     Object.keys(response).length!==3 || response.status!=='repair-ready' ||
     typeof response.nonce!=='string' || !/^[a-f0-9]{64}$/.test(response.nonce))throw Error('Invalid repair readiness response');
   return response.nonce;
+}
+
+export async function sshMigrationReceipt(transport,invoke=runSSH) {
+  const safe=validatePeerTransport(transport);
+  if(safe.kind!=='ssh-windows')throw Error('Explicit SSH transport required');
+  // The rename helper ships with the collector and owns the checked name literals.
+  const {renameNames}=await import('./peer-transport-rename.mjs');
+  if(path.win32.basename(safe.remoteRuntime).toLowerCase()!==renameNames.legacyDataFolder.toLowerCase())
+    throw Error('Legacy Windows runtime required');
+  const recordPath=path.win32.join(path.win32.dirname(safe.remoteRuntime),renameNames.visibleDataFolder,'observatory-migration.json');
+  const quote=value=>"'"+value.replaceAll("'","''")+"'";
+  const command=`$ErrorActionPreference = 'Stop'
+$running = [bool](Get-Process -Name WorkspaceObservatory -ErrorAction SilentlyContinue)
+$record = $null
+if (Test-Path -LiteralPath ${quote(recordPath)}) {
+  $record = Get-Content -LiteralPath ${quote(recordPath)} -Raw | ConvertFrom-Json
+}
+@{running=$running
+record=$record} | ConvertTo-Json -Compress -Depth 5`;
+  const encoded=Buffer.from(command,'utf16le').toString('base64');
+  const args=['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','PasswordAuthentication=no',
+    '-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8',safe.hostAlias,
+    `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`];
+  const output=await invoke(args,'',65536);
+  if(typeof output!=='string' || Buffer.byteLength(output)>65536)throw Error('Private SSH response limit');
+  let value;
+  try {value=JSON.parse(output);}catch {throw Error('Invalid PC migration response');}
+  if(!value || typeof value!=='object' || Array.isArray(value) || Object.keys(value).length!==2 ||
+    !Object.hasOwn(value,'running') || !Object.hasOwn(value,'record') || typeof value.running!=='boolean')
+    throw Error('Invalid PC migration response');
+  if(value.record===null)throw Error('The PC migration record was not found.');
+  if(!value.record || typeof value.record!=='object' || Array.isArray(value.record))throw Error('Invalid PC migration response');
+  return {...value.record,windowsAppRunning:value.running};
 }

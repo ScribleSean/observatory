@@ -27,7 +27,7 @@ test('invalid root, groups, keys and names are rejected',()=>{
     const symbol=clone();symbol[group][Symbol('extra')]='extra';invalid(symbol);
     for(const key of Object.keys(appNames[group])) {
       const missing=clone();delete missing[group][key];invalid(missing);
-      for(const name of [null,undefined,1,true,{},[], '', ' ', 'x'.repeat(81),'a/b','a\\b','..','a..b',
+      for(const name of [null,undefined,1,true,{},[], '', ' ', 'x'.repeat(81),'a/b','a\\b','..', 'a..b', 'a"b', "a'b", 'a$b', 'a;b', 'café',
         ...Array.from({length:32},(_,i)=>'a'+String.fromCharCode(i)),
         ...Array.from({length:33},(_,i)=>'a'+String.fromCharCode(127+i))]) {
         const value=clone();value[group][key]=name;invalid(value);
@@ -54,16 +54,34 @@ test('bundle identifier template uses the unchanged internal identifier',()=>{
   assert.equal(template.replace('${appNames.internal.macBundleIdentifier}',appNames.internal.macBundleIdentifier),'io.workspace-observatory.app');
 });
 
-test('retired bundle, artifact and data path literals are absent from production files',()=>{
+test('retired literals have explicit reported exceptions',t=>{
+  const pattern=/Workspace Observatory\.app|Workspace-Observatory-|Application Support\/Workspace Observatory|['"]Workspace Observatory['"]/g;
+  function allowed(file,line) {
+    if(file==='native/app-names.json' || file.endsWith('.test.mjs') || file.endsWith('Tests.swift') || file.includes('/tests/'))return true;
+    if(['native/windows/package.ps1','.github/workflows/windows-package.yml'].includes(file))
+      return /\$app = Join-Path .* 'Workspace Observatory'/.test(line);
+    if(file==='native/windows/retain-candidate.mjs')return /appNames\.internal\.windowsPackageFolder/.test(line);
+    if(file==='native/windows/signed-receipt.mjs')return /const domain=/.test(line);
+    if(file==='native/windows/AppIdentity.cs')return /Legacy(Data|Test)Name/.test(line);
+    if(file==='native/main.swift')return /let legacyDataFolder =/.test(line);
+    if(['native/mac/migrate-data.mjs','native/windows/migrate-data.ps1','scripts/peer-transport-rename.mjs'].includes(file))
+      return /legacy|Legacy/.test(line);
+    return false;
+  }
   function scan(directory) {
     for(const entry of readdirSync(new URL('../'+directory+'/',import.meta.url),{withFileTypes:true})) {
       const file=directory+'/'+entry.name;
-      if(entry.isDirectory()) { if(entry.name!=='tests')scan(file);continue; }
-      if(!entry.isFile() || entry.name==='app-names.json' || entry.name.endsWith('.test.mjs') || entry.name.endsWith('Tests.swift'))continue;
-      assert.doesNotMatch(read(file),/Workspace Observatory\.app|Workspace-Observatory-|Application Support\/Workspace Observatory/,file);
+      if(entry.isDirectory()) {scan(file);continue;}
+      if(!entry.isFile())continue;
+      read(file).split('\n').forEach((line,index)=>{
+        for(const match of line.matchAll(pattern)) {
+          assert.ok(allowed(file,line),`${file}:${index+1}: ${match[0]}`);
+          t.diagnostic(`Allowed retired literal ${file}:${index+1}: ${match[0]}`);
+        }
+      });
     }
   }
-  scan('native');scan('scripts');
+  scan('native');scan('scripts');scan('.github/workflows');
 });
 
 test('all internal identifiers retain their original values',()=>{
@@ -87,8 +105,9 @@ test('all internal identifiers retain their original values',()=>{
 });
 
 test('packaged updater scripts stay self-contained and match the internal receipt names',()=>{
-  // These files ship alone under Collector/scripts in the Windows package, so they keep literals.
+  // These two updater scripts ship under Updater/ in the Windows package, so they keep literals.
   const project=read('native/windows/WorkspaceObservatory.csproj');
+  assert.match(project, /<Link>Updater\/%\(Filename\)%\(Extension\)<\/Link>/, 'The two updater scripts ship under Updater/');
   const shipped=project.match(/<Content Include="([^"]+)">/)[1].split(';');
   assert.ok(shipped.includes('signed-receipt.mjs') && shipped.includes('verify-installation.mjs'));
   for(const name of shipped)assert.doesNotMatch(read('native/windows/'+name),/app-names/,name);

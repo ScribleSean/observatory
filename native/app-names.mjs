@@ -48,7 +48,7 @@ export function validateAppNames(value) {
       for(const key of keys) {
         const name=value[group][key];
         if(typeof name!=='string' || !name.trim() || name.length>80 ||
-          Array.from({length:name.length},(_,i)=>name.charCodeAt(i)).some(code=>code===0x2f || code===0x5c || code<0x20 || (code>=0x7f && code<=0x9f)) || name.includes('..'))throw Error();
+          !/^[A-Za-z0-9 .-]+$/.test(name) || name.includes('..'))throw Error();
       }
     }
     if(value.visible.macBundle!==value.visible.productName+'.app')throw Error();

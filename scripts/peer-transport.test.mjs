@@ -114,3 +114,28 @@ test('repair readiness only queries the setup endpoint and rejects malformed con
   await assert.rejects(sshPeerRepairReadiness(transport(),async()=>'x'.repeat(8193)),/response limit/);
   await assert.rejects(sshPeerRepairReadiness(transport(),async()=>{throw Error('offline');}),/offline/);
 });
+
+test('migration receipt uses only the derived runtime and fixed SSH options',async()=>{
+  const {sshMigrationReceipt}=await import('./peer-transport.mjs');
+  const target={...transport(),remoteRuntime:"C:/Users/Example's Account/Workspace Observatory"};
+  const record={schema:1,ssh:{from:{},to:{}}};
+  assert.deepEqual(await sshMigrationReceipt(target,async(args,input,limit)=>{
+    assert.deepEqual(args.slice(0,-1),['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',
+      '-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8',target.hostAlias]);
+    assert.equal(input,'');assert.equal(limit,65536);
+    assert.match(args.at(-1),/^powershell -NoProfile -NonInteractive -EncodedCommand /);
+    const command=Buffer.from(args.at(-1).split(' ').at(-1),'base64').toString('utf16le');
+    assert.ok(command.includes("C:\\Users\\Example''s Account\\Observatory\\observatory-migration.json"));
+    for(const key of ['remoteNode','remoteScript','remoteRuntime'])assert.ok(!command.includes(target[key]));
+    assert.match(command,/Get-Process -Name WorkspaceObservatory/);
+    assert.match(command,/Get-Content -LiteralPath .* -Raw/);
+    assert.match(command,/ConvertTo-Json -Compress -Depth 5/);
+    return JSON.stringify({running:false,record});
+  }),{...record,windowsAppRunning:false});
+  await assert.rejects(sshMigrationReceipt(target,async()=>JSON.stringify({running:false,record:null})),
+    {message:'The PC migration record was not found.'});
+  await assert.rejects(sshMigrationReceipt(target,async()=>'x'.repeat(65537)),/response limit/);
+  for(const response of [{running:false,record,extra:true},{record},{running:0,record},[],null,{running:false,record:[]}])
+    await assert.rejects(sshMigrationReceipt(target,async()=>JSON.stringify(response)));
+  await assert.rejects(sshMigrationReceipt(transport(),async()=>assert.fail('Must not invoke SSH')),/Legacy Windows runtime/);
+});
