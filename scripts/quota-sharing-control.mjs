@@ -1,3 +1,4 @@
+import {privateRefusalBudget} from './peer-directory.mjs';
 import {markSharingChoiceApplied} from './sharing-choice.mjs';
 import {lstat} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
@@ -16,19 +17,29 @@ const token=(state,pair)=>createHash('sha256').update(JSON.stringify([state.salt
 
 // A narrow local interface for native settings. Pairing/account identifiers and
 // quota readings are never returned. The token fences stale confirmation views.
-export async function quotaSharingControl(runtime,request={action:'status'},now=Date.now()) {
+export async function quotaSharingControl(runtime,request={action:'status'},now=Date.now(),options={}) {
   if(!request || !['status','enable','disable'].includes(request.action) ||
     Object.keys(request).some(key=>!['action','token'].includes(key)) ||
     (request.action==='enable' ? typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token) : Object.hasOwn(request,'token')) ||
     !Number.isSafeInteger(now) || now<0)throw Error('Invalid sharing settings request');
-  return withPeerStateLock(runtime,async()=>{
+  const retry=privateRefusalBudget(options);
+  const status=request.action==='status';
+  const read=operation=>status?operation():retry(operation);
+  // A status pairing refusal leaves the lock so the outer retry can try again.
+  // If the budget ends first, one last attempt reads it as no pairing, as before the retry existed.
+  let lastAttempt=false;
+  const locked=()=>withPeerStateLock(runtime,async()=>{
     // Disabling must remain available even if the pairing file is corrupt.
     if(request.action==='disable') {
       await markSharingChoiceApplied(runtime,'codex-limits');
       await revokeQuotaSharing(runtime,now);
     }
     let pair;
-    try {pair=await readPairing(runtime);}catch {pair=null;}
+    try {pair=await read(()=>readPairing(runtime));}
+    catch(error) {
+      if(status && !lastAttempt && retry.canRetry(error))throw Object.assign(error,{pairingRefusal:true});
+      pair=null;
+    }
     let state;
     try {await lstat(path.join(runtime,'private-quota'));}
     catch(error) {
@@ -36,7 +47,7 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
       if(request.action==='enable')throw Error('Read the account before sharing');
       return {...empty(),reason:pair?'account-unavailable':'pairing-unavailable'};
     }
-    state=await readQuotaState(runtime,now);
+    state=await read(()=>readQuotaState(runtime,now));
     if(request.action==='enable') {
       if(!pair || !recent(state,now) || request.token!==token(state,pair))throw Error('Sharing confirmation expired');
       state=await setQuotaSharing(runtime,{revision:state.revision,enabled:true,pairingId:pair.local.pairId},now);
@@ -45,6 +56,12 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
     const canEnable=Boolean(pair && recent(state,now));
     return {version:1,enabled,canEnable,reason:!pair?'pairing-unavailable':canEnable?'ready':'account-unavailable',
       token:canEnable?token(state,pair):null};
+  });
+  if(!status)return locked();
+  return retry(locked).catch(error=>{
+    if(!error?.pairingRefusal)throw error;
+    lastAttempt=true;
+    return locked();
   });
 }
 
