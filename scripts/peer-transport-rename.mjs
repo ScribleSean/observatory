@@ -25,9 +25,14 @@ const processes=async()=>(await execute('/bin/ps',['-axo','pid=,args='],{maxBuff
 
 function checkProcesses(text) {
   if(typeof text!=='string')throw Error('Mac process check unavailable.');
-  if(text.split('\n').some(line=>/\/WorkspaceObservatory(\s|$)/.test(line) || /\.app\/Contents\/Resources\/Runtime\//.test(line) ||
-    line.includes('/'+renameNames.legacyProductName+'.app/') || line.includes('/'+renameNames.visibleProductName+'.app/') ||
-    line.includes('claude-statusline-bridge.mjs')))throw Error('Quit the Mac app and its helpers before updating pairing.');
+  for(const line of text.split('\n')) {
+    const category=/\.app\/Contents\/Resources\/Runtime\//.test(line)?
+      'a bundled Observatory runtime (this includes a shell whose command names the bundled node)':
+      line.includes('claude-statusline-bridge.mjs')?'the Claude Code status line bridge':
+      /\/WorkspaceObservatory(\s|$)/.test(line) || line.includes('/'+renameNames.legacyProductName+'.app/') ||
+      line.includes('/'+renameNames.visibleProductName+'.app/')?'an Observatory app':null;
+    if(category)throw Error('Quit the Mac app and its helpers before updating pairing. Still running: '+category+'.');
+  }
 }
 function checkReceipt(record,transport) {
   if(!record || typeof record!=='object' || Array.isArray(record) || record.schema!==1 ||

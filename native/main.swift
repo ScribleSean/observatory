@@ -5,6 +5,11 @@ import SwiftUI
 import ServiceManagement
 import WebKit
 
+func loginItemIsOn() -> Bool {
+    UserDefaults.standard.bool(forKey: "loginItemWanted") ||
+        [.enabled, .requiresApproval].contains(SMAppService.mainApp.status)
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
@@ -427,7 +432,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let login = menu.addItem(withTitle: "Launch at login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.isEnabled = previewRuntime == nil && selectedRuntime == nil
-        login.state = [.enabled, .requiresApproval].contains(SMAppService.mainApp.status) ? .on : .off
+        login.state = loginItemIsOn() ? .on : .off
         menu.addItem(withTitle: "Login settings…", action: #selector(loginSettings), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -439,9 +444,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !store.shuttingDown else { return }
         guard previewRuntime == nil, selectedRuntime == nil else { return }
         do {
-            if [.enabled, .requiresApproval].contains(SMAppService.mainApp.status) {
+            if loginItemIsOn() {
                 UserDefaults.standard.set(false, forKey: "loginItemWanted")
-                try SMAppService.mainApp.unregister()
+                if SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
             }
             else {
                 UserDefaults.standard.set(true, forKey: "loginItemWanted")

@@ -19,15 +19,16 @@ test('guard creates nothing on a clean install',mac,t=>{
 });
 test('guard refuses all Observatory writers without creating folders',mac,t=>{
   const f=fixture(t);
-  for(const output of ['/fixture/'+appNames.internal.macExecutable+' --flag',
-    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
-    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
-    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
+  for(const [output,category] of [['/fixture/'+appNames.internal.macExecutable+' --flag','an Observatory app'],
+    ['/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory','an Observatory app'],
+    ['/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background','an Observatory app'],
+    ['/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic','a bundled Observatory runtime (this includes a shell whose command names the bundled node)'],
 
-    'python /fixture/'+appNames.legacy.macBundle+'/collector.py',
-    'node /fixture/'+appNames.visible.macBundle+'/collector.mjs',
-    'node claude-statusline-bridge.mjs']) {
-    assert.throws(()=>checkInstallTarget({...f,runningProcesses:()=>output}),{message:'Quit the earlier Observatory app first.'});
+    ['python /fixture/'+appNames.legacy.macBundle+'/collector.py','an Observatory app'],
+    ['node /fixture/'+appNames.visible.macBundle+'/collector.mjs','an Observatory app'],
+    ['node claude-statusline-bridge.mjs','the Claude Code status line bridge'],
+    ['/bin/sh -c "/tmp/Observatory.app/Contents/Resources/Runtime/node/bin/node --private-fixture"','a bundled Observatory runtime (this includes a shell whose command names the bundled node)']]) {
+    assert.throws(()=>checkInstallTarget({...f,runningProcesses:()=>output}),{message:'Quit the earlier Observatory app first. Still running: '+category+'.'});
     assert.deepEqual(fs.readdirSync(f.root),[]);
   }
   assert.throws(()=>checkInstallTarget({...f,runningProcesses:()=>null}),/Cannot verify/);

@@ -25,6 +25,7 @@ export function validatePeerTransport(value) {
   return Object.fromEntries(fields.map(key=>[key,value[key]]));
 }
 
+export {quote as quotePowerShell};
 const quote=value=>"'"+value.replace(/['\u2018-\u201b]/g,c=>c+c)+"'";
 
 function runSSH(args,input,maxBuffer=17_000_000) {

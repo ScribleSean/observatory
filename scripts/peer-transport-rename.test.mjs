@@ -126,13 +126,15 @@ test('repair fields and backslash separator style survive',mac,async t=>{
 
 test('process guards never write pairing bytes or mtimes',mac,async t=>{
   const runtime=await fixture(t);
-  for(const line of ['/tmp/WorkspaceObservatory --fixture',
-    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
-    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
-    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
-'/tmp/Workspace Observatory.app/Contents/helper',
-    '/tmp/Observatory.app/Contents/helper','node /tmp/claude-statusline-bridge.mjs'])
-    await refuses(runtime,{runningProcesses:()=>line,fetchReceipt:()=>assert.fail('Must not fetch')},/Quit/);
+  for(const [line,category] of [['/tmp/WorkspaceObservatory --fixture','an Observatory app'],
+    ['/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory','an Observatory app'],
+    ['/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background','an Observatory app'],
+    ['/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic','a bundled Observatory runtime (this includes a shell whose command names the bundled node)'],
+    ['/tmp/Workspace Observatory.app/Contents/helper','an Observatory app'],
+    ['/tmp/Observatory.app/Contents/helper','an Observatory app'],
+    ['node /tmp/claude-statusline-bridge.mjs','the Claude Code status line bridge'],
+    ['/bin/sh -c "/tmp/Observatory.app/Contents/Resources/Runtime/node/bin/node --private-fixture"','a bundled Observatory runtime (this includes a shell whose command names the bundled node)']])
+    await refuses(runtime,{runningProcesses:()=>line,fetchReceipt:()=>assert.fail('Must not fetch')},{message:'Quit the Mac app and its helpers before updating pairing. Still running: '+category+'.'});
   await refuses(runtime,{fetchReceipt:async()=>({...receipt(),windowsAppRunning:true})});
   await refuses(runtime,{fetchReceipt:async()=>{throw Error('The PC migration record was not found.');}},/record was not found/);
 });

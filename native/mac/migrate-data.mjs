@@ -44,9 +44,15 @@ export function assertObservatoryStopped(runningProcesses,message) {
   let output;
   try{output=runningProcesses();}catch{throw Error('Cannot verify application shutdown.');}
   if(typeof output!=='string' || output.length>8*1024*1024)throw Error('Cannot verify application shutdown.');
-  if(output.split('\n').some(line=>/\/WorkspaceObservatory(\s|$)/.test(line) || /\.app\/Contents\/Resources\/Runtime\//.test(line) ||
-    line.includes('/'+appNames.legacy.macBundle+'/') || line.includes('/'+appNames.visible.macBundle+'/') || line.includes('claude-statusline-bridge.mjs')))
-    throw Error(message);
+  const executable=new RegExp('/'+appNames.internal.macExecutable.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(\\s|$)');
+  for(const line of output.split('\n')) {
+    const category=/\.app\/Contents\/Resources\/Runtime\//.test(line)?
+      'a bundled Observatory runtime (this includes a shell whose command names the bundled node)':
+      line.includes('claude-statusline-bridge.mjs')?'the Claude Code status line bridge':
+      executable.test(line) || line.includes('/'+appNames.legacy.macBundle+'/') ||
+      line.includes('/'+appNames.visible.macBundle+'/')?'an Observatory app':null;
+    if(category)throw Error(message+' Still running: '+category+'.');
+  }
 }
 const stat=file=>{try{return fs.lstatSync(file);}catch(error){if(error.code==='ENOENT')return null;throw error;}};
 function layout({legacy,target,stage}) {

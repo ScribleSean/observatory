@@ -257,16 +257,17 @@ test('free space refusal happens before staging',mac,t=>{
 });
 test('ps arguments cover executables, bundled helpers and the status line bridge',mac,t=>{
   const f=fixture(t),before=snapshot(f.root);
-  for(const output of ['/fixture/'+appNames.internal.macExecutable+' --runtime fixture',
-    '/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory',
-    '/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background',
-    '/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic',
+  for(const [output,category] of [['/fixture/'+appNames.internal.macExecutable+' --runtime fixture','an Observatory app'],
+    ['/Users/x/Applications/Workspace Observatory copy.app/Contents/MacOS/WorkspaceObservatory','an Observatory app'],
+    ['/Users/x/Downloads/Observatory 2.app/Contents/MacOS/WorkspaceObservatory --background','an Observatory app'],
+    ['/Users/x/Downloads/Observatory 2.app/Contents/Resources/Runtime/node/bin/node --synthetic','a bundled Observatory runtime (this includes a shell whose command names the bundled node)'],
 
-    '/usr/bin/python /fixture/'+appNames.legacy.macBundle+'/Contents/collector.py',
-    '/usr/bin/node /fixture/'+appNames.visible.macBundle+'/Contents/collector.mjs',
-    '/usr/bin/node /fixture/claude-statusline-bridge.mjs']) {
+    ['/usr/bin/python /fixture/'+appNames.legacy.macBundle+'/Contents/collector.py','an Observatory app'],
+    ['/usr/bin/node /fixture/'+appNames.visible.macBundle+'/Contents/collector.mjs','an Observatory app'],
+    ['/usr/bin/node /fixture/claude-statusline-bridge.mjs','the Claude Code status line bridge'],
+    ['/bin/sh -c "/tmp/Observatory.app/Contents/Resources/Runtime/node/bin/node --private-fixture"','a bundled Observatory runtime (this includes a shell whose command names the bundled node)']]) {
     assert.throws(()=>migrateDataFolder({...f,runningProcesses:()=>output}),
-      {message:'Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again.'});
+      {message:'Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again. Still running: '+category+'.'});
   }
   assert.deepEqual(snapshot(f.root),before);
 });

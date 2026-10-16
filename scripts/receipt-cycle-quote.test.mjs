@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {quote} from '../native/windows/powershell-quote.mjs';
+import {quotePowerShell} from './peer-transport.mjs';
 
 test('PowerShell literals double ASCII and all smart single quotes',()=>{
   for(const mark of ["'",'\u2018','\u2019','\u201a','\u201b']) {
@@ -9,4 +10,9 @@ test('PowerShell literals double ASCII and all smart single quotes',()=>{
   }
   assert.equal(quote('plain path'),"'plain path'");
   assert.equal(quote(''),"''");
+});
+
+test('transport and Windows PowerShell quoting stay aligned',()=>{
+  const values=["'",'\u2018','\u2019','\u201a','\u201b'].map(mark=>`C:\\Users\\Example${mark}s Folder\\archive.zip`);
+  for(const value of [...values,'plain path',''])assert.equal(quotePowerShell(value),quote(value));
 });

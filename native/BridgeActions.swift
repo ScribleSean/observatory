@@ -680,7 +680,7 @@ final class MacBridgeHost: BridgeHost {
                 let input = BridgeStatusInput(appVersion: version, appBuild: build,
                     sources: sources.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
-                    startup: SMAppService.mainApp.status == .enabled, appearance: viewer.appearance, limitsConsent: limits,
+                    startup: loginItemIsOn(), appearance: viewer.appearance, limitsConsent: limits,
                     collectionPaused: store.collectionPausedForPairing || store.pairingMaintenance,
                     pairingState: paired.state, peerFingerprint: visible?.fingerprint,
                     transport: paired.transport, invitationKept: visible?.invitation != nil, sharing: shared.channels, sharingChoice: shared.choice)
