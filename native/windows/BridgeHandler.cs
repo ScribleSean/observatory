@@ -908,7 +908,7 @@ internal sealed class BridgeHandler : IDisposable
                 defaultsOnly = onlyDefaults;
                 pairingState = "idle";
                 if (!defaultsOnly) identityState = null;
-                if (SynchronizationContext.Current is System.Windows.Forms.WindowsFormsSynchronizationContext)
+                if (!onlyDefaults && SynchronizationContext.Current is System.Windows.Forms.WindowsFormsSynchronizationContext)
                 {
                     timer = new System.Windows.Forms.Timer { Interval = BridgeContract.Limits["pairingPollSeconds"].Number * 1000 };
                     timer.Tick += async (_, _) => await PollAsync(); timer.Start();
@@ -947,6 +947,7 @@ internal sealed class BridgeHandler : IDisposable
             catch { return new("unavailable"); }
             return new("done");
         }
+        // Guard for direct calls. The action queue runs page requests one at a time, so a page pairing start waits behind the lookup and does not reach this check.
         lock (gate) if (defaultsOnly && PairingStart(action)) return new("busy");
         bool temporary = false;
         if (action == "pairing-identity-create")
@@ -967,6 +968,7 @@ internal sealed class BridgeHandler : IDisposable
             lock (gate)
             {
                 if (request.Epoch != epoch || closed) return new("unavailable");
+                // Guard for direct calls. The action queue runs page requests one at a time, so a page pairing start waits behind the lookup and does not reach this check.
                 if (defaultsOnly || (session is not null && action != "pairing-identity-create")) return new("busy");
                 if (!BeginSession(action == "pairing-host-defaults")) return new("busy");
             }
@@ -1888,6 +1890,7 @@ internal sealed class BridgeHandler : IDisposable
                 HeldDefaults = new(TaskCreationOptions.RunContinuationsAsynchronously) };
             int pendingDefaults = test.Send("pairing-host-defaults");
             var held = test.Host.Session!;
+            test.Handler.RefreshFilesNow();
             var during = test.Result(test.Send("status"))["value"]!;
             Check(during["pairing"]!.ToJsonString() == beforePairing && during["collectionPaused"]!.GetValue<bool>(),
                 "Defaults preserve pairing status while holding collection");
