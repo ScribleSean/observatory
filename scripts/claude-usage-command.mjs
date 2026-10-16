@@ -15,19 +15,23 @@ function offsetMinutes(instant,timeZone) {
   return (Date.UTC(parts.year,parts.month-1,parts.day,parts.hour,parts.minute,parts.second)-Math.floor(instant/1000)*1000)/60000;
 }
 
-// "Oct 13 at 11:09pm (America/New_York)" or "Oct 16 at 6pm (America/New_York)".
+// Accept both ICU date separators and an optional explicit year.
 export function parseResetTime(text,now=Date.now()) {
-  const match=/^([A-Z][a-z]{2}) (\d{1,2}) at (\d{1,2})(?::(\d{2}))?(am|pm) \(([A-Za-z0-9_+/-]{1,64})\)$/.exec(text ?? '');
+  const match=/^([A-Z][a-z]{2}) (\d{1,2})(?:, (\d{4}))?(?: at |, )(\d{1,2})(?::(\d{2}))?[ \u202f]?(am|pm|AM|PM) \(([A-Za-z0-9_+/-]{1,64})\)$/.exec(text ?? '');
   if(!match)return null;
-  const month=months.indexOf(match[1]),day=Number(match[2]),minute=Number(match[4] ?? 0),zone=match[6];
-  let hour=Number(match[3]);
+  const month=months.indexOf(match[1]),day=Number(match[2]),minute=Number(match[5] ?? 0),zone=match[7];
+  let hour=Number(match[4]);
   if(month<0 || day<1 || day>31 || hour<1 || hour>12 || minute>59)return null;
-  hour=hour%12+(match[5]==='pm'?12:0);
+  hour=hour%12+(match[6].toLowerCase()==='pm'?12:0);
   try {
-    // The line has no year. A reset is always in the near future.
-    for(const year of [new Date(now).getUTCFullYear(),new Date(now).getUTCFullYear()+1]) {
+    // Only a date without a year can retry in the next year.
+    const years=match[3]===undefined?[new Date(now).getUTCFullYear(),new Date(now).getUTCFullYear()+1]:[Number(match[3])];
+    const calendar=new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'numeric',day:'numeric'});
+    for(const year of years) {
       let instant=Date.UTC(year,month,day,hour,minute);
       for(let pass=0;pass<2;pass++)instant=Date.UTC(year,month,day,hour,minute)-offsetMinutes(instant,zone)*60000;
+      const date=Object.fromEntries(calendar.formatToParts(new Date(instant)).map(part=>[part.type,Number(part.value)]));
+      if(date.year!==year || date.month!==month+1 || date.day!==day)continue;
       if(instant>now-86400000 && instant<now+9*86400000)return Math.round(instant/1000);
     }
   } catch {return null;}
