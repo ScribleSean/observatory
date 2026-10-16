@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { STRINGS } from '../../../lib/strings.generated';
 import { SETUP_SOURCES, clampStep, sampleSetupStatus, setupSummary, stepLabel } from '../../../lib/view-setup.mjs';
+import { contract } from '../../../lib/bridge-contract.mjs';
 import { createBridge, type Bridge, type BridgeOutcome } from '../bridge';
 import { createSettingsController, limitsConsentFlow, type SettingsController } from '../settings/controller';
 import { createFakeBridge } from '../settings/fake-bridge';
@@ -43,7 +44,7 @@ export function SetupContent({ status, step, available, busy, message, disclosur
       {toggle(S.claudeLimits, W.claudeLimitsHint, status?.limitsConsent, onLimits)}
       {disclosureOpen && <div className="ob-settings-disclosure"><ul>
         <li>{S.disclosureCommand}</li><li>{S.disclosureStorage}</li><li>{S.disclosureOff}</li>
-      </ul><button type="button" disabled={disabled} onClick={onConfirm}>{S.turnOn}</button><button type="button" disabled={disabled} onClick={onCancel}>{S.cancel}</button></div>}
+      </ul><button type="button" disabled={disabled || status?.limitsConsent == null} onClick={onConfirm}>{S.turnOn}</button><button type="button" disabled={disabled} onClick={onCancel}>{S.cancel}</button></div>}
       <p>{W.sourcesNote}</p><p>{W.privacyNote}</p>
     </>}
     {index === 1 && <><p>{W.pairingIntro}</p><p>{W.pairingHow}</p><p>{W.pairingNoAccount}</p></>}
@@ -105,11 +106,18 @@ export function SetupView({ demo, bridge, onFinished, onBlockedChange }: { demo:
     setStatusReadFinished(false);
     setStatus(demo ? validateBridgeStatus(sampleSetupStatus()) : null);
     readStatus(next);
+    // Read status again while Claude limits is Unknown, quietly and never during another read.
+    let polling = false;
+    const recoveryPoll = setInterval(() => {
+      if (!transport.available || polling || running.current || next.getStatus()?.limitsConsent !== null) return;
+      polling = true;
+      void next.status().catch(() => {}).finally(() => { polling = false; });
+    }, contract.limits.cacheRefreshSeconds * 1000);
     const clear = () => { generation.current++; running.current = false; flow.current?.cancel(); setDisclosureOpen(false); setBusy(false); };
     const hide = () => flushSync(clear);
     window.addEventListener('pagehide', hide);
     return () => {
-      clear(); window.removeEventListener('pagehide', hide); unsubscribe(); next.dispose();
+      clear(); clearInterval(recoveryPoll); window.removeEventListener('pagehide', hide); unsubscribe(); next.dispose();
       if (!bridge) transport.dispose();
     };
   }, [bridge, demo, readStatus]);

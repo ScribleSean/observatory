@@ -5,6 +5,7 @@ import { Window } from 'happy-dom';
 import { act, createElement } from 'react';
 import { sampleSetupStatus, setupSummary } from '../lib/view-setup.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
+import { contract } from '../lib/bridge-contract.mjs';
 const { createServer } = await import('vite');
 const { default: react } = await import('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
@@ -173,4 +174,20 @@ void test('setup renders null limits as Unknown in sources and summary', async t
   assert.equal(row.lastElementChild.textContent, 'Unknown');
   // Every source is off but the limits switch is unknown, so the page does not claim that no source is on.
   assert.equal(f.container.textContent.includes(strings.setup.finishNone), false);
+});
+
+void test('setup reads status again while Claude limits is Unknown and stops after unmount', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const unknown = sampleSetupStatus();
+  unknown.limitsConsent = null;
+  const f = await fixture(t, { firstStatus: { ok: true, code: 'done', value: unknown } });
+  const reads = () => f.messages.filter(message => message.action === 'status').length;
+  const label = () => [...f.container.querySelectorAll('label')].find(node => node.textContent === strings.settings.claudeLimits);
+  assert.equal(label().parentElement.querySelector('.ob-meta').textContent, 'Unknown');
+  const interval = contract.limits.cacheRefreshSeconds * 1000;
+  await act(async () => t.mock.timers.tick(interval));
+  assert.equal(reads(), 2);
+  assert.equal(label().parentElement.querySelector('.ob-meta').textContent, 'Off');
+  await act(async () => t.mock.timers.tick(interval * 3));
+  assert.equal(reads(), 2);
 });

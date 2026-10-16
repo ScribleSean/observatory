@@ -98,6 +98,7 @@ async function fixture(t, state = 'identity-ready', placeholder = false, initial
     recoverStatus: () => { failStatus = false; },
     holdStatus: () => { holdStatus = true; },
     remount: async () => act(async () => { root.unmount(); root = createRoot(container); mount(); }),
+    unmount: async () => act(async () => { root.unmount(); root = createRoot(container); }),
   };
 }
 
@@ -711,3 +712,14 @@ for (const partial of [false, true]) {
     assert.equal(f.messages.filter(message => message.action === 'status').length, 2);
   });
 }
+
+void test('Settings recovery poll stops when the page is unmounted', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const f = await fixture(t, 'idle', false, { failStatus: true });
+  const interval = contract.limits.cacheRefreshSeconds * 1000;
+  const reads = () => f.messages.filter(message => message.action === 'status').length;
+  const before = reads();
+  await f.unmount();
+  await act(async () => t.mock.timers.tick(interval * 3));
+  assert.equal(reads(), before);
+});
