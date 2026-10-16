@@ -2006,6 +2006,16 @@ internal sealed class BridgeHandler : IDisposable
                     Check(test.Handler.identityState == identity, "Defaults identity kept " + outcome);
                     Check(temporary.Disposed && !test.Host.Reserved, "Defaults identity cleanup " + outcome);
                 }
+                var unverifiedExit = new TestSession { VerifyExit = false };
+                test.Host.MakeSession = () => unverifiedExit;
+                await test.Run("pairing-host-defaults", code: "done");
+                Check(test.Host.CollectionPaused, "Defaults exit pauses collection");
+                Check(test.Handler.identityState == identity, "Defaults exit keeps identity");
+                pairing = (await test.Run("status"))["value"]!["pairing"]!;
+                Check(pairing["state"]!.GetValue<string>() == identity && pairing["transport"]!.GetValue<string>() == "none",
+                    "Defaults exit keeps pairing");
+                Check(unverifiedExit.Disposed && !test.Host.Reserved, "Defaults exit cleanup");
+                test.Host.CollectionPaused = wasPaused;
                 await test.Run("pairing-cancel");
                 Check((await test.Run("status"))["value"]!["pairing"]!.ToJsonString() == beforePairing &&
                     test.Handler.identityState == identity, "Defaults identity survives cancel");
