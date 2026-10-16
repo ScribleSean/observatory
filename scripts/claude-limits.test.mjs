@@ -577,6 +577,8 @@ test('a hard link created after lstat is refused by the opened handle check',asy
 const savedStatusline=previous=>({installedAt:new Date(now).toISOString(),settingsPath:'/synthetic/settings.json',previous});
 const repeatedStatusline=()=>JSON.stringify(savedStatusline({type:'command',command:'echo earlier'})).replace('"command":"echo earlier"','"command":"echo earlier","command":"echo replacement"');
 
+const prototypeStatusline=command=>`{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"__proto__":{"type":"command","command":${JSON.stringify(command)}}}}`;
+
 test('saved status line reader accepts installer markers and missing files',async t=>{
   const runtime=await folder(t),directory=path.join(runtime,'claude-limits'),file=path.join(directory,'statusline.json');
   assert.equal(await readClaudeStatuslineMarker(runtime),null);
@@ -603,6 +605,9 @@ const invalidStatuslines={
   'escaped repeated command':repeatedStatusline().replace('"command":"echo replacement"','"comm\\u0061nd":"echo replacement"'),
   'escaped repeated top-level key':JSON.stringify(savedStatusline(null)).replace('"previous":null','"previous":{},"previ\\u006fus":null'),
   'repeated key in array':JSON.stringify(savedStatusline({nested:[]})).replace('"nested":[]','"nested":[{"key":1,"key":2}]'),
+  'prototype member':'{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"__proto__":{"type":"command","command":"echo p"}}}',
+  'prototype member in array':'{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"nested":[{"__proto__":{}}]}}',
+  'escaped prototype member':'{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"__pr\\u006fto__":{}}}',
   'non-string command':JSON.stringify(savedStatusline({type:'command',command:42})),
   'missing command':JSON.stringify(savedStatusline({type:'command'})),
   'invalid JSON':'{',
@@ -632,12 +637,12 @@ for(const kind of ['symbolic link','hard link','linked folder','file folder','di
     await assert.rejects(readClaudeStatuslineMarker(runtime),{message:'Unsafe saved status line file'});
   });
 
-for(const kind of ['valid','hard link','symbolic link','linked folder','repeated command'])test(`bridge handles ${kind} saved status line`,
+for(const kind of ['valid','hard link','symbolic link','linked folder','repeated command','prototype member'])test(`bridge handles ${kind} saved status line`,
   {skip:['hard link','symbolic link','linked folder'].includes(kind) && process.platform==='win32'},async t=>{
     const runtime=await folder(t),file=path.join(runtime,'claude-limits/statusline.json');
     if(kind!=='linked folder')await mkdir(path.dirname(file));
     const command=`"${process.execPath}" -e "process.stdout.write('earlier line')"`;
-    const text=JSON.stringify(savedStatusline({type:'command',command}));
+    const text=kind==='prototype member'?prototypeStatusline(command):JSON.stringify(savedStatusline({type:'command',command}));
     if(['hard link','symbolic link'].includes(kind)) {
       const target=path.join(await folder(t),'statusline.json');
       await writeFile(target,text);
@@ -654,14 +659,14 @@ for(const kind of ['valid','hard link','symbolic link','linked folder','repeated
     assert.equal((await child).stdout,kind==='valid'?'earlier line':'5h 77% left · 7d 59% left\n');
   });
 
-for(const action of ['reinstall','uninstall'])for(const kind of ['hard link','symbolic link','repeated command'])test(`${action} refuses ${kind} marker without writes`,
+for(const action of ['reinstall','uninstall'])for(const kind of ['hard link','symbolic link','repeated command',...(action==='uninstall'?['prototype member']:[])])test(`${action} refuses ${kind} marker without writes`,
   {skip:['hard link','symbolic link'].includes(kind) && process.platform==='win32'},async t=>{
     const runtime=await folder(t),home=await folder(t),settingsPath=path.join(home,'settings.json');
     const directory=path.join(runtime,'claude-limits'),file=path.join(directory,'statusline.json');
     await mkdir(directory);
     const settings=JSON.stringify({model:'synthetic',statusLine:{type:'command',command:bridgeCommand(process.execPath,realBridge,runtime)}})+'\n';
     await writeFile(settingsPath,settings);
-    const marker=kind!=='repeated command'?JSON.stringify(savedStatusline({type:'command',command:'echo earlier'})):repeatedStatusline();
+    const marker=kind==='prototype member'?prototypeStatusline(`"${process.execPath}" -e "process.stdout.write('earlier line')"`):kind!=='repeated command'?JSON.stringify(savedStatusline({type:'command',command:'echo earlier'})):repeatedStatusline();
     let target;
     if(kind==='hard link' || kind==='symbolic link') {
       target=path.join(await folder(t),'statusline.json');

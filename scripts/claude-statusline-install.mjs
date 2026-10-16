@@ -74,7 +74,8 @@ export async function installStatusline({runtime,settingsPath=defaultSettingsPat
   const folder=await ensureClaudeLimitsFolder(runtime);
   const {text,settings}=await readSettings(settingsPath);
   const marker=path.join(folder,CLAUDE_STATUSLINE_FILE);
-  // Only an object can be restored as a status line. The settings backup keeps any other value.
+  // Only an object can be restored as a status line. Any other value is dropped, and the backup
+  // written below keeps it only until the next install replaces that backup.
   let previous=isObject(settings.statusLine)?settings.statusLine:null;
   if(isOurs(previous)) {
     // Reinstalling keeps the status line saved by the first install.

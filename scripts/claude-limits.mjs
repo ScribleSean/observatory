@@ -150,7 +150,10 @@ export async function readClaudeStatuslineMarker(runtime) {
     while(pending.length) {
       const value=pending.pop();
       if(value===null || typeof value!=='object')continue;
-      if(!Array.isArray(value))members+=Object.keys(value).length;
+      if(!Array.isArray(value)) {
+        if(Object.hasOwn(value,'__proto__'))throw unsafe();
+        members+=Object.keys(value).length;
+      }
       for(const child of Object.values(value))pending.push(child);
     }
     if(topLevelMembers(text,true)!==members)throw unsafe();
