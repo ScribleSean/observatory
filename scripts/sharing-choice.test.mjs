@@ -317,3 +317,36 @@ test('mark verifies the intent directory once before writing and once after rena
     });
   } finally {mocked.mock.restore();syncBuiltinESMExports();}
 });
+
+for(const [channel,failedFile] of [
+  ['codex-limits','sharing-choice.json'],
+  ['claude-code-tokens','sharing-choice.json'],
+  ['codex-limits','pairing.json']
+])test(`${channel} disable clears the choice after a transient ${failedFile} read failure`,async t=>{
+  const {runtime}=await fixture(t);
+  await chooseSharing(runtime,{enabled:true});
+  await quota(runtime);await updateProviderTokenSource(runtime,source(),now);
+  const control=channel==='codex-limits'?quotaSharingControl:providerTokenSharingControl;
+  const status=await control(runtime,{action:'status'},now);
+  await control(runtime,{action:'enable',token:status.token},now);
+  const open=fs.open,target=path.join(runtime,'private-sync',failedFile);
+  let failures=0;
+  const mocked=t.mock.method(fs,'open',async(file,...args)=>{
+    if(file===target && failures===0) {
+      failures++;
+      throw Object.assign(Error('Synthetic read failure'),{code:'EIO'});
+    }
+    return open(file,...args);
+  });
+  syncBuiltinESMExports();
+  try {
+    const disabled=await control(runtime,{action:'disable'},now);
+    assert.equal(disabled.enabled,false);
+    assert.deepEqual(Object.keys(disabled).sort(),['canEnable','enabled','reason','token','version']);
+    assert.equal(disabled.reason,'ready');
+    assert.equal(failures,1);
+  } finally {mocked.mock.restore();syncBuiltinESMExports();}
+  await quota(runtime,now+1);await updateProviderTokenSource(runtime,source(now+1),now+1);
+  assert.equal((await applySharingChoice(runtime,channel,now+1)).status,'none');
+  assert.equal((await control(runtime,{action:'status'},now+1)).enabled,false);
+});

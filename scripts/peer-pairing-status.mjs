@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {readPairing} from './peer-pairing.mjs';
+import {withPeerStateLock} from './peer-lock.mjs';
 import {assertPeerNotRevoked} from './peer-revocation.mjs';
 import {readPeerTrust} from './peer-tls-trust.mjs';
 import {readPeerState} from './peer-store.mjs';
@@ -58,7 +59,7 @@ async function readFileValue(name) {
   } finally {await file.close();}
 }
 
-export async function writePairingStatus(runtime,now=Date.now()) {
+export const writePairingStatus=(runtime,now=Date.now())=>withPeerStateLock(runtime,async()=>{
   const status=await readPairingStatus(runtime,now),name=path.join(runtime,filename);
   const bytes=JSON.stringify({...status,checkedAt:new Date(now).toISOString()});
   await targetInfo(name);
@@ -72,7 +73,7 @@ export async function writePairingStatus(runtime,now=Date.now()) {
     await rename(temporary,name);renamed=true;
   } finally {if(created && !renamed)await unlink(temporary);}
   return status;
-}
+});
 
 export async function readPairingStatusFile(runtime,now=Date.now()) {
   try {

@@ -11,7 +11,8 @@ import {readQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.m
 import {readProviderTokenState,setProviderTokenSharing,disableProviderTokenSharing,recentProviderSource} from './provider-token-store.mjs';
 
 const channels=['codex-limits','claude-code-tokens'];
-const fail=()=>Error('Sharing choice unavailable');
+class SharingChoiceValidationError extends Error {}
+const fail=()=>new SharingChoiceValidationError('Sharing choice unavailable');
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
   Object.keys(value).length===keys.length && keys.every(key=>Object.hasOwn(value,key));
 const exists=async filename=>{try {await lstat(filename);return true;}catch(error){if(error.code==='ENOENT')return false;throw error;}};
@@ -29,7 +30,9 @@ async function readIntent(runtime,pair,directory) {
     if(!same(before,await file.stat()))throw fail();
     const bytes=Buffer.alloc(1025),{bytesRead}=await file.read(bytes,0,bytes.length,0);
     if(bytesRead!==before.size || !same(before,await file.stat()) || !same(before,await lstat(filename)))throw fail();
-    const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,bytesRead)));
+    let value;
+    try {value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,bytesRead)));}
+    catch {throw fail();}
     if(!exact(value,['version','pairId','enabled','applied']) || value.version!==1 || value.enabled!==true ||
       typeof value.pairId!=='string' || !/^[a-f0-9]{64}$/.test(value.pairId) || !exact(value.applied,channels) ||
       channels.some(channel=>typeof value.applied[channel]!=='boolean'))throw fail();
@@ -82,7 +85,10 @@ export async function markSharingChoiceApplied(runtime,channel) {
       if(!pair)return;
       directory=await privateSyncDirectory(runtime);
       intent=await readIntent(runtime,pair,directory);
-    } catch {return;}
+    } catch(error) {
+      if(!(error instanceof SharingChoiceValidationError))await clearSharingChoice(runtime);
+      return;
+    }
     if(!intent || intent.applied[channel])return;
     intent.applied[channel]=true;
     try {await writeIntent(runtime,intent,directory);}

@@ -1,4 +1,6 @@
 import test from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
+import {withPeerStateLock} from './peer-lock.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,readdir,lstat,symlink,link,mkdir,open,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -153,4 +155,25 @@ test('status reader refuses another owner',{skip:process.platform==='win32'},asy
   const runtime=await fixture(t),now=Date.now();await writePairingStatus(runtime,now);
   const uid=process.getuid();t.mock.method(process,'getuid',()=>uid+1);
   assert.deepEqual(await readPairingStatusFile(runtime,now),status('unavailable'));
+});
+
+test('status writer waits for the peer lock and computes state after revocation',async t=>{
+  const {runtime}=await paired(t);
+  let acquired,release;
+  const ready=new Promise(resolve=>acquired=resolve),gate=new Promise(resolve=>release=resolve);
+  const holder=withPeerStateLock(runtime,async()=>{
+    acquired();
+    await gate;
+    await revokePairing(runtime);
+  });
+  await ready;
+  let completed=false;
+  const writer=writePairingStatus(runtime).then(value=>{completed=true;return value;});
+  try {
+    await delay(100);
+    assert.equal(completed,false);
+    await assert.rejects(lstat(path.join(runtime,'pairing-status.json')),{code:'ENOENT'});
+  } finally {release();await holder;}
+  assert.deepEqual(await writer,status('revoked'));
+  assert.deepEqual(await readPairingStatusFile(runtime),status('revoked'));
 });

@@ -220,8 +220,9 @@ turned on again by the intent, so turning one channel off later keeps it off.
 `sharing-choice.mjs --runtime <runtime>` takes `{"action":"status"}` or
 `{"action":"choose","enabled":true|false}` on standard input and prints only
 `{version,chosen,channels}`. Choosing false turns both channels off and removes the
-intent. Revocation now turns both channels off and removes the intent too. The outputs of the two sharing control scripts and every receiver-side check are
-unchanged. Their disable paths now first mark the channel in the intent, so a
+intent. Revocation now turns both channels off and removes the intent too.
+The outputs of the two sharing control scripts and every receiver-side check
+are unchanged. Their disable paths now first mark the channel in the intent, so a
 channel the person turns off is never turned back on, and they fail with the
 channel still on if that mark cannot be saved.
 
