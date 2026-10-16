@@ -39,7 +39,7 @@ Every view uses the same periods:
 
 | Period | Meaning |
 | --- | --- |
-| Now | The last 60 minutes, approximated from hourly records |
+| Now | The current clock hour up to the last reading, added to the previous clock hour, so it covers 60 to 120 minutes ending at that reading |
 | Day | One calendar day |
 | Week | The seven calendar days ending on the selected day |
 | Month | The 30 calendar days ending on the selected day |
@@ -55,10 +55,12 @@ Pairing a Mac and a Windows PC is optional. Each device works alone without it.
 
 1. Install [Tailscale](https://tailscale.com/) on both devices and sign in to the same account. Observatory uses the installed Tailscale client only to reach the other device. It does not include or configure Tailscale.
 2. On both devices, open Settings, then Devices and sharing, and choose Check Tailscale. It should read "Tailscale is running."
-3. On the first device, choose Host on this device and start pairing. Copy the invitation. Share it privately, because clipboard managers may keep copies. It expires within ten minutes.
-4. On the second device, choose Join with an invitation, paste it and start.
-5. The first device shows the claimed device's fingerprint. Confirm it there.
-6. Choose on both devices what to share with the other one. Sharing Codex limits or Claude Code tokens needs consent on both devices.
+3. On the first device, choose Pair a device, then Host on this device. If the app asks, choose Create device identity first. Check this device's address and sync port, which the app fills in from Tailscale where it can, and choose Start.
+4. Copy the invitation. Share it privately, because clipboard managers may keep copies. It expires within ten minutes.
+5. On the second device, choose Pair a device, then Join with an invitation. Paste the invitation and choose Claim.
+6. The first device shows the second device's fingerprint, address and port. Check them and choose Confirm.
+7. The second device asks you to confirm too. Choose Confirm there.
+8. Choose what to share with the other device, either while confirming or later under Sharing. Sharing Codex limits or Claude Code tokens needs consent on both devices.
 
 The devices then exchange sanitized records directly over an encrypted connection after each collection. Disconnect in Settings on either device ends the pairing. Windows Firewall may ask whether the bundled `node.exe` may listen on the Tailscale network. Allow it only for that network.
 
@@ -76,7 +78,7 @@ Dates use America/New_York on every device. Week covers the seven calendar days 
 
 The API-equivalent estimate uses standard short-context list prices from the price table in `native/prices.json`, which is taken from [LiteLLM's open price table](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json). The app shows the date the table was last checked and never fetches prices. A maintainer refreshes the table by hand with `node scripts/price-refresh.mjs --write`, which prints the changes before saving. The estimate is a hypothetical token-price scenario, not a bill or a subscription savings claim. A model with no entry in the table is left out and its estimate shows Unknown. Prices are looked up by exact model name, so a dated name or a `-latest` name also shows Unknown unless the table lists it. Claude model names the collector does not recognise, including Claude Fable, are counted under `unknown` and stay unpriced. Long-context premiums, Fast mode, tool charges and unreported cache writes are not included. The table's cache-write price is the standard short-lived cache rate, so longer cache writes are underestimated.
 
-Claude Code reports its own session cost to a status line command. When Observatory's status line bridge is installed, the app shows that cost as "Session cost (estimate)", separate from the API-equivalent estimate. Without the bridge it shows Unknown.
+Claude Code reports its own session cost to a status line command. Observatory shows that cost as "Session cost (estimate)", separate from the API-equivalent estimate, only when its status line bridge is installed. A release does not install the bridge, and turning on Claude Code limits in Settings does not add it, so an installed release shows Unknown for session cost.
 
 Codex tokens and screen time for All add the two paired devices only after the collector confirms that no session is counted twice. Claude Code tokens are shown per device. Dictation stays per device because synced history may overlap.
 

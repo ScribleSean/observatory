@@ -55,7 +55,7 @@ On first launch the app opens a setup screen that asks which sources to read. Ev
 
 ## Pairing a second device
 
-Pairing a Mac and a Windows PC is optional, and a single device gets the complete app. To pair, install [Tailscale](https://tailscale.com/) on both devices and sign in to the same account. Then copy an invitation in Settings on the first device, paste it in Settings on the second, and confirm the second device on the first. Tailscale is used only to reach the other device. Trust comes from the invitation, and records travel directly between the two devices over an encrypted connection. Sharing Codex limits or Claude Code tokens with the other device needs consent on both devices. See the [guide](docs/GUIDE.md#pair-two-devices).
+Pairing a Mac and a Windows PC is optional, and a single device gets the complete app. To pair, install [Tailscale](https://tailscale.com/) on both devices and sign in to the same account. Then copy an invitation in Settings on the first device, paste it in Settings on the second, and confirm the pairing on both devices. Tailscale is used only to reach the other device. Trust comes from the invitation, and records travel directly between the two devices over an encrypted connection. Sharing Codex limits or Claude Code tokens with the other device needs consent on both devices. See the [guide](docs/GUIDE.md#pair-two-devices).
 
 ## Data and privacy
 
@@ -76,7 +76,7 @@ See [private sync](docs/PRIVATE-SYNC.md) and [security](SECURITY.md).
 
 ## Limitations
 
-- Builds are not signed by an identified developer, and there are no automatic updates. Check for updates says that updates are not available in this build. To update, download the newer release and replace the app as the install guide describes.
+- Builds are not signed by an identified developer, and there are no automatic updates. Check for updates in the panel says that updates are not available in this build. To update, download the newer release and replace the app as the install guide describes.
 - The Mac app runs only on Apple Silicon with macOS 14 or later. The Windows app runs only on x64. There is no Linux app, and WSL and Ubuntu tracking are out of scope. iPhone integration is later work and is not implemented.
 - Claude Code limits are read only after you turn them on in Settings and accept the notes shown there. They are account-wide and are not sent to a paired device. When a new reading cannot be taken, the app shows the earlier reading with the time it was observed.
 - Screen time needs ActivityWatch on each device you want to track. Observatory does not install it.

@@ -27,6 +27,8 @@ Download the ZIP and `SHA256SUMS.txt` into the same folder. In Terminal, from th
 grep macos-arm64.zip SHA256SUMS.txt | shasum -a 256 -c
 ```
 
+If Safari unpacked the ZIP for you, it moved the ZIP to the Trash. Put the ZIP back in the folder with `SHA256SUMS.txt`, move the folder Safari unpacked to the Trash, and unpack the ZIP yourself after the check.
+
 The command prints the file name followed by `OK` when the two match. If it prints `FAILED`, delete the download and do not open it. A matching checksum shows that the file arrived intact. It does not prove who built it, because the checksum file comes from the same release page.
 
 ### Open an unsigned app
@@ -80,7 +82,7 @@ Change the path if the app is in `~/Applications`. The `-g` flag starts the app 
 
 ### Replace with a newer release
 
-There are no automatic updates. Check for updates says that updates are not available in this build. To move to a newer release:
+There are no automatic updates. Check for updates in the panel or the app menu says that updates are not available in this build. To move to a newer release:
 
 1. Download and check the new ZIP as described above.
 2. Right-click the menu-bar icon and choose Quit Observatory.
@@ -93,7 +95,7 @@ Builds up to 0.3.14 build 41 were named Workspace Observatory and kept their dat
 
 ### Remove
 
-1. If you turned on Claude Code limits, turn them off in Settings.
+1. If you turned on Claude Code limits, turn them off in Settings, so that no record of your consent stays in the data folder you may keep.
 2. If Start at login is on, turn it off in Settings under Startup.
 3. Right-click the menu-bar icon and choose Quit Observatory.
 4. Move `Observatory.app` to the Trash.
@@ -106,7 +108,7 @@ The rest of this guide is for building, packaging and testing the app from a che
 
 ### SDK
 
-Mac builds 39, 40 and 41 were compiled with the macOS 26.5 SDK from the Command Line Tools, selected by setting `SDKROOT`, and later builds use the same setting:
+Mac builds 39, 40 and 41 were compiled with the macOS 26.5 SDK from the Command Line Tools, selected by setting `SDKROOT`:
 
 ```sh
 SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk node native/build.mjs --runtime-dir /absolute/extracted-runtime --web-dir /absolute/web-bundle
@@ -196,11 +198,20 @@ Snapshots include only the existing allowlisted usage fields. Raw prompts, tool 
 
 ### Historical build and collector checks
 
-These results apply only to the named revisions and are kept as dated evidence. They do not verify a later build.
+The paragraphs below are copied unchanged from the guide at `1e6c082`, with their original dates and limitations. They apply only to the named revisions and environments and do not verify a later build. Where they name a viewer, a flag or a folder, they describe the build they were written for.
 
-- The [September 15 clean build for 2bdddc7](https://github.com/ScribleSean/observatory/actions/runs/34965810055) passed complete application and extracted ZIP verification. The source suite reported 515 passes, seven skips and zero failures. The 0.3.12 ZIP was 64,912,222 bytes, with 184,465,141 unpacked bytes. Its SHA-256 was `15316398a0a798184f0ed6f01452f0d7aba6877dd204fd65d61918ed7bfa333f`. The workflow did not retain a downloadable artifact, install the app, produce a DMG or notarize the build.
-- Runtime-only verification passed on [source `2a29da3`](https://github.com/ScribleSean/observatory/actions/runs/34738671031), producing a 61,556,651-byte archive with SHA-256 `3c9c9581711fb02f5dbc78554343279914d62d86817e2e724e5e093ce08e9709` and 14 dependency notices.
-- Full application and ZIP verification passed on [source `3ebf3ef`](https://github.com/ScribleSean/observatory/actions/runs/34740025534), with 366 passing source tests, no failures and five explicit skips. The archive was 63,842,120 bytes, SHA-256 `fe0d343a117bd0cf36fd3617b3667d5ee096c0408d518058e9c29fa9858c2a27`, with 181,335,679 unpacked bytes. It was not uploaded or installed.
-- The local collector was tested in an isolated directory on the development Mac. ActivityWatch, saved Codex usage and Wispr all returned valid metadata, and the snapshot passed the private-field shape check. These checks did not modify the installed app, its login registration or its settings, and they do not establish clean-machine compatibility.
+The [September 15 clean build for 2bdddc7](https://github.com/ScribleSean/observatory/actions/runs/34965810055) passed complete application and extracted ZIP verification. The source suite reported 515 passes, seven skips and zero failures. The 0.3.12 ZIP was 64,912,222 bytes, with 184,465,141 unpacked bytes. Its SHA-256 was `15316398a0a798184f0ed6f01452f0d7aba6877dd204fd65d61918ed7bfa333f`. Original and extracted bundles passed isolated checks and local signature verification. The workflow did not retain a downloadable artifact, install the app, produce a DMG or notarize the build. This is packaging evidence, not public release or interactive acceptance.
+
+Runtime-only verification passed on [source `2a29da3`](https://github.com/ScribleSean/observatory/actions/runs/34738671031), producing a 61,556,651-byte archive with SHA-256 `3c9c9581711fb02f5dbc78554343279914d62d86817e2e724e5e093ce08e9709` and 14 dependency notices. The optional `build_app` input extends later runs with the complete dashboard/native build, isolated native checks and ZIP extraction verification. It requires an arm64 runner. This opt-in mode executes the verified runtime and uses ad hoc local signing, but still does not install or publish the app. Its result must be verified separately from the runtime-only run.
+
+Full application and ZIP verification passed on [source `3ebf3ef`](https://github.com/ScribleSean/observatory/actions/runs/34740025534). There were 366 passing source tests, no failures and five explicit skips. Native popup tests passed offscreen fallback, dashboard handoff and reopening/closing the usage panel while retaining the dashboard. The ZIP and extracted application passed their checks. The archive was 63,842,120 bytes, SHA-256 `fe0d343a117bd0cf36fd3617b3667d5ee096c0408d518058e9c29fa9858c2a27`, with 181,335,679 unpacked bytes. The temporary hosted artifact was not uploaded or installed, no DMG was requested, and notarization and clean interactive first launch remain separate gates.
+
+Earlier candidate checks passed configuration and first-run consent tests, an isolated bundled-collector test with all sources disabled and no developer tools on PATH, signature verification, and the WebKit renderer/data-bridge test. A separate live collection using only the packaged runtimes read ActivityWatch, Codex tokens/settings, Wispr successfully. Native Settings was checked in an isolated preview: Save persisted the choice, Reload discarded unsaved changes, and preview collection remained disabled. This is historical development-machine evidence, not a clean-machine installation test or acceptance of a later candidate.
+
+## Historical local-collector checks
+
+The local collector was tested in an isolated directory on the development Mac. ActivityWatch, saved Codex usage, Wispr all returned valid metadata. The snapshot passed the private-field shape check. Regression tests cover disabled readers, output filtering, shared token/settings reads, invalid counters, and ActivityWatch interval normalization. POSIX runner tests cover failure, timeout, overlapping runs and separation of bundle code from writable state.
+
+These historical checks did not modify the installed app, its login registration, its existing settings or its legacy cross-device collector. They do not establish clean-machine compatibility or installed-app migration. Preserve working Mac/Windows exchange and recoverable state until its replacement is verified. Do not resume Ubuntu tracking to reproduce an old result. Native accessibility, menu-bar interaction, scheduled collection, login and sleep/wake acceptance remain on the [roadmap](ROADMAP.md).
 
 These builds used the earlier SwiftUI interface, which was removed in October 2026. The tag `archive/pre-viewer-removal` marks the last commit that has it. Builds since then show the shared web pages that the Windows app also uses.

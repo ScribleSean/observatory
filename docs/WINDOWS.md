@@ -27,12 +27,14 @@ Each release has two assets and one checksum file:
 Download the installer and `SHA256SUMS.txt` into the same folder. In PowerShell, from that folder, compare the installer with its listed checksum:
 
 ```powershell
-$installer = Get-ChildItem .\Observatory-*-windows-x64-setup.exe
-$expected = ((Select-String -Path .\SHA256SUMS.txt -SimpleMatch $installer.Name).Line -split '\s+')[0]
-(Get-FileHash $installer.FullName -Algorithm SHA256).Hash -eq $expected
+$installer = @(Get-ChildItem .\Observatory-*-windows-x64-setup.exe)
+if ($installer.Count -ne 1) { "Found $($installer.Count) installers. Keep exactly one in this folder." } else {
+  $expected = ((Select-String -Path .\SHA256SUMS.txt -SimpleMatch $installer[0].Name).Line -split '\s+')[0]
+  (Get-FileHash $installer[0].FullName -Algorithm SHA256).Hash -eq $expected
+}
 ```
 
-The last line prints `True` when the two match. If it prints `False`, or the first line finds more than one installer, delete the extra downloads and start again. Do not run an installer whose checksum does not match. A matching checksum shows that the file arrived intact. It does not prove who built it, because the checksum file comes from the same release page.
+The command prints `True` when the two match. If it prints `False`, or says it found more or fewer than one installer, remove the extra or partial downloads and start again. Do not run an installer whose checksum does not match. A matching checksum shows that the file arrived intact. It does not prove who built it, because the checksum file comes from the same release page.
 
 ### Run an unsigned installer
 
@@ -81,7 +83,7 @@ Original records stay with the tools that wrote them: ActivityWatch, Codex, Clau
 
 ### Replace with a newer release
 
-There are no automatic updates. Check for updates says that updates are not available in this build. The installer refuses to install over an existing copy, so replace it in this order:
+There are no automatic updates. Check for updates in the panel or the tray menu says that updates are not available in this build. The installer refuses to install over an existing copy, so replace it in this order:
 
 1. Download and check the new installer as described above.
 2. Right-click the tray icon and choose Quit Observatory.
@@ -94,7 +96,7 @@ Builds up to 0.3.14 build 41 were named Workspace Observatory and kept their dat
 
 ### Remove
 
-1. If you turned on Claude Code limits, turn them off in Settings.
+1. If you turned on Claude Code limits, turn them off in Settings, so that no record of your consent stays in the data folder you may keep.
 2. If Start at login is on, turn it off in Settings under Startup.
 3. Right-click the tray icon and choose Quit Observatory.
 4. Uninstall Observatory from Settings, Apps, Installed apps.
@@ -177,11 +179,34 @@ Start at login, in Settings under Startup, adds or removes only this installatio
 
 ### Historical package evidence
 
-These results apply only to the named revisions and are kept as dated evidence. They do not verify a later build.
+The paragraphs below are copied unchanged from the guide at `1e6c082`, with their original dates and limitations. They apply only to the named revisions and environments and do not verify a later build. Where they name a viewer, a flag or a folder, they describe the build they were written for.
 
-- The [September 15 clean package and installer run for 5907e8a](https://github.com/ScribleSean/observatory/actions/runs/34967825472) passed. All 522 source tests ran across the main suite and a separate ACL-heavy allowance TLS test, with 483 passes, 39 skips and zero failures. The clean package contained 3,051 verified files totaling 258,580,858 unpacked bytes. The unsigned 0.3.12 TEST-identity installer passed installation, payload hashes, shortcut and registration checks, running-app and overwrite refusal, linked-directory rejection, uninstall and reinstall, and saved-data preservation.
-- The [clean Windows package run for f980326](https://github.com/ScribleSean/observatory/actions/runs/34738823435) passed on September 13, 2026 UTC, with 345 passing source tests and 26 explicit skips, and verified all 3,027 manifest files, totaling 257,766,732 bytes.
-- The [full installer run for 04b6fa6](https://github.com/ScribleSean/workspace-observatory/actions/runs/34740480607) passed on September 13, 2026 UTC and exercised the 0.3.3 TEST-identity installer.
-- The September 12 native-default candidate at `d5a2317` passed the full Windows build with 250 JavaScript and reader tests passed, 14 skipped and zero failed. Package verification covered 1,025 files and 234,884,445 bytes. The unsigned installer was 93,988,602 bytes. These sizes include bundled runtimes and are not CPU or memory measurements.
+The dated checks in this guide apply only to the named revisions and environments. They are not new results or a statement of today's installed version. The native-default build was installed on the development machine on September 12, 2026. Later evidence is retained in the release record (archived).
+
+The [September 15 clean package and installer run for 5907e8a](https://github.com/ScribleSean/observatory/actions/runs/34967825472) passed. All 522 source tests ran across the main suite and a separate ACL-heavy allowance TLS test, with 483 passes, 39 skips and zero failures. The clean package contained 3,051 verified files totaling 258,580,858 unpacked bytes. The unsigned 0.3.12 TEST-identity installer passed installation, payload hashes, shortcut and registration checks, running-app and overwrite refusal, linked-directory rejection, uninstall/reinstall and saved-data preservation. No ordinary app registration was changed and no downloadable artifact was retained. Signing, interactive first launch, login and sleep/wake verification remain separate release gates.
+
+The [clean Windows package run for f980326](https://github.com/ScribleSean/observatory/actions/runs/34738823435) passed on September 13, 2026 UTC. It recorded 345 passing source tests and 26 explicit skips, then verified packaged native checks and all 3,027 manifest files, totaling 257,766,732 bytes. That run did not install the application or publish a release.
+
+The manual clean-package workflow now also offers isolated installer verification, enabled by default. It compiles a TEST-identity installer and runs the existing installation, overwrite refusal, linked-directory rejection, uninstall and saved-data preservation checks. This uses synthetic data on the disposable runner, not the ordinary application registration. A successful package-only run does not establish installer or desktop first-launch coverage.
+
+The [full installer run for 04b6fa6](https://github.com/ScribleSean/workspace-observatory/actions/runs/34740480607) passed on September 13, 2026 UTC. After 345 passing source tests, 26 explicit skips and full manifest verification, it compiled and exercised the 0.3.3 TEST-identity installer. Checks covered running-app refusal, per-user installation, payload hashes, the Start-menu shortcut, quoted registration, native self-tests, overwrite refusal, linked-directory rejection, uninstall/reinstall, and preservation of saved data and unrelated files and registry values. No ordinary app registration was changed and no artifact was published. This does not prove interactive first-run, login or sleep/wake behavior, or a later candidate's installation.
+
+#### Historical verification and remaining gates
+
+Earlier development-machine checks passed the native build and snapshot tests. The packaged app collected native Windows activity, saved Codex usage, Wispr statistics and optional Ubuntu Codex usage using its bundled runtimes. A signed-in desktop smoke test loaded the packaged React dashboard with fictional records and fetched its local snapshot through WebView2. The Activity view was visually inspected at the tested window size. These historical checks cover one configured machine, not native-only source retirement, clean-install compatibility or a full visual and accessibility review.
+
+For a synthetic desktop test, prepare a new private test directory with `node native/windows/prepare-demo-runtime.mjs ABSOLUTE_NEW_DIRECTORY`. Run the packaged executable with `--test-web ABSOLUTE_NEW_DIRECTORY` from the signed-in desktop. The test captures only the WebView and only for a snapshot marked as synthetic. It does not capture other windows or the desktop. The result and WebView cache belong in that test directory, never in a release package.
+
+Development builds also accept `--test-usage-popup C:\absolute\path\to\empty-test-directory`. This test requires an existing empty directory and refuses a linked directory. It uses in-memory synthetic quota data, starts no collectors, and captures only its own form and graph controls. On September 9 it passed window selection, reload, saved/unavailable states, accessible chart summaries and inert refresh/navigation callbacks. The captures were visually reviewed. This is not a test of clicking the real tray icon or of an installed release.
+
+The September 12 native-default candidate at `d5a2317` passed the full Windows build with 250 JavaScript/reader tests passed, 14 skipped and zero failed. Packaged native-dashboard, wizard and compact-tray tests passed. Package verification covered 1,025 files and 234,884,445 bytes, about 224 MiB unpacked. The unsigned installer is 93,988,602 bytes. These sizes include bundled runtimes and are not CPU or memory measurements.
+
+The isolated TEST installer passed install/uninstall, overwrite refusal, linked-path refusal and preservation checks. The ordinary build was then installed on the development machine with a recoverable application backup. Installed payload hashes, Start search registration, existing login registration and unchanged configuration/snapshot hashes were verified. Collection completed after restart. The user confirmed the native sidebar window was visible, although the process API returned no main-window handle. This does not prove every source, actual login launch or peer synchronization.
+
+Development source now queues a full refresh after Windows reports [automatic resume](https://learn.microsoft.com/en-us/windows/win32/power/pbt-apmresumeautomatic). A hidden top-level window receives the notification even when the dashboard is closed. Collection runs on the next 30-second timer tick, or after existing work finishes, through the usual consent, pairing-pause and shutdown checks. The later user-resume notification does not queue duplicate work. Normal collection also consumes a pending resume request, and provider cooldown rules are unchanged.
+
+Native compilation and synthetic notification, disposal, pending-work and shutdown checks passed on Windows for source `44ebf5c`. This change is not in the installed 0.3.8 build 14. No real suspend or logout was performed during verification.
+
+Development source adds **Browse saved allowance history** to Allowances. The owner-local window selects a saved account, date range and record type, then reads pages of observations, daily token reports or collection results. It reuses the shared archive reader, does not start collection or sharing, and does not expose history through web or peer routes. Filters invalidate the previous page, invalid date ranges cannot load, and closing the window cancels its bounded helper. This source change still needs packaged bridge and installed-window verification. It does not provide cross-device archive exchange or a Windows installer update.
 
 These builds used the earlier Windows Forms interface, which was removed in October 2026. The tag `archive/pre-viewer-removal` marks the last commit that has it. Builds since then show the shared web pages that the Mac app also uses.
