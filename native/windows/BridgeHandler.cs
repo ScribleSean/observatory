@@ -301,7 +301,9 @@ internal sealed class BridgeSettingsStore(string runtime)
         catch when (!strict) { return false; }
     }
 
-    internal string ReadPairingStatus(DateTimeOffset now)
+    internal string ReadPairingStatus(DateTimeOffset now) => ReadPairingStatusRecord(now).State;
+
+    internal (string State, DateTimeOffset? CheckedAt) ReadPairingStatusRecord(DateTimeOffset now)
     {
         try
         {
@@ -312,10 +314,10 @@ internal sealed class BridgeSettingsStore(string runtime)
                 state is not ("unpaired" or "revoked" or "establishing-trust" or "active-sync" or "sync-stale" or "unavailable") ||
                 !DateTimeOffset.TryParse(value["checkedAt"]?.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.AssumeUniversal, out var checkedAt) ||
-                now - checkedAt > TimeSpan.FromMinutes(2) || checkedAt - now > TimeSpan.FromMinutes(1)) return "unavailable";
-            return state;
+                now - checkedAt > TimeSpan.FromMinutes(2) || checkedAt - now > TimeSpan.FromMinutes(1)) return ("unavailable", null);
+            return (state, checkedAt);
         }
-        catch { return "unavailable"; }
+        catch { return ("unavailable", null); }
     }
 
     internal (string State, string Transport) ReadPairing(bool strict = false)
@@ -392,7 +394,8 @@ internal sealed class BridgeHandler : IDisposable
     private readonly QuotaSharingStatus[] sharing = [new(false, false, "pairing-unavailable", null), new(false, false, "pairing-unavailable", null)];
 
     private sealed record FileStatus((string Skin, string Appearance) Viewer, string? Device,
-        bool LimitsConsent, JsonObject Sources, bool Startup, (string State, string Transport) Pairing, string PairingStatus = "unavailable");
+        bool LimitsConsent, JsonObject Sources, bool Startup, (string State, string Transport) Pairing, string PairingStatus = "unavailable",
+        DateTimeOffset? PairingStatusAt = null);
     private FileStatus files = new(("sage", "system"), null, false, Sources(new()), false, ("unavailable", "none"));
     private DateTimeOffset? filesRead;
     private bool filesReading;
@@ -450,8 +453,8 @@ internal sealed class BridgeHandler : IDisposable
                 if (request.Action == "pairing-cancel") cancel = request;
                 else
                 {
-                    try { Post(request, request.Action == "status" ? Status() :
-                        new("done", new JsonObject { ["peerAddress"] = peerAddress })); }
+                    try { Post(request, request.Action == "status" ? Status() : request.Action == "pairing-peer-address" ?
+                        new("done", new JsonObject { ["peerAddress"] = peerAddress }) : new("unavailable")); }
                     finally { ids.Remove((request.Epoch, id)); }
                     if (request.Action == "status") ScheduleCache();
                     return;
@@ -650,7 +653,11 @@ internal sealed class BridgeHandler : IDisposable
             var viewer = files.Viewer;
             var pair = files.Pairing;
             var state = working ? "working" : session is not null ? pairingState : identityState is not null ? identityState : host.CollectionPaused ? "unavailable" : pair.State;
-            if (session is null && files.PairingStatus != "unavailable") state = files.PairingStatus;
+            var now = host.Now;
+            if (!working && session is null && identityState is null && !host.CollectionPaused &&
+                files.PairingStatus != "unavailable" && files.PairingStatusAt is DateTimeOffset checkedAt &&
+                now - checkedAt <= TimeSpan.FromMinutes(2) && checkedAt - now <= TimeSpan.FromMinutes(1))
+                state = files.PairingStatus;
             if (state == "confirming" && !Hex64(fingerprint)) state = "unavailable";
             var value = new JsonObject
             {
@@ -791,7 +798,11 @@ internal sealed class BridgeHandler : IDisposable
         try { value = value with { Sources = Sources(host.ReadConfiguration()) }; } catch { }
         try { value = value with { Startup = host.ReadStartup() }; } catch { }
         try { value = value with { Pairing = host.Settings.ReadPairing(strict: true) }; } catch { }
-        lock (gate) value = value with { PairingStatus = session is null ? host.Settings.ReadPairingStatus(host.Now) : "unavailable" };
+        lock (gate)
+        {
+            var record = session is null ? host.Settings.ReadPairingStatusRecord(host.Now) : (State: "unavailable", CheckedAt: (DateTimeOffset?)null);
+            value = value with { PairingStatus = record.State, PairingStatusAt = record.CheckedAt };
+        }
         return value;
     }
 
@@ -935,13 +946,20 @@ internal sealed class BridgeHandler : IDisposable
             if (!Confirm(request, "Device identity", "Allow a device identity stored in a permission-restricted file? The key is not stored using DPAPI or encrypted separately by Observatory. A valid existing identity is reused.")) return new("cancelled");
             lock (gate) temporary = session is null;
         }
-        if (action == "pairing-host-defaults") { lock (gate) temporary = session is null; }
+        if (action == "pairing-host-defaults")
+        {
+            lock (gate)
+            {
+                if (session is not null) return new("busy");
+                temporary = true;
+            }
+        }
         if (action is "pairing-host-start" or "pairing-join-claim" or "pairing-identity-create" or "pairing-host-defaults")
         {
             lock (gate)
             {
                 if (request.Epoch != epoch || closed) return new("unavailable");
-                if (session is not null && action is not ("pairing-identity-create" or "pairing-host-defaults")) return new("busy");
+                if (session is not null && action != "pairing-identity-create") return new("busy");
             }
             if (!BeginSession()) return new("busy");
         }
@@ -965,7 +983,8 @@ internal sealed class BridgeHandler : IDisposable
             switch (action)
             {
                 case "pairing-host-defaults":
-                    reply = await current.Send(new JsonObject { ["action"] = "host-defaults" });
+                    try { reply = await current.Send(new JsonObject { ["action"] = "host-defaults" }); }
+                    catch { await EndSession(current); return new("unavailable"); }
                     if (!Current()) return new("unavailable");
                     if (reply.Status != "ready" || reply.Port is null)
                     { await EndSession(current); return new("unavailable"); }
@@ -1017,7 +1036,7 @@ internal sealed class BridgeHandler : IDisposable
             await EndSession();
             return new(finished ? "done" : "unavailable");
         }
-        finally { if (temporary) await EndSession(); }
+        finally { if (temporary) await EndSession(current); }
     }
 
     internal async Task PollAsync()
@@ -1128,7 +1147,7 @@ internal sealed class BridgeHandler : IDisposable
     {
         internal readonly List<JsonObject> Commands = new();
         internal string PollState = "hosting", JoinState = "acknowledged", IdentityState = "identity-ready";
-        internal bool VerifyExit = true, RefuseDefaults;
+        internal bool VerifyExit = true, RefuseDefaults, ThrowDefaults;
         internal string? DefaultsRaw;
 
         internal TaskCompletionSource<TlsSetupReply>? HeldConfirm;
@@ -1144,6 +1163,7 @@ internal sealed class BridgeHandler : IDisposable
             if (action == "host-confirm" && HeldConfirm is not null) return HeldConfirm.Task;
             if (action == "host-start" && Held is not null) return Held.Task;
             if (action == "status" && HeldStatus is not null) return HeldStatus.Task;
+            if (action == "host-defaults" && ThrowDefaults) return Task.FromException<TlsSetupReply>(new InvalidOperationException("Synthetic defaults failure"));
             if (action == "host-defaults") return Task.FromResult(TlsSetupReply.Parse(DefaultsRaw ?? (RefuseDefaults
                 ? "{\"id\":1,\"status\":\"unavailable\"}"
                 : "{\"id\":1,\"status\":\"ready\",\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}")));
@@ -1841,13 +1861,26 @@ internal sealed class BridgeHandler : IDisposable
     // Creating a symbolic link needs Developer Mode or an elevated account on Windows.
     private static async Task TestNewPairingActions(string runtime)
     {
-        Check(Immediate.SetEquals(BridgeContract.Actions.Entries.Where(e => e.Value["immediate"].Kind == "boolean" &&
-            e.Value["immediate"].Text == "true").Select(e => e.Key)), "Immediate actions differ from contract");
+        var expectedImmediate = new HashSet<string> { "status", "pairing-peer-address", "pairing-cancel" };
+        Check(Immediate.SetEquals(expectedImmediate), "Immediate actions match literal set");
+        Check(expectedImmediate.SetEquals(BridgeContract.Actions.Entries.Where(e => e.Value["immediate"].Kind == "boolean" &&
+            e.Value["immediate"].Text == "true").Select(e => e.Key)), "Contract immediate actions match literal set");
         using var test = new TestDriver(runtime);
         var defaults = (await test.Run("pairing-host-defaults"))["value"]!;
         Check(defaults.ToJsonString() == "{\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}" &&
             test.Host.Session!.Disposed && test.Host.Releases == 1 && !test.Host.Reserved &&
             test.Host.Session.Commands.Single().ToJsonString() == "{\"action\":\"host-defaults\"}", "Host defaults lifecycle");
+        test.Host.MakeSession = () => new() { ThrowDefaults = true };
+        await test.Run("pairing-host-defaults", code: "unavailable");
+        Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Faulted defaults release temporary session");
+        test.Host.MakeSession = null;
+        await test.Run("pairing-host-start", HostArgs());
+        var hosting = test.Host.Session!;
+        await test.Run("pairing-host-defaults", code: "busy");
+        Check(test.Handler.session == hosting && !hosting.Disposed && test.Host.Reserved &&
+            !hosting.Commands.Any(c => c["action"]!.GetValue<string>() == "host-defaults"), "Defaults preserve hosting session");
+        Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "waiting", "Defaults preserve hosting status");
+        await test.Run("pairing-cancel");
         test.Host.MakeSession = () => new() { RefuseDefaults = true };
         await test.Run("pairing-host-defaults", code: "unavailable");
         Check(test.Host.Session!.Disposed && !test.Host.Reserved, "Refused defaults reservation");
@@ -1935,6 +1968,23 @@ internal sealed class BridgeHandler : IDisposable
                 status = (await test.Run("status"))["value"]!.AsObject();
                 Check(status["pairing"]!["state"]!.GetValue<string>() == state && ValidStatusShape(status), "Pairing file state: " + state);
             }
+            File.WriteAllText(path, Record("active-sync").ToJsonString()); test.Handler.RefreshFilesNow();
+            test.Handler.identityState = "identity-required";
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "identity-required", "Identity state overrides pairing file");
+            test.Handler.identityState = null;
+            test.Host.CollectionPaused = true;
+            status = (await test.Run("status"))["value"]!.AsObject();
+            Check(status["pairing"]!["state"]!.GetValue<string>() == "unavailable" &&
+                status["pairing"]!["transport"]!.GetValue<string>() == "none", "Paused collection overrides pairing file");
+            test.Host.CollectionPaused = false;
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == "active-sync", "Fresh pairing file supplies idle status");
+            var originalNow = test.Host.Now;
+            test.Host.Now = originalNow.AddMinutes(3);
+            Check((await test.Run("status"))["value"]!["pairing"]!["state"]!.GetValue<string>() == test.Handler.files.Pairing.State,
+                "Cached pairing status expires before first answer");
+            await test.Handler.cacheWork;
+            test.Host.Now = originalNow;
+            test.Handler.RefreshFilesNow();
             var extra = Record("active-sync"); extra["extra"] = true;
             foreach (var raw in new[] { Record("active-sync", test.Host.Now.AddSeconds(-121)).ToJsonString(),
                 Record("active-sync", test.Host.Now.AddSeconds(61)).ToJsonString(), extra.ToJsonString(), new string(' ', 1025),

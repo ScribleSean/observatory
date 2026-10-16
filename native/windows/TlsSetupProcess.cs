@@ -23,7 +23,7 @@ internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, 
         if (status == "ready")
         {
             if (!Keys(value, "id", "status", "address", "port", "portAvailable") || !AddressValid(value["address"]) ||
-                value["port"] is not JsonValue portValue || !portValue.TryGetValue<int>(out var port) || port is < 1024 or > 65535 ||
+                value["port"] is not JsonValue portValue || !portValue.TryGetValue<int>(out var port) || port != 43128 ||
                 (value["address"] is null) != (value["portAvailable"] is null) ||
                 value["portAvailable"] is not null && (value["portAvailable"] is not JsonValue available || !available.TryGetValue<bool>(out _)))
                 throw new InvalidOperationException("Invalid setup defaults.");
@@ -83,7 +83,7 @@ internal sealed record TlsSetupReply(int Id, string Status, string? Invitation, 
             foreach (var address in new JsonNode?[] { JsonValue.Create("203.0.113.1"), JsonValue.Create("100.064.0.1"), JsonValue.Create("fd00::1%3"), JsonValue.Create(true) })
             { var bad = good.DeepClone().AsObject(); bad[good == goodDefaults ? "address" : "peerAddress"] = address?.DeepClone(); invalid.Add(bad); }
         }
-        foreach (var port in new JsonNode?[] { null, JsonValue.Create(1023), JsonValue.Create(65536), JsonValue.Create(43128.5), JsonValue.Create("43128"), JsonValue.Create(true) })
+        foreach (var port in new JsonNode?[] { null, JsonValue.Create(43129), JsonValue.Create(1023), JsonValue.Create(65536), JsonValue.Create(43128.5), JsonValue.Create("43128"), JsonValue.Create(true) })
         { var bad = goodDefaults.DeepClone().AsObject(); bad["port"] = port; invalid.Add(bad); }
         foreach (var available in new JsonNode?[] { null, JsonValue.Create("true"), JsonValue.Create(1) })
         { var bad = goodDefaults.DeepClone().AsObject(); bad["portAvailable"] = available; invalid.Add(bad); }
