@@ -179,13 +179,18 @@ function SaveJson([string]$Path, $Value) {
 }
 function SaveLogin([string]$Path, $Value) {
     # Publish a flushed sibling file atomically so a crash cannot truncate saved intent.
-    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N')
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Compress))
+    # A rerun reads its intent from this same file, so an existing copy must already hold these bytes.
+    if (Item $Path) {
+        $existing = [IO.File]::ReadAllBytes($Path)
+        if ([Convert]::ToBase64String($existing) -cne [Convert]::ToBase64String($bytes)) { Refuse 'The saved login state does not match this run.' }
+        return
+    }
+    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N')
     $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
     try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) }
     finally { $stream.Dispose() }
-    if (Item $Path) { [IO.File]::Replace($temporary, $Path, $null) }
-    else { [IO.File]::Move($temporary, $Path) }
+    [IO.File]::Move($temporary, $Path)
 }
 function ReadLogin {
     if (Test-Path -LiteralPath $RunKey) {
