@@ -397,7 +397,7 @@ final class MacBridgeHost: BridgeHost {
             Task {
                 do {
                     let value = try await readConsent(arguments: enabled ? ["set", "--consent"] : ["clear"])
-                    consent.set(value); completion(.done, nil)
+                    consent.set(value); completion(value == enabled ? .done : .unavailable, nil)
                 } catch { consent.set(nil); completion(.unavailable, nil) }
             }
         case "set-sharing":
