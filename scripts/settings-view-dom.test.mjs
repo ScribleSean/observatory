@@ -271,7 +271,40 @@ void test('join Confirm posts join confirmation and hides claimed invitation con
   }
 });
 
-const localReadyHelp = 'This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again. If the other device has closed pairing, make a new invitation there and join with it.';
+const localReadyHelp = 'This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again.';
+
+void test('local-ready retry reports failure when done leaves pairing unconfirmed', async t => {
+  const f = await fixture(t, 'local-ready');
+  await refresh(f);
+  await f.click('Try again');
+  await f.answer(f.last('pairing-join-confirm'), { ok: true, code: 'done' });
+  const output = f.container.querySelector('output').textContent;
+  assert.equal(output, 'This change could not be made.');
+  assert.ok(!output.includes('Done'));
+  assert.equal(f.button('Try again').disabled, false);
+  assert.ok(f.container.textContent.includes(localReadyHelp));
+});
+
+void test('local-ready retry ending the session shows pairing repair controls', async t => {
+  const f = await fixture(t, 'local-ready');
+  await refresh(f);
+  await f.click('Try again');
+  f.status.pairing.state = 'establishing-trust';
+  await f.answer(f.last('pairing-join-confirm'), { ok: false, code: 'unavailable' });
+  assert.ok(![...f.container.querySelectorAll('button')].some(node => node.textContent === 'Try again'));
+  assert.ok(!f.container.textContent.includes(localReadyHelp));
+  assert.equal(f.button('Disconnect').disabled, false);
+  assert.equal(f.button('Prepare pairing repair').disabled, false);
+});
+
+void test('local-ready retry reports success after acknowledgement', async t => {
+  const f = await fixture(t, 'local-ready');
+  await refresh(f);
+  await f.click('Try again');
+  f.status.pairing.state = 'acknowledged';
+  await f.answer(f.last('pairing-join-confirm'), { ok: true, code: 'done' });
+  assert.equal(f.container.querySelector('output').textContent, 'Done');
+});
 
 void test('local-ready retries without sharing after a checked confirmation and remains retryable until acknowledged', async t => {
   const f = await fixture(t, 'awaiting-confirmation');

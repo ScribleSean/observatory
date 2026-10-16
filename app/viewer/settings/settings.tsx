@@ -261,7 +261,12 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       {state === 'awaiting-confirmation' && button(S.confirm, () => pairingAction(c => c.pairingJoinConfirm(choiceKnown && sharing)))}
       {state === 'local-ready' && <>
         <p>{S.pairLocalReadyHelp}</p>
-        {button(S.pairRetry, () => pairingAction(c => c.pairingJoinConfirm(false)))}
+        {button(S.pairRetry, () => pairingAction(async c => {
+          const result = await c.pairingJoinConfirm(false);
+          // A lost acknowledgement can return success while pairing remains unconfirmed.
+          if (result.ok && c.getStatus()?.pairing.state === 'local-ready') return { ...result, ok: false, code: 'unavailable' };
+          return result;
+        }))}
       </>}
       {state && pairedStates.has(state) && <Row>{button(S.disconnect, () => pairingAction(c => c.pairingDisconnect()))}{button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}</Row>}
       {state === 'revoked' && button(S.repair, () => pairingAction(c => c.pairingRepairPrepare()))}

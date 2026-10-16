@@ -309,7 +309,7 @@ enum ObservatoryStrings {
         static let `pairJoinConfirm` = "Confirm the invitation"
         static let `pairHostConfirm` = "Confirm the peer device"
         static let `pairLocalReady` = "Local device ready"
-        static let `pairLocalReadyHelp` = "This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again. If the other device has closed pairing, make a new invitation there and join with it."
+        static let `pairLocalReadyHelp` = "This device saved the pairing, but the other device has not confirmed that it received it. Keep pairing open on the other device and choose Try again."
         static let `pairRetry` = "Try again"
         static let `pairAcknowledged` = "Peer acknowledged"
         static let `pairConfigurationReady` = "Configuration ready"
