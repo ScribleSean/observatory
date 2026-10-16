@@ -17,6 +17,62 @@ def metadata(inode, mode, owner=501, **changes):
     return types.SimpleNamespace(**values)
 
 
+class FakeSelect:
+    KQ_FILTER_VNODE = -4
+    KQ_EV_ADD = 1
+    KQ_EV_CLEAR = 32
+    KQ_EV_ERROR = 16384
+    KQ_EV_EOF = 32768
+    KQ_NOTE_DELETE = 1
+    KQ_NOTE_WRITE = 2
+    KQ_NOTE_EXTEND = 4
+    KQ_NOTE_ATTRIB = 8
+    KQ_NOTE_LINK = 16
+    KQ_NOTE_RENAME = 32
+    KQ_NOTE_REVOKE = 64
+
+    def __init__(self, reader):
+        self.reader = reader
+        self.registrations = []
+        self.events = []
+        self.failure = None
+        self.closed = False
+        self.drains = 0
+
+    def kqueue(self):
+        if self.failure == "create":
+            raise OSError("fictional queue failure")
+        return self
+
+    def kevent(self, ident, **kwargs):
+        return types.SimpleNamespace(ident=ident, **kwargs)
+
+    def control(self, changes, count, timeout):
+        assert timeout == 0
+        if self.failure == ("register" if changes else "drain"):
+            raise OSError("fictional watcher failure")
+        if changes:
+            assert count == 0
+            self.registrations.extend(changes)
+            for event in changes:
+                self.reader.hook("register", self.reader.handles[event.ident])
+            return []
+        self.drains += 1
+        events, self.events = self.events[:count], self.events[count:]
+        return events
+
+    def close(self):
+        self.closed = True
+        if self.failure == "close":
+            raise OSError("fictional close failure")
+
+    def emit(self, path, fflags=0, **overrides):
+        fd = next(fd for fd, name in self.reader.handles.items() if name == path)
+        values = dict(ident=fd, fflags=fflags, flags=0, filter=self.KQ_FILTER_VNODE)
+        values.update(overrides)
+        self.events.append(types.SimpleNamespace(**values))
+
+
 class FakeReader:
     def __init__(self):
         self.uid = 501
@@ -32,6 +88,10 @@ class FakeReader:
         self.name_calls = 0
         self.hook = lambda event, path: None
         self.mount = None
+        self.select = FakeSelect(self)
+
+    def watcher(self):
+        return policy.VnodeWatcher(self.select)
 
     def canonical(self, path):
         self.hook("canonical", path)
@@ -178,6 +238,110 @@ class WalkTests(unittest.TestCase):
             reader.hook = mutate
             with self.subTest(attribute=attribute), self.assertRaises(policy.UnsafePath):
                 self.verify(reader)
+
+    def test_registration_precedes_first_fstat_and_acl_for_every_object(self):
+        for private in (False, True):
+            reader = FakeReader()
+            calls = []
+            reader.hook = lambda event, path: calls.append((event, path))
+            self.verify(reader, private=private)
+            self.assertEqual([e.ident for e in reader.select.registrations], list(reader.handles))
+            for event in reader.select.registrations:
+                self.assertEqual(event.filter, reader.select.KQ_FILTER_VNODE)
+                self.assertEqual(event.flags, reader.select.KQ_EV_ADD | reader.select.KQ_EV_CLEAR)
+                self.assertEqual(event.fflags, 127)
+            for path in reader.opened:
+                self.assertLess(calls.index(("open", path)), calls.index(("register", path)))
+                self.assertLess(calls.index(("register", path)), calls.index(("fstat", path)))
+                self.assertLess(calls.index(("register", path)), calls.index(("acl", path)))
+            self.assertTrue(reader.select.closed)
+
+    def test_ancestor_entry_churn_passes_but_security_fields_refuse(self):
+        churn = ("st_mtime_ns", "st_ctime_ns", "st_nlink", "st_size")
+        security = ("st_ino", "st_dev", "st_uid", "st_gid", "st_mode", "st_flags")
+        for private in (True, False):
+            ancestors = ("/", "/safe") if private else ("/", "/safe", "/safe/private")
+            for target in ancestors:
+                for attribute in churn + security:
+                    for bits in (2, 18):
+                        with self.subTest(private=private, path=target, attribute=attribute, bits=bits):
+                            reader = FakeReader()
+                            def mutate(event, path):
+                                if event == "acl" and path == target:
+                                    values = vars(reader.nodes[path]).copy()
+                                    values[attribute] += 1
+                                    reader.nodes[path] = types.SimpleNamespace(**values)
+                                    reader.select.emit(path, bits)
+                            reader.hook = mutate
+                            if attribute in churn:
+                                self.verify(reader, private=private)
+                            else:
+                                with self.assertRaises(policy.UnsafePath):
+                                    self.verify(reader, private=private)
+
+    def test_private_file_refuses_all_fingerprint_changes(self):
+        for attribute in vars(metadata(1, stat.S_IFREG | 0o600)):
+            with self.subTest(attribute=attribute):
+                reader = FakeReader()
+                def mutate(event, path):
+                    if event == "acl" and path == "/safe/private/snapshot.json":
+                        values = vars(reader.nodes[path]).copy()
+                        values[attribute] += 1
+                        reader.nodes[path] = types.SimpleNamespace(**values)
+                reader.hook = mutate
+                with self.assertRaises(policy.UnsafePath):
+                    self.verify(reader)
+
+    def test_events_refuse_transient_changes_with_unchanged_stat(self):
+        for private in (True, False):
+            paths = ("/", "/safe", "/safe/private")
+            if private:
+                paths += ("/safe/private/snapshot.json",)
+            for target in paths:
+                for bits in (0, 1, 2, 4, 8, 16, 18, 32, 64, 128, 10):
+                    with self.subTest(private=private, path=target, bits=bits):
+                        reader = FakeReader()
+                        reader.hook = lambda event, path: (
+                            reader.select.emit(path, bits) if event == "acl" and path == target else None)
+                        is_private = private and target.startswith("/safe/private")
+                        if is_private or bits & ~18:
+                            with self.assertRaises(policy.UnsafePath):
+                                self.verify(reader, private=private)
+                        else:
+                            self.verify(reader, private=private)
+
+    def test_malformed_events_refuse(self):
+        for overrides in (dict(ident=999), dict(flags=16384), dict(flags=32768), dict(filter=-1)):
+            reader = FakeReader()
+            reader.hook = lambda event, path: (
+                reader.select.emit(path, 2, **overrides) if event == "acl" and path == "/" else None)
+            with self.subTest(overrides=overrides), self.assertRaises(policy.UnsafePath):
+                self.verify(reader)
+
+    def test_watcher_failures_refuse_and_close_resources(self):
+        for stage in ("create", "register", "drain", "close"):
+            reader = FakeReader()
+            reader.select.failure = stage
+            with self.subTest(stage=stage), self.assertRaises(policy.UnsafePath):
+                self.verify(reader)
+            self.assertEqual(reader.select.closed, stage != "create")
+
+    def test_drain_continues_after_full_batch_and_runs_after_final_canonical(self):
+        for unsafe in (False, True):
+            reader = FakeReader()
+            def emit(event, path):
+                if event == "canonical" and reader.handles:
+                    for _ in range(128):
+                        reader.select.emit("/", 2)
+                    if unsafe:
+                        reader.select.emit("/", 8)
+            reader.hook = emit
+            if unsafe:
+                with self.assertRaises(policy.UnsafePath):
+                    self.verify(reader)
+            else:
+                self.verify(reader)
+            self.assertEqual(reader.select.drains, 3)
 
     def test_acl_change_without_stat_change_rejects(self):
         reader = FakeReader()

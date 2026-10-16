@@ -4,6 +4,10 @@ The caller must keep its own lock and create new files with mode 0600 and new
 directories with mode 0700. This is a metadata preflight, not an atomic lease
 against the current account or root changing the tree after it returns.
 
+Ancestors compare identity, mode, owner, group and flags, ignoring entry churn.
+A vnode watcher catches every attribute change, including changes undone before
+rechecking. Private objects retain every fingerprint field and reject any event.
+
 CLI: [--ancestor|--private] ABSOLUTE_DIRECTORY, default --private. Success is
 exit 0 and exactly 'private-path-acl: ok' on stdout, with no newline. All other
 outcomes fail. Only 64-bit Darwin, local APFS/HFS and inspectable canonical
@@ -25,6 +29,7 @@ import ctypes as C
 import errno
 import os
 import posixpath
+import select
 import stat
 
 # MacOSX26.5.sdk/usr/include/sys/acl.h. These are Darwin, not Linux, values.
@@ -307,17 +312,69 @@ class NativeFS:
                           tuple(value.f_fsid), value.f_fssubtype, value.f_flags_ext)
 
 
+class VnodeWatcher:
+    """Retain vnode events until the final metadata and name checks finish."""
+    def __init__(self, select_module):
+        self.select = select_module
+        self.registered = {}
+        try:
+            self.queue = self.select.kqueue()
+        except Exception as error:
+            raise UnsafePath() from error
+
+    def register(self, fd, private):
+        s = self.select
+        try:
+            event = s.kevent(fd, filter=s.KQ_FILTER_VNODE,
+                             flags=s.KQ_EV_ADD | s.KQ_EV_CLEAR,
+                             fflags=s.KQ_NOTE_DELETE | s.KQ_NOTE_WRITE
+                             | s.KQ_NOTE_EXTEND | s.KQ_NOTE_ATTRIB | s.KQ_NOTE_LINK
+                             | s.KQ_NOTE_RENAME | s.KQ_NOTE_REVOKE)
+            self.queue.control([event], 0, 0)
+            self.registered[fd] = private
+        except Exception as error:
+            raise UnsafePath() from error
+
+    def drain(self):
+        s = self.select
+        count = 64
+        try:
+            while True:
+                events = self.queue.control(None, count, 0)
+                for event in events:
+                    if (event.flags & (s.KQ_EV_ERROR | s.KQ_EV_EOF)
+                            or event.ident not in self.registered
+                            or event.filter != s.KQ_FILTER_VNODE
+                            or self.registered[event.ident]
+                            or event.fflags & ~(s.KQ_NOTE_WRITE | s.KQ_NOTE_LINK)):
+                        raise UnsafePath()
+                if len(events) < count:
+                    return
+        except Exception as error:
+            raise UnsafePath() from error
+
+    def close(self):
+        try:
+            self.queue.close()
+        except Exception as error:
+            raise UnsafePath() from error
+
+
 class NativeReader:
     def __init__(self):
         if sys.platform != "darwin":
             raise UnsafePath()
         self.os = os
+        self.select = select
         self.uid = os.getuid()
         if self.uid != os.geteuid() or os.getgid() != os.getegid():
             raise UnsafePath()
         lib = C.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
         self.native_fs = NativeFS(lib, os.uname().machine)
         self.native_acl = NativeACL(lib)
+
+    def watcher(self):
+        return VnodeWatcher(self.select)
 
     def canonical(self, path):
         return self.os.path.realpath(path, strict=True)
@@ -361,9 +418,16 @@ class NativeReader:
 
 
 def fingerprint(value):
-    # Exclude atime, which directory enumeration may legitimately update.
+    # Private objects keep every field below. Only atime is excluded because
+    # enumeration may update it. Ancestors ignore entry churn fields and rely
+    # on the watcher to catch every attribute change, even one later undone.
     return (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid,
             value.st_nlink, value.st_size, value.st_mtime_ns, value.st_ctime_ns,
+            value.st_flags)
+
+
+def ancestor_fingerprint(value):
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_uid, value.st_gid,
             value.st_flags)
 
 
@@ -379,6 +443,11 @@ def bounded_names(reader, fd):
 
 def verify_directory(path, *, private=True, reader=None):
     """Verify held root-to-leaf descriptors, then recheck names and metadata.
+
+    Ancestors compare identity, mode, owner, group and flags to ignore entry
+    churn. The watcher catches every attribute change, including one undone
+    during inspection. Private objects keep every fingerprint field and reject
+    every vnode event.
 
     --ancestor inspects only the directory chain. --private additionally
     inspects the owner-only leaf and at most ten immediate, single-link,
@@ -397,6 +466,8 @@ def verify_directory(path, *, private=True, reader=None):
         raise UnsafePath()
     snapshots = []
     with ExitStack() as handles:
+        watcher = reader.watcher()
+        handles.callback(watcher.close)
         def inspect(name, parent, directory, private_object):
             before = reader.named_stat(name, parent)
             if not (stat.S_ISDIR(before.st_mode) if directory else stat.S_ISREG(before.st_mode)):
@@ -406,19 +477,21 @@ def verify_directory(path, *, private=True, reader=None):
             # Reject obviously unsafe objects before opening them. Actual ACL
             # checks follow on the opened descriptor, not on a pathname.
             check_access(before.st_mode, before.st_uid, ACL(), reader.uid, private=private_object)
-            identity = fingerprint(before)
+            compare = fingerprint if private_object else ancestor_fingerprint
+            identity = compare(before)
             fd = reader.open(name, parent, directory)
             handles.callback(reader.close, fd)
-            if fingerprint(reader.fstat(fd)) != identity:
+            watcher.register(fd, private_object)
+            if compare(reader.fstat(fd)) != identity:
                 raise UnsafePath()
             filesystem = reader.filesystem(fd)
             check_filesystem(filesystem, reader.uid)
             acl = reader.acl(fd)
             check_access(before.st_mode, before.st_uid, acl, reader.uid, private=private_object)
-            if (fingerprint(reader.fstat(fd)) != identity
-                    or fingerprint(reader.named_stat(name, parent)) != identity):
+            if (compare(reader.fstat(fd)) != identity
+                    or compare(reader.named_stat(name, parent)) != identity):
                 raise UnsafePath()
-            snapshots.append((fd, parent, name, identity, filesystem, acl))
+            snapshots.append((fd, parent, name, identity, filesystem, acl, compare))
             return fd
 
         parent = None
@@ -431,14 +504,15 @@ def verify_directory(path, *, private=True, reader=None):
                 inspect(name, parent, False, True)
             if bounded_names(reader, parent) != names:
                 raise UnsafePath()
-        for fd, parent_fd, name, identity, filesystem, acl in reversed(snapshots):
-            if (fingerprint(reader.fstat(fd)) != identity
+        for fd, parent_fd, name, identity, filesystem, acl, compare in reversed(snapshots):
+            if (compare(reader.fstat(fd)) != identity
                     or reader.filesystem(fd) != filesystem or reader.acl(fd) != acl
-                    or fingerprint(reader.fstat(fd)) != identity
-                    or fingerprint(reader.named_stat(name, parent_fd)) != identity):
+                    or compare(reader.fstat(fd)) != identity
+                    or compare(reader.named_stat(name, parent_fd)) != identity):
                 raise UnsafePath()
         if reader.canonical(path) != path:
             raise UnsafePath()
+        watcher.drain()
 
 
 def main(arguments=None):
