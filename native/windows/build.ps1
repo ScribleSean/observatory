@@ -1,6 +1,7 @@
 param(
     [string]$Dotnet = 'dotnet',
-    [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache')
+    [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache'),
+    [switch]$SkipScriptSuite
 )
 $ErrorActionPreference = 'Stop'
 # Timestamped phase markers for build timing (issue 106). They only write to the host.
@@ -51,19 +52,23 @@ try {
     Write-BuildPhase 'self-test'
     & $Dotnet native/windows/bin/Release/net10.0-windows/WorkspaceObservatory.dll --self-test
     if ($LASTEXITCODE -ne 0) { throw 'Windows self-tests failed.' }
-    # Keep permission-heavy CLI/TLS fixtures out of the parallel suite. Their
-    # absolute timeouts stay unchanged, and every test file still runs.
-    $isolatedTests = @('peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs')
-    $contractTests = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File |
-        Where-Object { $_.Name -notin $isolatedTests } | Sort-Object Name |
-        ForEach-Object { $_.FullName })
-    Write-BuildPhase 'script suite'
-    & $node --test @contractTests
-    if ($LASTEXITCODE -ne 0) { throw 'Windows JavaScript and reader contract tests failed.' }
-    foreach ($isolatedTest in $isolatedTests) {
-        Write-BuildPhase ('isolated ' + $isolatedTest)
-        & $node --test (Join-Path 'scripts' $isolatedTest)
-        if ($LASTEXITCODE -ne 0) { throw ('Windows isolated contract failed: ' + $isolatedTest) }
+    if (-not $SkipScriptSuite) {
+        # Keep permission-heavy CLI/TLS fixtures out of the parallel suite. Their
+        # absolute timeouts stay unchanged, and every test file still runs.
+        $isolatedTests = @('peer-pairing.test.mjs', 'peer-tls-client.test.mjs', 'quota-tls.test.mjs')
+        $contractTests = @(Get-ChildItem -LiteralPath scripts -Filter '*.test.mjs' -File |
+            Where-Object { $_.Name -notin $isolatedTests } | Sort-Object Name |
+            ForEach-Object { $_.FullName })
+        Write-BuildPhase 'script suite'
+        & $node --test @contractTests
+        if ($LASTEXITCODE -ne 0) { throw 'Windows JavaScript and reader contract tests failed.' }
+        foreach ($isolatedTest in $isolatedTests) {
+            Write-BuildPhase ('isolated ' + $isolatedTest)
+            & $node --test (Join-Path 'scripts' $isolatedTest)
+            if ($LASTEXITCODE -ne 0) { throw ('Windows isolated contract failed: ' + $isolatedTest) }
+        }
+    } else {
+        Write-Output 'Script suite skipped by -SkipScriptSuite. A passing Script suite run on this commit is required before using it.'
     }
     Write-BuildPhase $null
     Write-Output 'Windows development build passed. This is not a self-contained release or installer.'
