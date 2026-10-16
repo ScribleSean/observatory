@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes,workerArguments} from './peer-live-controller.mjs';
 
 const invitation='observatory-pair:v1:fictional-secret';
-const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','host-close','service','publish',
+const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','service','publish',
   'exchange','repeat-exchange','restart','exchange-after-restart','quota-enable','quota-exchange','quota-repeat',
   'quota-disable-host','revoke','cleanup'];
 function fakes(override=()=>undefined) {
@@ -48,6 +48,7 @@ test('full sequence passes in order and keeps invitations private',async()=>{
   const run=fakes();
   assert.equal(await runSequence(run),true);
   assert.deepEqual(run.lines,[...steps.map(step=>`step ${step}: ok`),'result: passed']);
+  assert.ok(run.commands.every(({command})=>command.action!=='host-close'));
   assert.equal(run.cleaned,1);
   assert.ok(run.lines.every(line=>!line.includes(invitation)));
   const carrying=run.commands.filter(({command})=>JSON.stringify(command).includes(invitation));
@@ -164,7 +165,7 @@ test('strict command lines require pipes or sockets for both role streams',()=>{
 });
 test('invalid CLI child exits one with only generic stderr',()=>{
   const controller=fileURLToPath(new URL('./peer-live-controller.mjs',import.meta.url));
-  for(const args of [[],['--loopback','8.8.8.8']]) {
+  for(const args of [[],['--loopback','8.8.8.8'],['--loopback','10.0.0.1','--port','43128']]) {
     const child=spawnSync(process.execPath,[controller,...args],{encoding:'utf8',timeout:5000});
     assert.equal(child.status,1);assert.equal(child.stdout,'');
     assert.equal(child.stderr,'Fixture controller failed.\n');
@@ -174,7 +175,7 @@ test('invalid CLI child exits one with only generic stderr',()=>{
 test('fixed port accepts every trailing option position and reaches local worker arguments',()=>{
   const info={isFIFO:()=>true,isSocket:()=>false},streams={stdin:info,stdout:info};
   const fixture=fileURLToPath(new URL('./peer-live-fixture.test.mjs',import.meta.url));
-  for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
+  for(const mode of [['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
     for(const suffix of [['--port','43128'],['--port','43128','--repaired'],['--repaired','--port','43128']]) {
       const options=parseArguments([...mode,...suffix],streams);
       assert.equal(options.port,43128);
@@ -193,9 +194,12 @@ test('fixed port accepts every trailing option position and reaches local worker
     assert.deepEqual(workerArguments(options.address,options.port),[fixture,'--live-peer','10.0.0.1']);
   }
 });
-test('host-close runs only on host and requires closed before service',async()=>{
+test('fixed port adds host-close only on host and requires closed before service',async()=>{
   const run=fakes();
-  assert.equal(await runSequence(run),true);
+  assert.equal(await runSequence({...run,port:43128}),true);
+  const expected=[...steps];
+  expected.splice(expected.indexOf('service'),0,'host-close');
+  assert.deepEqual(run.lines,[...expected.map(step=>`step ${step}: ok`),'result: passed']);
   const index=run.commands.findIndex(({command})=>command.action==='host-close');
   assert.deepEqual(run.commands.slice(index-1,index+2),[
     {role:'host',command:{action:'acknowledged'}},
@@ -204,7 +208,7 @@ test('host-close runs only on host and requires closed before service',async()=>
   ]);
   assert.equal(run.commands.filter(({command})=>command.action==='host-close').length,1);
   const failed=fakes((role,command)=>command.action==='host-close'?{status:'open'}:undefined);
-  assert.equal(await runSequence(failed),false);
+  assert.equal(await runSequence({...failed,port:43128}),false);
   assert.equal(failed.commands.at(-1).command.action,'host-close');
   assert.equal(failed.cleaned,1);
 });
@@ -216,6 +220,10 @@ test('pause accepts all trailing option orders and rejects invalid or repeated v
   for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
     for(const extras of [[],[['--port','43128']],[['--repaired']],[['--port','43128'],['--repaired']]]) {
       for(const suffix of permutations([['--pause-after-host','60'],...extras])) {
+        if(mode[0]==='--loopback' && suffix.includes('--port')) {
+          assert.throws(()=>parseArguments([...mode,...suffix],streams),{message:'Fixture controller failed'});
+          continue;
+        }
         assert.deepEqual(parseArguments([...mode,...suffix],streams),{
           address:'10.0.0.1',role:mode[0]==='--role'?mode[1]:null,
           repaired:suffix.includes('--repaired'),pauseAfterHost:60,
@@ -223,8 +231,8 @@ test('pause accepts all trailing option orders and rejects invalid or repeated v
         });
       }
     }
-    for(const value of ['1','300'])assert.equal(parseArguments([...mode,'--pause-after-host',value],streams).pauseAfterHost,Number(value));
-    for(const value of ['0','301','60s','','+60','-60','60.0',' 60','60\n'])
+    for(const value of ['1','120'])assert.equal(parseArguments([...mode,'--pause-after-host',value],streams).pauseAfterHost,Number(value));
+    for(const value of ['0','121','300','301','60s','','+60','-60','60.0',' 60','60\n'])
       assert.throws(()=>parseArguments([...mode,'--pause-after-host',value],streams));
     for(const suffix of [['--pause-after-host'],['--pause-after-host','--repaired'],
       ['--pause-after-host','60','--pause-after-host','60']])
@@ -239,6 +247,10 @@ test('exchange pause accepts all trailing option orders and rejects invalid or r
   for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
     for(let mask=0;mask<8;mask++) {
       for(const suffix of permutations([['--pause-before-exchange','60'],...extras.filter((_,i)=>mask & (1<<i))])) {
+        if(mode[0]==='--loopback' && suffix.includes('--port')) {
+          assert.throws(()=>parseArguments([...mode,...suffix],streams),{message:'Fixture controller failed'});
+          continue;
+        }
         assert.deepEqual(parseArguments([...mode,...suffix],streams),{
           address:'10.0.0.1',role:mode[0]==='--role'?mode[1]:null,
           repaired:suffix.includes('--repaired'),pauseBeforeExchange:60,
@@ -247,8 +259,8 @@ test('exchange pause accepts all trailing option orders and rejects invalid or r
         });
       }
     }
-    for(const value of ['1','300'])assert.equal(parseArguments([...mode,'--pause-before-exchange',value],streams).pauseBeforeExchange,Number(value));
-    for(const value of ['0','301','60s','','+60','-60','60.0',' 60','60\n'])
+    for(const value of ['1','120'])assert.equal(parseArguments([...mode,'--pause-before-exchange',value],streams).pauseBeforeExchange,Number(value));
+    for(const value of ['0','121','300','301','60s','','+60','-60','60.0',' 60','60\n'])
       assert.throws(()=>parseArguments([...mode,'--pause-before-exchange',value],streams));
     for(const suffix of [['--pause-before-exchange'],['--pause-before-exchange','--repaired'],
       ['--pause-before-exchange','60','--pause-before-exchange','60']])
@@ -326,5 +338,23 @@ test('probe error replies and transport failures keep generic failure lines',asy
     });
     assert.equal(await runSequence(run),false);
     assert.deepEqual(run.lines.slice(-3),['step probe: failed','step cleanup: ok','result: stopped at probe']);
+  }
+});
+
+test('combined pauses cannot exceed 120 seconds',()=>{
+  const info={isFIFO:()=>true,isSocket:()=>false},streams={stdin:info,stdout:info};
+  for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
+    for(const reverse of [false,true]) {
+      for(const before of [60,61]) {
+        const pauses=[['--pause-after-host','60'],['--pause-before-exchange',String(before)]];
+        const args=[...mode,...(reverse?pauses.reverse():pauses).flat()];
+        if(before===61)assert.throws(()=>parseArguments(args,streams),{message:'Fixture controller failed'});
+        else {
+          const options=parseArguments(args,streams);
+          assert.equal(options.pauseAfterHost,60);
+          assert.equal(options.pauseBeforeExchange,60);
+        }
+      }
+    }
   }
 });

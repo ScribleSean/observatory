@@ -26,13 +26,14 @@ export function parseArguments(args,streams={}) {
     else if(args[i]==='--port' && port===undefined && !/[^0-9]/.test(args[i+1]??'') &&
       Number(args[i+1])>=1024 && Number(args[i+1])<=65535)port=Number(args[++i]);
     else if(args[i]==='--pause-after-host' && pauseAfterHost===undefined &&
-      !/[^0-9]/.test(args[i+1]??'') && Number(args[i+1])>=1 && Number(args[i+1])<=300)
+      !/[^0-9]/.test(args[i+1]??'') && Number(args[i+1])>=1 && Number(args[i+1])<=120)
       pauseAfterHost=Number(args[++i]);
     else if(args[i]==='--pause-before-exchange' && pauseBeforeExchange===undefined &&
-      !/[^0-9]/.test(args[i+1]??'') && Number(args[i+1])>=1 && Number(args[i+1])<=300)
+      !/[^0-9]/.test(args[i+1]??'') && Number(args[i+1])>=1 && Number(args[i+1])<=120)
       pauseBeforeExchange=Number(args[++i]);
     else throw failed();
   }
+  if((pauseAfterHost??0)+(pauseBeforeExchange??0)>120 || (values[0]==='--loopback' && port!==undefined))throw failed();
   const optionalPort={...(port===undefined?{}:{port}),...(pauseAfterHost===undefined?{}:{pauseAfterHost}),
     ...(pauseBeforeExchange===undefined?{}:{pauseBeforeExchange})};
   if(values.length===2 && values[0]==='--loopback' && isPairingAddress(values[1]))
@@ -91,7 +92,7 @@ export function createWorkerLink(input,output,{timeoutMs=60000}={}) {
   };
 }
 
-export async function runSequence({host:H,join:J,repaired=false,pauseAfterHost,pauseBeforeExchange,sleep:wait=sleep,log=line=>process.stderr.write(line+'\n'),cleanup}) {
+export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterHost,pauseBeforeExchange,sleep:wait=sleep,log=line=>process.stderr.write(line+'\n'),cleanup}) {
   let stopped=null,invitation=null,joinEndpoint=null,probeFailure=null;
   const status=word=>reply=>reply.status===word;
   async function send(link,action,check,extra={}) {
@@ -121,7 +122,7 @@ export async function runSequence({host:H,join:J,repaired=false,pauseAfterHost,p
     ['confirm',()=>send(H,'confirm',status('configuration-ready'),{peerEndpoint:joinEndpoint})],
     ['finish',()=>send(J,'finish',status('acknowledged'))],
     ['acknowledged',()=>send(H,'acknowledged',r=>r.acknowledged===true)],
-    ['host-close',()=>send(H,'host-close',status('closed'))],
+    ...(port===undefined?[]:[['host-close',()=>send(H,'host-close',status('closed'))]]),
     ['service',()=>both('service',status('sync-listening'))],
     ['publish',()=>both('publish',r=>Number.isInteger(r.sequence) && r.sequence>0)],
     ...(pauseBeforeExchange===undefined?[]:[['pause-exchange',async()=>{
@@ -180,7 +181,7 @@ async function main() {
     } else remote=localWorker(options.address,options.port);
     workers.push(remote);
     passed=await runSequence({host:options.role==='join'?remote:local,join:options.role==='join'?local:remote,
-      repaired:options.repaired,pauseAfterHost:options.pauseAfterHost,pauseBeforeExchange:options.pauseBeforeExchange,
+      repaired:options.repaired,port:options.port,pauseAfterHost:options.pauseAfterHost,pauseBeforeExchange:options.pauseBeforeExchange,
       cleanup:()=>cleanupWorkers(workers)});
   } catch {
     process.stderr.write('Fixture controller failed.\n');
