@@ -208,3 +208,71 @@ test('host-close runs only on host and requires closed before service',async()=>
   assert.equal(failed.commands.at(-1).command.action,'host-close');
   assert.equal(failed.cleaned,1);
 });
+
+test('pause accepts all trailing option orders and rejects invalid or repeated values',()=>{
+  const info={isFIFO:()=>true,isSocket:()=>false},streams={stdin:info,stdout:info};
+  const permutations=items=>items.length?items.flatMap((item,index)=>
+    permutations(items.filter((_,i)=>i!==index)).map(rest=>[...item,...rest])):[[]];
+  for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
+    for(const extras of [[],[['--port','43128']],[['--repaired']],[['--port','43128'],['--repaired']]]) {
+      for(const suffix of permutations([['--pause-after-host','60'],...extras])) {
+        assert.deepEqual(parseArguments([...mode,...suffix],streams),{
+          address:'10.0.0.1',role:mode[0]==='--role'?mode[1]:null,
+          repaired:suffix.includes('--repaired'),pauseAfterHost:60,
+          ...(suffix.includes('--port')?{port:43128}:{}),
+        });
+      }
+    }
+    for(const value of ['1','300'])assert.equal(parseArguments([...mode,'--pause-after-host',value],streams).pauseAfterHost,Number(value));
+    for(const value of ['0','301','60s','','+60','-60','60.0',' 60','60\n'])
+      assert.throws(()=>parseArguments([...mode,'--pause-after-host',value],streams));
+    for(const suffix of [['--pause-after-host'],['--pause-after-host','--repaired'],
+      ['--pause-after-host','60','--pause-after-host','60']])
+      assert.throws(()=>parseArguments([...mode,...suffix],streams));
+  }
+});
+test('pause waits after host success and before probe with ordered status lines',async()=>{
+  let release,started;
+  const waiting=new Promise(resolve=>{started=resolve;});
+  const run=fakes();
+  const result=runSequence({...run,pauseAfterHost:60,sleep:async ms=>{
+    assert.equal(ms,60000);
+    started();
+    await new Promise(resolve=>{release=resolve;});
+  }});
+  await waiting;
+  assert.equal(run.commands.at(-1).command.action,'host');
+  assert.deepEqual(run.lines.slice(-2),['step host: ok','step pause: waiting 60 s']);
+  release();
+  assert.equal(await result,true);
+  assert.deepEqual(run.lines.slice(2,7),[
+    'step host: ok','step pause: waiting 60 s','step pause: ok','step probe: ok','step join: ok',
+  ]);
+});
+test('failed host never pauses',async()=>{
+  const run=fakes((role,command)=>command.action==='host'?{}:undefined);
+  assert.equal(await runSequence({...run,pauseAfterHost:60,sleep:()=>assert.fail('Unexpected sleep')}),false);
+  assert.ok(run.lines.every(line=>!line.includes('pause')));
+});
+test('probe failure prints only allowed tcp words from replies',async()=>{
+  for(const tcp of ['timeout','refused','unavailable','other',invitation,null,{},undefined]) {
+    const run=fakes((role,command)=>command.action==='probe'?{tcp,private:invitation}:undefined);
+    assert.equal(await runSequence(run),false);
+    const suffix=['timeout','refused','unavailable'].includes(tcp)?` (${tcp})`:'';
+    assert.deepEqual(run.lines.slice(-3),[`step probe: failed${suffix}`,'step cleanup: ok','result: stopped at probe']);
+    assert.equal(run.commands.at(-1).command.action,'probe');
+    assert.equal(run.cleaned,1);
+    assert.ok(run.lines.every(line=>!line.includes(invitation)));
+  }
+});
+test('probe error replies and transport failures keep generic failure lines',async()=>{
+  for(const transportFailure of [false,true]) {
+    const run=fakes((role,command)=>{
+      if(command.action!=='probe')return;
+      if(transportFailure)throw Error(invitation);
+      return {tcp:'timeout',error:invitation};
+    });
+    assert.equal(await runSequence(run),false);
+    assert.deepEqual(run.lines.slice(-3),['step probe: failed','step cleanup: ok','result: stopped at probe']);
+  }
+});

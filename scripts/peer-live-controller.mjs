@@ -1,6 +1,7 @@
 import {fstatSync} from 'node:fs';
 // Private test controller. Never included in installed packages.
 import {spawn} from 'node:child_process';
+import {setTimeout as sleep} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {isPairingAddress} from './peer-invitation.mjs';
@@ -19,14 +20,17 @@ export function acceptsPipes({stdin,stdout}={}) {
 }
 export function parseArguments(args,streams={}) {
   const modeLength=args[0]==='--loopback'?2:4,values=args.slice(0,modeLength);
-  let repaired=false,port;
+  let repaired=false,port,pauseAfterHost;
   for(let i=modeLength;i<args.length;i++) {
     if(args[i]==='--repaired' && !repaired)repaired=true;
     else if(args[i]==='--port' && port===undefined && !/[^0-9]/.test(args[i+1]??'') &&
       Number(args[i+1])>=1024 && Number(args[i+1])<=65535)port=Number(args[++i]);
+    else if(args[i]==='--pause-after-host' && pauseAfterHost===undefined &&
+      !/[^0-9]/.test(args[i+1]??'') && Number(args[i+1])>=1 && Number(args[i+1])<=300)
+      pauseAfterHost=Number(args[++i]);
     else throw failed();
   }
-  const optionalPort=port===undefined?{}:{port};
+  const optionalPort={...(port===undefined?{}:{port}),...(pauseAfterHost===undefined?{}:{pauseAfterHost})};
   if(values.length===2 && values[0]==='--loopback' && isPairingAddress(values[1]))
     return {address:values[1],repaired,role:null,...optionalPort};
   if(values.length===4 && values[0]==='--role' && ['host','join'].includes(values[1]) &&
@@ -83,8 +87,8 @@ export function createWorkerLink(input,output,{timeoutMs=60000}={}) {
   };
 }
 
-export async function runSequence({host:H,join:J,repaired=false,log=line=>process.stderr.write(line+'\n'),cleanup}) {
-  let stopped=null,invitation=null,joinEndpoint=null;
+export async function runSequence({host:H,join:J,repaired=false,pauseAfterHost,sleep:wait=sleep,log=line=>process.stderr.write(line+'\n'),cleanup}) {
+  let stopped=null,invitation=null,joinEndpoint=null,probeFailure=null;
   const status=word=>reply=>reply.status===word;
   async function send(link,action,check,extra={}) {
     const reply=await link.send({action,...extra});
@@ -101,7 +105,14 @@ export async function runSequence({host:H,join:J,repaired=false,log=line=>proces
     ...(repaired?[['repair',()=>both('repair',r=>['unpaired','prepared'].includes(r.status))]]:[]),
     ['endpoint',async()=>{hostEndpoint=(await send(H,'endpoint',endpoint)).endpoint;joinEndpoint=(await send(J,'endpoint',endpoint)).endpoint;}],
     ['host',async()=>{invitation=(await send(H,'host',r=>typeof r.invitation==='string' && r.invitation.startsWith('observatory-pair:v1:'))).invitation;}],
-    ['probe',()=>send(J,'probe',r=>r.tcp==='connected',{invitation})],
+    ...(pauseAfterHost===undefined?[]:[['pause',async()=>{
+      log(`step pause: waiting ${pauseAfterHost} s`);
+      await wait(pauseAfterHost*1000);
+    }]]),
+    ['probe',()=>send(J,'probe',r=>{
+      if(['timeout','refused','unavailable'].includes(r.tcp))probeFailure=r.tcp;
+      return r.tcp==='connected';
+    },{invitation})],
     ['join',async()=>{try {await send(J,'join',status('awaiting-confirmation'),{invitation});} finally {invitation=null;}}],
     ['confirm',()=>send(H,'confirm',status('configuration-ready'),{peerEndpoint:joinEndpoint})],
     ['finish',()=>send(J,'finish',status('acknowledged'))],
@@ -121,7 +132,7 @@ export async function runSequence({host:H,join:J,repaired=false,log=line=>proces
   try {
     for(const [name,run] of steps) {
       try {await run();log(`step ${name}: ok`);}
-      catch {stopped=name;log(`step ${name}: failed`);break;}
+      catch {stopped=name;log(`step ${name}: failed${name==='probe' && probeFailure?` (${probeFailure})`:''}`);break;}
     }
   } finally {
     invitation=null;hostEndpoint=null;joinEndpoint=null;
@@ -161,7 +172,7 @@ async function main() {
     } else remote=localWorker(options.address,options.port);
     workers.push(remote);
     passed=await runSequence({host:options.role==='join'?remote:local,join:options.role==='join'?local:remote,
-      repaired:options.repaired,cleanup:()=>cleanupWorkers(workers)});
+      repaired:options.repaired,pauseAfterHost:options.pauseAfterHost,cleanup:()=>cleanupWorkers(workers)});
   } catch {
     process.stderr.write('Fixture controller failed.\n');
     try {await cleanupWorkers(workers);} catch {}
