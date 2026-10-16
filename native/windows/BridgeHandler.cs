@@ -1127,7 +1127,7 @@ internal sealed class BridgeHandler : IDisposable
                 var pending = await current.Send(new JsonObject { ["action"] = "pending-peer" });
                 lock (gate) if (current == session && generation == sessionGeneration) peerAddress = pending.PeerAddress;
             }
-            if (reply.Status is "acknowledged" or "unavailable" or "cancelled" || pairingState == "unavailable") await EndPolledSession(current);
+            if (reply.Status is "acknowledged" or "unavailable" or "inactive" or "cancelled" || pairingState == "unavailable") await EndPolledSession(current);
         }
         catch { await EndPolledSession(current); }
         finally { lock (gate) polling = false; }
@@ -1945,6 +1945,10 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("pairing-cancel");
         Check(session.Disposed && !test.Host.Reserved && session.Commands.Last()["action"]!.GetValue<string>() == "cancel",
             "Configuration ready cancel releases session");
+        await test.Run("pairing-host-start", HostArgs());
+        session = test.Host.Session!; session.PollState = "inactive";
+        await test.Handler.PollAsync();
+        Check(session.Disposed && !test.Host.Reserved, "Inactive poll releases host session");
         await test.Run("pairing-host-start", HostArgs());
         session = test.Host.Session!; await test.Run("pairing-cancel");
         Check(session.Disposed && !test.Host.Reserved && session.Commands.Last()["action"]!.GetValue<string>() == "cancel", "Cancel reservation");
