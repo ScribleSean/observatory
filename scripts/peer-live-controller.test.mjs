@@ -1,11 +1,12 @@
 import test from 'node:test';
+import {EventEmitter} from 'node:events';
 import assert from 'node:assert/strict';
 import {PassThrough,Writable} from 'node:stream';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes,workerArguments} from './peer-live-controller.mjs';
 
-import {parseFixtureArguments,exchangeFailure} from './peer-live-fixture.test.mjs';
+import {parseFixtureArguments,exchangeFailure,diagnosticQuotaSync} from './peer-live-fixture.test.mjs';
 
 const invitation='observatory-pair:v1:fictional-secret';
 const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','service','publish',
@@ -488,12 +489,12 @@ test('quota reasons allow only fixed status words and peer reading presence',asy
         let count=0;
         const run=fakes((role,command)=>{
           const target=step==='quota-repeat'?'quota-exchange':step==='quota-disable-host'?'quota-disable':step;
-          if(command.action!==target || (step==='quota-exchange'?++count<1:++count!==(step==='quota-repeat'?3:1)))return;
+          if(command.action!==target || (step==='quota-exchange'?++count<1:++count<(step==='quota-repeat'?3:1)))return;
           return {...(status===undefined?{}:{status}),peerRemaining,private:invitation};
         });
         assert.equal(await runSequence(run),false);
         const safeStatus=['ok','passive','disabled','peer-disabled','unavailable'].includes(status)?status:'other';
-        const reason=(status===undefined?'':`status ${safeStatus}, `)+`peer reading ${typeof peerRemaining==='number'?'present':'absent'}`;
+        const reason=`${['quota-exchange','quota-repeat'].includes(step)?'joining':'hosting'} side, `+(status===undefined?'':`status ${safeStatus}, `)+`peer reading ${typeof peerRemaining==='number'?'present':'absent'}`;
         assert.ok(run.lines.includes(`step ${step}: failed (${reason})`));
         assert.ok(run.lines.every(line=>!line.includes(invitation)));
       }
@@ -526,7 +527,7 @@ for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'
           if(!passes)return {status:'waiting',transport:'not-configured',private:invitation};
         }
       });
-      const reason=index===3?'status unavailable, peer reading absent':`${label}, status unavailable, transport unavailable`;
+      const reason=index===3?`${label}, status unavailable, peer reading absent`:`${label}, status unavailable, transport unavailable`;
       assert.equal(await runSequence(run),passes);
       const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
       assert.deepEqual(requests[target-1],requests[target]);
@@ -534,7 +535,7 @@ for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'
       assert.equal(run.lines.at(-2),'second exchanges used: 1');
       if(passes)assert.ok(run.lines.includes(`step ${step}: ok`));
       else {
-        const finalReason=index===3?'status other, peer reading absent':`${label}, status waiting, transport not-configured`;
+        const finalReason=index===3?`${label}, status other, peer reading absent`:`${label}, status waiting, transport not-configured`;
         assert.equal(run.lines.at(-4),`step ${step}: failed (${finalReason})`);
         assert.equal(run.lines.at(-1),`result: stopped at ${step}`);
         assert.equal(requests.length,target+1);
@@ -564,16 +565,16 @@ test('quota repeat uses the passing joining reply after a second exchange',async
       if(role==='host')return ++hostCount===1?{status:'ok',peerRemaining:70,peerSamples:99}:undefined;
       count++;
       if(count===1)return {status:'unavailable',peerRemaining:70,peerSamples:100};
-      if(count<=3)return {status:'ok',peerRemaining:70,peerSamples:count===2?4:repeatSamples};
+      if(count<=3 || (count===4 && repeatSamples===5))return {status:'ok',peerRemaining:70,peerSamples:count===2?4:repeatSamples};
     });
     assert.equal(await runSequence(run),repeatSamples===4);
     assert.ok(run.lines.includes('step quota-exchange: ok'));
-    assert.ok(run.lines.includes(repeatSamples===4?'step quota-repeat: ok':'step quota-repeat: failed (status ok, peer reading present)'));
-    assert.equal(run.lines.at(-2),'second exchanges used: 1');
+    assert.ok(run.lines.includes(repeatSamples===4?'step quota-repeat: ok':'step quota-repeat: failed (joining side, status ok, peer reading present)'));
+    assert.equal(run.lines.at(-2),`second exchanges used: ${repeatSamples===4?1:2}`);
   }
 });
-test('every other request keeps the stop rule including quota repeat and disable',async()=>{
-  const eligible=new Set(['exchange','repeat-exchange','exchange-after-restart','quota-exchange']);
+test('every other request keeps the stop rule',async()=>{
+  const eligible=new Set(['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host']);
   let step;
   const targets=[];
   const reference=fakes();
@@ -609,4 +610,100 @@ for(const kind of ['closed','timeout','error'])test(`exchange link ${kind} stops
   assert.equal(run.lines.at(-2),'second exchanges used: 0');
   const reason=kind==='closed'?'worker link closed':kind==='timeout'?'worker reply timeout':'worker error';
   assert.equal(run.lines.at(-4),`step exchange: failed (${reason})`);
+});
+
+test('quota diagnostics report fixed words on either side and reject malformed objects',async()=>{
+  for(const side of ['host','join'])for(const failure of [undefined,null,[],{},
+    {stage:'tls',code:'ECONNRESET',request:'status'},
+    {stage:'response',code:'none',request:'exchange'},
+    {stage:invitation,code:invitation,request:invitation},
+    {stage:'connect',code:'none',request:'status',private:invitation}]) {
+    const run=fakes((role,{action})=>role===side && action==='quota-exchange'?
+      {status:'unavailable',failure,elapsedMs:1550}:undefined);
+    assert.equal(await runSequence(run),false);
+    const label=side==='host'?'hosting':'joining';
+    let reason=`${label} side, status unavailable, peer reading absent`;
+    if(failure && !Array.isArray(failure) && Object.keys(failure).length===3) {
+      const safe=failure.stage===invitation?{stage:'other',code:'other',request:'other'}:failure;
+      reason+=`, stage ${safe.stage}, code ${safe.code}, request ${safe.request}, elapsed 2 s`;
+    }
+    assert.ok(run.lines.includes(`step quota-exchange: failed (${reason})`));
+    assert.ok(run.lines.includes(`step quota-exchange: second exchange (${label} side, ${reason})`));
+    assert.ok(run.lines.every(line=>!line.includes(invitation)));
+  }
+});
+
+for(const [step,side,action,target] of [
+  ['quota-repeat','join','quota-exchange',2],
+  ['quota-disable-host','host','quota-disable',1],
+  ['quota-disable-host','join','quota-exchange',3],
+  ['quota-disable-host','host','quota-exchange',2],
+])for(const passes of [true,false])test(`${step} ${side} ${action} retries once and ${passes?'continues':'stops'}`,async()=>{
+  let count=0;
+  const run=fakes((role,command)=>{
+    if(role!==side || command.action!==action)return;
+    count++;
+    if(count===target || (!passes && count===target+1))return {status:'unavailable'};
+  });
+  assert.equal(await runSequence(run),passes);
+  const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
+  assert.deepEqual(requests[target-1],requests[target]);
+  const label=side==='host'?'hosting':'joining';
+  assert.ok(run.lines.includes(`step ${step}: second exchange (${label} side, ${label} side, status unavailable, peer reading absent)`));
+  assert.equal(run.lines.at(-2),'second exchanges used: 1');
+  if(!passes) {
+    assert.equal(requests.length,target+1);
+    assert.deepEqual(run.commands.at(-1),requests.at(-1));
+  }
+});
+
+test('fixture quota diagnostics map the last socket without network access',async()=>{
+  for(const request of ['status','exchange'])for(const stage of ['none','connect','tls','response']) {
+    let ticks=0,calls=0;
+    const sockets=[];
+    const result=await diagnosticQuotaSync('synthetic-runtime',{
+      clock:()=>ticks++?1249:0,
+      connect:()=>{
+        if(stage==='none')throw Error('Synthetic connection failure');
+        const socket=new EventEmitter();
+        sockets.push(socket);
+        return socket;
+      },
+      quotaRequest:async(runtime,transport,input,{connect})=>{
+        assert.equal(runtime,'synthetic-runtime');
+        assert.deepEqual(transport,{synthetic:true});
+        calls++;
+        if(input.action==='status' && request==='exchange') {
+          const socket=connect();
+          socket.emit('connect');socket.emit('secureConnect');socket.emit('data');
+          return {status:'ready',record:null};
+        }
+        const socket=connect();
+        if(['tls','response'].includes(stage))socket.emit('connect');
+        if(stage==='response')socket.emit('secureConnect');
+        socket.emit('error',{code:'ECONNREFUSED',message:invitation});
+        throw Error('Synthetic failure');
+      },
+      sync:async(runtime,{request:send})=>{
+        try {
+          await send({synthetic:true},{action:'status'});
+          await send({synthetic:true},{action:'exchange'});
+        } catch {}
+        return {status:'unavailable',peer:null};
+      },
+    });
+    const expectedRequest=stage==='none'?'status':request;
+    assert.equal(calls,expectedRequest==='status'?1:2);
+    assert.deepEqual(result,{status:'unavailable',peer:null,
+      failure:{stage,code:stage==='none'?'none':'ECONNREFUSED',request:expectedRequest},elapsedMs:1200});
+  }
+  const success={status:'ok',peer:null};
+  assert.deepEqual(await diagnosticQuotaSync('synthetic-runtime',{sync:async()=>success}),success);
+  const result=await diagnosticQuotaSync('synthetic-runtime',{
+    connect:()=>new EventEmitter(),
+    quotaRequest:async(_runtime,_transport,_input,{connect})=>{connect().emit('error',{code:invitation});},
+    sync:async(_runtime,{request})=>{await request({}, {action:invitation});return {status:'unavailable'};},
+    clock:()=>0,
+  });
+  assert.deepEqual(result,{status:'unavailable',failure:{stage:'connect',code:'other',request:'other'},elapsedMs:0});
 });

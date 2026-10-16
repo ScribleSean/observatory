@@ -126,8 +126,18 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
       }
     } else if(['quota-enable','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep)) {
       const status=['ok','passive','disabled','peer-disabled','unavailable'].includes(reply?.status)?reply.status:'other';
-      replyFailure=(object(reply) && Object.hasOwn(reply,'status')?`status ${status}, `:'')+
+      replyFailure=`${link===H?'hosting':'joining'} side, `+(object(reply) && Object.hasOwn(reply,'status')?`status ${status}, `:'')+
         `peer reading ${typeof reply?.peerRemaining==='number'?'present':'absent'}`;
+      const failure=reply?.failure;
+      if(object(failure) && Object.keys(failure).length===3 && ['stage','code','request'].every(key=>Object.hasOwn(failure,key))) {
+        const stage=['none','connect','tls','response'].includes(failure.stage)?failure.stage:'other';
+        const code=['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED','other','none']
+          .includes(failure.code)?failure.code:'other';
+        const request=['status','exchange'].includes(failure.request)?failure.request:'other';
+        const elapsed=number(reply.elapsedMs) && reply.elapsedMs>=0 && Number.isSafeInteger(Math.round(reply.elapsedMs/1000))?
+          Math.round(reply.elapsedMs/1000):'other';
+        replyFailure+=`, stage ${stage}, code ${code}, request ${request}, elapsed ${elapsed} s`;
+      }
     }
     throw failed();
   }
@@ -136,7 +146,7 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
     let reply=await receive(link,()=>link.send(command));
     try {checkReply(reply,check,link);}
     catch (error) {
-      if(!valid(reply) || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange'].includes(activeStep))throw error;
+      if(!valid(reply) || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep))throw error;
       log(`step ${activeStep}: second exchange (${link===H?'hosting':'joining'} side, ${replyFailure})`);
       secondExchanges++;
       replyFailure=null;

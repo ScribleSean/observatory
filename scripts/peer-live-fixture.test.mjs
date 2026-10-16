@@ -17,7 +17,7 @@ import {readPairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload} from './peer-store.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
-import {tlsPeerExchange} from './peer-tls-outbound.mjs';
+import {tlsPeerExchange,tlsQuotaRequest} from './peer-tls-outbound.mjs';
 import {preparePairingRepair} from './peer-repair.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
 import {revokePairing} from './peer-revocation.mjs';
@@ -29,6 +29,31 @@ export function exchangeFailure({socketCreated=false,connected=false,secureConne
   const code=!errorSeen?'none':['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED']
     .includes(errorCode)?errorCode:'other';
   return {stage,code};
+}
+
+function observeSocket(socket,events) {
+  events.socketCreated=true;
+  socket.once('connect',()=>{events.connected=true;});
+  socket.once('secureConnect',()=>{events.secureConnected=true;});
+  socket.once('data',()=>{events.dataReceived=true;});
+  socket.once('error',error=>{events.errorSeen=true;events.errorCode=error.code;});
+  return socket;
+}
+
+export async function diagnosticQuotaSync(runtime,{sync=syncQuota,quotaRequest=tlsQuotaRequest,connect=tls.connect,clock=()=>performance.now()}={}) {
+  let events={},request='other';
+  const started=clock();
+  const result=await sync(runtime,{request:(transport,input)=>{
+    const action=['status','exchange'].includes(input.action)?input.action:'other';
+    if(!events.socketCreated)request=action;
+    return quotaRequest(runtime,transport,input,{connect:(...args)=>{
+      const socket=connect(...args);
+      events={};request=action;
+      return observeSocket(socket,events);
+    }});
+  }});
+  if(result.status!=='unavailable')return result;
+  return {...result,failure:{...exchangeFailure(events),request},elapsedMs:Math.round((clock()-started)/100)*100};
 }
 
 // Only called with the fixture's owned temporary runtime. No provider is read.
@@ -60,8 +85,8 @@ export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
       if((await summary()).sharing)await revokeQuotaSharing(runtime);
       return summary();
     case 'quota-exchange': {
-      const result=await syncQuota(runtime,{request});
-      return {status:result.status,...await summary()};
+      const result=request===undefined?await diagnosticQuotaSync(runtime):await syncQuota(runtime,{request});
+      return {status:result.status,...await summary(),...(result.failure?{failure:result.failure,elapsedMs:result.elapsedMs}:{})};
     }
     default: throw Error('Unknown synthetic quota action');
   }
@@ -152,12 +177,7 @@ async function main(address,port=0,workerLifetime=300) {
         const events={socketCreated:false,connected:false,secureConnected:false,dataReceived:false,errorSeen:false};
         const connect=(...args)=>{
           const socket=tls.connect(...args);
-          events.socketCreated=true;
-          socket.once('connect',()=>{events.connected=true;});
-          socket.once('secureConnect',()=>{events.secureConnected=true;});
-          socket.once('data',()=>{events.dataReceived=true;});
-          socket.once('error',error=>{events.errorSeen=true;events.errorCode=error.code;});
-          return socket;
+          return observeSocket(socket,events);
         };
         const exchangeTLS=(runtime,transport,record)=>tlsPeerExchange(runtime,transport,record,{connect});
         const started=performance.now(),now=Date.now(),previous=[];
