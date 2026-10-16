@@ -9,7 +9,7 @@ import {appNames} from '../native/app-names.mjs';
 
 const script = path.resolve('native/windows/migrate-data.ps1');
 const windows = {skip: process.platform !== 'win32'};
-const quote = value => "'" + value.replaceAll("'", "''") + "'";
+const quote = value => "'" + value.replace(/['\u2018\u2019\u201a\u201b]/g, character => character.repeat(2)) + "'";
 const ps = code => spawnSync('powershell.exe', ['-NoProfile','-NonInteractive','-Command',code], {encoding:'utf8'});
 const hex = c => c.repeat(64);
 
@@ -478,7 +478,7 @@ test('test options and interruption hooks are gated and running checks surround 
     assert.match(source,new RegExp('if \\(\\$testEnvironment -and \\$env:OBSERVATORY_MIGRATION_'+hook+'(?: | -and|\\))'));
   }
   assert.equal(source.match(/^    CheckRunning$/gm)?.length,3);
-  assert.match(source,/ExchangeLock\r?\n    CheckRunning\r?\n    \$step = 'manifest'/);
+  assert.match(source,/ExchangeLock\r?\n    CollectionLock\r?\n    CheckRunning\r?\n    \$step = 'manifest'/);
   assert.match(source,/CheckRunning\r?\n    \$step = 'switch'\r?\n    SaveJson \$recordPath \$record\r?\n    if \(\$state -ne 'missing'\) \{\r?\n        \[IO.Directory\]::Move/);
   assert.match(source,/Get-CimInstance Win32_Process/);
   assert.match(source,/StartsWith\(\$runtime, \[StringComparison\]::OrdinalIgnoreCase\)/);
@@ -521,7 +521,7 @@ test('leftover target hook without the test environment completes with stdin clo
   success(run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1',OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'invalid'}}),'migrated');
 });
 
-for (const variant of ['legacy runtime','visible runtime','status line','unrelated status line','web view']) {
+for (const variant of ['legacy runtime','visible runtime','status line','unrelated status line','web view','unrelated web view','closing web view','legacy prefix web view','visible prefix web view','separator web view','quoted web view','external collector']) {
   test(`running check scopes a synthetic ${variant} process`,windows,async t => {
     let child;
     t.after(async () => {
@@ -533,18 +533,29 @@ for (const variant of ['legacy runtime','visible runtime','status line','unrelat
     });
     const f = await fixture(t);
     let executable = process.execPath;
-    const childScript = path.join(f.parent,variant.includes('status line')?'claude-statusline-bridge.mjs':'wait.mjs');
-    await writeFile(childScript,"process.stdout.write('ready\\n')\nsetTimeout(() => {}, 120000)\n");
+    let childScript = path.join(f.parent,variant.includes('status line')?'claude-statusline-bridge.mjs':'wait.mjs');
+    if (variant === 'external collector') {
+      childScript = path.join(f.parent,'Programs',appNames.legacy.productName,'Collector','scripts','wait.mjs');
+      await mkdir(path.dirname(childScript),{recursive:true});
+      executable = path.join(f.parent,'nodejs','node.exe');
+      await mkdir(path.dirname(executable));
+      await copyFile(process.execPath,executable);
+    }
+    await writeFile(childScript,`process.stdout.write('ready\\n')\nsetTimeout(() => {}, ${variant === 'closing web view' ? 1000 : 120000})\n`);
     if (variant === 'legacy runtime' || variant === 'visible runtime') {
       executable = path.join(f.parent,'Programs',variant === 'legacy runtime'?appNames.legacy.productName:appNames.visible.productName,'Runtime','node.exe');
       await mkdir(path.dirname(executable),{recursive:true});
       await copyFile(process.execPath,executable);
     }
-    if (variant === 'web view') {
+    if (variant.includes('web view')) {
       executable = path.join(f.parent,'msedgewebview2.exe');
       await copyFile(process.execPath,executable);
     }
-    const runtime = variant === 'unrelated status line' ? path.join(f.parent,'unrelated') : f.legacy;
+    let runtime = variant.startsWith('unrelated') ? path.join(f.parent,'unrelated') : f.legacy;
+    if (variant === 'legacy prefix web view') runtime = f.legacy+' Installer Test\\WebViewCache';
+    if (variant === 'visible prefix web view') runtime = f.target+' Installer Test\\WebViewCache';
+    if (variant === 'separator web view') runtime += '\\';
+    if (variant === 'quoted web view') runtime = '"'+runtime+'"';
     child = spawn(executable,[childScript,'--runtime',runtime.replaceAll('\\','/').toUpperCase()],{stdio:['ignore','pipe','pipe']});
     await new Promise((resolve,reject) => {
       child.once('error',reject);
@@ -552,9 +563,12 @@ for (const variant of ['legacy runtime','visible runtime','status line','unrelat
       child.stdout.once('data',resolve);
     });
     const before = await snapshot(f.parent);
-    if (variant === 'unrelated status line') {
+    if (variant.startsWith('unrelated') || variant.includes('prefix')) {
       success(run(f,{action:'status'}),'missing');
-    } else if (variant === 'web view') {
+    } else if (variant === 'closing web view') {
+      success(run(f,{env:{OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'5000'}}),'migrated');
+      return;
+    } else if (variant.includes('web view')) {
       const started = Date.now();
       refused(run(f,{env:{OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'500'}}),/The earlier app's web view is still closing\. Wait a minute and run again\./);
       assert.ok(Date.now()-started >= 500,'matching web view receives a grace period');
@@ -601,7 +615,6 @@ test('ordinary hard links become separate copied files',windows,async t => {
 for (const [label,content,reason] of [
   ['invalid schema','{"schema":2,"loginWasOn":true}','Invalid saved login state'],
   ['invalid JSON','invalid','Invalid saved login state'],
-  ['mismatched bytes','{ "schema":1,"loginWasOn":true }','does not match this run'],
 ]) {
   test(`saved login refusal names the repair file for ${label}`,windows,async t => {
     const f = await fixture(t);
@@ -615,3 +628,134 @@ for (const [label,content,reason] of [
     assert.equal(await readFile(path.join(f.parent,name),'utf8'),content);
   });
 }
+
+test('quote helper doubles all five PowerShell single quote characters', () => {
+  for (const mark of ["'",'\u2018','\u2019','\u201a','\u201b']) {
+    assert.equal(quote('a'+mark+'b'),"'a"+mark+mark+"b'");
+  }
+});
+
+test('real runs refuse every bridge and lock probes follow folder validation', async () => {
+  const source = await readFile(script,'utf8');
+  assert.match(source,/if \(\[string\]\$process.CommandLine -like '\*claude-statusline-bridge.mjs\*'\) \{\s*if \(-not \$testEnvironment -or \(TargetsDataFolder \(\[string\]\$process.CommandLine\)\)\) \{ \$running = \$true \}/);
+  assert.match(source,/SafeDirectory \$Legacy \$true\s+CollectionLock/);
+  const probe = source.slice(source.indexOf('function CollectionLock'),source.indexOf('function MoveCarriedLogin'));
+  assert.ok(probe.indexOf('SafeDirectory $Legacy $true') < probe.indexOf('Item $collectionLock'));
+  assert.match(probe,/ReparsePoint\) \{ Refuse 'The earlier collection.lock is a link\.'/);
+  assert.match(probe,/FileAccess\]::Read, \[IO.FileShare\]::None/);
+});
+
+for (const [label,content] of [
+  ['spaces','{ "schema" : 1, "loginWasOn" : true }'],
+  ['newline','{"schema":1,"loginWasOn":true}\n'],
+  ['CRLF','{\r\n "schema":1,\r\n "loginWasOn":true\r\n}\r\n'],
+  ['BOM','\ufeff{"schema":1,"loginWasOn":true}'],
+]) {
+  test(`carried login accepts ${label}`,windows,async t => {
+    const f = await fixture(t);
+    await writeFile(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json'),content);
+    assert.equal(success(run(f),'migrated').loginWasOn,true);
+    assert.equal(await readFile(path.join(f.target,'login-state-carried.json'),'utf8'),content);
+  });
+}
+
+// Load only the named functions, never the migration entry point or its default paths.
+async function functionsSource(names) {
+  const source = await readFile(script,'utf8');
+  return names.map(name => {
+    const start = source.indexOf('function '+name+'(');
+    assert.ok(start >= 0,name);
+    return source.slice(start,source.indexOf('\nfunction ',start));
+  }).join('\n');
+}
+
+test('SaveLogin refuses a different boolean without replacing the carried file',windows,async t => {
+  const f = await fixture(t),carried = path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json');
+  const content = '{"schema":1,"loginWasOn":false}';
+  await writeFile(carried,content);
+  const functions = await functionsSource(['Refuse','Item','LoginRepair','SaveLogin']);
+  const result = ps(`$ErrorActionPreference='Stop'\n${functions}\n$carriedLoginPath=${quote(carried)}\ntry { SaveLogin $carriedLoginPath @{schema=1;loginWasOn=$true} } catch { [Console]::Error.WriteLine($_.Exception.Message)\nexit 1 }`);
+  assert.equal(result.status,1);
+  assert.ok(result.stderr.includes(carried));
+  assert.match(result.stderr,/does not match this run/);
+  assert.equal(await readFile(carried,'utf8'),content);
+});
+
+for (const name of ['login-state.json','observatory-migration.json']) {
+  test(`invalid stage ${name} names its actual repair path`,windows,async t => {
+    const f = await fixture(t);
+    await mkdir(f.stage);
+    const saved = path.join(f.stage,name);
+    await writeFile(saved,'invalid');
+    const result = run(f);
+    refused(result,/Invalid saved login state/);
+    assert.ok(result.stderr.includes(saved));
+    assert.ok(result.stderr.includes('Writing .'+appNames.visible.dataFolder+'-migration-login.json with the right value overrides it.'));
+    await writeFile(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json'),'{"schema":1,"loginWasOn":false}');
+    success(run(f),'migrated');
+  });
+}
+
+test('collection lock links refuse before opening the link',windows,async t => {
+  const f = await fixture(t),outside = path.join(f.parent,'synthetic-lock');
+  await writeFile(outside,'synthetic');
+  await symlink(outside,path.join(f.legacy,'collection.lock'),'file');
+  refused(run(f),/The earlier collection.lock is a link\./);
+  assert.equal(await readFile(outside,'utf8'),'synthetic');
+});
+
+test('a carried file that cannot move leaves migration successful and retries on rerun',windows,async t => {
+  const f = await fixture(t),carried = path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json');
+  await writeFile(carried,'{"schema":1,"loginWasOn":false}');
+  const child = spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+    `$h=[IO.File]::Open(${quote(carried)},'Open','Read','Read')\ntry { [Console]::Out.WriteLine('ready')\n[Console]::ReadLine() | Out-Null } finally { $h.Dispose() }`],{stdio:['pipe','pipe','pipe']});
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise(resolve => child.once('close',resolve));
+      child.kill();
+      await exited;
+    }
+  });
+  await new Promise((resolve,reject) => {
+    child.once('error',reject);
+    child.once('exit',() => reject(new Error('File holder exited before readiness')));
+    child.stdout.once('data',resolve);
+  });
+  assert.equal(success(run(f),'migrated').note,'The login state file stayed beside the data folder.');
+  assert.equal(success(run(f),'already-migrated').note,'The login state file stayed beside the data folder.');
+  assert.equal(JSON.parse(await readFile(carried,'utf8')).loginWasOn,false);
+  const exited = new Promise(resolve => child.once('close',resolve));
+  child.stdin.end('\n');
+  await exited;
+  success(run(f),'already-migrated');
+  await assert.rejects(lstat(carried),{code:'ENOENT'});
+  const moved = path.join(f.target,'login-state-carried.json');
+  const before = await readFile(moved,'utf8');
+  await writeFile(carried,'{"schema":1,"loginWasOn":true}');
+  success(run(f),'already-migrated');
+  assert.equal(await readFile(moved,'utf8'),before);
+  assert.equal(JSON.parse(await readFile(carried,'utf8')).loginWasOn,true);
+});
+
+test('folder boundaries distinguish quoted installer paths in both PowerShell editions',windows,async t => {
+  const f = await fixture(t);
+  const functions = await functionsSource(['CommandTargetsFolder']);
+  for (const shell of ['powershell.exe','pwsh']) {
+    for (const folder of [f.legacy,f.target]) {
+      for (const [command,expected] of [
+        ['node "'+folder+' Installer Test\\WebViewCache"',false],
+        ['node "'+folder+'"',true],
+        ['node "'+folder+'\\"',true],
+        ['node '+folder,true],
+        ['node '+folder+' --flag',true],
+        ['node "'+folder.replaceAll('\\','/').toUpperCase()+'/WebViewCache"',true],
+        ['node "'+folder+'Other"',false],
+      ]) {
+        const result = spawnSync(shell,['-NoProfile','-NonInteractive','-Command',
+          `$ErrorActionPreference='Stop'\n${functions}\nCommandTargetsFolder ${quote(command)} ${quote(folder)}`],{encoding:'utf8'});
+        assert.equal(result.status,0,result.stderr || result.error?.message);
+        assert.equal(result.stdout.trim(),expected ? 'True' : 'False',shell+': '+command);
+      }
+    }
+  }
+});
