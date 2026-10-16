@@ -71,6 +71,21 @@ test('the lock is released after the action settles, including after a failure',
   assert.equal(await withPeerStateLock(runtime,async()=>'ok'),'ok');
 });
 
+test('the lock refuses a planted write-ahead sidecar before running the action',async t=>{
+  const runtime=await fixture(t);
+  await withPeerStateLock(runtime,async()=>{});
+  for(const suffix of ['-wal','-shm']) {
+    const filename=path.join(runtime,'private-repair','operation.sqlite'+suffix);
+    await writeFile(filename,'synthetic',{mode:0o600});
+    let ran=false;
+    await assert.rejects(withPeerStateLock(runtime,async()=>{ran=true;}),
+      /Unsafe pairing lock sidecar/);
+    assert.equal(ran,false);
+    await rm(filename,{force:true});
+  }
+  assert.equal(await withPeerStateLock(runtime,async()=>'ok'),'ok');
+});
+
 test('concurrent processes wait for the peer lock instead of refusing its folder',
   {skip:process.platform!=='darwin',timeout:120000},async t=>{
   const runtime=await fixture(t);
@@ -149,8 +164,13 @@ test('a journal mid-removal is waited for and then treated as absent',async()=>{
 });
 
 test('a journal that stays unlinked is refused after the bound',{timeout:5000},async()=>{
+  let calls=0;
   await assert.rejects(checkLockSidecars('synthetic.sqlite',{
-    stat:async filename=>filename.endsWith('-journal')?fakeSidecar({nlink:0}):absentSidecar(),
+    stat:async filename=>{
+      if(!filename.endsWith('-journal'))return absentSidecar();
+      if(++calls>1000)throw Error('Synthetic stat call limit');
+      return fakeSidecar({nlink:0});
+    },
     wait:ms=>new Promise(resolve=>setTimeout(resolve,ms)),boundMs:50
   }),/Unsafe pairing lock sidecar/);
 });
