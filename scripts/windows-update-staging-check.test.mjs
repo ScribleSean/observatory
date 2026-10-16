@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const script = readFileSync(new URL('../native/windows/verify-update-staging.ps1', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const line = (name) => script.split('\n').find((value) => value.trimStart().startsWith(`${name} =`));
@@ -30,12 +32,40 @@ test('writer wait is bounded and never kills processes', () => {
   const wait = script.slice(script.indexOf('function WaitForDataWriters'), script.indexOf('$node ='));
   for (const required of [
     '[Diagnostics.Stopwatch]::StartNew()', 'Get-Process WorkspaceObservatory',
-    'Get-CimInstance Win32_Process', "Name = 'msedgewebview2.exe'",
+    'Get-CimInstance Win32_Process -OperationTimeoutSec 10', "Name = 'msedgewebview2.exe'",
     '.CommandLine.IndexOf($data, [StringComparison]::OrdinalIgnoreCase)',
     '$timer.Elapsed.TotalSeconds -ge 60', 'Start-Sleep -Milliseconds 500',
     "throw 'WebView2 or app processes still running. Retain all files for inspection.'",
   ]) assert.ok(wait.includes(required), required);
+  const timeout = wait.slice(wait.indexOf('if ($timer.Elapsed.TotalSeconds -ge 60)'), wait.indexOf('Start-Sleep'));
+  for (const diagnostic of [
+    "$apps | ForEach-Object { Write-Output ('Still running: ' + $_.ProcessName + ' ' + $_.Id) }",
+    "$webviews | ForEach-Object { Write-Output ('Still running: ' + $_.Name + ' ' + $_.ProcessId) }",
+  ]) {
+    assert.ok(timeout.includes(diagnostic), diagnostic);
+    assert.ok(timeout.indexOf(diagnostic) < timeout.indexOf('throw '));
+  }
+  for (const diagnostic of script.split('\n').filter((value) => value.includes('Still running'))) {
+    assert.doesNotMatch(diagnostic, /CommandLine/i);
+  }
   assert.doesNotMatch(script, /Stop-Process|taskkill|\.Kill\s*\(/i);
+});
+
+test('the WebView2 profile exclusion in the update check is safe only while the shared viewer keeps nothing in browser storage', () => {
+  const viewer = fileURLToPath(new URL('../app/viewer/', import.meta.url));
+  let checked = 0;
+  function checkDirectory(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) checkDirectory(path);
+      else if (entry.isFile() && /\.(?:ts|tsx|js|mjs)$/.test(entry.name)) {
+        assert.doesNotMatch(readFileSync(path, 'utf8'), /localStorage|sessionStorage|indexedDB|caches\.open|document\.cookie/, path);
+        checked += 1;
+      }
+    }
+  }
+  checkDirectory(viewer);
+  assert.ok(checked > 0);
 });
 
 test('waits precede data listing and final cleanup verification', () => {

@@ -30,10 +30,13 @@ function WaitForDataWriters {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     do {
         $apps = @(Get-Process WorkspaceObservatory -ErrorAction SilentlyContinue)
-        $webviews = @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" |
+        # This match relies on the WebView2 command line naming the data folder path. A mismatch makes the check fail rather than pass.
+        $webviews = @(Get-CimInstance Win32_Process -OperationTimeoutSec 10 -Filter "Name = 'msedgewebview2.exe'" |
             Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($data, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
         if ($apps.Count -eq 0 -and $webviews.Count -eq 0) { return }
         if ($timer.Elapsed.TotalSeconds -ge 60) {
+            $apps | ForEach-Object { Write-Output ('Still running: ' + $_.ProcessName + ' ' + $_.Id) }
+            $webviews | ForEach-Object { Write-Output ('Still running: ' + $_.Name + ' ' + $_.ProcessId) }
             throw 'WebView2 or app processes still running. Retain all files for inspection.'
         }
         Start-Sleep -Milliseconds 500
@@ -103,7 +106,7 @@ try {
         throw 'Update test data contains a link.'
     }
     # A normal relaunch opens the shared viewer, whose WebView2 profile is the
-    # documented WebViewCache\EBWebView folder in the data folder. Nothing else may be written.
+    # documented WebViewCache\EBWebView folder in the data folder. No other file may be written.
     $profilePrefix = (Join-Path $data 'WebViewCache\EBWebView') + [IO.Path]::DirectorySeparatorChar
     $dataFiles = @(Get-ChildItem -LiteralPath $data -Recurse -File -Force |
         Where-Object { -not $_.FullName.StartsWith($profilePrefix, [StringComparison]::OrdinalIgnoreCase) })
