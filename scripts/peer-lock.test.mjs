@@ -14,6 +14,63 @@ async function fixture(t) {
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
 
+test('a pending action keeps the lock across garbage collection',{timeout:120000},async t=>{
+  const runtime=await fixture(t);
+  const moduleURL=new URL('./peer-lock.mjs',import.meta.url).href;
+  const code=`setInterval(()=>{},1000)
+    import {withPeerStateLock} from ${JSON.stringify(moduleURL)}
+    await withPeerStateLock(process.argv[1],async()=>{
+      setTimeout(()=>{
+        globalThis.gc()
+        setTimeout(()=>{
+          globalThis.gc()
+          process.stdout.write('ready')
+        },100)
+      },0)
+      await new Promise(()=>{})
+    })`;
+  const child=spawn(process.execPath,['--expose-gc','--input-type=module','-e',code,runtime],
+    {stdio:['ignore','pipe','pipe']});
+  const exited=once(child,'exit');
+  t.after(async()=>{
+    if(child.exitCode===null && child.signalCode===null) {
+      child.kill('SIGKILL');
+      await exited;
+    }
+  });
+  let stdout='',stderr='';
+  child.stderr.on('data',chunk=>{stderr+=chunk;});
+  const ready=new Promise(resolve=>{
+    child.stdout.on('data',chunk=>{
+      stdout+=chunk;
+      if(stdout.includes('ready'))resolve();
+    });
+  });
+  let timer;
+  try {
+    await Promise.race([
+      ready,
+      exited.then(()=>{throw Error(`Lock owner exited: ${stderr}`);}),
+      new Promise((resolve,reject)=>{
+        timer=setTimeout(()=>reject(Error('Lock owner did not become ready')),30000);
+      }),
+    ]);
+  } finally {clearTimeout(timer);}
+  await assert.rejects(withPeerStateLock(runtime,()=>{}),/locked/);
+  assert.equal(child.exitCode,null);
+  assert.equal(child.signalCode,null);
+  child.kill('SIGKILL');
+  await exited;
+  await withPeerStateLock(runtime,async()=>{});
+});
+
+test('the lock is released after the action settles, including after a failure',async t=>{
+  const runtime=await fixture(t);
+  await assert.rejects(withPeerStateLock(runtime,()=>{throw Error('synthetic failure');}),
+    /synthetic failure/);
+  assert.equal(await withPeerStateLock(runtime,async()=>'ok'),'ok');
+});
+
 test('concurrent processes wait for the peer lock instead of refusing its folder',
   {skip:process.platform!=='darwin',timeout:120000},async t=>{
   const runtime=await fixture(t);

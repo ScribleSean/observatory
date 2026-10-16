@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {promisify} from 'node:util';
 import {inspectTailscale,summarizeTailscale,tailscaleCandidates,tailscaleSelfAddresses} from './tailscale-status.mjs';
 
 test('Tailscale states never imply peer reachability or expose identity fields',()=>{
@@ -56,11 +61,98 @@ test('self addresses use the same single bounded read-only command',async()=>{
   assert.deepEqual(await tailscaleSelfAddresses(options),addresses('running',ipv4,ipv6));
   assert.equal(calls.length,1);
   assert.deepEqual(calls[0],{file:tailscaleCandidates('darwin')[0],args:['status','--json','--peers=false'],
-    options:{timeout:8000,maxBuffer:1024*1024,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8'}});
+    options:{timeout:8000,maxBuffer:1024*1024,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8',env:{...process.env,TERM:'dumb'}}});
   await inspectTailscale(options);
   assert.equal(calls.length,2);
   assert.deepEqual(calls[0],calls[1]);
   assert.deepEqual(await tailscaleSelfAddresses(injected(running([ipv6.toUpperCase()]))),addresses('running',null,ipv6.toUpperCase()));
+});
+
+test('macOS status and self addresses copy the current environment and override TERM',async()=>{
+  const originalTerm=process.env.TERM;
+  try {
+    for(const inspect of [inspectTailscale,tailscaleSelfAddresses]) {
+      for(const term of [undefined,'xterm-256color']) {
+        if(term===undefined)delete process.env.TERM;
+        else process.env.TERM=term;
+        const expectedEnv={...process.env,TERM:'dumb'};
+        let recorded;
+        await inspect({platform:'darwin',available:async()=>{},run:async(file,args,options)=>{
+          recorded=options;
+          return {stdout:running(['100.64.0.1'])};
+        }});
+        assert.deepEqual(recorded,{timeout:8000,maxBuffer:1024*1024,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8',env:expectedEnv});
+        assert.notEqual(recorded.env,process.env);
+        assert.equal(process.env.TERM,term);
+      }
+    }
+  }finally {
+    if(originalTerm===undefined)delete process.env.TERM;
+    else process.env.TERM=originalTerm;
+  }
+});
+
+test('Windows status and self addresses keep the existing options without env',async()=>{
+  for(const inspect of [inspectTailscale,tailscaleSelfAddresses]) {
+    let recorded;
+    await inspect({platform:'win32',programFiles:'C:\\Program Files',available:async()=>{},run:async(file,args,options)=>{
+      recorded=options;
+      return {stdout:running(['100.64.0.1'])};
+    }});
+    assert.equal(Object.hasOwn(recorded,'env'),false);
+    assert.deepEqual(recorded,{timeout:8000,maxBuffer:1024*1024,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8'});
+  }
+});
+
+test('bridge environment runs the macOS CLI without launching its GUI',{skip:process.platform==='win32'},async()=>{
+  const execute=promisify(execFile);
+  const folder=await mkdtemp(path.join(os.tmpdir(),'tailscale-term-'));
+  try {
+    const fake=path.join(folder,'Tailscale');
+    const failure='The Tailscale GUI failed to start (Tailscale.CLIError error 3.)';
+    await writeFile(fake,`#!/bin/sh
+if [ -z "$(/usr/bin/printenv TERM)" ]
+then
+  printf '%s\\n' '${failure}'
+  exit 0
+fi
+printf '%s\\n' '{"BackendState":"Running","Self":{"Online":true,"TailscaleIPs":["100.64.0.1"]}}'
+`,{mode:0o700});
+    const bridgeEnv={PATH:'/usr/bin:/bin:/usr/sbin:/sbin'};
+    for(const key of ['HOME','USER','LOGNAME','LANG','TMPDIR']) {
+      if(process.env[key]!==undefined)bridgeEnv[key]=process.env[key];
+    }
+    const control=await execute(fake,['status','--json','--peers=false'],{env:bridgeEnv,encoding:'utf8'});
+    assert.equal(control.stdout.trim(),failure);
+    const source=`
+import assert from 'node:assert/strict'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
+const {inspectTailscale}=await import(process.argv[2])
+const execute=promisify(execFile)
+const bridgeKeys=JSON.parse(process.argv[3])
+// macOS can add this variable at startup, so restore the bridge fixture.
+delete process.env.__CF_USER_TEXT_ENCODING
+assert.deepEqual(Object.keys(process.env).sort(),bridgeKeys)
+assert.equal(Object.hasOwn(process.env,'TERM'),false)
+let calls=0
+const value=await inspectTailscale({platform:'darwin',available:async()=>{},run:(file,args,options)=>{
+  calls++
+  assert.deepEqual(Object.keys(options.env).sort(),[...bridgeKeys,'TERM'].sort())
+  assert.deepEqual(options.env,{...process.env,TERM:'dumb'})
+  return execute(process.argv[1],args,options)
+}})
+assert.equal(calls,1)
+assert.equal(value.status,'running')
+console.log(JSON.stringify(value))
+`;
+    const {stdout}=await execute(process.execPath,['--input-type=module','-e',source,fake,
+      new URL('./tailscale-status.mjs',import.meta.url).href,JSON.stringify(Object.keys(bridgeEnv).sort())],
+    {env:bridgeEnv,encoding:'utf8',timeout:8000});
+    assert.equal(JSON.parse(stdout).status,'running');
+  }finally {
+    await rm(folder,{recursive:true,force:true});
+  }
 });
 
 test('only self IP entries can supply addresses',async()=>{
