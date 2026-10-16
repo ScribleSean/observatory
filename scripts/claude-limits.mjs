@@ -86,14 +86,14 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
 
 const folderOf=runtime=>path.join(runtime,CLAUDE_LIMITS_FOLDER);
 
-async function plainFile(file,limit) {
+async function plainText(file,limit) {
   let handle;
   try {
     const before=await lstat(file);
-    if(!before.isFile() || before.isSymbolicLink() || before.size>limit)throw Error('Unsafe Claude limits file');
+    if(!before.isFile() || before.isSymbolicLink() || before.nlink>1 || before.size>limit)throw Error('Unsafe Claude limits file');
     handle=await open(file,constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
     const info=await handle.stat();
-    if(!info.isFile() || info.size>limit || info.dev!==before.dev || info.ino!==before.ino)throw Error('Unsafe Claude limits file');
+    if(!info.isFile() || info.nlink>1 || info.size>limit || info.dev!==before.dev || info.ino!==before.ino)throw Error('Unsafe Claude limits file');
     const buffer=Buffer.alloc(limit+1);
     let size=0;
     while(size<buffer.length) {
@@ -102,8 +102,40 @@ async function plainFile(file,limit) {
       size+=bytesRead;
     }
     if(size>limit)throw Error('Unsafe Claude limits file');
-    return JSON.parse(buffer.toString('utf8',0,size));
+    return buffer.toString('utf8',0,size);
   } finally {await handle?.close().catch(()=>{});}
+}
+
+async function plainFile(file,limit) {
+  return JSON.parse(await plainText(file,limit));
+}
+
+// Count member separators only after JSON.parse has validated the text.
+function topLevelMembers(text) {
+  let depth=0,string=false,escaped=false,count=0;
+  for(const character of text) {
+    if(string) {
+      if(escaped)escaped=false;
+      else if(character==='\\')escaped=true;
+      else if(character==='"')string=false;
+    } else if(character==='"')string=true;
+    else if(character==='{' || character==='[')depth++;
+    else if(character==='}' || character===']')depth--;
+    else if(character===':' && depth===1)count++;
+  }
+  return count;
+}
+
+export function parseLimitsConsentMarker(text) {
+  try {
+    const marker=JSON.parse(text);
+    if(!isObject(marker))return false;
+    const keys=Object.keys(marker);
+    if(keys.length!==2 || !keys.includes('consent') || !keys.includes('givenAt') || topLevelMembers(text)!==keys.length)return false;
+    if(marker.consent!==true || typeof marker.givenAt!=='string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(marker.givenAt))return false;
+    // Years 0001 to 9999 only, the range a .NET DateTime holds, so both apps read the same marker.
+    return !marker.givenAt.startsWith('0000') && new Date(marker.givenAt).toISOString()===marker.givenAt;
+  } catch {return false;}
 }
 
 export async function ensureClaudeLimitsFolder(runtime) {
@@ -149,8 +181,7 @@ export async function claudeLimitsConsent(runtime) {
   if(!await plainLimitsFolder(runtime))return {given:false,consentMarker:false,statusLine:false};
   let consentMarker=false;
   try {
-    const marker=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096);
-    consentMarker=isObject(marker) && marker.consent===true;
+    consentMarker=parseLimitsConsentMarker(await plainText(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096));
   } catch {}
   const statusLine=await claudeStatuslineInstalled(runtime);
   return {given:consentMarker || statusLine,consentMarker,statusLine};
