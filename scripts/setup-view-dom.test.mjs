@@ -154,6 +154,9 @@ void test('setup summary preserves unknown limits without counting them as on', 
   const summary = setupSummary(status);
   assert.equal(summary.rows.find(row => row.id === 'claudeLimits').on, null);
   assert.equal(summary.anyOn, false);
+  assert.equal(summary.noneOn, false);
+  status.limitsConsent = false;
+  assert.equal(setupSummary(status).noneOn, true);
 });
 
 void test('setup renders null limits as Unknown in sources and summary', async t => {
@@ -168,4 +171,6 @@ void test('setup renders null limits as Unknown in sources and summary', async t
   await f.click('Continue');
   const row = [...f.container.querySelectorAll('.ob-setup-summary li')].find(node => node.firstElementChild.textContent === strings.settings.claudeLimits);
   assert.equal(row.lastElementChild.textContent, 'Unknown');
+  // Every source is off but the limits switch is unknown, so the page does not claim that no source is on.
+  assert.equal(f.container.textContent.includes(strings.setup.finishNone), false);
 });

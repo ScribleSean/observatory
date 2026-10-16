@@ -49,7 +49,7 @@ export function SetupContent({ status, step, available, busy, message, disclosur
     {index === 1 && <><p>{W.pairingIntro}</p><p>{W.pairingHow}</p><p>{W.pairingNoAccount}</p></>}
     {index === 2 && <><p>{W.finishIntro}</p><ul className="ob-setup-summary">
       {summary.rows.map(row => <li key={row.id}><span>{row.label}</span><span>{word(row.on)}</span></li>)}
-    </ul>{status && !summary.anyOn && <p>{W.finishNone}</p>}</>}
+    </ul>{status && summary.noneOn && <p>{W.finishNone}</p>}</>}
     <div className="ob-setup-navigation">
       {index > 0 && <button type="button" onClick={() => onStep(index - 1)}>{W.back}</button>}
       {index < 2 ? <button type="button" onClick={() => onStep(index + 1)}>{W.next}</button> : <button type="button" disabled={disabled} onClick={onFinish}>{W.finish}</button>}

@@ -100,6 +100,7 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
       }
     }, contract.limits.pairingPollSeconds * 1000);
     const recoveryPoll = setInterval(() => {
+      if (!transport.available) return;
       const current = next.getStatus();
       if (!current || current.limitsConsent === null || Object.values(current.sharing).some(channel => channel === null)) refresh();
     }, contract.limits.cacheRefreshSeconds * 1000);
