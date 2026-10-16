@@ -1,13 +1,16 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {mkdtemp,realpath,rm,cp,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,createPeerRecord,readPeerState} from './peer-store.mjs';
+
+const runtimeBase=await testRuntimeBase('provider-token-compatibility');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 
 // Frozen endpoint source from main 2292d0d. Execute it as a separate process so
 // rolling-upgrade coverage cannot silently acquire the new optional dispatcher.
@@ -54,7 +57,7 @@ const legacyEndpoint = [
 
 test('legacy and upgraded endpoint processes share core records while only the upgrade accepts the optional channel',
   {skip:!['darwin','win32'].includes(process.platform),timeout:process.platform==='win32'?300000:30000},async t=>{
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-compatibility-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-provider-compatibility-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const scripts=path.join(root,'scripts'),runtime=await mkdtemp(path.join(root,'runtime-'));
   await cp(fileURLToPath(new URL('.',import.meta.url)),scripts,{recursive:true,

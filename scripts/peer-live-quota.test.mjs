@@ -1,14 +1,17 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,lstat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {runSyntheticQuotaAction} from './peer-live-fixture.test.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-live-quota');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 test('live quota fixture uses only synthetic data and verifies consent, retention and disable',async t=>{
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-live-quota-test-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-live-quota-test-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const Mac=await mkdtemp(path.join(root,'Mac-')),Windows=await mkdtemp(path.join(root,'Windows-'));
   const run=runSyntheticQuotaAction;

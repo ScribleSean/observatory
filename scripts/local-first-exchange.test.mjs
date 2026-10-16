@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {macSnapshot} from './mac-snapshot.mjs';
 import {windowsSnapshot} from './windows-dashboard.mjs';
@@ -13,6 +13,9 @@ import {collectProviderTokenSources} from './provider-token-sync.mjs';
 import {providerTokenSharingControl} from './provider-token-sharing-control.mjs';
 import {readProviderTokenState} from './provider-token-store.mjs';
 import {cleanClaudeTokenSource} from './provider-token-sources.mjs';
+
+const runtimeBase=await testRuntimeBase('local-first-exchange');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 
 const at='2026-10-01T13:00:00.000Z',now=Date.parse(at),date='2026-10-01';
 const config=host=>({host,comparisonId:'a'.repeat(64),codexHosts:[host]});
@@ -56,7 +59,7 @@ test('an older peer still accepts what this device sends with local additions',a
       assert.equal(merged.settings.find(row=>row.host===host).refusal,host===failedHost?'ancestor-refused':undefined);
     }
   }
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'local-first-provider-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'local-first-provider-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   await initializePairing(runtime,createPairingConfigurations().Mac);
   const providerNow=Date.now(),providerAt=new Date(providerNow).toISOString();

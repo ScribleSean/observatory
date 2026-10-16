@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,symlink,lstat,readlink,mkdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -14,8 +14,11 @@ import {exchangePeerRecord} from './peer-exchange.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing} from './quota-store.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-revocation');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-revocation-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-revocation-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   return runtime;
 }

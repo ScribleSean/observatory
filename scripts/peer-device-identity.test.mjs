@@ -1,17 +1,20 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,chmod,unlink,link,symlink,mkdir,readdir} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {generateKeyPairSync} from 'node:crypto';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {initializeDeviceIdentity,readDeviceIdentity,validateDeviceIdentity} from './peer-device-identity.mjs';
 import {prepareDeviceIdentity,deviceIdentitySetupStatus} from './peer-identity-setup.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-device-identity');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 test('protected device identity storage',{skip:!existsSync(openssl)},async t=>{
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-identity-test-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-identity-test-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const key=path.join(root,'test.key'),cert=path.join(root,'test.pem');
   execFileSync(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-sha256','-keyout',key,
