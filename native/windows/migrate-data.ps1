@@ -160,6 +160,16 @@ function LoginRepair([string]$Reason, [string]$Path) {
     }
     return $message
 }
+function ValidLogin($Value, [bool]$ExactKeys) {
+    if ($Value -isnot [pscustomobject] -or
+        ($Value.schema -isnot [int] -and $Value.schema -isnot [long]) -or
+        $Value.schema -ne 1 -or $Value.loginWasOn -isnot [bool]) { return $false }
+    if ($ExactKeys) {
+        $keys = @($Value.PSObject.Properties.Name)
+        if ($keys.Count -ne 2 -or 'schema' -cnotin $keys -or 'loginWasOn' -cnotin $keys) { return $false }
+    }
+    return $true
+}
 function CollectionLock {
     $script:step = 'running'
     SafeDirectory $Legacy $true
@@ -176,7 +186,12 @@ function CollectionLock {
 function MoveCarriedLogin {
     try {
         $destination = Join-Path $Target 'login-state-carried.json'
-        if ((Item $carriedLoginPath) -and -not (Item $destination)) {
+        $entry = Item $carriedLoginPath
+        if ($entry -and ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            $result.note = 'The login state file is a link and was left beside the data folder.'
+            return
+        }
+        if ($entry -and -not (Item $destination)) {
             [IO.File]::Move($carriedLoginPath, $destination)
         }
     } catch {
@@ -261,10 +276,16 @@ function SaveLogin([string]$Path, $Value) {
     # Publish a flushed sibling file atomically so a crash cannot truncate saved intent.
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Compress))
     # Compare saved intent, allowing JSON whitespace and a UTF-8 BOM.
-    if (Item $Path) {
-        try { $existing = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json }
+    $entry = Item $Path
+    if ($entry) {
+        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { Refuse ('The saved login state is a link in ' + $Path + '. Replace the link with a regular file that holds {"schema":1,"loginWasOn":true} or false as it was.') }
+        try {
+            $json = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+            if (-not $json.TrimStart().StartsWith('{')) { Refuse (LoginRepair 'Invalid saved login state' $Path) }
+            $existing = $json | ConvertFrom-Json
+        }
         catch { Refuse (LoginRepair 'Invalid saved login state' $Path) }
-        if ($existing.schema -ne 1 -or $existing.loginWasOn -isnot [bool] -or $existing.loginWasOn -ne $Value.loginWasOn) {
+        if (-not (ValidLogin $existing $true) -or $existing.loginWasOn -ne $Value.loginWasOn) {
             Refuse (LoginRepair 'The saved login state does not match this run' $Path)
         }
         return
@@ -411,15 +432,25 @@ public static class MigrationFileLinks {
     $loginPath = Join-Path $Stage 'login-state.json'
     $carriedLoginPath = Join-Path $Parent ('.' + $names.visible.dataFolder + '-migration-login.json')
     $savedLoginPath = $null
-    if (Item $carriedLoginPath) { $savedLoginPath = $carriedLoginPath }
+    $carriedEntry = Item $carriedLoginPath
+    $carriedLink = $carriedEntry -and ($carriedEntry.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    if ($carriedLink -and $state -ne 'already-migrated') {
+        Refuse ('The saved login state is a link in ' + $carriedLoginPath + '. Replace the link with a regular file that holds {"schema":1,"loginWasOn":true} or false as it was.')
+    }
+    if ($carriedEntry -and -not $carriedLink) { $savedLoginPath = $carriedLoginPath }
     elseif (Item $loginPath) { $savedLoginPath = $loginPath }
     elseif (Item (Join-Path $Stage $marker)) { $savedLoginPath = Join-Path $Stage $marker }
     if ($savedLoginPath) {
-        try { $login = Get-Content -LiteralPath $savedLoginPath -Raw -Encoding UTF8 | ConvertFrom-Json }
+        try {
+            $json = Get-Content -LiteralPath $savedLoginPath -Raw -Encoding UTF8
+            if (-not $json.TrimStart().StartsWith('{')) { Refuse (LoginRepair 'Invalid saved login state' $savedLoginPath) }
+            $login = $json | ConvertFrom-Json
+        }
         catch { Refuse (LoginRepair 'Invalid saved login state' $savedLoginPath) }
-        if ($login.schema -ne 1 -or $login.loginWasOn -isnot [bool]) { Refuse (LoginRepair 'Invalid saved login state' $savedLoginPath) }
+        if (-not (ValidLogin $login ($savedLoginPath -ne (Join-Path $Stage $marker)))) { Refuse (LoginRepair 'Invalid saved login state' $savedLoginPath) }
         $loginWasOn = $login.loginWasOn
-    } else { $loginWasOn = ReadLogin }
+    } elseif ($state -eq 'already-migrated') { $loginWasOn = $saved.loginWasOn }
+    else { $loginWasOn = ReadLogin }
     $ssh = [ordered]@{ from = (SshPaths $names.legacy); to = (SshPaths $names.visible) }
     $result = [ordered]@{ state = $state; directories = $directories.Count; files = $files.Count; bytes = $bytes; skipped = $skipped.Count
         loginWasOn = $loginWasOn; statusLineTargetsEarlierFolder = (StatusLineTargetsEarlierFolder)
@@ -477,6 +508,7 @@ public static class MigrationFileLinks {
     foreach ($entry in $stageManifest) {
         if ($entry.path -eq $receipt -and ($entry.type -ne 'file' -or $entry.sha256 -ne $receiptHash)) { $validStage = $false }
     }
+    $step = 'login'
     SaveLogin $carriedLoginPath ([ordered]@{ schema = 1; loginWasOn = $loginWasOn })
     if ((Item $Stage) -and -not $validStage) {
         $stale = Join-Path $Parent ('.' + $names.visible.dataFolder + '-migration-stale-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,4))
