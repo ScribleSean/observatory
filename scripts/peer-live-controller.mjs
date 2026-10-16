@@ -147,7 +147,7 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
     try {checkReply(reply,check,link);}
     catch (error) {
       if(!valid(reply) || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange','quota-repeat','quota-disable-host'].includes(activeStep))throw error;
-      log(`step ${activeStep}: second exchange (${link===H?'hosting':'joining'} side, ${replyFailure})`);
+      log(`step ${activeStep}: second exchange (${replyFailure})`);
       secondExchanges++;
       replyFailure=null;
       reply=await receive(link,()=>link.send(command));
@@ -209,9 +209,9 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
   return stopped===null;
 }
 
-export async function cleanupWorkers(workers,{timeoutMs=30000}={}) {
+export async function cleanupWorkers(workers,{timeoutMs=30000,remoteTimeoutMs=120000,wait=deadline}={}) {
   const closed=workers.map(worker=>{try {worker.close();return true;} catch {return false;}});
-  const results=await Promise.allSettled(workers.map(worker=>deadline(worker.exited,timeoutMs)));
+  const results=await Promise.allSettled(workers.map(worker=>wait(worker.exited,worker.remote?remoteTimeoutMs:timeoutMs)));
   if(closed.includes(false) || results.some(result=>result.status!=='fulfilled' || result.value!==0))throw failed();
 }
 export function workerArguments(address,port,workerLifetime) {
@@ -234,7 +234,7 @@ async function main() {
     let remote;
     if(options.role) {
       const exited=new Promise(resolve=>{process.stdin.once('end',()=>resolve(0));process.stdin.once('error',()=>resolve(1));process.stdin.once('close',()=>resolve(process.stdin.readableEnded?0:1));});
-      remote={...createWorkerLink(process.stdin,process.stdout),exited};
+      remote={...createWorkerLink(process.stdin,process.stdout),exited,remote:true};
     } else remote=localWorker(options.address,options.port,options.workerLifetime);
     workers.push(remote);
     passed=await runSequence({host:options.role==='join'?remote:local,join:options.role==='join'?local:remote,

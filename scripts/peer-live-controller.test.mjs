@@ -139,13 +139,23 @@ test('ready requires a valid first line and has a deadline',async()=>{
   }
 });
 test('cleanup closes every worker before waiting and rejects bad exits or timeout',async()=>{
-  for(const exit of [Promise.resolve(0),Promise.resolve(1),Promise.resolve(null),new Promise(()=>{})]) {
-    const closed=[],workers=[0,1].map(index=>({close(){closed.push(index);},exited:exit}));
-    const result=cleanupWorkers(workers,{timeoutMs:10});
+  for(const remote of [false,true])for(const exit of [Promise.resolve(0),Promise.resolve(1),Promise.resolve(null),new Promise(()=>{})]) {
+    const closed=[],workers=[0,1].map(index=>({close(){closed.push(index);},exited:exit,remote}));
+    const result=cleanupWorkers(workers,{timeoutMs:10,remoteTimeoutMs:10});
     assert.deepEqual(closed,[0,1]);
     if(await Promise.race([exit,Promise.resolve('pending')])===0)await result;
     else await assert.rejects(result);
   }
+});
+test('cleanup gives remote workers 120 seconds and local workers 30 seconds',async()=>{
+  const closed=[],durations=[];
+  const workers=[false,true,false].map((remote,index)=>({remote,exited:Promise.resolve(0),close(){closed.push(index);}}));
+  await cleanupWorkers(workers,{wait:(exit,ms)=>{
+    assert.deepEqual(closed,[0,1,2]);
+    durations.push(ms);
+    return exit;
+  }});
+  assert.deepEqual(durations,[30000,120000,30000]);
 });
 test('cleanup failure prevents a passing result',async()=>{
   const run=fakes();
@@ -523,7 +533,7 @@ for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'
         count++;
         if(count===target)return {status:'unavailable',transport:'unavailable',private:invitation};
         if(count===target+1) {
-          assert.equal(run.lines.at(-1),`step ${step}: second exchange (${label}, ${reason})`);
+          assert.equal(run.lines.at(-1),`step ${step}: second exchange (${reason})`);
           if(!passes)return {status:'waiting',transport:'not-configured',private:invitation};
         }
       });
@@ -532,6 +542,7 @@ for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'
       const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
       assert.deepEqual(requests[target-1],requests[target]);
       assert.equal(run.lines.filter(line=>line.includes(': second exchange (')).length,1);
+      for(const line of run.lines.filter(line=>line.includes(' side')))assert.equal(line.match(/ side/g).length,1);
       assert.equal(run.lines.at(-2),'second exchanges used: 1');
       if(passes)assert.ok(run.lines.includes(`step ${step}: ok`));
       else {
@@ -628,7 +639,7 @@ test('quota diagnostics report fixed words on either side and reject malformed o
       reason+=`, stage ${safe.stage}, code ${safe.code}, request ${safe.request}, elapsed 2 s`;
     }
     assert.ok(run.lines.includes(`step quota-exchange: failed (${reason})`));
-    assert.ok(run.lines.includes(`step quota-exchange: second exchange (${label} side, ${reason})`));
+    assert.ok(run.lines.includes(`step quota-exchange: second exchange (${reason})`));
     assert.ok(run.lines.every(line=>!line.includes(invitation)));
   }
 });
@@ -649,9 +660,10 @@ for(const [step,side,action,target] of [
   const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
   assert.deepEqual(requests[target-1],requests[target]);
   const label=side==='host'?'hosting':'joining';
-  assert.ok(run.lines.includes(`step ${step}: second exchange (${label} side, ${label} side, status unavailable, peer reading absent)`));
+  assert.ok(run.lines.includes(`step ${step}: second exchange (${label} side, status unavailable, peer reading absent)`));
   assert.equal(run.lines.at(-2),'second exchanges used: 1');
   if(!passes) {
+    assert.equal(run.lines.at(-4),`step ${step}: failed (${label} side, status unavailable, peer reading absent)`);
     assert.equal(requests.length,target+1);
     assert.deepEqual(run.commands.at(-1),requests.at(-1));
   }
