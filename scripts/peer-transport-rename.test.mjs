@@ -51,12 +51,14 @@ async function refuses(runtime,options={},pattern) {
   assert.deepEqual(await snapshot(runtime),before);
 }
 
+// The rename helper runs on the Mac only.
+const mac={skip:process.platform==='win32'};
 test('collector name literals equal the shared app names',()=>{
   assert.deepEqual(renameNames,{visibleDataFolder:appNames.visible.dataFolder,legacyDataFolder:appNames.legacy.dataFolder,
     visibleProductName:appNames.visible.productName,legacyProductName:appNames.legacy.productName});
 });
 
-test('rename preserves identity and bidirectional exchange and keeps the setup retry guard',async t=>{
+test('rename preserves identity and bidirectional exchange and keeps the setup retry guard',mac,async t=>{
   const mac=await fixture(t),windows=await fixture(t,'Windows'),raw=pair();
   const remote=complementaryWindowsPairing(raw);await write(windows,remote);
   // Select Windows only in the endpoint under test. Filesystem checks still run on this Mac.
@@ -111,7 +113,7 @@ test('rename preserves identity and bidirectional exchange and keeps the setup r
   assert.deepEqual(await snapshot(mac),before);
 });
 
-test('repair fields and backslash separator style survive',async t=>{
+test('repair fields and backslash separator style survive',mac,async t=>{
   const runtime=await fixture(t),raw=pair();
   raw.transport={...raw.transport,...receipt().ssh.from};
   raw.repair={mac:'1'.repeat(64),windows:'2'.repeat(64)};
@@ -122,7 +124,7 @@ test('repair fields and backslash separator style survive',async t=>{
   assert.deepEqual(updated,{...raw,transport:{...raw.transport,...receipt().ssh.to}});
 });
 
-test('process guards never write pairing bytes or mtimes',async t=>{
+test('process guards never write pairing bytes or mtimes',mac,async t=>{
   const runtime=await fixture(t);
   for(const line of ['/tmp/WorkspaceObservatory --fixture','/tmp/Workspace Observatory.app/Contents/helper',
     '/tmp/Observatory.app/Contents/helper','node /tmp/claude-statusline-bridge.mjs'])
@@ -131,7 +133,7 @@ test('process guards never write pairing bytes or mtimes',async t=>{
   await refuses(runtime,{fetchReceipt:async()=>{throw Error('The PC migration record was not found.');}},/record was not found/);
 });
 
-test('partial, custom and malformed records refuse without writing',async t=>{
+test('partial, custom and malformed records refuse without writing',mac,async t=>{
   const runtime=await fixture(t);
   for(const count of [1,2]) {
     const raw=pair();for(const key of fields.slice(0,count))raw.transport[key]=receipt().ssh.to[key];
@@ -148,7 +150,7 @@ test('partial, custom and malformed records refuse without writing',async t=>{
   for(const record of malformed)await refuses(runtime,{fetchReceipt:async()=>record});
 });
 
-test('legacy and noncanonical runtimes and differing pending pairing refuse',async t=>{
+test('legacy and noncanonical runtimes and differing pending pairing refuse',mac,async t=>{
   const legacy=await fixture(t,appNames.legacy.dataFolder);await refuses(legacy,{},/Canonical/);
   const runtime=await fixture(t);
   await refuses(runtime+'/',{},/Canonical/);
@@ -158,7 +160,7 @@ test('legacy and noncanonical runtimes and differing pending pairing refuse',asy
   await refuses(runtime,{},/Conflicting pending/);
 });
 
-test('TLS and absent pairing return not-ssh without fetching',async t=>{
+test('TLS and absent pairing return not-ssh without fetching',mac,async t=>{
   const runtime=await fixture(t);
   await write(runtime,{...validatePairing(pair()),transport:{kind:'tls',address:'100.64.0.2',port:43128}});
   const before=await snapshot(runtime);

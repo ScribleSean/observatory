@@ -6,7 +6,9 @@ param(
     [string]$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
     # Test-only names isolate synthetic checks from an installed application.
     [string]$AppIdOverride = '',
-    [string]$ProcessNameOverride = ''
+    [string]$ProcessNameOverride = '',
+    # Test only. Hosted CI runners are elevated. A person never needs this.
+    [switch]$AllowElevatedTestRun
 )
 $ErrorActionPreference = 'Stop'
 $failure = $null
@@ -158,7 +160,7 @@ try {
     if ($Action -notin @('status','copy')) { Refuse 'Choose status or copy.' }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Refuse 'Run without administrator rights.' }
+    if (-not $AllowElevatedTestRun -and $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Refuse 'Run without administrator rights.' }
     . (Join-Path $PSScriptRoot 'app-names.ps1')
     $names = Read-AppNames
     if (-not ('MigrationFileLinks' -as [type])) {

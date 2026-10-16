@@ -57,7 +57,7 @@ async function fixture(t) {
 }
 function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe'}={}) {
   return spawnSync(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
-    '-Action',action,'-Parent',f.parent,'-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,...(confirm?['-ConfirmAppQuit']:[]),...extra],
+    '-Action',action,'-Parent',f.parent,'-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,'-AllowElevatedTestRun',...(confirm?['-ConfirmAppQuit']:[]),...extra],
   {encoding:'utf8',env:{...process.env,OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',...env},timeout:120000});
 }
 function success(result,state) {
@@ -277,7 +277,11 @@ test('exclusive operation database handle refuses',windows,async t => {
   const ready = path.join(f.parent,'ready');
   const child = spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',
     `$h=[IO.File]::Open(${quote(database)},'Open','ReadWrite','None')\ntry { [IO.File]::WriteAllText(${quote(ready)},'ready')\n[Console]::ReadLine() | Out-Null } finally { $h.Dispose() }`],{stdio:['pipe','pipe','pipe']});
-  t.after(() => child.kill());
+  t.after(() => {
+    // Release every handle so a failed assertion cannot keep the test process alive.
+    child.stdin.destroy();child.stdout.destroy();child.stderr.destroy();
+    child.kill();child.unref();
+  });
   let prepared = false;
   for (let i=0;i<100;i++) {
     try { await readFile(ready); prepared=true; break; } catch {}
