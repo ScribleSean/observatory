@@ -148,7 +148,7 @@ test('a journal mid-removal is waited for and then treated as absent',async()=>{
   assert.equal(calls,3);
 });
 
-test('a journal that stays unlinked is refused after the bound',async()=>{
+test('a journal that stays unlinked is refused after the bound',{timeout:5000},async()=>{
   await assert.rejects(checkLockSidecars('synthetic.sqlite',{
     stat:async filename=>filename.endsWith('-journal')?fakeSidecar({nlink:0}):absentSidecar(),
     wait:ms=>new Promise(resolve=>setTimeout(resolve,ms)),boundMs:50
@@ -170,9 +170,16 @@ test('a journal mid-removal that is replaced by an unsafe file is refused',async
 test('wrong sidecars are refused without waiting',async()=>{
   const cases=[
     ['-wal',fakeSidecar()],
+    ['-shm',fakeSidecar()],
     ['-journal',fakeSidecar({isFile:()=>false,isSymbolicLink:()=>true})],
+    ['-journal',fakeSidecar({size:65537})],
+    ['-journal',fakeSidecar({nlink:0,isFile:()=>false,isSymbolicLink:()=>true})],
+    ['-journal',fakeSidecar({nlink:0,size:65537})],
     ['-journal',fakeSidecar({nlink:2})],
-    ...(process.platform==='win32'?[]:[['-journal',fakeSidecar({mode:0o640})]])
+    ...(process.platform==='win32'?[]:[
+      ['-journal',fakeSidecar({mode:0o640})],
+      ['-journal',fakeSidecar({nlink:0,mode:0o640})]
+    ])
   ];
   for(const [suffix,info] of cases) {
     let waits=0;
