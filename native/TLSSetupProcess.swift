@@ -6,9 +6,32 @@ struct TLSSetupReply: Decodable {
     let status: String
     let invitation: String?
     let peerCertificateSha256: String?
+    var address: String? = nil
+    var port: Int? = nil
+    var portAvailable: Bool? = nil
+    var peerAddress: String? = nil
 
     static func selfTest() {
         precondition((try? parse(Data("{\"id\":1,\"status\":\"idle\",\"peerCertificateSha256\":null}".utf8)))?.status == "idle")
+        for text in [
+            #"{"id":1,"status":"ready","address":"100.64.0.1","port":43128,"portAvailable":true}"#,
+            #"{"id":1,"status":"ready","address":null,"port":43128,"portAvailable":null}"#,
+            #"{"id":1,"status":"confirming","peerAddress":"100.64.0.2"}"#,
+            #"{"id":1,"status":"confirming","peerAddress":null}"#,
+            #"{"id":1,"status":"confirming","peerAddress":"bad"}"#
+        ] { precondition((try? parse(Data(text.utf8))) != nil) }
+        for text in [
+            #"{"id":1,"status":"ready","address":"bad","port":43128,"portAvailable":true}"#,
+            #"{"id":1,"status":"ready","address":null,"port":43128,"portAvailable":true}"#,
+            #"{"id":1,"status":"ready","address":"10.0.0.1","port":43128,"portAvailable":null}"#,
+            #"{"id":1,"status":"ready","address":null,"port":43128,"portAvailable":null,"extra":0}"#,
+            #"{"id":1,"status":"ready","address":null,"port":43129,"portAvailable":null}"#,
+            #"{"id":1,"status":"ready","address":null,"port":43128.0,"portAvailable":null}"#,
+            #"{"id":1,"status":"ready","address":null,"port":43128,"portAvailable":0}"#,
+            #"{"id":1,"status":"confirming","peerAddress":1}"#,
+            #"{"id":1,"status":"confirming","peerAddress":null,"extra":0}"#,
+            #"{"id":1,"status":"ready","peerAddress":null}"#
+        ] { precondition((try? parse(Data(text.utf8))) == nil) }
         for invalid in ["{}", "{\"id\":true,\"status\":\"idle\"}", "{\"id\":1,\"status\":\"hosting\"}",
                         "{\"id\":1,\"status\":\"paired\"}", "{\"id\":1,\"status\":\"idle\",\"key\":\"private\"}"] {
             precondition((try? parse(Data(invalid.utf8))) == nil)
@@ -18,11 +41,32 @@ struct TLSSetupReply: Decodable {
     static func parse(_ data: Data) throws -> TLSSetupReply {
         guard data.count <= 8192,
               let fields = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              Set(fields.keys).isSubset(of: ["id", "status", "invitation", "peerCertificateSha256"]) else {
+              !fields.isEmpty else {
             throw CocoaError(.fileReadCorruptFile)
         }
         let reply = try JSONDecoder().decode(TLSSetupReply.self, from: data)
-        guard reply.id > 0, ["idle", "working", "waiting", "confirming", "inactive", "hosting", "cancelled",
+        guard reply.id > 0 else { throw CocoaError(.fileReadCorruptFile) }
+        if Set(fields.keys) == ["id", "status", "address", "port", "portAvailable"] {
+            guard reply.status == "ready", reply.port == 43128,
+                  reply.address.map(BridgeContract.address) ?? true,
+                  (reply.address == nil) == (reply.portAvailable == nil),
+                  let text = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadCorruptFile) }
+            let parser = BridgeParser(Array(text.utf16), maxDepth: 16)
+            let node = try parser.parse()
+            guard !parser.duplicate, node["port"].kind == "number", node["port"].text == "43128" else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return reply
+        }
+        if Set(fields.keys) == ["id", "status", "peerAddress"] {
+            guard ["idle", "working", "waiting", "confirming", "inactive", "hosting", "cancelled",
+                   "configuration-ready", "awaiting-confirmation", "local-ready", "acknowledged", "unavailable",
+                   "identity-ready", "identity-required", "identity-recovery-required"].contains(reply.status) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return reply
+        }
+        guard Set(fields.keys).isSubset(of: ["id", "status", "invitation", "peerCertificateSha256"]), ["idle", "working", "waiting", "confirming", "inactive", "hosting", "cancelled",
             "configuration-ready", "awaiting-confirmation", "local-ready", "acknowledged", "unavailable",
             "identity-ready", "identity-required", "identity-recovery-required"].contains(reply.status),
               (reply.status == "hosting") == (reply.invitation != nil) else { throw CocoaError(.fileReadCorruptFile) }
