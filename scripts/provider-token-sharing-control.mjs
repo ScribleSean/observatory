@@ -15,14 +15,20 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     !exactProviderFields(request,request.action==='enable'?['action','token']:['action']) ||
     (request.action==='enable' && (typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token))))throw Error('Invalid provider sharing request');
   const retry=privateRefusalBudget(options);
-  return withPeerStateLock(runtime,async()=>{
+  const status=request.action==='status';
+  const read=operation=>status?operation():retry(operation);
+  const locked=()=>withPeerStateLock(runtime,async()=>{
     if(request.action==='disable') {
       await markSharingChoiceApplied(runtime,'claude-code-tokens');
       await disableProviderTokenSharing(runtime,now);
     }
     let pair;
-    try {pair=await retry(()=>readPairing(runtime));}catch {pair=null;}
-    let state=pair?await retry(()=>readProviderTokenState(runtime,now)):null;
+    try {pair=await read(()=>readPairing(runtime));}
+    catch(error) {
+      if(status && retry.canRetry(error))throw error;
+      pair=null;
+    }
+    let state=pair?await read(()=>readProviderTokenState(runtime,now)):null;
     if(request.action==='enable') {
       if(!pair || !state || !recentProviderSource(state.source,now) || request.token!==token(state,pair))throw Error('Provider sharing confirmation expired');
       state=await setProviderTokenSharing(runtime,{revision:state.revision,enabled:true},now);
@@ -31,6 +37,7 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     return {version:1,enabled:Boolean(pair && state?.generation),canEnable,
       reason:!pair?'pairing-unavailable':canEnable?'ready':'source-unavailable',token:canEnable?token(state,pair):null};
   });
+  return status?retry(locked):locked();
 }
 
 async function main() {

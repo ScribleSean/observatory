@@ -23,14 +23,20 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
     (request.action==='enable' ? typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token) : Object.hasOwn(request,'token')) ||
     !Number.isSafeInteger(now) || now<0)throw Error('Invalid sharing settings request');
   const retry=privateRefusalBudget(options);
-  return withPeerStateLock(runtime,async()=>{
+  const status=request.action==='status';
+  const read=operation=>status?operation():retry(operation);
+  const locked=()=>withPeerStateLock(runtime,async()=>{
     // Disabling must remain available even if the pairing file is corrupt.
     if(request.action==='disable') {
       await markSharingChoiceApplied(runtime,'codex-limits');
       await revokeQuotaSharing(runtime,now);
     }
     let pair;
-    try {pair=await retry(()=>readPairing(runtime));}catch {pair=null;}
+    try {pair=await read(()=>readPairing(runtime));}
+    catch(error) {
+      if(status && retry.canRetry(error))throw error;
+      pair=null;
+    }
     let state;
     try {await lstat(path.join(runtime,'private-quota'));}
     catch(error) {
@@ -38,7 +44,7 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
       if(request.action==='enable')throw Error('Read the account before sharing');
       return {...empty(),reason:pair?'account-unavailable':'pairing-unavailable'};
     }
-    state=await retry(()=>readQuotaState(runtime,now));
+    state=await read(()=>readQuotaState(runtime,now));
     if(request.action==='enable') {
       if(!pair || !recent(state,now) || request.token!==token(state,pair))throw Error('Sharing confirmation expired');
       state=await setQuotaSharing(runtime,{revision:state.revision,enabled:true,pairingId:pair.local.pairId},now);
@@ -48,6 +54,7 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
     return {version:1,enabled,canEnable,reason:!pair?'pairing-unavailable':canEnable?'ready':'account-unavailable',
       token:canEnable?token(state,pair):null};
   });
+  return status?retry(locked):locked();
 }
 
 async function main() {

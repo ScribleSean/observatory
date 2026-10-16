@@ -7,6 +7,9 @@ import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {PRIVATE_PATH_REFUSAL,privateRefusalBudget} from './peer-directory.mjs';
 import {readQuotaState} from './quota-store.mjs';
+import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
+import {quotaSharingControl} from './quota-sharing-control.mjs';
+import {providerTokenSharingControl} from './provider-token-sharing-control.mjs';
 
 function budget(options={}) {
   let clock=0;
@@ -188,3 +191,71 @@ process.stdout.write(String(changes))
     finally {await rm(runtime,{recursive:true,force:true});}
   }
 });
+
+// Reuse the pairing setup from quota-sharing-control.test.mjs without account observations.
+async function pairedRuntime(runtime) {
+  await initializePairing(runtime,createPairingConfigurations().Mac);
+  await readQuotaState(runtime,Date.now());
+}
+
+for(const [name,control] of [['quota',quotaSharingControl],['provider-token',providerTokenSharingControl]]) {
+  test(`${name} paired status recovers from a private-sync refusal`,darwinOnly,async t=>{
+    const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-paired-refusal-')));
+    let wrappers;
+    try {
+      const python=await fixturePython(t,runtime);
+      if(!python)return;
+      await pairedRuntime(runtime);
+      wrappers=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-paired-wrapper-')));
+      const script=`scripts/${name}-sharing-control.mjs`;
+      const expected=statusValue(await status(script,runtime,python));
+      assert.notEqual(expected.reason,'pairing-unavailable');
+      const {wrapper,counter}=await refusalWrapper(wrappers,python,'private-sync');
+      const actual=statusValue(await status(script,runtime,wrapper));
+      await access(counter);
+      if(name==='provider-token')assert.deepEqual(actual,expected);
+      else assert.equal(actual.reason,expected.reason);
+    } finally {
+      if(wrappers)await rm(wrappers,{recursive:true,force:true});
+      await rm(runtime,{recursive:true,force:true});
+    }
+  });
+
+  test(`${name} status releases the peer lock during retry wait`,darwinOnly,async t=>{
+    const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-status-lock-')));
+    const originalPython=process.env.OBSERVATORY_PYTHON;
+    let wrappers;
+    try {
+      const python=await fixturePython(t,runtime);
+      if(!python)return;
+      await pairedRuntime(runtime);
+      const expected=await control(runtime);
+      wrappers=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-lock-wrapper-')));
+      const {wrapper,counter}=await refusalWrapper(wrappers,python,'private-sync');
+      process.env.OBSERVATORY_PYTHON=wrapper;
+      let waits=0,acquired=false;
+      const actual=await control(runtime,{action:'status'},Date.now(),{
+        now:()=>0,
+        wait:async()=>{
+          waits++;
+          // A separate process cannot inherit the lock's reentrant async context.
+          const child=spawn(process.execPath,['--import','./native/tests/test-source-runtime.mjs','--input-type=module','-e',`
+import {withPeerStateLock} from './scripts/peer-lock.mjs'
+await withPeerStateLock(process.argv[1],async()=>process.stdout.write('acquired'))
+`,runtime],{env:{...process.env,OBSERVATORY_PYTHON:python},timeout:15000});
+          const result=await collectChild(child);
+          acquired=result.code===0 && result.stdout==='acquired';
+        }
+      });
+      await access(counter);
+      assert.equal(waits,1);
+      assert.equal(acquired,true,'A concurrent process must acquire the peer lock during the retry wait');
+      assert.deepEqual(actual,expected);
+    } finally {
+      if(originalPython===undefined)delete process.env.OBSERVATORY_PYTHON;
+      else process.env.OBSERVATORY_PYTHON=originalPython;
+      if(wrappers)await rm(wrappers,{recursive:true,force:true});
+      await rm(runtime,{recursive:true,force:true});
+    }
+  });
+}

@@ -14,16 +14,19 @@ export const PRIVATE_PATH_REFUSAL='Private path access-control verification fail
 // This retries only the churn refusal and never changes what the check accepts.
 export function privateRefusalBudget({platform=process.platform,budgetMs=1000,now=()=>performance.now(),wait=ms=>delay(ms)}={}) {
   const deadline=now()+budgetMs;
-  return async operation=>{
+  const canRetry=error=>platform==='darwin' && error?.message===PRIVATE_PATH_REFUSAL && now()<deadline;
+  const retry=async operation=>{
     for(;;) {
       try {return await operation();}
       catch(error) {
-        if(platform!=='darwin' || error?.message!==PRIVATE_PATH_REFUSAL || now()>=deadline)throw error;
+        if(!canRetry(error))throw error;
         await wait(20);
         if(now()>=deadline)throw error;
       }
     }
   };
+  retry.canRetry=canRetry;
+  return retry;
 }
 
 const refused=error=>{if(!error || typeof error!=='object')error=Error('Private directory verification failed');if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
