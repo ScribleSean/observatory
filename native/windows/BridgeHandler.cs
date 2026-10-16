@@ -317,7 +317,7 @@ internal sealed class BridgeSettingsStore(string runtime)
         try
         {
             if (Attributes(Path.Combine(runtime, "claude-limits", "consent.json")) is null) return false;
-            var value = ReadObject(Path.Combine("claude-limits", "consent.json"), 4096, refuseBom: true);
+            var value = ReadObject(Path.Combine("claude-limits", "consent.json"), 4096, stable: true, refuseBom: true);
             if (value.Count != 2 || value["consent"]?.GetValue<bool>() != true ||
                 value["givenAt"]?.GetValue<string>() is not string givenAt) return false;
             const string format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
