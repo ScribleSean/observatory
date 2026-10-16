@@ -1312,7 +1312,7 @@ internal sealed class BridgeHandler : IDisposable
         {
             int number = id ?? ++NextId;
             requests[number] = action; TestedActions.Add(action);
-            Handler.Receive(new JsonObject { ["id"] = number, ["action"] = action, ["args"] = args ?? new() }.ToJsonString(), Origin, Document, Posts.Add);
+            Handler.Receive(new JsonObject { ["id"] = number, ["action"] = action, ["args"] = args?.DeepClone() ?? new JsonObject() }.ToJsonString(), Origin, Document, Posts.Add);
             return number;
         }
         internal async Task<JsonObject> Run(string action, JsonObject? args = null, string code = "done")
