@@ -1,3 +1,4 @@
+import {privateRefusalBudget} from './peer-directory.mjs';
 import {markSharingChoiceApplied} from './sharing-choice.mjs';
 import {lstat} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
@@ -16,11 +17,12 @@ const token=(state,pair)=>createHash('sha256').update(JSON.stringify([state.salt
 
 // A narrow local interface for native settings. Pairing/account identifiers and
 // quota readings are never returned. The token fences stale confirmation views.
-export async function quotaSharingControl(runtime,request={action:'status'},now=Date.now()) {
+export async function quotaSharingControl(runtime,request={action:'status'},now=Date.now(),options={}) {
   if(!request || !['status','enable','disable'].includes(request.action) ||
     Object.keys(request).some(key=>!['action','token'].includes(key)) ||
     (request.action==='enable' ? typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token) : Object.hasOwn(request,'token')) ||
     !Number.isSafeInteger(now) || now<0)throw Error('Invalid sharing settings request');
+  const retry=privateRefusalBudget(options);
   return withPeerStateLock(runtime,async()=>{
     // Disabling must remain available even if the pairing file is corrupt.
     if(request.action==='disable') {
@@ -28,7 +30,7 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
       await revokeQuotaSharing(runtime,now);
     }
     let pair;
-    try {pair=await readPairing(runtime);}catch {pair=null;}
+    try {pair=await retry(()=>readPairing(runtime));}catch {pair=null;}
     let state;
     try {await lstat(path.join(runtime,'private-quota'));}
     catch(error) {
@@ -36,7 +38,7 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
       if(request.action==='enable')throw Error('Read the account before sharing');
       return {...empty(),reason:pair?'account-unavailable':'pairing-unavailable'};
     }
-    state=await readQuotaState(runtime,now);
+    state=await retry(()=>readQuotaState(runtime,now));
     if(request.action==='enable') {
       if(!pair || !recent(state,now) || request.token!==token(state,pair))throw Error('Sharing confirmation expired');
       state=await setQuotaSharing(runtime,{revision:state.revision,enabled:true,pairingId:pair.local.pairId},now);

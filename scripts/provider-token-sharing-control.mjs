@@ -1,3 +1,4 @@
+import {privateRefusalBudget} from './peer-directory.mjs';
 import {markSharingChoiceApplied} from './sharing-choice.mjs';
 import {realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -9,18 +10,19 @@ import {readProviderTokenState,setProviderTokenSharing,disableProviderTokenShari
 import {exactProviderFields,providerClock} from './provider-token-peer.mjs';
 
 const token=(state,pair)=>createHash('sha256').update(JSON.stringify(['provider-token-sharing-v1',state.salt,state.revision,pair.local.pairId])).digest('hex');
-export async function providerTokenSharingControl(runtime,request={action:'status'},now=Date.now()) {
+export async function providerTokenSharingControl(runtime,request={action:'status'},now=Date.now(),options={}) {
   if(!providerClock(now) || !['status','enable','disable'].includes(request?.action) ||
     !exactProviderFields(request,request.action==='enable'?['action','token']:['action']) ||
     (request.action==='enable' && (typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token))))throw Error('Invalid provider sharing request');
+  const retry=privateRefusalBudget(options);
   return withPeerStateLock(runtime,async()=>{
     if(request.action==='disable') {
       await markSharingChoiceApplied(runtime,'claude-code-tokens');
       await disableProviderTokenSharing(runtime,now);
     }
     let pair;
-    try {pair=await readPairing(runtime);}catch {pair=null;}
-    let state=pair?await readProviderTokenState(runtime,now):null;
+    try {pair=await retry(()=>readPairing(runtime));}catch {pair=null;}
+    let state=pair?await retry(()=>readProviderTokenState(runtime,now)):null;
     if(request.action==='enable') {
       if(!pair || !state || !recentProviderSource(state.source,now) || request.token!==token(state,pair))throw Error('Provider sharing confirmation expired');
       state=await setProviderTokenSharing(runtime,{revision:state.revision,enabled:true},now);

@@ -4,10 +4,28 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 export {REFUSAL_CODES};
+export const PRIVATE_PATH_REFUSAL='Private path access-control verification failed';
+
+// This retries only the churn refusal and never changes what the check accepts.
+export function privateRefusalBudget({platform=process.platform,budgetMs=1000,now=()=>performance.now(),wait=ms=>delay(ms)}={}) {
+  const deadline=now()+budgetMs;
+  return async operation=>{
+    for(;;) {
+      try {return await operation();}
+      catch(error) {
+        if(platform!=='darwin' || error?.message!==PRIVATE_PATH_REFUSAL || now()>=deadline)throw error;
+        await wait(20);
+        if(now()>=deadline)throw error;
+      }
+    }
+  };
+}
+
 const refused=error=>{if(!error || typeof error!=='object')error=Error('Private directory verification failed');if(error.refusal!=='ancestor-refused')error.refusal='private-folder-refused';return error;};
 const execute=promisify(execFile);
 // Measurement only (issue 106). Off unless OBSERVATORY_COUNT_POWERSHELL names an
@@ -52,7 +70,7 @@ async function macPermissions(directory,privateLeaf) {
     const {stdout}=await execute(python,['-I','-B',script,privateLeaf?'--private':'--ancestor',directory],
       {timeout:15000,maxBuffer:4096});
     if(!/^private-path-acl: ok\n?$/.test(stdout))throw Error('Invalid verification result');
-  } catch {throw Error('Private path access-control verification failed');}
+  } catch {throw Error(PRIVATE_PATH_REFUSAL);}
 }
 
 async function directoryChain(directory) {
