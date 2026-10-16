@@ -6,6 +6,7 @@ import {after} from 'node:test';
 import {mkdir,rm,writeFile,readFile,stat,symlink} from 'node:fs/promises';
 import path from 'node:path';
 import {renameWindowsTransport,renameNames} from './peer-transport-rename.mjs';
+import {pythonTestCommand} from './test-python.mjs';
 import {testRuntimeBase} from './test-runtime-base.mjs';
 import {appNames} from '../native/app-names.mjs';
 import {privateSyncDirectory,privateCollectorDirectory} from './peer-directory.mjs';
@@ -32,8 +33,8 @@ const file=(runtime,name='pairing.json')=>path.join(runtime,'private-sync',name)
 const write=(runtime,value,name)=>writeFile(file(runtime,name),JSON.stringify(value),{mode:0o600});
 // The private-path check needs Python 3.10 or later. Use the test Python that the
 // person selected, never a PATH python3, when no runtime Python was given.
-if(process.env.OBSERVATORY_PYTHON===undefined && process.env.OBSERVATORY_TEST_PYTHON)
-  process.env.OBSERVATORY_PYTHON=process.env.OBSERVATORY_TEST_PYTHON;
+if(process.env.OBSERVATORY_PYTHON===undefined && process.env.OBSERVATORY_TEST_PYTHON!==undefined)
+  process.env.OBSERVATORY_PYTHON=pythonTestCommand([]).executable;
 // Runtimes live under the shared test base so their ancestors stay stable for the private-path check.
 const runtimeBase=await testRuntimeBase('peer-transport-rename');
 after(()=>rm(runtimeBase,{recursive:true,force:true}));

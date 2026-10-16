@@ -522,7 +522,7 @@ test('leftover target hook without the test environment completes with stdin clo
   // Real runs refuse every bridge, including brief bridges from parallel tests or Claude Code.
   for (let attempt = 0; attempt < 10; attempt++) {
     result = run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1',OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'invalid'}});
-    if (result.status !== 1 || !result.stderr.startsWith('Migration refused (running):') || attempt === 9) break;
+    if (result.status !== 1 || !result.stderr.includes('close Claude Code sessions that show the Observatory status line') || attempt === 9) break;
     await new Promise(resolve => setTimeout(resolve,2000));
   }
   success(result,'migrated');
@@ -775,6 +775,8 @@ for (const shell of ['powershell.exe','pwsh']) {
     const invalid = [
       '{"schema":1,"loginWasOn":true,"extra":0}',
       '{"schema":"1","loginWasOn":true}',
+      '{"Schema":1,"loginWasOn":true}',
+      '',
       '{"schema":1.0,"loginWasOn":true}',
       '{"schema":1.5,"loginWasOn":true}',
       '{"schema":true,"loginWasOn":true}',
@@ -801,7 +803,7 @@ for (const shell of ['powershell.exe','pwsh']) {
       const file = path.join(f.stage,name);
       for (const content of [...invalid,...valid]) {
         await writeFile(file,content);
-        const accepted = valid.includes(content) || (name === 'observatory-migration.json' && content === invalid[0]);
+        const accepted = valid.includes(content) || (name === 'observatory-migration.json' && [invalid[0],'{"Schema":1,"loginWasOn":true}'].includes(content));
         const result = run(f,{shell,action:'status'});
         if (accepted) success(result,'missing');
         else {
@@ -825,7 +827,11 @@ test('carried login links stay beside the folder after switching and on rerun',w
     if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) { t.skip('Windows symbolic link creation is unavailable: '+error.code); return; }
     throw error;
   }
-  refused(run(f),/The saved login state is a link/);
+  const before = await snapshot(f.parent);
+  const result = run(f);
+  refused(result);
+  assert.equal(result.stderr.trim(),`Migration refused (login): The saved login state is a link in ${carried}. Replace the link with a regular file that holds {"schema":1,"loginWasOn":true} or false as it was.`);
+  assert.deepEqual(await snapshot(f.parent),before);
   await rm(carried);
   await mkdir(f.target);
   const child = run(f,{spawnProcess:spawn,env:{OBSERVATORY_MIGRATION_TOUCH_TARGET:'1'}});
