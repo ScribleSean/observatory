@@ -329,3 +329,7 @@ void test('Windows sources hold no double-encoded text', () => {
       assert.equal(bytes.includes(broken), false, `${name} has text saved through the wrong encoding`);
   }
 });
+
+void test('data migration never writes startup registry values', () => {
+  assert.doesNotMatch(read('migrate-data.ps1'), /\b(?:Set|New|Remove)-ItemProperty\b/i);
+});
