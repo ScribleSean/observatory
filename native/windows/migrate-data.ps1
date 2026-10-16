@@ -72,11 +72,16 @@ function Manifest([string]$Root) {
     if ($links.Count) { Refuse ('Reparse points are not allowed at relative paths: ' + ($links -join ', ') + '.') }
     $entries
 }
-function Digest($Entries) {
+function Digest($Entries, [switch]$IgnoreDirectoryTimes) {
     $lines = New-Object 'System.Collections.Generic.List[string]'
     foreach ($entry in $Entries) {
         $hex = ([BitConverter]::ToString([Text.Encoding]::UTF8.GetBytes($entry.path))).Replace('-', '').ToLowerInvariant()
-        $lines.Add(($hex, $entry.type, $entry.size.ToString([Globalization.CultureInfo]::InvariantCulture), $entry.ticks.ToString([Globalization.CultureInfo]::InvariantCulture), $entry.sha256 -join "`t"))
+        # Target directories are compared by path and type because NTFS enumeration can return stale times.
+        if ($IgnoreDirectoryTimes -and $entry.type -eq 'directory') {
+            $lines.Add(($hex, $entry.type -join "`t"))
+        } else {
+            $lines.Add(($hex, $entry.type, $entry.size.ToString([Globalization.CultureInfo]::InvariantCulture), $entry.ticks.ToString([Globalization.CultureInfo]::InvariantCulture), $entry.sha256 -join "`t"))
+        }
     }
     $lines.Sort([StringComparer]::Ordinal)
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -377,7 +382,12 @@ public static class MigrationFileLinks {
     $step = 'switch'
     $record.completedAt = [DateTime]::UtcNow.ToString('o')
     if ($state -ne 'missing') {
-        if ((Digest @(Manifest $Target)) -ne (Digest $targetManifest)) { Refuse 'The destination changed during the copy.' }
+        # Test only. The test owns the mutation and acknowledges it through stdin.
+        if ($env:OBSERVATORY_MIGRATION_TOUCH_TARGET -eq '1') {
+            [Console]::Out.WriteLine('migration-target-check-ready')
+            if ([Console]::ReadLine() -ne 'target-change-complete') { Refuse 'The synthetic target change was not acknowledged.' }
+        }
+        if ((Digest @(Manifest $Target) -IgnoreDirectoryTimes) -ne (Digest $targetManifest -IgnoreDirectoryTimes)) { Refuse 'The destination changed during the copy.' }
         $suffix = 'empty'
         if ($state -eq 'installer-receipt-only') { $suffix = 'installer-receipt' }
         $record.aside = '.' + $names.visible.dataFolder + '-' + $suffix + '-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')

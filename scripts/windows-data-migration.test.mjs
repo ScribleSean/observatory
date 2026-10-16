@@ -55,10 +55,10 @@ async function fixture(t) {
   await writeFile(path.join(legacy,'settings.json'),'{"synthetic":true}\n');
   return {parent,legacy,target,stage,runKey,appId:'MigrationTest'+randomUUID(),processName:'MigrationTest'+randomUUID()};
 }
-function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe'}={}) {
-  return spawnSync(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
+function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe',spawnProcess=spawnSync}={}) {
+  return spawnProcess(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
     '-Action',action,'-Parent',f.parent,'-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,'-AllowElevatedTestRun',...(confirm?['-ConfirmAppQuit']:[]),...extra],
-  {encoding:'utf8',env:{...process.env,OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',...env},timeout:120000});
+  {encoding:'utf8',env:{...process.env,OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'',...env},timeout:120000});
 }
 function success(result,state) {
   assert.equal(result.status,0,result.stderr || result.error?.message);
@@ -297,10 +297,48 @@ test('receipt switch crash recovers from retained receipt',windows,async t => {
   const f = await fixture(t);
   await mkdir(path.join(f.target,'updates'),{recursive:true});
   await writeFile(path.join(f.target,'updates','installed-envelope.json'),'synthetic receipt');
-  refused(run(f,{env:{OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1'}}),/Migration refused \(switch\):/);
+  refused(run(f,{env:{OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1'}}),/^Migration refused \(switch\): The synthetic migration was interrupted before switching\.\r?\n?$/);
   await assert.rejects(lstat(f.target),{code:'ENOENT'});
+  const record = JSON.parse(await readFile(path.join(f.stage,'observatory-migration.json'),'utf8'));
+  assert.match(record.aside,/^\.Observatory-installer-receipt-\d{8}T\d{13}Z$/);
+  const aside = path.join(f.parent,record.aside);
+  assert.ok((await lstat(aside)).isDirectory());
+  assert.equal(await readFile(path.join(aside,'updates','installed-envelope.json'),'utf8'),'synthetic receipt');
   success(run(f),'migrated');
   assert.equal(await readFile(path.join(f.target,'updates','installed-envelope.json'),'utf8'),'synthetic receipt');
+});
+
+test('target changed immediately before the switch is refused and retained',windows,async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.target,'updates'),{recursive:true});
+  const receipt = path.join(f.target,'updates','installed-envelope.json');
+  await writeFile(receipt,'synthetic receipt');
+  const child = run(f,{spawnProcess:spawn,env:{OBSERVATORY_MIGRATION_TOUCH_TARGET:'1'}});
+  t.after(() => {
+    child.stdin.destroy();child.stdout.destroy();child.stderr.destroy();
+    child.kill();child.unref();
+  });
+  let stdout = '',stderr = '',changed = false;
+  const extra = path.join(f.target,'second-file.json');
+  const status = await new Promise((resolve,reject) => {
+    child.on('error',reject);
+    child.stderr.on('data',data => { stderr += data; });
+    child.stdout.on('data',data => {
+      stdout += data;
+      if (!changed && /migration-target-check-ready\r?\n/.test(stdout)) {
+        changed = true;
+        writeFile(extra,'synthetic concurrent data').then(() => child.stdin.end('target-change-complete\n'),reject);
+      }
+    });
+    child.on('close',resolve);
+  });
+  assert.ok(changed,'migration reached the target check');
+  assert.equal(stdout.trim(),'migration-target-check-ready');
+  refused({status,stdout:'',stderr},/Migration refused \(switch\): The destination changed during the copy\./);
+  assert.equal(await readFile(extra,'utf8'),'synthetic concurrent data');
+  assert.equal(await readFile(receipt,'utf8'),'synthetic receipt');
+  assert.ok((await lstat(f.stage)).isDirectory());
+  assert.equal((await readdir(f.parent)).filter(name => name.startsWith('.'+appNames.visible.dataFolder+'-installer-receipt-')).length,0);
 });
 
 test('changed source retains stale stage and copies fresh bytes',windows,async t => {
