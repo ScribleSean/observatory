@@ -144,7 +144,7 @@ export async function readClaudeStatuslineMarker(runtime) {
     if(!isObject(marker))throw unsafe();
     const keys=Object.keys(marker);
     if(keys.length!==3 || !['installedAt','settingsPath','previous'].every(key=>keys.includes(key)))throw unsafe();
-    if(typeof marker.installedAt!=='string' || typeof marker.settingsPath!=='string' || (marker.previous!==null && !isObject(marker.previous)))throw unsafe();
+    if(typeof marker.installedAt!=='string' || typeof marker.settingsPath!=='string')throw unsafe();
     let members=0;
     const pending=[marker];
     while(pending.length) {

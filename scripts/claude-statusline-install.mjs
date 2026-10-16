@@ -74,16 +74,18 @@ export async function installStatusline({runtime,settingsPath=defaultSettingsPat
   const folder=await ensureClaudeLimitsFolder(runtime);
   const {text,settings}=await readSettings(settingsPath);
   const marker=path.join(folder,CLAUDE_STATUSLINE_FILE);
-  let previous=settings.statusLine===undefined?null:settings.statusLine;
+  // Only an object can be restored as a status line. The settings backup keeps any other value.
+  let previous=isObject(settings.statusLine)?settings.statusLine:null;
   if(isOurs(previous)) {
     // Reinstalling keeps the status line saved by the first install.
-    previous=(await readClaudeStatuslineMarker(runtime))?.previous ?? null;
+    const saved=(await readClaudeStatuslineMarker(runtime))?.previous;
+    previous=isObject(saved)?saved:null;
   }
   if(text!==null)await copyFile(settingsPath,settingsPath+'.observatory-backup');
   await writeJsonAtomic(marker,{installedAt:now.toISOString(),settingsPath,previous});
   try {await writeSettings(settingsPath,{...settings,statusLine:{type:'command',command}},text);}
   catch(error) {if(!isOurs(settings.statusLine))await unlink(marker).catch(()=>{});throw error;}
-  return {installed:true,replacedStatusLine:previous!==null,settingsPath};
+  return {installed:true,replacedStatusLine:previous!==null || (settings.statusLine!==undefined && settings.statusLine!==null && !isOurs(settings.statusLine)),settingsPath};
 }
 
 export async function uninstallStatusline({runtime,settingsPath=defaultSettingsPath()}) {
