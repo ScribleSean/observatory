@@ -13,7 +13,7 @@ const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
 const { SettingsContent, SettingsView, presentResult, pairingDefaults } = await server.ssrLoadModule('/app/viewer/settings/settings.tsx');
-const { createSettingsController, limitsConsentFlow, changeAppearance } = await server.ssrLoadModule('/app/viewer/settings/controller.ts');
+const { createSettingsController, limitsConsentFlow, changeAppearance, joinConfirmOutcome } = await server.ssrLoadModule('/app/viewer/settings/controller.ts');
 const { createFakeBridge } = await server.ssrLoadModule('/app/viewer/settings/fake-bridge.ts');
 const { validateBridgeStatus } = await server.ssrLoadModule('/app/viewer/settings/status.ts');
 const { DashboardView } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
@@ -418,3 +418,51 @@ void test('pairing pre-fill results require exact shapes, bounded ports and cont
     assert.equal(pairingDefaults(value, true), null);
   }
 });
+
+for (const state of ['acknowledged', 'paired', 'establishing-trust', 'active-sync', 'sync-stale', 'local-ready', null, 'working']) {
+  void test(`join confirmation maps done with ${state}`, () => {
+    const after = state === null ? null : sampleBridgeStatus();
+    if (after) after.pairing.state = state;
+    const result = { id: 42, ok: true, code: 'done' };
+    const success = state !== null && !['local-ready', 'working'].includes(state);
+    assert.deepEqual(joinConfirmOutcome(result, after), {
+      outcome: success ? result : { ...result, ok: false, code: 'unavailable' },
+      unknown: state === null || state === 'working',
+    });
+  });
+}
+for (const code of ['unavailable', 'busy', 'cancelled', 'refused']) {
+  void test(`join confirmation preserves ${code} even when paired`, () => {
+    const after = sampleBridgeStatus();
+    after.pairing.state = 'paired';
+    const result = { id: 42, ok: false, code };
+    const mapped = joinConfirmOutcome(result, after);
+    assert.equal(mapped.outcome, result);
+    assert.equal(mapped.unknown, false);
+  });
+}
+void test('join confirmation preserves a timed out result', () => {
+  const result = { id: 42, ok: false, code: 'unavailable', timedOut: true };
+  assert.deepEqual(joinConfirmOutcome(result, null), { outcome: result, unknown: false });
+});
+
+for (const read of ['reject', 'not-ok', 'invalid']) {
+  void test(`join confirmation treats a ${read} status read as unknown`, async () => {
+    const controller = createSettingsController({
+      available: true,
+      async send(action) {
+        if (action !== 'status') return { id: 1, ok: true, code: 'done' };
+        if (read === 'reject') throw new Error('Synthetic status failure');
+        return { id: 2, ok: read !== 'not-ok', code: read === 'not-ok' ? 'unavailable' : 'done', value: {} };
+      },
+      onLateResult() { return () => {}; },
+      dispose() {},
+    });
+    try {
+      const result = await controller.pairingJoinConfirm(false);
+      assert.equal(result.code, 'unavailable');
+      assert.equal(result.ok, false);
+      assert.equal(result.unknown, true);
+    } finally { controller.dispose(); }
+  });
+}
