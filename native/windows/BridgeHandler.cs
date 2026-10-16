@@ -90,7 +90,8 @@ internal static class BridgeProcesses
             throw new InvalidOperationException("Bundled tools unavailable.");
         using var process = new Process { StartInfo = start };
         process.Start();
-        var output = process.StandardOutput.ReadToEndAsync();
+        var output = Path.GetFileName(start.ArgumentList[0]) == "claude-limits-consent.mjs"
+            ? ReadConsentOutput(process.StandardOutput.BaseStream) : process.StandardOutput.ReadToEndAsync();
         var errors = DiscardErrors(process.StandardError);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         try
@@ -108,6 +109,25 @@ internal static class BridgeProcesses
         }
         await Task.WhenAll(output, errors).ConfigureAwait(false);
         return new(process.ExitCode, await output.ConfigureAwait(false));
+    }
+
+    internal const int ConsentOutputCap = 1024;
+
+    internal static async Task<string> ReadConsentOutput(Stream stream)
+    {
+        var bytes = new byte[ConsentOutputCap];
+        var buffer = new byte[1024];
+        int count = 0, read;
+        bool oversized = false;
+        while ((read = await stream.ReadAsync(buffer).ConfigureAwait(false)) != 0)
+        {
+            if (read > bytes.Length - count) oversized = true;
+            if (oversized) continue;
+            buffer.AsSpan(0, read).CopyTo(bytes.AsSpan(count)); count += read;
+        }
+        if (oversized) return "";
+        try { return new UTF8Encoding(false, true).GetString(bytes, 0, count); }
+        catch (DecoderFallbackException) { return ""; }
     }
 
     private static async Task DiscardErrors(StreamReader reader)
@@ -162,7 +182,7 @@ internal sealed class BridgeSettingsStore(string runtime)
 
     internal bool ViewerExists => Attributes(Path.Combine(runtime, "viewer.json")) is not null;
 
-    private JsonObject ReadObject(string name, int cap, bool stable = false)
+    private JsonObject ReadObject(string name, int cap, bool stable = false, bool refuseBom = false)
     {
         PlainFolder(runtime);
         var path = Path.Combine(runtime, name);
@@ -194,6 +214,8 @@ internal sealed class BridgeSettingsStore(string runtime)
                 !GetFileInformationByHandle(handle, out var named) || !Same(before, named) || count != stream.Length)
                 throw new IOException("Settings file changed.");
         }
+        if (refuseBom && count >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf)
+            throw new IOException("Invalid consent settings.");
         using var doc = JsonDocument.Parse(bytes.AsMemory(0, count));
         if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new IOException("Invalid settings.");
         var keys = new HashSet<string>(StringComparer.Ordinal);
@@ -295,10 +317,18 @@ internal sealed class BridgeSettingsStore(string runtime)
         try
         {
             if (Attributes(Path.Combine(runtime, "claude-limits", "consent.json")) is null) return false;
-            return ReadObject(Path.Combine("claude-limits", "consent.json"), 4096)["consent"]?.GetValue<bool>()
-                ?? throw new IOException("Invalid consent settings.");
+            var value = ReadObject(Path.Combine("claude-limits", "consent.json"), 4096, stable: true, refuseBom: true);
+            if (value.Count != 2 || value["consent"]?.GetValue<bool>() != true ||
+                value["givenAt"]?.GetValue<string>() is not string givenAt) return false;
+            const string format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+            // Years 0001 to 9999 only, the range the shared reader accepts.
+            return DateTimeOffset.TryParseExact(givenAt, format, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var date) &&
+                date.ToString(format, System.Globalization.CultureInfo.InvariantCulture) == givenAt;
         }
-        catch when (!strict) { return false; }
+        catch (IOException error) when (strict && (error.HResult == unchecked((int)0x80070020) ||
+            error.HResult == unchecked((int)0x80070021))) { throw; }
+        catch { return false; }
     }
 
     internal string ReadPairingStatus(DateTimeOffset now) => ReadPairingStatusRecord(now).State;
@@ -583,7 +613,9 @@ internal sealed class BridgeHandler : IDisposable
             case "set-limits-consent":
                 if (Enabled() && !Confirm(request, "Claude Code limits", "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times. Turn on Claude Code limits?")) return new("cancelled");
                 var consentArgs = Enabled() ? new[] { "set", "--runtime", runtime, "--consent" } : new[] { "clear", "--runtime", runtime };
-                return await Script("claude-limits-consent.mjs", consentArgs);
+                var consentResult = await host.RunScript(BridgeProcesses.Create(runtime, "claude-limits-consent.mjs", consentArgs));
+                return new(consentResult.ExitCode == 0 && ConsentMarkerReported(consentResult.Output, out var marker) &&
+                    marker == Enabled() ? "done" : "unavailable");
             case "set-sharing-choice":
                 if (Enabled() && !ConfirmSharing(request)) return new("cancelled");
                 var choice = await ReadSharingChoice(Enabled() ? "{\"action\":\"choose\",\"enabled\":true}" : "{\"action\":\"choose\",\"enabled\":false}");
@@ -792,6 +824,25 @@ internal sealed class BridgeHandler : IDisposable
         }
         catch { }
         finally { lock (gate) choiceReading = false; }
+    }
+
+    internal static bool ConsentMarkerReported(string output, out bool marker)
+    {
+        marker = false;
+        if (Encoding.UTF8.GetByteCount(output) > BridgeProcesses.ConsentOutputCap) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(output);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in doc.RootElement.EnumerateObject())
+                if (!keys.Add(property.Name) || property.Name is not ("given" or "consentMarker" or "statusLine") ||
+                    property.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
+            if (keys.Count != 3) return false;
+            marker = doc.RootElement.GetProperty("consentMarker").GetBoolean();
+            return true;
+        }
+        catch (JsonException) { return false; }
     }
 
     private FileStatus ReadFiles(FileStatus previous)
@@ -1213,6 +1264,7 @@ internal sealed class BridgeHandler : IDisposable
         internal TestSession? Session;
         internal Func<TestSession>? MakeSession;
         internal int ScriptExit;
+        internal string? ConsentOutput { get; set; }
         internal readonly List<string?> ScriptInputs = new();
         internal string ChoiceOutput = "{\"version\":1,\"chosen\":true,\"channels\":{\"codex-limits\":\"on\",\"claude-code-tokens\":\"waiting-for-reading\"}}";
         public BridgeSettingsStore Settings { get { Calls.Enqueue("settings"); return settings; } }
@@ -1274,7 +1326,10 @@ internal sealed class BridgeHandler : IDisposable
             Calls.Enqueue("script:" + Path.GetFileName(start.ArgumentList[0])); Scripts.Add(start);
             ScriptInputs.Add(input);
             return Task.FromResult(new BridgeScriptResult(ScriptExit, Path.GetFileName(start.ArgumentList[0]) == "sharing-choice.mjs"
-                ? ChoiceOutput : "Synthetic output must stay private"));
+                ? ChoiceOutput : Path.GetFileName(start.ArgumentList[0]) == "claude-limits-consent.mjs"
+                    ? ConsentOutput ?? new JsonObject { ["given"] = start.ArgumentList[1] == "set",
+                        ["consentMarker"] = start.ArgumentList[1] == "set", ["statusLine"] = false }.ToJsonString()
+                    : "Synthetic output must stay private"));
         }
         public Task<string> ReadTailscaleStatus() { Calls.Enqueue("tailscale"); return Task.FromResult("running"); }
     }
@@ -1593,7 +1648,7 @@ internal sealed class BridgeHandler : IDisposable
         store.WriteDevice("Fictional PC");
         var consent = Path.Combine(root, "claude-limits", "consent.json");
         var pairing = Path.Combine(root, "private-sync", "pairing.json");
-        File.WriteAllText(consent, "{\"consent\":true}");
+        File.WriteAllText(consent, "{\"consent\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}");
         File.WriteAllText(pairing, "{}");
         using var local = new TestDriver(root);
         var initial = (await local.Run("status"))["value"]!;
@@ -1601,6 +1656,25 @@ internal sealed class BridgeHandler : IDisposable
         Check(initial["skin"]!["current"]!.GetValue<string>() == "instrument" &&
             initial["deviceName"]!.GetValue<string>() == "Fictional PC" && initial["limitsConsent"]!.GetValue<bool>() &&
             initial["pairing"]!["transport"]!.GetValue<string>() == "ssh", "Initial file cache");
+        const string validConsent = "{\"consent\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}";
+        var consentTarget = Path.Combine(root, "synthetic-consent-target.json"); File.WriteAllText(consentTarget, validConsent);
+        async Task CheckConsentCache(bool expected, string reason)
+        {
+            local.Handler.RefreshFilesNow();
+            Check((await local.Run("status"))["value"]!["limitsConsent"]!.GetValue<bool>() == expected, reason);
+        }
+        File.Delete(consent);
+        if (TryHardLink(consent, consentTarget))
+        { await CheckConsentCache(false, "Hard-linked consent cache"); File.Delete(consent); }
+        File.WriteAllText(consent, validConsent); await CheckConsentCache(true, "Restored consent cache");
+        File.WriteAllText(consent, "{bad"); await CheckConsentCache(false, "Malformed consent cache");
+        File.WriteAllText(consent, validConsent); await CheckConsentCache(true, "Restored consent cache");
+        File.Delete(consent);
+        if (TryLink(consent, consentTarget))
+        { await CheckConsentCache(false, "Linked consent cache"); File.Delete(consent); }
+        File.WriteAllText(consent, validConsent); await CheckConsentCache(true, "Restored consent cache");
+        using (var locked = new FileStream(consent, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            await CheckConsentCache(true, "Locked consent cache lost previous value");
         local.Host.Calls.Clear();
         store.WriteViewer("almanac", "light");
         store.WriteDevice("Updated PC");
@@ -1728,6 +1802,35 @@ internal sealed class BridgeHandler : IDisposable
         test.Host.Consent = true;
         await test.Run("pairing-disconnect"); await test.Run("pairing-repair-prepare");
         Check(test.Host.Calls.Contains("disconnect") && test.Host.Calls.Contains("repair") && test.Host.Calls.Count(c => c == "refresh") == 2, "Maintenance calls");
+        foreach (var (output, expected) in new[] {
+            ("{\"given\":true,\"consentMarker\":false,\"statusLine\":true}", false),
+            ("{\"given\":true,\"consentMarker\":true,\"statusLine\":false}", true),
+            ("{\"given\":true,\"consentMarker\":true,\"statusLine\":true}", true),
+            ("{\"given\":false,\"consentMarker\":false,\"statusLine\":false}", false) })
+        {
+            Check(ConsentMarkerReported(output, out var marker) && marker == expected, "Consent output marker");
+            test.Host.ConsentOutput = output;
+            foreach (bool enabled in new[] { true, false })
+                await test.Run("set-limits-consent", new() { ["enabled"] = enabled }, enabled == expected ? "done" : "unavailable");
+        }
+        foreach (var output in new[] {
+            "{\"given\":1,\"consentMarker\":false,\"statusLine\":true}",
+            "{\"given\":true,\"consentMarker\":\"yes\",\"statusLine\":false}",
+            "{\"given\":true,\"consentMarker\":true,\"statusLine\":0}",
+            "{\"given\":true,\"consentMarker\":true}",
+            "{\"given\":true,\"consentMarker\":true,\"statusLine\":false,\"extra\":true}",
+            "{\"given\":true,\"given\":true,\"consentMarker\":true,\"statusLine\":false}",
+            "{bad", "[]", "{} {}", new string(' ', 1025),
+            new string(' ', 1024) + "{\"given\":true,\"consentMarker\":true,\"statusLine\":false}",
+            "{\"given\":true,\"consentMarker\":true,\"statusLine\":false,\"" + new string('é', 500) + "\":true}" })
+        {
+            Check(!ConsentMarkerReported(output, out _), "Invalid consent output");
+            test.Host.ConsentOutput = output;
+            await test.Run("set-limits-consent", new() { ["enabled"] = true }, "unavailable");
+        }
+        test.Host.ConsentOutput = null; test.Host.ScriptExit = 1;
+        await test.Run("set-limits-consent", new() { ["enabled"] = true }, "unavailable");
+        test.Host.ScriptExit = 0;
         test.Host.InDialog = () => test.Host.CollectorBusy = true;
         await test.Run("pairing-disconnect", code: "busy");
         Check(test.Host.CollectionPaused, "Busy maintenance lost pause");
@@ -2148,6 +2251,14 @@ internal sealed class BridgeHandler : IDisposable
 
     private static async Task TestStorageAndProcesses(string runtime)
     {
+        foreach (int size in new[] { 1024, 1025, 4096 })
+        {
+            using var output = new MemoryStream(Encoding.UTF8.GetBytes(new string(' ', size)));
+            Check((await BridgeProcesses.ReadConsentOutput(output)).Length == (size == 1024 ? size : 0) &&
+                output.Position == output.Length, "Consent output byte cap and drain");
+        }
+        using (var output = new MemoryStream(new byte[] { 0xff }))
+            Check(await BridgeProcesses.ReadConsentOutput(output) == "", "Invalid consent output UTF-8");
         TestHardLinks(runtime);
         var store = new BridgeSettingsStore(runtime);
         store.WriteViewer("instrument", "light"); Check(store.ReadViewer() == ("instrument", "light"), "Viewer round trip");
@@ -2209,11 +2320,57 @@ internal sealed class BridgeHandler : IDisposable
         Directory.Delete(viewer);
         var consentFolder = Path.Combine(runtime, "claude-limits"); Directory.CreateDirectory(consentFolder);
         var consent = Path.Combine(consentFolder, "consent.json");
-        foreach (var text in new[] { "{\"consent\":false}", "{\"consent\":\"true\"}", new string(' ', 4097) })
-        { File.WriteAllText(consent, text); Check(!store.ReadLimitsConsent(), "Invalid consent"); }
-        File.WriteAllText(consent, "{\"consent\":true}"); Check(store.ReadLimitsConsent(), "Stored consent");
-        File.Delete(consent);
-        if (TryLink(consent, target)) { Check(!store.ReadLimitsConsent(), "Linked consent"); File.Delete(consent); }
+        const string validConsent = "{\"consent\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}";
+        void InvalidConsent(string reason) => Check(!store.ReadLimitsConsent() && !store.ReadLimitsConsent(strict: true), reason);
+        InvalidConsent("Missing consent");
+        foreach (var text in new[] { "{\"consent\":true}", "{\"consent\":false}",
+            validConsent.Replace("true", "false"), validConsent.Replace("true", "\"true\""),
+            validConsent.Replace("}", ",\"extra\":true}"), validConsent.Replace("}", ",\"consent\":true}"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-13-01T00:00:00.000Z"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-02-30T00:00:00.000Z"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-10-14"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-10-14T24:00:00.000Z"),
+            validConsent.Replace("2026-10-14T00:00:00.000Z", "2026-10-14T00:00:60.000Z"),
+            validConsent.Replace("\"2026-10-14T00:00:00.000Z\"", "1"),
+            "\ufeff" + validConsent, "[]", "{bad", new string(' ', 4097),
+            "{\"consen\\u0074\":true,\"consent\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}" })
+        { File.WriteAllText(consent, text); InvalidConsent("Invalid consent"); }
+        File.WriteAllText(consent, validConsent);
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Stored consent");
+        File.WriteAllText(consent, "{\"conse\\u006et\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}");
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Escaped consent name");
+        File.WriteAllText(consent, validConsent.Replace("2026-10-14", "0000-02-29")); InvalidConsent("Year zero consent");
+        File.WriteAllText(consent, validConsent.Replace("2026-10-14", "0001-01-01"));
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Year one consent");
+        File.WriteAllText(consent, validConsent.Replace("000Z", "000\\u005a"));
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Escaped givenAt consent");
+        File.WriteAllText(consent, validConsent.Replace("2026-10-14T00:00:00.000Z", "9999-12-31T23:59:59.999Z"));
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Year 9999 consent");
+        File.WriteAllText(consent, validConsent.Replace("2026-10-14", "2024-02-29"));
+        Check(store.ReadLimitsConsent() && store.ReadLimitsConsent(strict: true), "Leap day consent");
+        File.WriteAllText(consent, validConsent);
+        using (var locked = new FileStream(consent, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            refused = false;
+            try { store.ReadLimitsConsent(strict: true); }
+            catch (IOException error) when (error.HResult == unchecked((int)0x80070020) || error.HResult == unchecked((int)0x80070021)) { refused = true; }
+            Check(refused && !store.ReadLimitsConsent(), "Locked consent");
+        }
+        File.Delete(consent); Directory.CreateDirectory(consent);
+        InvalidConsent("Consent directory"); Directory.Delete(consent);
+        var consentTarget = Path.Combine(runtime, "synthetic-consent-target.json"); File.WriteAllText(consentTarget, validConsent);
+        if (TryHardLink(consent, consentTarget)) { InvalidConsent("Hard-linked consent"); File.Delete(consent); }
+        if (TryLink(consent, consentTarget)) { InvalidConsent("Linked consent"); File.Delete(consent); }
+        Directory.Delete(consentFolder); InvalidConsent("Missing consent folder");
+        File.WriteAllText(consentFolder, "{}"); InvalidConsent("Non-folder consent parent"); File.Delete(consentFolder);
+        var linkedFolder = Path.Combine(runtime, "synthetic-consent-folder"); Directory.CreateDirectory(linkedFolder);
+        File.WriteAllText(Path.Combine(linkedFolder, "consent.json"), validConsent);
+        bool folderLinked = false;
+        try { Directory.CreateSymbolicLink(consentFolder, linkedFolder); folderLinked = true; }
+        catch (Exception error) when (error is UnauthorizedAccessException or IOException)
+        { Console.WriteLine("Settings bridge linked-folder checks skipped: this account cannot create symbolic links."); }
+        if (folderLinked) { InvalidConsent("Linked consent folder"); Directory.Delete(consentFolder); }
+        Directory.CreateDirectory(consentFolder);
         var sync = Path.Combine(runtime, "private-sync"); Directory.CreateDirectory(sync);
         File.WriteAllText(Path.Combine(sync, "pairing.json"), "{}"); Check(store.ReadPairing() == ("paired", "ssh"), "SSH status");
         File.WriteAllText(Path.Combine(sync, "tls-trust.json"), "{}"); Check(store.ReadPairing() == ("paired", "tls"), "TLS status");
