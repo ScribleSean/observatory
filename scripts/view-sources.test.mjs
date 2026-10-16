@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import strings from '../lib/strings.json' with { type: 'json' };
 import { statusWord, refusalText, checkTime, sourceGroups, sourceTotals, dictationSources, hasDictation, dictationView } from '../lib/view-sources.mjs';
 
 const now = Date.parse('2026-10-14T12:00:00Z');
@@ -59,6 +60,32 @@ const day = { date: '2026-10-14', transcriptions: 4, wordRecords: 4, words: 120,
 const source = { host: 'Mac', source: 'Synthetic A', status: 'ok', days: [day] };
 const snapshot = sources => ({ timezone: 'UTC', dictation: sources });
 const card = row => dictationView(snapshot([row]), {}, now).cards[0];
+void test('Sources and dictation agree on unimplemented rows and exclude them from totals', () => {
+  for (const row of [
+    { host: 'Mac', source: 'ChatGPT', status: 'not-supported', days: [] },
+    { ...source, source: 'ChatGPT' },
+    { ...source, source: 'Synthetic B', status: 'not-supported', refusal: 'ancestor-refused', checkedAt: '2026-10-14T11:58:00Z' },
+  ]) {
+    const value = snapshot([source, row]);
+    const groups = sourceGroups(value, now);
+    const [implemented, result] = groups.find(group => group.id === 'dictation').rows;
+    assert.equal(implemented.status, 'ok');
+    assert.equal(implemented.statusWord, strings.sources.statusOk);
+    assert.equal(result.status, 'not-implemented');
+    assert.equal(result.statusWord, 'Not implemented');
+    assert.equal(result.refusal, null);
+    assert.deepEqual(result.check, checkTime(row.checkedAt, now));
+    assert.equal(result.statusWord, dictationView(value, {}, now).cards[1].statusWord);
+    assert.deepEqual(sourceTotals(groups), { read: 1, total: 1, byStatus: [{ word: strings.sources.statusOk, count: 1 }] });
+  }
+});
+void test('unimplemented dictation handling does not change other source groups', () => {
+  const row = { host: 'Mac', source: 'ChatGPT', status: 'not-supported', refusal: 'ancestor-refused' };
+  const result = sourceGroups({ activity: [row] }, now).find(group => group.id === 'activity').rows[0];
+  assert.equal(result.status, 'unknown');
+  assert.equal(result.statusWord, strings.status.unknown);
+  assert.equal(result.refusal, refusalText(row.refusal));
+});
 void test('unimplemented dictation rows remain labelled cards without tool choices or zero values', () => {
   for (const row of [
     { host: 'Mac', source: 'ChatGPT', status: 'not-supported', days: [] },
