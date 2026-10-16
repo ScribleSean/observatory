@@ -239,7 +239,7 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       {toggle(S.codexLimits, status?.sources.quota, enabled => action(c => c.setSource('quota', enabled)))}
       {toggle(S.claudeLimits, status?.limitsConsent, enabled => enabled ? setDisclosure(consent?.request() ?? false) : action(c => c.setLimitsConsent(false)))}
       {disclosure && <div className="ob-settings-disclosure"><ul><li>{S.disclosureCommand}</li><li>{S.disclosureStorage}</li><li>{S.disclosureOff}</li></ul>
-        {button(S.turnOn, () => run(() => { setDisclosure(false); return consent?.confirm() ?? Promise.resolve({ id: 0, ok: false, code: 'refused', local: true }); }))}
+        {button(S.turnOn, () => run(() => { setDisclosure(false); return consent?.confirm() ?? Promise.resolve({ id: 0, ok: false, code: 'refused', local: true }); }), disabled || status?.limitsConsent == null)}
         {button(S.cancel, () => setDisclosure(consent?.cancel() ?? false))}</div>}
     </>)}
     {group(S.devices, <>

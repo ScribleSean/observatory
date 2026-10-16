@@ -77,3 +77,13 @@ void test('setup navigation depends on action availability and defaults to hidde
     assert.equal(html.includes('<nav'), actionsAvailable === false);
   }
 });
+
+void test('setup Turn on is disabled while Claude limits is Unknown', () => {
+  const turnOn = html => html.match(/<button[^>]*>Turn on<\/button>/)?.[0];
+  const known = turnOn(render(0, { disclosureOpen: true }));
+  assert.ok(known);
+  assert.doesNotMatch(known, /disabled/);
+  const status = sampleSetupStatus();
+  status.limitsConsent = null;
+  assert.match(turnOn(render(0, { status, disclosureOpen: true })), /disabled/);
+});

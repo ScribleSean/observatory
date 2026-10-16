@@ -488,3 +488,13 @@ void test('partial status preserves null parts and exact keys', () => {
     }
   }
 });
+
+void test('Turn on in an open consent panel is disabled while Claude limits is Unknown', () => {
+  const turnOn = html => html.match(/<button[^>]*>Turn on<\/button>/)?.[0];
+  const known = turnOn(render(sampleBridgeStatus(), { disclosureOpen: true }));
+  assert.ok(known);
+  assert.doesNotMatch(known, /disabled/);
+  const status = sampleBridgeStatus();
+  status.limitsConsent = null;
+  assert.match(turnOn(render(status, { disclosureOpen: true })), /disabled/);
+});
