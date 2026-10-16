@@ -5,7 +5,7 @@ import path from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {appNames} from '../native/app-names.mjs';
-import {migrateDataFolder,inspectDataMigration,updateWindowsPeerPaths} from '../native/mac/migrate-data.mjs';
+import {migrateDataFolder,inspectDataMigration} from '../native/mac/migrate-data.mjs';
 import {privateSyncDirectory} from './peer-directory.mjs';
 import {readPairing,createPairingConfigurations} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
@@ -124,7 +124,7 @@ test('Swift uses the canonical legacy data folder literal',()=>{
 test('running or unverifiable processes refuse without writes',mac,t=>{
   const f=fixture(t),before=snapshot(f.root);
   for(const runningProcesses of [()=>'/fixture/'+appNames.internal.macExecutable,()=>null,()=>{throw Error('ps failed');}])
-    assert.throws(()=>migrateDataFolder({...f,runningProcesses}),/Quit all|Cannot verify/);
+    assert.throws(()=>migrateDataFolder({...f,runningProcesses}),/Quit every|Cannot verify/);
   assert.deepEqual(snapshot(f.root),before);
 });
 test('occupied target and linked legacy entries refuse without staging',mac,t=>{
@@ -143,10 +143,10 @@ test('already migrated and inspection perform no writes',mac,t=>{
   assert.equal(inspectDataMigration(f).target,'migrated');
   assert.deepEqual(snapshot(f.root),copied);
 });
-test('interrupted staging resumes and removes only owned partial files',mac,t=>{
+test('interrupted staging is retained aside on the next run',mac,t=>{
   const f=fixture(t);let copied=0;
   assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(){if(++copied===2)throw Error('interrupted');}}}),/interrupted/);
-  fs.writeFileSync(path.join(f.stage,'stale.observatory-partial'),'partial');
+  assert.equal(fs.existsSync(f.stage),false);
   assert.equal(migrateDataFolder(f).state,'migrated');
   assert.equal(fs.existsSync(path.join(f.target,'stale.observatory-partial')),false);
 });
@@ -155,16 +155,17 @@ test('changed legacy refuses the switch',mac,t=>{
   assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(){fs.writeFileSync(path.join(f.legacy,'new'),'changed');}}}),/earlier data folder changed/);
   assert.equal(fs.existsSync(f.target),false);
 });
-test('extra staging files refuse the switch',mac,t=>{
+test('extra staging files are retained aside before a fresh copy',mac,t=>{
   const f=fixture(t);fs.mkdirSync(f.stage);fs.writeFileSync(path.join(f.stage,'extra'),'fixture');
-  assert.throws(()=>migrateDataFolder(f),/staging copy does not match/);assert.equal(fs.existsSync(f.target),false);
+  assert.equal(migrateDataFolder(f).state,'migrated');
+  assert.ok(fs.readdirSync(f.root).some(name=>name.includes('-migration-stale-')));
 });
 test('FIFO is skipped and reported',{skip:process.platform==='win32'},t=>{
   const f=fixture(t);execFileSync('mkfifo',[path.join(f.legacy,'pipe')]);
   assert.deepEqual(inspectDataMigration(f).skipped,['pipe']);
   assert.deepEqual(migrateDataFolder(f).skipped,['pipe']);assert.equal(fs.existsSync(path.join(f.target,'pipe')),false);
 });
-test('pairing, quota, peer and settings survive migration and Windows paths update once',mac,async t=>{
+test('pairing, quota, peer and settings survive migration',mac,async t=>{
   const f=fixture(t,{pairing:true}),now=1700000000000;
   await privateSyncDirectory(f.legacy,true);
   const pairing=createPairingConfigurations().Mac;
@@ -188,16 +189,7 @@ test('pairing, quota, peer and settings survive migration and Windows paths upda
   assert.deepEqual(await readPeerState(f.target,pairing.peer,now),record);
   await privateSyncDirectory(f.target,false);
   for(const name of ['viewer.json','settings.json'])assert.deepEqual(fs.readFileSync(path.join(f.target,name)),fs.readFileSync(path.join(f.legacy,name)));
-  assert.deepEqual(await updateWindowsPeerPaths({runtime:f.target}),{state:'updated',fields:['remoteNode','remoteScript','remoteRuntime']});
-  const expected=structuredClone(pairing);
-  for(const field of ['remoteNode','remoteScript','remoteRuntime'])expected.transport[field]=expected.transport[field].replace('Workspace Observatory','Observatory');
-  assert.deepEqual(await readPairing(f.target),expected);
-  assert.deepEqual(await updateWindowsPeerPaths({runtime:f.target}),{state:'unchanged'});
   assert.deepEqual(snapshot(f.legacy),before);
-  await assert.rejects(updateWindowsPeerPaths({runtime:f.legacy}),/new data folder/);
-  const tls={...pairing,transport:{kind:'tls',address:'10.0.0.3',port:43128}};
-  fs.writeFileSync(path.join(f.target,'private-sync/pairing.json'),JSON.stringify(tls));
-  assert.deepEqual(await updateWindowsPeerPaths({runtime:f.target}),{state:'unchanged'});
 });
 
 test('empty destination can be replaced and linked folders are refused',mac,t=>{
@@ -212,17 +204,116 @@ test('empty destination can be replaced and linked folders are refused',mac,t=>{
   assert.throws(()=>migrateDataFolder({...g,legacy:path.join(alias,appNames.legacy.dataFolder),
     target:path.join(alias,appNames.visible.dataFolder),stage:path.join(alias,'.migration')}),/ancestor refused/);
 });
-test('Windows peer path updates preserve separators and require the exact parent segment',mac,async t=>{
-  const f=fixture(t,{pairing:true});migrateDataFolder(f);
-  const pairing=createPairingConfigurations().Mac;
-  pairing.transport={kind:'ssh-windows',hostAlias:'synthetic-host',
-    remoteNode:'C:\\Users\\Example\\AppData\\Local\\pRoGrAmS\\Workspace Observatory\\Runtime\\node.exe',
-    remoteScript:'C:/Other/Workspace Observatory/Collector/scripts/peer-exchange.mjs',
-    remoteRuntime:'C:\\Users\\Example\\AppData\\LOCAL\\Workspace Observatory'};
-  fs.writeFileSync(path.join(f.target,'private-sync/pairing.json'),JSON.stringify(pairing),{mode:0o600});
-  assert.deepEqual(await updateWindowsPeerPaths({runtime:f.target}),{state:'updated',fields:['remoteNode','remoteRuntime']});
-  const expected=structuredClone(pairing);
-  expected.transport.remoteNode=expected.transport.remoteNode.replace('Workspace Observatory','Observatory');
-  expected.transport.remoteRuntime=expected.transport.remoteRuntime.replace('Workspace Observatory','Observatory');
-  assert.deepEqual(await readPairing(f.target),expected);
+
+const staleFolders=f=>fs.readdirSync(f.root).filter(name=>name.startsWith('.'+appNames.visible.dataFolder+'-migration-stale-')).map(name=>path.join(f.root,name));
+test('receipt survives interruption and resumes directly at the switch',mac,t=>{
+  const f=fixture(t);
+  assert.throws(()=>migrateDataFolder({...f,hooks:{afterReceipt(){throw Error('crash');}}}),/crash/);
+  const before=fs.statSync(path.join(f.stage,'settings.json')).ino;
+  assert.equal(migrateDataFolder({...f,hooks:{afterFile(){assert.fail('must not recopy');}}}).state,'migrated');
+  assert.equal(fs.statSync(path.join(f.target,'settings.json')).ino,before);
+  assert.equal(staleFolders(f).length,0);
+});
+test('a disappearing copied source refuses once and a stable retry succeeds',mac,t=>{
+  const f=fixture(t);
+  assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(name){
+    if(name==='settings.json')fs.renameSync(path.join(f.legacy,name),path.join(f.root,'retained'));
+  }}}),/earlier data folder changed/);
+  assert.equal(staleFolders(f).length,1);
+  assert.equal(fs.existsSync(f.stage),false);
+  assert.equal(migrateDataFolder(f).state,'migrated');
+});
+test('source symlink swap never copies outside bytes',mac,t=>{
+  const f=fixture(t),outside='outside bytes that must never be copied';
+  fs.writeFileSync(path.join(f.root,'outside'),outside);
+  assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(name){
+    if(name==='settings.json') {
+      fs.renameSync(path.join(f.legacy,'viewer.json'),path.join(f.root,'saved'));
+      fs.symlinkSync(path.join(f.root,'outside'),path.join(f.legacy,'viewer.json'));
+    }
+  }}}),/earlier data folder changed/);
+  assert.equal(staleFolders(f).length,1);
+  for(const folder of staleFolders(f))for(const entry of Object.values(snapshot(folder)))
+    assert.notEqual(entry.bytes,Buffer.from(outside).toString('hex'));
+});
+test('read-only directories survive a refused run and stable retry',mac,t=>{
+  const f=fixture(t),folder=path.join(f.legacy,'private-sync/nested');
+  fs.chmodSync(folder,0o500);
+  assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(name){
+    if(name==='viewer.json')fs.writeFileSync(path.join(f.stage,'extra'),'mismatch');
+  }}}),/staging copy does not match/);
+  assert.equal(staleFolders(f).length,1);
+  assert.equal(migrateDataFolder(f).state,'migrated');
+  assert.equal(fs.statSync(path.join(f.target,'private-sync/nested')).mode&0o777,0o500);
+  // Allow the fixture cleanup to remove these synthetic directories.
+  for(const root of [f.legacy,f.target,...staleFolders(f)])fs.chmodSync(path.join(root,'private-sync/nested'),0o700);
+});
+test('free space refusal happens before staging',mac,t=>{
+  const f=fixture(t),before=snapshot(f.root);
+  assert.throws(()=>migrateDataFolder({...f,statfs:parent=>{
+    assert.equal(parent,f.root);return {bavail:0,bsize:4096};
+  }}),{message:'Not enough free space for the copy.'});
+  assert.deepEqual(snapshot(f.root),before);
+});
+test('ps arguments cover executables, bundled helpers and the status line bridge',mac,t=>{
+  const f=fixture(t),before=snapshot(f.root);
+  for(const output of ['/fixture/'+appNames.internal.macExecutable+' --runtime fixture',
+    '/usr/bin/python /fixture/'+appNames.legacy.macBundle+'/Contents/collector.py',
+    '/usr/bin/node /fixture/'+appNames.visible.macBundle+'/Contents/collector.mjs',
+    '/usr/bin/node /fixture/claude-statusline-bridge.mjs']) {
+    assert.throws(()=>migrateDataFolder({...f,runningProcesses:()=>output}),
+      {message:'Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again.'});
+  }
+  assert.deepEqual(snapshot(f.root),before);
+});
+test('shutdown is rechecked before comparison and switch',mac,t=>{
+  for(const at of [2,3]) {
+    const f=fixture(t);let calls=0;
+    assert.throws(()=>migrateDataFolder({...f,runningProcesses:()=>++calls===at?'node claude-statusline-bridge.mjs':''}),/Quit every/);
+    assert.equal(calls,at);assert.equal(fs.existsSync(f.target),false);
+    assert.equal(migrateDataFolder(f).state,'migrated');
+  }
+});
+test('a valid receipt distinguishes later changes to the earlier folder',mac,t=>{
+  const f=fixture(t);migrateDataFolder(f);
+  fs.writeFileSync(path.join(f.legacy,'settings.json'),'changed');
+  assert.equal(inspectDataMigration(f).target,'migrated-earlier-folder-changed');
+});
+test('private hardlinks and foreign owners refuse with bounded entry names',mac,t=>{
+  const f=fixture(t);
+  fs.linkSync(path.join(f.legacy,'private-sync/nested/one'),path.join(f.root,'hardlink'));
+  assert.throws(()=>migrateDataFolder(f),{message:'Private file has multiple links: private-sync'});
+  const g=fixture(t),uid=process.getuid();let calls=0;
+  t.mock.method(process,'getuid',()=>++calls===1?uid:uid+1);
+  assert.throws(()=>migrateDataFolder(g),{message:'Entry is not owned by the current user: private-sync'});
+});
+
+test('status line inspection only reads an explicitly supplied settings fixture',mac,t=>{
+  const f=fixture(t),settingsPath=path.join(f.root,'settings-fixture.json');
+  assert.equal(inspectDataMigration(f).statusLineTargetsEarlierFolder,'Unknown');
+  fs.writeFileSync(settingsPath,JSON.stringify({statusLine:{command:'node "'+f.legacy+'/scripts/claude-statusline-bridge.mjs"'}}));
+  assert.equal(inspectDataMigration({...f,settingsPath}).statusLineTargetsEarlierFolder,true);
+  fs.writeFileSync(settingsPath,JSON.stringify({statusLine:{command:'node "'+f.target+'/scripts/claude-statusline-bridge.mjs"'}}));
+  assert.equal(inspectDataMigration({...f,settingsPath}).statusLineTargetsEarlierFolder,false);
+});
+test('a copied file hash mismatch retains no partial file',mac,t=>{
+  const f=fixture(t),source=path.join(f.legacy,'viewer.json');
+  const info=fs.statSync(source);
+  assert.throws(()=>migrateDataFolder({...f,hooks:{afterFile(name){
+    if(name==='settings.json') {
+      fs.writeFileSync(source,'X'.repeat(info.size));
+      fs.utimesSync(source,info.atimeMs/1000,info.mtimeMs/1000);
+    }
+  }}}),/copied file does not match/);
+  assert.equal(staleFolders(f).length,1);
+  assert.ok(Object.keys(snapshot(staleFolders(f)[0])).every(name=>!name.endsWith('.observatory-partial')));
+});
+test('a receipted but damaged stage is retained before recopying',mac,t=>{
+  const f=fixture(t);
+  assert.throws(()=>migrateDataFolder({...f,hooks:{afterReceipt(){throw Error('crash');}}}),/crash/);
+  fs.writeFileSync(path.join(f.stage,'settings.json'),'damaged stage');
+  assert.equal(migrateDataFolder(f).state,'migrated');
+  assert.equal(staleFolders(f).length,1);
+  assert.equal(fs.readFileSync(path.join(staleFolders(f)[0],'settings.json'),'utf8'),'damaged stage');
+  assert.equal(fs.readFileSync(path.join(f.target,'settings.json'),'utf8'),'{"synthetic":true}');
 });

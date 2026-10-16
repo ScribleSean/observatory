@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import {appNames} from '../native/app-names.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -82,7 +84,7 @@ test('legacy app rename retains the earlier bundle and journals promotion',mac,t
   assert.equal(readFileSync(path.join(result.recovery,'previous/Contents/Resources/LICENSE'),'utf8'),'fixture-0');
   assert.equal(readFileSync(path.join(target,'Contents/Resources/LICENSE'),'utf8'),'fixture-1');
   assert.deepEqual(readFileSync(path.join(result.recovery,'transaction.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line).state),
-    ['prepared','previous-retained','candidate-promoted']);
+    ['prepared','previous-retained','candidate-promoted','payload-verified']);
   for(const name of ['previous-manifest.json','candidate-manifest.json'])assert.ok(existsSync(path.join(result.recovery,name)));
 });
 test('rename refuses an existing destination, a running app and unrelated basenames',mac,t=>{
@@ -93,4 +95,38 @@ test('rename refuses an existing destination, a running app and unrelated basena
   assert.throws(()=>replaceMacApp(f),/already exists/);
   const g=setup(t),other=path.join(g.root,'Other.app');renameSync(g.installed,other);
   assert.throws(()=>replaceMacApp({...g,installed:other}),/Stage the candidate/);
+});
+
+test('rename verifies the promoted target and retains failed payloads for recovery',mac,t=>{
+  const f=setup(t),target=f.installed,checked=[];
+  f.installed=path.join(f.root,appNames.legacy.macBundle);renameSync(target,f.installed);
+  const original=Error('promoted signature rejected');let failure;
+  try {replaceMacApp({...f,verifySignature:folder=>{
+    checked.push(folder);if(folder===target)throw original;
+  }});}catch(error){failure=error;}
+  assert.equal(failure,original);
+  assert.deepEqual(checked,[f.installed,f.staged,target]);
+  assert.ok(existsSync(target));
+  assert.ok(existsSync(path.join(failure.recovery,'previous')));
+  assert.match(readFileSync(path.join(failure.recovery,'transaction.jsonl'),'utf8'),/recovery-required/);
+});
+
+test('rename preserves the promotion error and attaches a rollback error',mac,t=>{
+  const f=setup(t),target=f.installed;
+  f.installed=path.join(f.root,appNames.legacy.macBundle);renameSync(target,f.installed);
+  const rename=fs.renameSync,original=Error('synthetic promotion failure'),rollback=Error('synthetic rollback failure');
+  let failure;
+  const mock=t.mock.method(fs,'renameSync',(from,to)=>{
+    if(from===f.staged)throw original;
+    if(to===f.installed)throw rollback;
+    return rename(from,to);
+  });
+  syncBuiltinESMExports();
+  try {replaceMacApp(f);}catch(error){failure=error;}
+  finally {mock.mock.restore();syncBuiltinESMExports();}
+  assert.equal(failure,original);
+  assert.equal(failure.rollbackError,rollback);
+  assert.ok(existsSync(f.staged));
+  assert.ok(existsSync(path.join(failure.recovery,'previous')));
+  assert.match(readFileSync(path.join(failure.recovery,'transaction.jsonl'),'utf8'),/recovery-required/);
 });

@@ -82,9 +82,20 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
         assertTargetMissing();
         renameSync(staged,target);promoted=true;
         record('candidate-promoted');
+        const activated=verify(target,'candidate');
+        if(activated.sourceRevision!==candidateIdentity.sourceRevision || activated.buildNumber!==candidateIdentity.buildNumber)
+          throw Error('Promoted payload identity changed');
+        record('payload-verified');
         return {state:'renamed',installed:target,recovery,sourceRevision:candidateIdentity.sourceRevision};
       } catch(error) {
-        if(retained && !promoted)renameSync(previous,installed);
+        try {
+          if(retained && !promoted) {renameSync(previous,installed);record('previous-restored');}
+          else record('recovery-required');
+        } catch(rollbackError) {
+          error.rollbackError=rollbackError;
+          try{record('recovery-required');}catch{}
+        }
+        error.recovery=recovery;
         throw error;
       } finally {closeSync(journal);}
     }

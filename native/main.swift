@@ -74,14 +74,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 .appendingPathComponent("Library/Application Support/Observatory")
         }
         if selectedRuntime == nil && previewRuntime == nil &&
-            !CommandLine.arguments.contains(where: { $0.hasPrefix("--test-") || $0 == "--self-test" }) &&
-            SMAppService.mainApp.status == .enabled &&
-            UserDefaults.standard.string(forKey: "loginItemBundlePath") != Bundle.main.bundlePath {
+            !CommandLine.arguments.contains(where: { $0.hasPrefix("--test-") || $0 == "--self-test" }) {
+            let defaults = UserDefaults.standard
             do {
-                try SMAppService.mainApp.unregister()
-                try SMAppService.mainApp.register()
-                UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
-            } catch {}
+                if SMAppService.mainApp.status == .enabled &&
+                    defaults.string(forKey: "loginItemBundlePath") != Bundle.main.bundlePath {
+                    try SMAppService.mainApp.unregister()
+                    defaults.set(true, forKey: "loginItemWanted")
+                }
+                if defaults.bool(forKey: "loginItemWanted") && SMAppService.mainApp.status != .enabled {
+                    try SMAppService.mainApp.register()
+                    defaults.set(false, forKey: "loginItemWanted")
+                    defaults.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                }
+            } catch { showLoginAttention() }
         }
         store = ObservatoryStore(runtime: runtime, collectionAllowed: previewRuntime == nil)
         if let identity = selectedRuntimeIdentity, let selectedRuntime {
@@ -431,17 +437,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !store.shuttingDown else { return }
         guard previewRuntime == nil, selectedRuntime == nil else { return }
         do {
-            if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
+            if SMAppService.mainApp.status == .enabled {
+                UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                try SMAppService.mainApp.unregister()
+            }
             else {
                 try SMAppService.mainApp.register()
+                UserDefaults.standard.set(false, forKey: "loginItemWanted")
                 UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
             }
-        } catch {
-            let alert = NSAlert()
-            alert.messageText = "Launch at login needs attention"
-            alert.informativeText = "Open Login Items in System Settings to allow Observatory."
-            alert.runModal()
-        }
+        } catch { showLoginAttention() }
+    }
+    private func showLoginAttention() {
+        let alert = NSAlert()
+        alert.messageText = "Launch at login needs attention"
+        alert.informativeText = "Open Login Items in System Settings to allow Observatory."
+        alert.runModal()
     }
     @objc private func loginSettings() {
         guard previewRuntime == nil, selectedRuntime == nil else { return }
