@@ -1,5 +1,6 @@
 """Kernel vnode checks on disposable synthetic folders only."""
 from contextlib import contextmanager
+import ctypes
 import os
 from pathlib import Path
 import select
@@ -114,8 +115,10 @@ class KernelWatcherTests(unittest.TestCase):
 
 @contextmanager
 def private_tree():
-    with tempfile.TemporaryDirectory(dir=os.path.realpath(tempfile.gettempdir())) as base:
-        ancestor = Path(base) / "ancestor"
+    base = Path(__file__).resolve().parents[2] / ".test-runtime" / "private-path-acl-watch"
+    os.makedirs(base, mode=0o700, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=os.path.realpath(base)) as tree:
+        ancestor = Path(tree) / "ancestor"
         ancestor.mkdir(mode=0o700)
         private = ancestor / "leaf"
         private.mkdir(mode=0o700)
@@ -166,7 +169,7 @@ class KernelVerificationTests(unittest.TestCase):
                 policy.verify_directory(os.path.realpath(private), private=True,
                                         reader=policy.NativeReader())
             except (OSError, policy.UnsafePath) as error:
-                raise unittest.SkipTest(
+                raise AssertionError(
                     "Untouched synthetic tree failed NativeReader verification "
                     "(filesystem or ancestor policy unsupported): "
                     f"{type(error).__name__}: {error}") from error
@@ -224,6 +227,48 @@ class KernelVerificationTests(unittest.TestCase):
             renamed = ancestor.with_name("renamed")
             ancestor.rename(renamed)
             renamed.rename(ancestor)
+        self.verify_action(action, allowed=False)
+
+    def test_ancestor_xattr_and_back_refuses(self):
+        def action(ancestor, private):
+            name = "com.observatory.fixture"
+            if hasattr(os, "setxattr") and hasattr(os, "removexattr"):
+                os.setxattr(ancestor, name, b"fictional")
+                os.removexattr(ancestor, name)
+            else:
+                subprocess.run(["/usr/bin/xattr", "-w", name, "fictional", str(ancestor)],
+                               check=True)
+                subprocess.run(["/usr/bin/xattr", "-d", name, str(ancestor)], check=True)
+        self.verify_action(action, allowed=False)
+
+    def test_ancestor_utime_and_back_refuses(self):
+        def action(ancestor, private):
+            original = ancestor.stat()
+            try:
+                os.utime(ancestor, ns=(1_000_000_000, 1_000_000_000))
+            finally:
+                os.utime(ancestor, ns=(original.st_atime_ns, original.st_mtime_ns))
+        self.verify_action(action, allowed=False)
+
+    def test_ancestor_atomic_swap_and_back_refuses(self):
+        try:
+            library = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+            renamex = library.renamex_np
+        except (OSError, AttributeError) as error:
+            self.skipTest(f"renamex_np unavailable: {type(error).__name__}: {error}")
+        renamex.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+        renamex.restype = ctypes.c_int
+
+        def swap(source, target):
+            if renamex(os.fsencode(source), os.fsencode(target), 0x2) != 0:
+                error = ctypes.get_errno()
+                raise OSError(error, os.strerror(error))
+
+        def action(ancestor, private):
+            sibling = ancestor.with_name("swap")
+            sibling.mkdir(mode=0o700)
+            swap(sibling, ancestor)
+            swap(sibling, ancestor)
         self.verify_action(action, allowed=False)
 
     def test_private_file_churn_refuses(self):
