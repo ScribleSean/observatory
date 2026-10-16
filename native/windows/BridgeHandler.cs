@@ -172,6 +172,40 @@ internal sealed class BridgeSettingsStore(string runtime)
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FileInformation information);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LimitsFolderIdInfo
+    {
+        public ulong VolumeSerialNumber;
+        public ulong Low;
+        public ulong High;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LimitsFolderAttributeTagInfo
+    {
+        public FileAttributes Attributes;
+        public uint ReparseTag;
+    }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern SafeFileHandle OpenLimitsFolder(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", EntryPoint = "GetFileInformationByHandleEx", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadLimitsFolderAttributes(SafeFileHandle handle, int informationClass, out LimitsFolderAttributeTagInfo info, uint size);
+    [DllImport("kernel32.dll", EntryPoint = "GetFileInformationByHandleEx", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadLimitsFolderId(SafeFileHandle handle, int informationClass, out LimitsFolderIdInfo info, uint size);
+
+    private static (ulong VolumeSerialNumber, ulong Low, ulong High) ReadLimitsFolderIdentity(string path)
+    {
+        using var handle = OpenLimitsFolder(path, 0x80, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        if (handle.IsInvalid || !ReadLimitsFolderAttributes(handle, 9, out var attributes, 8) ||
+            (attributes.Attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != FileAttributes.Directory ||
+            !ReadLimitsFolderId(handle, 18, out var id, 24))
+            throw new IOException("Consent folder unavailable.");
+        return (id.VolumeSerialNumber, id.Low, id.High);
+    }
+
     internal static void RefuseHardLink(string path)
     {
         using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read,
@@ -312,21 +346,29 @@ internal sealed class BridgeSettingsStore(string runtime)
         catch when (!strict) { return null; }
     }
 
-    internal bool ReadLimitsConsent(bool strict = false)
+    internal bool ReadLimitsConsent(bool strict = false, Action? afterRead = null)
     {
+        bool readingConsent = false;
         try
         {
             if (Attributes(Path.Combine(runtime, "claude-limits", "consent.json")) is null) return false;
+            var folder = Path.Combine(runtime, "claude-limits");
+            var before = ReadLimitsFolderIdentity(folder);
+            readingConsent = true;
             var value = ReadObject(Path.Combine("claude-limits", "consent.json"), 4096, stable: true, refuseBom: true);
-            if (value.Count != 2 || value["consent"]?.GetValue<bool>() != true ||
-                value["givenAt"]?.GetValue<string>() is not string givenAt) return false;
+            readingConsent = false;
             const string format = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
             // Years 0001 to 9999 only, the range the shared reader accepts.
-            return DateTimeOffset.TryParseExact(givenAt, format, System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal, out var date) &&
+            bool result = value.Count == 2 && value["consent"]?.GetValue<bool>() == true &&
+                value["givenAt"]?.GetValue<string>() is string givenAt &&
+                DateTimeOffset.TryParseExact(givenAt, format, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal, out var date) &&
                 date.ToString(format, System.Globalization.CultureInfo.InvariantCulture) == givenAt;
+            afterRead?.Invoke();
+            if (ReadLimitsFolderIdentity(folder) != before) return false;
+            return result;
         }
-        catch (IOException error) when (strict && (error.HResult == unchecked((int)0x80070020) ||
+        catch (IOException error) when (strict && readingConsent && (error.HResult == unchecked((int)0x80070020) ||
             error.HResult == unchecked((int)0x80070021))) { throw; }
         catch { return false; }
     }
@@ -2484,6 +2526,71 @@ internal sealed class BridgeHandler : IDisposable
         { Console.WriteLine("Settings bridge linked-folder checks skipped: this account cannot create symbolic links."); }
         if (folderLinked) { InvalidConsent("Linked consent folder"); Directory.Delete(consentFolder); }
         Directory.CreateDirectory(consentFolder);
+        foreach (var strict in new[] { false, true })
+        {
+            File.WriteAllText(consent, validConsent);
+            Check(store.ReadLimitsConsent(strict, afterRead: () => { }), "Unchanged consent folder");
+            File.Delete(consent);
+            var savedFolder = Path.Combine(runtime, "synthetic-consent-folder-before-swap");
+            bool swapped = false, replaced = false;
+            try
+            {
+                File.WriteAllText(consent, validConsent);
+                bool accepted = store.ReadLimitsConsent(strict, afterRead: () =>
+                {
+                    Directory.Move(consentFolder, savedFolder); swapped = true;
+                    Directory.CreateDirectory(consentFolder);
+                    File.WriteAllText(consent, validConsent); replaced = true;
+                });
+                Check(replaced && !accepted, "Replaced consent folder");
+            }
+            finally
+            {
+                if (swapped)
+                {
+                    if (Directory.Exists(consentFolder)) Directory.Delete(consentFolder, recursive: true);
+                    Directory.Move(savedFolder, consentFolder);
+                }
+                File.Delete(consent);
+            }
+            swapped = false;
+            folderLinked = false;
+            try
+            {
+                File.WriteAllText(consent, validConsent);
+                bool accepted = store.ReadLimitsConsent(strict, afterRead: () =>
+                {
+                    Directory.Move(consentFolder, savedFolder); swapped = true;
+                    try { Directory.CreateSymbolicLink(consentFolder, linkedFolder); folderLinked = true; }
+                    catch (Exception error) when (error is UnauthorizedAccessException or IOException)
+                    { Console.WriteLine("Settings bridge linked-folder checks skipped: this account cannot create symbolic links."); }
+                });
+                Check(swapped, "Consent folder link swap reached");
+                if (folderLinked) Check(!accepted, "Linked consent folder after read");
+            }
+            finally
+            {
+                if (folderLinked) Directory.Delete(consentFolder);
+                if (swapped) Directory.Move(savedFolder, consentFolder);
+                File.Delete(consent);
+            }
+            bool removed = false;
+            try
+            {
+                File.WriteAllText(consent, validConsent);
+                bool accepted = store.ReadLimitsConsent(strict, afterRead: () =>
+                {
+                    File.Delete(consent);
+                    Directory.Delete(consentFolder); removed = true;
+                });
+                Check(removed && !accepted, "Removed consent folder after read");
+            }
+            finally
+            {
+                Directory.CreateDirectory(consentFolder);
+                File.Delete(consent);
+            }
+        }
         var sync = Path.Combine(runtime, "private-sync"); Directory.CreateDirectory(sync);
         File.WriteAllText(Path.Combine(sync, "pairing.json"), "{}"); Check(store.ReadPairing() == ("paired", "ssh"), "SSH status");
         File.WriteAllText(Path.Combine(sync, "tls-trust.json"), "{}"); Check(store.ReadPairing() == ("paired", "tls"), "TLS status");
