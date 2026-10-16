@@ -383,8 +383,12 @@ final class MacBridgeHost: BridgeHost {
             guard !isolatedRuntime, !preview else { completion(.unavailable, nil); return }
             do {
                 if enabled && SMAppService.mainApp.status != .enabled {
+                    UserDefaults.standard.set(true, forKey: "loginItemWanted")
                     try SMAppService.mainApp.register()
-                    UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                    if SMAppService.mainApp.status == .enabled {
+                        UserDefaults.standard.set(false, forKey: "loginItemWanted")
+                        UserDefaults.standard.set(Bundle.main.bundlePath, forKey: "loginItemBundlePath")
+                    }
                 }
                 else if !enabled && SMAppService.mainApp.status != .notRegistered { try SMAppService.mainApp.unregister() }
                 let status = SMAppService.mainApp.status

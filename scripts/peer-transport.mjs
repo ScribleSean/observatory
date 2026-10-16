@@ -25,6 +25,8 @@ export function validatePeerTransport(value) {
   return Object.fromEntries(fields.map(key=>[key,value[key]]));
 }
 
+const quote=value=>"'"+value.replace(/['\u2018-\u201b]/g,c=>c+c)+"'";
+
 function runSSH(args,input,maxBuffer=17_000_000) {
   return new Promise((resolve,reject)=>{
     const child=execFile('/usr/bin/ssh',args,{timeout:30000,killSignal:'SIGKILL',maxBuffer},(error,stdout)=>{
@@ -41,7 +43,6 @@ async function sshRequest(transport,request,endpoint,invoke,limit) {
   if(safe.kind!=='ssh-windows')throw Error('Explicit SSH transport required');
   const script=endpoint==='setup'?path.win32.join(path.win32.dirname(safe.remoteScript),'peer-setup-endpoint.mjs'):
     endpoint==='quota'?path.win32.join(path.win32.dirname(safe.remoteScript),'quota-exchange.mjs'):safe.remoteScript;
-  const quote=value=>"'"+value.replaceAll("'","''")+"'";
   const command=`& ${quote(safe.remoteNode)} ${quote(script)} ${quote(safe.remoteRuntime)}; exit $LASTEXITCODE`;
   const encoded=Buffer.from(command,'utf16le').toString('base64');
   const args=['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','PasswordAuthentication=no',
@@ -101,7 +102,6 @@ export async function sshMigrationReceipt(transport,invoke=runSSH) {
   if(path.win32.basename(safe.remoteRuntime).toLowerCase()!==renameNames.legacyDataFolder.toLowerCase())
     throw Error('Legacy Windows runtime required');
   const recordPath=path.win32.join(path.win32.dirname(safe.remoteRuntime),renameNames.visibleDataFolder,'observatory-migration.json');
-  const quote=value=>"'"+value.replaceAll("'","''")+"'";
   const command=`$ErrorActionPreference = 'Stop'
 $running = [bool](Get-Process -Name WorkspaceObservatory -ErrorAction SilentlyContinue)
 $record = $null
