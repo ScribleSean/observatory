@@ -51,15 +51,34 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: script-suite-${{ github.ref }}
-  cancel-in-progress: true
+  group: script-suite-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   suite:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-14]
-        part: [general, tls-1, tls-2, tls-3]
+        include:
+          - os: windows-latest
+            part: general
+          - os: windows-latest
+            part: tls-1
+          - os: windows-latest
+            part: tls-2
+          - os: windows-latest
+            part: tls-3
+          - os: windows-latest
+            part: tls-4
+          - os: windows-latest
+            part: sync-1
+          - os: windows-latest
+            part: sync-2
+          - os: windows-latest
+            part: sync-3
+          - os: macos-14
+            part: general
+          - os: macos-14
+            part: tls
     runs-on: ${{ matrix.os }}
     timeout-minutes: 50
     steps:
@@ -124,15 +143,38 @@ jobs:
         env:
           SUITE_PART: ${{ matrix.part }}
         run: |
-          const { readdirSync } = require('node:fs');
+          const { readdirSync, readFileSync } = require('node:fs');
           const { spawnSync } = require('node:child_process');
           const part = process.env.SUITE_PART;
+          // Windows groups use measured durations from run 38821008546.
           const shards = {
-            'tls-1': ['provider-token-sync.test.mjs'],
-            'tls-2': ['peer-pairing.test.mjs', 'peer-repair.test.mjs', 'peer-setup.test.mjs', 'peer-tls-service.test.mjs', 'peer-tls-trust.test.mjs'],
-            'tls-3': ['peer-tls-client.test.mjs', 'peer-tls-sync.test.mjs', 'provider-token-tls.test.mjs', 'quota-sync.test.mjs', 'quota-tls.test.mjs'],
+            'tls-1': ['peer-tls-trust.test.mjs', 'peer-pairing.test.mjs', 'peer-tls-service.test.mjs'],
+            'tls-2': ['peer-repair.test.mjs', 'peer-tls-sync.test.mjs'],
+            'tls-3': ['peer-setup.test.mjs', 'peer-tls-repair.test.mjs', 'peer-tls-client.test.mjs'],
+            'tls-4': ['quota-sync.test.mjs', 'provider-token-tls.test.mjs', 'quota-tls.test.mjs', 'peer-tls-control.test.mjs'],
           };
+          const syncNames = {
+            'sync-1': [
+              'local hours stay on the dashboard while stored and exchanged records remain identical',
+              'collection off disables sharing and failed reads replace totals with Unknown',
+              'concurrent TLS roles exchange without holding a network lock and preserve local collection on errors',
+              'native sharing CLI exposes only bounded status and confirmation fields',
+            ],
+            'sync-2': [
+              'duplicate deliveries keep source and receipt time, newer snapshots replace instead of sum',
+              'pairing revoke, corruption and retirement fence transport while local disable remains available',
+              'sharing starts off, is enabled by a current local confirmation, and probes carry no readings',
+              'private provider database rejects extra schema and mismatched saved bindings',
+              'private provider database rejects file symlinks',
+            ],
+          };
+          const syncFile = 'provider-token-sync.test.mjs';
           const tls = Object.values(shards).flat();
+          const names = Object.values(syncNames).flat();
+          const validParts = process.platform === 'win32'
+            ? [...Object.keys(shards), 'sync-1', 'sync-2', 'sync-3'] : ['tls'];
+          const refuse = (message) => { console.error(message); process.exit(1); };
+          if (new Set(names).size !== names.length) refuse('Duplicate sync test name');
           const tlsPatterns = [
             /^peer-tls-.*\.test\.mjs$/,
             /^peer-(pairing|repair|setup)\.test\.mjs$/,
@@ -144,25 +186,42 @@ jobs:
             console.error('Duplicate TLS test file across shards');
             process.exit(1);
           }
-          if (part !== 'general' && !Object.hasOwn(shards, part)) {
-            console.error('SUITE_PART must be general or one of: ' + Object.keys(shards).join(', '));
+          if (part !== 'general' && !validParts.includes(part)) {
+            console.error('SUITE_PART must be general or one of: ' + validParts.join(', '));
             process.exit(1);
           }
           const files = readdirSync('scripts', { withFileTypes: true })
             .filter((entry) => entry.isFile() && entry.name.endsWith('.test.mjs'))
             .map((entry) => entry.name)
             .sort();
-          for (const name of tls) {
+          for (const name of [...tls, syncFile]) {
             if (!files.includes(name)) {
               console.error(`Missing TLS test file: ${name}`);
               process.exit(1);
             }
           }
-          shards['tls-3'].push(...files.filter((name) => isTls(name) && !tls.includes(name)));
-          const batches = part !== 'general' ? shards[part].map((name) => [name]) : [files.filter((name) => !isTls(name))];
+          shards['tls-4'].push(...files.filter((name) => isTls(name) && !tls.includes(name) && name !== syncFile));
+          const isSync = part.startsWith('sync-');
+          if (isSync) {
+            let source;
+            try { source = readFileSync(`scripts/${syncFile}`, 'utf8'); }
+            catch { refuse('Unable to read provider sync test file'); }
+            for (const name of names) {
+              if (source.split("test('" + name + "'").length - 1 !== 1) {
+                refuse(`Expected exactly one top-level sync test: ${name}`);
+              }
+            }
+          }
+          const selected = isSync ? [syncFile] : part === 'tls' ? files.filter(isTls) : shards[part];
+          const batches = part !== 'general' ? selected.map((name) => [name]) : [files.filter((name) => !isTls(name))];
           const args = ['--import', './native/tests/test-source-runtime.mjs', '--test'];
           args.push(part !== 'general' ? '--test-timeout=900000' : '--test-timeout=300000');
           if (part !== 'general' || process.platform === 'darwin') args.push('--test-concurrency=1');
+          if (isSync) {
+            const escape = (name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const flag = part === 'sync-3' ? '--test-skip-pattern' : '--test-name-pattern';
+            for (const name of (part === 'sync-3' ? names : syncNames[part])) args.push(`${flag}=^${escape(name)}$`);
+          }
           for (const batch of batches) {
             const result = spawnSync(process.execPath, [...args, ...batch.map((name) => `scripts/${name}`)], { stdio: 'inherit' });
             if (result.error) console.error(result.error);

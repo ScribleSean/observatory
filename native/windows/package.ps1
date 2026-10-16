@@ -3,7 +3,8 @@ param(
     [string]$BuildPython = (Join-Path $env:SystemRoot 'py.exe'),
     [string]$CacheRoot = (Join-Path $env:LOCALAPPDATA 'WorkspaceObservatoryBuild\cache'),
     [string]$UpdatePublicKey,
-    [switch]$SkipWebBuild
+    [switch]$SkipWebBuild,
+    [switch]$SkipScriptSuite
 )
 $ErrorActionPreference = 'Stop'
 # Timestamped phase markers for build timing (issue 106). They only write to the host.
@@ -35,7 +36,7 @@ Push-Location $sourceRoot
 try {
     if (-not $SkipWebBuild) {
         Write-PackagePhase 'development build'
-        & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot
+        & (Join-Path $PSScriptRoot 'build.ps1') -Dotnet $Dotnet -CacheRoot $CacheRoot -SkipScriptSuite:$SkipScriptSuite
     }
     if (-not (Test-Path (Join-Path $sourceRoot '.native-build\web\dashboard.html'))) { throw 'Build the shared viewer first.' }
     if (Test-Path (Join-Path $sourceRoot '.native-build\web\local')) { throw 'Private snapshots must never enter a package.' }

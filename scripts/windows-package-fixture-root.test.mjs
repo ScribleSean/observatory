@@ -89,3 +89,114 @@ void test('failure diagnostics use the same account-volume fixture root without 
   ];
   assert.equal(uploads.length, 2);
 });
+
+const packageSteps = workflow().split(/^      - /m).slice(1);
+const gate = packageSteps.find((step) => step.startsWith('name: Require a passing script suite on this commit\n'));
+const gateScript = gate.split('        run: |\n')[1].split('\n').map((line) => line.slice(10)).join('\n');
+
+test('package gate has read-only permissions and runs after Python before Defender', () => {
+  assert.equal(workflow().match(/^permissions:\n([\s\S]*?)^concurrency:/m)[1], '  contents: read\n  actions: read\n');
+  const index = packageSteps.indexOf(gate);
+  assert.ok(packageSteps[index - 1].startsWith('uses: actions/setup-python@v5\n'));
+  assert.ok(packageSteps[index + 1].startsWith('name: Exclude build tools from Defender scans\n'));
+  assert.match(gate, /^        if: '!inputs.verify_compiler_only'$/m);
+  assert.match(gate, /^        shell: node \{0\}$/m);
+  assert.match(gate, /        env:\n          GITHUB_TOKEN: \$\{\{ github.token \}\}\n        run: \|/);
+  assert.match(workflow(), /^          \.\/native\/windows\/package.ps1 -BuildPython \$builder -SkipScriptSuite$/m);
+});
+
+const syntheticEnv = {
+  GITHUB_API_URL: 'https://api.example.invalid', GITHUB_REPOSITORY: 'fictional/project',
+  GITHUB_SHA: 'fictional-sha', GITHUB_TOKEN: 'synthetic-secret-token',
+};
+const passingRun = {
+  id: 123, html_url: 'https://example.invalid/run/123', head_sha: syntheticEnv.GITHUB_SHA,
+  status: 'completed', conclusion: 'success', event: 'push',
+  head_repository: { full_name: syntheticEnv.GITHUB_REPOSITORY },
+};
+
+async function runGate({ runs = [passingRun], status = 200, malformed = false, data, env = syntheticEnv, networkError = false } = {}) {
+  const { runInNewContext } = await import('node:vm');
+  const output = [];
+  const calls = [];
+  let exit = 0;
+  const stopped = new Error('synthetic exit');
+  try {
+    await runInNewContext(gateScript, {
+      process: { env, exit: (code) => { exit = code; throw stopped; } },
+      console: { log: (...args) => output.push(args.join(' ')), error: (...args) => output.push(args.join(' ')) },
+      fetch: async (url, options) => {
+        calls.push(JSON.parse(JSON.stringify({ url, options })));
+        if (networkError) throw new Error(syntheticEnv.GITHUB_TOKEN);
+        return { ok: status === 200, status, json: async () => {
+          if (malformed) throw new Error(syntheticEnv.GITHUB_TOKEN);
+          return data ?? { workflow_runs: runs };
+        } };
+      },
+    });
+  } catch (error) { assert.equal(error, stopped); }
+  assert.ok(!output.join('\n').includes(syntheticEnv.GITHUB_TOKEN));
+  return { exit, output, calls };
+}
+
+for (const event of ['push', 'workflow_dispatch']) {
+  test(`package gate accepts a completed ${event} on this commit`, async () => {
+    const result = await runGate({ runs: [{ ...passingRun, event }] });
+    assert.equal(result.exit, 0);
+    assert.deepEqual(result.output, ['Accepted Script suite run 123: https://example.invalid/run/123']);
+    assert.deepEqual(result.calls, [{
+      url: 'https://api.example.invalid/repos/fictional/project/actions/workflows/script-suite.yml/runs?head_sha=fictional-sha&status=success&per_page=100',
+      options: { headers: {
+        Authorization: 'Bearer synthetic-secret-token', Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      } },
+    }]);
+  });
+}
+
+for (const [label, options, reason] of [
+  ['empty list', { runs: [] }],
+  ['pull request', { runs: [{ ...passingRun, event: 'pull_request' }] }],
+  ['different commit', { runs: [{ ...passingRun, head_sha: 'other-sha' }] }],
+  ['failed run', { runs: [{ ...passingRun, conclusion: 'failure' }] }],
+  ['incomplete run', { runs: [{ ...passingRun, status: 'in_progress' }] }],
+  ['different repository', { runs: [{ ...passingRun, head_repository: { full_name: 'fictional/other' } }] }],
+  ['missing repository', { runs: [{ ...passingRun, head_repository: null }] }],
+  ['HTTP refusal', { status: 403 }, 'Script suite lookup returned HTTP 403.'],
+  ['malformed JSON', { malformed: true }, 'Script suite lookup returned malformed JSON.'],
+  ['malformed response shape', { data: {} }, 'Script suite lookup returned malformed JSON.'],
+  ['network failure', { networkError: true }, 'Script suite lookup failed.'],
+]) {
+  test(`package gate refuses ${label}`, async () => {
+    const result = await runGate(options);
+    assert.equal(result.exit, 1);
+    assert.deepEqual(result.output, [reason ?? 'No successful Script suite run (push or manual dispatch) exists for fictional-sha. Dispatch Script suite on this commit, wait for it to pass, then run this workflow again.']);
+  });
+}
+
+test('package gate refuses each missing environment variable without fetching', async () => {
+  for (const key of Object.keys(syntheticEnv)) {
+    const env = { ...syntheticEnv };
+    delete env[key];
+    const result = await runGate({ env });
+    assert.equal(result.exit, 1);
+    assert.deepEqual(result.calls, []);
+    assert.deepEqual(result.output, [`No successful Script suite run (push or manual dispatch) exists for ${env.GITHUB_SHA}. Dispatch Script suite on this commit, wait for it to pass, then run this workflow again.`]);
+  }
+});
+
+test('SkipScriptSuite wraps only the script suite and isolated loop and is forwarded by packaging', () => {
+  const build = readFileSync(new URL('../native/windows/build.ps1', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  const pack = readFileSync(new URL('../native/windows/package.ps1', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  assert.match(build, /param\([\s\S]*?\[switch\]\$SkipScriptSuite\n\)/);
+  assert.match(pack, /param\([\s\S]*?\[switch\]\$SkipScriptSuite\n\)/);
+  assert.match(pack, /& \(Join-Path \$PSScriptRoot 'build.ps1'\) -Dotnet \$Dotnet -CacheRoot \$CacheRoot -SkipScriptSuite:\$SkipScriptSuite/);
+  const block = build.match(/    if \(-not \$SkipScriptSuite\) \{\n([\s\S]*?)\n    \} else \{\n        Write-Output 'Script suite skipped by -SkipScriptSuite\. A passing Script suite run on this commit is required before using it\.'\n    \}/);
+  assert.ok(block);
+  assert.equal(build.split('if (-not $SkipScriptSuite)').length - 1, 1);
+  assert.match(block[1], /Write-BuildPhase 'script suite'\n        & \$node --test @contractTests/);
+  assert.match(block[1], /foreach \(\$isolatedTest in \$isolatedTests\) \{\n            Write-BuildPhase \('isolated ' \+ \$isolatedTest\)\n            & \$node --test \(Join-Path 'scripts' \$isolatedTest\)/);
+  assert.doesNotMatch(block[1], /--self-test|Dotnet|npm|web bundle/);
+  assert.ok(build.indexOf('& $Dotnet native/windows/bin/Release/net10.0-windows/WorkspaceObservatory.dll --self-test') < block.index);
+  assert.ok(build.indexOf("    Write-Output 'Windows development build passed.") > block.index + block[0].length);
+});
