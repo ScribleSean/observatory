@@ -205,10 +205,12 @@ void test('disclosure confirmation obeys the single action gate', async t => {
   const consent = [...f.container.querySelectorAll('label')].find(node => node.textContent === 'Claude Code limits').querySelector('input');
   await act(async () => consent.click());
   for (const text of [
-    'Claude Code hides most of its footer keyboard hints while any custom status line is configured.',
-    'Readings arrive only while a Claude Code session is responding, and only for Pro and Max subscriptions.',
-    'The limits are account-wide. They are observed on this device and are not sent to a paired device.',
+    "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times. The command gets a small fixed set of environment variables, and nothing else from it is kept.",
+    "The readings stay in this device's data folder and are not sent to a paired device. A session cost is recorded only when the optional status line bridge reports one.",
+    "Nothing is added to Claude Code's settings. Turn this switch off to stop the readings. If the status line bridge was installed separately, readings continue until it is removed.",
   ]) assert.ok(f.container.textContent.includes(text));
+  assert.ok(!f.container.textContent.includes('footer keyboard hints'));
+  assert.ok(!f.container.textContent.includes('only while a Claude Code session is responding'));
   const turnOn = f.button('Turn on');
   await act(async () => {
     f.button('Check for updates').click();

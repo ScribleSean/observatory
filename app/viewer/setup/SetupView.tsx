@@ -42,7 +42,7 @@ export function SetupContent({ status, step, available, busy, message, disclosur
       {SETUP_SOURCES.map(({ id, label, hint }) => toggle(label, hint, status?.sources[id as keyof BridgeStatus['sources']], enabled => onSource(id, enabled)))}
       {toggle(S.claudeLimits, W.claudeLimitsHint, status?.limitsConsent, onLimits)}
       {disclosureOpen && <div className="ob-settings-disclosure"><ul>
-        <li>{S.disclosureHints}</li><li>{S.disclosureReadings}</li><li>{S.disclosureSharing}</li>
+        <li>{S.disclosureCommand}</li><li>{S.disclosureStorage}</li><li>{S.disclosureOff}</li>
       </ul><button type="button" disabled={disabled} onClick={onConfirm}>{S.turnOn}</button><button type="button" disabled={disabled} onClick={onCancel}>{S.cancel}</button></div>}
       <p>{W.sourcesNote}</p><p>{W.privacyNote}</p>
     </>}

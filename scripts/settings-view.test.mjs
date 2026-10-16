@@ -233,8 +233,8 @@ void test('limits disclosure requests and cancellation send nothing, confirmatio
   const consent = limitsConsentFlow(controller);
   const { STRINGS } = await server.ssrLoadModule('/lib/strings.generated.ts');
   const html = render(sampleBridgeStatus(), { disclosureOpen: consent.request() });
-  for (const key of ['disclosureHints', 'disclosureReadings', 'disclosureSharing']) {
-    assert.ok(html.includes(STRINGS.settings[key]));
+  for (const key of ['disclosureCommand', 'disclosureStorage', 'disclosureOff']) {
+    assert.ok(html.includes(renderToStaticMarkup(STRINGS.settings[key])));
   }
   assert.equal(bridge.messages.length, 0);
   assert.equal(consent.cancel(), false);
