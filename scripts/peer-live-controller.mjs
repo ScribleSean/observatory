@@ -18,13 +18,20 @@ export function acceptsPipes({stdin,stdout}={}) {
   return [stdin,stdout].every(info=>Boolean(info && (info.isFIFO() || info.isSocket())));
 }
 export function parseArguments(args,streams={}) {
-  const values=[...args],repaired=values.at(-1)==='--repaired';
-  if(repaired)values.pop();
+  const modeLength=args[0]==='--loopback'?2:4,values=args.slice(0,modeLength);
+  let repaired=false,port;
+  for(let i=modeLength;i<args.length;i++) {
+    if(args[i]==='--repaired' && !repaired)repaired=true;
+    else if(args[i]==='--port' && port===undefined && !/[^0-9]/.test(args[i+1]??'') &&
+      Number(args[i+1])>=1024 && Number(args[i+1])<=65535)port=Number(args[++i]);
+    else throw failed();
+  }
+  const optionalPort=port===undefined?{}:{port};
   if(values.length===2 && values[0]==='--loopback' && isPairingAddress(values[1]))
-    return {address:values[1],repaired,role:null};
+    return {address:values[1],repaired,role:null,...optionalPort};
   if(values.length===4 && values[0]==='--role' && ['host','join'].includes(values[1]) &&
     values[2]==='--local' && isPairingAddress(values[3]) && acceptsPipes(streams))
-    return {address:values[3],repaired,role:values[1]};
+    return {address:values[3],repaired,role:values[1],...optionalPort};
   throw failed();
 }
 
@@ -99,6 +106,7 @@ export async function runSequence({host:H,join:J,repaired=false,log=line=>proces
     ['confirm',()=>send(H,'confirm',status('configuration-ready'),{peerEndpoint:joinEndpoint})],
     ['finish',()=>send(J,'finish',status('acknowledged'))],
     ['acknowledged',()=>send(H,'acknowledged',r=>r.acknowledged===true)],
+    ['host-close',()=>send(H,'host-close',status('closed'))],
     ['service',()=>both('service',status('sync-listening'))],
     ['publish',()=>both('publish',r=>Number.isInteger(r.sequence) && r.sequence>0)],
     ['exchange',exchange],['repeat-exchange',exchange],
@@ -129,11 +137,14 @@ export async function cleanupWorkers(workers,{timeoutMs=30000}={}) {
   const results=await Promise.allSettled(workers.map(worker=>deadline(worker.exited,timeoutMs)));
   if(closed.includes(false) || results.some(result=>result.status!=='fulfilled' || result.value!==0))throw failed();
 }
-function localWorker(address) {
+export function workerArguments(address,port) {
+  const fixturePath=fileURLToPath(new URL('./peer-live-fixture.test.mjs',import.meta.url));
+  return [fixturePath,'--live-peer',address,...(port===undefined?[]:['--port',String(port)])];
+}
+function localWorker(address,port) {
   const env={...process.env};
   for(const key of Object.keys(env))if(['NODE_OPTIONS','NODE_PATH','NODE_EXTRA_CA_CERTS'].includes(key.toUpperCase()))delete env[key];
-  const fixturePath=fileURLToPath(new URL('./peer-live-fixture.test.mjs',import.meta.url));
-  const child=spawn(process.execPath,[fixturePath,'--live-peer',address],{stdio:['pipe','pipe','ignore'],env});
+  const child=spawn(process.execPath,workerArguments(address,port),{stdio:['pipe','pipe','ignore'],env});
   const exited=new Promise(resolve=>{child.once('error',()=>resolve(1));child.once('exit',code=>resolve(code));});
   return {...createWorkerLink(child.stdout,child.stdin),exited};
 }
@@ -142,12 +153,12 @@ async function main() {
   const workers=[];
   let passed=false;
   try {
-    const local=localWorker(options.address);workers.push(local);
+    const local=localWorker(options.address,options.port);workers.push(local);
     let remote;
     if(options.role) {
       const exited=new Promise(resolve=>{process.stdin.once('end',()=>resolve(0));process.stdin.once('error',()=>resolve(1));process.stdin.once('close',()=>resolve(process.stdin.readableEnded?0:1));});
       remote={...createWorkerLink(process.stdin,process.stdout),exited};
-    } else remote=localWorker(options.address);
+    } else remote=localWorker(options.address,options.port);
     workers.push(remote);
     passed=await runSequence({host:options.role==='join'?remote:local,join:options.role==='join'?local:remote,
       repaired:options.repaired,cleanup:()=>cleanupWorkers(workers)});

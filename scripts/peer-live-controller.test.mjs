@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {PassThrough,Writable} from 'node:stream';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes} from './peer-live-controller.mjs';
+import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes,workerArguments} from './peer-live-controller.mjs';
 
 const invitation='observatory-pair:v1:fictional-secret';
-const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','service','publish',
+const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','host-close','service','publish',
   'exchange','repeat-exchange','restart','exchange-after-restart','quota-enable','quota-exchange','quota-repeat',
   'quota-disable-host','revoke','cleanup'];
 function fakes(override=()=>undefined) {
@@ -27,6 +27,7 @@ function fakes(override=()=>undefined) {
         case 'confirm': return {status:'configuration-ready'};
         case 'finish': return {status:'acknowledged'};
         case 'acknowledged': return {acknowledged:true};
+        case 'host-close': return {status:'closed'};
         case 'service': return {status:'sync-listening'};
         case 'stop-service': return {status:'stopped'};
         case 'publish': return {sequence:1};
@@ -168,4 +169,42 @@ test('invalid CLI child exits one with only generic stderr',()=>{
     assert.equal(child.status,1);assert.equal(child.stdout,'');
     assert.equal(child.stderr,'Fixture controller failed.\n');
   }
+});
+
+test('fixed port accepts every trailing option position and reaches local worker arguments',()=>{
+  const info={isFIFO:()=>true,isSocket:()=>false},streams={stdin:info,stdout:info};
+  const fixture=fileURLToPath(new URL('./peer-live-fixture.test.mjs',import.meta.url));
+  for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
+    for(const suffix of [['--port','43128'],['--port','43128','--repaired'],['--repaired','--port','43128']]) {
+      const options=parseArguments([...mode,...suffix],streams);
+      assert.equal(options.port,43128);
+      assert.equal(options.repaired,suffix.includes('--repaired'));
+      assert.deepEqual(workerArguments(options.address,options.port),[fixture,'--live-peer','10.0.0.1','--port','43128']);
+    }
+    for(const port of ['1024','65535'])assert.equal(parseArguments([...mode,'--port',port],streams).port,Number(port));
+    for(const value of ['0','1023','65536','43128x','+43128','-43128','43128.0',' 43128','43128\n','']) {
+      for(const suffix of [['--port',value],['--port',value,'--repaired'],['--repaired','--port',value]])
+        assert.throws(()=>parseArguments([...mode,...suffix],streams));
+    }
+    for(const suffix of [['--port'],['--repaired','--port'],['--port','--repaired'],
+      ['--port','43128','--port','43128'],['--port','43128','--repaired','--repaired']])
+      assert.throws(()=>parseArguments([...mode,...suffix],streams));
+    const options=parseArguments(mode,streams);
+    assert.deepEqual(workerArguments(options.address,options.port),[fixture,'--live-peer','10.0.0.1']);
+  }
+});
+test('host-close runs only on host and requires closed before service',async()=>{
+  const run=fakes();
+  assert.equal(await runSequence(run),true);
+  const index=run.commands.findIndex(({command})=>command.action==='host-close');
+  assert.deepEqual(run.commands.slice(index-1,index+2),[
+    {role:'host',command:{action:'acknowledged'}},
+    {role:'host',command:{action:'host-close'}},
+    {role:'host',command:{action:'service'}},
+  ]);
+  assert.equal(run.commands.filter(({command})=>command.action==='host-close').length,1);
+  const failed=fakes((role,command)=>command.action==='host-close'?{status:'open'}:undefined);
+  assert.equal(await runSequence(failed),false);
+  assert.equal(failed.commands.at(-1).command.action,'host-close');
+  assert.equal(failed.cleaned,1);
 });

@@ -57,14 +57,14 @@ export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
   }
 }
 
-async function main(address) {
+async function main(address,port=0) {
   if(!['darwin','win32'].includes(process.platform) || !isPairingAddress(address))throw Error('Invalid fixture host');
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-live-fixture-')));
   let listener=null,invitation=null,service=null,serviceExit=null,statusId=0,closing=false,validFrom=0;
   let serviceBuffer='',serviceReply=null;
   const key=path.join(runtime,'synthetic.key'),cert=path.join(runtime,'synthetic.pem');
   const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
-  const endpoint={kind:'tls',address,port:0};
+  const endpoint={kind:'tls',address,port};
   const send=value=>process.stdout.write(JSON.stringify(value)+'\n');
   async function stopService() {
     if(!service)return;
@@ -106,7 +106,7 @@ async function main(address) {
       }
       case 'host':
         if(listener)throw Error('Already hosting');
-        listener=await startHostTLSSetup(runtime,{address});
+        listener=await startHostTLSSetup(runtime,{address,port});
         return {invitation:encodeInvitation(listener.invitation)};
       case 'join':
         invitation=decodeInvitation(command.invitation);
@@ -116,6 +116,9 @@ async function main(address) {
         return {status:'configuration-ready'};
       case 'finish': return receiveConfirmedTLSPairing(runtime,invitation);
       case 'acknowledged': return {acknowledged:(await readHostTLSSetup(runtime)).acknowledged};
+      case 'host-close':
+        await listener?.cancel();listener=null;
+        return {status:'closed'};
       case 'service':
         if(service)throw Error('Already running');
         service=spawn(process.execPath,[fileURLToPath(new URL('./peer-tls-service.mjs',import.meta.url)),'--runtime',runtime],{stdio:['pipe','pipe','ignore']});
@@ -152,7 +155,7 @@ async function main(address) {
     await initializeDeviceIdentity(runtime,{version:1,key:await readFile(key,'utf8'),cert:certificate});
     await rm(key);await rm(cert);
     const probe=net.createServer();
-    await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen({host:address,port:0,exclusive:true},resolve);});
+    await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen({host:address,port,exclusive:true},resolve);});
     endpoint.port=probe.address().port;
     await new Promise(resolve=>probe.close(resolve));
     timer=setTimeout(()=>process.stdin.destroy(),300000);
@@ -178,5 +181,7 @@ async function main(address) {
     send({ready:true});await ended;closing=true;await pending;
   } finally {clearTimeout(timer);await cleanup();}
 }
-if(process.argv.length===4 && process.argv[2]==='--live-peer')
-  main(process.argv[3]).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
+if(process.argv[2]==='--live-peer' && (process.argv.length===4 ||
+  (process.argv.length===6 && process.argv[4]==='--port' && !/[^0-9]/.test(process.argv[5]) &&
+    Number(process.argv[5])>=1024 && Number(process.argv[5])<=65535)))
+  main(process.argv[3],process.argv.length===6?Number(process.argv[5]):0).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
