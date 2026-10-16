@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$Executable)
 $ErrorActionPreference = 'Stop'
-$appNames = Get-Content (Join-Path $PSScriptRoot '../app-names.json') -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot 'app-names.ps1')
+$appNames = Read-AppNames
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
     Write-Host 'SKIP: normal update startup requires a disposable hosted Windows runner.'
     return

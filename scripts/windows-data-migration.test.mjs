@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
+import {spawnSync,spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,realpath,mkdir,writeFile,readFile,readdir,lstat,rm,symlink} from 'node:fs/promises';
+import {mkdtemp,realpath,mkdir,writeFile,readFile,readdir,lstat,rm,symlink,link,open} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {appNames} from '../native/app-names.mjs';
@@ -16,12 +16,22 @@ const hex = c => c.repeat(64);
 // These checks run on every platform without invoking Windows or touching app data.
 test('migration uses named identities and stream copies', async () => {
   const source = await readFile(script,'utf8');
-  assert.match(source,/Get-Content\s+\(Join-Path \$PSScriptRoot '\.\.\\app-names\.json'\) -Raw \| ConvertFrom-Json/);
+  for (const name of ['migrate-data','check-update-startup','test-installer','verify-update-staging']) {
+    const text = await readFile(`native/windows/${name}.ps1`,'utf8');
+    assert.match(text,/\. \(Join-Path \$PSScriptRoot 'app-names.ps1'\)/);
+    assert.match(text,/= Read-AppNames/);
+  }
+  const helper = await readFile('native/windows/app-names.ps1','utf8');
+  assert.match(helper,/Get-Content -LiteralPath .* -Raw/);
+  assert.match(helper,/Invalid app names/);
+  assert.doesNotMatch(source.slice(source.indexOf('function Digest'),source.indexOf('function PrivateFolder')),/ConvertTo-Json/);
   assert.match(source,/\$names\.legacy\.dataFolder/);
   assert.match(source,/\$names\.visible\.dataFolder/);
-  assert.match(source,/Mutex\]::TryOpenExisting\(\('Local\\' \+ \$names\.internal\.windowsAppId\)/);
-  assert.match(source,/Semaphore\]::TryOpenExisting\(\('Local\\' \+ \$names\.internal\.windowsAppId \+ '\.InUse'\)/);
-  assert.doesNotMatch(source,/Copy-Item|\[(?:System\.)?IO\.File\]::Copy|Remove-Item/i);
+  assert.match(source,/Mutex\]::TryOpenExisting/);
+  assert.match(source,/Semaphore\]::TryOpenExisting/);
+  assert.doesNotMatch(source,/Copy-Item|\[(?:System\.)?IO\.File\]::Copy|Remove-Item\s/i);
+  assert.deepEqual(source.split('\n').filter(line => /Remove-ItemProperty/.test(line)).map(line => line.trim()),
+    ['Remove-ItemProperty -LiteralPath $RunKey -Name $names.internal.windowsStartupName']);
   assert.match(source,/FileMode\]::CreateNew/);
   assert.match(source,/Flush\(\$true\)/);
 });
@@ -43,25 +53,26 @@ async function fixture(t) {
   const runKey = 'HKCU:\\Software\\WorkspaceObservatoryTests\\'+randomUUID();
   await mkdir(legacy);
   await writeFile(path.join(legacy,'settings.json'),'{"synthetic":true}\n');
-  return {parent,legacy,target,stage,runKey};
+  return {parent,legacy,target,stage,runKey,appId:'MigrationTest'+randomUUID(),processName:'MigrationTest'+randomUUID()};
 }
-function run(f,{action='copy',confirm=true,env={},extra=[]}={}) {
-  return spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
-    '-Action',action,'-Parent',f.parent,'-RunKey',f.runKey,...(confirm?['-ConfirmAppQuit']:[]),...extra],
-  {encoding:'utf8',env:{...process.env,OBSERVATORY_MIGRATION_STOP_AFTER:'',...env},timeout:120000});
+function run(f,{action='copy',confirm=true,env={},extra=[],shell='powershell.exe'}={}) {
+  return spawnSync(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
+    '-Action',action,'-Parent',f.parent,'-RunKey',f.runKey,'-AppIdOverride',f.appId,'-ProcessNameOverride',f.processName,...(confirm?['-ConfirmAppQuit']:[]),...extra],
+  {encoding:'utf8',env:{...process.env,OBSERVATORY_MIGRATION_STOP_AFTER:'',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'',...env},timeout:120000});
 }
 function success(result,state) {
   assert.equal(result.status,0,result.stderr || result.error?.message);
   assert.equal(result.stderr,'');
   const output = JSON.parse(result.stdout);
   assert.equal(output.state,state);
-  assert.ok(!result.stdout.includes(':\\'));
+  assert.equal(output.notes,'alternate data streams are not copied');
   return output;
 }
 function refused(result,pattern) {
   assert.equal(result.status,1,result.stdout+result.stderr);
   assert.equal(result.stdout,'');
   assert.equal(result.stderr.trim().split(/\r?\n/).length,1);
+  assert.match(result.stderr,/^Migration refused \((input|running|folders|manifest|lock|stage|copy|verify|acl|login|switch)\): /);
   if(pattern)assert.match(result.stderr,pattern);
 }
 async function snapshot(root) {
@@ -187,19 +198,19 @@ test('empty target is retained when switching directories',windows,async t => {
 
 test('login intent is read only from an isolated temporary registry key',windows,async t => {
   const f = await fixture(t);
-  const executable = path.join(f.parent,'Programs',appNames.legacy.dataFolder,appNames.internal.windowsExecutable);
+  const executable = path.join(f.parent,'Programs',appNames.legacy.productName,appNames.internal.windowsExecutable);
   t.after(() => {
     const removed = ps(`Remove-Item -LiteralPath ${quote(f.runKey)} -Recurse -Force -ErrorAction Stop`);
     assert.equal(removed.status,0,removed.stderr);
   });
-  const created = ps(`$ErrorActionPreference='Stop'\nNew-Item -Path ${quote(f.runKey)} -Force | Out-Null\nNew-ItemProperty -LiteralPath ${quote(f.runKey)} -Name ${quote(appNames.internal.windowsStartupName)} -Value ${quote('"'+executable+'" --startup')} -PropertyType String | Out-Null`);
+  const created = ps(`$ErrorActionPreference='Stop'\nNew-Item -Path ${quote(f.runKey)} -Force | Out-Null\nNew-ItemProperty -LiteralPath ${quote(f.runKey)} -Name ${quote(appNames.internal.windowsStartupName)} -Value ${quote('"'+executable+'" --background')} -PropertyType String | Out-Null`);
   assert.equal(created.status,0,created.stderr);
   success(run(f),'migrated');
   const record = JSON.parse(await readFile(path.join(f.target,'observatory-migration.json'),'utf8'));
   assert.equal(record.loginWasOn,true);
   const retained = ps(`Get-ItemPropertyValue -LiteralPath ${quote(f.runKey)} -Name ${quote(appNames.internal.windowsStartupName)}`);
-  assert.equal(retained.status,0,retained.stderr);
-  assert.equal(retained.stdout.trim(),'"'+executable+'" --startup');
+  assert.notEqual(retained.status,0);
+  assert.equal(record.loginWasOn,true);
 });
 
 for (const folder of ['target','stage']) {
@@ -222,13 +233,13 @@ test('resuming replaces stale bytes and restores write times',windows,async t =>
   assert.deepEqual(await snapshot(f.legacy),before);
 });
 
-test('extra staging files refuse the switch and are retained',windows,async t => {
+test('extra staging files move aside and are retained',windows,async t => {
   const f = await fixture(t);
   await mkdir(f.stage);
   await writeFile(path.join(f.stage,'unowned.txt'),'synthetic unowned bytes');
-  refused(run(f),/does not exactly match/);
-  assert.equal(await readFile(path.join(f.stage,'unowned.txt'),'utf8'),'synthetic unowned bytes');
-  await assert.rejects(lstat(f.target),{code:'ENOENT'});
+  success(run(f),'migrated');
+  const stale = (await readdir(f.parent)).find(name => name.includes('-migration-stale-'));
+  assert.equal(await readFile(path.join(f.parent,stale,'unowned.txt'),'utf8'),'synthetic unowned bytes');
 });
 
 test('changed legacy data refuses the switch',windows,async t => {
@@ -240,4 +251,116 @@ test('changed legacy data refuses the switch',windows,async t => {
   await writeFile(wrapper,`param([string]$Directory,[switch]$Initialize)\n$arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',${quote(realAcl)},'-Directory',$Directory)\nif ($Initialize) { $arguments += '-Initialize' }\n& powershell.exe @arguments\nif ($LASTEXITCODE -ne 0) { exit 1 }\nif ($Initialize) { [IO.File]::WriteAllText(${quote(path.join(f.legacy,'settings.json'))}, 'synthetic changed data') }\n`);
   refused(run(f,{extra:['-AclScript',wrapper]}),/The earlier data folder changed during the copy/);
   await assert.rejects(lstat(f.target),{code:'ENOENT'});
+});
+
+for (const relative of ['private-unknown','nested/private-sync','Private-Sync','private-sync-retired-ABC']) {
+  test(`unknown private directory ${relative} refuses at manifest`,windows,async t => {
+    const f = await fixture(t);
+    await mkdir(path.join(f.legacy,relative),{recursive:true});
+    refused(run(f),/Migration refused \(manifest\): Unknown private folder/);
+  });
+}
+
+test('journal refuses before manifest',windows,async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.legacy,'private-repair'));
+  await writeFile(path.join(f.legacy,'private-repair','operation.sqlite-journal'),'synthetic');
+  refused(run(f),/Migration refused \(lock\): The Mac pairing exchange/);
+});
+
+test('exclusive operation database handle refuses',windows,async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.legacy,'private-repair'));
+  const database = path.join(f.legacy,'private-repair','operation.sqlite');
+  const file = await open(database,'w');
+  await file.close();
+  const ready = path.join(f.parent,'ready');
+  const child = spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+    `$h=[IO.File]::Open(${quote(database)},'Open','ReadWrite','None')\ntry { [IO.File]::WriteAllText(${quote(ready)},'ready')\n[Console]::ReadLine() | Out-Null } finally { $h.Dispose() }`],{stdio:['pipe','pipe','pipe']});
+  t.after(() => child.kill());
+  let prepared = false;
+  for (let i=0;i<100;i++) {
+    try { await readFile(ready); prepared=true; break; } catch {}
+    await new Promise(resolve => setTimeout(resolve,100));
+  }
+  assert.ok(prepared,'exclusive holder became ready');
+  refused(run(f),/Migration refused \(lock\): The Mac pairing exchange/);
+  child.stdin.end('\n');
+  await new Promise(resolve => child.once('exit',resolve));
+});
+
+test('receipt switch crash recovers from retained receipt',windows,async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.target,'updates'),{recursive:true});
+  await writeFile(path.join(f.target,'updates','installed-envelope.json'),'synthetic receipt');
+  refused(run(f,{env:{OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1'}}),/Migration refused \(switch\):/);
+  await assert.rejects(lstat(f.target),{code:'ENOENT'});
+  success(run(f),'migrated');
+  assert.equal(await readFile(path.join(f.target,'updates','installed-envelope.json'),'utf8'),'synthetic receipt');
+});
+
+test('changed source retains stale stage and copies fresh bytes',windows,async t => {
+  const f = await fixture(t);
+  refused(run(f,{env:{OBSERVATORY_MIGRATION_STOP_AFTER:'1'}}),/Migration refused \(copy\):/);
+  await writeFile(path.join(f.legacy,'settings.json'),'changed synthetic source');
+  success(run(f),'migrated');
+  const stale = (await readdir(f.parent)).filter(name => /-migration-stale-\d{8}T\d{6}Z-[a-f0-9]{4}$/.test(name));
+  assert.equal(stale.length,1);
+  assert.equal(await readFile(path.join(f.target,'settings.json'),'utf8'),'changed synthetic source');
+});
+
+test('hard linked private staged file refuses without disclosing its name',windows,async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.stage,'private-sync'),{recursive:true});
+  const outside = path.join(f.parent,'synthetic-link-source');
+  await writeFile(outside,'synthetic');
+  await link(outside,path.join(f.stage,'private-sync','secret-name'));
+  refused(run(f),/Migration refused \(manifest\): Hard links/);
+  assert.ok(!run(f).stderr.includes('secret-name'));
+});
+
+test('Unicode and bracket paths copy literally and SSH uses install product names',windows,async t => {
+  const f = await fixture(t);
+  await mkdir(path.join(f.legacy,'資料 [folder]'));
+  await writeFile(path.join(f.legacy,'資料 [folder]','café [a].txt'),'synthetic unicode');
+  const result = success(run(f),'migrated');
+  const ssh = {};
+  for (const [side,names] of [['from',appNames.legacy],['to',appNames.visible]]) {
+    ssh[side] = {remoteNode:path.join(f.parent,'Programs',names.productName,'Runtime','node.exe'),
+      remoteScript:path.join(f.parent,'Programs',names.productName,'Collector','scripts','peer-exchange.mjs'),
+      remoteRuntime:path.join(f.parent,names.dataFolder)};
+  }
+  assert.deepEqual(result.ssh,ssh);
+  assert.deepEqual(JSON.parse(await readFile(path.join(f.target,'observatory-migration.json'),'utf8')).ssh,ssh);
+  assert.equal(await readFile(path.join(f.target,'資料 [folder]','café [a].txt'),'utf8'),'synthetic unicode');
+});
+
+test('PowerShell editions produce identical canonical digest',windows,async t => {
+  if (spawnSync('pwsh',['-NoProfile','-Command','$PSVersionTable.PSVersion.ToString()']).status !== 0) {
+    t.skip('PowerShell 7 is unavailable'); return;
+  }
+  const f = await fixture(t);
+  await mkdir(path.join(f.legacy,'資料 [folder]'));
+  await writeFile(path.join(f.legacy,'資料 [folder]','café.txt'),'synthetic');
+  const old = success(run(f,{action:'status'}),'missing');
+  const modern = success(run(f,{action:'status',shell:'pwsh'}),'missing');
+  assert.equal(old.manifestSha256,modern.manifestSha256);
+});
+
+test('saved login intent survives an interrupted copy and a stale stage',windows,async t => {
+  const f = await fixture(t);
+  const executable = path.join(f.parent,'Programs',appNames.legacy.productName,appNames.internal.windowsExecutable);
+  t.after(() => ps(`Remove-Item -LiteralPath ${quote(f.runKey)} -Recurse -Force -ErrorAction SilentlyContinue`));
+  const created = ps(`$ErrorActionPreference='Stop'\nNew-Item -Path ${quote(f.runKey)} -Force | Out-Null\nNew-ItemProperty -LiteralPath ${quote(f.runKey)} -Name ${quote(appNames.internal.windowsStartupName)} -Value ${quote('"'+executable+'" --background')} -PropertyType String | Out-Null\nNew-ItemProperty -LiteralPath ${quote(f.runKey)} -Name Unrelated -Value preserved -PropertyType String | Out-Null`);
+  assert.equal(created.status,0,created.stderr);
+  assert.equal(success(run(f,{action:'status'}),'missing').loginWasOn,true);
+  refused(run(f,{env:{OBSERVATORY_MIGRATION_STOP_AFTER:'1'}}),/Migration refused \(copy\):/);
+  assert.equal(JSON.parse(await readFile(path.join(f.stage,'login-state.json'),'utf8')).loginWasOn,true);
+  assert.notEqual(ps(`Get-ItemPropertyValue -LiteralPath ${quote(f.runKey)} -Name ${quote(appNames.internal.windowsStartupName)}`).status,0);
+  assert.equal(ps(`Get-ItemPropertyValue -LiteralPath ${quote(f.runKey)} -Name Unrelated`).stdout.trim(),'preserved');
+  assert.equal(success(run(f,{action:'status'}),'missing').loginWasOn,true);
+  await writeFile(path.join(f.legacy,'settings.json'),'changed synthetic data');
+  assert.equal(success(run(f),'migrated').loginWasOn,true);
+  assert.equal(JSON.parse(await readFile(path.join(f.target,'observatory-migration.json'),'utf8')).loginWasOn,true);
+  await assert.rejects(lstat(path.join(f.target,'login-state.json')),{code:'ENOENT'});
 });

@@ -410,6 +410,7 @@ internal static class Program
                 return;
             }
             using var updateQuit = new EventWaitHandle(false, EventResetMode.AutoReset, AppIdentity.Current.QuitName);
+            LoginStartup.RestoreMigration();
             var context = new ObservatoryContext(activation, !args.Contains("--background"), updateQuit,
                 panelTiming: args.Contains("--panel-timing"));
             EventHandler? readyHandler = null;
