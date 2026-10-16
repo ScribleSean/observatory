@@ -518,7 +518,14 @@ test('leftover target hook without the test environment completes with stdin clo
   await writeFile(path.join(f.parent,'.claude','settings.json'),'{}');
   // A saved false intent avoids reading or changing the real startup registry key.
   await writeFile(path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json'),'{"schema":1,"loginWasOn":false}');
-  success(run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1',OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'invalid'}}),'migrated');
+  let result;
+  // Real runs refuse every bridge, including brief bridges from parallel tests or Claude Code.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    result = run(f,{testOptions:false,allowElevated:false,env:{USERPROFILE:f.parent,LOCALAPPDATA:f.parent,OBSERVATORY_MIGRATION_TEST:'',OBSERVATORY_MIGRATION_TOUCH_TARGET:'1',OBSERVATORY_MIGRATION_STOP_AFTER:'invalid',OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE:'1',OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH:'1',OBSERVATORY_MIGRATION_WEBVIEW_WAIT_MS:'invalid'}});
+    if (result.status !== 1 || !result.stderr.startsWith('Migration refused (running):') || attempt === 9) break;
+    await new Promise(resolve => setTimeout(resolve,2000));
+  }
+  success(result,'migrated');
 });
 
 for (const variant of ['legacy runtime','visible runtime','status line','unrelated status line','web view','unrelated web view','closing web view','legacy prefix web view','visible prefix web view','separator web view','quoted web view','external collector']) {
@@ -673,7 +680,7 @@ test('SaveLogin refuses a different boolean without replacing the carried file',
   const f = await fixture(t),carried = path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json');
   const content = '{"schema":1,"loginWasOn":false}';
   await writeFile(carried,content);
-  const functions = await functionsSource(['Refuse','Item','LoginRepair','SaveLogin']);
+  const functions = await functionsSource(['Refuse','Item','LoginRepair','ValidLogin','SaveLogin']);
   const result = ps(`$ErrorActionPreference='Stop'\n${functions}\n$carriedLoginPath=${quote(carried)}\ntry { SaveLogin $carriedLoginPath @{schema=1;loginWasOn=$true} } catch { [Console]::Error.WriteLine($_.Exception.Message)\nexit 1 }`);
   assert.equal(result.status,1);
   assert.ok(result.stderr.includes(carried));
@@ -758,4 +765,94 @@ test('folder boundaries distinguish quoted installer paths in both PowerShell ed
       }
     }
   }
+});
+
+for (const shell of ['powershell.exe','pwsh']) {
+  test(`saved login validation is strict in ${shell}`,windows,async t => {
+    const f = await fixture(t);
+    const carried = path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json');
+    const functions = await functionsSource(['Refuse','Item','LoginRepair','ValidLogin','SaveLogin']);
+    const invalid = [
+      '{"schema":1,"loginWasOn":true,"extra":0}',
+      '{"schema":"1","loginWasOn":true}',
+      '{"schema":1.0,"loginWasOn":true}',
+      '{"schema":1.5,"loginWasOn":true}',
+      '{"schema":true,"loginWasOn":true}',
+      '{"schema":1,"loginWasOn":"true"}',
+      '[{"schema":1,"loginWasOn":true}]',
+      '[{"schema":1,"loginWasOn":true},{"schema":1,"loginWasOn":true}]',
+    ];
+    const valid = ['{"schema":1,"loginWasOn":true}\n','\ufeff{"schema":1,"loginWasOn":false}\r\n'];
+    for (const content of [...invalid,...valid]) {
+      const accepted = valid.includes(content);
+      await writeFile(carried,content);
+      const saved = spawnSync(shell,['-NoProfile','-NonInteractive','-Command',
+        `$ErrorActionPreference='Stop'\n${functions}\n$carriedLoginPath=${quote(carried)}\ntry { SaveLogin $carriedLoginPath @{schema=1;loginWasOn=$${content.includes('false')?'false':'true'}} } catch { [Console]::Error.WriteLine($_.Exception.Message)\nexit 1 }`],{encoding:'utf8'});
+      assert.equal(saved.status,accepted?0:1,saved.stderr || saved.error?.message);
+      if (!accepted) assert.ok(saved.stderr.includes(carried));
+      const result = run(f,{shell,action:'status'});
+      if (accepted) assert.equal(success(result,'missing').loginWasOn,content.includes('true'));
+      else refused(result,/Invalid saved login state/);
+      assert.equal(await readFile(carried,'utf8'),content);
+    }
+    await rm(carried);
+    await mkdir(f.stage);
+    for (const name of ['login-state.json','observatory-migration.json']) {
+      const file = path.join(f.stage,name);
+      for (const content of [...invalid,...valid]) {
+        await writeFile(file,content);
+        const accepted = valid.includes(content) || (name === 'observatory-migration.json' && content === invalid[0]);
+        const result = run(f,{shell,action:'status'});
+        if (accepted) success(result,'missing');
+        else {
+          refused(result,/Invalid saved login state/);
+          assert.ok(result.stderr.includes(file));
+        }
+      }
+      await rm(file);
+    }
+  });
+}
+
+test('carried login links stay beside the folder after switching and on rerun',windows,async t => {
+  const f = await fixture(t);
+  const carried = path.join(f.parent,'.'+appNames.visible.dataFolder+'-migration-login.json');
+  const outside = path.join(f.parent,'synthetic-login-target.json');
+  const content = 'Not JSON, must never be read as login state';
+  await writeFile(outside,content);
+  try { await symlink(outside,carried,'file'); }
+  catch (error) {
+    if (['EPERM','EACCES','ENOTSUP'].includes(error.code)) { t.skip('Windows symbolic link creation is unavailable: '+error.code); return; }
+    throw error;
+  }
+  refused(run(f),/The saved login state is a link/);
+  await rm(carried);
+  await mkdir(f.target);
+  const child = run(f,{spawnProcess:spawn,env:{OBSERVATORY_MIGRATION_TOUCH_TARGET:'1'}});
+  t.after(() => {
+    child.stdin.destroy();child.stdout.destroy();child.stderr.destroy();
+    child.kill();child.unref();
+  });
+  let stdout = '',stderr = '',changed = false;
+  const status = await new Promise((resolve,reject) => {
+    child.on('error',reject);
+    child.stderr.on('data',data => { stderr += data; });
+    child.stdout.on('data',data => {
+      stdout += data;
+      if (!changed && /migration-target-check-ready\r?\n/.test(stdout)) {
+        changed = true;
+        // Replace only the synthetic carried file after its saved-state read.
+        rm(carried).then(() => symlink(outside,carried,'file'))
+          .then(() => child.stdin.end('target-change-complete\n'),reject);
+      }
+    });
+    child.on('close',resolve);
+  });
+  assert.ok(changed,'migration reached the target check');
+  const output = stdout.replace(/^migration-target-check-ready\r?\n/,'');
+  assert.equal(success({status,stdout:output,stderr},'migrated').note,'The login state file is a link and was left beside the data folder.');
+  assert.equal(success(run(f),'already-migrated').note,'The login state file is a link and was left beside the data folder.');
+  assert.ok((await lstat(carried)).isSymbolicLink());
+  assert.equal(await readFile(outside,'utf8'),content);
+  await assert.rejects(lstat(path.join(f.target,'login-state-carried.json')),{code:'ENOENT'});
 });

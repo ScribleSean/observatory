@@ -51,7 +51,7 @@ test('Mac replacement verifies relocated bundles, retains previous app and leave
 });
 test('running Mac app or occupied installer lock prevents all moves',mac,t=>{
   const f=setup(t);
-  assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>f.installed+'/Contents/MacOS/WorkspaceObservatory --synthetic\n'}),/Quit all.* Still running: an Observatory app\.$/);
+  assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>f.installed+'/Contents/MacOS/WorkspaceObservatory --synthetic\n'}),/Quit all Observatory app copies before replacement\. Still running: an Observatory app\.$/);
   const lock=path.join(f.root,'.observatory-install.lock');writeFileSync(lock,'other installer');
   assert.throws(()=>replaceMacApp(f),{code:'EEXIST'});
   assert.equal(readFileSync(lock,'utf8'),'other installer');
@@ -147,7 +147,7 @@ test('bundled collectors and status line bridges refuse replacement in both mode
       ['/Users/x/Applications/Observatory.app/Contents/Resources/Runtime/python/bin/python3 --synthetic','a bundled Observatory runtime (this includes a shell whose command names the bundled node)'],
       ['/synthetic/node /synthetic/claude-statusline-bridge.mjs --synthetic','the Claude Code status line bridge'],]) {
       assert.throws(()=>replaceMacApp({...f,runningProcesses:()=>line}),
-        {message:'Quit all Observatory app copies before replacement Still running: '+category+'.'});
+        {message:'Quit all Observatory app copies before replacement. Still running: '+category+'.'});
       assert.ok(existsSync(f.installed)&&existsSync(f.staged));
       assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
       assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');

@@ -34,7 +34,7 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
     if(receipt?.schema!==1 || receipt.platform!=='macos-arm64' || !Array.isArray(receipt.files))
       throw Error('Independent Mac package receipts are required');
   }
-  const assertStopped=()=>assertObservatoryStopped(runningProcesses,'Quit all Observatory app copies before replacement');
+  const assertStopped=()=>assertObservatoryStopped(runningProcesses,'Quit all Observatory app copies before replacement.');
   assertStopped();
   const lock=path.join(path.dirname(installed),'.observatory-install.lock');
   const handle=openSync(lock,'wx',0o600);
