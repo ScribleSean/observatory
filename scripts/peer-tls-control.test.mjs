@@ -1,10 +1,10 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {PassThrough} from 'node:stream';
 import {once} from 'node:events';
 import {spawn} from 'node:child_process';
 import {mkdtemp,realpath,rm,lstat,readdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createTLSSetupController,serveTLSSetupControl} from './peer-tls-control.mjs';
@@ -13,6 +13,9 @@ import {createInvitation,encodeInvitation} from './peer-invitation.mjs';
 import {initializePairing,createPairingConfigurations,readPairing} from './peer-pairing.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 import {chooseSharing,readSharingChoice} from './sharing-choice.mjs';
+
+const runtimeBase=await testRuntimeBase('peer-tls-control');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 
 const invite=()=>createInvitation({address:'10.0.0.2',port:43128,certificateSha256:'a'.repeat(64)});
 test('controller exposes only invitation and peer fingerprint, never internal handles or configuration',async()=>{
@@ -80,7 +83,7 @@ test('duplicate request IDs and truncated frames fail closed',async()=>{
 });
 
 test('real child process exchanges status through pipes and exits when the parent closes stdin',async t=>{
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-control-test-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-control-test-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const child=spawn(process.execPath,[fileURLToPath(new URL('./peer-tls-control.mjs',import.meta.url)),'--runtime',runtime],
     {stdio:['pipe','pipe','pipe']});
@@ -179,7 +182,7 @@ test('join sharing waits for a ready pairing and also records acknowledged succe
 });
 
 async function choiceFixture(t,mode,receive=async()=>({status:'local-ready'})) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-control-choice-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-control-choice-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   await initializePairing(runtime,createPairingConfigurations().Mac);
   const pair=await readPairing(runtime);
