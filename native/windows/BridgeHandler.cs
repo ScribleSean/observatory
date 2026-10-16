@@ -1914,7 +1914,7 @@ internal sealed class BridgeHandler : IDisposable
         var command = session.Commands.Last(c => c["action"]!.GetValue<string>() == "host-confirm");
         Check(command.Count == 5 && !command["sharing"]!.GetValue<bool>() && command["localEndpoint"]!.ToJsonString() == "{\"kind\":\"tls\",\"address\":\"100.64.0.1\",\"port\":43128}", "Host confirmation endpoint");
         await test.Handler.PollAsync();
-        Check(!session.Disposed && test.Host.Reserved, "Configuration ready poll ended session");
+        Check(!session.Disposed && test.Host.Reserved, "Configuration ready poll keeps session");
         session.PollState = "acknowledged";
         await test.Handler.PollAsync();
         Check(session.Disposed && !test.Host.Reserved, "Acknowledged poll releases host session");
@@ -1942,11 +1942,16 @@ internal sealed class BridgeHandler : IDisposable
         foreach (var action in new[] { "refresh", "set-sharing", "set-sharing-choice", "pairing-disconnect", "pairing-repair-prepare" })
             await test.Run(action, action == "set-sharing" ? ShareArgs(false) :
                 action == "set-sharing-choice" ? new JsonObject { ["enabled"] = false } : null, "busy");
+        await test.Run("pairing-host-start", HostArgs(), "busy");
         await test.Run("pairing-cancel");
         Check(session.Disposed && !test.Host.Reserved && session.Commands.Last()["action"]!.GetValue<string>() == "cancel",
             "Configuration ready cancel releases session");
         await test.Run("pairing-host-start", HostArgs());
-        session = test.Host.Session!; session.PollState = "inactive";
+        session = test.Host.Session!;
+        await test.Run("pairing-host-confirm", new() { ["sharing"] = false, ["fingerprint"] = new string('a', 64),
+            ["peerAddress"] = "100.64.0.2", ["peerPort"] = 43129 });
+        Check(!session.Disposed && test.Host.Reserved, "Configuration ready keeps session before inactive poll");
+        session.PollState = "inactive";
         await test.Handler.PollAsync();
         Check(session.Disposed && !test.Host.Reserved, "Inactive poll releases host session");
         await test.Run("pairing-host-start", HostArgs());
