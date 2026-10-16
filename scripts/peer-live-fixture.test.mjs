@@ -57,7 +57,7 @@ export async function runSyntheticQuotaAction(runtime,action,{request}={}) {
   }
 }
 
-async function main(address,port=0) {
+async function main(address,port=0,workerLifetime=300) {
   if(!['darwin','win32'].includes(process.platform) || !isPairingAddress(address))throw Error('Invalid fixture host');
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-live-fixture-')));
   let listener=null,invitation=null,service=null,serviceExit=null,statusId=0,closing=false,validFrom=0;
@@ -158,7 +158,7 @@ async function main(address,port=0) {
     await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen({host:address,port,exclusive:true},resolve);});
     endpoint.port=probe.address().port;
     await new Promise(resolve=>probe.close(resolve));
-    timer=setTimeout(()=>process.stdin.destroy(),300000);
+    timer=setTimeout(()=>process.stdin.destroy(),workerLifetime*1000);
     let buffer='',pending=Promise.resolve(),count=0;
     const ended=new Promise(resolve=>{process.stdin.once('end',resolve);process.stdin.once('close',resolve);});
     process.stdin.on('data',chunk=>{
@@ -181,7 +181,20 @@ async function main(address,port=0) {
     send({ready:true});await ended;closing=true;await pending;
   } finally {clearTimeout(timer);await cleanup();}
 }
-if(process.argv[2]==='--live-peer' && (process.argv.length===4 ||
-  (process.argv.length===6 && process.argv[4]==='--port' && !/[^0-9]/.test(process.argv[5]) &&
-    Number(process.argv[5])>=1024 && Number(process.argv[5])<=65535)))
-  main(process.argv[3],process.argv.length===6?Number(process.argv[5]):0).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
+export function parseFixtureArguments(args) {
+  if(args[0]!=='--live-peer' || typeof args[1]!=='string')return null;
+  const options={address:args[1]};
+  for(let i=2;i<args.length;i+=2) {
+    const key=args[i]==='--port'?'port':args[i]==='--worker-lifetime'?'workerLifetime':null;
+    const value=args[i+1];
+    if(!key || Object.hasOwn(options,key) || typeof value!=='string' || !value || /[^0-9]/.test(value))return null;
+    const n=Number(value),min=key==='port'?1024:60,max=key==='port'?65535:1200;
+    if(n<min || n>max)return null;
+    options[key]=n;
+  }
+  return options;
+}
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  const options=parseFixtureArguments(process.argv.slice(2));
+  if(options)main(options.address,options.port,options.workerLifetime).catch(()=>{process.stderr.write('Synthetic peer fixture failed.\n');process.exitCode=1;});
+}

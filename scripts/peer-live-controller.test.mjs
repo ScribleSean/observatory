@@ -5,6 +5,8 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {runSequence,createWorkerLink,cleanupWorkers,parseArguments,acceptsPipes,workerArguments} from './peer-live-controller.mjs';
 
+import {parseFixtureArguments} from './peer-live-fixture.test.mjs';
+
 const invitation='observatory-pair:v1:fictional-secret';
 const steps=['ready','endpoint','host','probe','join','confirm','finish','acknowledged','service','publish',
   'exchange','repeat-exchange','restart','exchange-after-restart','quota-enable','quota-exchange','quota-repeat',
@@ -86,16 +88,20 @@ function wire(respond,timeoutMs=30) {
   input.write('{"ready":true}\n');
   return {link,input,output,requests};
 }
-for(const kind of ['error','wrong id','timeout','over-long line','invalid JSON'])test(`protocol ${kind} fails endpoint and cleans up`,async()=>{
+for(const kind of ['error','wrong id','timeout','closed','over-long line','invalid JSON'])test(`protocol ${kind} fails endpoint and cleans up`,async()=>{
   const run=fakes();
   const worker=wire((request,input)=>{
+    if(kind==='closed')input.end();
     if(kind==='error')input.write(JSON.stringify({id:request.id,error:invitation})+'\n');
     if(kind==='wrong id')input.write(JSON.stringify({id:request.id+1})+'\n');
     if(kind==='over-long line')input.write('x'.repeat(65537));
     if(kind==='invalid JSON')input.write('not json\n');
   });
   assert.equal(await runSequence({...run,host:worker.link}),false);
-  assert.deepEqual(run.lines,['step ready: ok','step endpoint: failed','step cleanup: ok','result: stopped at endpoint']);
+  const reason=kind==='error'?'worker error':kind==='timeout'?'worker reply timeout':'worker link closed';
+  assert.equal(worker.link.failureReason(),reason);
+  assert.deepEqual(run.lines,['step ready: ok',`step endpoint: failed (${reason})`,'step cleanup: ok','result: stopped at endpoint']);
+  assert.ok(run.lines.every(line=>!line.includes(invitation)));
   assert.equal(worker.requests.length,1);
   assert.equal(run.commands.length,0);
   assert.equal(run.cleaned,1);
@@ -329,7 +335,7 @@ test('probe failure prints only allowed tcp words from replies',async()=>{
     assert.ok(run.lines.every(line=>!line.includes(invitation)));
   }
 });
-test('probe error replies and transport failures keep generic failure lines',async()=>{
+test('probe error replies have a fixed reason and unknown failures stay generic',async()=>{
   for(const transportFailure of [false,true]) {
     const run=fakes((role,command)=>{
       if(command.action!=='probe')return;
@@ -337,7 +343,7 @@ test('probe error replies and transport failures keep generic failure lines',asy
       return {tcp:'timeout',error:invitation};
     });
     assert.equal(await runSequence(run),false);
-    assert.deepEqual(run.lines.slice(-3),['step probe: failed','step cleanup: ok','result: stopped at probe']);
+    assert.deepEqual(run.lines.slice(-3),[`step probe: failed${transportFailure?'':' (worker error)'}`,'step cleanup: ok','result: stopped at probe']);
   }
 });
 
@@ -356,5 +362,92 @@ test('combined pauses cannot exceed 120 seconds',()=>{
         }
       }
     }
+  }
+});
+
+const pipeInfo={isFIFO:()=>true,isSocket:()=>false};
+const pipeStreams={stdin:pipeInfo,stdout:pipeInfo};
+test('worker lifetime parses strictly and reaches fixture arguments in either order',()=>{
+  const modes=[['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']];
+  for(const lifetime of ['60','300','600','1200']) {
+    for(const mode of modes) {
+      const options=parseArguments([...mode,'--worker-lifetime',lifetime],pipeStreams);
+      assert.equal(options.workerLifetime,Number(lifetime));
+      const args=workerArguments(options.address,options.port,options.workerLifetime).slice(1);
+      assert.deepEqual(args,['--live-peer','10.0.0.1','--worker-lifetime',lifetime]);
+      assert.deepEqual(parseFixtureArguments(args),{address:'10.0.0.1',workerLifetime:Number(lifetime)});
+    }
+    for(const suffix of [['--port','43128','--worker-lifetime',lifetime],['--worker-lifetime',lifetime,'--port','43128']]) {
+      const options=parseArguments([...modes[1],...suffix],pipeStreams);
+      const expected={address:'10.0.0.1',port:43128,workerLifetime:Number(lifetime)};
+      assert.deepEqual(parseFixtureArguments(['--live-peer','10.0.0.1',...suffix]),expected);
+      assert.deepEqual(parseFixtureArguments(workerArguments(options.address,options.port,options.workerLifetime).slice(1)),expected);
+    }
+  }
+  assert.deepEqual(parseFixtureArguments(['--live-peer','10.0.0.1']),{address:'10.0.0.1'});
+  for(const suffix of [[],['59'],['1201'],['600.0'],['+600'],['-600'],['6e2'],[' 600'],['600\n'],[''],['600','--worker-lifetime','600'],['600','unexpected']]) {
+    const extra=['--worker-lifetime',...suffix];
+    assert.equal(parseFixtureArguments(['--live-peer','10.0.0.1',...extra]),null);
+    for(const mode of modes)assert.throws(()=>parseArguments([...mode,...extra],pipeStreams));
+  }
+  for(const extra of [['--port','43128','--port','43128'],['--unknown','600'],['--port'],['extra']])
+    assert.equal(parseFixtureArguments(['--live-peer','10.0.0.1',...extra]),null);
+});
+test('pause budget reserves 180 seconds and caps each pause at 120 seconds',()=>{
+  const mode=['--loopback','10.0.0.1'];
+  for(const [lifetime,a,b,allowed] of [[600,120,120,true],[300,60,60,true],[300,60,61,false],
+    [600,121,1,false],[600,1,121,false],[240,30,30,true],[240,30,31,false],[180,1,1,false],[60,1,1,false]]) {
+    for(const suffix of [
+      ['--worker-lifetime',String(lifetime),'--pause-after-host',String(a),'--pause-before-exchange',String(b)],
+      ['--pause-before-exchange',String(b),'--pause-after-host',String(a),'--worker-lifetime',String(lifetime)],
+    ]) {
+      if(allowed)assert.equal(parseArguments([...mode,...suffix]).workerLifetime,lifetime);
+      else assert.throws(()=>parseArguments([...mode,...suffix]));
+    }
+  }
+});
+test('exchange reasons allow only fixed status and transport words at every exchange step',async()=>{
+  for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart'].entries()) {
+    for(const status of ['merged','waiting','unavailable',invitation,{secret:invitation}]) {
+      for(const transport of ['ok','unavailable','not-configured',invitation,{secret:invitation}]) {
+        if(status==='merged' && transport==='ok')continue;
+        let count=0;
+        const run=fakes((role,command)=>command.action==='exchange' && ++count===index*2+1?{status,transport,private:invitation}:undefined);
+        assert.equal(await runSequence(run),false);
+        const safeStatus=['merged','waiting','unavailable'].includes(status)?status:'other';
+        const safeTransport=['ok','unavailable','not-configured'].includes(transport)?transport:'other';
+        assert.ok(run.lines.includes(`step ${step}: failed (status ${safeStatus}, transport ${safeTransport})`));
+        assert.ok(run.lines.every(line=>!line.includes(invitation)));
+      }
+    }
+  }
+});
+test('quota reasons allow only fixed status words and peer reading presence',async()=>{
+  for(const step of ['quota-enable','quota-exchange','quota-repeat','quota-disable-host']) {
+    for(const status of ['ok','passive','disabled','peer-disabled','unavailable',invitation,{secret:invitation},undefined]) {
+      for(const peerRemaining of [70,null,invitation]) {
+        let count=0;
+        const run=fakes((role,command)=>{
+          const target=step==='quota-repeat'?'quota-exchange':step==='quota-disable-host'?'quota-disable':step;
+          if(command.action!==target || ++count!==(step==='quota-repeat'?3:1))return;
+          return {...(status===undefined?{}:{status}),peerRemaining,private:invitation};
+        });
+        assert.equal(await runSequence(run),false);
+        const safeStatus=['ok','passive','disabled','peer-disabled','unavailable'].includes(status)?status:'other';
+        const reason=(status===undefined?'':`status ${safeStatus}, `)+`peer reading ${typeof peerRemaining==='number'?'present':'absent'}`;
+        assert.ok(run.lines.includes(`step ${step}: failed (${reason})`));
+        assert.ok(run.lines.every(line=>!line.includes(invitation)));
+      }
+    }
+  }
+});
+test('worker error takes priority over reply fields including readiness',async()=>{
+  for(const action of ['ready','exchange','quota-enable','quota-exchange','quota-disable']) {
+    const run=fakes((role,command)=>command.action===action?{error:invitation,status:invitation,transport:invitation}:undefined);
+    if(action==='ready')run.host.ready=async()=>({ready:true,error:invitation});
+    assert.equal(await runSequence(run),false);
+    const step=action==='quota-disable'?'quota-disable-host':action;
+    assert.ok(run.lines.includes(`step ${step}: failed (worker error)`));
+    assert.ok(run.lines.every(line=>!line.includes(invitation)));
   }
 });
