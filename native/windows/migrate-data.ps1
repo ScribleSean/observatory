@@ -3,6 +3,7 @@ param(
     [string]$Parent = $env:LOCALAPPDATA,
     [switch]$ConfirmAppQuit,
     [string]$AclScript = (Join-Path $PSScriptRoot '..\..\scripts\private-sync-acl.ps1'),
+    [string]$SettingsPath = (Join-Path $env:USERPROFILE '.claude\settings.json'),
     [string]$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
     # Test-only names isolate synthetic checks from an installed application.
     [string]$AppIdOverride = '',
@@ -124,11 +125,45 @@ function DisplayPath([string]$Relative) {
     }
     return ($Relative -replace '[\r\n]', '?')
 }
+function CheckRunning {
+    $script:step = 'running'
+    $appId = $names.internal.windowsAppId
+    if ($AppIdOverride) { $appId = $AppIdOverride }
+    $processName = [IO.Path]::GetFileNameWithoutExtension($names.internal.windowsExecutable)
+    if ($ProcessNameOverride) { $processName = $ProcessNameOverride }
+    $mutex = $null
+    $semaphore = $null
+    try {
+        $running = [Threading.Mutex]::TryOpenExisting(('Local\' + $appId), [ref]$mutex)
+        $running = [Threading.Semaphore]::TryOpenExisting(('Local\' + $appId + '.InUse'), [ref]$semaphore) -or $running
+        $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
+        foreach ($process in @(Get-CimInstance Win32_Process)) {
+            if ([string]$process.CommandLine -like '*claude-statusline-bridge.mjs*') { $running = $true }
+            if ($process.Name -ieq 'node.exe' -and $process.ExecutablePath) {
+                foreach ($product in @($names.legacy.productName, $names.visible.productName)) {
+                    $runtime = (Join-Path (Join-Path (Join-Path $Parent 'Programs') $product) 'Runtime').TrimEnd('\') + '\'
+                    if ($process.ExecutablePath.StartsWith($runtime, [StringComparison]::OrdinalIgnoreCase)) { $running = $true }
+                }
+            }
+        }
+        if ($running -or $processes.Count) { Refuse 'Quit every Observatory app and close Claude Code sessions that show the Observatory status line, then run again.' }
+    } finally {
+        if ($null -ne $mutex) { $mutex.Dispose() }
+        if ($null -ne $semaphore) { $semaphore.Dispose() }
+    }
+}
+function StatusLineTargetsEarlierFolder {
+    try {
+        $settings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
+        $command = $settings.statusLine.command
+        return $command -is [string] -and $command.IndexOf('claude-statusline-bridge.mjs', [StringComparison]::OrdinalIgnoreCase) -ge 0 -and $command.IndexOf($Legacy, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    } catch { return 'Unknown' }
+}
 function ExchangeLock {
     $script:step = 'lock'
     $database = Join-Path $Legacy 'private-repair\operation.sqlite'
     $message = 'The Mac pairing exchange is using the earlier folder. Quit the Mac app and run again.'
-    if ((Item ($database + '-journal')) -or (Item ($database + '-wal'))) { Refuse $message }
+    if ((Item ($database + '-journal')) -or (Item ($database + '-wal'))) { Refuse 'An earlier pairing exchange left an unfinished database journal in the earlier folder. Start and quit the Mac app once, then run again.' }
     if (Item $database) {
         try {
             $handle = [IO.File]::Open($database, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
@@ -141,6 +176,16 @@ function SaveJson([string]$Path, $Value) {
     $stream = [IO.FileStream]::new($Path, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
     try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) }
     finally { $stream.Dispose() }
+}
+function SaveLogin([string]$Path, $Value) {
+    # Publish a flushed sibling file atomically so a crash cannot truncate saved intent.
+    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N')
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Compress))
+    $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) }
+    finally { $stream.Dispose() }
+    if (Item $Path) { [IO.File]::Replace($temporary, $Path, $null) }
+    else { [IO.File]::Move($temporary, $Path) }
 }
 function ReadLogin {
     if (Test-Path -LiteralPath $RunKey) {
@@ -166,6 +211,7 @@ function CheckAcl([string]$Directory, [bool]$Initialize) {
     }
 }
 function StreamCopy([string]$Source, [string]$Destination, [long]$Ticks) {
+    # Hard links outside private-* are copied as separate files.
     # Alternate data streams are not copied. Only the unnamed stream is opened.
     $partial = $Destination + '.' + [Guid]::NewGuid().ToString('N') + '.observatory-partial'
     $inputStream = $null
@@ -185,6 +231,10 @@ function StreamCopy([string]$Source, [string]$Destination, [long]$Ticks) {
     [IO.File]::SetLastWriteTimeUtc($Destination, [DateTime]::new($Ticks, [DateTimeKind]::Utc))
 }
 try {
+    $testEnvironment = $env:OBSERVATORY_MIGRATION_TEST -ceq '1'
+    foreach ($option in @('AllowElevatedTestRun','AppIdOverride','ProcessNameOverride','RunKey','AclScript','SettingsPath')) {
+        if (-not $testEnvironment -and $PSBoundParameters.ContainsKey($option)) { Refuse 'Test-only options need the test environment.' }
+    }
     if ($Action -notin @('status','copy')) { Refuse 'Choose status or copy.' }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -231,22 +281,7 @@ public static class MigrationFileLinks {
     $Legacy = Join-Path $Parent $names.legacy.dataFolder
     $Target = Join-Path $Parent $names.visible.dataFolder
     $Stage = Join-Path $Parent ('.' + $names.visible.dataFolder + '-migration')
-    $step = 'running'
-    $appId = $names.internal.windowsAppId
-    if ($AppIdOverride) { $appId = $AppIdOverride }
-    $processName = [IO.Path]::GetFileNameWithoutExtension($names.internal.windowsExecutable)
-    if ($ProcessNameOverride) { $processName = $ProcessNameOverride }
-    $mutex = $null
-    $semaphore = $null
-    try {
-        $running = [Threading.Mutex]::TryOpenExisting(('Local\' + $appId), [ref]$mutex)
-        $running = [Threading.Semaphore]::TryOpenExisting(('Local\' + $appId + '.InUse'), [ref]$semaphore) -or $running
-        $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue)
-        if ($running -or $processes.Count) { Refuse 'Quit every Observatory app before inspecting or copying data.' }
-    } finally {
-        if ($null -ne $mutex) { $mutex.Dispose() }
-        if ($null -ne $semaphore) { $semaphore.Dispose() }
-    }
+    CheckRunning
     $step = 'folders'
     SafeDirectory $Legacy $true
     SafeDirectory $Target $false
@@ -283,20 +318,21 @@ public static class MigrationFileLinks {
     $stageManifest = @()
     if (Item $Stage) { $stageManifest = @(Manifest $Stage) }
     $step = 'login'
-    $loginWasOn = ReadLogin
     $loginPath = Join-Path $Stage 'login-state.json'
-    if (Item $loginPath) {
-        $login = Get-Content -LiteralPath $loginPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $carriedLoginPath = Join-Path $Parent ('.' + $names.visible.dataFolder + '-migration-login.json')
+    $savedLoginPath = $null
+    if (Item $carriedLoginPath) { $savedLoginPath = $carriedLoginPath }
+    elseif (Item $loginPath) { $savedLoginPath = $loginPath }
+    elseif (Item (Join-Path $Stage $marker)) { $savedLoginPath = Join-Path $Stage $marker }
+    if ($savedLoginPath) {
+        $login = Get-Content -LiteralPath $savedLoginPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($login.schema -ne 1 -or $login.loginWasOn -isnot [bool]) { Refuse 'Invalid saved login state.' }
         $loginWasOn = $login.loginWasOn
-    }
-    elseif (Item (Join-Path $Stage $marker)) {
-        $savedLogin = Get-Content -LiteralPath (Join-Path $Stage $marker) -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($savedLogin.loginWasOn -is [bool]) { $loginWasOn = $savedLogin.loginWasOn }
-    }
+    } else { $loginWasOn = ReadLogin }
     $ssh = [ordered]@{ from = (SshPaths $names.legacy); to = (SshPaths $names.visible) }
     $result = [ordered]@{ state = $state; directories = $directories.Count; files = $files.Count; bytes = $bytes; skipped = $skipped.Count
-        loginWasOn = $loginWasOn; notes = 'alternate data streams are not copied'; manifestSha256 = $manifestHash }
+        loginWasOn = $loginWasOn; statusLineTargetsEarlierFolder = (StatusLineTargetsEarlierFolder)
+        notes = 'alternate data streams are not copied. Hard links outside private-* are copied as separate files'; manifestSha256 = $manifestHash }
     if ($Action -eq 'status' -or $state -eq 'already-migrated') {
         if ($state -eq 'already-migrated') { $result.loginWasOn = $saved.loginWasOn }
         $result | ConvertTo-Json -Depth 8 -Compress
@@ -304,7 +340,7 @@ public static class MigrationFileLinks {
     }
     $step = 'input'
     $stopAfter = 0
-    if ($env:OBSERVATORY_MIGRATION_STOP_AFTER -and
+    if ($testEnvironment -and $env:OBSERVATORY_MIGRATION_STOP_AFTER -and
         (-not [int]::TryParse($env:OBSERVATORY_MIGRATION_STOP_AFTER, [ref]$stopAfter) -or $stopAfter -le 0)) {
         Refuse 'The test interruption count must be a positive integer.'
     }
@@ -344,9 +380,11 @@ public static class MigrationFileLinks {
     foreach ($entry in $stageManifest) {
         if ($entry.path -eq $receipt -and ($entry.type -ne 'file' -or $entry.sha256 -ne $receiptHash)) { $validStage = $false }
     }
+    SaveLogin $carriedLoginPath ([ordered]@{ schema = 1; loginWasOn = $loginWasOn })
     if ((Item $Stage) -and -not $validStage) {
         $stale = Join-Path $Parent ('.' + $names.visible.dataFolder + '-migration-stale-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,4))
         [IO.Directory]::Move($Stage, $stale)
+        if ($testEnvironment -and $env:OBSERVATORY_MIGRATION_STOP_AFTER_ASIDE -eq '1') { Refuse 'The synthetic migration was interrupted after moving the stage aside.' }
     }
     if (-not (Item $Stage)) { [IO.Directory]::CreateDirectory($Stage) | Out-Null }
     $step = 'login'
@@ -388,6 +426,7 @@ public static class MigrationFileLinks {
         [IO.Directory]::SetLastWriteTimeUtc((Join-Path $Stage $entry.path), [DateTime]::new($entry.ticks, [DateTimeKind]::Utc))
     }
     ExchangeLock
+    CheckRunning
     $step = 'manifest'
     $second = @(Manifest $Legacy)
     $step = 'verify'
@@ -406,7 +445,7 @@ public static class MigrationFileLinks {
     $record.completedAt = [DateTime]::UtcNow.ToString('o')
     if ($state -ne 'missing') {
         # Test only. The test owns the mutation and acknowledges it through stdin.
-        if ($env:OBSERVATORY_MIGRATION_TOUCH_TARGET -eq '1') {
+        if ($testEnvironment -and $env:OBSERVATORY_MIGRATION_TOUCH_TARGET -eq '1') {
             [Console]::Out.WriteLine('migration-target-check-ready')
             if ([Console]::ReadLine() -ne 'target-change-complete') { Refuse 'The synthetic target change was not acknowledged.' }
         }
@@ -414,11 +453,14 @@ public static class MigrationFileLinks {
         $suffix = 'empty'
         if ($state -eq 'installer-receipt-only') { $suffix = 'installer-receipt' }
         $record.aside = '.' + $names.visible.dataFolder + '-' + $suffix + '-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')
-        SaveJson $recordPath $record
-        [IO.Directory]::Move($Target, (Join-Path $Parent $record.aside))
-        if ($env:OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH -eq '1') { Refuse 'The synthetic migration was interrupted before switching.' }
     }
     SaveJson $recordPath $record
+    CheckRunning
+    $step = 'switch'
+    if ($state -ne 'missing') {
+        [IO.Directory]::Move($Target, (Join-Path $Parent $record.aside))
+        if ($testEnvironment -and $env:OBSERVATORY_MIGRATION_STOP_BEFORE_SWITCH -eq '1') { Refuse 'The synthetic migration was interrupted before switching.' }
+    }
     [IO.File]::Delete($loginPath)
     [IO.Directory]::Move($Stage, $Target)
     $result.state = 'migrated'
