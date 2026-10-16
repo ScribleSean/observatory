@@ -5,11 +5,6 @@ import WebKit
 
 enum BridgeCode: String { case done, refused, busy, cancelled, unavailable }
 
-func bridgeActionUnavailable(_ action: String, _ args: [String: BridgeValue]) -> Bool {
-    ["pairing-host-defaults", "pairing-peer-address", "set-sharing-choice"].contains(action) ||
-        (["pairing-host-confirm", "pairing-join-confirm"].contains(action) && args["sharing"] == .bool(true))
-}
-
 struct BridgeResult {
     let id: Int
     let code: BridgeCode
@@ -23,6 +18,9 @@ struct BridgeResult {
 
 @MainActor
 final class BridgeAdmission {
+    static let immediateActions = Set(BridgeContract.actions.entries.compactMap { name, spec in
+        spec["immediate"].kind == "boolean" && spec["immediate"].text == "true" ? name : nil
+    })
     private final class Entry {
         let ticket = UUID()
         let document: UUID
@@ -55,8 +53,8 @@ final class BridgeAdmission {
 
     private func busy(_ action: String) -> Bool {
         let state = state()
-        return dialogOpen || modalOpen() || (state.sessionOpen && ["refresh", "set-sharing", "pairing-disconnect", "pairing-repair-prepare"].contains(action)) ||
-            (state.pairingBlocked && ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action))
+        return dialogOpen || modalOpen() || (state.sessionOpen && ["refresh", "set-sharing", "set-sharing-choice", "pairing-disconnect", "pairing-repair-prepare"].contains(action)) ||
+            (state.pairingBlocked && ["pairing-host-defaults", "pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].contains(action))
     }
 
     func submit(id: Int, action: String, args: [String: BridgeValue] = [:], document: UUID,
@@ -67,12 +65,8 @@ final class BridgeAdmission {
             reply(BridgeResult(id: id, code: .refused, value: nil))
             return
         }
-        if bridgeActionUnavailable(action, args) {
-            reply(BridgeResult(id: id, code: .unavailable, value: nil))
-            return
-        }
         let entry = Entry(document: document, id: id, action: action, run: run, reply: reply)
-        if action == "status" || action == "pairing-cancel" {
+        if Self.immediateActions.contains(action) {
             immediate[entry.ticket] = entry
             start(entry)
             return
@@ -317,6 +311,7 @@ struct BridgeStatusInput {
     var transport: String
     var invitationKept: Bool
     var sharing: [String: QuotaSharingStatus]
+    var sharingChoice: BridgeSharingChoice = .unavailable
 
     static func pairingState(controlStatus: String) -> String {
         if controlStatus == "hosting" { return "waiting" }
@@ -339,7 +334,7 @@ struct BridgeStatusInput {
               BridgeContract.values["transport"].strings.contains(input.transport),
               (input.pairingState != "confirming" || input.peerFingerprint != nil),
               input.peerFingerprint.map({ input.pairingState == "confirming" && hex($0) }) ?? true,
-              Set(input.sharing.keys) == ["codex-limits", "claude-code-tokens"] else { return nil }
+              Set(input.sharing.keys) == ["codex-limits", "claude-code-tokens"], input.sharingChoice.valid else { return nil }
         var sharing: [String: Any] = [:]
         for (channel, status) in input.sharing {
             guard status.version == 1, BridgeContract.values["sharingReason"].strings.contains(status.reason),
@@ -353,7 +348,7 @@ struct BridgeStatusInput {
             "deviceName": input.deviceName as Any? ?? NSNull(), "startup": input.startup, "appearance": input.appearance,
             "limitsConsent": input.limitsConsent, "collectionPaused": input.collectionPaused, "pairing": ["state": input.pairingState,
                 "peerFingerprint": input.peerFingerprint as Any? ?? NSNull(), "transport": input.transport, "invitationKept": input.invitationKept],
-            "sharing": sharing, "sharingChoice": ["chosen": false, "channels": ["codex-limits": "unavailable", "claude-code-tokens": "unavailable"]]]
+            "sharing": sharing, "sharingChoice": input.sharingChoice.value]
         guard let data = try? JSONSerialization.data(withJSONObject: result), data.count <= BridgeContract.status["maxBytes"].number else { return nil }
         return result
     }
@@ -361,23 +356,29 @@ struct BridgeStatusInput {
 
 func bridgeSyntheticStatusShapes() -> [[String: Any]] {
     let unavailable = QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "pairing-unavailable", token: nil)
-    return ["confirming", "awaiting-confirmation", "local-ready", "acknowledged"].map { state in
+    return ["confirming", "awaiting-confirmation", "local-ready", "acknowledged", "active-sync", "identity-required", "identity-recovery-required"].map { state in
         BridgeStatusInput.bridgeStatusValue(BridgeStatusInput(appVersion: "1.0-test", appBuild: 1,
             sources: ["activity": true, "codex": true, "claude": false, "wispr": false, "quota": false],
             skin: "sage", customSkins: [], deviceName: "Synthetic Mac", startup: false, appearance: "system",
-            limitsConsent: false, collectionPaused: true, pairingState: state,
+            limitsConsent: false, collectionPaused: !["active-sync", "identity-required", "identity-recovery-required"].contains(state), pairingState: state,
             peerFingerprint: state == "confirming" ? String(repeating: "a", count: 64) : nil,
-            transport: "none", invitationKept: state == "confirming",
-            sharing: ["codex-limits": unavailable, "claude-code-tokens": unavailable]))!
+            transport: state == "active-sync" ? "tls" : "none", invitationKept: state == "confirming",
+            sharing: state == "active-sync" ? [
+                "codex-limits": QuotaSharingStatus(version: 1, enabled: true, canEnable: true, reason: "ready", token: String(repeating: "a", count: 64)),
+                "claude-code-tokens": QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "source-unavailable", token: nil)
+            ] : ["codex-limits": unavailable, "claude-code-tokens": unavailable],
+            sharingChoice: state == "active-sync" ? BridgeSharingChoice(version: 1, chosen: true,
+                channels: ["codex-limits": "on", "claude-code-tokens": "waiting-for-reading"]) : .unavailable))!
     }
 }
 
 func runBridgeSelfTests() {
     // Keep this JSON literal identical to native/tests/bridge-status-shapes.json. scripts/mac-bridge-status.test.mjs checks both.
     let expectedShapes = #"""
-    [{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":true,"peerFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","state":"confirming","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"awaiting-confirmation","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"local-ready","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"acknowledged","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1}]
+    [{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":true,"peerFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","state":"confirming","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"awaiting-confirmation","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"local-ready","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"acknowledged","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"active-sync","transport":"tls"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"source-unavailable","token":null},"codex-limits":{"canEnable":true,"enabled":true,"reason":"ready","token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"sharingChoice":{"channels":{"claude-code-tokens":"waiting-for-reading","codex-limits":"on"},"chosen":true},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"identity-required","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"identity-recovery-required","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1}]
     """#
     let expected = try! JSONSerialization.jsonObject(with: Data(expectedShapes.utf8)) as! [[String: Any]]
+    precondition(bridgeSyntheticStatusShapes().count == expected.count)
     for (value, fixture) in zip(bridgeSyntheticStatusShapes(), expected) {
         precondition(try! JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) ==
             JSONSerialization.data(withJSONObject: fixture, options: [.sortedKeys]))
@@ -408,10 +409,9 @@ func runBridgeSelfTests() {
             }, reply: { results[id] = $0 })
         }
         modal = true
-        for (offset, action) in ["pairing-host-defaults", "pairing-peer-address", "set-sharing-choice", "pairing-host-confirm", "pairing-join-confirm"].enumerated() {
-            admission.submit(id: 90 + offset, action: action, args: ["enabled": .bool(true), "sharing": .bool(true)], document: document,
-                run: { _ in preconditionFailure("Unavailable action called host") }, reply: { precondition($0.code == .unavailable) })
-        }
+        let contractImmediate = Set(BridgeContract.actions.entries.filter { $0.1["immediate"].text == "true" }.map { $0.0 })
+        precondition(BridgeAdmission.immediateActions == contractImmediate)
+        precondition(contractImmediate == ["status", "pairing-cancel", "pairing-peer-address"])
         submit(80, "set-skin")
         submit(81, "status")
         submit(82, "pairing-cancel")
@@ -431,6 +431,12 @@ func runBridgeSelfTests() {
         submit(3, "status")
         submit(4, "pairing-cancel")
         precondition(started == [1, 3, 4])
+        submit(7, "pairing-peer-address")
+        precondition(started.last == 7)
+        submit(7, "pairing-peer-address")
+        precondition(results[7]?.code == .refused)
+        completions[7]?(.done, ["peerAddress": NSNull()])
+        started.removeLast()
         submit(5, "set-skin")
         submit(6, "export-data")
         precondition(results[5]?.code == .busy && results[6]?.code == .busy)
@@ -450,23 +456,23 @@ func runBridgeSelfTests() {
             completions[id]?(.done, nil)
         }
         session = true
-        for (offset, action) in ["refresh", "set-sharing", "pairing-disconnect", "pairing-repair-prepare"].enumerated() {
+        for (offset, action) in ["refresh", "set-sharing", "set-sharing-choice", "pairing-disconnect", "pairing-repair-prepare"].enumerated() {
             submit(20 + offset, action)
             precondition(results[20 + offset]?.code == .busy)
         }
-        submit(24, "set-skin")
-        precondition(started.last == 24)
-        completions[24]?(.done, nil)
+        submit(29, "set-skin")
+        precondition(started.last == 29)
+        completions[29]?(.done, nil)
         session = false
         blocked = true
-        for (offset, action) in ["pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].enumerated() {
+        for (offset, action) in ["pairing-host-defaults", "pairing-identity-create", "pairing-host-start", "pairing-host-confirm", "pairing-join-claim", "pairing-join-confirm"].enumerated() {
             submit(30 + offset, action)
             precondition(results[30 + offset]?.code == .busy)
         }
-        submit(35, "pairing-cancel")
+        submit(38, "pairing-cancel")
         submit(36, "pairing-copy-invitation")
-        precondition(started.suffix(2) == [35, 36])
-        completions[35]?(.done, nil)
+        precondition(started.suffix(2) == [38, 36])
+        completions[38]?(.done, nil)
         completions[36]?(.done, nil)
         blocked = false
         submit(40, "set-skin")
@@ -618,6 +624,8 @@ func runBridgeSelfTests() {
         change(&changed)
         precondition(BridgeStatusInput.bridgeStatusValue(changed) == nil)
     }
+    invalidStatus { $0.sharingChoice = BridgeSharingChoice(version: 2, chosen: false, channels: [:]) }
+    invalidStatus { $0.sharingChoice = BridgeSharingChoice(version: 1, chosen: true, channels: ["codex-limits": "invalid", "claude-code-tokens": "on"]) }
     invalidStatus { $0.pairingState = "confirming" }
     invalidStatus { $0.pairingState = "waiting"; $0.peerFingerprint = String(repeating: "a", count: 64) }
     invalidStatus { $0.appearance = "auto" }

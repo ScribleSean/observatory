@@ -222,5 +222,173 @@
       },
       "chosen": false
     }
+  },
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": false,
+    "pairing": {
+      "state": "active-sync",
+      "peerFingerprint": null,
+      "transport": "tls",
+      "invitationKept": false
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": true,
+        "canEnable": true,
+        "reason": "ready",
+        "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "source-unavailable",
+        "token": null
+      }
+    },
+    "sharingChoice": {
+      "chosen": true,
+      "channels": {
+        "codex-limits": "on",
+        "claude-code-tokens": "waiting-for-reading"
+      }
+    }
+  },
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": false,
+    "pairing": {
+      "state": "identity-required",
+      "peerFingerprint": null,
+      "transport": "none",
+      "invitationKept": false
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      }
+    },
+    "sharingChoice": {
+      "channels": {
+        "claude-code-tokens": "unavailable",
+        "codex-limits": "unavailable"
+      },
+      "chosen": false
+    }
+  },
+  {
+    "version": 1,
+    "app": {
+      "version": "1.0-test",
+      "build": 1
+    },
+    "sources": {
+      "activity": true,
+      "codex": true,
+      "claude": false,
+      "wispr": false,
+      "quota": false
+    },
+    "skin": {
+      "current": "sage",
+      "bundled": [
+        "sage",
+        "almanac",
+        "instrument",
+        "amber-crt"
+      ],
+      "custom": []
+    },
+    "deviceName": "Synthetic Mac",
+    "startup": false,
+    "appearance": "system",
+    "limitsConsent": false,
+    "collectionPaused": false,
+    "pairing": {
+      "state": "identity-recovery-required",
+      "peerFingerprint": null,
+      "transport": "none",
+      "invitationKept": false
+    },
+    "sharing": {
+      "codex-limits": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      },
+      "claude-code-tokens": {
+        "enabled": false,
+        "canEnable": false,
+        "reason": "pairing-unavailable",
+        "token": null
+      }
+    },
+    "sharingChoice": {
+      "channels": {
+        "claude-code-tokens": "unavailable",
+        "codex-limits": "unavailable"
+      },
+      "chosen": false
+    }
   }
 ]
