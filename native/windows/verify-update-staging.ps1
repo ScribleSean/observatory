@@ -28,6 +28,22 @@ function RunChecked([string]$Exe, [string]$Arguments) {
         if ($process.ExitCode -ne 0) { throw ('Staging process failed: ' + $process.ExitCode) }
     } finally { $process.Dispose() }
 }
+function WaitForDataWriters {
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $apps = @(Get-Process WorkspaceObservatory -ErrorAction SilentlyContinue)
+        # This match relies on the WebView2 command line naming the data folder path. A mismatch makes the check fail rather than pass.
+        $webviews = @(Get-CimInstance Win32_Process -OperationTimeoutSec 10 -Filter "Name = 'msedgewebview2.exe'" |
+            Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($data, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+        if ($apps.Count -eq 0 -and $webviews.Count -eq 0) { return }
+        if ($timer.Elapsed.TotalSeconds -ge 60) {
+            $apps | ForEach-Object { Write-Output ('Still running: ' + $_.ProcessName + ' ' + $_.Id) }
+            $webviews | ForEach-Object { Write-Output ('Still running: ' + $_.Name + ' ' + $_.ProcessId) }
+            throw 'WebView2 or app processes still running. Retain all files for inspection.'
+        }
+        Start-Sleep -Milliseconds 500
+    } while ($true)
+}
 $node = Join-Path $PackageDirectory 'Runtime\node.exe'
 & $node (Join-Path $PSScriptRoot 'verify-manifest.mjs') $PackageDirectory
 if ($LASTEXITCODE -ne 0) { throw 'Candidate verification failed.' }
@@ -80,11 +96,28 @@ try {
     [IO.File]::WriteAllText((Join-Path $data 'setup-state.json'), '{"version":1,"completed":true}')
     & $node (Join-Path $PSScriptRoot 'check-update-install.mjs') $installed $expanded (Join-Path $request 'installation-receipt.json') $output
     if ($LASTEXITCODE -ne 0) { throw 'Complete update and relaunch verification failed.' }
-    $dataFiles = @(Get-ChildItem -LiteralPath $data -Recurse -File)
+    WaitForDataWriters
+    foreach ($folder in @((Join-Path $data 'WebViewCache'), (Join-Path $data 'WebViewCache\EBWebView'))) {
+        if ((Test-Path -LiteralPath $folder) -and
+            ((Get-Item -LiteralPath $folder -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'WebView2 profile folder is a link.'
+        }
+    }
+    if (@(Get-ChildItem -LiteralPath $data -Recurse -Force -Directory |
+        Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -ne 0) {
+        throw 'Update test data contains a link.'
+    }
+    # A normal relaunch opens the shared viewer, whose WebView2 profile is the
+    # documented WebViewCache\EBWebView folder in the data folder. No other file may be written.
+    $profilePrefix = (Join-Path $data 'WebViewCache\EBWebView') + [IO.Path]::DirectorySeparatorChar
+    $dataFiles = @(Get-ChildItem -LiteralPath $data -Recurse -File -Force |
+        Where-Object { -not $_.FullName.StartsWith($profilePrefix, [StringComparison]::OrdinalIgnoreCase) })
     # The update publishes its authenticated receipt before relaunch. The Node
     # integration check verifies its exact bytes and signature above.
     $expectedData = @((Join-Path $data 'setup-state.json'), (Join-Path $data 'updates\installed-envelope.json'))
     if ($dataFiles.Count -ne $expectedData.Count -or @($dataFiles | Where-Object { $_.FullName -notin $expectedData }).Count -ne 0) {
+        $dataFiles | Where-Object { $_.FullName -notin $expectedData } | Select-Object -First 50 |
+            ForEach-Object { Write-Output ('Unexpected data file: ' + $_.FullName.Substring($data.Length + 1)) }
         throw 'Update test wrote unexpected data.'
     }
     if ((Get-Content -LiteralPath (Join-Path $data 'setup-state.json') -Raw) -cne '{"version":1,"completed":true}') {
@@ -97,7 +130,16 @@ try {
     Copy-Item -LiteralPath (Join-Path $installed 'Uninstall.exe') -Destination $uninstaller
     RunChecked $uninstaller ('/S _?=' + $installed)
 }
+WaitForDataWriters
 if ((Test-Path -LiteralPath $installed) -or (Test-Path -LiteralPath $data) -or (Test-Path -LiteralPath $shortcuts) -or (Test-Path $registration)) {
+    if (Test-Path -LiteralPath $installed) { Write-Output 'Remaining location: install folder' }
+    if (Test-Path -LiteralPath $data) {
+        Write-Output 'Remaining location: data folder'
+        Get-ChildItem -LiteralPath $data -Recurse -File -Force | Select-Object -First 50 |
+            ForEach-Object { Write-Output ('Remaining data file: ' + $_.FullName.Substring($data.Length + 1)) }
+    }
+    if (Test-Path -LiteralPath $shortcuts) { Write-Output 'Remaining location: shortcuts folder' }
+    if (Test-Path $registration) { Write-Output 'Remaining location: registration' }
     throw 'Staging test did not leave a clean runner.'
 }
 Write-Output 'PASS: disposable ordinary installation removed. No release signed or published.'
