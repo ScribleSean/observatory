@@ -12,18 +12,21 @@ on:
         default: true
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: windows-package-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Use the account volume for private-state fixtures
         if: '!inputs.verify_compiler_only'
         shell: pwsh
@@ -45,6 +48,60 @@ jobs:
         if: '!inputs.verify_compiler_only'
         with:
           python-version: '3.13'
+      - name: Require a passing script suite on this commit
+        if: '!inputs.verify_compiler_only'
+        shell: node {0}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          (async () => {
+            const { GITHUB_API_URL, GITHUB_REPOSITORY, GITHUB_SHA, GITHUB_TOKEN } = process.env;
+            const refuse = () => {
+              console.error(`No successful Script suite run (push or manual dispatch) exists for ${GITHUB_SHA}. Dispatch Script suite on this commit, wait for it to pass, then run this workflow again.`);
+              process.exit(1);
+            };
+            if (![GITHUB_API_URL, GITHUB_REPOSITORY, GITHUB_SHA, GITHUB_TOKEN].every(Boolean)) return refuse();
+            let response;
+            try {
+              response = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/script-suite.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=100`, {
+                headers: {
+                  Authorization: `Bearer ${GITHUB_TOKEN}`,
+                  Accept: 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+              });
+            } catch {
+              console.error('Script suite lookup failed.');
+              process.exit(1);
+            }
+            if (!response.ok) {
+              console.error(`Script suite lookup returned HTTP ${response.status}.`);
+              process.exit(1);
+            }
+            let data;
+            try {
+              data = await response.json();
+              if (!Array.isArray(data?.workflow_runs)) throw new Error();
+            } catch {
+              console.error('Script suite lookup returned malformed JSON.');
+              process.exit(1);
+            }
+            const run = data.workflow_runs.find((run) => run?.head_sha === GITHUB_SHA &&
+              run.status === 'completed' && run.conclusion === 'success' &&
+              ['push', 'workflow_dispatch'].includes(run.event) &&
+              run.head_repository?.full_name === GITHUB_REPOSITORY);
+            if (!run) return refuse();
+            console.log(`Accepted Script suite run ${run.id}: ${run.html_url}`);
+          })();
+      - name: Exclude build tools from Defender scans
+        if: '!inputs.verify_compiler_only'
+        shell: pwsh
+        run: |
+          try {
+            Add-MpPreference -ExclusionPath $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE, (Split-Path -Parent (Get-Command node).Source) -ExclusionProcess 'node.exe', 'powershell.exe' -ErrorAction Stop
+          } catch {
+            Write-Output '::warning::Could not exclude build tools from Defender scans. Continuing with the build.'
+          }
       - name: Build and verify complete package from a clean checkout
         if: '!inputs.verify_compiler_only'
         shell: pwsh
@@ -57,7 +114,7 @@ jobs:
           & $builder -B -m pip install --no-index --no-deps $timezone
           if ($LASTEXITCODE -ne 0) { throw 'Pinned build timezone preparation failed.' }
           $env:OBSERVATORY_TEST_PYTHON = $builder
-          ./native/windows/package.ps1 -BuildPython $builder
+          ./native/windows/package.ps1 -BuildPython $builder -SkipScriptSuite
       - name: Compile and verify the isolated installer lifecycle
         id: candidate
         if: inputs.verify_installer && !inputs.verify_compiler_only

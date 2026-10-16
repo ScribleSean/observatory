@@ -9,8 +9,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: native-compile-${{ github.ref }}
-  cancel-in-progress: true
+  group: native-compile-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   windows:
     runs-on: windows-latest
