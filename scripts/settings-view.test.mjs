@@ -466,3 +466,25 @@ for (const read of ['reject', 'not-ok', 'invalid']) {
     } finally { controller.dispose(); }
   });
 }
+
+void test('partial status preserves null parts and exact keys', () => {
+  assert.ok(validateBridgeStatus({ ...sampleBridgeStatus(), limitsConsent: null }));
+  for (const limitsConsent of [0, 'false', undefined]) {
+    assert.equal(validateBridgeStatus({ ...sampleBridgeStatus(), limitsConsent }), null);
+  }
+  for (const channels of [['codex-limits'], ['claude-code-tokens'], ['codex-limits', 'claude-code-tokens']]) {
+    const status = sampleBridgeStatus();
+    for (const channel of channels) status.sharing[channel] = null;
+    assert.deepEqual(validateBridgeStatus(status), status);
+  }
+  for (const channel of ['codex-limits', 'claude-code-tokens']) {
+    const missing = sampleBridgeStatus();
+    delete missing.sharing[channel];
+    assert.equal(validateBridgeStatus(missing), null);
+    for (const value of [undefined, false, true, 0, 'false', [], {}]) {
+      const status = sampleBridgeStatus();
+      status.sharing[channel] = value;
+      assert.equal(validateBridgeStatus(status), null);
+    }
+  }
+});

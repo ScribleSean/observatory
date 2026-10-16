@@ -22,12 +22,12 @@ export function SetupContent({ status, step, available, busy, message, disclosur
   const index = clampStep(step);
   const disabled = !available || !status || busy;
   const summary = setupSummary(status);
-  const word = (value: boolean | undefined) => value === undefined ? S.unknown : value ? S.on : S.off;
-  const toggle = (label: string, hint: string, value: boolean | undefined, change: (enabled: boolean) => void) => <div key={label}>
+  const word = (value: boolean | null | undefined) => value == null ? S.unknown : value ? S.on : S.off;
+  const toggle = (label: string, hint: string, value: boolean | null | undefined, change: (enabled: boolean) => void) => <div key={label}>
     <div className="ob-row ob-settings-toggle">
-      <label className="ob-settings-switch"><input type="checkbox" aria-checked={value === undefined ? 'mixed' : value}
-        ref={input => { if (input) input.indeterminate = value === undefined; }} checked={value ?? false}
-        disabled={disabled} onChange={event => change(event.target.checked)} />{label}</label>
+      <label className="ob-settings-switch"><input type="checkbox" aria-checked={value == null ? 'mixed' : value}
+        ref={input => { if (input) input.indeterminate = value == null; }} checked={value ?? false}
+        disabled={disabled || value == null} onChange={event => change(event.target.checked)} />{label}</label>
       <span className="ob-meta">{word(value)}</span>
     </div><p className="ob-meta">{hint}</p>
   </div>;

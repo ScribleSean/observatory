@@ -86,21 +86,29 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
       if (presented.tailscale !== undefined) setTailscale(presented.tailscale);
       if (action === 'pairing-join-claim') setJoinText('');
     });
-    void next.status();
     let polling = false;
+    const refresh = () => {
+      if (polling) return;
+      polling = true;
+      void next.status().catch(() => {}).finally(() => { polling = false; });
+    };
+    refresh();
     const poll = setInterval(() => {
       const state = next.getStatus()?.pairing.state;
       if (!polling && state && !terminal.has(state) && state !== 'identity-ready' && state !== 'identity-required') {
-        polling = true;
-        void next.status().finally(() => { polling = false; });
+        refresh();
       }
     }, contract.limits.pairingPollSeconds * 1000);
+    const recoveryPoll = setInterval(() => {
+      const current = next.getStatus();
+      if (!current || current.limitsConsent === null || Object.values(current.sharing).some(channel => channel === null)) refresh();
+    }, contract.limits.cacheRefreshSeconds * 1000);
     const clear = () => { generation.current++; running.current = false; setBusy(false); setInvitation(''); setJoinText(''); };
     const hide = () => flushSync(clear);
     window.addEventListener('pagehide', hide);
     return () => {
       clear();
-      clearInterval(poll); window.removeEventListener('pagehide', hide);
+      clearInterval(poll); clearInterval(recoveryPoll); window.removeEventListener('pagehide', hide);
       unsubscribe(); stopResults(); next.dispose();
       if (!bridge) transport.dispose();
     };
@@ -212,9 +220,9 @@ export function SettingsContent({ status: raw, controller, available = true, bus
   };
   const button = (label: string, onClick: () => void, blocked = disabled) => <button type="button" disabled={blocked} onClick={onClick}>{label}</button>;
   const group = (label: string, children: ReactNode) => <Card label={label}><h3>{label}</h3>{children}</Card>;
-  const toggle = (label: string, value: boolean | undefined, change: (enabled: boolean) => void, blocked = false) => <div className="ob-row ob-settings-toggle">
-    <label className="ob-settings-switch"><input type="checkbox" aria-checked={value === undefined ? 'mixed' : value} ref={input => { if (input) input.indeterminate = value === undefined; }} checked={value ?? false} disabled={disabled || blocked} onChange={event => change(event.target.checked)} />{label}</label>
-    <span className="ob-meta">{value === undefined ? S.unknown : value ? S.on : S.off}</span>
+  const toggle = (label: string, value: boolean | null | undefined, change: (enabled: boolean) => void, blocked = false) => <div className="ob-row ob-settings-toggle">
+    <label className="ob-settings-switch"><input type="checkbox" aria-checked={value == null ? 'mixed' : value} ref={input => { if (input) input.indeterminate = value == null; }} checked={value ?? false} disabled={disabled || blocked || value == null} onChange={event => change(event.target.checked)} />{label}</label>
+    <span className="ob-meta">{value == null ? S.unknown : value ? S.on : S.off}</span>
   </div>;
   const field = (label: string, value: string, change: (value: string) => void, numeric = false) => <label className="ob-settings-field">{label}
     <input value={value} disabled={disabled} autoComplete="off" spellCheck={false} inputMode={numeric ? 'numeric' : 'text'} onChange={event => change(event.target.value)} placeholder={!status ? S.unknown : undefined} />
@@ -273,9 +281,9 @@ export function SettingsContent({ status: raw, controller, available = true, bus
       {(['codex-limits', 'claude-code-tokens'] as SharingChannel[]).map(channel => choiceKnown ? <Row key={channel}>
         <span>{channel === 'codex-limits' ? S.shareCodexLimits : S.shareClaudeTokens}</span>
         <span>{sharingWords[status?.sharingChoice.channels[channel] ?? 'unavailable']}</span>
-      </Row> : <div key={channel}>{toggle(channel === 'codex-limits' ? S.shareCodexLimits : S.shareClaudeTokens, status?.sharing[channel].enabled,
-        enabled => action(c => c.setSharing(channel, enabled, status?.sharing[channel].token)), !!status && !status.sharing[channel].enabled && !status.sharing[channel].canEnable)}
-        {status && !status.sharing[channel].enabled && !status.sharing[channel].canEnable && <p className="ob-meta">{reasons[status.sharing[channel].reason]}</p>}</div>)}
+      </Row> : <div key={channel}>{toggle(channel === 'codex-limits' ? S.shareCodexLimits : S.shareClaudeTokens, status?.sharing[channel]?.enabled,
+        enabled => action(c => c.setSharing(channel, enabled, status?.sharing[channel]?.token)), !!status?.sharing[channel] && !status.sharing[channel].enabled && !status.sharing[channel].canEnable)}
+        {status?.sharing[channel] && !status.sharing[channel].enabled && !status.sharing[channel].canEnable && <p className="ob-meta">{reasons[status.sharing[channel].reason]}</p>}</div>)}
     </>)}
     {group(S.startup, toggle(S.startAtLogin, status?.startup, enabled => action(c => c.setStartup(enabled))))}
     {group(S.about, <>

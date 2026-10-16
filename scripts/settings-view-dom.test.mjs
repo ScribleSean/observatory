@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import { act, createElement } from 'react';
+import { contract } from '../lib/bridge-contract.mjs';
 import { sampleBridgeStatus } from '../lib/sample-snapshot.mjs';
 
 const load = specifier => import(specifier);
@@ -13,7 +14,7 @@ after(() => server.close());
 let SettingsView;
 const invitation = 'observatory-pair:v1:U0FNUExF';
 
-async function fixture(t, state = 'identity-ready', placeholder = false) {
+async function fixture(t, state = 'identity-ready', placeholder = false, initial = {}) {
   const win = new Window({ url: 'https://synthetic.test/dashboard.html' });
   const globals = { window: win, document: win.document, navigator: win.navigator, HTMLElement: win.HTMLElement, HTMLInputElement: win.HTMLInputElement, HTMLTextAreaElement: win.HTMLTextAreaElement, Node: win.Node, Event: win.Event, MouseEvent: win.MouseEvent, IS_REACT_ACT_ENVIRONMENT: true };
   const saved = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -23,10 +24,11 @@ async function fixture(t, state = 'identity-ready', placeholder = false) {
   const status = sampleBridgeStatus();
   Object.assign(status.pairing, { state, invitationKept: state === 'waiting' });
   status.limitsConsent = false;
+  Object.assign(status, initial.status);
   if (placeholder) status.sharingChoice = { chosen: false, channels: { 'codex-limits': 'unavailable', 'claude-code-tokens': 'unavailable' } };
   const messages = [];
   const listeners = new Set();
-  let failStatus = false;
+  let failStatus = initial.failStatus ?? false;
   let holdStatus = false;
   const bridge = {
     available: true,
@@ -93,6 +95,7 @@ async function fixture(t, state = 'identity-ready', placeholder = false) {
   });
   return { win, container, status, messages, button, click, input, last, answer, late, host, hosted, hide,
     failStatus: () => { failStatus = true; },
+    recoverStatus: () => { failStatus = false; },
     holdStatus: () => { holdStatus = true; },
     remount: async () => act(async () => { root.unmount(); root = createRoot(container); mount(); }),
   };
@@ -659,3 +662,52 @@ void test('first Confirm reports failure when done leaves pairing local-ready', 
   await f.answer(f.last('pairing-join-confirm'));
   assert.equal(f.container.querySelector('output').textContent, 'This change could not be made.');
 });
+
+for (const placeholder of [false, true]) {
+void test(`partial Settings switches stay unknown and disabled with placeholder ${placeholder}`, async t => {
+  const status = sampleBridgeStatus();
+  status.limitsConsent = null;
+  status.sharing['claude-code-tokens'] = null;
+  const f = await fixture(t, 'idle', placeholder, { status });
+  const row = label => [...f.container.querySelectorAll('.ob-settings-toggle')].find(node => node.querySelector('label')?.textContent === label);
+  // With a known sharing choice each channel row shows the separately read choice state, so a failed channel read changes nothing there.
+  for (const label of placeholder ? ['Claude Code limits', 'Share Claude Code tokens'] : ['Claude Code limits']) {
+    const item = row(label);
+    assert.ok(item, label);
+    assert.equal(item.querySelector('.ob-meta').textContent, 'Unknown');
+    assert.equal(item.querySelector('input').disabled, true);
+    assert.equal(item.querySelector('input').getAttribute('aria-checked'), 'mixed');
+  }
+  if (placeholder) {
+    assert.equal(row('Share Claude Code tokens').parentElement.querySelector('p'), null);
+    assert.equal(row('Share Codex limits').querySelector('.ob-meta').textContent, status.sharing['codex-limits'].enabled ? 'On' : 'Off');
+  } else {
+    const choiceRow = label => [...f.container.querySelectorAll('.ob-row')].find(node => node.firstElementChild?.textContent === label);
+    assert.equal(row('Share Claude Code tokens'), undefined);
+    assert.equal(choiceRow('Share Codex limits').lastElementChild.textContent, 'Off');
+    assert.equal(choiceRow('Share Claude Code tokens').lastElementChild.textContent, 'Off');
+  }
+});
+}
+
+for (const partial of [false, true]) {
+  void test(`Settings recovers from ${partial ? 'partial' : 'unavailable'} status without overlapping polls`, async t => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const f = await fixture(t, 'idle', false, partial ? { status: { limitsConsent: null } } : { failStatus: true });
+    const limits = () => [...f.container.querySelectorAll('.ob-settings-toggle')].find(node => node.querySelector('label')?.textContent === 'Claude Code limits');
+    assert.equal(limits().querySelector('.ob-meta').textContent, 'Unknown');
+    f.recoverStatus();
+    f.status.limitsConsent = true;
+    f.holdStatus();
+    const interval = contract.limits.cacheRefreshSeconds * 1000;
+    await act(async () => t.mock.timers.tick(interval));
+    assert.equal(f.messages.filter(message => message.action === 'status').length, 2);
+    await act(async () => t.mock.timers.tick(interval * 3));
+    assert.equal(f.messages.filter(message => message.action === 'status').length, 2);
+    await f.answer(f.last('status'), { value: structuredClone(f.status) });
+    assert.equal(limits().querySelector('.ob-meta').textContent, 'On');
+    assert.equal(limits().querySelector('input').disabled, false);
+    await act(async () => t.mock.timers.tick(interval * 2));
+    assert.equal(f.messages.filter(message => message.action === 'status').length, 2);
+  });
+}

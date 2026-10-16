@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { Window } from 'happy-dom';
 import { act, createElement } from 'react';
-import { sampleSetupStatus } from '../lib/view-setup.mjs';
+import { sampleSetupStatus, setupSummary } from '../lib/view-setup.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
 const { createServer } = await import('vite');
 const { default: react } = await import('@vitejs/plugin-react');
@@ -146,4 +146,26 @@ void test('DashboardView at #setup restores navigation after rejected status', a
   assert.ok(f.container.querySelector('[role="alert"]'));
   assert.ok(f.container.querySelector('nav'));
   assert.deepEqual(f.messages, [{ action: 'status', args: {} }]);
+});
+
+void test('setup summary preserves unknown limits without counting them as on', () => {
+  const status = sampleSetupStatus();
+  status.limitsConsent = null;
+  const summary = setupSummary(status);
+  assert.equal(summary.rows.find(row => row.id === 'claudeLimits').on, null);
+  assert.equal(summary.anyOn, false);
+});
+
+void test('setup renders null limits as Unknown in sources and summary', async t => {
+  const status = sampleSetupStatus();
+  status.limitsConsent = null;
+  const f = await fixture(t, { firstStatus: { ok: true, code: 'done', value: status } });
+  const label = [...f.container.querySelectorAll('label')].find(node => node.textContent === strings.settings.claudeLimits);
+  assert.equal(label.querySelector('input').disabled, true);
+  assert.equal(label.querySelector('input').getAttribute('aria-checked'), 'mixed');
+  assert.equal(label.parentElement.querySelector('.ob-meta').textContent, 'Unknown');
+  await f.click('Continue');
+  await f.click('Continue');
+  const row = [...f.container.querySelectorAll('.ob-setup-summary li')].find(node => node.firstElementChild.textContent === strings.settings.claudeLimits);
+  assert.equal(row.lastElementChild.textContent, 'Unknown');
 });

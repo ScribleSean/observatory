@@ -11,11 +11,11 @@ export type BridgeStatus = {
   deviceName: string | null;
   startup: boolean;
   appearance: 'system' | 'light' | 'dark';
-  limitsConsent: boolean;
+  limitsConsent: boolean | null;
   collectionPaused: boolean;
   pairing: { state: string; peerFingerprint: string | null; transport: string; invitationKept: boolean };
   sharingChoice: { chosen: boolean; channels: Record<SharingChannel, 'on' | 'waiting-for-reading' | 'off' | 'unavailable'> };
-  sharing: Record<SharingChannel, { enabled: boolean; canEnable: boolean; reason: string; token: string | null }>;
+  sharing: Record<SharingChannel, { enabled: boolean; canEnable: boolean; reason: string; token: string | null } | null>;
 };
 const keys = (value: unknown, names: string[]): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value) &&
   Reflect.ownKeys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
@@ -28,7 +28,7 @@ export function validateBridgeStatus(value: unknown): BridgeStatus | null {
     if (value.version !== contract.status.version || !keys(app, ['version', 'build']) || typeof app.version !== 'string' ||
       !/^[A-Za-z0-9][A-Za-z0-9 .+-]*$/.test(app.version) || Array.from(app.version).length > contract.status.appVersionMaxLength || !Number.isSafeInteger(app.build) || (app.build as number) < 0 ||
       !keys(sources, ['activity', 'codex', 'claude', 'wispr', 'quota']) || Object.values(sources).some(v => typeof v !== 'boolean') ||
-      typeof value.startup !== 'boolean' || typeof value.limitsConsent !== 'boolean' || typeof value.collectionPaused !== 'boolean' ||
+      typeof value.startup !== 'boolean' || (value.limitsConsent !== null && typeof value.limitsConsent !== 'boolean') || typeof value.collectionPaused !== 'boolean' ||
       !contract.values.appearance.includes(value.appearance as string) || !validateArgs('set-device-name', { name: value.deviceName }).ok) return null;
     const bundled = contract.actions['set-skin'].args.skin.bundled;
     if (!keys(skin, ['current', 'bundled', 'custom']) || !Array.isArray(skin.bundled) ||
@@ -45,6 +45,7 @@ export function validateBridgeStatus(value: unknown): BridgeStatus | null {
       Object.values(sharingChoice.channels).some(state => !contract.values.sharingChoiceState.includes(state as string))) return null;
     if (!keys(sharing, ['codex-limits', 'claude-code-tokens'])) return null;
     for (const [channel, item] of Object.entries(sharing)) {
+      if (item === null) continue;
       if (!keys(item, ['enabled', 'canEnable', 'reason', 'token']) || typeof item.enabled !== 'boolean' || typeof item.canEnable !== 'boolean' ||
         !contract.values.sharingReason.includes(item.reason as string) ||
         (channel === 'codex-limits' && item.reason === 'source-unavailable') || (channel === 'claude-code-tokens' && item.reason === 'account-unavailable') ||
