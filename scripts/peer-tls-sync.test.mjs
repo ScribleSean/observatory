@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
@@ -8,7 +8,7 @@ import {createTrustedSyncService} from './peer-tls-service.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing,publishQuotaState} from './quota-store.mjs';
 import {createSharedQuota} from './quota-peer.mjs';
 import {execFileSync} from 'node:child_process';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
@@ -20,11 +20,14 @@ import {startTrustedSyncListener} from './peer-tls-sync.mjs';
 import {tlsPeerExchange} from './peer-tls-outbound.mjs';
 import {finalizePeerCollection} from './peer-finalize.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-tls-sync');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
 const fingerprint=pem=>new X509Certificate(pem).fingerprint256.replaceAll(':','').toLowerCase();
 test('trusted TLS exchange uses the existing record store and revocation fence',
   {skip:!['darwin','win32'].includes(process.platform) || !existsSync(openssl)},async t=>{
-    const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-sync-test-')));
+    const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-sync-test-')));
     t.after(()=>rm(root,{recursive:true,force:true}));
     async function identity(name) {
       const key=path.join(root,name+'.key'),cert=path.join(root,name+'.pem');

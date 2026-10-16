@@ -1,15 +1,18 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {readQuotaState,updateQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 import {createSharedQuota} from './quota-peer.mjs';
 import {exchangeQuota} from './quota-exchange.mjs';
+
+const runtimeBase=await testRuntimeBase('quota-exchange');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.now();
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-exchange-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-exchange-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const pair=createPairingConfigurations().Windows;
   await initializePairing(runtime,pair);

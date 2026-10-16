@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {cp,copyFile,mkdtemp,realpath,rm,readFile,writeFile,readdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {spawnSync} from 'node:child_process';
@@ -19,6 +19,9 @@ import {exchangeProviderTokens,assertOutgoingProviderTokenRequest} from './provi
 import {syncProviderTokens,collectProviderTokenSources,attachProviderTokenSync} from './provider-token-sync.mjs';
 import {fileSymlinkOrSkip} from './test-file-symlink.mjs';
 
+const runtimeBase=await testRuntimeBase('provider-token-sync');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const now=Date.now();
 function source(host,at=now,total=14) {
   const counts={inputTokens:total-12,cacheReadTokens:3,cacheCreationTokens:4,outputTokens:5,totalTokens:total,requestCount:1};
@@ -30,7 +33,7 @@ async function enable(runtime,at=now) {
   return providerTokenSharingControl(runtime,{action:'enable',token:status.token},at);
 }
 async function fixture(t,{enabled=true,tls=false}={}) {
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-sync-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-provider-sync-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const pair=createPairingConfigurations(),runtime={};
   pair.Mac.transport={kind:'ssh-windows',hostAlias:'synthetic',remoteNode:'C:/App/node.exe',remoteScript:'C:/App/peer-exchange.mjs',remoteRuntime:'C:/Runtime'};
@@ -51,7 +54,7 @@ test('API estimates never reach the saved or exchanged Claude record',async t=>{
   const at=now+1,local=source('Mac',at);
   assert.ok(Object.hasOwn(prices.models,'claude-opus-5-5'));
   local.days[0].models[0].model='claude-opus-5-5';
-  const root=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-sync-copy-')));
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-provider-sync-copy-')));
   t.after(()=>rm(root,{recursive:true,force:true}));
   async function cloneRuntime(sourceRuntime,host) {
     const destRuntime=await realpath(await mkdtemp(path.join(root,host)));
@@ -207,7 +210,7 @@ test('concurrent TLS roles exchange without holding a network lock and preserve 
   await attachProviderTokenSync(Mac,invalid,{...local,private:'PRIVATE'},{clock:()=>now});
   assert.equal(invalid.data.coreMarker,true);assert.equal(invalid.providerTokenSync.status,'unavailable');
   assert.equal(invalid.data.providerTokenSources[0].status,'unavailable');assert.equal(JSON.stringify(invalid).includes('PRIVATE'),false);
-  const unpaired=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-unpaired-')));
+  const unpaired=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-provider-unpaired-')));
   t.after(()=>rm(unpaired,{recursive:true,force:true}));
   assert.deepEqual(await collectProviderTokenSources(unpaired,local,{clock:()=>now}),{status:'disabled',sources:[local]});
   assert.deepEqual(await readdir(unpaired),[]);
@@ -245,7 +248,7 @@ test('local hours stay on the dashboard while stored and exchanged records remai
   await writeFile(path.join(Mac,'private-sync','pairing.json'),'bad',{mode:0o600});
   const failed=await collectProviderTokenSources(Mac,local,{clock:()=>now});
   assert.equal(failed.status,'unavailable');assert.deepEqual(failed.sources[0],local);
-  const unpaired=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-provider-hours-')));
+  const unpaired=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-provider-hours-')));
   t.after(()=>rm(unpaired,{recursive:true,force:true}));
   assert.deepEqual(await collectProviderTokenSources(unpaired,local,{clock:()=>now}),{status:'disabled',sources:[local]});
   assert.deepEqual(await readdir(unpaired),[]);

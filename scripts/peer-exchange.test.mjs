@@ -1,16 +1,19 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,createPeerRecord,readPeerState} from './peer-store.mjs';
 import {exchangePeerRecord,exchangePeerRequest} from './peer-exchange.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-exchange');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const supported=['darwin','win32'].includes(process.platform);
 async function fixture(t,publish=true) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-exchange-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-exchange-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const host=process.platform==='darwin'?'Mac':'Windows',pair=createPairingConfigurations()[host];
   await initializePairing(runtime,pair);

@@ -1,9 +1,9 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,X509Certificate} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,realpath,rm,writeFile,readFile,stat,readdir} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {privateSyncDirectory,privateCollectorDirectory} from './peer-directory.mjs';
 import {writeRepairConsent} from './peer-repair-consent.mjs';
@@ -19,6 +19,9 @@ import {saveConfirmedPeerTrust} from './peer-tls-trust.mjs';
 import {prepareHostTLSSetup,readHostTLSSetup,recordHostTLSAcknowledgement} from './peer-tls-host.mjs';
 import {setupConfigurationDigest,legacySetupConfigurationDigest} from './peer-tls-setup-message.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-legacy-shape');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const now=Date.now(),at=new Date(now).toISOString(),hex=c=>c.repeat(64);
 const transport={kind:'ssh-windows',hostAlias:'synthetic-host',remoteNode:'C:/fixture/node.exe',
   remoteScript:'C:/fixture/peer-exchange.mjs',remoteRuntime:'C:/fixture/runtime'};
@@ -32,7 +35,7 @@ function normalized(value) {
   return result;
 }
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-legacy-shape-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-legacy-shape-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   await privateSyncDirectory(runtime,true);
   return runtime;

@@ -1,12 +1,15 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {createPeerRecord,acceptPeerState} from './peer-store.mjs';
 import {finalizeWithLocalAdditions} from './local-additions.mjs';
+
+const runtimeBase=await testRuntimeBase('local-additions-merge');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 
 const date='2026-10-01',hours=[12,...Array(23).fill(0)];
 const counts={inputTokens:10,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:2,reasoningOutputTokens:0,totalTokens:12};
@@ -16,7 +19,7 @@ const payload=(config,at)=>createPeerPayload({collectedAt:at,activity:{status:'u
   dictation:[{source:'Wispr Flow',status:'unavailable'}]},config);
 
 for(const host of ['Mac','Windows'])test(`stored peer merge preserves only ${host} local additions`,async t=>{
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'local-additions-merge-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'local-additions-merge-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   const pairing=createPairingConfigurations()[host],now=Date.now(),at=new Date(now).toISOString();
   await initializePairing(runtime,pairing);

@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,readdir,access,symlink,stat} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
@@ -15,12 +15,15 @@ import {revokePairing} from './peer-revocation.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {publishLocalPayload,readPeerState,acceptPeerState} from './peer-store.mjs';
 
+const runtimeBase=await testRuntimeBase('peer-repair');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
+
 const request={transport:{kind:'ssh-windows',hostAlias:'synthetic-host',
   remoteNode:'C:/Fixture/Runtime/node.exe',remoteScript:'C:/Fixture/Collector/peer-exchange.mjs',remoteRuntime:'C:/Fixture/Data'}};
 const sendTo=windows=>async(_transport,pairing)=>ensureWindowsPairing(windows,{version:1,pairing},'win32');
 const readiness=windows=>async()=> (await windowsRepairReadiness(windows,'win32')).nonce;
 async function fixture(t) {
-  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-repair-')));
+  const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-repair-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
 async function bytes(directory) {

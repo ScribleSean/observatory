@@ -1,10 +1,13 @@
-import test from 'node:test';
+import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp,realpath,rm,readdir,readFile,symlink,writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {collectQuota,findCodexExecutable} from './collect-quota.mjs';
 import {readQuotaArchive,readQuotaState} from './quota-store.mjs';
+
+const runtimeBase=await testRuntimeBase('collect-quota');
+after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.parse('2026-09-09T12:00:00Z');
 const macOnly={skip:process.platform!=='darwin'};
 const emptyCandidates={appCandidates:[],toolCandidates:[]};
@@ -140,7 +143,7 @@ test('collected pace uses retained observations and cannot survive an account sw
   assert.equal(switched.pace[0].status,'insufficient-history');
   assert.equal(switched.history.length,1);
 }));
-async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-quota-collection-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
+async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-collection-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
 test('daily history refresh is hourly while limits retain independent observations',async()=>fixture(async runtime=>{
   const scope='a'.repeat(64), requests=[];
   let latest;
