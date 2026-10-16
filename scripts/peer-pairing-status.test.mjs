@@ -157,23 +157,64 @@ test('status reader refuses another owner',{skip:process.platform==='win32'},asy
   assert.deepEqual(await readPairingStatusFile(runtime,now),status('unavailable'));
 });
 
-test('status writer waits for the peer lock and computes state after revocation',async t=>{
-  const {runtime}=await paired(t);
+async function preparedStatus(runtime) {
+  const deadline=performance.now()+10000;
+  while(performance.now()<deadline) {
+    const temporary=(await readdir(runtime)).find(name=>name.startsWith('pairing-status.json.') && name.endsWith('.tmp'));
+    if(temporary) {
+      const bytes=await readFile(path.join(runtime,temporary),'utf8');
+      if(bytes)return JSON.parse(bytes);
+    }
+    await delay(10);
+  }
+  assert.fail('Status computation did not prepare a temporary file while the lock was held');
+}
+
+test('status writer computes before acquiring the peer lock and waits to rename',async t=>{
+  const runtime=await fixture(t),now=Date.now();
   let acquired,release;
   const ready=new Promise(resolve=>acquired=resolve),gate=new Promise(resolve=>release=resolve);
-  const holder=withPeerStateLock(runtime,async()=>{
-    acquired();
-    await gate;
-    await revokePairing(runtime);
-  });
+  const holder=withPeerStateLock(runtime,async()=>{acquired();await gate;});
   await ready;
   let completed=false;
-  const writer=writePairingStatus(runtime).then(value=>{completed=true;return value;});
+  const writer=writePairingStatus(runtime,now).then(value=>{completed=true;return value;});
+  const settled=Promise.allSettled([holder,writer]);
   try {
-    await delay(100);
+    assert.deepEqual(await preparedStatus(runtime),{version:1,state:'unpaired',checkedAt:new Date(now).toISOString()});
+    await delay(50);
     assert.equal(completed,false);
     await assert.rejects(lstat(path.join(runtime,'pairing-status.json')),{code:'ENOENT'});
-  } finally {release();await holder;}
+  } finally {release();await settled;}
+  await holder;
+  assert.deepEqual(await writer,status('unpaired'));
+  assert.deepEqual(await readPairingStatusFile(runtime,now),status('unpaired'));
+});
+
+test('status writer replaces a prepared active state after concurrent revocation',async t=>{
+  const {runtime,remote,pairs}=await paired(t),now=Date.now();
+  const payload=createPeerPayload({collectedAt:new Date(now).toISOString(),activity:{status:'not-connected'},
+    codex:[{host:'Windows',status:'not-connected'}],dictation:[{source:'Wispr Flow',status:'not-connected'}]},pairs.Windows.local);
+  const record=await publishLocalPayload(remote,payload,pairs.Windows.local,now);
+  await acceptPeerState(runtime,record,pairs.Mac.peer,now);
+  const handle=await open(path.join(runtime,'private-sync/pairing.json'),'r'),prototype=Object.getPrototypeOf(handle);
+  await handle.close();
+  const sync=prototype.sync;
+  let prepared,release,paused=false;
+  const ready=new Promise(resolve=>prepared=resolve),gate=new Promise(resolve=>release=resolve);
+  const mocked=t.mock.method(prototype,'sync',async function() {
+    await sync.call(this);
+    if(!paused) {paused=true;prepared();await gate;}
+  });
+  const writer=writePairingStatus(runtime,now);
+  const settled=Promise.allSettled([writer]);
+  try {
+    await Promise.race([ready,writer.then(()=>assert.fail('Writer did not pause before taking the lock'))]);
+    assert.deepEqual(await preparedStatus(runtime),{version:1,state:'active-sync',checkedAt:new Date(now).toISOString()});
+    await revokePairing(runtime);
+    assert.deepEqual(await readPairingStatusFile(runtime),status('revoked'));
+  } finally {release();await settled;mocked.mock.restore();}
   assert.deepEqual(await writer,status('revoked'));
-  assert.deepEqual(await readPairingStatusFile(runtime),status('revoked'));
+  assert.deepEqual(JSON.parse(await readFile(path.join(runtime,'pairing-status.json'),'utf8')),
+    {version:1,state:'revoked',checkedAt:new Date(now).toISOString()});
+  assert.deepEqual((await readdir(runtime)).filter(name=>name.endsWith('.tmp')),[]);
 });

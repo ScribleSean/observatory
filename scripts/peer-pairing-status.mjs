@@ -59,21 +59,36 @@ async function readFileValue(name) {
   } finally {await file.close();}
 }
 
-export const writePairingStatus=(runtime,now=Date.now())=>withPeerStateLock(runtime,async()=>{
-  const status=await readPairingStatus(runtime,now),name=path.join(runtime,filename);
-  const bytes=JSON.stringify({...status,checkedAt:new Date(now).toISOString()});
+export async function writePairingStatus(runtime,now=Date.now()) {
+  let status=await readPairingStatus(runtime,now);
+  const name=path.join(runtime,filename),checkedAt=new Date(now).toISOString();
+  const bytes=JSON.stringify({...status,checkedAt});
   await targetInfo(name);
   const temporary=path.join(runtime,`${filename}.${randomBytes(16).toString('hex')}.tmp`);
   let created=false,renamed=false;
   try {
     const file=await open(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
     created=true;
-    try {await file.writeFile(bytes);await file.sync();}finally{await file.close();}
-    await targetInfo(name);
-    await rename(temporary,name);renamed=true;
+    try {
+      await file.writeFile(bytes);await file.sync();
+      await withPeerStateLock(runtime,async()=>{
+        let revoked=false;
+        try {await lstat(path.join(runtime,'private-sync','revoked'));revoked=true;}
+        catch(error) {if(error.code!=='ENOENT')throw error;}
+        if(revoked && status.state!=='revoked') {
+          status=result('revoked');
+          await file.truncate(0);
+          await file.write(JSON.stringify({...status,checkedAt}),0,'utf8');
+          await file.sync();
+        }
+        await file.close();
+        await targetInfo(name);
+        await rename(temporary,name);renamed=true;
+      });
+    } finally {await file.close();}
   } finally {if(created && !renamed)await unlink(temporary);}
   return status;
-});
+}
 
 export async function readPairingStatusFile(runtime,now=Date.now()) {
   try {
