@@ -63,7 +63,7 @@ const scripts=path.join(resources,'Collector','scripts');
 mkdirSync(scripts,{recursive:true});
 for(const name of readdirSync(path.join(root,'scripts'))) {
   if(name.endsWith('.test.mjs') || name==='test-file-symlink.mjs' ||
-    name==='test-python.mjs' || !/\.(mjs|py|ps1)$/.test(name))continue;
+    name==='test-python.mjs' || name==='peer-live-controller.mjs' || !/\.(mjs|py|ps1)$/.test(name))continue;
   cpSync(path.join(root,'scripts',name),path.join(scripts,name));
 }
 const sources=readdirSync(path.join(root,'native')).filter(name=>name.endsWith('.swift')).map(name=>path.join(root,'native',name));

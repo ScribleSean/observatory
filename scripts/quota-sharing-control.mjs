@@ -1,3 +1,4 @@
+import {markSharingChoiceApplied} from './sharing-choice.mjs';
 import {lstat} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -8,7 +9,7 @@ import {withPeerStateLock} from './peer-lock.mjs';
 import {readQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 
 const empty=()=>({version:1,enabled:false,canEnable:false,reason:'account-unavailable',token:null});
-const recent=(state,now)=>state?.history?.latestReadStatus==='ok' &&
+export const recent=(state,now)=>state?.history?.latestReadStatus==='ok' &&
   ['ok','stale'].includes(state.history.status) && Number.isFinite(Date.parse(state.history.asOf)) &&
   now-Date.parse(state.history.asOf)>=0 && now-Date.parse(state.history.asOf)<=600000;
 const token=(state,pair)=>createHash('sha256').update(JSON.stringify([state.salt,state.revision,pair.local.pairId])).digest('hex');
@@ -22,7 +23,10 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
     !Number.isSafeInteger(now) || now<0)throw Error('Invalid sharing settings request');
   return withPeerStateLock(runtime,async()=>{
     // Disabling must remain available even if the pairing file is corrupt.
-    if(request.action==='disable')await revokeQuotaSharing(runtime,now);
+    if(request.action==='disable') {
+      await markSharingChoiceApplied(runtime,'codex-limits');
+      await revokeQuotaSharing(runtime,now);
+    }
     let pair;
     try {pair=await readPairing(runtime);}catch {pair=null;}
     let state;

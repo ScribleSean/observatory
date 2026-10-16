@@ -27,8 +27,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: update-safety-${{ github.ref }}
-  cancel-in-progress: true
+  group: update-safety-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   update-safety:
     strategy:
