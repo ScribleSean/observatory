@@ -17,12 +17,22 @@ test('Sage uses the shared token colours', () => {
   assert.deepEqual(read('sage.json').colors,tokens);
 });
 
-test('Sage muted text meets 4.5:1 contrast on filter hover, surface and background in light and dark', () => {
-  const {colors}=read('sage.json');
-  for(const [index,mode] of ['light','dark'].entries()) {
-    for(const background of ['track','surface','background'])
-      assert.ok(contrast(colors.muted[index],colors[background][index])>=4.5,`${mode} muted on ${background}`);
+test('every bundled skin muted text meets 4.5:1 contrast on filter hover, surface and background in light and dark', () => {
+  for(const file of files) {
+    const {colors}=read(file);
+    for(const [index,mode] of ['light','dark'].entries()) {
+      for(const background of ['track','surface','background'])
+        assert.ok(contrast(colors.muted[index],colors[background][index])>=4.5,`${file} ${mode} muted on ${background}`);
+    }
   }
+});
+
+test('the contrast check reports muted text on a low-contrast light track', () => {
+  const sage=read('sage.json');
+  const faint=structuredClone(sage);
+  faint.colors.track[0]=faint.colors.muted[0];
+  assert.deepEqual(skinContrastProblems(faint),['light: muted on track is 1.00, needs 4.5']);
+  assert.deepEqual(skinContrastProblems(sage),[]);
 });
 
 test('every bundled skin passes the contrast check in light and dark', () => {

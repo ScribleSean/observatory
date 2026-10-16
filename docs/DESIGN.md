@@ -155,7 +155,7 @@ A skin changes how the shared viewer looks. It never changes what a number means
 - **Fields.** A name, light and dark values for every colour token, a font choice from the bundled fonts for text and for numerals, a corner radius, whether rules are drawn, and a limit style.
 - **Limit styles.** A fixed list the viewer implements. Bar, numeral and text bar exist. Block and dial are planned. A skin picks one. A new style is a change to the viewer, reviewed like any other.
 - **Bundled fonts only.** A skin names a font the app ships. Each added font needs its licence recorded in `THIRD-PARTY-NOTICES.md`.
-- **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails. Since issue 153 Sage also keeps its secondary text at 4.5:1 or more on the track colour, which is the hover background of an unselected filter button, in light and dark. The other bundled skins do not meet that rule yet (Almanac light measures 3.63:1), so the shared check does not apply it to them.
+- **Contrast.** Bundled skins must pass a contrast check for text on background and on surface, in light and dark. A skin a person adds is checked the same way and shown with a warning if it fails. Secondary text also needs 4.5:1 or more on the track colour, which is the hover background of an unselected filter button, in light and dark. Sage met that rule first (issue 153). Since issue 205 Almanac, Instrument and Amber CRT meet it too, through darker or lighter secondary text in their skin files, and the shared check applies it to every skin.
 - **Where skins live.** Bundled skins sit beside `native/design-tokens.json`, which becomes the default skin (Sage). A person's own skins are files in the app's data folder, chosen in Settings.
 
 Bundled skins, in `native/skins/`:
@@ -167,7 +167,7 @@ Bundled skins, in `native/skins/`:
 | Instrument | Bar | Same in both | Dark by nature |
 | Amber CRT | Text bar | Same in both | Dark by nature |
 
-`lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
+`lib/skins.mjs` validates a skin, builds its style values and checks contrast. Text and secondary text need 4.5 to 1 on the background and on the surface, and secondary text also on the track. Meters, dots and large numerals need 3 to 1. All four bundled skins pass in light and dark, which also covers the provider, warning and error colours that were unmeasured before.
 
 A shell chooses a skin by setting `data-skin` on the root element. The page reads it on load and follows a later change to it, so a shell can switch skins without reloading. A shell should not use `?skin=name`, because the Windows host refuses query strings. The query works only for the sample pages in a browser. An unknown name falls back to Sage, whether it is set before the page loads or later. With sample data each page shows a skin picker so a person can compare them.
 
