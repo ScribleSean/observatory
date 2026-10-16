@@ -231,6 +231,58 @@ test('pause accepts all trailing option orders and rejects invalid or repeated v
       assert.throws(()=>parseArguments([...mode,...suffix],streams));
   }
 });
+test('exchange pause accepts all trailing option orders and rejects invalid or repeated values',()=>{
+  const info={isFIFO:()=>true,isSocket:()=>false},streams={stdin:info,stdout:info};
+  const permutations=items=>items.length?items.flatMap((item,index)=>
+    permutations(items.filter((_,i)=>i!==index)).map(rest=>[...item,...rest])):[[]];
+  const extras=[['--pause-after-host','30'],['--port','43128'],['--repaired']];
+  for(const mode of [['--loopback','10.0.0.1'],['--role','host','--local','10.0.0.1'],['--role','join','--local','10.0.0.1']]) {
+    for(let mask=0;mask<8;mask++) {
+      for(const suffix of permutations([['--pause-before-exchange','60'],...extras.filter((_,i)=>mask & (1<<i))])) {
+        assert.deepEqual(parseArguments([...mode,...suffix],streams),{
+          address:'10.0.0.1',role:mode[0]==='--role'?mode[1]:null,
+          repaired:suffix.includes('--repaired'),pauseBeforeExchange:60,
+          ...(suffix.includes('--pause-after-host')?{pauseAfterHost:30}:{}),
+          ...(suffix.includes('--port')?{port:43128}:{}),
+        });
+      }
+    }
+    for(const value of ['1','300'])assert.equal(parseArguments([...mode,'--pause-before-exchange',value],streams).pauseBeforeExchange,Number(value));
+    for(const value of ['0','301','60s','','+60','-60','60.0',' 60','60\n'])
+      assert.throws(()=>parseArguments([...mode,'--pause-before-exchange',value],streams));
+    for(const suffix of [['--pause-before-exchange'],['--pause-before-exchange','--repaired'],
+      ['--pause-before-exchange','60','--pause-before-exchange','60']])
+      assert.throws(()=>parseArguments([...mode,...suffix],streams));
+  }
+});
+test('exchange pause waits between publish and exchange with either pause option combination',async()=>{
+  for(const pauseAfterHost of [undefined,30]) {
+    let release,started;
+    const waiting=new Promise(resolve=>{started=resolve;});
+    const run=fakes(),sleeps=[];
+    const result=runSequence({...run,pauseAfterHost,pauseBeforeExchange:60,sleep:async ms=>{
+      sleeps.push(ms);
+      if(ms===30000) {
+        assert.equal(run.commands.at(-1).command.action,'host');
+        return;
+      }
+      assert.equal(ms,60000);
+      started();
+      await new Promise(resolve=>{release=resolve;});
+    }});
+    await waiting;
+    assert.equal(run.commands.at(-1).command.action,'publish');
+    assert.ok(run.commands.every(({command})=>command.action!=='exchange'));
+    assert.deepEqual(run.lines.slice(-2),['step publish: ok','step pause-exchange: waiting 60 s']);
+    release();
+    assert.equal(await result,true);
+    const index=run.lines.indexOf('step publish: ok');
+    assert.deepEqual(run.lines.slice(index,index+4),[
+      'step publish: ok','step pause-exchange: waiting 60 s','step pause-exchange: ok','step exchange: ok',
+    ]);
+    assert.deepEqual(sleeps,pauseAfterHost===undefined?[60000]:[30000,60000]);
+  }
+});
 test('pause waits after host success and before probe with ordered status lines',async()=>{
   let release,started;
   const waiting=new Promise(resolve=>{started=resolve;});
