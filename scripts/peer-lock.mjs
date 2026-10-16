@@ -14,7 +14,20 @@ const held=new AsyncLocalStorage();
 // so callers can retry rather than blocking the UI or resetting peer state.
 export async function withPeerStateLock(runtime,action) {
   if(held.getStore()?.get(runtime)?.active)return action();
-  const directory=await privateCollectorDirectory(runtime,'private-repair',true);
+  const verificationDeadline=performance.now()+1000;
+  let directory;
+  // Another process holding the lock creates and removes the SQLite journal in this folder.
+  // The macOS check refuses a folder whose entries change while it is inspected,
+  // so a waiter retries only that check's refusal within the lock's contention bound.
+  for(;;) {
+    try {directory=await privateCollectorDirectory(runtime,'private-repair',true);break;}
+    catch(error) {
+      if(process.platform!=='darwin' || error?.message!=='Private path access-control verification failed' ||
+        performance.now()>=verificationDeadline)throw error;
+      await delay(20);
+      if(performance.now()>=verificationDeadline)throw error;
+    }
+  }
   const filename=path.join(directory,'operation.sqlite');
   try {
     const file=await open(filename,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);

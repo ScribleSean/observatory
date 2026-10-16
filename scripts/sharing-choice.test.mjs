@@ -7,7 +7,7 @@ import {syncBuiltinESMExports} from 'node:module';
 import {mkdtemp,realpath,rm,lstat,readFile,writeFile,symlink,chmod,unlink,mkdir,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {testRuntimeBase} from './test-runtime-base.mjs';
 import {spawnSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
 import {chooseSharing,applySharingChoice,readSharingChoice,clearSharingChoice,markSharingChoiceApplied} from './sharing-choice.mjs';
@@ -23,13 +23,7 @@ import {attachQuotaSync} from './quota-sync.mjs';
 import {collectProviderTokenSources} from './provider-token-sync.mjs';
 const now=Date.now(),channels=['codex-limits','claude-code-tokens'];
 const filename=runtime=>path.join(runtime,'private-sync/sharing-choice.json');
-// macOS and other non-Windows platforms use the repository folder because the macOS
-// private-path check compares every ancestor's metadata before and after.
-// Windows keeps the temp folder because CI places it on the account volume and
-// the Windows check does not compare timestamps.
-const runtimeRoot=process.platform==='win32'?tmpdir():fileURLToPath(new URL('../.test-runtime/',import.meta.url));
-if(process.platform!=='win32')await mkdir(runtimeRoot,{recursive:true,mode:0o700});
-const runtimeBase=await realpath(await mkdtemp(path.join(runtimeRoot,'sharing-choice-')));
+const runtimeBase=await testRuntimeBase('sharing-choice');
 after(()=>rm(runtimeBase,{recursive:true,force:true}));
 async function fixture(t,paired=true) {
   const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-choice-')));
