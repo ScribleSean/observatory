@@ -8,8 +8,8 @@ import sys
 from zoneinfo import ZoneInfo
 
 # These limits are a coarse guard on the reader's time and memory, and the line limit
-# also bounds requests held in memory (about 30 seconds and 2 GB for the densest
-# history allowed on a current Mac).
+# also bounds requests held in memory (about 30 seconds and up to about 3 GB for the
+# densest history allowed, measured on a current Mac).
 # The collectors' 60 second reader limit is the final bound, and a history over any
 # limit or past that time reads unavailable, never partial.
 MAX_FILES = 10_000
