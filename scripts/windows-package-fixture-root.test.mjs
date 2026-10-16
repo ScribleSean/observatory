@@ -8,6 +8,32 @@ const workflow = () =>
     'utf8',
   ).replaceAll('\r\n', '\n');
 
+void test('Windows package job allows 75 minutes', () => {
+  assert.match(workflow(), /^  package:\n    runs-on: windows-latest\n    timeout-minutes: 75\n/m);
+});
+
+void test('Windows package excludes build tools from Defender immediately before the build', () => {
+  const text = workflow();
+  const name = '      - name: Exclude build tools from Defender scans';
+  assert.equal(text.split(name).length - 1, 1);
+  const start = text.indexOf(name);
+  const end = text.indexOf('\n      - ', start + 1);
+  assert.equal(text.slice(start, end), [
+    name,
+    "        if: '!inputs.verify_compiler_only'",
+    '        shell: pwsh',
+    '        run: |',
+    '          try {',
+    "            Add-MpPreference -ExclusionPath $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE, (Split-Path -Parent (Get-Command node).Source) -ExclusionProcess 'node.exe', 'powershell.exe' -ErrorAction Stop",
+    '          } catch {',
+    "            Write-Output '::warning::Could not exclude build tools from Defender scans. Continuing with the build.'",
+    '          }',
+  ].join('\n'));
+  assert.ok(text.slice(end).startsWith(
+    '\n      - name: Build and verify complete package from a clean checkout\n',
+  ));
+});
+
 void test('Windows package fixtures use the account volume before native build and installer checks', () => {
   const text = workflow();
   const start = text.indexOf(

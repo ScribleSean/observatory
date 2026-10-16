@@ -18,7 +18,7 @@ concurrency:
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
@@ -45,6 +45,15 @@ jobs:
         if: '!inputs.verify_compiler_only'
         with:
           python-version: '3.13'
+      - name: Exclude build tools from Defender scans
+        if: '!inputs.verify_compiler_only'
+        shell: pwsh
+        run: |
+          try {
+            Add-MpPreference -ExclusionPath $env:RUNNER_TEMP, $env:GITHUB_WORKSPACE, (Split-Path -Parent (Get-Command node).Source) -ExclusionProcess 'node.exe', 'powershell.exe' -ErrorAction Stop
+          } catch {
+            Write-Output '::warning::Could not exclude build tools from Defender scans. Continuing with the build.'
+          }
       - name: Build and verify complete package from a clean checkout
         if: '!inputs.verify_compiler_only'
         shell: pwsh
