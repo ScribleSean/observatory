@@ -98,7 +98,7 @@ export function createWorkerLink(input,output,{timeoutMs=60000}={}) {
 }
 
 export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterHost,pauseBeforeExchange,sleep:wait=sleep,log=line=>process.stderr.write(line+'\n'),cleanup}) {
-  let stopped=null,invitation=null,joinEndpoint=null,probeFailure=null,replyFailure=null,activeStep=null;
+  let stopped=null,invitation=null,joinEndpoint=null,probeFailure=null,replyFailure=null,activeStep=null,secondExchanges=0;
   const status=word=>reply=>reply.status===word;
   async function receive(link,operation) {
     try {return await operation();}
@@ -132,8 +132,17 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
     throw failed();
   }
   async function send(link,action,check,extra={}) {
-    const reply=await receive(link,()=>link.send({action,...extra}));
-    checkReply(reply,check,link);
+    const command={action,...extra};
+    let reply=await receive(link,()=>link.send(command));
+    try {checkReply(reply,check,link);}
+    catch (error) {
+      if(!valid(reply) || !['exchange','repeat-exchange','exchange-after-restart','quota-exchange'].includes(activeStep))throw error;
+      log(`step ${activeStep}: second exchange (${link===H?'hosting':'joining'} side, ${replyFailure})`);
+      secondExchanges++;
+      replyFailure=null;
+      reply=await receive(link,()=>link.send(command));
+      checkReply(reply,check,link);
+    }
     return reply;
   }
   async function both(action,check,links=[H,J]) {for(const link of links)await send(link,action,check);}
@@ -185,6 +194,7 @@ export async function runSequence({host:H,join:J,repaired=false,port,pauseAfterH
     try {await cleanup();log('step cleanup: ok');}
     catch {log('step cleanup: failed');stopped??='cleanup';}
   }
+  log(`second exchanges used: ${secondExchanges}`);
   log(stopped?`result: stopped at ${stopped}`:'result: passed');
   return stopped===null;
 }

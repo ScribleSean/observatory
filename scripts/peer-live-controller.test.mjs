@@ -49,7 +49,7 @@ function fakes(override=()=>undefined) {
 test('full sequence passes in order and keeps invitations private',async()=>{
   const run=fakes();
   assert.equal(await runSequence(run),true);
-  assert.deepEqual(run.lines,[...steps.map(step=>`step ${step}: ok`),'result: passed']);
+  assert.deepEqual(run.lines,[...steps.map(step=>`step ${step}: ok`),'second exchanges used: 0','result: passed']);
   assert.ok(run.commands.every(({command})=>command.action!=='host-close'));
   assert.equal(run.cleaned,1);
   assert.ok(run.lines.every(line=>!line.includes(invitation)));
@@ -63,7 +63,7 @@ test('first failed finish stops commands and still cleans up',async()=>{
   const run=fakes((role,command)=>command.action==='finish'?{status:'local-ready'}:undefined);
   assert.equal(await runSequence(run),false);
   assert.equal(run.commands.at(-1).command.action,'finish');
-  assert.deepEqual(run.lines.slice(-3),['step finish: failed','step cleanup: ok','result: stopped at finish']);
+  assert.deepEqual(run.lines.slice(-4),['step finish: failed','step cleanup: ok','second exchanges used: 0','result: stopped at finish']);
   assert.equal(run.cleaned,1);
 });
 test('error replies fail even if their success fields match',async()=>{
@@ -100,7 +100,7 @@ for(const kind of ['error','wrong id','timeout','closed','over-long line','inval
   assert.equal(await runSequence({...run,host:worker.link}),false);
   const reason=kind==='error'?'worker error':kind==='timeout'?'worker reply timeout':'worker link closed';
   assert.equal(worker.link.failureReason(),reason);
-  assert.deepEqual(run.lines,['step ready: ok',`step endpoint: failed (${reason})`,'step cleanup: ok','result: stopped at endpoint']);
+  assert.deepEqual(run.lines,['step ready: ok',`step endpoint: failed (${reason})`,'step cleanup: ok','second exchanges used: 0','result: stopped at endpoint']);
   assert.ok(run.lines.every(line=>!line.includes(invitation)));
   assert.equal(worker.requests.length,1);
   assert.equal(run.commands.length,0);
@@ -149,7 +149,7 @@ test('cleanup closes every worker before waiting and rejects bad exits or timeou
 test('cleanup failure prevents a passing result',async()=>{
   const run=fakes();
   assert.equal(await runSequence({...run,cleanup:async()=>{throw Error('private');}}),false);
-  assert.deepEqual(run.lines.slice(-2),['step cleanup: failed','result: stopped at cleanup']);
+  assert.deepEqual(run.lines.slice(-3),['step cleanup: failed','second exchanges used: 0','result: stopped at cleanup']);
 });
 test('strict command lines require pipes or sockets for both role streams',()=>{
   const info=kind=>({isFIFO:()=>kind==='pipe',isSocket:()=>kind==='socket'});
@@ -205,7 +205,7 @@ test('fixed port adds host-close only on host and requires closed before service
   assert.equal(await runSequence({...run,port:43128}),true);
   const expected=[...steps];
   expected.splice(expected.indexOf('service'),0,'host-close');
-  assert.deepEqual(run.lines,[...expected.map(step=>`step ${step}: ok`),'result: passed']);
+  assert.deepEqual(run.lines,[...expected.map(step=>`step ${step}: ok`),'second exchanges used: 0','result: passed']);
   const index=run.commands.findIndex(({command})=>command.action==='host-close');
   assert.deepEqual(run.commands.slice(index-1,index+2),[
     {role:'host',command:{action:'acknowledged'}},
@@ -329,7 +329,7 @@ test('probe failure prints only allowed tcp words from replies',async()=>{
     const run=fakes((role,command)=>command.action==='probe'?{tcp,private:invitation}:undefined);
     assert.equal(await runSequence(run),false);
     const suffix=['timeout','refused','unavailable'].includes(tcp)?` (${tcp})`:'';
-    assert.deepEqual(run.lines.slice(-3),[`step probe: failed${suffix}`,'step cleanup: ok','result: stopped at probe']);
+    assert.deepEqual(run.lines.slice(-4),[`step probe: failed${suffix}`,'step cleanup: ok','second exchanges used: 0','result: stopped at probe']);
     assert.equal(run.commands.at(-1).command.action,'probe');
     assert.equal(run.cleaned,1);
     assert.ok(run.lines.every(line=>!line.includes(invitation)));
@@ -343,7 +343,7 @@ test('probe error replies have a fixed reason and unknown failures stay generic'
       return {tcp:'timeout',error:invitation};
     });
     assert.equal(await runSequence(run),false);
-    assert.deepEqual(run.lines.slice(-3),[`step probe: failed${transportFailure?'':' (worker error)'}`,'step cleanup: ok','result: stopped at probe']);
+    assert.deepEqual(run.lines.slice(-4),[`step probe: failed${transportFailure?'':' (worker error)'}`,'step cleanup: ok','second exchanges used: 0','result: stopped at probe']);
   }
 });
 
@@ -412,7 +412,7 @@ test('exchange reasons allow only fixed status and transport words at every exch
       for(const transport of ['ok','unavailable','not-configured',invitation,{secret:invitation}]) {
         if(status==='merged' && transport==='ok')continue;
         let count=0;
-        const run=fakes((role,command)=>command.action==='exchange' && ++count===index*2+1?{status,transport,private:invitation}:undefined);
+        const run=fakes((role,command)=>command.action==='exchange' && ++count>=index*2+1?{status,transport,private:invitation}:undefined);
         assert.equal(await runSequence(run),false);
         const safeStatus=['merged','waiting','unavailable'].includes(status)?status:'other';
         const safeTransport=['ok','unavailable','not-configured'].includes(transport)?transport:'other';
@@ -428,14 +428,14 @@ test('exchange diagnostics name both senders and sanitize every diagnostic field
       for(const stage of ['connect','tls','response','none',invitation,{}]) {
         for(const code of ['ETIMEDOUT','ECONNRESET','ECONNREFUSED','EHOSTUNREACH','ENETUNREACH','EPIPE','ECONNABORTED','none','other',invitation,{}]) {
           let count=0;
-          const run=fakes((role,command)=>command.action==='exchange' && role===side && ++count===index+1?
+          const run=fakes((role,command)=>command.action==='exchange' && role===side && ++count>=index+1?
             {status:'merged',transport:'unavailable',failure:{stage,code},elapsedMs:1499,private:invitation}:undefined);
           assert.equal(await runSequence(run),false);
           const safeStage=typeof stage==='string' && stage!==invitation?stage:'other';
           const safeCode=typeof code==='string' && code!==invitation?code:'other';
-          assert.deepEqual(run.lines.slice(-3),[
+          assert.deepEqual(run.lines.slice(-4),[
             `step ${step}: failed (${side==='host'?'hosting':'joining'} side, status merged, transport unavailable, stage ${safeStage}, code ${safeCode}, elapsed 1 s)`,
-            'step cleanup: ok',`result: stopped at ${step}`,
+            'step cleanup: ok','second exchanges used: 1',`result: stopped at ${step}`,
           ]);
           assert.equal(run.cleaned,1);
           assert.ok(run.lines.every(line=>!line.includes(invitation)));
@@ -450,9 +450,9 @@ test('missing or malformed failure objects omit diagnostics',async()=>{
     const run=fakes((role,command)=>command.action==='exchange'?
       {status:'merged',transport:'unavailable',failure,elapsedMs:invitation}:undefined);
     assert.equal(await runSequence(run),false);
-    assert.deepEqual(run.lines.slice(-3),[
+    assert.deepEqual(run.lines.slice(-4),[
       'step exchange: failed (joining side, status merged, transport unavailable)',
-      'step cleanup: ok','result: stopped at exchange',
+      'step cleanup: ok','second exchanges used: 1','result: stopped at exchange',
     ]);
   }
 });
@@ -462,7 +462,7 @@ test('elapsed diagnostics round seconds and never print arbitrary values',async(
     const run=fakes((role,command)=>command.action==='exchange'?
       {status:'merged',transport:'unavailable',failure:{stage:'response',code:'none'},elapsedMs}:undefined);
     assert.equal(await runSequence(run),false);
-    assert.equal(run.lines.at(-3),`step exchange: failed (joining side, status merged, transport unavailable, stage response, code none, elapsed ${expected} s)`);
+    assert.equal(run.lines.at(-4),`step exchange: failed (joining side, status merged, transport unavailable, stage response, code none, elapsed ${expected} s)`);
   }
 });
 test('fixture event mapping identifies the failed stage without network access',()=>{
@@ -488,7 +488,7 @@ test('quota reasons allow only fixed status words and peer reading presence',asy
         let count=0;
         const run=fakes((role,command)=>{
           const target=step==='quota-repeat'?'quota-exchange':step==='quota-disable-host'?'quota-disable':step;
-          if(command.action!==target || ++count!==(step==='quota-repeat'?3:1))return;
+          if(command.action!==target || (step==='quota-exchange'?++count<1:++count!==(step==='quota-repeat'?3:1)))return;
           return {...(status===undefined?{}:{status}),peerRemaining,private:invitation};
         });
         assert.equal(await runSequence(run),false);
@@ -509,4 +509,104 @@ test('worker error takes priority over reply fields including readiness',async()
     assert.ok(run.lines.includes(`step ${step}: failed (worker error)`));
     assert.ok(run.lines.every(line=>!line.includes(invitation)));
   }
+});
+
+for(const [index,step] of ['exchange','repeat-exchange','exchange-after-restart','quota-exchange'].entries()) {
+  for(const side of ['host','join']) {
+    for(const passes of [true,false])test(`${step} on ${side} uses one identical second request that ${passes?'passes':'fails'}`,async()=>{
+      const action=index===3?'quota-exchange':'exchange',target=index===3?1:index+1;
+      const label=side==='host'?'hosting side':'joining side';
+      let count=0;
+      const run=fakes((role,command)=>{
+        if(role!==side || command.action!==action)return;
+        count++;
+        if(count===target)return {status:'unavailable',transport:'unavailable',private:invitation};
+        if(count===target+1) {
+          assert.equal(run.lines.at(-1),`step ${step}: second exchange (${label}, ${reason})`);
+          if(!passes)return {status:'waiting',transport:'not-configured',private:invitation};
+        }
+      });
+      const reason=index===3?'status unavailable, peer reading absent':`${label}, status unavailable, transport unavailable`;
+      assert.equal(await runSequence(run),passes);
+      const requests=run.commands.filter(({role,command})=>role===side && command.action===action);
+      assert.deepEqual(requests[target-1],requests[target]);
+      assert.equal(run.lines.filter(line=>line.includes(': second exchange (')).length,1);
+      assert.equal(run.lines.at(-2),'second exchanges used: 1');
+      if(passes)assert.ok(run.lines.includes(`step ${step}: ok`));
+      else {
+        const finalReason=index===3?'status other, peer reading absent':`${label}, status waiting, transport not-configured`;
+        assert.equal(run.lines.at(-4),`step ${step}: failed (${finalReason})`);
+        assert.equal(run.lines.at(-1),`result: stopped at ${step}`);
+        assert.equal(requests.length,target+1);
+        assert.deepEqual(run.commands.at(-1),requests.at(-1));
+      }
+      assert.ok(run.lines.every(line=>!line.includes(invitation)));
+    });
+  }
+}
+test('counts second requests on both sides across every eligible step',async()=>{
+  const counts=new Map();
+  const run=fakes((role,{action})=>{
+    if(!['exchange','quota-exchange'].includes(action))return;
+    const key=role+action,count=(counts.get(key)??0)+1;
+    counts.set(key,count);
+    if(action==='exchange' && count%2===1 || action==='quota-exchange' && count===1)
+      return {status:'unavailable',transport:'unavailable'};
+  });
+  assert.equal(await runSequence(run),true);
+  assert.equal(run.lines.at(-2),'second exchanges used: 8');
+});
+test('quota repeat uses the passing joining reply after a second exchange',async()=>{
+  for(const repeatSamples of [4,5]) {
+    let count=0,hostCount=0;
+    const run=fakes((role,{action})=>{
+      if(action!=='quota-exchange')return;
+      if(role==='host')return ++hostCount===1?{status:'ok',peerRemaining:70,peerSamples:99}:undefined;
+      count++;
+      if(count===1)return {status:'unavailable',peerRemaining:70,peerSamples:100};
+      if(count<=3)return {status:'ok',peerRemaining:70,peerSamples:count===2?4:repeatSamples};
+    });
+    assert.equal(await runSequence(run),repeatSamples===4);
+    assert.ok(run.lines.includes('step quota-exchange: ok'));
+    assert.ok(run.lines.includes(repeatSamples===4?'step quota-repeat: ok':'step quota-repeat: failed (status ok, peer reading present)'));
+    assert.equal(run.lines.at(-2),'second exchanges used: 1');
+  }
+});
+test('every other request keeps the stop rule including quota repeat and disable',async()=>{
+  const eligible=new Set(['exchange','repeat-exchange','exchange-after-restart','quota-exchange']);
+  let step;
+  const targets=[];
+  const reference=fakes();
+  const originalLog=reference.log;
+  await runSequence({...reference,repaired:true,port:43128,log:line=>{
+    if(line.startsWith('step ') && line.endsWith(': ok')) {
+      step=line.slice(5,-4);
+      for(let i=targets.length;i<reference.commands.length;i++)targets.push(step);
+    }
+    originalLog(line);
+  }});
+  for(const [index,target] of targets.entries()) {
+    if(eligible.has(target))continue;
+    let count=0;
+    const run=fakes(()=>++count===index+1?{}:undefined);
+    assert.equal(await runSequence({...run,repaired:true,port:43128}),false);
+    assert.equal(run.commands.length,index+1);
+    assert.equal(run.lines.at(-2),'second exchanges used: 0');
+    assert.equal(run.lines.at(-1),`result: stopped at ${target}`);
+  }
+});
+for(const kind of ['closed','timeout','error'])test(`exchange link ${kind} stops without a second request`,async()=>{
+  const run=fakes(),original=run.join.send;
+  const worker=wire((request,input)=>{
+    if(kind==='closed')input.end();
+    if(kind==='error')input.write(JSON.stringify({id:request.id,error:invitation})+'\n');
+  });
+  await worker.link.ready();
+  run.join.send=command=>command.action==='exchange'?worker.link.send(command):original(command);
+  run.join.failureReason=worker.link.failureReason;
+  assert.equal(await runSequence(run),false);
+  assert.equal(worker.requests.length,1);
+  assert.equal(run.lines.at(-2),'second exchanges used: 0');
+  const reason=kind==='closed'?'worker link closed':kind==='timeout'?'worker reply timeout':'worker error';
+  assert.equal(run.lines.at(-4),`step exchange: failed (${reason})`);
 });
