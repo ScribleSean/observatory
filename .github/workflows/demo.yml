@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    # The full script suite runs on every pull request and on main in script-suite.yml.
+    # The full script suite runs in script-suite.yml on pull requests and pushes to main that change its paths.
     # This job runs only the checks for the fictional demo it uploads.
     runs-on: ubuntu-latest
     timeout-minutes: 10
