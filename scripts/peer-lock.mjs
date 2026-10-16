@@ -7,6 +7,8 @@ import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 
 const held=new AsyncLocalStorage();
+// Keep the lock independent of garbage collection while an action is pending.
+const openLockDatabases=new Set();
 
 export async function checkLockSidecars(filename,{stat=lstat,wait=delay,boundMs=1000}={}) {
   for(const suffix of ['-journal','-wal','-shm']) {
@@ -61,6 +63,7 @@ export async function withPeerStateLock(runtime,action) {
   const lease={active:false};
   try {
     database=new DatabaseSync(filename);
+    openLockDatabases.add(database);
     const after=await lstat(filename);
     if(after.dev!==before.dev || after.ino!==before.ino)throw Error('Changing pairing operation lock');
     if(database.prepare('PRAGMA journal_mode').get().journal_mode!=='delete')throw Error('Unsupported pairing lock mode');
@@ -79,6 +82,9 @@ export async function withPeerStateLock(runtime,action) {
     return await held.run(contexts,action);
   } finally {
     lease.active=false;
-    if(database) {try{database.exec('ROLLBACK');}catch{}database.close();}
+    if(database) {
+      try{database.exec('ROLLBACK');}catch{}
+      try{database.close();}finally{openLockDatabases.delete(database);}
+    }
   }
 }
