@@ -24,7 +24,7 @@ async function log(root,name,body){const file=path.join(root,'projects','a',name
 
 test('keeps the deliberate history caps and the 4 MiB line cap',async()=>{
   const source=await readFile(script,'utf8');
-  for(const line of ['MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024','MAX_FILES = 10_000','MAX_LINES = 10_000_000','MAX_LINE_BYTES = 4 * 1024 * 1024']) {
+  for(const line of ['MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024','MAX_FILES = 10_000','MAX_LINES = 3_000_000','MAX_LINE_BYTES = 4 * 1024 * 1024']) {
     assert.ok(source.split('\n').includes(line),line);
   }
 });
