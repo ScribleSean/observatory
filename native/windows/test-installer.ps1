@@ -1,8 +1,9 @@
 param([Parameter(Mandatory=$true)][string]$InstallerPath)
 $ErrorActionPreference = 'Stop'
-$appNames = Get-Content (Join-Path $PSScriptRoot '../app-names.json') -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot 'app-names.ps1')
+$appNames = Read-AppNames
 if (-not [IO.Path]::IsPathRooted($InstallerPath)) { throw 'Absolute installer path required.' }
-$build = Get-Content (Join-Path (Split-Path $InstallerPath) 'installer-build.json') -Raw | ConvertFrom-Json
+$build = Get-Content -LiteralPath (Join-Path (Split-Path $InstallerPath) 'installer-build.json') -Raw | ConvertFrom-Json
 if (-not $build.testIdentity -or [IO.Path]::GetFileName($InstallerPath) -ne $build.installerName) { throw 'Only a generated TEST-identity installer may be used.' }
 $expectedHash = (Get-Content -LiteralPath "$InstallerPath.sha256" -Raw).Split(' ')[0]
 if ((Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) { throw 'Installer checksum mismatch.' }
@@ -42,7 +43,7 @@ function Invoke-CheckedProcess([string]$Executable, [string]$Arguments, [int]$Ex
 }
 function Check([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Check-Payload {
-    $manifest = Get-Content (Join-Path $install 'package-manifest.json') -Raw | ConvertFrom-Json
+    $manifest = Get-Content -LiteralPath (Join-Path $install 'package-manifest.json') -Raw | ConvertFrom-Json
     foreach ($file in $manifest.files) {
         $target = Join-Path $install $file.path
         Check ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -eq $file.sha256) 'Installed payload checksum mismatch.'
@@ -97,7 +98,7 @@ try {
     Move-Item -LiteralPath $runtime -Destination $held
     New-Item -ItemType Junction -Path $runtime -Target $outside | Out-Null
     Invoke-TestUninstall 12
-    Check ((Get-Content (Join-Path $outside 'node.exe') -Raw) -eq 'Synthetic unrelated file.') 'Linked target was changed.'
+    Check ((Get-Content -LiteralPath (Join-Path $outside 'node.exe') -Raw) -eq 'Synthetic unrelated file.') 'Linked target was changed.'
     Check ((Get-Item -LiteralPath $runtime).Attributes -band [IO.FileAttributes]::ReparsePoint) 'Expected test junction is missing.'
     [IO.Directory]::Delete($runtime, $false)
     Move-Item -LiteralPath $held -Destination $runtime
@@ -110,8 +111,8 @@ try {
     Invoke-TestUninstall
     Check (-not (Test-Path (Join-Path $install 'WorkspaceObservatory.exe'))) 'Application executable remains.'
     Check ((Get-ChildItem -LiteralPath $install -Force).Count -eq 1) 'Unexpected files remain after uninstall.'
-    Check ((Get-Content (Join-Path $install 'unrelated-test.txt') -Raw) -eq 'preserve') 'Unrelated install file was removed.'
-    Check ((Get-Content (Join-Path $shortcuts 'unrelated-test.txt') -Raw) -eq 'preserve') 'Unrelated shortcut-folder file was removed.'
+    Check ((Get-Content -LiteralPath (Join-Path $install 'unrelated-test.txt') -Raw) -eq 'preserve') 'Unrelated install file was removed.'
+    Check ((Get-Content -LiteralPath (Join-Path $shortcuts 'unrelated-test.txt') -Raw) -eq 'preserve') 'Unrelated shortcut-folder file was removed.'
     Check ($null -eq $run.GetValue($startupName)) 'Owned login startup registration remains.'
     $key = $registry.OpenSubKey($keyName, $true)
     try {

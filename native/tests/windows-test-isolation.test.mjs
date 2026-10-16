@@ -330,6 +330,9 @@ void test('Windows sources hold no double-encoded text', () => {
   }
 });
 
-void test('data migration never writes startup registry values', () => {
-  assert.doesNotMatch(read('migrate-data.ps1'), /\b(?:Set|New|Remove)-ItemProperty\b/i);
+void test('data migration removes only the named startup value', () => {
+  const source = read('migrate-data.ps1');
+  assert.doesNotMatch(source, /\b(?:Set|New)-ItemProperty\b/i);
+  assert.deepEqual(source.split('\n').filter(line => /\bRemove-ItemProperty\b/i.test(line)).map(line => line.trim()),
+    ['Remove-ItemProperty -LiteralPath $RunKey -Name $names.internal.windowsStartupName']);
 });

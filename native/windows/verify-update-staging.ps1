@@ -1,6 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$PackageDirectory)
 $ErrorActionPreference = 'Stop'
-$appNames = Get-Content (Join-Path $PSScriptRoot '../app-names.json') -Raw | ConvertFrom-Json
+. (Join-Path $PSScriptRoot 'app-names.ps1')
+$appNames = Read-AppNames
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'This integration check is restricted to disposable GitHub-hosted Windows runners.'
 }

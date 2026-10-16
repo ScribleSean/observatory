@@ -51,7 +51,7 @@ internal sealed record AppIdentity(bool IsTest)
         var testDirectory = string.Equals(directoryName, TestName, StringComparison.OrdinalIgnoreCase);
         if (owner is null)
         {
-            if (testDirectory) throw new IOException("TEST installation identity is missing.");
+            if (testDirectory || string.Equals(directoryName, LegacyTestName, StringComparison.OrdinalIgnoreCase)) throw new IOException("TEST installation identity is missing.");
             return new(false); // Uninstalled source builds retain the ordinary identity.
         }
         var lines = owner.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
