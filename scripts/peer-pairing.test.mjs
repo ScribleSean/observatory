@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,writeFile,readFile,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,validatePairing,initializePairing,readPairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
@@ -53,7 +54,9 @@ test('linked pairing file is rejected without reading its target', {skip:process
   await writeFile(path.join(other,'private.json'),JSON.stringify(pair));
   await symlink(path.join(other,'private.json'),file);await assert.rejects(readPairing(runtime));
 });
-const lifecyclePhaseTimeout=30000;
+// On hosted Windows runners the first paired collection phase took 8 s to 21 s across 61 jobs (median about 15 s).
+// Each paired collector run makes about 23 serial private-folder checks and each one starts PowerShell, so each phase allows 60 s.
+const lifecyclePhaseTimeout=60000;
 test('normal native CLI loads pairing, publishes local state and merges a validated peer',
   {skip:!['darwin','win32'].includes(process.platform),timeout:5*lifecyclePhaseTimeout},async t=>{
     let runtime,pair,at,peerHost,run,activePhase,completed=false;
@@ -72,18 +75,32 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
           .map(source=>({source,status:'not-connected'}))},pair.peer);
       await acceptPeerState(runtime,createPeerRecord(peerPayload,pair.peer,1),pair.peer);
       const script=fileURLToPath(new URL(mac?'./collect-mac.mjs':'./collect-windows.mjs',import.meta.url));
-      run=phase=>{
+      run=async phase=>{
         t.signal.throwIfAborted();
         phase.signal.throwIfAborted();
-        return execFileSync(process.execPath,[script],{env:{...process.env,OBSERVATORY_RUNTIME:runtime,
-          OBSERVATORY_PYTHON:process.env.OBSERVATORY_PYTHON},encoding:'utf8',timeout:20000});
+        const countFile=process.platform==='win32'?path.join(await fixture(t,()=>activePhase),'powershell-count.txt'):null;
+        const started=performance.now();
+        try {
+          const {stdout}=await promisify(execFile)(process.execPath,[script],{env:{...process.env,OBSERVATORY_RUNTIME:runtime,
+            OBSERVATORY_PYTHON:process.env.OBSERVATORY_PYTHON,...(countFile?{OBSERVATORY_COUNT_POWERSHELL:countFile}:{})},
+          encoding:'utf8',windowsHide:true,signal:AbortSignal.any([t.signal,phase.signal])});
+          return stdout;
+        } finally {
+          const ms=Math.round(performance.now()-started);
+          let count='';
+          if(countFile)try {
+            const match=(await readFile(countFile,'utf8')).trim().split(/\r?\n/).at(-1).match(/^private-sync-acl (\d+)$/);
+            if(match)count=` with ${match[1]} private-folder checks`;
+          } catch {}
+          phase.diagnostic(`collector run ${ms} ms${count}`);
+        }
       };
       completed=!phase.signal.aborted;
     })());
     if(!completed || t.signal.aborted)return;
     completed=false;
     await t.test('initial publish, privacy and merge',{timeout:lifecyclePhaseTimeout},phase=>activePhase=(async()=>{
-      const output=run(phase);assert.equal(JSON.parse(output).state,'partial');
+      const output=await run(phase);assert.equal(JSON.parse(output).state,'partial');
       assert.equal((await readPeerState(runtime,pair.local,Date.now(),'local')).revision.sequence,1);
       const dashboard=await readFile(path.join(runtime,'public/local/usage.json'),'utf8');
       const data=JSON.parse(dashboard);
@@ -95,7 +112,7 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
     if(!completed || t.signal.aborted)return;
     completed=false;
     await t.test('revision advance',{timeout:lifecyclePhaseTimeout},phase=>activePhase=(async()=>{
-      run(phase);assert.equal((await readPeerState(runtime,pair.local,Date.now(),'local')).revision.sequence,2);
+      await run(phase);assert.equal((await readPeerState(runtime,pair.local,Date.now(),'local')).revision.sequence,2);
       completed=!phase.signal.aborted;
     })());
     if(!completed || t.signal.aborted)return;
@@ -103,7 +120,7 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
     const pairingFile=path.join(runtime,'private-sync/pairing.json');
     await t.test('corrupt configuration withholds peer data',{timeout:lifecyclePhaseTimeout},phase=>activePhase=(async()=>{
       await writeFile(pairingFile,'{}');
-      assert.equal(JSON.parse(run(phase)).state,'partial');
+      assert.equal(JSON.parse(await run(phase)).state,'partial');
       const corrupt=JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
       assert.notEqual(corrupt.activity.find(row=>row.host===peerHost).checkedAt,at);
       completed=!phase.signal.aborted;
@@ -113,7 +130,7 @@ test('normal native CLI loads pairing, publishes local state and merges a valida
       await writeFile(pairingFile,JSON.stringify(pair));
       phase.signal.throwIfAborted();
       await revokePairing(runtime);
-      assert.equal(JSON.parse(run(phase)).state,'partial');
+      assert.equal(JSON.parse(await run(phase)).state,'partial');
       const standalone=JSON.parse(await readFile(path.join(runtime,'public/local/usage.json'),'utf8'));
       assert.notEqual(standalone.activity.find(row=>row.host===peerHost).checkedAt,at);
       assert.equal(JSON.parse(await readFile(path.join(runtime,'private-sync/pairing.json'),'utf8')).local.pairId,pair.local.pairId);
