@@ -78,7 +78,7 @@ See [private sync](docs/PRIVATE-SYNC.md) and [security](SECURITY.md).
 
 - Builds are not signed by an identified developer, and there are no automatic updates. Check for updates says that updates are not available in this build. To update, download the newer release and replace the app as the install guide describes.
 - The Mac app runs only on Apple Silicon with macOS 14 or later. The Windows app runs only on x64. There is no Linux app, and WSL and Ubuntu tracking are out of scope. iPhone integration is later work and is not implemented.
-- Claude Code limits are read only after you turn them on in Settings and accept the notes shown there. Claude Code reports them only for Pro and Max subscriptions, and only while a session is responding. Between sessions the app shows when the last reading was taken.
+- Claude Code limits are read only after you turn them on in Settings and accept the notes shown there. They are account-wide and are not sent to a paired device. When a new reading cannot be taken, the app shows the earlier reading with the time it was observed.
 - Screen time needs ActivityWatch on each device you want to track. Observatory does not install it.
 - Collection runs every five minutes while the app is running.
 - Days are counted in the America/New_York time zone on every device.
