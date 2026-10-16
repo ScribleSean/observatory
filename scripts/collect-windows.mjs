@@ -21,7 +21,7 @@ import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
-import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,withinTime} from './claude-limits.mjs';
+import {readClaudeLimits,attachClaudeLimits,claudeLimitsSource,claudeLimitsConsent,withinTime} from './claude-limits.mjs';
 import {windowsCollectorLease} from './windows-collector-lease.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -45,7 +45,7 @@ function run(file,args,input='',environment=process.env) {
   });
 }
 
-export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits,signal,
+export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,readLimits=readClaudeLimits,limitsTimeoutMs=20000,signal,
   readConfiguration=()=>readFile(path.join(runtime,'collector.config.json'),'utf8')}={}) {
   if(process.platform!=='win32' || !path.isAbsolute(runtime))throw Error('Native Windows runtime required');
   signal?.throwIfAborted();
@@ -125,7 +125,9 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   attachProviderTokenEstimates(result); // Estimates are added after the peer exchange, so they never enter exchanged records.
   signal?.throwIfAborted();
   // Account-wide limits observed on this device. They are not shared with a paired device.
-  attachClaudeLimits(result,await withinTime(readLimits(runtime),20000).catch(()=>claudeLimitsSource(null,{enabled:true})));
+  const {given:enabled}=await claudeLimitsConsent(runtime).catch(()=>({given:false}));
+  attachClaudeLimits(result,await withinTime(readLimits(runtime),limitsTimeoutMs).catch(()=>({
+    ...claudeLimitsSource(null,{enabled}),...(enabled?{usageCommand:'timed-out'}:{})})));
   attachDeviceName(result.data,'Windows',deviceName);
   const {data,status}=result;
   await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});

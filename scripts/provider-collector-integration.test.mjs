@@ -112,3 +112,22 @@ test('Mac collection ignores saved receipt and benchmark settings',
     assert.ok(!published.includes(receipts));
     assert.deepEqual(await readFile(localConfig),before);
   });
+
+for(const platform of ['darwin','win32'])for(const consent of [false,true])test(`${platform} limits timeout preserves consent ${consent}`,
+  {skip:process.platform!==platform},async t=>{
+    const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-limits-timeout-')));
+    t.after(()=>rm(runtime,{recursive:true,force:true}));
+    await writeFile(path.join(runtime,'collector.config.json'),JSON.stringify({activity:false,codex:false,
+      claude:false,wispr:false,quota:false}));
+    if(consent) {
+      await mkdir(path.join(runtime,'claude-limits'));
+      await writeFile(path.join(runtime,'claude-limits/consent.json'),'{"consent":true}');
+    }
+    const options={readLimits:()=>new Promise(()=>{}),limitsTimeoutMs:10};
+    const keepAlive=setInterval(()=>{},1000);
+    t.after(()=>clearInterval(keepAlive));
+    const python=execPython(['-c','import sys\nprint(sys.executable)']).toString().trim();
+    const result=platform==='darwin'?await collectMac(runtime,python,null,options):await collectWindows(runtime,null,options);
+    assert.deepEqual(result.data.claudeLimits,{provider:'Claude Code',scope:'account',
+      status:consent?'unavailable':'not-connected',windows:[],...(consent?{usageCommand:'timed-out'}:{})});
+  });
