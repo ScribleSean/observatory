@@ -20,9 +20,74 @@ test('reset times are read in their own time zone, with and without minutes', ()
   assert.equal(parseResetTime('Oct 16 at 6pm (America/New_York)',now),Date.parse('2026-10-16T22:00:00Z')/1000);
   assert.equal(parseResetTime('Oct 14 at 12am (UTC)',now),Date.parse('2026-10-14T00:00:00Z')/1000);
   assert.equal(parseResetTime('Oct 14 at 12:30pm (Asia/Kolkata)',now),Date.parse('2026-10-14T07:00:00Z')/1000);
-  assert.equal(parseResetTime('Jan 2 at 9am (UTC)',Date.parse('2026-12-30T10:00:00Z')),Date.parse('2027-01-02T09:00:00Z')/1000);
+  assert.equal(parseResetTime('Jan 2 at 9am (UTC)',Date.parse('2026-12-30T10:00:00Z')),null);
+  assert.equal(parseResetTime('Jan 2, 9am (UTC)',Date.parse('2026-12-30T10:00:00Z')),null);
   for(const bad of ['tomorrow','Oct 13 at 25pm (UTC)','Oct 13 at 11:99pm (UTC)','Zzz 13 at 1pm (UTC)','Oct 13 at 1pm (Not/A_Zone)','Mar 1 at 1pm (UTC)',undefined])
     assert.equal(parseResetTime(bad,now),null,String(bad));
+});
+
+test('reset formats from both ICU variants map to exact epoch seconds', () => {
+  for(const separator of [' at ', ', '])for(const year of ['', ', 2026']) {
+    for(const [date,time,expected] of [
+      ['Oct 16','6pm','2026-10-16T22:00:00Z'],
+      ['Oct 13','11:09pm','2026-10-14T03:09:00Z'],
+      ['Oct 14','9am','2026-10-14T13:00:00Z'],
+      ['Oct 14','9:09am','2026-10-14T13:09:00Z'],
+    ])for(const suffix of ['lower','upper','space','narrow']) {
+      const formatted=time.replace(/am|pm/,value=>suffix==='lower'?value:
+        `${suffix==='space'?' ':suffix==='narrow'?'\u202f':''}${value.toUpperCase()}`);
+      const input=`${date}${year}${separator}${formatted} (America/New_York)`;
+      assert.equal(parseResetTime(input,now),Date.parse(expected)/1000,input);
+    }
+  }
+  assert.equal(parseResetTime('Oct 16, 6 PM (UTC)',now),Date.parse('2026-10-16T18:00:00Z')/1000);
+});
+
+test('omitted years follow the printed time zone across New Year', () => {
+  const newYork=Date.parse('2027-01-01T03:00:00Z');
+  for(const input of ['Dec 31 at 11pm (America/New_York)','Dec 31, 11pm (America/New_York)'])
+    assert.equal(parseResetTime(input,newYork),Date.parse('2027-01-01T04:00:00Z')/1000,input);
+  const auckland=Date.parse('2026-12-31T12:00:00Z');
+  for(const input of ['Jan 1 at 2am (Pacific/Auckland)','Jan 1, 2027, 2am (Pacific/Auckland)'])
+    assert.equal(parseResetTime(input,auckland),Date.parse('2026-12-31T13:00:00Z')/1000,input);
+  assert.equal(parseResetTime('Dec 31 at 11pm (UTC)',auckland),Date.parse('2026-12-31T23:00:00Z')/1000);
+});
+
+test('explicit years across New Year are used without a next-year retry', () => {
+  const december=Date.parse('2026-12-30T10:00:00Z');
+  for(const separator of [' at ', ', ']) {
+    for(const [time,expected] of [['9am','2027-01-02T09:00:00Z'],['6:09pm','2027-01-02T18:09:00Z']])
+      assert.equal(parseResetTime(`Jan 2, 2027${separator}${time} (UTC)`,december),Date.parse(expected)/1000);
+    assert.equal(parseResetTime(`Jan 2, 2026${separator}9am (UTC)`,december),null);
+  }
+});
+
+test('malformed reset times and nonexistent calendar dates are refused', () => {
+  for(const bad of ['Oct 16 6pm (UTC)','Oct 16,6pm (UTC)','Oct 16, 18:00 (UTC)',
+    'Oct 16, 26, 6pm (UTC)','Oct 16, 6pm','Oct 16, 6pm (UTC) extra',
+    'Oct 16, 6pm (Not/A_Zone)','Oct 16, 6  PM (UTC)','Oct 16, 6\tPM (UTC)',
+    'Oct 16, 6Pm (UTC)','Oct 0, 6pm (UTC)','Oct 32, 6pm (UTC)','Oct 16, 0pm (UTC)',
+    'Oct 16, 13pm (UTC)','Oct 16, 6:60pm (UTC)'])assert.equal(parseResetTime(bad,now),null,bad);
+  const february=Date.parse('2026-02-28T10:00:00Z');
+  for(const year of ['', ', 2026'])for(const separator of [' at ', ', '])for(const zone of ['UTC','America/New_York'])
+    assert.equal(parseResetTime(`Feb 30${year}${separator}6pm (${zone})`,february),null);
+});
+
+test('reset window boundaries stay exclusive with and without a year', () => {
+  const reference=Date.parse('2026-10-13T18:00:00Z');
+  for(const year of ['', ', 2026']) {
+    for(const date of ['Oct 12','Oct 22'])assert.equal(parseResetTime(`${date}${year}, 6pm (UTC)`,reference),null);
+    assert.equal(parseResetTime(`Oct 12${year}, 6:01pm (UTC)`,reference),Date.parse('2026-10-12T18:01:00Z')/1000);
+    assert.equal(parseResetTime(`Oct 22${year}, 5:59pm (UTC)`,reference),Date.parse('2026-10-22T17:59:00Z')/1000);
+  }
+});
+
+test('comma reset lines return both windows with LF and CRLF endings', () => {
+  const result=text('23% used · resets Oct 13, 11:09pm (America/New_York)',
+    '75% used · resets Oct 16, 6pm (America/New_York)');
+  for(const ending of ['\n','\r\n'])assert.deepEqual(parseClaudeUsage(envelope(result.replaceAll('\n',ending)),now),
+    {rate_limits:{five_hour:{used_percentage:23,resets_at:Date.parse('2026-10-14T03:09:00Z')/1000},
+      seven_day:{used_percentage:75,resets_at:Date.parse('2026-10-16T22:00:00Z')/1000}}});
 });
 
 test('the two limit lines become status line fields and nothing else is kept', () => {
