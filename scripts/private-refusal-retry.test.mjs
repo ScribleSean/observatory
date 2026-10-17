@@ -157,37 +157,79 @@ test('status commands recover from one deterministic private-path refusal',darwi
   }
 });
 
-test('quota status succeeds during continuous synthetic journal churn',darwinOnly,async t=>{
+// Churn uses a neutral file name. A name SQLite uses itself, such as state.sqlite-journal,
+// also trips the quota store's own sidecar guard, which is a different refusal.
+function startChurn(runtime,milliseconds) {
+  const churn=spawn(process.execPath,['--input-type=module','-e',`
+import {writeFileSync,unlinkSync} from 'node:fs'
+import {performance} from 'node:perf_hooks'
+const file=process.argv[1]
+const until=performance.now()+Number(process.argv[2])
+let changes=0
+while(performance.now()<until) {
+  writeFileSync(file,'',{mode:0o600,flag:'wx'})
+  unlinkSync(file)
+  if(++changes===1)process.stderr.write('ready')
+}
+process.stdout.write(String(changes))
+`,path.join(runtime,'private-quota/synthetic-churn.tmp'),String(milliseconds)],{timeout:30000});
+  const ready=new Promise((resolve,reject)=>{
+    churn.stderr.once('data',resolve);
+    churn.once('error',reject);
+    churn.once('close',()=>reject(Error('The churn process ended before it started')));
+  });
+  const done=collectChild(churn);
+  return {churn,ready,done};
+}
+
+test('quota status succeeds when private-quota churn stops within the retry budget',darwinOnly,async t=>{
   const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-private-churn-')));
-  let churnDone;
+  let current;
   try {
     const python=await fixturePython(t,runtime);
     if(!python)return;
     await readQuotaState(runtime,Date.now());
     for(let run=0;run<3;run++) {
-      const churn=spawn(process.execPath,['--input-type=module','-e',`
-import {writeFileSync,unlinkSync} from 'node:fs'
-import {performance} from 'node:perf_hooks'
-const journal=process.argv[1]
-const until=performance.now()+400
-let changes=0
-while(performance.now()<until) {
-  writeFileSync(journal,'',{mode:0o600,flag:'wx'})
-  unlinkSync(journal)
-  changes++
-}
-process.stdout.write(String(changes))
-`,path.join(runtime,'private-quota/state.sqlite-journal')],{timeout:15000});
-      churnDone=collectChild(churn);
+      current=startChurn(runtime,400);
+      await current.ready;
       const result=await status('scripts/quota-sharing-control.mjs',runtime,python);
-      const writer=await churnDone;
+      const writer=await current.done;
       assert.equal(writer.code,0,writer.stderr);
-      assert.equal(writer.signal,null);
-      assert.ok(Number(writer.stdout)>0,'The synthetic journal changed during the churn process');
+      assert.ok(Number(writer.stdout)>0,'The synthetic file changed during the churn process');
       assert.deepEqual(statusValue(result),quotaStatus,`Status run ${run+1}`);
     }
   } finally {
-    try {if(churnDone)await churnDone;}
+    try {if(current)await current.done;}
+    finally {await rm(runtime,{recursive:true,force:true});}
+  }
+});
+
+test('quota status gives the right answer or a clean refusal when private-quota churn outlasts the retry budget',darwinOnly,async t=>{
+  const runtime=await realpath(await mkdtemp(path.join(tmpdir(),'observatory-private-churn-long-')));
+  let current;
+  try {
+    const python=await fixturePython(t,runtime);
+    if(!python)return;
+    await readQuotaState(runtime,Date.now());
+    current=startChurn(runtime,20000);
+    await current.ready;
+    const started=performance.now();
+    const result=await status('scripts/quota-sharing-control.mjs',runtime,python);
+    const elapsed=performance.now()-started;
+    // Continuous churn can outlast any bounded retry, and a loaded machine can leave a clean window
+    // in which one full check passes. The guarantee is the right answer or a clean refusal after the
+    // whole budget, never a wrong answer.
+    if(result.code===0) {
+      assert.deepEqual(statusValue(result),quotaStatus);
+    } else {
+      assert.equal(result.code,1);
+      assert.equal(result.signal,null);
+      assert.equal(result.stdout,'');
+      assert.equal(result.stderr.trim(),'Allowance sharing settings could not be verified. Refresh settings before retrying.');
+      assert.ok(elapsed>=1000,`The status read gave up after ${Math.round(elapsed)} ms`);
+    }
+  } finally {
+    try {if(current) {current.churn.kill('SIGTERM');await current.done;}}
     finally {await rm(runtime,{recursive:true,force:true});}
   }
 });
