@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,appendFile,readFile,stat,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execPython} from './test-python.mjs';
@@ -9,8 +9,8 @@ import {fileSymlinkOrSkip} from './test-file-symlink.mjs';
 const script='scripts/read-claude-usage.py';
 const event=(id,requestId,usage,{timestamp='2026-09-25T04:30:00Z',model='claude-sonnet-4-20250514',type='assistant'}={})=>JSON.stringify({type,timestamp,requestId,message:{role:'assistant',id,model,usage,content:'PRIVATE'}})+'\n';
 const usage=(input_tokens,cache_read_input_tokens,cache_creation_input_tokens,output_tokens)=>({input_tokens,cache_read_input_tokens,cache_creation_input_tokens,output_tokens});
-function read(root){
-  const data=JSON.parse(execPython([script,root]).toString());
+function read(root,reader=script){
+  const data=JSON.parse(execPython([reader,root]).toString());
   for(const day of data.days??[]) {
     assert.equal(day.hours.length,24);
     assert.ok(day.hours.every(value=>Number.isSafeInteger(value) && value>=0));
@@ -21,6 +21,48 @@ function read(root){
 }
 async function fixture(action){const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-'));try{await action(root);}finally{await rm(root,{recursive:true,force:true});}}
 async function log(root,name,body){const file=path.join(root,'projects','a',name);await mkdir(path.dirname(file),{recursive:true});await writeFile(file,body);return file;}
+
+test('keeps the deliberate history caps and the 4 MiB line cap',async()=>{
+  const source=await readFile(script,'utf8');
+  for(const line of ['MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024','MAX_FILES = 10_000','MAX_LINES = 3_000_000','MAX_LINE_BYTES = 4 * 1024 * 1024']) {
+    assert.ok(source.split('\n').includes(line),line);
+  }
+});
+test('reads a synthetic history larger than the old 128 MiB cap completely',async()=>fixture(async root=>{
+  const line=Buffer.from(JSON.stringify({type:'user',pad:'x'.repeat(1024*1024-25)})+'\n');
+  assert.equal(line.length,1024*1024);
+  const file=await log(root,'large.jsonl','');
+  for(let index=0;index<130;index++)await appendFile(file,line);
+  await appendFile(file,event('m1','r1',usage(1,2,3,4)));
+  assert.ok((await stat(file)).size>128*1024*1024);
+  const data=read(root);
+  assert.equal(data.status,'ok');
+  assert.equal(data.days.reduce((total,day)=>total+day.requestCount,0),1);
+}));
+for(const limit of ['MAX_TOTAL_BYTES','MAX_FILES','MAX_LINES']) {
+  test(`${limit} accepts histories below and at its cap and fails closed above it`,async()=>fixture(async root=>{
+    const valid=event('m1','r1',usage(1,2,3,4));
+    const cap=limit==='MAX_TOTAL_BYTES'?Buffer.byteLength(valid)+1:2;
+    const source=await readFile(script,'utf8');
+    const pattern=new RegExp(`^${limit} = .+$`,'m');
+    assert.ok(pattern.test(source));
+    const reader=path.join(root,'limited-reader.py');
+    await writeFile(reader,source.replace(pattern,`${limit} = ${cap}`));
+    for(const offset of [-1,0,1]) {
+      if(limit==='MAX_FILES') {
+        await log(root,`${offset+1}.jsonl`,offset===-1?valid:'{}\n');
+      } else {
+        await log(root,'one.jsonl',valid+'\n'.repeat(offset+1));
+      }
+      const data=read(root,reader);
+      if(offset===1)assert.deepEqual(data,{provider:'claude-code',status:'unavailable'});
+      else {
+        assert.equal(data.status,'ok');
+        assert.equal(data.days[0].requestCount,1);
+      }
+    }
+  }));
+}
 
 test('keeps the final monotone streamed snapshot and separately counts cache categories',async()=>fixture(async root=>{
   await log(root,'one.jsonl',event('m1','r1',usage(1,0,0,2))+event('m1','r1',usage(4,8,16,1093)));
