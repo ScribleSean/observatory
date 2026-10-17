@@ -5,7 +5,7 @@ import { validateBridgeStatus, type SharingChannel } from './status';
 
 export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs = 150): Bridge {
   const state = validateBridgeStatus(status);
-  if (!state) throw new TypeError('Invalid sample status');
+  if (!state || state.limitsConsent === null || Object.values(state.sharing).some(channel => channel === null)) throw new TypeError('Invalid sample status');
   let nextId = 1;
   let disposed = false;
   let hostPolls = 0;
@@ -15,6 +15,7 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
     hostPolls = 0;
     // Sample sharing follows the sample pairing, so the demo can show both switch states.
     for (const [channel, item] of Object.entries(state.sharing)) {
+      if (!item) continue;
       const paired = ['paired', 'establishing-trust', 'active-sync', 'sync-stale'].includes(next);
       Object.assign(item, { enabled: paired && item.enabled, canEnable: paired, reason: paired ? 'ready' : 'pairing-unavailable',
         token: paired ? (channel === 'codex-limits' ? 'c0' : 'd0').repeat(32) : null });
@@ -58,7 +59,7 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
             case 'set-sharing-choice': chooseSharing(input.enabled as boolean); break;
             case 'set-sharing': {
               const channel = state.sharing[input.channel as SharingChannel];
-              if (input.enabled && (!channel.canEnable || input.token !== channel.token)) unavailable();
+              if (!channel || (input.enabled && (!channel.canEnable || input.token !== channel.token))) unavailable();
               else channel.enabled = input.enabled as boolean;
               break;
             }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import { STRINGS } from '../../../lib/strings.generated';
 import { SETUP_SOURCES, clampStep, sampleSetupStatus, setupSummary, stepLabel } from '../../../lib/view-setup.mjs';
+import { contract } from '../../../lib/bridge-contract.mjs';
 import { createBridge, type Bridge, type BridgeOutcome } from '../bridge';
 import { createSettingsController, limitsConsentFlow, type SettingsController } from '../settings/controller';
 import { createFakeBridge } from '../settings/fake-bridge';
@@ -22,12 +23,12 @@ export function SetupContent({ status, step, available, busy, message, disclosur
   const index = clampStep(step);
   const disabled = !available || !status || busy;
   const summary = setupSummary(status);
-  const word = (value: boolean | undefined) => value === undefined ? S.unknown : value ? S.on : S.off;
-  const toggle = (label: string, hint: string, value: boolean | undefined, change: (enabled: boolean) => void) => <div key={label}>
+  const word = (value: boolean | null | undefined) => value == null ? S.unknown : value ? S.on : S.off;
+  const toggle = (label: string, hint: string, value: boolean | null | undefined, change: (enabled: boolean) => void) => <div key={label}>
     <div className="ob-row ob-settings-toggle">
-      <label className="ob-settings-switch"><input type="checkbox" aria-checked={value === undefined ? 'mixed' : value}
-        ref={input => { if (input) input.indeterminate = value === undefined; }} checked={value ?? false}
-        disabled={disabled} onChange={event => change(event.target.checked)} />{label}</label>
+      <label className="ob-settings-switch"><input type="checkbox" aria-checked={value == null ? 'mixed' : value}
+        ref={input => { if (input) input.indeterminate = value == null; }} checked={value ?? false}
+        disabled={disabled || value == null} onChange={event => change(event.target.checked)} />{label}</label>
       <span className="ob-meta">{word(value)}</span>
     </div><p className="ob-meta">{hint}</p>
   </div>;
@@ -43,13 +44,13 @@ export function SetupContent({ status, step, available, busy, message, disclosur
       {toggle(S.claudeLimits, W.claudeLimitsHint, status?.limitsConsent, onLimits)}
       {disclosureOpen && <div className="ob-settings-disclosure"><ul>
         <li>{S.disclosureCommand}</li><li>{S.disclosureStorage}</li><li>{S.disclosureOff}</li>
-      </ul><button type="button" disabled={disabled} onClick={onConfirm}>{S.turnOn}</button><button type="button" disabled={disabled} onClick={onCancel}>{S.cancel}</button></div>}
+      </ul><button type="button" disabled={disabled || status?.limitsConsent == null} onClick={onConfirm}>{S.turnOn}</button><button type="button" disabled={disabled} onClick={onCancel}>{S.cancel}</button></div>}
       <p>{W.sourcesNote}</p><p>{W.privacyNote}</p>
     </>}
     {index === 1 && <><p>{W.pairingIntro}</p><p>{W.pairingHow}</p><p>{W.pairingNoAccount}</p></>}
     {index === 2 && <><p>{W.finishIntro}</p><ul className="ob-setup-summary">
       {summary.rows.map(row => <li key={row.id}><span>{row.label}</span><span>{word(row.on)}</span></li>)}
-    </ul>{status && !summary.anyOn && <p>{W.finishNone}</p>}</>}
+    </ul>{status && summary.noneOn && <p>{W.finishNone}</p>}</>}
     <div className="ob-setup-navigation">
       {index > 0 && <button type="button" onClick={() => onStep(index - 1)}>{W.back}</button>}
       {index < 2 ? <button type="button" onClick={() => onStep(index + 1)}>{W.next}</button> : <button type="button" disabled={disabled} onClick={onFinish}>{W.finish}</button>}
@@ -105,11 +106,18 @@ export function SetupView({ demo, bridge, onFinished, onBlockedChange }: { demo:
     setStatusReadFinished(false);
     setStatus(demo ? validateBridgeStatus(sampleSetupStatus()) : null);
     readStatus(next);
+    // Read status again while Claude limits is Unknown, quietly and never during another read.
+    let polling = false;
+    const recoveryPoll = setInterval(() => {
+      if (!transport.available || polling || running.current || next.getStatus()?.limitsConsent !== null) return;
+      polling = true;
+      void next.status().catch(() => {}).finally(() => { polling = false; });
+    }, contract.limits.cacheRefreshSeconds * 1000);
     const clear = () => { generation.current++; running.current = false; flow.current?.cancel(); setDisclosureOpen(false); setBusy(false); };
     const hide = () => flushSync(clear);
     window.addEventListener('pagehide', hide);
     return () => {
-      clear(); window.removeEventListener('pagehide', hide); unsubscribe(); next.dispose();
+      clear(); clearInterval(recoveryPoll); window.removeEventListener('pagehide', hide); unsubscribe(); next.dispose();
       if (!bridge) transport.dispose();
     };
   }, [bridge, demo, readStatus]);
