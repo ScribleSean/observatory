@@ -370,7 +370,10 @@ local controller must persist its own complementary pairing before calling it.
 joining user's expected host and source scope. `receiveConfirmedTLSPairing`
 uses the saved local identity, persists and verifies the received pairing and
 trust, then sends an acknowledgement digest covering the entire canonical
-configuration. A lost acknowledgement returns `local-ready`. An explicit
+configuration. A lost acknowledgement returns `local-ready`. The whole step
+stays inside a 40-second budget, so it ends before the native wrappers' 45-second
+command timeout. The acknowledgement gets only the time left, and when none is left
+it is not sent and the step returns `local-ready`. An explicit
 identical retry can finish without changing the pairing. The listener accepts
 repeated matching acknowledgements until cancellation or expiry, but rejects
 another certificate or a changed configuration digest. Its acknowledged state

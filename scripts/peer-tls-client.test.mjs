@@ -12,7 +12,7 @@ import {once} from 'node:events';
 import {createInvitation} from './peer-invitation.mjs';
 import {requestPeerClaim,claimFromInvitation,discoverPeerCertificate,requestPeerSetup,acknowledgePeerSetup} from './peer-tls-client.mjs';
 import {createPairingConfigurations,readPairing} from './peer-pairing.mjs';
-import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
+import {receiveConfirmedTLSPairing,joinBudgetMs} from './peer-tls-join.mjs';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {readPeerTrust} from './peer-tls-trust.mjs';
 import {setupConfigurationDigest,legacySetupConfigurationDigest} from './peer-tls-setup-message.mjs';
@@ -144,7 +144,9 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
   });
   await t.test('handshake deadline stays short for a long acknowledgement deadline',async()=>{
     const stalledSockets=new Set();
+    let connections=0;
     const stalled=net.createServer(socket=>{
+      connections++;
       stalledSockets.add(socket);socket.on('error',()=>{});
       socket.once('close',()=>stalledSockets.delete(socket));
     });
@@ -156,6 +158,7 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
       await assert.rejects(acknowledgePeerSetup({...invitation,port:stalled.address().port},serverIdentity.cert,clientIdentity,pair,
         {connect,timeoutMs:24000,handshakeTimeoutMs:150}),{message:'Authenticated pairing connection unavailable'});
       assert.ok(performance.now()-started<5000);
+      assert.ok(connections>=1);
     } finally {
       for(const socket of stalledSockets)socket.destroy();
       await new Promise(resolve=>stalled.close(resolve));
@@ -263,6 +266,28 @@ test('real TLS pins certificates before sending invitation bytes',{skip:!existsS
         assert.deepEqual(await receive({connect}),{status:'acknowledged'});
         assert.equal(listener.status(),'acknowledged');
         assert.deepEqual(await readPairing(runtime),pair);
+      } finally {await listener.cancel();}
+    });
+  await t.test('joining controller skips an acknowledgement once the join budget is spent',
+    {skip:!['darwin','win32'].includes(process.platform)},async()=>{
+      const runtime=await realpath(mkdtempSync(path.join(root,'joining-budget-')));
+      await initializeDeviceIdentity(runtime,{version:1,...clientIdentity});
+      const listener=await startPairingListener({address:'10.0.0.2',identity:serverIdentity},{createServer});
+      try {
+        await requestPeerClaim(listener.invitation,serverIdentity.cert,clientIdentity,{connect});
+        const receive=options=>receiveConfirmedTLSPairing(runtime,listener.invitation,options);
+        const pair=createPairingConfigurations()[process.platform==='darwin'?'Mac':'Windows'];
+        pair.transport={kind:'tls',address:'10.0.0.2',port:43128};pair.peerCertificateSha256=pin;
+        listener.confirmSetup(listener.pending().claimId,pair);
+        let readings=0,connections=0;
+        assert.deepEqual(await receive({now:()=>readings++===0?0:joinBudgetMs,connect:options=>{
+          connections++;
+          return connect(options);
+        }}),{status:'local-ready'});
+        assert.equal(connections,2);
+        assert.deepEqual(await readPairing(runtime),pair);
+        assert.equal(listener.status(),'configuration-ready');
+        assert.deepEqual(await receive({connect}),{status:'acknowledged'});
       } finally {await listener.cancel();}
     });
   await t.test('confirmed configuration reaches only the claimed device with exact source scope and repeatable acknowledgement',async()=>{
