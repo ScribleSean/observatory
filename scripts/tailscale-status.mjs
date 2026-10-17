@@ -42,8 +42,10 @@ async function runTailscale({platform=process.platform,programFiles=process.env.
       return result('unavailable');
     }
     try {
+      // The macOS app binary tries to start its GUI, and prints no JSON, when TERM is missing.
       const {stdout}=await run(candidate,['status','--json','--peers=false'],
-        {timeout:8000,maxBuffer:limit,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8'});
+        {timeout:8000,maxBuffer:limit,killSignal:'SIGKILL',windowsHide:true,encoding:'utf8',
+          ...(platform==='darwin'?{env:{...process.env,TERM:'dumb'}}:{})});
       return summarize(stdout);
     }catch{return result('unavailable');}
   }

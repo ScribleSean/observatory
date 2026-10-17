@@ -7,10 +7,15 @@ import re
 import sys
 from zoneinfo import ZoneInfo
 
-MAX_FILES = 2_000
-MAX_TOTAL_BYTES = 128 * 1024 * 1024
+# These limits are a coarse guard on the reader's time and memory, and the line limit
+# also bounds requests held in memory (about 30 seconds and up to about 3 GB for the
+# densest history allowed, measured on a current Mac).
+# The collectors' 60 second reader limit is the final bound, and a history over any
+# limit or past that time reads unavailable, never partial.
+MAX_FILES = 10_000
+MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_LINE_BYTES = 4 * 1024 * 1024
-MAX_LINES = 1_000_000
+MAX_LINES = 3_000_000
 MAX_SAFE = 2**53 - 1
 FIELDS = ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens')
 MODEL = re.compile(r'^claude-[a-z0-9][a-z0-9.-]{0,98}$')

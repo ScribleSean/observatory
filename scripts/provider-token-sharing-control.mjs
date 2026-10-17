@@ -1,3 +1,4 @@
+import {privateRefusalBudget} from './peer-directory.mjs';
 import {markSharingChoiceApplied} from './sharing-choice.mjs';
 import {realpathSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -9,18 +10,28 @@ import {readProviderTokenState,setProviderTokenSharing,disableProviderTokenShari
 import {exactProviderFields,providerClock} from './provider-token-peer.mjs';
 
 const token=(state,pair)=>createHash('sha256').update(JSON.stringify(['provider-token-sharing-v1',state.salt,state.revision,pair.local.pairId])).digest('hex');
-export async function providerTokenSharingControl(runtime,request={action:'status'},now=Date.now()) {
+export async function providerTokenSharingControl(runtime,request={action:'status'},now=Date.now(),options={}) {
   if(!providerClock(now) || !['status','enable','disable'].includes(request?.action) ||
     !exactProviderFields(request,request.action==='enable'?['action','token']:['action']) ||
     (request.action==='enable' && (typeof request.token!=='string' || !/^[a-f0-9]{64}$/.test(request.token))))throw Error('Invalid provider sharing request');
-  return withPeerStateLock(runtime,async()=>{
+  const retry=privateRefusalBudget(options);
+  const status=request.action==='status';
+  const read=operation=>status?operation():retry(operation);
+  // A status pairing refusal leaves the lock so the outer retry can try again.
+  // If the budget ends first, one last attempt reads it as no pairing, as before the retry existed.
+  let lastAttempt=false;
+  const locked=()=>withPeerStateLock(runtime,async()=>{
     if(request.action==='disable') {
       await markSharingChoiceApplied(runtime,'claude-code-tokens');
       await disableProviderTokenSharing(runtime,now);
     }
     let pair;
-    try {pair=await readPairing(runtime);}catch {pair=null;}
-    let state=pair?await readProviderTokenState(runtime,now):null;
+    try {pair=await read(()=>readPairing(runtime));}
+    catch(error) {
+      if(status && !lastAttempt && retry.canRetry(error))throw Object.assign(error,{pairingRefusal:true});
+      pair=null;
+    }
+    let state=pair?await read(()=>readProviderTokenState(runtime,now)):null;
     if(request.action==='enable') {
       if(!pair || !state || !recentProviderSource(state.source,now) || request.token!==token(state,pair))throw Error('Provider sharing confirmation expired');
       state=await setProviderTokenSharing(runtime,{revision:state.revision,enabled:true},now);
@@ -28,6 +39,12 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
     const canEnable=Boolean(pair && recentProviderSource(state?.source,now));
     return {version:1,enabled:Boolean(pair && state?.generation),canEnable,
       reason:!pair?'pairing-unavailable':canEnable?'ready':'source-unavailable',token:canEnable?token(state,pair):null};
+  });
+  if(!status)return locked();
+  return retry(locked).catch(error=>{
+    if(!error?.pairingRefusal)throw error;
+    lastAttempt=true;
+    return locked();
   });
 }
 
