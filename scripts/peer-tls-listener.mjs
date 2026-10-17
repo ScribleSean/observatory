@@ -7,6 +7,9 @@ import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {validRepairNonce} from './peer-repair-consent.mjs';
 
 const failure=()=>Error('Pairing listener unavailable');
+// Matches the client's acknowledgement bound.
+const acknowledgementTimeoutMs=24000;
+const connectionKey=socket=>JSON.stringify([socket.localAddress,socket.localPort,socket.remoteAddress,socket.remotePort]);
 export function pairingPeerAddress(value) {
   const address=typeof value==='string'?value.replace(/^::ffff:(?=[0-9]+\.)/i,''):value;
   return isPairingAddress(address)?address:null;
@@ -32,7 +35,7 @@ export async function startPairingListener({address,port=0,identity},
     (onAcknowledged!==undefined && typeof onAcknowledged!=='function'))throw failure();
   let fingerprint;
   try {fingerprint=deviceCertificate(identity.cert);}catch{throw failure();}
-  const session=new InvitationSession(),sockets=new Set();
+  const session=new InvitationSession(),sockets=new Set(),connectionDeadlines=new Map();
   let pending=null,delivery=null,attempts=0,server,expiry,closing;
   const close=()=>{
     session.cancel();pending=null;delivery=null;clearTimeout(expiry);
@@ -55,10 +58,11 @@ export async function startPairingListener({address,port=0,identity},
         peerFingerprint=deviceCertificate(socket.getPeerCertificate().raw);
         peerCertificate=new X509Certificate(socket.getPeerCertificate().raw).toString();
       } catch {socket.destroy();return;}
-      let size=0,claimed=false,acknowledged=false;
+      let size=0,claimed=false,acknowledged=false,processingDeadline;
+      const key=connectionKey(socket);
       const chunks=[],deadline=setTimeout(()=>socket.destroy(),8000);
       socket.once('close',()=>{
-        clearTimeout(deadline);
+        clearTimeout(deadline);clearTimeout(processingDeadline);
         if(claimed && !acknowledged)void close();
       });
       socket.on('data',chunk=>{
@@ -81,6 +85,8 @@ export async function startPairingListener({address,port=0,identity},
               Object.hasOwn(request,'digest') && request.digest===delivery.digest) {
               const current=delivery;
               if(onAcknowledged) {
+                clearTimeout(deadline);clearTimeout(connectionDeadlines.get(key));
+                processingDeadline=setTimeout(()=>socket.destroy(),acknowledgementTimeoutMs);
                 const saved=await onAcknowledged({peerCertificateSha256:peerFingerprint,digest:request.digest});
                 if(saved?.version!==1 || saved.status!=='acknowledged' || Object.keys(saved).length!==2)throw failure();
               }
@@ -106,7 +112,13 @@ export async function startPairingListener({address,port=0,identity},
       sockets.add(socket);socket.once('close',()=>sockets.delete(socket));
       // Covers sockets that never complete TLS as well as slow application input.
       const deadline=setTimeout(()=>socket.destroy(),8000);
-      socket.once('close',()=>clearTimeout(deadline));
+      // Raw TCP and TLS sockets share these endpoints without private Node fields.
+      const key=connectionKey(socket);
+      connectionDeadlines.set(key,deadline);
+      socket.once('close',()=>{
+        clearTimeout(deadline);
+        if(connectionDeadlines.get(key)===deadline)connectionDeadlines.delete(key);
+      });
     });
     server.on('tlsClientError',()=>{});
     server.on('error',()=>{void close();});
