@@ -15,9 +15,22 @@ test('Mac fixture stays identical to the Swift self-test literal', () => {
   const swift = readFileSync(new URL('../native/BridgeHandler.swift', import.meta.url), 'utf8');
   const literal = swift.match(/let expectedShapes = #"""\n([\s\S]*?)\n    """#/);
   assert.ok(literal);
+  assert.equal(fixtureText.replace(/^\/\/[^\n]*\n/, '').trimEnd(), literal[1].trimStart());
   assert.deepEqual(shapes, JSON.parse(literal[1]));
 });
-for (const shape of shapes) {
+const partialShapes = [
+  ['unknown limits consent', shapes.find(shape => shape.limitsConsent === null)],
+  ['unknown Claude token sharing', shapes.find(shape => shape.sharing['claude-code-tokens'] === null)],
+];
+for (const [name, shape] of partialShapes) {
+  test(`Mac partial status reaches the page validator unchanged: ${name}`, () => {
+    assert.ok(shape);
+    assert.notEqual(shape.sharing['codex-limits'], null);
+    assert.deepEqual(Object.keys(shape.sharing).sort(), ['claude-code-tokens', 'codex-limits']);
+    assert.deepEqual(validateBridgeStatus(shape), shape);
+  });
+}
+for (const shape of shapes.filter(shape => !partialShapes.some(([, partial]) => partial === shape))) {
   test(`Mac status reaches the page validator: ${shape.pairing.state}`, () => {
     assert.deepEqual(validateBridgeStatus(shape), shape);
   });

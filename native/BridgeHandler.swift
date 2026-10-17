@@ -304,13 +304,13 @@ struct BridgeStatusInput {
     var deviceName: String?
     var startup: Bool
     var appearance: String
-    var limitsConsent: Bool
+    var limitsConsent: Bool?
     var collectionPaused: Bool
     var pairingState: String
     var peerFingerprint: String?
     var transport: String
     var invitationKept: Bool
-    var sharing: [String: QuotaSharingStatus]
+    var sharing: [String: QuotaSharingStatus?]
     var sharingChoice: BridgeSharingChoice = .unavailable
 
     static func pairingState(controlStatus: String) -> String {
@@ -337,6 +337,10 @@ struct BridgeStatusInput {
               Set(input.sharing.keys) == ["codex-limits", "claude-code-tokens"], input.sharingChoice.valid else { return nil }
         var sharing: [String: Any] = [:]
         for (channel, status) in input.sharing {
+            guard let status else {
+                sharing[channel] = NSNull()
+                continue
+            }
             guard status.version == 1, BridgeContract.values["sharingReason"].strings.contains(status.reason),
                   status.reason != (channel == "codex-limits" ? "source-unavailable" : "account-unavailable"),
                   status.canEnable ? status.reason == "ready" && status.token.map(hex) == true : status.token == nil else { return nil }
@@ -346,7 +350,7 @@ struct BridgeStatusInput {
         let result: [String: Any] = ["version": 1, "app": ["version": input.appVersion, "build": input.appBuild],
             "sources": input.sources, "skin": ["current": input.skin, "bundled": ViewerSettingsFile.bundled, "custom": input.customSkins],
             "deviceName": input.deviceName as Any? ?? NSNull(), "startup": input.startup, "appearance": input.appearance,
-            "limitsConsent": input.limitsConsent, "collectionPaused": input.collectionPaused, "pairing": ["state": input.pairingState,
+            "limitsConsent": input.limitsConsent as Any? ?? NSNull(), "collectionPaused": input.collectionPaused, "pairing": ["state": input.pairingState,
                 "peerFingerprint": input.peerFingerprint as Any? ?? NSNull(), "transport": input.transport, "invitationKept": input.invitationKept],
             "sharing": sharing, "sharingChoice": input.sharingChoice.value]
         guard let data = try? JSONSerialization.data(withJSONObject: result), data.count <= BridgeContract.status["maxBytes"].number else { return nil }
@@ -356,8 +360,8 @@ struct BridgeStatusInput {
 
 func bridgeSyntheticStatusShapes() -> [[String: Any]] {
     let unavailable = QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "pairing-unavailable", token: nil)
-    return ["confirming", "awaiting-confirmation", "local-ready", "acknowledged", "active-sync", "identity-required", "identity-recovery-required"].map { state in
-        BridgeStatusInput.bridgeStatusValue(BridgeStatusInput(appVersion: "1.0-test", appBuild: 1,
+    var inputs = ["confirming", "awaiting-confirmation", "local-ready", "acknowledged", "active-sync", "identity-required", "identity-recovery-required"].map { state in
+        BridgeStatusInput(appVersion: "1.0-test", appBuild: 1,
             sources: ["activity": true, "codex": true, "claude": false, "wispr": false, "quota": false],
             skin: "sage", customSkins: [], deviceName: "Synthetic Mac", startup: false, appearance: "system",
             limitsConsent: false, collectionPaused: !["active-sync", "identity-required", "identity-recovery-required"].contains(state), pairingState: state,
@@ -368,14 +372,21 @@ func bridgeSyntheticStatusShapes() -> [[String: Any]] {
                 "claude-code-tokens": QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "source-unavailable", token: nil)
             ] : ["codex-limits": unavailable, "claude-code-tokens": unavailable],
             sharingChoice: state == "active-sync" ? BridgeSharingChoice(version: 1, chosen: true,
-                channels: ["codex-limits": "on", "claude-code-tokens": "waiting-for-reading"]) : .unavailable))!
+                channels: ["codex-limits": "on", "claude-code-tokens": "waiting-for-reading"]) : .unavailable)
     }
+    var unknownConsent = inputs[4]
+    unknownConsent.limitsConsent = nil
+    inputs.append(unknownConsent)
+    var unknownTokens = inputs[4]
+    unknownTokens.sharing["claude-code-tokens"] = .some(nil)
+    inputs.append(unknownTokens)
+    return inputs.map { BridgeStatusInput.bridgeStatusValue($0)! }
 }
 
 func runBridgeSelfTests() {
     // Keep this JSON literal identical to native/tests/bridge-status-shapes.json. scripts/mac-bridge-status.test.mjs checks both.
     let expectedShapes = #"""
-    [{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":true,"peerFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","state":"confirming","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"awaiting-confirmation","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"local-ready","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"acknowledged","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"active-sync","transport":"tls"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"source-unavailable","token":null},"codex-limits":{"canEnable":true,"enabled":true,"reason":"ready","token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"sharingChoice":{"channels":{"claude-code-tokens":"waiting-for-reading","codex-limits":"on"},"chosen":true},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"identity-required","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"identity-recovery-required","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1}]
+    [{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":true,"peerFingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","state":"confirming","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"awaiting-confirmation","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"local-ready","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":true,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"acknowledged","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"active-sync","transport":"tls"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"source-unavailable","token":null},"codex-limits":{"canEnable":true,"enabled":true,"reason":"ready","token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"sharingChoice":{"channels":{"claude-code-tokens":"waiting-for-reading","codex-limits":"on"},"chosen":true},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"identity-required","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"identity-recovery-required","transport":"none"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null},"codex-limits":{"canEnable":false,"enabled":false,"reason":"pairing-unavailable","token":null}},"sharingChoice":{"channels":{"claude-code-tokens":"unavailable","codex-limits":"unavailable"},"chosen":false},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":null,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"active-sync","transport":"tls"},"sharing":{"claude-code-tokens":{"canEnable":false,"enabled":false,"reason":"source-unavailable","token":null},"codex-limits":{"canEnable":true,"enabled":true,"reason":"ready","token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"sharingChoice":{"channels":{"claude-code-tokens":"waiting-for-reading","codex-limits":"on"},"chosen":true},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1},{"app":{"build":1,"version":"1.0-test"},"appearance":"system","collectionPaused":false,"deviceName":"Synthetic Mac","limitsConsent":false,"pairing":{"invitationKept":false,"peerFingerprint":null,"state":"active-sync","transport":"tls"},"sharing":{"claude-code-tokens":null,"codex-limits":{"canEnable":true,"enabled":true,"reason":"ready","token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},"sharingChoice":{"channels":{"claude-code-tokens":"waiting-for-reading","codex-limits":"on"},"chosen":true},"skin":{"bundled":["sage","almanac","instrument","amber-crt"],"current":"sage","custom":[]},"sources":{"activity":true,"claude":false,"codex":true,"quota":false,"wispr":false},"startup":false,"version":1}]
     """#
     let expected = try! JSONSerialization.jsonObject(with: Data(expectedShapes.utf8)) as! [[String: Any]]
     precondition(bridgeSyntheticStatusShapes().count == expected.count)
@@ -619,6 +630,17 @@ func runBridgeSelfTests() {
         ["chosen": false, "channels": ["codex-limits": "unavailable", "claude-code-tokens": "unavailable"]]))
     keys(status["sharing"], ["codex-limits", "claude-code-tokens"])
     for value in (status["sharing"] as! [String: Any]).values { keys(value, ["enabled", "canEnable", "reason", "token"]) }
+    var partial = input
+    partial.limitsConsent = nil
+    partial.sharing["claude-code-tokens"] = .some(nil)
+    let partialStatus = BridgeStatusInput.bridgeStatusValue(partial)!
+    precondition(partialStatus["limitsConsent"] is NSNull)
+    let partialSharing = partialStatus["sharing"] as! [String: Any]
+    keys(partialSharing, ["codex-limits", "claude-code-tokens"])
+    precondition(partialSharing["claude-code-tokens"] is NSNull)
+    keys(partialSharing["codex-limits"], ["enabled", "canEnable", "reason", "token"])
+    partial.sharing["codex-limits"] = QuotaSharingStatus(version: 1, enabled: false, canEnable: false, reason: "source-unavailable", token: nil)
+    precondition(BridgeStatusInput.bridgeStatusValue(partial) == nil)
     func invalidStatus(_ change: (inout BridgeStatusInput) -> Void) {
         var changed = input
         change(&changed)
@@ -635,6 +657,8 @@ func runBridgeSelfTests() {
     invalidStatus { $0.appVersion = "a\n" }
     invalidStatus { $0.appVersion = String(repeating: "a", count: 33) }
     invalidStatus { $0.appBuild = -1 }
+    invalidStatus { $0.sharing.removeValue(forKey: "claude-code-tokens") }
+    invalidStatus { $0.sharing["extra"] = .some(nil) }
     invalidStatus { $0.sources.removeValue(forKey: "quota") }
     invalidStatus { $0.transport = "http" }
     invalidStatus { $0.pairingState = "paired-ish" }
