@@ -6,6 +6,7 @@ import {setupConfigurationDigest} from './peer-tls-setup-message.mjs';
 import {validRepairNonce} from './peer-repair-consent.mjs';
 
 const protocol='observatory-pair/1';
+export const acknowledgementTimeoutMs=24000;
 const failure=()=>Error('Authenticated pairing connection unavailable');
 const fingerprint=raw=>createHash('sha256').update(raw).digest('hex');
 
@@ -87,18 +88,19 @@ export async function acknowledgePeerSetup(invitation,certificatePem,identity,pa
     {version:1,action:'acknowledge',digest:setupConfigurationDigest(pairing)},response=>{
       if(response?.version!==1 || response.status!=='acknowledged' || Object.keys(response).length!==2)throw failure();
       return {status:'acknowledged'};
-    },options);
+    },{...options,timeoutMs:options.timeoutMs===undefined?acknowledgementTimeoutMs:options.timeoutMs},acknowledgementTimeoutMs);
 }
 
 async function pairingRequest(invitation,certificatePem,identity,request,validateResponse,
-  {connect=tls.connect,timeoutMs=8000,signal}={}) {
+  {connect=tls.connect,timeoutMs=8000,handshakeTimeoutMs=8000,signal}={},maximumTimeoutMs=8000) {
   let safe,certificate;
   try {
     safe=validateInvitation(invitation);
     if(typeof certificatePem!=='string' || Buffer.byteLength(certificatePem)>16384 ||
       !identity || typeof identity.key!=='string' || typeof identity.cert!=='string' ||
       identity.key.length>16384 || identity.cert.length>16384 ||
-      !Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>8000 || signal?.aborted)throw failure();
+      !Number.isInteger(timeoutMs) || timeoutMs<1 || timeoutMs>maximumTimeoutMs ||
+      !Number.isInteger(handshakeTimeoutMs) || handshakeTimeoutMs<1 || handshakeTimeoutMs>8000 || signal?.aborted)throw failure();
     certificate=new X509Certificate(certificatePem);
     if(fingerprint(certificate.raw)!==safe.certificateSha256)throw failure();
   } catch {throw failure();}
@@ -109,10 +111,11 @@ async function pairingRequest(invitation,certificatePem,identity,request,validat
     const abort=()=>finish(failure());
     const finish=(error,result)=>{
       if(done)return;
-      done=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);socket?.destroy();
+      done=true;clearTimeout(timer);clearTimeout(handshakeTimer);signal?.removeEventListener('abort',abort);socket?.destroy();
       if(error)reject(failure());else resolve(result);
     };
     const timer=setTimeout(()=>finish(failure()),timeoutMs);
+    const handshakeTimer=setTimeout(abort,Math.min(handshakeTimeoutMs,timeoutMs));
     signal?.addEventListener('abort',abort,{once:true});
     try {
       socket=connect({host:safe.address,port:safe.port,
@@ -129,6 +132,7 @@ async function pairingRequest(invitation,certificatePem,identity,request,validat
           if(!socket.authorized || socket.alpnProtocol!==protocol || !peer.raw ||
             fingerprint(peer.raw)!==safe.certificateSha256)throw failure();
           // No invitation bytes are written before all authentication checks.
+          clearTimeout(handshakeTimer);
           socket.end(JSON.stringify(request)+'\n');
         } catch {finish(failure());}
       });

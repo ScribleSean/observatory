@@ -310,8 +310,14 @@ invitation fingerprint before dialing. It uses that exact certificate as its
 trust anchor, keeps `rejectUnauthorized` enabled, requires TLS 1.3 and the
 Observatory pairing application protocol, and checks the connected certificate
 again before writing the invitation secret. A local client certificate and key
-are required. Responses are bounded to 8 KiB with an eight-second absolute
-deadline. Errors contain no remote response or invitation details.
+are required. Responses are bounded to 8 KiB. Claim and setup-fetch requests
+have an eight-second absolute deadline. An acknowledgement has a 24-second
+absolute deadline, because the host saves it to protected storage before it
+replies, and on Windows that save runs about nine private-folder checks
+(4.6 seconds on a fast CI runner and over 8 seconds on slower ones, issue 229).
+Every request must still finish connecting, the TLS handshake and its
+authentication checks within eight seconds. Errors contain no remote response
+or invitation details.
 
 The claim operation does not persist trust or treat an awaiting-confirmation
 response as completed pairing. Native identity setup and confirmation remain
@@ -348,7 +354,11 @@ Only bounded claim, setup-fetch and setup-acknowledgement messages are accepted.
 There is no snapshot, quota, file or
 command endpoint. Four simultaneous sockets, 64 total connection attempts,
 eight-second connection deadlines, a 1 KiB request limit and invitation expiry
-bound the setup session. A valid claim exposes its certificate fingerprint and
+bound the setup session. When the host's durable acknowledgement callback is
+supplied, an acknowledgement from the claimed certificate with the matching
+digest replaces the two eight-second deadlines on its socket with one
+24-second deadline while the save runs. The reply is sent only after the save
+succeeds. A valid claim exposes its certificate fingerprint and
 confirmation handle only through the local module API. Explicit confirmation
 through `confirm` returns the fingerprint and closes the listener. It does not
 save trust. The separate `confirmSetup` operation keeps the bounded listener
@@ -360,7 +370,10 @@ local controller must persist its own complementary pairing before calling it.
 joining user's expected host and source scope. `receiveConfirmedTLSPairing`
 uses the saved local identity, persists and verifies the received pairing and
 trust, then sends an acknowledgement digest covering the entire canonical
-configuration. A lost acknowledgement returns `local-ready`. An explicit
+configuration. A lost acknowledgement returns `local-ready`. The whole step
+stays inside a 40-second budget, so it ends before the native wrappers' 45-second
+command timeout. The acknowledgement gets only the time left, and when none is left
+it is not sent and the step returns `local-ready`. An explicit
 identical retry can finish without changing the pairing. The listener accepts
 repeated matching acknowledgements until cancellation or expiry, but rejects
 another certificate or a changed configuration digest. Its acknowledged state
