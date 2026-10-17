@@ -174,11 +174,19 @@ while(performance.now()<until) {
 process.stdout.write(String(changes))
 `,path.join(runtime,'private-quota/synthetic-churn.tmp'),String(milliseconds)],{timeout:30000});
   const ready=new Promise((resolve,reject)=>{
-    churn.stderr.once('data',resolve);
+    let text='';
+    churn.stderr.setEncoding('utf8');
+    churn.stderr.on('data',chunk=>{text+=chunk;if(text==='ready')resolve();});
     churn.once('error',reject);
     churn.once('close',()=>reject(Error('The churn process ended before it started')));
   });
-  const done=collectChild(churn);
+  const done=new Promise((resolve,reject)=>{
+    let stdout='';
+    churn.stdout.setEncoding('utf8');
+    churn.stdout.on('data',chunk=>{stdout+=chunk;});
+    churn.on('error',reject);
+    churn.on('close',(code,signal)=>resolve({code,signal,stdout}));
+  });
   return {churn,ready,done};
 }
 
@@ -194,7 +202,7 @@ test('quota status succeeds when private-quota churn stops within the retry budg
       await current.ready;
       const result=await status('scripts/quota-sharing-control.mjs',runtime,python);
       const writer=await current.done;
-      assert.equal(writer.code,0,writer.stderr);
+      assert.equal(writer.code,0);
       assert.ok(Number(writer.stdout)>0,'The synthetic file changed during the churn process');
       assert.deepEqual(statusValue(result),quotaStatus,`Status run ${run+1}`);
     }
@@ -216,6 +224,7 @@ test('quota status gives the right answer or a clean refusal when private-quota 
     const started=performance.now();
     const result=await status('scripts/quota-sharing-control.mjs',runtime,python);
     const elapsed=performance.now()-started;
+    assert.equal(current.churn.exitCode,null,'The churn process ran for the whole status read');
     // Continuous churn can outlast any bounded retry, and a loaded machine can leave a clean window
     // in which one full check passes. The guarantee is the right answer or a clean refusal after the
     // whole budget, never a wrong answer.
@@ -226,6 +235,7 @@ test('quota status gives the right answer or a clean refusal when private-quota 
       assert.equal(result.signal,null);
       assert.equal(result.stdout,'');
       assert.equal(result.stderr.trim(),'Allowance sharing settings could not be verified. Refresh settings before retrying.');
+      // The command prints one message for every error, so the time tells a spent retry budget apart from an early failure.
       assert.ok(elapsed>=1000,`The status read gave up after ${Math.round(elapsed)} ms`);
     }
   } finally {
