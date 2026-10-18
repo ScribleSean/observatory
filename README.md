@@ -18,7 +18,7 @@
   <img src="docs/images/panel-spike-light.jpg" width="320" alt="The same panel in light appearance with sample data">
 </p>
 
-<p align="center">The panel with sample data. These images were taken during development and differ from the release in small details.</p>
+<p align="center">The panel with sample data.</p>
 
 ## What it shows
 
