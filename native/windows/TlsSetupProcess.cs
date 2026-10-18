@@ -109,9 +109,11 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
     private readonly object gate = new();
     private readonly Task reader;
     private readonly Task errors;
+    private readonly TaskCompletionSource<bool> forceStopCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? disposal;
     private int nextId, closed;
     internal bool ExitVerified { get; private set; }
+    internal int? ExitCode { get; private set; }
 
     internal TlsSetupProcess(string runtime) : this(runtime,
         Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe"),
@@ -213,7 +215,23 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
             foreach (var item in pending) item.Value.TrySetException(new InvalidOperationException("Setup process stopped."));
             pending.Clear();
         }
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+        try { process.StandardInput.Close(); } catch { }
+        _ = ForceStopAfter(TimeSpan.FromSeconds(2));
+    }
+
+    private async Task ForceStopAfter(TimeSpan grace)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(grace);
+            try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+        }
+        catch { }
+        finally { forceStopCompletion.TrySetResult(true); }
     }
 
     public ValueTask DisposeAsync()
@@ -227,6 +245,9 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await process.WaitForExitAsync(timeout.Token);
         await Task.WhenAll(reader, errors).WaitAsync(timeout.Token);
+        // Stop can already be running on another caller after setting closed.
+        await forceStopCompletion.Task.WaitAsync(timeout.Token);
+        if (process.HasExited) ExitCode = process.ExitCode;
         ExitVerified = process.HasExited;
         process.Dispose();
     }
@@ -257,7 +278,24 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
                 }
             }
             await bridge.DisposeAsync();
-            if (!bridge.ExitVerified) throw new InvalidOperationException("Setup bridge exit not verified.");
+            if (!bridge.ExitVerified || bridge.ExitCode != 0) throw new InvalidOperationException("Setup bridge graceful exit not verified.");
+
+            // The stub lives outside the control runtime so the final non-recursive delete still proves the control script left nothing behind.
+            var stubFolder = Path.Combine(Path.GetTempPath(), "observatory-native-stub-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stubFolder);
+            try
+            {
+                var stubbornScript = Path.Combine(stubFolder, "ignore-input-end.mjs");
+                await File.WriteAllTextAsync(stubbornScript,
+                    "process.stdin.resume()\nprocess.stdin.on('end', () => {})\nsetInterval(() => {}, 1000)\n");
+                var stubborn = new TlsSetupProcess(stubFolder, node, stubbornScript);
+                var watch = Stopwatch.StartNew();
+                await using (stubborn) { await stubborn.DisposeAsync(); }
+                watch.Stop();
+                if (!stubborn.ExitVerified || watch.Elapsed < TimeSpan.FromSeconds(1.5) || watch.Elapsed >= TimeSpan.FromSeconds(7))
+                    throw new InvalidOperationException("Setup bridge forced exit not verified.");
+            }
+            finally { Directory.Delete(stubFolder, recursive: true); }
             Console.WriteLine("Windows setup process bridge passed.");
         }
         finally { Directory.Delete(runtime, recursive: identitySetup); }
