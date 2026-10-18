@@ -304,3 +304,12 @@ test('reset values become Unknown while missing or invalid reset times keep thei
     }
   }
 });
+
+test('a window time later than its source time cannot make an old limits reading current', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z');
+  const snapshot = { claudeLimits: { status: 'ok', checkedAt: '2026-10-18T10:00:00Z', windows: [
+    { bucket: 'claude', window: 'five_hour', durationMinutes: 300, remainingPercent: 50, resetsAt: '2026-10-18T14:00:00Z', checkedAt: '2026-10-18T11:59:00Z' }] } };
+  const row = limits(snapshot, now).find(item => item.provider === 'claude');
+  assert.equal(row.stale, true);
+  assert.match(row.note, /as of/);
+});
