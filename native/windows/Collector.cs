@@ -427,7 +427,6 @@ internal sealed class Collector : IDisposable
             if (collector.Busy || File.Exists(Path.Combine(root, "collection.lock")) ||
                 File.ReadAllText(heavyStatus) != "Full collection freshness must not change.")
                 throw new Exception("Temporary pairing release started collection.");
-            collector.Configure(activity: false, codex: false);
             var releasePairing = collector.BeginDirectPairing();
             if (!collector.Busy || collector.operations.TryBegin()) throw new Exception("Pairing did not reserve collection.");
             var duplicateDenied = false;
