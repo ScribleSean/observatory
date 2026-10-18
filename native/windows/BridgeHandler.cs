@@ -1684,7 +1684,9 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("status"); await test.Handler.cacheWork;
         Check(test.Host.Scripts.Count == 1, "Sharing choice cache throttle");
         test.Host.SharingThrows = true;
+        var sharingReads = test.Host.Calls.Count(c => c.StartsWith("sharing:status:", StringComparison.Ordinal));
         await test.Handler.RefreshSharing(0); await test.Handler.RefreshSharing(1);
+        Check(test.Host.Calls.Count(c => c.StartsWith("sharing:status:", StringComparison.Ordinal)) == sharingReads + 2, "Failed sharing reads attempted");
         Check(JsonNode.DeepEquals(cached["value"]!["sharing"], (await test.Run("status"))["value"]!["sharing"]), "Failed sharing read lost checked values");
         test.Host.SharingThrows = false;
         test.Host.Now += TimeSpan.FromSeconds(5); test.Host.CollectorBusy = true;
@@ -1714,7 +1716,9 @@ internal sealed class BridgeHandler : IDisposable
             foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
                 Check(unknown["sharing"]![channel] is null, "Initial sharing before first read");
             unreadHost.CollectorBusy = false;
+            var unreadSharingReads = unreadHost.Calls.Count(c => c.StartsWith("sharing:status:", StringComparison.Ordinal));
             await unread.RefreshSharing(0); await unread.RefreshSharing(1);
+            Check(unreadHost.Calls.Count(c => c.StartsWith("sharing:status:", StringComparison.Ordinal)) == unreadSharingReads + 2, "Failed first sharing reads attempted");
             var failed = unread.Status().Value!;
             Check(JsonNode.DeepEquals(unknown, failed), "Failed first sharing read invented values");
             var shape = unknown.DeepClone().AsObject();
