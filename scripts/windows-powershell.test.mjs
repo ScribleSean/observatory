@@ -40,7 +40,7 @@ test('PowerShell file execution overrides an inherited Restricted process policy
     assert.equal(bypass.status,0,bypass.stderr);
     assert.equal(bypass.stdout.trim(),line);
     assert.ifError(control.error);
-    if(control.status===0) {
+    if(control.stdout.includes(line)) {
       t.skip('The runner did not honour the inherited Restricted process policy');
       return;
     }
