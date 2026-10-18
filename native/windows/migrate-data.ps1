@@ -52,6 +52,12 @@ function Manifest([string]$Root) {
                 $links.Add((DisplayPath $relative))
                 continue
             }
+            $retirementParent = RetirementFolder ([IO.Path]::GetDirectoryName($relative))
+            if ($retirementParent -and ($entry.PSIsContainer -or
+                (-not [string]::Equals($entry.Name, 'retirement-receipt.json', [StringComparison]::Ordinal) -and
+                 -not [string]::Equals($entry.Name, 'retirement-snapshot.json', [StringComparison]::Ordinal)))) {
+                Refuse ('Unexpected entry in the retirement checkpoint folder at relative path: ' + (DisplayPath $relative))
+            }
             $kind = 'file'
             $size = [long]0
             $hash = ''
@@ -62,7 +68,7 @@ function Manifest([string]$Root) {
                 $kind = 'directory'
                 $pending.Push($entry.FullName)
             } else {
-                if ((PrivateFolder ($relative.Split('\')[0])) -and [MigrationFileLinks]::Count($entry.FullName) -ne 1) {
+                if (((PrivateFolder ($relative.Split('\')[0])) -or $retirementParent) -and [MigrationFileLinks]::Count($entry.FullName) -ne 1) {
                     Refuse ('Hard links are not allowed at relative path: ' + (DisplayPath $relative))
                 }
                 $size = [long]$entry.Length
@@ -112,7 +118,11 @@ function Digest($Entries, [switch]$IgnoreDirectoryTimes) {
     try { Hex ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))) }
     finally { $sha.Dispose() }
 }
+function RetirementFolder([string]$Relative) {
+    return [string]::Equals($Relative, '.runtime\private-repair', [StringComparison]::Ordinal)
+}
 function PrivateFolder([string]$Relative) {
+    if (RetirementFolder $Relative) { return $true }
     return -not $Relative.Contains('\') -and ($Relative -cin @('private-sync','private-codex','private-repair','private-quota','private-device-identity') -or
         $Relative -cmatch '^private-sync-retired-[a-f0-9]{64}$')
 }

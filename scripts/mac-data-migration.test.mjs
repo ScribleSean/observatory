@@ -53,6 +53,19 @@ test('full migration preserves nested permissions, timestamps and every legacy b
   assert.equal(receipt.manifestSha256,result.manifestSha256);
   assert.equal(fs.statSync(path.join(f.target,'observatory-migration.json')).mode&0o777,0o600);
 });
+test('retirement checkpoint preserves bytes, private mode and the legacy folder',mac,t=>{
+  const f=fixture(t),relative='.runtime/private-repair';
+  fs.mkdirSync(path.join(f.legacy,relative),{recursive:true,mode:0o700});
+  const files={'retirement-receipt.json':'{"synthetic":"receipt"}\n',
+    'retirement-snapshot.json':'{"synthetic":"snapshot"}\n'};
+  for(const [name,bytes] of Object.entries(files))fs.writeFileSync(path.join(f.legacy,relative,name),bytes,{mode:0o600});
+  const before=snapshot(f.legacy);
+  assert.equal(migrateDataFolder(f).state,'migrated');
+  for(const [name,bytes] of Object.entries(files))
+    assert.deepEqual(fs.readFileSync(path.join(f.target,relative,name)),Buffer.from(bytes));
+  assert.equal(fs.statSync(path.join(f.target,relative)).mode&0o777,0o700);
+  assert.deepEqual(snapshot(f.legacy),before);
+});
 test('backup bundle links retain their text and report destinations outside Backups',mac,t=>{
   const f=fixture(t),bundle='Backups/Old.app.backup',versions=bundle+'/Sparkle.framework/Versions';
   fs.mkdirSync(path.join(f.legacy,versions,'A'),{recursive:true});

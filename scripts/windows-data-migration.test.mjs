@@ -36,6 +36,12 @@ test('migration uses named identities and stream copies', async () => {
   assert.match(source,/Flush\(\$true\)/);
 });
 
+test('retirement checkpoint keeps its exact path and file names',async () => {
+  const source = await readFile(script,'utf8');
+  for(const literal of ['.runtime\\private-repair','retirement-receipt.json','retirement-snapshot.json'])
+    assert.ok(source.includes("'"+literal+"'"));
+});
+
 test('runtime guards retain the legacy names from the shared names file', async () => {
   const identity = await readFile('native/windows/AppIdentity.cs','utf8');
   for (const [constant,value] of [['LegacyDataName',appNames.legacy.dataFolder],['LegacyTestName',appNames.legacy.windowsTestName]]) {
@@ -127,6 +133,47 @@ test('copies synthetic pairing, quota, settings and nested data with protected A
   const migrated = await snapshot(f.parent);
   success(run(f),'already-migrated');
   assert.deepEqual(await snapshot(f.parent),migrated);
+});
+
+test('retirement checkpoint migrates with protected ACLs and unchanged legacy bytes',windows,async t => {
+  const f = await fixture(t),relative = path.join('.runtime','private-repair');
+  const {privateCollectorDirectory} = await import('./peer-directory.mjs');
+  await mkdir(path.join(f.legacy,relative),{recursive:true});
+  const files = {'retirement-receipt.json':'{"synthetic":"receipt"}\n',
+    'retirement-snapshot.json':'{"synthetic":"snapshot"}\n'};
+  for(const [name,bytes] of Object.entries(files))await writeFile(path.join(f.legacy,relative,name),bytes);
+  const before = await snapshot(f.legacy);
+  success(run(f),'migrated');
+  for(const [name,bytes] of Object.entries(files))
+    assert.deepEqual(await readFile(path.join(f.target,relative,name)),Buffer.from(bytes));
+  assert.deepEqual(await snapshot(f.legacy),before);
+  await privateCollectorDirectory(path.join(f.target,'.runtime'),'private-repair');
+  success(run(f),'already-migrated');
+});
+
+for(const [name,directory] of [['extra.json',false],['retirement-receipt.json',true],['Retirement-Snapshot.json',false]]) {
+  test(`retirement checkpoint refuses unexpected entry ${name}`,windows,async t => {
+    const f = await fixture(t),folder = path.join(f.legacy,'.runtime','private-repair');
+    await mkdir(folder,{recursive:true});
+    if(directory)await mkdir(path.join(folder,name));
+    else await writeFile(path.join(folder,name),'{"synthetic":true}');
+    const before = await snapshot(f.legacy),result = run(f);
+    refused(result,/^Migration refused \(manifest\): Unexpected entry in the retirement checkpoint folder at relative path: \.runtime\\private-repair\r?\n?$/);
+    await assert.rejects(lstat(f.target),{code:'ENOENT'});
+    assert.deepEqual(await snapshot(f.legacy),before);
+  });
+}
+
+test('retirement checkpoint refuses hard linked files',windows,async t => {
+  const f = await fixture(t),folder = path.join(f.legacy,'.runtime','private-repair');
+  await mkdir(folder,{recursive:true});
+  const outside = path.join(f.parent,'synthetic-link-source');
+  await writeFile(outside,'{"synthetic":true}');
+  await link(outside,path.join(folder,'retirement-receipt.json'));
+  const result = run(f);
+  refused(result,/Migration refused \(manifest\): Hard links are not allowed/);
+  assert.ok(!result.stderr.includes('retirement-receipt.json'));
+  await assert.rejects(lstat(f.target),{code:'ENOENT'});
 });
 
 test('copy requires quit confirmation without writes',windows,async t => {
@@ -257,11 +304,13 @@ test('changed legacy data refuses the switch',windows,async t => {
   await assert.rejects(lstat(f.target),{code:'ENOENT'});
 });
 
-for (const relative of ['private-unknown','nested/private-sync','Private-Sync','private-sync-retired-ABC']) {
+for (const relative of ['private-unknown','nested/private-sync','Private-Sync','private-sync-retired-ABC',
+  '.runtime/private-sync','.Runtime/private-repair','.runtime/Private-Repair','x/.runtime/private-repair']) {
   test(`unknown private directory ${relative} refuses at manifest`,windows,async t => {
     const f = await fixture(t);
     await mkdir(path.join(f.legacy,relative),{recursive:true});
     refused(run(f),/Migration refused \(manifest\): Unknown private folder/);
+    await assert.rejects(lstat(f.target),{code:'ENOENT'});
   });
 }
 
