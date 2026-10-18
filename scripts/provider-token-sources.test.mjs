@@ -13,8 +13,9 @@ const counters={inputTokens:5,cacheReadTokens:2,cacheCreationTokens:0,outputToke
 const report={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...counters,models:[{model:'claude-sonnet-4-20250514',...counters,privateId:'PRIVATE'}]}]};
 
 test('Fable version shapes retain their names while arbitrary text stays unknown',()=>{
-  const accepted=['claude-fable-5','claude-fable-5-1','claude-fable-5-20260101',
-    'claude-fable-5-1-20260101-latest','claude-5-fable','claude-5-1-fable-20260101-latest'];
+  // Only the Fable ids the price table lists. No dated Fable id is known, and the
+  // dated shape is the same pattern branch the dated Sonnet fixtures cover.
+  const accepted=['claude-fable-5','claude-fable-5-1','claude-5-fable'];
   const rejected=['claude-fablex-5','claude-fable','claude-fable-5 extra text','extra claude-fable-5'];
   for(const model of [...accepted,...rejected]) {
     const raw={...report,days:[{...report.days[0],models:[{model,...counters}]}]};
