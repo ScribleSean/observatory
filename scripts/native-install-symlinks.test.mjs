@@ -13,7 +13,8 @@ test('bundle copy preserves symlink text in the installer source',()=>{
   assert.equal(call[1].replace(/\s/g,''),expected);
 });
 
-test('copied framework links survive removal of the source',t=>{
+// native/install.mjs installs the Mac app only. Windows rewrites link separators.
+test('copied framework links survive removal of the source',{skip:process.platform!=='darwin'},t=>{
   const root=fs.mkdtempSync(path.join(tmpdir(),'native-install-symlinks-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const source=path.join(root,'source.app'),app=path.join(root,'copy.app');
