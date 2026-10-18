@@ -463,13 +463,13 @@ internal sealed class BridgeHandler : IDisposable
     private readonly DateTimeOffset?[] sharingRead = new DateTimeOffset?[2];
     private readonly bool[] sharingReading = new bool[2];
     private readonly long[] sharingRevision = new long[2];
-    // This is the not yet read state. The contract has no unknown sharing value.
-    private readonly QuotaSharingStatus[] sharing = [new(false, false, "pairing-unavailable", null), new(false, false, "pairing-unavailable", null)];
+    // Null means no successful read has completed.
+    private readonly QuotaSharingStatus?[] sharing = [null, null];
 
     private sealed record FileStatus((string Skin, string Appearance) Viewer, string? Device,
-        bool LimitsConsent, JsonObject Sources, bool Startup, (string State, string Transport) Pairing, string PairingStatus = "unavailable",
+        bool? LimitsConsent, JsonObject Sources, bool Startup, (string State, string Transport) Pairing, string PairingStatus = "unavailable",
         DateTimeOffset? PairingStatusAt = null);
-    private FileStatus files = new(("sage", "system"), null, false, Sources(new()), false, ("unavailable", "none"));
+    private FileStatus files = new(("sage", "system"), null, null, Sources(new()), false, ("unavailable", "none"));
     private DateTimeOffset? filesRead;
     private bool filesReading;
     private long filesRevision;
@@ -789,7 +789,7 @@ internal sealed class BridgeHandler : IDisposable
                 !double.IsFinite(build) || build < 0 || build > 9007199254740991 || Math.Truncate(build) != build) return false;
             var sources = value["sources"];
             if (!Keys(sources, "activity", "codex", "claude", "wispr", "quota") || sources!.AsObject().Any(p => !Boolean(p.Value)) ||
-                !Boolean(value["startup"]) || !Boolean(value["limitsConsent"]) || !Boolean(value["collectionPaused"]) ||
+                !Boolean(value["startup"]) || (value["limitsConsent"] is not null && !Boolean(value["limitsConsent"])) || !Boolean(value["collectionPaused"]) ||
                 Text(value["appearance"]) is not string appearance || !values["appearance"].Contains(appearance) ||
                 !Argument("set-device-name", "name", value["deviceName"])) return false;
             var skin = value["skin"];
@@ -812,21 +812,24 @@ internal sealed class BridgeHandler : IDisposable
             var sharing = value["sharing"];
             if (!Keys(sharing, "codex-limits", "claude-code-tokens")) return false;
             foreach (var (channel, item) in sharing!.AsObject())
+            {
+                if (item is null) continue;
                 if (!Keys(item, "enabled", "canEnable", "reason", "token") || !Boolean(item!["enabled"]) || !Boolean(item["canEnable"]) ||
                     Text(item["reason"]) is not string reason || !values["sharingReason"].Contains(reason) ||
                     (channel == "codex-limits" && reason == "source-unavailable") || (channel == "claude-code-tokens" && reason == "account-unavailable") ||
                     (item["canEnable"]!.GetValue<bool>() ? !Hex64(Text(item["token"])) : item["token"] is not null)) return false;
+            }
             return ValidSharingChoice(value["sharingChoice"]);
         }
         catch { return false; }
     }
 
     private static SharingChannel Channel(int index) => index == 0 ? SharingChannel.Quota : SharingChannel.ProviderTokens;
-    private static JsonObject SharingValue(QuotaSharingStatus value) => new()
+    private static JsonObject? SharingValue(QuotaSharingStatus? value) => value is null ? null : new()
         { ["enabled"] = value.Enabled, ["canEnable"] = value.CanEnable, ["reason"] = value.Reason, ["token"] = value.Token };
     private static QuotaSharingStatus CheckedSharing(QuotaSharingStatus value, int index)
     {
-        var json = SharingValue(value); json["version"] = 1;
+        var json = SharingValue(value)!; json["version"] = 1;
         return QuotaSharing.Parse(json.ToJsonString(), Channel(index));
     }
 
@@ -1319,7 +1322,7 @@ internal sealed class BridgeHandler : IDisposable
         public void CompleteSetup() => ShellBridgeHost.CompleteSetup(runtime, () => CollectionPaused, StartCollector);
         public bool NativePairingOpen { get; set; }
         public bool NativeDialogOpen { get; set; }
-        internal bool CopyThrows, ScriptThrows;
+        internal bool CopyThrows, ScriptThrows, SharingThrows;
         public bool Confirm(string title, string text) { Calls.Enqueue("confirm:" + title); Dialogs++; InDialog?.Invoke(); return Consent; }
         public string? ChooseExportFile() { Calls.Enqueue("export"); InDialog?.Invoke(); return ExportFile; }
         public void CopyInvitation(string value) { if (CopyThrows) throw new InvalidOperationException("Synthetic clipboard failure"); Check(value.StartsWith("observatory-pair:v1:", StringComparison.Ordinal), "Clipboard value"); Calls.Enqueue("copy"); }
@@ -1346,6 +1349,7 @@ internal sealed class BridgeHandler : IDisposable
         public Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel)
         {
             Calls.Enqueue("sharing:" + action + ":" + channel);
+            if (SharingThrows) throw new IOException("Synthetic sharing failure");
             return Task.FromResult(new QuotaSharingStatus(action == "enable", true, "ready", new string('a', 64)));
         }
         public Action<bool> BeginDirectPairing()
@@ -1618,7 +1622,7 @@ internal sealed class BridgeHandler : IDisposable
         Check(!status["collectionPaused"]!.GetValue<bool>(), "Collection not paused at rest");
         Check(Encoding.UTF8.GetByteCount(status.ToJsonString()) <= 16384 && !status.ToJsonString().Contains("\"invitation\""), "Status privacy");
         foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
-            Check(status["sharing"]![channel]!.ToJsonString() == "{\"enabled\":false,\"canEnable\":false,\"reason\":\"pairing-unavailable\",\"token\":null}", "Unread sharing state");
+            Check(status["sharing"]![channel] is null, "Unread sharing state");
         Check(!test.Host.Calls.Any(c => c.StartsWith("sharing:", StringComparison.Ordinal)), "Busy collector read sharing");
         await test.Handler.cacheWork;
         Check((await test.Run("tailscale-check"))["value"]!["status"]!.GetValue<string>() == "running", "Tailscale cache");
@@ -1628,6 +1632,9 @@ internal sealed class BridgeHandler : IDisposable
         test.Host.Now += TimeSpan.FromSeconds(6); test.Host.CollectorBusy = false;
         await test.Run("status"); await test.Handler.cacheWork;
         Check(test.Host.Calls.Contains("sharing:status:Quota") && test.Host.Calls.Contains("sharing:status:ProviderTokens"), "Channel cache reads");
+        var checkedStatus = (await test.Run("status"))["value"]!;
+        foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
+            Check(JsonNode.DeepEquals(checkedStatus["sharing"]![channel], SharingValue(new(false, true, "ready", new string('a', 64)))), "Checked sharing state");
         test.Host.AppVersion = null;
         await test.Run("status", code: "unavailable");
         test.Host.AppVersion = new(1, 2, 3, 4);
@@ -1676,6 +1683,10 @@ internal sealed class BridgeHandler : IDisposable
         Check(cached["value"]!["sharingChoice"]!["chosen"]!.GetValue<bool>() && test.Host.ScriptInputs.Single() == "{\"action\":\"status\"}", "Sharing choice cache read");
         await test.Run("status"); await test.Handler.cacheWork;
         Check(test.Host.Scripts.Count == 1, "Sharing choice cache throttle");
+        test.Host.SharingThrows = true;
+        await test.Handler.RefreshSharing(0); await test.Handler.RefreshSharing(1);
+        Check(JsonNode.DeepEquals(cached["value"]!["sharing"], (await test.Run("status"))["value"]!["sharing"]), "Failed sharing read lost checked values");
+        test.Host.SharingThrows = false;
         test.Host.Now += TimeSpan.FromSeconds(5); test.Host.CollectorBusy = true;
         await test.Run("status"); await test.Handler.cacheWork;
         Check(test.Host.Scripts.Count == 1, "Busy collector read sharing choice");
@@ -1694,6 +1705,36 @@ internal sealed class BridgeHandler : IDisposable
         var pairing = Path.Combine(root, "private-sync", "pairing.json");
         File.WriteAllText(consent, "{\"consent\":true,\"givenAt\":\"2026-10-14T00:00:00.000Z\"}");
         File.WriteAllText(pairing, "{}");
+        using (var locked = new FileStream(consent, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var unreadHost = new TestHost(root) { CollectorBusy = true, SharingThrows = true };
+            using var unread = new BridgeHandler(unreadHost, root);
+            var unknown = unread.Status().Value!;
+            Check(ValidStatusShape(unknown) && unknown["limitsConsent"] is null, "Locked consent before first read");
+            foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
+                Check(unknown["sharing"]![channel] is null, "Initial sharing before first read");
+            unreadHost.CollectorBusy = false;
+            await unread.RefreshSharing(0); await unread.RefreshSharing(1);
+            var failed = unread.Status().Value!;
+            Check(JsonNode.DeepEquals(unknown, failed), "Failed first sharing read invented values");
+            var shape = unknown.DeepClone().AsObject();
+            shape["sharing"]!["codex-limits"] = SharingValue(new(false, true, "ready", new string('a', 64)));
+            Check(ValidStatusShape(shape), "Null consent and channel refused");
+            shape["sharing"]!["claude-code-tokens"] = SharingValue(new(false, true, "ready", new string('a', 64)));
+            shape["sharing"]!["codex-limits"] = null;
+            Check(ValidStatusShape(shape), "Null quota channel refused");
+            shape["sharing"]!.AsObject().Remove("codex-limits");
+            Check(!ValidStatusShape(shape), "Missing sharing channel accepted");
+            shape = unknown.DeepClone().AsObject(); shape["sharing"]!["extra"] = null;
+            Check(!ValidStatusShape(shape), "Extra sharing channel accepted");
+            shape = unknown.DeepClone().AsObject(); shape["limitsConsent"] = "false";
+            Check(!ValidStatusShape(shape), "Non-boolean consent accepted");
+            foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
+            {
+                shape = unknown.DeepClone().AsObject(); shape["sharing"]![channel] = new JsonObject();
+                Check(!ValidStatusShape(shape), "Broken sharing channel accepted");
+            }
+        }
         using var local = new TestDriver(root);
         var initial = (await local.Run("status"))["value"]!;
         await local.Handler.cacheWork;
