@@ -12,6 +12,51 @@ import {pythonTestCommand} from './test-python.mjs';
 const counters={inputTokens:5,cacheReadTokens:2,cacheCreationTokens:0,outputTokens:3,totalTokens:10,requestCount:1};
 const report={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...counters,models:[{model:'claude-sonnet-4-20250514',...counters,privateId:'PRIVATE'}]}]};
 
+test('Fable version shapes retain their names while arbitrary text stays unknown',()=>{
+  const accepted=['claude-fable-5','claude-fable-5-1','claude-fable-5-20260101',
+    'claude-fable-5-1-20260101-latest','claude-5-fable','claude-5-1-fable-20260101-latest'];
+  const rejected=['claude-fablex-5','claude-fable','claude-fable-5 extra text','extra claude-fable-5'];
+  for(const model of [...accepted,...rejected]) {
+    const raw={...report,days:[{...report.days[0],models:[{model,...counters}]}]};
+    const source=cleanClaudeTokenSource(raw,'Mac','2026-09-25T00:00:00Z');
+    assert.equal(source.days[0].models[0].model,accepted.includes(model)?model:'unknown');
+    if(rejected.includes(model)) {
+      const result=attachProviderTokenEstimates({data:{providerTokenSources:[source]}});
+      assert.equal(result.data.providerTokenSources[0].days[0].apiEstimate.usd,null);
+    }
+  }
+});
+
+for(const model of ['claude-fable-5','claude-fable-5-1']) {
+  test(`${model} reader records retain their model and use the price table`,async t=>{
+    const root=await mkdtemp(path.join(tmpdir(),'observatory-fable-integration-'));
+    t.after(()=>rm(root,{recursive:true,force:true}));
+    const file=path.join(root,'projects','fixture','usage.jsonl');
+    await mkdir(path.dirname(file),{recursive:true});
+    await writeFile(file,JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r1',
+      message:{role:'assistant',id:'m1',model,usage:{input_tokens:1,cache_read_input_tokens:2,
+        cache_creation_input_tokens:3,output_tokens:4}}})+'\n');
+    const reader=await readFile(new URL('./read-claude-usage.py',import.meta.url),'utf8');
+    const command=pythonTestCommand(['-I','-',root]);
+    const run=spawnSync(command.executable,command.args,{cwd:path.resolve('.'),input:reader,encoding:'utf8'});
+    assert.equal(run.status,0,run.stderr);
+    const source=cleanClaudeTokenSource(JSON.parse(run.stdout),'Mac','2026-09-25T12:00:00Z');
+    const result=attachProviderTokenEstimates({data:{providerTokenSources:[source]}});
+    const day=result.data.providerTokenSources[0].days[0];
+    assert.equal(day.models[0].model,model);
+    const nativePrices=JSON.parse(await readFile(new URL('../native/prices.json',import.meta.url),'utf8'));
+    const price=nativePrices.models[model];
+    assert.deepEqual(prices.models[model],price);
+    const expected=(price.input+2*price.cachedInput+3*price.cacheWrite+4*price.output)/1e6;
+    assert.ok(expected>0);
+    for(const apiEstimate of [day.models[0].apiEstimate,day.apiEstimate]) {
+      assert.equal(apiEstimate.usd,expected);
+      assert.equal(apiEstimate.coveredTokens,10);
+      assert.equal(apiEstimate.excluded,0);
+    }
+  });
+}
+
 test('hourly totals are opt-in and retained only when complete and reconciled',()=>{
   const hours=[10,...Array(23).fill(0)],checkedAt='2026-09-25T00:00:00Z';
   const raw={...report,days:[{...report.days[0],hours}]};
