@@ -225,12 +225,12 @@ test('expired local and peer windows are Unknown with no low warning or pace', (
     assert.equal(row.remaining, null);
     assert.equal(row.low, false);
     assert.equal(row.pace, null);
-    assert.equal(row.note, 'Reset time unknown');
+    assert.equal(row.note, 'Waiting for the reset to be observed.');
   }
   const peer = peerLimits({ peerQuota: { ...data.quota, host: 'Mac' } }, now);
   assert.equal(peer.rows[0].remaining, null);
   assert.equal(peer.rows[0].low, false);
-  assert.equal(peer.rows[0].note, 'Reset time unknown');
+  assert.equal(peer.rows[0].note, 'Waiting for the reset to be observed.');
 });
 
 test('a carried window cannot project pace from the fresh source timestamp', () => {
@@ -260,11 +260,11 @@ test('limits view renders reset windows as Unknown in every limit style', async 
   for (const style of ['meter', 'numeral', 'text']) {
     const html = renderToStaticMarkup(createElement(LimitRows, { rows: limitRows(data, now), style }));
     assert.match(html, />Unknown</);
-    assert.match(html, /Reset time unknown/);
+    assert.match(html, /Waiting for the reset to be observed\./);
     assert.doesNotMatch(html, />0%<|>12%<|width:0%|width:12%/);
     if (style === 'meter') assert.match(html, /class="ob-bar" aria-hidden="true"><\/div>/);
     if (style === 'text') assert.match(html, /class="ob-blocks" aria-hidden="true"/);
     const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: style }));
-    assert.match(view, /class="ob-num big">Unknown<\/span><span class="ob-meta">Reset time unknown/);
+    assert.match(view, /class="ob-num big">Unknown<\/span><span class="ob-meta">Waiting for the reset to be observed\./);
   }
 });

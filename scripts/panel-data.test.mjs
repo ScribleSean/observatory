@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, sourceCounts, totals } from '../lib/panel-data.mjs';
+import { readingTime } from '../lib/panel-data.mjs';
 import { spawnSync } from 'node:child_process';
 import { SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
@@ -300,7 +301,7 @@ test('reset values become Unknown while missing or invalid reset times keep thei
     for (const row of limits({ quota: source, claudeLimits: source }, now)) {
       assert.equal(row.remaining, expired ? null : 12);
       assert.equal(row.low, !expired);
-      assert.equal(row.note, strings.status.resetUnknown);
+      assert.equal(row.note, expired ? strings.limits.resetPending : strings.status.resetUnknown);
     }
   }
 });
@@ -312,4 +313,24 @@ test('a window time later than its source time cannot make an old limits reading
   const row = limits(snapshot, now).find(item => item.provider === 'claude');
   assert.equal(row.stale, true);
   assert.match(row.note, /as of/);
+});
+
+test('an as of note names the date when the reading is from an earlier day', () => {
+  const now = new Date(2026, 9, 18, 15, 0).getTime();
+  const earlier = new Date(2026, 9, 15, 7, 10).getTime();
+  const sameDay = new Date(2026, 9, 18, 7, 10).getTime();
+  assert.equal(readingTime(sameDay, now), new Date(sameDay).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  assert.notEqual(readingTime(earlier, now), new Date(earlier).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  assert.match(readingTime(earlier, now), /15/);
+});
+
+test('a kept higher Claude Code reading shows as of its own earlier time', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z');
+  const snapshot = { claudeLimits: { status: 'ok', checkedAt: '2026-10-18T11:59:00Z', windows: [
+    { bucket: 'claude', window: 'five_hour', durationMinutes: 300, remainingPercent: 20, resetsAt: '2026-10-18T14:00:00Z', checkedAt: '2026-10-18T11:10:00Z' },
+    { bucket: 'claude', window: 'seven_day', durationMinutes: 10080, remainingPercent: 70, resetsAt: '2026-10-20T14:00:00Z', checkedAt: '2026-10-18T11:59:00Z' }] } };
+  const [kept, fresh] = limits(snapshot, now).filter(item => item.provider === 'claude');
+  assert.equal(kept.stale, true);
+  assert.match(kept.note, /as of/);
+  assert.equal(fresh.stale, false);
 });

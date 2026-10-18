@@ -75,8 +75,8 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     const before=saved.windows[name],after=next.windows[name];
     if(!before || !after) {if(before || after)merged.windows[name]=before ?? after;continue;}
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
-    merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage
-      ? {...before,observedAt:after.observedAt} : after;
+    // The kept higher value keeps its own observation time, so it shows as of when it was read.
+    merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage ? before : after;
   }
   const before=saved.sessionCost,after=next.sessionCost;
   const cost=after && (!before || after.observedAt>=before.observedAt)?after:before;
