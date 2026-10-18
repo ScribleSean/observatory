@@ -1,3 +1,4 @@
+import {writeSnapshot} from './snapshot-size.mjs';
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
 import {finalizeWithLocalAdditions} from './local-additions.mjs';
@@ -66,10 +67,10 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
   await mkdir(folder,{recursive:true});
   if((await lstat(folder)).isSymbolicLink())throw Error('Unsafe runtime directory');
   const startedAt=new Date().toISOString();
-  const atomic=async(name,value,beforeReplace)=>{
+  const atomic=async(name,value,beforeReplace,serialized=false)=>{
     const temporary=path.join(folder,`.collector-${randomUUID()}.tmp`);
     try {
-      await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600,flush:true});
+      await writeFile(temporary,serialized?value:JSON.stringify(value),{flag:'wx',mode:0o600,flush:true});
       await beforeReplace?.();
       await rename(temporary,path.join(folder,name));
     } finally {await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
@@ -130,7 +131,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     ...claudeLimitsSource(null,{enabled}),...(enabled?{usageCommand:'timed-out'}:{})})));
   attachDeviceName(result.data,'Windows',deviceName);
   const {data,status}=result;
-  await atomic('usage.json',data,async()=>{await replacement.preserve();signal?.throwIfAborted();});
+  await writeSnapshot(data,{atomic,startedAt,beforeReplace:async()=>{await replacement.preserve();signal?.throwIfAborted();}});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),
     snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
   console.log(JSON.stringify(status));
