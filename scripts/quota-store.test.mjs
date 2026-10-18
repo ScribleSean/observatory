@@ -64,6 +64,12 @@ test('quota store reloads an expired stale history as unavailable, never stale w
   assert.equal(reopened.history.status,'unavailable');
   assert.deepEqual(reopened.history.samples,[]);
 }));
+test('quota store does not reload a saved ok history as ok when the clock is behind its latest sample',async()=>fixture(async runtime=>{
+  const initial=await readQuotaState(runtime,now);
+  await updateQuotaState(runtime,{revision:initial.revision,scope,observation},now);
+  const reopened=await readQuotaState(runtime,now-60000);
+  assert.notEqual(reopened.history.status,'ok');
+}));
 test('quota store rejects late writes after disabling and does not resurrect readings',async()=>fixture(async runtime=>{
   const initial=await readQuotaState(runtime,now);
   const first=await updateQuotaState(runtime,{revision:initial.revision,scope,observation},now);
