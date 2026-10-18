@@ -88,20 +88,24 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   if(localConfig.host===peerConfig.host || localConfig.comparisonId!==peerConfig.comparisonId)throw Error('Invalid peer pair');
   const payloads=[parsePeerPayload(JSON.stringify(local),localConfig,now),parsePeerPayload(JSON.stringify(peer),peerConfig,now)]
     .sort((a,b)=>a.host.localeCompare(b.host));
-  const checked=source=>({...source,checkedAt:payloads.find(p=>p.host===source.host).collectedAt});
+  const isFresh=payload=>now-Date.parse(payload.collectedAt)<=600000;
+  const checked=source=>{
+    const payload=payloads.find(p=>p.host===source.host);
+    return {...source,status:isFresh(payload)?source.status:'stale',checkedAt:payload.collectedAt};
+  };
   const normalized=payloads.map(p=>checked(p.activity.status==='ok'?cleanActivity(p.activity,p.host):p.activity));
   const activity=normalized.map(({intervals,trackingIntervals,...safe})=>safe);
   const settings=payloads.flatMap(p=>p.codex.filter(row=>row.host===p.host).map(({inventory,...safe})=>checked(safe)));
   const tokens=settings.map(source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:{...absent(source.host,source.status),checkedAt:source.checkedAt});
   const expectedHosts=[localConfig.host,peerConfig.host];
   const evidenceHosts=[localConfig.host,peerConfig.host];
-  const evidence=payloads.flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
+  const evidence=payloads.filter(isFresh).flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
     version:1,comparisonId:p.comparisonId,host:row.host,...row.inventory,
     // Recorded usage requires a nonempty inventory.
     status:!row.inventory.keys.length && (row.profiles.some(profile=>profile.totalTokens>0) ||
       row.tokenProfiles?.some(profile=>profile.totalTokens>0))
       ?'incomplete':row.inventory.status})));
-  const fresh=payloads.every(p=>now-Date.parse(p.collectedAt)<=600000);
+  const fresh=payloads.every(isFresh);
   const combined=fresh?{...combineActivity(normalized),checkedAt:payloads.map(p=>p.collectedAt).sort((a,b)=>a<b?-1:a>b?1:0)[0]}:absent('Combined');
   const combinedTokens=fresh?combinePeerTokens(tokens,evidence,localConfig.comparisonId,expectedHosts,evidenceHosts):absent('All');
   const combinedSettings=combinedTokens.status==='ok'?combineSettings(tokens,settings):absent('All');

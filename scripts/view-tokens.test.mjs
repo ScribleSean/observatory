@@ -312,3 +312,34 @@ test('a missing snapshot reads as empty', () => {
     assert.equal(result.claude.sessionCost.usd, null);
   }
 });
+
+test('old device readings with ok status do not supply tokens, estimates or settings', () => {
+  const data = sampleSnapshot(now);
+  for (const key of ['tokens', 'providerTokenSources', 'settings'])
+    for (const row of data[key]) row.checkedAt = new Date(Date.parse(data.collectedAt) - 660000).toISOString();
+  const result = view(data);
+  assertEmpty(result.codex, 'unknown');
+  assertEmpty(result.claude, 'unknown');
+  assert.equal(result.settings[0].status, 'unknown');
+  assert.deepEqual(result.settings[0].rows, []);
+  const all = view(data, { host: 'All' });
+  assert.equal(all.codex.status, 'ok');
+  assert.ok(all.claude.byDevice.every(row => row.total === null && row.status === 'unknown'));
+});
+
+test('tokens use snapshot time for local readings and peer lag', () => {
+  for (const lag of [0, 9, 11]) {
+    const data = snapshot();
+    data.collectedAt = new Date(now - 1800000).toISOString();
+    const checkedAt = new Date(Date.parse(data.collectedAt) - lag * 60000).toISOString();
+    for (const key of ['tokens', 'providerTokenSources']) data[key][0].checkedAt = checkedAt;
+    data.settings = [{ host: 'Mac', status: 'ok', checkedAt, profiles: [{ date: '2026-10-14', model: 'fictional', totalTokens: 10 }] }];
+    const result = view(data);
+    for (const provider of ['codex', 'claude']) {
+      assert.equal(result[provider].totals.total, lag <= 10 ? 10 : null);
+      assert.equal(result[provider].note.includes('as of'), lag > 10);
+      assert.equal(view(data, { period: 'day', now: now + 86400000 })[provider].status, lag <= 10 ? 'no-records' : 'unknown');
+    }
+    assert.equal(result.settings[0].status, lag <= 10 ? 'ok' : 'unknown');
+  }
+});

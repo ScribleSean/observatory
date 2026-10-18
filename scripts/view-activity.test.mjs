@@ -194,7 +194,8 @@ test('history supplies retained totals while Now uses the live source only', () 
   assert.equal(view(data, { period: 'now' }).total, 200);
   data.activity[0].status = 'unavailable';
   assert.equal(view(data, { period: 'now' }).total, null);
-  assert.equal(view(data).total, 7200);
+  assert.equal(view(data).total, null);
+  assert.equal(data.activityHistory[0].days[0].seconds, 7200);
 });
 test('categories do not include peer device or Combined records', () => {
   const data = snapshot();
@@ -233,18 +234,48 @@ test('Combined archive masks hours after its reading despite a later collection'
     assert.ok(view(data, { host: 'All', date: '2026-10-13' }).hourly.every(point => point.value === null));
   }
 });
-test('unavailable device retains earlier hours and masks at the archive reading', () => {
+test('unavailable device keeps archived hours stored but does not display them', () => {
   const data = snapshot();
   data.activity[0].status = 'unavailable';
   data.activityHistory = [{
     host: 'Mac', status: 'ok', latestReadStatus: 'unavailable', asOf: readingAt,
     days: [day('2026-10-13'), day(), day('2026-10-15')],
   }];
-  assert.deepEqual(view(data, { date: '2026-10-13' }).hourly.map(point => point.value), hours(100));
-  assert.deepEqual(view(data).hourly.map(point => point.value), [...Array(13).fill(100), ...Array(11).fill(null)]);
+  assert.deepEqual(view(data, { date: '2026-10-13' }).hourly.map(point => point.value), hours(null));
+  assert.deepEqual(view(data).hourly.map(point => point.value), hours(null));
+  assert.deepEqual(data.activityHistory[0].days[0].hours, hours(100));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
   assert.equal(view(data, { period: 'now' }).total, null);
   assert.ok(view(data, { period: 'now' }).hourly.every(point => point.value === null));
   data.activityHistory[0].days[0].hours = hours(null);
   assert.ok(view(data, { date: '2026-10-13' }).hourly.every(point => point.value === null));
+});
+
+test('stale device readings cannot supply retained activity or hourly charts', () => {
+  const data = snapshot();
+  data.activity[0].checkedAt = new Date(Date.parse(data.collectedAt) - 660000).toISOString();
+  data.activityHistory = [{ host: 'Mac', status: 'ok', latestReadStatus: 'ok', trackingStatus: 'recent', days: [day()] }];
+  const result = view(data);
+  assert.equal(result.total, null);
+  assert.match(result.note, /as of/);
+  assert.ok(result.hourly.every(row => row.value === null));
+  assert.equal(result.tracking.status, 'unavailable');
+  assert.ok(view(data, { period: 'now' }).hourly.every(row => row.value === null));
+  assert.equal(view(data, { host: 'All' }).total, 3600);
+});
+
+test('activity retains old snapshot history while excluding late peers', () => {
+  for (const lag of [0, 9, 11]) {
+    const data = snapshot();
+    data.collectedAt = new Date(now - 1800000).toISOString();
+    data.activity[0].checkedAt = new Date(Date.parse(data.collectedAt) - lag * 60000).toISOString();
+    data.activityHistory = [{ ...data.activity[0], days: [day('2026-10-13', 42), day()] }];
+    const result = view(data, { date: '2026-10-13' });
+    assert.equal(result.total, lag <= 10 ? 42 : null);
+    assert.equal(result.note.includes('as of'), lag > 10);
+    assert.equal(result.hourly.some(row => row.value !== null), lag <= 10);
+    const empty = view(data, { now: now + 86400000 });
+    if (lag <= 10) assert.equal(empty.note, 'No records');
+    else assert.match(empty.note, /as of/);
+  }
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, sourceCounts, totals } from '../lib/panel-data.mjs';
+import { deviceReadingReference, deviceReadingCurrent, compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, sourceCounts, totals } from '../lib/panel-data.mjs';
 import { spawnSync } from 'node:child_process';
 import { SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
@@ -273,4 +273,89 @@ test('stored pace remains the default and can be omitted without changing other 
     assert.equal(row.note, 'Resets in 1h 0m · runs out in about 30m');
     assert.deepEqual(without[index], { ...row, note: 'Resets in 1h 0m' });
   });
+});
+
+test('device freshness gates tokens, activity history and provider tokens without changing All', () => {
+  for (const host of ['Mac', 'Windows']) for (const status of ['ok', 'stale', 'unavailable']) {
+    const data = snapshot();
+    const baseline = totals(data, 'All', 'day', new Date(now));
+    const checkedAt = new Date(now - 11 * 60000).toISOString();
+    for (const key of ['tokens', 'activity']) {
+      let row = data[key].find(row => row.host === host);
+      if (!row) { row = { host, days: [] }; data[key].push(row); }
+      Object.assign(row, { status, checkedAt });
+    }
+    data.activityHistory = [{ host, status: 'ok', days: [{ date: '2026-03-10', seconds: 42 }] }];
+    data.providerTokenSources = [{ host, provider: 'claude-code', status, checkedAt, days: [day('2026-03-10', 42)] }];
+    const result = totals(data, host, 'day', new Date(now));
+    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds, result.usd], [null, null, null, null]);
+    for (const note of [result.codexNote, result.claudeNote, result.timeNote]) {
+      if (status === 'unavailable') assert.equal(note, '');
+      else assert.match(note, /as of/);
+    }
+    assert.deepEqual(recordedDays(data, 'activity', host, now), []);
+    if (status === 'ok') assert.equal(totals(data, 'All', 'day', new Date(now)).codexTokens, baseline.codexTokens);
+  }
+});
+
+test('fresh empty periods keep No records and the ten-minute boundary is inclusive', () => {
+  for (const age of [9 * 60000, 10 * 60000]) {
+    const data = snapshot();
+    const at = now + 86400000;
+    data.tokens[1].checkedAt = new Date(at - age).toISOString();
+    const result = totals(data, 'Windows', 'day', new Date(at));
+    assert.equal(result.codexTokens, null);
+    assert.equal(result.codexNote, 'No records');
+  }
+});
+
+test('source counts exclude old ok device rows while preserving account counts', () => {
+  const checkedAt = new Date(now - 660000).toISOString();
+  assert.deepEqual(sourceCounts({ tokens: [{ host: 'Mac', status: 'ok', checkedAt }],
+    quota: { status: 'ok' } }, now), { read: 1, total: 2 });
+});
+
+test('snapshot time preserves local history and measures peer lag', () => {
+  for (const lag of [0, 9, 10, 11]) {
+    const data = snapshot();
+    data.collectedAt = new Date(now - 30 * 60000).toISOString();
+    const checkedAt = new Date(Date.parse(data.collectedAt) - lag * 60000).toISOString();
+    for (const key of ['tokens', 'activity']) for (const row of data[key]) row.checkedAt = checkedAt;
+    data.activityHistory = [{ ...data.activity[0], days: [{ date: '2026-03-09', seconds: 42 }] }];
+    data.providerTokenSources = [{ ...data.tokens[0], provider: 'claude-code' }];
+    const result = totals(data, 'Mac', 'all', new Date(now));
+    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds], lag <= 10 ? [150, 150, 42] : [null, null, null]);
+    for (const note of [result.codexNote, result.claudeNote, result.timeNote]) assert.equal(note.includes('as of'), lag > 10);
+    assert.equal(sourceCounts(data, now).read, lag <= 10 ? 4 : 0);
+    const empty = totals(data, 'Mac', 'day', new Date(now + 86400000));
+    for (const note of [empty.codexNote, empty.claudeNote, empty.timeNote]) {
+      if (lag <= 10) assert.equal(note, 'No records');
+      else assert.match(note, /as of/);
+    }
+  }
+});
+
+test('snapshot reference falls back for missing invalid or far future times', () => {
+  for (const collectedAt of [undefined, 'invalid', new Date(now + 120001).toISOString()]) {
+    const data = snapshot();
+    data.collectedAt = collectedAt;
+    data.tokens[0].checkedAt = new Date(now - 660000).toISOString();
+    assert.equal(deviceReadingReference(data, now), now);
+    assert.equal(totals(data, 'Mac', 'day', new Date(now)).codexTokens, null);
+    data.tokens[0].checkedAt = new Date(now - 540000).toISOString();
+    assert.equal(totals(data, 'Mac', 'day', new Date(now)).codexTokens, 100);
+  }
+  const reference = deviceReadingReference({ collectedAt: new Date(now + 120000).toISOString() }, now);
+  assert.equal(reference, now + 120000);
+  assert.equal(deviceReadingCurrent({ status: 'ok', checkedAt: new Date(reference + 600000).toISOString() }, reference), true);
+  assert.equal(deviceReadingCurrent({ status: 'ok' }, reference), true);
+  assert.equal(deviceReadingCurrent({ status: 'stale', checkedAt: new Date(reference).toISOString() }, reference), false);
+});
+
+test('a failed device read stays Unknown without an as of time', () => {
+  const at = '2026-10-18T12:00:00Z';
+  const snapshot = { collectedAt: at, timezone: 'UTC', tokens: [{ host: 'Windows', status: 'unavailable', checkedAt: '2026-10-18T11:00:00Z' }] };
+  const result = totals(snapshot, 'Windows', 'day', new Date(at));
+  assert.equal(result.codexTokens, null);
+  assert.equal(result.codexNote, '');
 });
