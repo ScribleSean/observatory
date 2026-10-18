@@ -11,6 +11,8 @@ Installed revisions:
 - Mac: build 43 from `02555e8`, installed on October 17, 2026 by replacing build 42 with a recoverable copy kept beside it. The installed `build-info.json` names `02555e8` with `sourceDirty` false. The main binary declares macOS 14.0 and the 26.5 SDK.
 - Windows PC: build 42 from `a5a1d3c`, installed on October 16, 2026. Build 43 is not installed on the PC.
 
+Neither install has a section in [the state record](STATE.md) yet.
+
 The checks of "What done means" in [the build plan](BUILD-PLAN.md) and the README checklist on issue 105 have not been run against build 43 on either device. Their results go in [the state record](STATE.md), not here.
 
 ### Release steps
@@ -18,7 +20,7 @@ The checks of "What done means" in [the build plan](BUILD-PLAN.md) and the READM
 Each step names what was done for build 43. "Not run" means the step has not happened.
 
 1. **Script suite on the exact revision.** Run `script-suite.yml` on the release revision on both hosted runners. Build 43: run 38994239128, dispatched on `main` at `02555e8`, succeeded.
-2. **Windows package, gated on that suite.** Dispatch `windows-package.yml` on the same revision with installer verification on. Its first step refuses a commit that has no successful Script suite run (push or dispatch) for the same SHA. It uploads the installer and package as workflow artifacts kept for one day only. Download the installer artifact the same day and check its ZIP digest against the one in the run log, the setup file against its `.sha256` sidecar, and `installer-build.json` (version, build number, source revision, clean, not a test identity). Build 43: run 38996117293 succeeded at `02555e8` on October 17, 2026, but its artifacts expired before they were downloaded. A new package run at the same revision is needed, and the PC installs that file. A rebuild is a new file even at the same revision, so its digests are recorded fresh and the expired run's values are never reused.
+2. **Windows package, gated on that suite.** Dispatch `windows-package.yml` on the same revision with installer verification on. Before it builds, it refuses a commit that has no successful Script suite run (push or dispatch) for the same SHA. It uploads the installer and package as workflow artifacts kept for one day only. Download the installer artifact the same day and check its ZIP digest against the one in the run log, the setup file against its `.sha256` sidecar, and `installer-build.json` (version, build number, source revision, clean, not a test identity). Build 43: run 38996117293 succeeded at `02555e8` on October 17, 2026, but its artifacts expired before they were downloaded. A new package run at the same revision is needed, and the PC installs that file. A rebuild is a new file even at the same revision, so its digests are recorded fresh and the expired run's values are never reused.
 3. **Mac build on the Mac.** From a clean worktree at the release revision, build with the macOS 26.5 SDK and package the ZIP:
 
    ```sh
@@ -40,6 +42,7 @@ Each step names what was done for build 43. "Not run" means the step has not hap
 - Build 43 installed and checked on the PC, from a new package run (step 2).
 - "What done means" verified on both devices against installed build 43, including Tailscale pairing with a pasted invitation between the installed apps (P1-6). That pairing has passed only in the synthetic two-device harness (P1-4). The existing SSH pairing stays until it passes.
 - The NuGet vulnerable-package query on the PC (step 5).
+- The runtime review that the September 13 section of [the security notes](../SECURITY.md) names as a gate on final publication. It is archived and has not been repeated for build 43.
 - Clean-machine installation and first launch on each platform. The development devices are not clean machines.
 - Signing and notarization. The release ships with the unsigned-app warnings described in step 7.
 - Automatic updates. No production update feed, keys or appcast exist, and none is published with this release. See [desktop updates](UPDATES.md).

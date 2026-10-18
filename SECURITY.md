@@ -2,7 +2,7 @@
 
 This is an early local-first desktop application with an optional static browser view. Do not expose the browser server to a network or host builds containing personal data. No browser-server authentication or multi-user authorization is implemented. Local processes with filesystem access remain in the trust boundary.
 
-Cross-device transport is verified only for the existing SSH pairing. The installed Mac and Windows apps were re-paired over SSH on October 13, 2026, and the Mac reads fresh Windows records, as recorded in [the state record](docs/STATE.md). Pairing through Tailscale with a pasted invitation has passed only in the synthetic two-device test harness (P1-4, October 16, 2026), with temporary runtimes and synthetic records. That run had intermittent dropped connections whose cause is still open. Tailscale pairing between installed apps is not verified until the installed-app check (P1-6) passes on both devices.
+Cross-device transport is verified only for the existing SSH pairing. The installed build 41 apps on the Mac and the Windows PC were re-paired over SSH on October 13, 2026, and the Mac read fresh Windows records, as recorded in [the state record](docs/STATE.md). The state record has no pairing check yet for the builds installed since then. Pairing through Tailscale with a pasted invitation has passed only in the synthetic two-device test harness (P1-4, October 16, 2026), with temporary runtimes and synthetic records. That run had intermittent dropped connections whose cause is still open. Tailscale pairing between installed apps is not verified until the installed-app check (P1-6) passes on both devices.
 
 Use `npm run serve:local`, not a Vite development server, for ongoing viewing. It serves the built shared viewer from `.native-build/web` through Node built-ins, with no framework server functions or image upload and processing paths. The server accepts only loopback requests with an allowlisted Host, rejects cross-site requests, and does not execute commands.
 
@@ -17,7 +17,7 @@ npm audit --package-lock-only --ignore-scripts --registry=https://registry.npmjs
 npm audit --package-lock-only --ignore-scripts --omit=dev --registry=https://registry.npmjs.org --json
 ```
 
-These submit public dependency metadata to npm, not usage records. The full tree has 106 packages, of which 5 are production entries (the project and four packages). The production-only audit reported zero advisories. The full audit reported three, all in development tools:
+These submit public dependency metadata to npm, not usage records. The full tree has 106 packages, of which 5 are production entries (the project and four packages). The production-only audit reported zero advisories. The full audit flagged three packages, one high and two critical, all development tools. npm counts oxfmt as affected through tinypool, so the table has two rows:
 
 | Package | Severity | Advisory | Reached through | Ships in an app |
 | --- | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ The generated notice `Web/assets/third-party-licenses.txt` in the installed buil
 
 The Windows project locks one NuGet package, Microsoft.Web.WebView2 1.0.4191.47 (`native/windows/packages.lock.json`). The .NET SDK is not installed on the Mac, so `dotnet list native/windows/WorkspaceObservatory.csproj package --vulnerable --include-transitive` was not run. A GitHub advisory database query for that NuGet package returned no advisories. This is weaker than the NuGet query and does not cover the .NET runtime packs. The NuGet query still needs to run on the PC before publication.
 
-Zero production findings is not a vulnerability-free claim. This check does not audit the bundled Node, Python or .NET runtimes (including the pip copy inside the Mac Python runtime, which the app does not run), system webviews, OS components, application logic or future advisories. Repeat it if the lock file changes before publication.
+Zero production findings is not a vulnerability-free claim. This check does not audit the bundled Node, Python or .NET runtimes (including the pip copy inside the Mac Python runtime, which the app does not run), system webviews, OS components, application logic or future advisories. Repeat it if the lock file changes before publication. It does not replace the archived runtime review that the September 13 section below names as a gate on final publication. That review has not been repeated for build 43.
 
 ## Dependency review, September 13, 2026 UTC (historical)
 
