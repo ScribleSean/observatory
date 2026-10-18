@@ -2,31 +2,30 @@
 
 Assessed on 2026-10-12 from `main` at `93b856b` on the Windows PC. This is a read-only assessment. Nothing was merged, pushed, deleted or installed. A documentation change is not a new build or a verification result.
 
-That assessment is historical. The sections marked "historical" below describe `main` at `93b856b` and are kept as assessed. "Current status" and "What the app does today" were rewritten on 2026-10-14 for build 41. The dated install records keep their original dates and wording.
+That assessment is historical. The sections marked "historical" below describe `main` at `93b856b` and are kept as assessed. "What the app does today" was rewritten on 2026-10-14 for build 41, and "Current status" was rewritten again on 2026-10-17 for builds 42 and 43. The dated install records keep their original dates and wording.
 
 ## Current status
 
-Updated on 2026-10-14 from the Mac, by reading `main`, GitHub and the build 41 install records below. Nothing was installed or run on either device for this update. The sections below keep their original dates and wording.
+Updated on 2026-10-17 local time (early on 2026-10-18 UTC) from the Mac for L1 (issue 113), by reading `main`, GitHub, the issue comments, the orchestrator's session log and the install records below. The owner reported the PC offline at 03:37 UTC on 2026-10-18, so the PC's installed state below is its last recorded state. The sections below keep their original dates and wording.
 
 | Topic | State |
 | --- | --- |
-| `main` | Version 0.3.14 build 41. Since the build 41 installs, pull request 93 bounded the Claude usage command and repaired the Windows menu text, and pull request 95 recorded the execution plan. Neither change is in an installed build. |
-| Installed on Windows | Build 41 from `06e73c2`, installed on 2026-10-13 (local time). Started outside a Claude desktop session, its first collection read 6 of 6 sources with state `ok`. See "Build 41 install on Windows". |
-| Installed on Mac | Build 41 from `3f70771`, installed on 2026-10-13 (local time). Started with a clean environment, it read 10 of 10 sources with state `ok`. See "Build 41 install on the Mac". |
-| Shared viewer | The shared panel is in build 41 on both platforms behind `--web-panel`, and Windows hosts a dashboard window behind `--web-dashboard`. Neither is the default and neither was exercised on an installed build. |
-| Pairing | Re-paired on 2026-10-13 without the Ubuntu slot, over SSH. The Mac reads fresh Windows records and the All token total reports `ok`. |
+| `main` | Version 0.3.14 build 43 at `02555e8` (pull request 232). Pull request 233 later replaced the two README images at `8470ab2`, a documentation change only. |
+| Installed on Windows | Build 42 from `a5a1d3c`, installed on 2026-10-16. Build 43 was packaged by CI, but that run's artifacts have expired and it is not installed on the PC. See "Build 42 install sitting (L1)" and "Build 43". |
+| Installed on Mac | Build 43 from `02555e8`, installed on 2026-10-17, with build 42 retained for rollback. See "Build 43". |
+| Shared viewer | The default and only viewer in build 42 on both devices. Both installed apps refuse `--legacy-dashboard` and `--native-viewer` with exit 64, and each installed Web folder holds only `assets`, `dashboard.html` and `panel.html`. These checks were run on build 42, not repeated on build 43. |
+| Pairing | Still the SSH pairing from 2026-10-13. Its saved Windows paths were updated to the renamed folders on 2026-10-16, and records were read in both directions afterwards. Tailscale pairing between the installed apps (P1-6) has not been done. |
 | Plan | [The build plan](BUILD-PLAN.md), corrected on 2026-10-14, and [the execution plan](EXECUTION-PLAN.md) approved that day. |
-| Open pull requests | 94, the script suite workflow (Q1-a). Its first run failed on both hosted runners. |
-| Open issues | 79 to 84 and 96 to 113, one per workstream (the build plan's "How progress is tracked" lists them). 58, which records that the Windows app loses its private folders when it is started from a Claude desktop session. 60, the same question on the Mac. 39, which R2 is expected to supersede. |
-| Script suite on the Mac | 925 tests, 816 passed, 4 failed and 105 skipped on `02b83ac`, run serially with the installed app's Python 3.13. The four failures are named in [the execution plan](EXECUTION-PLAN.md) under "Baselines" and also fail on the hosted macOS runner. |
+| Open pull requests | 234, 235 and 236, fixes for issues 212, 214 and 222. 150, a draft outside the plan. |
+| Open issues | Workstream issues 80, 83, 84, 103 and 105 to 113. From the install sittings and their fixes: 212 to 216, 222, 228 and 229. Also 58, 60, 174, 189, 192 and 199. |
+| Script suite | Run `38949215984` on `a5a1d3c` and run `38994239128` on `02555e8` succeeded on the hosted runners. Their test counts are not copied into this record. |
 
-Work that is ready to pick up, in order (the execution plan, section 2, has the full order):
+Work left for L1, as of 2026-10-17:
 
-1. Finish and merge the plan corrections pull request.
-2. Done on 2026-10-14. The missing workstream issues are open (96 to 113), and the corrected scope is posted on issues 79 to 84.
-3. Unblock pull request 94: Python 3.13 on the Windows runner lacks `tzdata`, and the four failing tests on the Mac need a decision.
-4. Send the Windows session the W1 items from the last orchestrator comment on issue 84.
-5. Start R1, V1, M1 and the rest of Q1 in parallel. D1 and D2 follow R1. R2 can run at any time, with both apps installed from it together.
+1. Install build 43 on the PC. The package run's artifacts had expired by 2026-10-18 (see "Build 43"), so a new Clean Windows package run on `02555e8` comes first.
+2. P1-6, Tailscale pairing between the installed apps, from step T-3 on, with the owner present.
+3. The Finish half of O1-3 on both devices, and its first half on the Mac.
+4. The done-item checks that were not exercised on an installed build (listed under "Not exercised on build 42" and "Build 43").
 
 ## What the app does today
 
@@ -384,6 +383,155 @@ Recorded on 2026-10-13 (local time) on the Windows PC. The Mac was not touched. 
 - The tray menu, the native popup, the dashboard windows and the `--web-panel` and `--web-dashboard` flags on the installed build.
 - Login startup, which is off, and sleep and wake.
 - Whether the Mac reads this PC's records after the change. Only this PC's view was read.
+
+## Build 42 install sitting (L1)
+
+Recorded on 2026-10-17 local time from the Mac, from the orchestrator's session log, the reports of the "Observatory Windows" session and the comments on issues 107, 108, 113 and 215. The sitting ran on 2026-10-16 from about 19:24 to 21:03 UTC (15:24 to 17:03 local time on both devices). Times are UTC unless marked local. No usage value, title, prompt, invitation or credential is recorded here.
+
+### Release revision and packages
+
+- `REV` is `a5a1d3ce6eddc72d16ba26e09257f44886792d59`, the merge of pull request 191 (issue 189 part B). It comes after pull request 203, which raised the build number to 42 and recorded that build 42 keeps the SSH path. `native/Release.props` at `REV` says build 42.
+- Script suite run `38949215984`, a push run on `REV`, succeeded.
+- Clean Windows package run `38954719132` on `REV` succeeded. The installer artifact `verified-windows-installer-build42-<REV>-38954719132-1` has digest `sha256:d203be779b6562ca1b0c56cf7dadb2449de3627a76390866450d21f4f5682adf`, and the package artifact has digest `sha256:e291de8c27abe4b2fa0ef9826af0b71f284bdddb869027518f98353f6dd7195a`. On the PC, `Observatory-0.3.14-windows-x64-setup.exe` was 100,850,592 bytes with SHA-256 `80e4cbe17094f3a00bc2ab69d4cb67ea957ea74939ebfce1414a62cd127bb503`, matching its sidecar. `installer-build.json` records 0.3.14 build 42, source `REV`, `testIdentity` false and a clean tree.
+- Mac: the runtime was prepared with `prepare-runtime.py` from the cached pinned archives. This Mac's `tar` cannot read Zstandard, so a decompress-only Python shim was put on `PATH` for that step. The shim uses the `zstandard` package from PyPI, installed into a temporary virtual environment. Nothing was installed outside the session's temporary folders. `native/build.mjs` at `REV` with `SDKROOT` set to the macOS 26.5 SDK exited 0, and every native check it runs passed. `node native/mac/package.mjs --zip-only` verified the ZIP. `Observatory-0.3.14-macos-arm64.zip` is 66,389,373 bytes with SHA-256 `101083a037de2d31a1e52be0061c5cb5dd383655e659d66ce5a040a1ec810d2a`. Its manifest lists 1,797 files and 191,611,442 bytes unpacked. It is ad hoc signed and not notarized.
+
+### Mac install
+
+- Before the install: build 41 from `3f70771` at `~/Applications/Workspace Observatory.app`. Strict signature verification failed with "a sealed resource is missing or invalid", because test runs earlier that day had written `__pycache__` folders into its bundled Python (issue 213). Those folders were moved to the Trash with Finder, and the signature then verified.
+- Backup: `~/Library/Application Support/Observatory Backups` was created with mode 700, and the existing build 41 backup was renamed into it as `build41-from-build40`. Build 41 was quit at 19:31:09, with no status line bridge running. The data folder and the preferences file were copied to `Observatory Backups/build42-from-build41-20261016T193112Z`, and the copy matched the original by SHA-256 (73 files, about 49 MB).
+- Data copy (N1): `node native/mac/migrate-data.mjs status` reported the earlier folder present, the new folder missing, 73 files and nothing refused. `copy --confirm-app-quit` reported `migrated` with 16 folders, 73 files and 51,417,464 bytes. Afterwards the earlier folder still matched the backup's checksum list.
+- Replacement: `native/mac/replace-app.mjs` in rename mode refused before changing anything, because it checks the build 41 bundle against build 42's required files (`Contents/Resources/Web/dashboard.html`). This is issue 212. The orchestrator did the same rename by hand. Build 41 was moved to `~/Applications/.observatory-update-manual-20261016T193200Z/previous`, and the candidate, extracted from the verified ZIP and signature-checked, was moved to `~/Applications/Observatory.app`. The installed bundle then matched the build 42 manifest. This replacement has no transaction journal.
+- Installed target: `build-info.json` records 0.3.14 build 42, source `REV` and `sourceDirty` false. Strict signature verification passed. `--self-test`, `--test-collector` and `--test-web` each returned 0. The bundle holds no `price-refresh.mjs`, no `peer-live-controller.mjs`, no test files and no `__pycache__` folder.
+- Launch line, used for every start on the Mac: `env -i HOME="$HOME" USER="$USER" PATH=/usr/bin:/bin:/usr/sbin:/sbin /usr/bin/open -n -g "$HOME/Applications/Observatory.app"`. The process environment had no `CLAUDE*` or `ANTHROPIC*` variable.
+- First collection that finished after launch, at about 19:38: `snapshot-status.mjs` read activity, tokens, settings and dictation as `ok` for Mac and Windows. The Windows rows were the PC's records already saved on the Mac. Codex limits read `ok`. Claude Code limits read `ok` with the `five_hour` and `seven_day` windows, while the usage command reported `timed-out`. The Mac's Claude Code token source read `unavailable` (issue 223). The combined token total read `unverified`. The collector's own state line for this collection was not recorded.
+- The Mac app was quit again at 19:38 and kept quit until 19:54:37, so that SSH exchanges could not write into the PC's earlier folder while the PC copied it. Downtime on 2026-10-16 was 19:31:09 to about 19:32:27 and 19:38 to 19:54:37. Later that day the Mac app was also restarted at about 20:08 and 20:33 after the Settings page read Unknown (issue 216), and quit for a few seconds at about 20:24 for the backup before pairing.
+
+### PC install
+
+Every step that started the app or read or wrote the data folders, the backups, the installer or the uninstaller ran outside a Claude desktop session through `Win32_Process.Create` (parent `WmiPrvSE.exe`), with one exception. The installer download with `gh` ran inside the session, because its sign-in is not visible outside it, and wrote into the clone folder on disk. The downloaded files were checked outside the session. Scripts and logs were kept in the PC clone's ignored `.runtime\l1` folder, and the clone was at `REV`.
+
+- R2-5, before any change: `snapshot-status.mjs --file` on build 41's snapshot listed only Mac and Windows hosts in every row. The file still held a top-level `localModel` entry with host Ubuntu, written by build 41. Build 42's first snapshot no longer has that entry.
+- Rollback: the verified build 41 installer is on the PC outside the Claude package store. Its artifact and setup checksums match the build 41 record above.
+- Backups: `%LOCALAPPDATA%\Observatory Backups` was created outside the package store. The newest package-store backup was copied to `build41-from-build40` (332 files, 59,511,600 bytes, every file equal by SHA-256), and then all four package-store backups went to the Recycle Bin. Issue 107 lists each path. The live data folder was copied to `build42-from-build41-20261016T192729Z` with the app running (331 files, 61,179,673 bytes, every file equal by SHA-256), with `registry.reg`, an export of `HKCU\Software\Observatory`. This corrects the build 40 and build 41 Windows records above. Their backups under `%LOCALAPPDATA%\WorkspaceObservatoryBackups` existed only inside the Claude desktop package store.
+- Before the install: file version 0.3.14.41, and `installer-owner.ini` recorded revision `06e73c2`.
+- Download: the installer artifact matched the digest the run publishes, the setup file matched its sidecar, and the setup file had no mark of the web.
+- Installer refusal: setup `/S` with build 41 still running returned exit 10, not the expected 14, and changed nothing. In `installer.nsi`, the running-app check (exit 10) comes before the existing-install check (exit 14). Build 41 was quit at 15:38:19 local, and a second run then returned 14 and changed nothing.
+- Data copy (N1): `migrate-data.ps1 -Action status` first refused with "Unknown private folder at relative path: .runtime\private-repair" (issue 214). That folder held the two Ubuntu and WSL retirement files from 2026-10-07. With the owner's confirmation in the Windows session, `.runtime` was moved to `Observatory Backups\retired-runtime-private-repair-20261016`, and both files were equal by hash before and after. `status` then reported 329 files and 60,845,992 bytes, and `copy` reported `migrated` with the saved SSH paths updated to the new install and data folders. The copy removed the Start at login value, and the install restored it later.
+- The Windows session corrected its own report for the two steps above. Its tree comparison there was not valid, because PowerShell's `diff` alias shadowed its helper. It re-established from write times that nothing in the old install or the old data folder was written after the quit. The fixed helper was used from the uninstall on.
+- Uninstall: a copy of build 41's uninstaller, run with `/S _?=` and the old install folder, returned 0. The old install folder, its registration and both Start menu entries were gone. Both data folders were unchanged by hash.
+- Install: the setup file was hashed again and matched, and `/S` returned 0. `Programs\Observatory` holds 3,092 files. The registration keeps the key `WorkspaceObservatorySetup`, now with the display name Observatory 0.3.14. The Start menu entry is `Observatory\Observatory.lnk`.
+- Installed target: file version 0.3.14.42, and `installer-owner.ini` records revision `REV`. The package manifest matched `installer-build.json`, and the manifest check passed on 3,089 package files plus `Uninstall.exe` and `installer-owner.ini`. `--self-test` (ending "Shared viewer is the only viewer.") and `--test-launch-isolation` returned 0 with no error output. `price-refresh.mjs` is absent.
+- Launch line: `"%LOCALAPPDATA%\Programs\Observatory\WorkspaceObservatory.exe" --background`, started through `Win32_Process.Create` with parent `WmiPrvSE.exe`. The PC app was closed for 11.1 minutes (15:38:19 to 15:49:25 local).
+- First collection: `ok`, 6 of 6 sources, about 18 seconds after the start. Every row lists only Mac and Windows. Codex limits read `ok`, Claude Code limits read `not-connected` because the status line bridge was not installed yet, and the combined token total read `unavailable`. Start at login points at the new install folder.
+
+### SSH path update and R2-5
+
+- Both apps were quit (the PC at 15:54:13 local). `scripts/peer-transport-rename.mjs --runtime <Mac data folder>`, run from the release worktree with the shell's own runtimes, failed with "Private path access-control verification failed". The runbook says to stop and record a private-path refusal on the Mac. The orchestrator instead ran the same script from the installed bundle with its bundled Node, and it reported `{"state":"updated"}`. The cause of the first refusal was not investigated.
+- The PC app started again at 15:54:39 local (closed for 0.4 minutes), and the Mac app at 19:54:37.
+- The PC's next collection read `ok`, 6 of 6. Its Mac rows read `ok` and were under one minute old.
+- The Mac's collection at about 19:59 read activity, tokens, settings and dictation `ok` for both devices, with the Windows activity row about five minutes old. Claude Code limits read `ok` with the usage command `read`. The Mac's Claude Code token source still read `unavailable`.
+- The combined token total read `unverified` on the Mac and `unavailable` on the PC. The runbook expected `ok`, so that part of R2-5 did not pass. The cause was not examined.
+
+### Status line bridge (H1-b, H1-c, N1-4)
+
+- Mac: with the bundled Node, `claude-statusline-install.mjs status` reported the entry installed and limits consent given through the status line. `install --runtime <new data folder> --bridge <bridge inside Observatory.app> --consent` returned 0, and the entry names `Observatory.app` and the new data folder, not the earlier ones. `uninstall` returned 0 and left no status line, which matches the state before Observatory's entry. A second `install` returned 0 and put the bridge entry back. The prompt from a clean-environment Claude Code session (runbook step M-13) was not run.
+- PC, after the owner approved it in the Windows session: `install --runtime ... --bridge ... --consent` returned 0, replaced no other status line and kept the 9 other top-level settings keys. The written command uses forward slashes and no `&` call operator, so it runs from `cmd` and Git Bash, and Windows PowerShell 5.1 would need `&` in front. The "Not verified" sentence about command quoting under PowerShell in `docs/DESIGN.md` was not updated with this result. After the owner ran one Claude Code session in a terminal, the collection at 20:24:59 read Claude Code limits `ok` with `five_hour` and `seven_day` through the status line, with the session cost present.
+- PC usage command (issue 215): the installed collector found `claude.exe` in `~\.local\bin`, and the command exited 0 within its limit, but its output was not recognised (`usageCommand` `unrecognized`). A later outside-session run recorded the output shape without values. Claude Code 2.1.292 writes reset times in the comma form, which pull request 225 accepts. That fix is in build 43 and has not run on the PC.
+
+### Owner checks and done items on build 42
+
+- Light appearance: on the Mac, with the system set to Light and the app's Appearance set to System, the app turned light. The owner reported the same check as good on the PC. The Mac app's Appearance was left on System.
+- PC tray panel (W1-4): the owner clicked the tray icon and then another window, and reported it as good.
+- Grey secondary text (S8), on the Mac only: the owner judged Almanac, Instrument and Amber CRT acceptable in light and in dark.
+- Item 1: the Mac main window lists Limits, Activity, Tokens, Dictation, Sources and Settings, read through the accessibility tree. The orchestrator also saw Claude Code and Codex side by side in Limits, with Unknown where a value was missing. On the PC, the `--background --panel-timing` harness ran on the installed app with nothing clicked. The panel was ready in Inter Tight with 4 buttons and 4 limit rows, the dashboard page was ready in Inter Tight, and its PNG shows the six section names. This build's facts lines carry no `sections=` or skin field, so the section count is a visual check. The first panel open took 356.8 ms and warm opens 4 to 9 ms. The harness pressed refresh, check-updates, open-settings and open-dashboard, and each was accepted. W1-3: the dashboard opened in about 358 ms, and closing it released its two processes. The normal PC app was closed for 9.3 minutes for this harness (16:47:39 to 16:56:57 local), while the harness instance itself collected. The panel footer read "10 of 11 sources read" while the PC's collector read 6 of 6. On the Mac, issue 223 traced the same footer count to the Mac's unavailable Claude Code token source, which suggests the footer counts both devices. That was not confirmed on the PC.
+- Item 2: Claude Code and Codex limits both read `ok` on each device, on the Mac through the usage command and on the PC through the status line.
+- Item 5, on `REV` and the installed Mac app: the tag `archive/pre-viewer-removal` is an ancestor of `REV`. `git grep` for the removed viewer names outside `docs` finds hits only in `native/main.swift` (3), `native/verify-preview-guard.mjs` (1), `native/windows/LaunchIsolationTests.cs` (4), `scripts/audit-repairs.test.mjs` (1) and `scripts/documentation.test.mjs` (1), which are lists of refused options and tests that check the removal. `nm` finds no `NativeDashboard` symbol in the Mac binary. Both apps exit 64 for `--legacy-dashboard` and `--native-viewer`, and both Web folders hold only `assets`, `dashboard.html` and `panel.html`.
+
+### Tailscale pairing between the installed apps (P1-6)
+
+- T-1, Mac: a first copy into `Observatory Backups/p16-before-pairing-20261016T202349Z` was taken with the app running and matched only outside the live collector files and databases. That copy was moved to the Trash, where it is the folder named `Observatory`. The app was then quit for a few seconds, the data folder was copied again and matched in full by SHA-256, and the app was started again. `build41-from-build40` then went to the Trash.
+- T-1, PC: the app was closed for 0.1 minutes. `p16-before-pairing-20261016T202536Z` holds 347 data files (103,103,856 bytes, every file equal by SHA-256) and `registry.reg`. `build41-from-build40` then went to the Recycle Bin.
+- T-2: the installed `tailscale-status.mjs` reported `running` on both devices. On the Mac it was run from a shell, not through the app. `tailscale ping` used a direct path both ways (5 ms from the Mac, 6 ms from the PC).
+- The sitting stopped before T-3. On the Mac, Check Tailscale in Settings reported Tailscale as unavailable (issue 217), and the Settings page read Unknown again (issue 216). The owner chose to keep SSH and pair on build 43. Pairing repair was not prepared on either device, and the only retired pairing folder on the Mac is the one from 2026-10-13.
+- Not verified: everything from T-3 on, including the invitation, the macOS and Windows firewall prompts, the listener on the Tailscale address, record exchange over Tailscale, restart, sleep and Tailscale toggling, and the rollback. P1-7 (SSH removal) waits for P1-6.
+
+### Fresh-folder run (O1-3)
+
+- PC: the installed build 42 was started outside a Claude desktop session with `--runtime <new empty folder in the clone's .runtime>`. The window opened and `setup-state.json` recorded `completed` false, so the first-run wizard was pending. The owner declined computer control, so nothing was clicked. Ticking ActivityWatch, Finish, the working app after it and the restart were not exercised. The test folder went to the Recycle Bin on the second attempt, 5 seconds after the first failed.
+- Mac: not run.
+
+### Earlier data folders and backups
+
+- Mac: after the SSH path update and one collection each way, the `Workspace Observatory` data folder was moved to the Trash with Finder at 20:00:36. `lsof` found no open file in it first, and its backup had matched.
+- PC: at 16:02 local, after the owner confirmed in the Windows session, `%LOCALAPPDATA%\Workspace Observatory` (329 files) went to the Recycle Bin. No process from the old install or naming the folder was running, `collection.lock` opened exclusively, and the folder differed from its backup by 8 known files: the 2 moved retirement files and 6 files that build 41's last collection rewrote before the quit. The next collection read `ok`, 6 of 6.
+- At the end of the sitting the Mac kept `build42-from-build41-20261016T193112Z` and `p16-before-pairing-20261016T202349Z`. The PC kept `build42-from-build41-20261016T192729Z` and `p16-before-pairing-20261016T202536Z`, plus `retired-runtime-private-repair-20261016`, kept as data.
+
+### Private-path check at `REV`
+
+`REV` contains pull request 191, so on the Mac the private-path check no longer refuses on entry churn above a private folder. One private-path refusal was seen on the Mac during the sitting, at the first SSH path update attempt described above. Separately, the diagnosis on issue 216 traced the Settings failures to the check refusing a private folder that changes while it is inspected. That is the private folder itself, which pull request 191 left under the full check.
+
+### Bugs found
+
+| Issue | What | State on 2026-10-17 |
+| --- | --- | --- |
+| 212 | `replace-app.mjs` rename mode cannot upgrade from build 41. | Open. |
+| 213 | Tests that used the installed app's Python wrote `__pycache__` into the signed bundle. | Open. The lead briefs now point tests at a separate prepared runtime. |
+| 214 | The Windows data copy refuses the Ubuntu retirement checkpoint folder. | Open. |
+| 215 | The PC's Claude Code usage command output is not recognised. | Open. Pull request 225 is in build 43, and the issue stays open until the PC reads `usageCommand` `read`. |
+| 216 | The Mac Settings page read every value as Unknown until the app restarted, seen at about 20:07 and 20:32. | Open. Pull requests 219, 220 and 221 are in build 43. |
+| 217 | Check Tailscale always read unavailable on the Mac, because the bridge environment has no `TERM`. | Closed by pull request 218, in build 43. |
+| 222 | Windows status reports placeholder sharing and consent values as Off before its first read. Found in review of pull request 219. | Open. |
+| 223 | The Mac Claude Code token source read unavailable at the reader's 128 MiB history limit. | Closed by pull request 224, in build 43. |
+| 226 | The peer lock sometimes refused its own journal under concurrency on macOS CI. | Closed by pull request 227, in build 43. |
+| 229 | `peer-tls-client` tests time out on slow Windows CI runners. | Open. Pull request 230 is merged, and the issue stays open until more slow-runner passes on `main`. |
+
+### Not exercised on build 42
+
+- On the Mac: the Start at login switch (the Settings page lists it, but its state was not read), login startup, sleep and wake, the clean-environment Claude Code prompt (M-13), `--panel-timing`, the skin facts lines and `build-strings.mjs --check`.
+- On both devices: Refresh from the panel with `finishedAt` advancing within 60 seconds, P1-6 from T-3 on, the Finish half of O1-3, and done items 6 and 7.
+
+## Build 43
+
+Recorded on 2026-10-17 local time from the Mac. Build 43 carries the fixes for issues 210, 216, 217, 223, 226 and 229 and the usage command change for issue 215 (pull requests 211, 218, 219, 220, 221, 224, 225, 227, 230 and 231), plus pull request 232, which raised the build number.
+
+### Release revision and packages
+
+- `REV43` is `02555e82e04a57636ae33ae24237ff4631533bb9` (pull request 232). `native/Release.props` there says build 43.
+- Script suite run `38994239128`, dispatched on `REV43`, succeeded.
+- Clean Windows package run `38996117293` on `REV43` succeeded. Its log reports the installer artifact digest `sha256:fc2363e20f52a00111d0c67ffdc5c2b0fba0faba33ba2d654156c0ade3e0fce1` and the package artifact digest `sha256:7909a83ed653ccf6c8bc9340ed3df7d426e4730ed3e9b8ebfbb88a8736565584`. The setup file's own SHA-256 is not recorded, because the artifact was not downloaded. A listing of the run's artifacts at about 03:40 on 2026-10-18 returned none, which fits the one-day retention.
+- Mac: `native/build.mjs` at `REV43` with the macOS 26.5 SDK reused the runtime prepared for build 42 from the same pinned archives. It passed on the fourth attempt. The first two failed at the `--test-popup` check with "dashboard activation deadline exceeded", most likely because the Mac was locked, and the third was stopped when the Claude app closed. `package.mjs --zip-only` verified the ZIP. `Observatory-0.3.14-macos-arm64.zip` is 66,394,917 bytes with SHA-256 `d792b69a7feb7c5bbff84b981ad4b7ceb5033c9180790fb9ff18a3adddf3f37e`. Its manifest lists 1,797 files and 191,634,573 bytes unpacked.
+
+### Mac install
+
+- Build 42 was quit at 04:02:12 on 2026-10-17 (00:02 local). With the app quit, the data folder was copied to `Observatory Backups/build43-from-build42-20261017T040212Z`, and the copy matched by SHA-256. `build42-from-build41-20261016T193112Z` then went to the Trash. The Mac now keeps `build43-from-build42-20261017T040212Z` and `p16-before-pairing-20261016T202349Z`.
+- The candidate was extracted from the verified ZIP and passed strict signature verification. `replace-app.mjs` ran in normal mode, because the installed app was already named `Observatory.app`. The previous receipt was build 42's `app-manifest.json` from its package step, and the candidate receipt was build 43's. The journal in `~/Applications/.observatory-update-ZV2cAX` records `prepared`, `previous-retained`, `candidate-promoted` and `payload-verified`, and build 42 is retained in its `previous` folder. The build 41 copy from 2026-10-16 is still in `.observatory-update-manual-20261016T193200Z`.
+- Installed target: `build-info.json` records 0.3.14 build 43, source `REV43` and `sourceDirty` false. Strict signature verification passed and `--self-test` returned 0. `--test-web` and `--test-collector` were not run on the installed build 43.
+- The app was started with the Mac launch line above. It was closed for under half a minute.
+- Tailscale: the installed `tailscale-status.mjs`, run with the bundled Node and only `HOME`, `USER`, `PATH=/usr/bin:/bin`, `LANG` and `TMPDIR` set (no `TERM`, as in the bridge's environment), reported `running`. The Check Tailscale button in Settings was not pressed.
+- Status read while writing this record, at about 03:43 on 2026-10-18: the last collection finished at 03:34:23 with state `ok` and 10 of 10 sources. `snapshot-status.mjs`, run with the bundled Node, read every activity, tokens, settings and dictation row as `ok` for both devices, and the Mac's Claude Code token source as `ok`. Codex limits read `ok`. Claude Code limits read `ok` with the `seven_day` window only and the usage command `read`. The combined token total read `unavailable`. The Windows rows were last checked at 21:11 on 2026-10-17, about six and a half hours before the read. The bundle held no `__pycache__` folder.
+
+### PC
+
+Build 43 is not installed on the PC. The upgrade steps were sent to the Windows session at 02:51 on 2026-10-17, and no report has come back. The Mac's copy of the PC's records was last checked at 21:11 on 2026-10-17, and the owner reported the PC offline at 03:37 on 2026-10-18. The PC's last recorded installed build is build 42 from the sitting above. Because the package run's artifacts have expired, a new Clean Windows package run on `REV43` is needed before the PC install.
+
+### What is verified on an installed build
+
+| Check | Mac | PC |
+| --- | --- | --- |
+| Build 42 identity, signature or manifest, and self-tests | Verified on 2026-10-16 | Verified on 2026-10-16 |
+| Data copy to the Observatory folders, earlier folder kept until the checks passed | Verified on build 42 | Verified on build 42 |
+| SSH path update and one collection each way | Verified on build 42 | Verified on build 42 |
+| Combined token total `ok` | Not verified (`unverified` on build 42, `unavailable` on build 43) | Not verified (`unavailable` on build 42) |
+| Claude Code and Codex limits both read | Verified on build 42 and build 43 | Verified on build 42, through the status line only |
+| Light appearance (owner) | Verified on build 42 | Verified on build 42 |
+| Grey secondary text in Almanac, Instrument and Amber CRT (owner) | Verified on build 42 | Not checked |
+| Panel hides after a click on another window (owner) | Not checked | Verified on build 42 (tray panel) |
+| Old viewers gone (item 5) | Verified on build 42 | Verified on build 42 |
+| Build 43 identity, signature and self-test | Verified on 2026-10-17 | Not installed |
+| Tailscale status script without `TERM` | Verified on build 43 | Not affected (issue 217) |
+| Tailscale pairing between the installed apps (P1-6) | Not verified, stopped after T-2 | Not verified, stopped after T-2 |
+| First-run wizard opens on a fresh folder (O1-3, first half) | Not run | Verified on build 42 |
+| O1-3 Finish with ActivityWatch and the working app after it | Not exercised | Not exercised |
 
 ## Next decisions
 
