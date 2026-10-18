@@ -398,3 +398,14 @@ test('fresh empty device rows report No records', () => {
   assert.deepEqual([result.codexTokens, result.seconds], [null, null]);
   assert.deepEqual([result.codexNote, result.timeNote], ['No records', 'No records']);
 });
+
+test('a late device reading from an earlier day names its date in the as of note', () => {
+  const at = new Date(2026, 9, 18, 12, 0).toISOString();
+  const checkedAt = new Date(2026, 9, 17, 23, 0).toISOString();
+  const snapshot = { collectedAt: at, timezone: 'UTC', tokens: [{ host: 'Windows', status: 'stale', checkedAt, days: [] }] };
+  const result = totals(snapshot, 'Windows', 'day', new Date(at));
+  const timeOnly = new Date(checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  assert.match(result.codexNote, /^Unknown · as of /);
+  assert.notEqual(result.codexNote, `Unknown · as of ${timeOnly}`);
+  assert.match(result.codexNote, /17/);
+});
