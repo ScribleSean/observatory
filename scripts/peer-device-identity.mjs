@@ -78,10 +78,11 @@ export const initializeDeviceIdentity=(runtime,value,{beforeRename}={})=>withPee
   try {await rename(directory,path.join(runtime,'private-device-identity'));}
   catch {throw unavailable();}
   if(process.platform!=='win32') {
+    // Best effort only. The identity is already in place, and the checks below decide the result.
     let parent;
     try {parent=await open(runtime,constants.O_RDONLY);await parent.sync();}
-    catch(error) {if(!['EISDIR','EPERM','EINVAL','ENOTSUP','EOPNOTSUPP','EBADF'].includes(error.code))throw error;}
-    finally {await parent?.close();}
+    catch {}
+    finally {await parent?.close().catch(()=>{});}
   }
   await privateCollectorDirectory(runtime,'private-device-identity');
   return readDeviceIdentity(runtime);

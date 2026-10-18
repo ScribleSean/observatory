@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {PassThrough} from 'node:stream';
 import {once} from 'node:events';
 import {spawn} from 'node:child_process';
-import {mkdtemp,realpath,rm,lstat,readdir} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,lstat,readdir,readFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -279,4 +282,29 @@ for(const sharing of [true,false,undefined])test(`join committed confirmation re
   if(sharing!==undefined)command.sharing=sharing;
   assert.deepEqual(await controller.run(command),{status:'local-ready'});
   assert.equal((await readSharingChoice(runtime)).chosen,sharing===true);
+});
+
+const openssl=process.platform==='win32'?'C:/Program Files/Git/usr/bin/openssl.exe':'/usr/bin/openssl';
+test('cancel during identity creation waits and never leaves a partial identity',{skip:!existsSync(openssl)},async()=>{
+  const root=await realpath(await mkdtemp(path.join(runtimeBase,'identity-cancel-')));
+  const key=path.join(root,'synthetic.key'),cert=path.join(root,'synthetic.pem');
+  execFileSync(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-sha256','-keyout',key,
+    '-out',cert,'-days','1','-subj','/CN=Observatory synthetic identity'],{stdio:'ignore',timeout:15000});
+  const identity={version:1,key:await readFile(key,'utf8'),cert:await readFile(cert,'utf8')};
+  for(const delay of [0,1,5,20]) {
+    const runtime=await realpath(await mkdtemp(path.join(root,'runtime-')));
+    const controller=createTLSSetupController(runtime);
+    let settled=false;
+    const command=controller.run({action:'identity-create',storage:'restricted-file',identity})
+      .then(result=>result.status,()=> 'unavailable').finally(()=>{settled=true;});
+    if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
+    assert.deepEqual(await controller.run({action:'cancel'}),{status:'cancelled'});
+    // The cancel reply comes only after the running command has settled.
+    assert.equal(settled,true);
+    assert.ok(['cancelled','unavailable','identity-ready'].includes(await command));
+    const names=(await readdir(runtime)).filter(name=>name==='private-device-identity');
+    // Either no identity folder or a complete one, never an empty or partial folder.
+    if(names.length)assert.ok(await readDeviceIdentity(runtime));
+    else assert.equal(await readDeviceIdentity(runtime),null);
+  }
 });
