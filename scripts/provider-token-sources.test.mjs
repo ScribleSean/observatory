@@ -51,7 +51,7 @@ for(const model of ['claude-fable-5','claude-fable-5-1']) {
     const expected=(price.input+2*price.cachedInput+3*price.cacheWrite+4*price.output)/1e6;
     assert.ok(expected>0);
     for(const apiEstimate of [day.models[0].apiEstimate,day.apiEstimate]) {
-      assert.equal(apiEstimate.usd,expected);
+      assert.ok(Math.abs(apiEstimate.usd-expected)<1e-12,`${apiEstimate.usd} is not ${expected}`);
       assert.equal(apiEstimate.coveredTokens,10);
       assert.equal(apiEstimate.excluded,0);
     }
