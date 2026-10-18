@@ -1,6 +1,6 @@
 import {X509Certificate} from 'node:crypto';
 import {constants} from 'node:fs';
-import {lstat,open} from 'node:fs/promises';
+import {lstat,open,unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {createPairingConfigurations,validatePairing,readPairing} from './peer-pairing.mjs';
@@ -58,7 +58,8 @@ function complementary(pair,transport,localFingerprint) {
 
 // Call only after local confirmation of the certificate from the claimed TLS
 // connection. Endpoints come from explicit setup.
-export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,async()=>{
+export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,()=>prepareHostTLSSetupLocked(runtime,request));
+async function prepareHostTLSSetupLocked(runtime,request,onPrepared) {
   const host=process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows':null;
   if(!host || !request || typeof request!=='object' || Array.isArray(request) ||
     Object.keys(request).length!==(Object.hasOwn(request,'peerRepairNonce')?5:4) ||
@@ -83,8 +84,9 @@ export const prepareHostTLSSetup=(runtime,request)=>withPeerStateLock(runtime,as
   const offer=complementary(pair,localEndpoint,localFingerprint),directory=await privateSyncDirectory(runtime);
   await saveIdentical(directory,offerFile,offer);
   await privateSyncDirectory(runtime);
+  if(onPrepared)await onPrepared();
   return offer;
-});
+}
 
 async function hostState(runtime) {
   const pair=await readPairing(runtime),trust=await readPeerTrust(runtime),directory=await privateSyncDirectory(runtime);
@@ -125,6 +127,7 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
   if(!identity)throw fail();
   const localFingerprint=fingerprint(identity.cert);
   const listener=await startPairingListener({address,port,identity},{createServer:options.createServer,
+    sessionOptions:options.sessionOptions,setExpiry:options.setExpiry,
     onAcknowledged:ack=>recordHostTLSAcknowledgement(runtime,ack)});
   return {
     invitation:listener.invitation,status:listener.status,pending:listener.pending,cancel:listener.cancel,
@@ -133,9 +136,47 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
       if(!pending || pending.claimId!==claimId || listener.pending()?.claimId!==claimId ||
         !current || fingerprint(current.cert)!==localFingerprint ||
         request?.localEndpoint?.address!==address)throw fail();
-      const offer=await prepareHostTLSSetup(runtime,{...request,peerCertificate:pending.peerCertificate,
-        peerCertificateSha256:pending.peerCertificateSha256,peerRepairNonce:pending.peerRepairNonce});
-      return listener.confirmSetup(claimId,offer);
+      const handle=listener.claimSetup(claimId),created=new Map();
+      try {
+        const directory=path.join(runtime,'private-sync'),absent=[];
+        for(const name of ['pairing.json','tls-trust.json',offerFile]) {
+          const filename=path.join(directory,name);
+          try {await lstat(filename);}catch(error){if(error.code!=='ENOENT')throw error;absent.push(filename);}
+        }
+        const capture=async()=>{
+          // These writers create files exclusively without renaming them. Capture
+          // partial writes too, while the same peer state lock is still held.
+          const captures=await Promise.allSettled(absent.map(async filename=>{
+            if(created.has(filename))return;
+            let info;
+            try {info=await lstat(filename);}catch(error){if(error.code==='ENOENT')return;throw error;}
+            if(!info.isFile() || info.isSymbolicLink())throw fail();
+            created.set(filename,info);
+          }));
+          if(captures.some(result=>result.status==='rejected'))throw fail();
+        };
+        let offer;
+        try {
+          offer=await prepareHostTLSSetupLocked(runtime,{...request,peerCertificate:pending.peerCertificate,
+            peerCertificateSha256:pending.peerCertificateSha256,peerRepairNonce:pending.peerRepairNonce},async()=>{
+            await capture();
+            // Function-only test seam, never populated by the JSON controller.
+            if(options.beforePublish)await options.beforePublish();
+          });
+        } finally {await capture();}
+        return listener.publishSetup(handle,offer);
+      } catch {
+        try {
+          const rollback=await Promise.allSettled([...created].map(async([filename,identity])=>{
+            let current;
+            try {current=await lstat(filename);}catch(error){if(error.code==='ENOENT')return;throw error;}
+            if(current.isFile() && !current.isSymbolicLink() &&
+              current.dev===identity.dev && current.ino===identity.ino)await unlink(filename);
+          }));
+          if(rollback.some(result=>result.status==='rejected'))throw fail();
+        } finally {await listener.cancel();}
+        throw fail();
+      }
     }),
   };
 }
