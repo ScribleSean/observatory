@@ -69,6 +69,20 @@ test('payload commands name individual files and remove deepest empty folders fi
   assert.ok(lists.checks.includes('Call un.NoLinkedPath'));
   assert.throws(()=>payloadLists({files:[{path:'Uninstall.exe'}]},'C:/candidate'));
 });
+test('installer writes InstallLocation once after payload, envelope and shortcut success',()=>{
+  const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
+  const install=script.match(/^Section "Install"\r?\n([\s\S]*?)^SectionEnd/m)?.[1];
+  assert.ok(install);
+  const writes=[...install.matchAll(/^\s*WriteRegStr HKCU "\$\{UNINSTALL_KEY\}" "InstallLocation" "\$INSTDIR"\s*$/gm)];
+  assert.equal(writes.length,1);
+  const payload=install.indexOf('!include "install-files.nsh"');
+  const envelope=install.indexOf('!ifdef UPDATE_ENVELOPE');
+  const envelopeEnd=install.indexOf('!endif',envelope);
+  const shortcut=install.indexOf('CreateShortcut ');
+  const shortcutCheck=install.indexOf('IfErrors install_failed',shortcut);
+  assert.ok(payload>=0 && envelope>payload && envelopeEnd>envelope);
+  assert.ok(shortcut>envelopeEnd && shortcutCheck>shortcut && writes[0].index>shortcutCheck);
+});
 test('installer is per-user, source startup is opt-in and uninstall has ownership gates',()=>{
   const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
   assert.match(script,/RequestExecutionLevel user/);

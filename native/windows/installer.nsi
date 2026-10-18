@@ -128,7 +128,6 @@ Section "Install"
   WriteINIStr "$INSTDIR\installer-owner.ini" "Owner" "Product" "${SETUP_ID}"
   WriteINIStr "$INSTDIR\installer-owner.ini" "Owner" "Revision" "${SOURCE_REVISION}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   IfErrors install_failed
   !include "install-files.nsh"
   IfErrors install_failed
