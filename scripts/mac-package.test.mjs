@@ -152,3 +152,13 @@ test('older Mac layouts require an explicit option and still match the exact rec
     assert.throws(()=>verifyMacPackage(bundle,manifest,{requireCurrentLayout:false}),/does not match/);
   });
 });
+
+for(const required of [`Contents/MacOS/${appNames.internal.macExecutable}`,'Contents/Info.plist',
+  'Contents/Resources/build-info.json','Contents/_CodeSignature/CodeResources']) {
+  test(`older Mac layout requires ${required}`,()=>{
+    fixture(({bundle})=>{
+      rmSync(path.join(bundle,required));
+      assert.throws(()=>inspectMacPackage(bundle,{requireCurrentLayout:false}),/Required package file missing/);
+    });
+  });
+}

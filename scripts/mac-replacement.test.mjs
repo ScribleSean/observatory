@@ -58,17 +58,19 @@ test('running Mac app or occupied installer lock prevents all moves',mac,t=>{
   assert.equal(readFileSync(lock,'utf8'),'other installer');
   assert.ok(existsSync(f.installed)&&existsSync(f.staged));
 });
-test('Mac signature failure after promotion restores verified previous app without restoring data',mac,t=>{
-  const f=setup(t,{olderLayout:true});let signatures=0,failure;
-  try {replaceMacApp({...f,verifySignature:()=>{if(++signatures===3)throw Error('Rejected signature');}});}
-  catch(error) {failure=error;}
-  assert.equal(failure?.restored,true);
-  assert.deepEqual(JSON.parse(readFileSync(path.join(failure.recovery,'previous-manifest.json'),'utf8')),f.previousManifest);
-  assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
-  assert.equal(readFileSync(path.join(failure.recovery,'rejected/Contents/Resources/LICENSE'),'utf8'),'fixture-1');
-  assert.equal(readFileSync(f.history,'utf8'),'newer private observations');
-  assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
-});
+for(const olderLayout of [false,true]) {
+  test(`Mac signature failure after promotion restores verified ${olderLayout?'older':'current'} layout without restoring data`,mac,t=>{
+    const f=setup(t,{olderLayout});let signatures=0,failure;
+    try {replaceMacApp({...f,verifySignature:()=>{if(++signatures===3)throw Error('Rejected signature');}});}
+    catch(error) {failure=error;}
+    assert.equal(failure?.restored,true);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(failure.recovery,'previous-manifest.json'),'utf8')),f.previousManifest);
+    assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
+    assert.equal(readFileSync(path.join(failure.recovery,'rejected/Contents/Resources/LICENSE'),'utf8'),'fixture-1');
+    assert.equal(readFileSync(f.history,'utf8'),'newer private observations');
+    assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
+  });
+}
 test('Mac replacement refuses altered candidate contents before any move',mac,t=>{
   const f=setup(t);writeFileSync(path.join(f.staged,'Contents/Resources/LICENSE'),'tampered');
   assert.throws(()=>replaceMacApp(f),/does not match/);
@@ -178,6 +180,22 @@ for(const renameMode of [false,true]) {
     writeFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'fixture-X');
     assert.throws(()=>replaceMacApp(f),/does not match/);
     assert.ok(existsSync(f.installed)&&existsSync(f.staged));
+    assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
+  });
+  test(`earlier Mac bundle without Info.plist refuses all moves in ${renameMode?'rename':'normal'} mode`,mac,t=>{
+    const f=setup(t,{olderLayout:true,renameMode}),missing='Contents/Info.plist';
+    rmSync(path.join(f.installed,missing));
+    const manifest=f.previousManifest,removed=manifest.files.find(file=>file.path===missing);
+    manifest.files=manifest.files.filter(file=>file.path!==missing);
+    manifest.fileCount--;manifest.bytes-=removed.bytes;
+    const mock=t.mock.method(fs,'renameSync');syncBuiltinESMExports();
+    try {
+      assert.throws(()=>replaceMacApp(f),/Required package file missing/);
+      assert.equal(mock.mock.callCount(),0);
+    } finally {mock.mock.restore();syncBuiltinESMExports();}
+    assert.ok(existsSync(f.installed)&&existsSync(f.staged));
+    assert.equal(readFileSync(path.join(f.installed,'Contents/Resources/LICENSE'),'utf8'),'fixture-0');
+    assert.equal(readFileSync(path.join(f.staged,'Contents/Resources/LICENSE'),'utf8'),'fixture-1');
     assert.equal(existsSync(path.join(f.root,'.observatory-install.lock')),false);
   });
   test(`candidate needs current layout in ${renameMode?'rename':'normal'} mode`,mac,t=>{
