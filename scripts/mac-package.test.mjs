@@ -61,7 +61,8 @@ test('Mac packages require clean matching source and distribution notices',()=>{
 test('Mac package inspection rejects private filenames and encoded build paths',()=>{
   fixture(({bundle})=>{
     const privateFile=path.join(bundle,'usage.json');writeFileSync(privateFile,'{}');
-    assert.throws(()=>inspectMacPackage(bundle),/Private/);rmSync(privateFile);
+    assert.throws(()=>inspectMacPackage(bundle),/Private/);
+    assert.throws(()=>inspectMacPackage(bundle,{requireCurrentLayout:false}),/Private/);rmSync(privateFile);
     writeFileSync(path.join(bundle,'Contents/Resources/LICENSE'),Buffer.from('/fixture/private/build','utf16le'));
     assert.throws(()=>inspectMacPackage(bundle,{buildRoots:['/fixture/private/build']}),/Build path/);
   });
@@ -91,6 +92,7 @@ test('Mac package links must remain inside the app and match the manifest', {ski
     assert.equal(manifest.symlinks.length,1);
     rmSync(link);assert.throws(()=>verifyMacPackage(bundle,manifest),/does not match/);
     symlinkSync(process.execPath,link);assert.throws(()=>inspectMacPackage(bundle),/escapes/);
+    assert.throws(()=>inspectMacPackage(bundle,{requireCurrentLayout:false}),/escapes/);
   });
 });
 
@@ -118,6 +120,9 @@ test('Mac packages with Sparkle require its runtime and retained license',()=>{
   fixture(({bundle,info})=>{
     writeFileSync(info,JSON.stringify({...JSON.parse(readFileSync(info)),updaterVersion:'2.10.0'}));
     assert.throws(()=>inspectMacPackage(bundle),/Required Sparkle file missing/);
+    const older=inspectMacPackage(bundle,{requireCurrentLayout:false});
+    assert.deepEqual(verifyMacPackage(bundle,older,{requireCurrentLayout:false}),older);
+    assert.throws(()=>verifyMacPackage(bundle,older),/Required Sparkle file missing/);
     const paths=['Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle',
       'Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate',
       'Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Info.plist',
@@ -135,3 +140,25 @@ test('Mac packages with Sparkle require its runtime and retained license',()=>{
     assert.throws(()=>inspectMacPackage(bundle),/Required Sparkle file missing/);
   });
 });
+
+test('older Mac layouts require an explicit option and still match the exact receipt',()=>{
+  fixture(({bundle})=>{
+    rmSync(path.join(bundle,'Contents/Resources/Web/dashboard.html'));
+    assert.throws(()=>inspectMacPackage(bundle),/Required package file missing/);
+    const manifest=inspectMacPackage(bundle,{requireCurrentLayout:false});
+    assert.throws(()=>verifyMacPackage(bundle,manifest),/Required package file missing/);
+    assert.deepEqual(verifyMacPackage(bundle,manifest,{requireCurrentLayout:false}),manifest);
+    writeFileSync(path.join(bundle,'Contents/Resources/LICENSE'),'fixturX');
+    assert.throws(()=>verifyMacPackage(bundle,manifest,{requireCurrentLayout:false}),/does not match/);
+  });
+});
+
+for(const required of [`Contents/MacOS/${appNames.internal.macExecutable}`,'Contents/Info.plist',
+  'Contents/Resources/build-info.json','Contents/_CodeSignature/CodeResources']) {
+  test(`older Mac layout requires ${required}`,()=>{
+    fixture(({bundle})=>{
+      rmSync(path.join(bundle,required));
+      assert.throws(()=>inspectMacPackage(bundle,{requireCurrentLayout:false}),/Required package file missing/);
+    });
+  });
+}
