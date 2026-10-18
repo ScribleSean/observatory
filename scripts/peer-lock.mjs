@@ -7,6 +7,12 @@ import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 
 const held=new AsyncLocalStorage();
+let lockDeadlineMs=null;
+
+export function limitPeerLockWait(untilMs) {
+  if(untilMs!==null && (!Number.isFinite(untilMs) || untilMs<0))throw Error('Invalid peer lock deadline');
+  lockDeadlineMs=untilMs;
+}
 // Keep the lock independent of garbage collection while an action is pending.
 const openLockDatabases=new Set();
 
@@ -76,7 +82,7 @@ export async function withPeerStateLock(runtime,action) {
     // which may take up to 15 seconds. One exchange lease runs several checks,
     // so a waiter allows at least one full check before reporting the lock busy.
     // The bound still fails so callers can retry.
-    const deadline=performance.now()+peerLockWaitMs();
+    const deadline=Math.min(performance.now()+peerLockWaitMs(),lockDeadlineMs??Infinity);
     for(;;) {
       try {database.exec('BEGIN IMMEDIATE');break;}
       catch(error) {

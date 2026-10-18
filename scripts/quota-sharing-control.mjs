@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readPairing} from './peer-pairing.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {readQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
 
 const empty=()=>({version:1,enabled:false,canEnable:false,reason:'account-unavailable',token:null});
@@ -65,7 +65,11 @@ export async function quotaSharingControl(runtime,request={action:'status'},now=
   });
 }
 
+export const peerLockDeadlineMs=4000;
+
 async function main() {
+  // Stay inside the 10000 ms command-line deadline.
+  limitPeerLockWait(peerLockDeadlineMs);
   const args=process.argv.slice(2);
   if(args.length!==2 || args[0]!=='--runtime' || !path.isAbsolute(args[1]))throw Error('Invalid runtime');
   const chunks=[];let bytes=0;

@@ -4,7 +4,7 @@ import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {privateSyncDirectory,privateRefusalBudget} from './peer-directory.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {recent} from './quota-sharing-control.mjs';
 import {readQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
@@ -152,7 +152,11 @@ export const clearSharingChoice=runtime=>withPeerStateLock(runtime,async()=>{
   await unlink(filename);
 });
 
+export const peerLockDeadlineMs=4000;
+
 async function main() {
+  // Stay inside the 10000 ms command-line deadline.
+  limitPeerLockWait(peerLockDeadlineMs);
   const args=process.argv.slice(2);
   if(args.length!==2 || args[0]!=='--runtime' || !path.isAbsolute(args[1]))throw fail();
   const chunks=[];let bytes=0;

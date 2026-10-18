@@ -4,7 +4,7 @@ import {mkdtemp,realpath,rm,readFile,writeFile,chmod} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import path from 'node:path';
-import {checkLockSidecars,peerLockWaitMs,withPeerStateLock} from './peer-lock.mjs';
+import {checkLockSidecars,limitPeerLockWait,peerLockWaitMs,withPeerStateLock} from './peer-lock.mjs';
 import {testRuntimeBase} from './test-runtime-base.mjs';
 
 const runtimeBase=await testRuntimeBase('peer-lock');
@@ -18,6 +18,61 @@ test('the lock wait bound accounts for Windows private-folder checks',()=>{
   assert.equal(peerLockWaitMs('win32'),15000);
   assert.equal(peerLockWaitMs('darwin'),1000);
   assert.equal(peerLockWaitMs(),peerLockWaitMs(process.platform));
+});
+
+test('the peer lock deadline validates values and can be cleared',()=>{
+  try {
+    for(const value of [NaN,Infinity,-1,'5',undefined])
+      assert.throws(()=>limitPeerLockWait(value),/^Error: Invalid peer lock deadline$/);
+    assert.doesNotThrow(()=>limitPeerLockWait(null));
+    assert.doesNotThrow(()=>limitPeerLockWait(0));
+  } finally {limitPeerLockWait(null);}
+});
+
+async function holdLock(runtime) {
+  let release,ready,failed;
+  const released=new Promise(resolve=>{release=resolve;});
+  const acquired=new Promise((resolve,reject)=>{ready=resolve;failed=reject;});
+  const holder=withPeerStateLock(runtime,async()=>{ready();await released;});
+  void holder.catch(failed);
+  await acquired;
+  return async()=>{release();await holder;};
+}
+
+test('a process deadline stops a waiter before the platform bound',async t=>{
+  const runtime=await fixture(t);
+  const release=await holdLock(runtime);
+  try {
+    const started=performance.now();
+    limitPeerLockWait(started+300);
+    await assert.rejects(withPeerStateLock(runtime,()=>{}),/locked/);
+    const elapsed=performance.now()-started;
+    assert.ok(elapsed<peerLockWaitMs(),`Wait took ${elapsed} ms`);
+    if(process.platform==='win32')assert.ok(elapsed<5000,`Wait took ${elapsed} ms`);
+  } finally {limitPeerLockWait(null);await release();}
+});
+
+test('Windows waits for a holder that releases after six seconds',{
+  skip:process.platform!=='win32'?'Windows has the extended lock wait bound':false,
+  timeout:60000
+},async t=>{
+  const runtime=await fixture(t);
+  const release=await holdLock(runtime);
+  const timer=setTimeout(release,6000);
+  try {
+    const started=performance.now();
+    assert.equal(await withPeerStateLock(runtime,()=>'acquired'),'acquired');
+    assert.ok(performance.now()-started>5000);
+  } finally {clearTimeout(timer);await release();}
+});
+
+for(const [name,outerDeadlineMs] of [
+  ['sharing-choice',10000],['quota-sharing-control',10000],
+  ['provider-token-sharing-control',10000],['peer-exchange',30000],
+  ['peer-repair',20000],['peer-revocation',20000]
+])test(`${name} leaves at least five seconds after lock acquisition`,async()=>{
+  const {peerLockDeadlineMs}=await import(`./${name}.mjs`);
+  assert.ok(peerLockDeadlineMs<outerDeadlineMs-5000);
 });
 
 test('a pending action keeps the lock across garbage collection',{timeout:120000},async t=>{

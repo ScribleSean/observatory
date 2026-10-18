@@ -2,7 +2,7 @@ import {fileURLToPath} from 'node:url';
 import {readPairing} from './peer-pairing.mjs';
 import {readPeerState,acceptPeerState} from './peer-store.mjs';
 import {assertPairingActive} from './peer-revocation.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {exchangeProviderTokens} from './provider-token-exchange.mjs';
 
 // This is a local stdin/stdout endpoint for an authenticated SSH session, not a
@@ -33,7 +33,11 @@ export function exchangePeerRequest(runtime,message,now=Date.now()) {
   return exchangePeerRecord(runtime,message,now);
 }
 
+export const peerLockDeadlineMs=15000;
+
 async function main(runtime) {
+  // Stay inside the 30000 ms command-line deadline.
+  limitPeerLockWait(peerLockDeadlineMs);
   const chunks=[];let size=0;
   const timer=setTimeout(()=>{process.stderr.write('Peer exchange input timeout\n');process.exit(1);},30000);
   try {
