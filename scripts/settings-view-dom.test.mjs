@@ -691,14 +691,15 @@ void test(`partial Settings switches stay unknown and disabled with placeholder 
 });
 }
 
-for (const partial of [false, true]) {
-  void test(`Settings recovers from ${partial ? 'partial' : 'unavailable'} status without overlapping polls`, async t => {
+for (const partial of [null, 'limitsConsent', 'sources']) {
+  void test(`Settings recovers from ${partial ?? 'unavailable'} status without overlapping polls`, async t => {
     t.mock.timers.enable({ apis: ['setInterval'] });
-    const f = await fixture(t, 'idle', false, partial ? { status: { limitsConsent: null } } : { failStatus: true });
-    const limits = () => [...f.container.querySelectorAll('.ob-settings-toggle')].find(node => node.querySelector('label')?.textContent === 'Claude Code limits');
+    const f = await fixture(t, 'idle', false, partial ? { status: { [partial]: null } } : { failStatus: true });
+    const limits = () => [...f.container.querySelectorAll('.ob-settings-toggle')].find(node => node.querySelector('label')?.textContent === (partial === 'sources' ? 'Codex' : 'Claude Code limits'));
     assert.equal(limits().querySelector('.ob-meta').textContent, 'Unknown');
     f.recoverStatus();
-    f.status.limitsConsent = true;
+    if (partial === 'sources') f.status.sources = { ...sampleBridgeStatus().sources, codex: true };
+    else f.status.limitsConsent = true;
     f.holdStatus();
     const interval = contract.limits.cacheRefreshSeconds * 1000;
     await act(async () => t.mock.timers.tick(interval));
@@ -722,4 +723,20 @@ void test('Settings recovery poll stops when the page is unmounted', async t => 
   await f.unmount();
   await act(async () => t.mock.timers.tick(interval * 3));
   assert.equal(reads(), before);
+});
+
+void test('null sources disable only source switches and leave pairing Cancel usable', async t => {
+  const f = await fixture(t, 'awaiting-confirmation', false, { status: { sources: null } });
+  for (const label of ['ActivityWatch', 'Codex', 'Claude Code', 'Wispr Flow', 'Codex limits']) {
+    const row = [...f.container.querySelectorAll('.ob-settings-toggle')].find(node => node.querySelector('label')?.textContent === label);
+    assert.ok(row, label);
+    assert.equal(row.querySelector('.ob-meta').textContent, 'Unknown');
+    const input = row.querySelector('input');
+    assert.equal(input.disabled, true);
+    assert.equal(input.indeterminate, true);
+    assert.equal(input.getAttribute('aria-checked'), 'mixed');
+  }
+  for (const label of ['Cancel', 'Confirm', 'Check Tailscale', 'Check for updates', 'Export data']) assert.equal(f.button(label).disabled, false);
+  await f.click('Cancel');
+  assert.ok(f.last('pairing-cancel'));
 });

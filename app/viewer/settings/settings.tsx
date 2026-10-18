@@ -102,7 +102,7 @@ export function SettingsView({ demo, skinId, onSkinChange, bridge }: {
     const recoveryPoll = setInterval(() => {
       if (!transport.available) return;
       const current = next.getStatus();
-      if (!current || current.limitsConsent === null || Object.values(current.sharing).some(channel => channel === null)) refresh();
+      if (!current || current.sources === null || current.limitsConsent === null || Object.values(current.sharing).some(channel => channel === null)) refresh();
     }, contract.limits.cacheRefreshSeconds * 1000);
     const clear = () => { generation.current++; running.current = false; setBusy(false); setInvitation(''); setJoinText(''); };
     const hide = () => flushSync(clear);
@@ -234,9 +234,9 @@ export function SettingsContent({ status: raw, controller, available = true, bus
     {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The paused note uses the requested paragraph status markup. */}
     {status?.collectionPaused === true && <p className="ob-settings-paused" role="status">{S.collectionPaused}</p>}
     <output aria-live="polite">{busy ? S.working : message}</output>
-    {group(S.sources, <>{(['activity', 'codex', 'claude', 'wispr'] as const).map(source => <div key={source}>{toggle(S[source], status?.sources[source], enabled => action(c => c.setSource(source, enabled)))}</div>)}</>)}
+    {group(S.sources, <>{(['activity', 'codex', 'claude', 'wispr'] as const).map(source => <div key={source}>{toggle(S[source], status?.sources?.[source], enabled => action(c => c.setSource(source, enabled)))}</div>)}</>)}
     {group(S.accounts, <>
-      {toggle(S.codexLimits, status?.sources.quota, enabled => action(c => c.setSource('quota', enabled)))}
+      {toggle(S.codexLimits, status?.sources?.quota, enabled => action(c => c.setSource('quota', enabled)))}
       {toggle(S.claudeLimits, status?.limitsConsent, enabled => enabled ? setDisclosure(consent?.request() ?? false) : action(c => c.setLimitsConsent(false)))}
       {disclosure && <div className="ob-settings-disclosure"><ul><li>{S.disclosureCommand}</li><li>{S.disclosureStorage}</li><li>{S.disclosureOff}</li></ul>
         {button(S.turnOn, () => run(() => { setDisclosure(false); return consent?.confirm() ?? Promise.resolve({ id: 0, ok: false, code: 'refused', local: true }); }), disabled || status?.limitsConsent == null)}

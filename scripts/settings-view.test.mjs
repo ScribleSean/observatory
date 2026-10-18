@@ -498,3 +498,50 @@ void test('Turn on in an open consent panel is disabled while Claude limits is U
   status.limitsConsent = null;
   assert.match(turnOn(render(status, { disclosureOpen: true })), /disabled/);
 });
+
+void test('null sources alone render Unknown and preserve other Settings controls', () => {
+  const status = sampleBridgeStatus();
+  status.pairing.state = 'awaiting-confirmation';
+  const normal = render(status);
+  const partial = { ...status, sources: null };
+  assert.deepEqual(validateBridgeStatus(partial), partial);
+  const html = render(partial);
+  const rows = [...html.matchAll(/<div class="ob-row ob-settings-toggle">(.*?)<\/div>/g)];
+  for (const row of rows.slice(0, 5)) {
+    assert.match(row[1], /aria-checked="mixed"/);
+    assert.match(row[1], /disabled=""/);
+    assert.match(row[1], />Unknown</);
+    assert.doesNotMatch(row[1], />Off</);
+  }
+  assert.equal(rows.slice(0, 5).length, 5);
+  const otherControls = text => [...text.matchAll(/<(?:input|button|select)\b[^>]*>/g)].slice(5).map(match => match[0]);
+  assert.deepEqual(otherControls(html), otherControls(normal));
+  assert.match(html, /<button type="button">Cancel<\/button>/);
+  for (const sources of [undefined, false, 0, [], {}, { ...status.sources, quota: 'false' }, { ...status.sources, extra: false }]) {
+    assert.equal(validateBridgeStatus({ ...status, sources }), null);
+  }
+  const missing = { ...status.sources };
+  delete missing.quota;
+  assert.equal(validateBridgeStatus({ ...status, sources: missing }), null);
+});
+
+void test('Setup keeps null sources Unknown through the source and finish steps', async () => {
+  const { SetupContent } = await server.ssrLoadModule('/app/viewer/setup/SetupView.tsx');
+  const status = { ...sampleBridgeStatus(), sources: null };
+  for (const step of [0, 1, 2]) {
+    const props = { status, step, available: true, busy: false, message: '', disclosureOpen: true };
+    const html = renderToStaticMarkup(createElement(SetupContent, props));
+    assert.equal((html.match(/>Unknown</g) ?? []).length, step === 1 ? 0 : 5);
+    if (step === 0) {
+      assert.equal((html.match(/aria-checked="mixed" disabled=""/g) ?? []).length, 5);
+      assert.match(html, /<button type="button">Cancel<\/button>/);
+    }
+    const normal = renderToStaticMarkup(createElement(SetupContent, { ...props, status: sampleBridgeStatus() }));
+    const buttons = text => [...text.matchAll(/<button\b[^>]*>.*?<\/button>/g)].map(match => match[0]);
+    assert.deepEqual(buttons(html), buttons(normal));
+  }
+});
+
+void test('fake bridge refuses null sources in sample status', () => {
+  assert.throws(() => createFakeBridge({ ...sampleBridgeStatus(), sources: null }), /Invalid sample status/);
+});

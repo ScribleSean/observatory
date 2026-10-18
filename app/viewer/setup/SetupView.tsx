@@ -40,7 +40,7 @@ export function SetupContent({ status, step, available, busy, message, disclosur
     <h3 ref={headingRef} tabIndex={-1}>{[W.sourcesTitle, W.pairingTitle, W.finishTitle][index]}</h3>
     {index === 0 && <>
       <p>{W.sourcesIntro}</p>
-      {SETUP_SOURCES.map(({ id, label, hint }) => toggle(label, hint, status?.sources[id as keyof BridgeStatus['sources']], enabled => onSource(id, enabled)))}
+      {SETUP_SOURCES.map(({ id, label, hint }) => toggle(label, hint, status?.sources?.[id as keyof NonNullable<BridgeStatus['sources']>], enabled => onSource(id, enabled)))}
       {toggle(S.claudeLimits, W.claudeLimitsHint, status?.limitsConsent, onLimits)}
       {disclosureOpen && <div className="ob-settings-disclosure"><ul>
         <li>{S.disclosureCommand}</li><li>{S.disclosureStorage}</li><li>{S.disclosureOff}</li>
@@ -106,10 +106,11 @@ export function SetupView({ demo, bridge, onFinished, onBlockedChange }: { demo:
     setStatusReadFinished(false);
     setStatus(demo ? validateBridgeStatus(sampleSetupStatus()) : null);
     readStatus(next);
-    // Read status again while Claude limits is Unknown, quietly and never during another read.
+    // Read status again while sources or Claude limits are Unknown, quietly and never during another read.
     let polling = false;
     const recoveryPoll = setInterval(() => {
-      if (!transport.available || polling || running.current || next.getStatus()?.limitsConsent !== null) return;
+      const current = next.getStatus();
+      if (!transport.available || polling || running.current || !current || (current.sources !== null && current.limitsConsent !== null)) return;
       polling = true;
       void next.status().catch(() => {}).finally(() => { polling = false; });
     }, contract.limits.cacheRefreshSeconds * 1000);
