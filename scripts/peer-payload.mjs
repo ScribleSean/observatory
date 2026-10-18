@@ -89,18 +89,19 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   const payloads=[parsePeerPayload(JSON.stringify(local),localConfig,now),parsePeerPayload(JSON.stringify(peer),peerConfig,now)]
     .sort((a,b)=>a.host.localeCompare(b.host));
   const isFresh=payload=>now-Date.parse(payload.collectedAt)<=600000;
-  const checked=source=>{
-    const payload=payloads.find(p=>p.host===source.host);
-    // Only a reading can become stale. A source that was not read keeps its status.
-    return {...source,status:isFresh(payload) || source.status!=='ok'?source.status:'stale',checkedAt:payload.collectedAt};
-  };
+  const checked=source=>({...source,checkedAt:payloads.find(p=>p.host===source.host).collectedAt});
+  // Only a reading can become stale. A source that was not read keeps its status.
+  // Stale applies to the published rows only. History and token days are kept from the reading itself.
+  const late=row=>!isFresh(payloads.find(p=>p.host===row.host)) && row.status==='ok'?{...row,status:'stale'}:row;
   const normalized=payloads.map(p=>checked(p.activity.status==='ok'?cleanActivity(p.activity,p.host):p.activity));
-  const activity=normalized.map(({intervals,trackingIntervals,...safe})=>safe);
-  const settings=payloads.flatMap(p=>p.codex.filter(row=>row.host===p.host).map(({inventory,...safe})=>checked(safe)));
-  const tokens=settings.map(source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:{...absent(source.host,source.status),checkedAt:source.checkedAt});
+  const activityRead=normalized.map(({intervals,trackingIntervals,...safe})=>safe);
+  const activity=activityRead.map(late);
+  const settingsRead=payloads.flatMap(p=>p.codex.filter(row=>row.host===p.host).map(({inventory,...safe})=>checked(safe)));
+  const settings=settingsRead.map(late);
+  const tokens=settingsRead.map(source=>source.status==='ok'?{...tokensFromSettings(source,source.host),checkedAt:source.checkedAt}:{...absent(source.host,source.status),checkedAt:source.checkedAt}).map(late);
   const expectedHosts=[localConfig.host,peerConfig.host];
   const evidenceHosts=[localConfig.host,peerConfig.host];
-  const evidence=payloads.filter(isFresh).flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
+  const evidence=payloads.flatMap(p=>p.codex.filter(row=>row.status==='ok').map(row=>({
     version:1,comparisonId:p.comparisonId,host:row.host,...row.inventory,
     // Recorded usage requires a nonempty inventory.
     status:!row.inventory.keys.length && (row.profiles.some(profile=>profile.totalTokens>0) ||
@@ -112,10 +113,10 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   const combinedSettings=combinedTokens.status==='ok'?combineSettings(tokens,settings):absent('All');
   const collectedAt=new Date(now).toISOString();
   const data={schema:2,timezone:'America/New_York',collectedAt,activity,combined,tokens,combinedTokens,settings,combinedSettings,
-    dictation:payloads.flatMap(p=>p.dictation.map(checked)),agents:[],agentSource:absent('Local','not-connected'),
+    dictation:payloads.flatMap(p=>p.dictation.map(checked)).map(late),agents:[],agentSource:absent('Local','not-connected'),
     quota:absent('Codex account','not-connected')};
   data.activityHistory=['Combined','Mac','Windows'].map(host=>{
-    const source=host==='Combined'?combined:activity.find(row=>row.host===host);
+    const source=host==='Combined'?combined:activityRead.find(row=>row.host===host);
     const asOf=host==='Combined'?payloads.map(p=>p.collectedAt).sort()[0]:source.checkedAt;
     return retainActivityHistory(previous,[source],asOf).find(row=>row.host===host);
   });

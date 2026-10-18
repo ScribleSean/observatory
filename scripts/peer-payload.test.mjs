@@ -77,8 +77,10 @@ test('stale peer retains dated local views and history without current combined 
   const result=mergePeerPayloads(packet('Mac'),old,config('Mac'),config('Windows'),[],now);
   assert.equal(result.combined.status,'unavailable');assert.equal(result.combinedTokens.status,'unavailable');
   assert.equal(result.tokens.find(s=>s.host==='Windows').checkedAt,old.collectedAt);
-  assert.equal(result.activityHistory.find(s=>s.host==='Windows').asOf,null);
-  assert.equal(result.activityHistory.find(s=>s.host==='Windows').latestReadStatus,'stale');
+  // A late payload is still a reading. Its days are kept in history.
+  assert.equal(result.activityHistory.find(s=>s.host==='Windows').asOf,old.collectedAt);
+  assert.ok(result.activityHistory.find(s=>s.host==='Windows').days.length>0);
+  assert.equal(result.activity.find(s=>s.host==='Windows').status,'stale');
 });
 test('two-slot configurations and payloads are refused',()=>{
   const value=raw('Windows'),legacy={...config('Windows'),codexHosts:['Windows','Ubuntu']};
@@ -130,7 +132,7 @@ test('native evidence freshness boundaries preserve original observations',()=>{
     const result=mergePeerPayloads(packet('Mac'),windows,config('Mac'),config('Windows'),[],now);
     assert.equal(result.combinedTokens.status,status);
     assert.equal(result.tokens.find(row=>row.host==='Windows').checkedAt,windows.collectedAt);
-    assert.equal(result.activityHistory.find(row=>row.host==='Windows').asOf,status==='ok'?windows.collectedAt:null);
+    assert.equal(result.activityHistory.find(row=>row.host==='Windows').asOf,windows.collectedAt);
     assert.equal(JSON.stringify(windows),before);
   }
 });
@@ -168,7 +170,9 @@ for (const age of [9, 11]) test(`peer sources at ${age} minutes preserve reading
   if (age > 10) {
     for (const key of ['combined', 'combinedTokens', 'combinedSettings']) assert.notEqual(result[key].status, 'ok');
     const history = result.activityHistory.find(row => row.host === 'Windows');
-    assert.equal(history.latestReadStatus, 'stale');
+    assert.equal(history.latestReadStatus, 'ok');
+    assert.equal(history.asOf, peer.collectedAt);
+    assert.ok(result.tokens.find(row => row.host === 'Windows').days.length > 0);
     assert.deepEqual(history.days, baseline.activityHistory.find(row => row.host === 'Windows').days);
   }
 });
