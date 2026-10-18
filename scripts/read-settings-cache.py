@@ -102,11 +102,11 @@ class SettingsCache:
         if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
             self.db.close()
             raise ValueError('Changing cache file')
-        self.db.execute('PRAGMA trusted_schema=OFF')
-        self.db.execute('PRAGMA synchronous=FULL')
-        self.db.execute('PRAGMA max_page_count=32768')
         schema = 'CREATE TABLE events (key TEXT PRIMARY KEY, signature TEXT NOT NULL, data TEXT NOT NULL)'
         try:
+            self.db.execute('PRAGMA trusted_schema=OFF')
+            self.db.execute('PRAGMA synchronous=FULL')
+            self.db.execute('PRAGMA max_page_count=32768')
             if self.db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete' or self.db.execute('PRAGMA page_size').fetchone()[0] != 4096:
                 raise ValueError('Unsupported cache format')
             self.db.execute('BEGIN IMMEDIATE')

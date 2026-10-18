@@ -1,4 +1,3 @@
-import {privateSyncDirectory} from './peer-directory.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,mkdir,readdir,symlink,stat} from 'node:fs/promises';
@@ -9,6 +8,7 @@ import {createPeerRecord,acceptPeerState,readPeerState,publishLocalPayload} from
 import {DatabaseSync} from 'node:sqlite';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
+import {privateSyncDirectory} from './peer-directory.mjs';
 
 const now=Date.parse('2026-09-09T13:00:00.000Z');
 const config={host:'Windows',codexHosts:['Windows'],pairId:'a'.repeat(64),deviceId:'b'.repeat(64),comparisonId:'c'.repeat(64)};
