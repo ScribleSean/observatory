@@ -6,7 +6,7 @@ import stat
 MAX_CACHE_BYTES = 2 * 1024 * 1024 * 1024
 CACHE_PAGE_SIZE = 4096
 MAX_CACHE_PAGES = MAX_CACHE_BYTES // CACHE_PAGE_SIZE
-MAX_RETAINED_BYTES = 256 * 1024 * 1024
+MAX_RETAINED_BYTES = 64 * 1024 * 1024
 DEFAULT_SCAN_BYTES = 2 * 1024 * 1024 * 1024
 
 
@@ -144,8 +144,8 @@ class SettingsCache:
             return []
         row = self.db.execute('SELECT signature, data FROM events WHERE key=?', (key,)).fetchone()
         if row and row[0] == signature:
-            # Bound encoded list overhead before parsing retained events.
-            if len(row[1]) > MAX_RETAINED_BYTES * 2 + 2:
+            # Each retained event adds at most a comma and a space, plus two list brackets.
+            if len(row[1]) > MAX_RETAINED_BYTES + 2 * MAX_LINES + 2:
                 raise ValueError('Private event cache entry limit')
             try:
                 saved = json.loads(row[1])
@@ -205,13 +205,17 @@ class SettingsCache:
         self.db.execute('INSERT INTO events VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET signature=excluded.signature, data=excluded.data', (key, signature, json.dumps(events)))
         return events
 
-    def close(self):
+    def close(self, *, completed=False):
         # Remove metadata for logs no longer in the selected session and archive set.
         try:
+            if not completed:
+                return
+            self.db.execute('BEGIN')
             for (key,) in self.db.execute('SELECT key FROM events').fetchall():
                 if self.read_budget:
                     self.read_budget.check()
                 if key not in self.used:
                     self.db.execute('DELETE FROM events WHERE key=?', (key,))
+            self.db.commit()
         finally:
             self.db.close()

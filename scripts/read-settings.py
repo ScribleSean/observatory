@@ -238,9 +238,8 @@ def collect(folder, *, retry_cache=True, cache_budget=None, read_budget=None):
         with file.open('rb') as stream:
             first = stream.readline(1_000_000)
             read_budget.charge(first)
-        first = first.decode('utf-8')
         try:
-            meta = json.loads(first)
+            meta = json.loads(first.decode('utf-8'))
         except ValueError:
             meta = {}
         payload = meta.get('payload') if isinstance(meta, dict) and meta.get('type') == 'session_meta' else None
@@ -268,11 +267,13 @@ def collect(folder, *, retry_cache=True, cache_budget=None, read_budget=None):
     cache = SettingsCache(globals()['CACHE_DIRECTORY'], budget) if globals().get('CACHE_DIRECTORY') else None
     if cache:
         cache.read_budget = read_budget
+    completed = False
     try:
         profiles, tools, retained, hour_totals = summarize_sessions(sessions, cutoff, cache, {identity: lineage(identity) for identity in sessions}, read_budget)
+        completed = True
     finally:
         if cache:
-            cache.close()
+            cache.close(completed=completed)
     if cache:
         if cache.pending:
             # Rebuild metadata and inventory after a transient file change. A

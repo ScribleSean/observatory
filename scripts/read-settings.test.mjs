@@ -179,9 +179,9 @@ with tempfile.TemporaryDirectory() as directory:
             if ChangingCache.attempts==1 or ChangingCache.change_always:
                 with file.open('a',encoding='utf-8') as stream: stream.write('\\n')
             return super().events(file,expected)
-        def close(self):
+        def close(self,**kwargs):
             ChangingCache.spent+=self.scanned_bytes
-            super().close()
+            super().close(**kwargs)
     m.SettingsCache=ChangingCache; m.CACHE_DIRECTORY=str(cache); m.CACHE_SCAN_BUDGET=100000
     assert m.collect(logs)==expected
     assert ChangingCache.attempts==2 and ChangingCache.spent<=m.CACHE_SCAN_BUDGET
@@ -351,8 +351,86 @@ assert m.MAX_READ_SECONDS==45
 assert m.MAX_CACHE_BYTES==2*1024**3
 assert m.CACHE_PAGE_SIZE==4096
 assert m.MAX_CACHE_PAGES==524288
-assert m.MAX_RETAINED_BYTES==256*1024**2
+assert m.MAX_RETAINED_BYTES==64*1024**2
 assert m.DEFAULT_SCAN_BYTES==2*1024**3
+`);
+});
+
+test('a first line cut inside a UTF-8 character follows the invalid metadata path',()=>{
+  runLimitFixture(`
+for cached in (False,True):
+    with tempfile.TemporaryDirectory() as directory:
+        root=pathlib.Path(directory).resolve()
+        logs=root/'logs'
+        (logs/'sessions').mkdir(parents=True)
+        file=logs/'sessions/one.jsonl'
+        m=patched()
+        m.INVENTORY_SALT='synthetic-salt'
+        if cached:
+            cache=root/'cache'
+            cache.mkdir(mode=0o700)
+            m.CACHE_DIRECTORY=str(cache)
+        tail=json.dumps(event)+'\\n'
+        file.write_text('invalid metadata\\n'+tail,encoding='utf-8')
+        expected=m.collect(logs)
+        first=' '*999_999+chr(0x20ac)+'\\n'
+        assert first.encode()[999_999:1_000_002]==bytes([0xe2,0x82,0xac])
+        file.write_text(first+tail,encoding='utf-8')
+        result=m.collect(logs)
+        assert result==expected
+        assert result['status']=='ok'
+        assert result['inventory']['status']=='incomplete'
+        assert result['tokenProfiles'][0]['totalTokens']==110
+`);
+});
+
+test('an interrupted byte limited pass keeps cached entries for unreached files',()=>{
+  runLimitFixture(`
+import sqlite3
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True)
+    one=logs/'sessions/one.jsonl'
+    two=logs/'sessions/two.jsonl'
+    first=content.replace('synthetic','a')
+    second=content.replace('synthetic','b')
+    one.write_text(first,encoding='utf-8')
+    two.write_text(second,encoding='utf-8')
+    cache=root/'cache'
+    cache.mkdir(mode=0o700)
+    m=patched()
+    m.CACHE_DIRECTORY=str(cache)
+    assert m.collect(logs)['status']=='ok'
+    def saved_entries():
+        db=sqlite3.connect(cache/'events.sqlite')
+        try:
+            return db.execute('SELECT * FROM events ORDER BY key').fetchall()
+        finally:
+            db.close()
+    saved=saved_entries()
+    assert len(saved)==2
+    # Invalidate the first entry so its scan exceeds the inventory byte allowance.
+    one.write_text(first+'\\n',encoding='utf-8')
+    amount=len(first.splitlines(keepends=True)[0].encode())+len(second.splitlines(keepends=True)[0].encode())
+    m=patched({'MAX_TOTAL_BYTES':amount})
+    m.CACHE_DIRECTORY=str(cache)
+    m.CACHE_SCAN_BUDGET=2*1024**3
+    reached=[]
+    original=m.SettingsCache
+    class TrackingCache(original):
+        def events(self,file,expected):
+            reached.append(file)
+            return super().events(file,expected)
+    m.SettingsCache=TrackingCache
+    unavailable(lambda:m.collect(logs))
+    assert reached==[one]
+    assert saved_entries()==saved
+    m.MAX_TOTAL_BYTES=2*1024**3
+    assert m.collect(logs)['tokenProfiles'][0]['totalTokens']==220
+    two.rename(logs/'sessions/two.txt')
+    assert m.collect(logs)['tokenProfiles'][0]['totalTokens']==110
+    assert len(saved_entries())==1
 `);
 });
 
