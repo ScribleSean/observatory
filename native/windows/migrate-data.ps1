@@ -32,7 +32,7 @@ function SafeDirectory([string]$Path, [bool]$Required) {
         Refuse 'A data folder is a file or a reparse point.'
     }
 }
-function Manifest([string]$Root) {
+function Manifest([string]$Root, [switch]$Source) {
     $rootPath = [IO.Path]::GetFullPath((Item $Root).FullName)
     $prefix = $rootPath.TrimEnd([char]92) + '\'
     $pending = New-Object 'System.Collections.Generic.Stack[string]'
@@ -53,7 +53,7 @@ function Manifest([string]$Root) {
                 continue
             }
             $retirementParent = RetirementFolder ([IO.Path]::GetDirectoryName($relative))
-            if ($retirementParent -and ($entry.PSIsContainer -or
+            if ($Source -and $retirementParent -and ($entry.PSIsContainer -or
                 (-not [string]::Equals($entry.Name, 'retirement-receipt.json', [StringComparison]::Ordinal) -and
                  -not [string]::Equals($entry.Name, 'retirement-snapshot.json', [StringComparison]::Ordinal)))) {
                 Refuse ('Unexpected entry in the retirement checkpoint folder at relative path: ' + (DisplayPath $relative))
@@ -411,7 +411,7 @@ public static class MigrationFileLinks {
     $marker = 'observatory-migration.json'
     ExchangeLock
     $step = 'manifest'
-    $original = @(Manifest $Legacy)
+    $original = @(Manifest $Legacy -Source)
     if (@($original | Where-Object { $_.path -in @($marker, 'login-state.json', 'login-state-carried.json') }).Count) { Refuse 'The earlier folder already contains a migration record.' }
     $manifestHash = Digest $original
     $expected = @($original | Where-Object { $_.path -ne $receipt -or $_.type -ne 'file' })
@@ -568,7 +568,7 @@ public static class MigrationFileLinks {
     CollectionLock
     CheckRunning
     $step = 'manifest'
-    $second = @(Manifest $Legacy)
+    $second = @(Manifest $Legacy -Source)
     $step = 'verify'
     if ((Digest $second) -ne $manifestHash) { Refuse 'The earlier data folder changed during the copy. Quit every Observatory app and run again.' }
     $staged = @(Manifest $Stage)

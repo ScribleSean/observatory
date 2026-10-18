@@ -219,6 +219,26 @@ test('interrupted copy resumes with the abandoned stage moved aside',windows,asy
   for(const name of ['a','b','settings.json'])assert.deepEqual(await readFile(path.join(f.target,name)),before[name].bytes);
 });
 
+test('retirement checkpoint copy resumes with a partial file in the abandoned stage',windows,async t => {
+  const f = await fixture(t),relative = path.join('.runtime','private-repair');
+  await mkdir(path.join(f.legacy,relative),{recursive:true});
+  const files = {'retirement-receipt.json':'{"synthetic":"receipt"}\n',
+    'retirement-snapshot.json':'{"synthetic":"snapshot"}\n'};
+  for(const [name,bytes] of Object.entries(files))await writeFile(path.join(f.legacy,relative,name),bytes);
+  const before = await snapshot(f.legacy);
+  await mkdir(path.join(f.stage,relative),{recursive:true});
+  const partial = 'retirement-receipt.json.'+'a'.repeat(32)+'.observatory-partial';
+  await writeFile(path.join(f.stage,relative,partial),'synthetic partial');
+  success(run(f),'migrated');
+  assert.deepEqual(await snapshot(f.legacy),before);
+  assert.deepEqual((await readdir(path.join(f.target,relative))).sort(),Object.keys(files).sort());
+  for(const [name,bytes] of Object.entries(files))
+    assert.deepEqual(await readFile(path.join(f.target,relative,name)),Buffer.from(bytes));
+  const stale = (await readdir(f.parent)).filter(name => name.includes('-migration-stale-'));
+  assert.equal(stale.length,1);
+  assert.equal(await readFile(path.join(f.parent,stale[0],relative,partial),'utf8'),'synthetic partial');
+});
+
 test('installer receipt is preserved in both the target and retained folder',windows,async t => {
   const f = await fixture(t);
   await mkdir(path.join(f.target,'updates'),{recursive:true});
