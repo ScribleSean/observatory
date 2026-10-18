@@ -5,7 +5,15 @@ $ProgressPreference = 'SilentlyContinue'
 $base = "http://127.0.0.1:$Port/api/0"
 $end = [DateTimeOffset]::UtcNow
 $start = $end.AddDays(-7)
-$buckets = Invoke-RestMethod -Uri "$base/buckets/" -TimeoutSec 10
+# The collector stops this script at 60 seconds. Every request shares one 50 second budget,
+# so a slow ActivityWatch reads Unavailable here instead of being killed.
+$clock = [System.Diagnostics.Stopwatch]::StartNew()
+function Get-RequestTimeout([int]$limit) {
+  $left = 50 - [int]$clock.Elapsed.TotalSeconds
+  if ($left -lt 1) { throw 'Activity read time limit' }
+  return [Math]::Min($limit, $left)
+}
+$buckets = Invoke-RestMethod -Uri "$base/buckets/" -TimeoutSec (Get-RequestTimeout 10)
 $dnsHostname = [System.Net.Dns]::GetHostName()
 $localNames = @($env:COMPUTERNAME, $dnsHostname, $dnsHostname.Split('.')[0])
 $groups = [System.Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
@@ -35,7 +43,7 @@ foreach ($windowGroup in $groups.Values) {
     $a = ConvertTo-Json -Compress -InputObject $idleGroup.afks[0]
     $query = "w = query_bucket($w); a = query_bucket($a); a = filter_keyvals(a, `"status`", [`"not-afk`"]); RETURN = filter_period_intersect(w, a);"
     $body = @{query=@($query);timeperiods=@(($start.ToString('o') + '/' + $end.ToString('o')))} | ConvertTo-Json -Compress
-    $result = Invoke-RestMethod -Method Post -Uri "$base/query/" -Body $body -ContentType 'application/json' -TimeoutSec 30
+    $result = Invoke-RestMethod -Method Post -Uri "$base/query/" -Body $body -ContentType 'application/json' -TimeoutSec (Get-RequestTimeout 30)
     $intervals += @(foreach ($event in $result[0]) {
       $app = [string]$event.data.app
       $category = 'Other'
@@ -61,7 +69,7 @@ foreach ($windowGroup in $groups.Values) {
     })
     $trackingQuery = "w = query_bucket($w); a = query_bucket($a); RETURN = filter_period_intersect(w, a);"
     $trackingBody = @{query=@($trackingQuery);timeperiods=@(($start.ToString('o') + '/' + $end.ToString('o')))} | ConvertTo-Json -Compress
-    $observed = Invoke-RestMethod -Method Post -Uri "$base/query/" -Body $trackingBody -ContentType 'application/json' -TimeoutSec 30
+    $observed = Invoke-RestMethod -Method Post -Uri "$base/query/" -Body $trackingBody -ContentType 'application/json' -TimeoutSec (Get-RequestTimeout 30)
     $trackingIntervals += @(foreach ($event in $observed[0]) {
       $duration = [double]$event.duration
       if ([double]::IsNaN($duration) -or [double]::IsInfinity($duration) -or $duration -lt 0) { throw 'Invalid duration' }
@@ -69,7 +77,7 @@ foreach ($windowGroup in $groups.Values) {
       [pscustomobject]@{start=$eventStart.ToString('o');end=$eventStart.AddSeconds($duration).ToString('o')}
     })
   }
-  $latest = Invoke-RestMethod -Uri "$base/buckets/$([Uri]::EscapeDataString($windowId))/events?limit=1" -TimeoutSec 10
+  $latest = Invoke-RestMethod -Uri "$base/buckets/$([Uri]::EscapeDataString($windowId))/events?limit=1" -TimeoutSec (Get-RequestTimeout 10)
   if ($latest.Count -gt 0) {
     $parsed = [DateTimeOffset]::MinValue
     if ([DateTimeOffset]::TryParse([string]$latest[0].timestamp, [ref]$parsed) -and $parsed -gt $latestTime) {

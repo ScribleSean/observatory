@@ -26,6 +26,8 @@ test('filters local hosts instead of requiring one pair across all hosts', () =>
   assert.match(source, /\$localNames -inotcontains \$bucket\.hostname/);
   assert.match(source, /\[System\.Net\.Dns\]::GetHostName\(\)/);
   assert.match(source, /\[StringComparer\]::Ordinal/);
+  assert.equal((source.match(/-TimeoutSec \(Get-RequestTimeout \d+\)/g) ?? []).length, 4);
+  assert.match(source, /\$left = 50 - /);
 });
 
 test('output contains only fixed labels and interval fields', () => {
@@ -81,7 +83,7 @@ function report(result) {
   assert.deepEqual(Object.keys(output).sort(), ['host', 'status', 'start', 'end', 'latestEvent', 'intervals', 'trackingIntervals'].sort());
   assert.equal(output.host, 'Windows');
   assert.equal(output.status, 'ok');
-  assert.doesNotMatch(result.stdout, /window_|idle_|SYNTHETIC-PC|Synthetic private title|code\.exe/);
+  assert.doesNotMatch(result.stdout, /window_|idle_|SYNTHETIC-PC|SYNTHETIC-OLD-PC|Synthetic private title|code\.exe/i);
   return output;
 }
 
@@ -101,7 +103,8 @@ test('reads cross-alias watchers and reports the latest window event', windowsOn
   const {stdout} = await exec(powershell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[System.Net.Dns]::GetHostName()']);
   const alias = stdout.trim();
   assert.notEqual(alias.toLowerCase(), computer.toLowerCase());
-  const result = await collect(t, [...pair(computer, 'current'), ...pair(alias, 'alias')], {crossOnly:true});
+  // The alias pair is read first and carries the later event, so keeping the last event read would fail.
+  const result = await collect(t, [...pair(alias, 'alias'), ...pair(computer, 'current')], {crossOnly:true});
   const output = report(result);
   assert.equal(result.stdout.toLowerCase().includes(alias.toLowerCase()), false);
   const combinations = ['window_current/idle_current', 'window_current/idle_alias', 'window_alias/idle_current', 'window_alias/idle_alias'];
