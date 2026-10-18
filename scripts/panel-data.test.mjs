@@ -288,12 +288,12 @@ test('device freshness gates tokens, activity history and provider tokens withou
     data.activityHistory = [{ host, status: 'ok', days: [{ date: '2026-03-10', seconds: 42 }] }];
     data.providerTokenSources = [{ host, provider: 'claude-code', status, checkedAt, days: [day('2026-03-10', 42)] }];
     const result = totals(data, host, 'day', new Date(now));
-    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds, result.usd], [null, null, null, null]);
+    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds, result.usd], [null, null, status === 'unavailable' ? 42 : null, null]);
     for (const note of [result.codexNote, result.claudeNote, result.timeNote]) {
       if (status === 'unavailable') assert.equal(note, '');
       else assert.match(note, /as of/);
     }
-    assert.deepEqual(recordedDays(data, 'activity', host, now), []);
+    assert.deepEqual(recordedDays(data, 'activity', host, now), status === 'unavailable' ? data.activityHistory[0].days : []);
     if (status === 'ok') assert.equal(totals(data, 'All', 'day', new Date(now)).codexTokens, baseline.codexTokens);
   }
 });
@@ -366,4 +366,35 @@ test('the panel note for an old device reading says Unknown before the reading t
   const result = totals(snapshot, 'Windows', 'day', new Date(at));
   assert.equal(result.codexTokens, null);
   assert.match(result.codexNote, /^Unknown · as of /);
+});
+
+test('failed local activity reads preserve saved days and week totals', () => {
+  const data = { timezone: 'UTC', collectedAt: new Date(now).toISOString(),
+    activity: [{ host: 'Mac', status: 'unavailable' }],
+    activityHistory: [{ host: 'Mac', status: 'ok', days: [{ date: '2026-03-08', seconds: 20 }, { date: '2026-03-09', seconds: 40 }] }] };
+  assert.deepEqual(recordedDays(data, 'activity', 'Mac', now), data.activityHistory[0].days);
+  assert.equal(totals(data, 'Mac', 'week', new Date(now)).seconds, 60);
+});
+
+test('late reading dates use the snapshot timezone and panel totals stay Unknown', () => {
+  const data = { timezone: 'America/New_York', collectedAt: '2026-03-10T00:20:00Z' };
+  const days = ['2026-03-08', '2026-03-09', '2026-03-10'].map(date => ({ date, seconds: 30, totalTokens: 50 }));
+  for (const key of ['activity', 'tokens']) data[key] = [{ host: 'Windows', status: 'stale', checkedAt: '2026-03-10T00:05:00Z', days }];
+  data.activityHistory = [{ host: 'Windows', status: 'ok', days }];
+  for (const key of ['activity', 'tokens']) assert.deepEqual(recordedDays(data, key, 'Windows', now), [days[0]]);
+  for (const period of ['day', 'week', 'month', 'all']) {
+    const result = totals(data, 'Windows', period, new Date('2026-03-10T00:20:00Z'));
+    assert.equal(result.seconds, null);
+    assert.equal(result.codexTokens, null);
+    assert.match(result.timeNote, /^Unknown · as of /);
+    assert.match(result.codexNote, /^Unknown · as of /);
+  }
+});
+
+test('fresh empty device rows report No records', () => {
+  const data = { timezone: 'UTC', collectedAt: new Date(now).toISOString() };
+  for (const key of ['activity', 'tokens']) data[key] = [{ host: 'Mac', status: 'ok', checkedAt: data.collectedAt, days: [] }];
+  const result = totals(data, 'Mac', 'week', new Date(now));
+  assert.deepEqual([result.codexTokens, result.seconds], [null, null]);
+  assert.deepEqual([result.codexNote, result.timeNote], ['No records', 'No records']);
 });

@@ -194,7 +194,7 @@ test('history supplies retained totals while Now uses the live source only', () 
   assert.equal(view(data, { period: 'now' }).total, 200);
   data.activity[0].status = 'unavailable';
   assert.equal(view(data, { period: 'now' }).total, null);
-  assert.equal(view(data).total, null);
+  assert.equal(view(data).total, 7200);
   assert.equal(data.activityHistory[0].days[0].seconds, 7200);
 });
 test('categories do not include peer device or Combined records', () => {
@@ -234,15 +234,15 @@ test('Combined archive masks hours after its reading despite a later collection'
     assert.ok(view(data, { host: 'All', date: '2026-10-13' }).hourly.every(point => point.value === null));
   }
 });
-test('unavailable device keeps archived hours stored but does not display them', () => {
+test('unavailable device displays archived hours only through the archive reading', () => {
   const data = snapshot();
   data.activity[0].status = 'unavailable';
   data.activityHistory = [{
     host: 'Mac', status: 'ok', latestReadStatus: 'unavailable', asOf: readingAt,
     days: [day('2026-10-13'), day(), day('2026-10-15')],
   }];
-  assert.deepEqual(view(data, { date: '2026-10-13' }).hourly.map(point => point.value), hours(null));
-  assert.deepEqual(view(data).hourly.map(point => point.value), hours(null));
+  assert.deepEqual(view(data, { date: '2026-10-13' }).hourly.map(point => point.value), hours(100));
+  assert.deepEqual(view(data).hourly.map(point => point.value), hours(100).map((value, hour) => hour <= 12 ? value : null));
   assert.deepEqual(data.activityHistory[0].days[0].hours, hours(100));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
   assert.equal(view(data, { period: 'now' }).total, null);
@@ -271,11 +271,49 @@ test('activity retains old snapshot history while excluding late peers', () => {
     data.activity[0].checkedAt = new Date(Date.parse(data.collectedAt) - lag * 60000).toISOString();
     data.activityHistory = [{ ...data.activity[0], days: [day('2026-10-13', 42), day()] }];
     const result = view(data, { date: '2026-10-13' });
-    assert.equal(result.total, lag <= 10 ? 42 : null);
-    assert.equal(result.note.includes('as of'), lag > 10);
-    assert.equal(result.hourly.some(row => row.value !== null), lag <= 10);
+    assert.equal(result.total, 42);
+    assert.equal(result.note, '');
+    assert.equal(result.hourly.some(row => row.value !== null), true);
     const empty = view(data, { now: now + 86400000 });
     if (lag <= 10) assert.equal(empty.note, 'No records');
     else assert.match(empty.note, /as of/);
   }
+});
+
+test('failed Mac reads still list and total the activity archive', () => {
+  const data = snapshot();
+  data.activity[0].status = 'unavailable';
+  data.activityHistory = [{ host: 'Mac', status: 'ok', days: [day('2026-10-12', 20), day('2026-10-13', 40)] }];
+  const result = view(data, { period: 'week' });
+  assert.equal(result.total, 60);
+  assert.deepEqual(result.dates, ['2026-10-14', '2026-10-13', '2026-10-12']);
+});
+
+test('late Windows history remains visible without partial period totals', () => {
+  for (const status of ['ok', 'stale']) {
+    const data = snapshot();
+    Object.assign(data.activity[1], { status, checkedAt: new Date(now - 15 * 60000).toISOString() });
+    data.activityHistory = [{ host: 'Windows', status: 'ok', days: [day('2026-10-12', 20), day('2026-10-13', 40), day()] }];
+    for (const period of ['day', 'week', 'month', 'all']) {
+      const result = view(data, { host: 'Windows', period });
+      assert.equal(result.total, null);
+      assert.match(result.note, /as of/);
+      assert.ok(result.dates.includes('2026-10-13'));
+      if (period === 'week') assert.deepEqual(result.series.slice(-3).map(row => row.value), [20, 40, null]);
+    }
+    const earlier = view(data, { host: 'Windows', period: 'week', date: '2026-10-13' });
+    assert.equal(earlier.total, 60);
+    assert.equal(earlier.note, '');
+    const current = view(data, { host: 'Windows', period: 'now' });
+    assert.equal(current.total, null);
+    assert.equal(current.note, strings.activity.nowStale);
+  }
+});
+
+test('fresh empty activity rows report No records', () => {
+  const data = snapshot();
+  data.activity[0].days = [];
+  const result = view(data, { period: 'week' });
+  assert.equal(result.total, null);
+  assert.equal(result.note, strings.status.noRecords);
 });

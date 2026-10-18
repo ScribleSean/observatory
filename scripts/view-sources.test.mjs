@@ -203,3 +203,16 @@ void test('sources and dictation measure lag within an old snapshot', () => {
     assert.equal(dictationView(data, { period: 'day' }, now + 86400000).cards[0].records, lag <= 10 ? 'No records' : 'Unknown');
   }
 });
+
+test('late dictation keeps earlier chart days without reporting partial totals', () => {
+  const day = date => ({ date, transcriptions: 2, words: 10, wordRecords: 2, audioSeconds: 30, audioRecords: 2 });
+  const data = { timezone: 'UTC', collectedAt: new Date(now).toISOString(), dictation: [{ host: 'Windows', source: 'Wispr Flow', status: 'stale', checkedAt: new Date(now - 900000).toISOString(), days: [day('2026-10-13'), day('2026-10-14')] }] };
+  const card = dictationView(data, { period: 'week' }, now).cards[0];
+  assert.deepEqual([card.records, card.words, card.audio], ['Unknown', 'Unknown', 'Unknown']);
+  assert.match(card.note, /as of/);
+  assert.deepEqual(card.chart, [{ label: '2026-10-13', value: 30 }]);
+  const earlier = dictationView(data, { period: 'week', date: '2026-10-13' }, now).cards[0];
+  assert.equal(earlier.records, '2');
+  assert.equal(earlier.words, '10');
+  assert.equal(earlier.note, '');
+});

@@ -318,8 +318,10 @@ test('old device readings with ok status do not supply tokens, estimates or sett
   for (const key of ['tokens', 'providerTokenSources', 'settings'])
     for (const row of data[key]) row.checkedAt = new Date(Date.parse(data.collectedAt) - 660000).toISOString();
   const result = view(data);
-  assertEmpty(result.codex, 'unknown');
-  assertEmpty(result.claude, 'unknown');
+  assertEmpty({ ...result.codex, days: [] }, 'unknown');
+  assertEmpty({ ...result.claude, days: [] }, 'unknown');
+  assert.ok(result.codex.days.every(day => day.date < '2026-10-14'));
+  assert.ok(result.claude.days.every(day => day.date < '2026-10-14'));
   assert.equal(result.settings[0].status, 'unknown');
   assert.deepEqual(result.settings[0].rows, []);
   const all = view(data, { host: 'All' });
@@ -342,4 +344,27 @@ test('tokens use snapshot time for local readings and peer lag', () => {
     }
     assert.equal(result.settings[0].status, lag <= 10 ? 'ok' : 'unknown');
   }
+});
+
+test('late token periods hide partial totals but retain complete daily values', () => {
+  const data = snapshot([day({ date: '2026-10-13' }), day()]);
+  data.collectedAt = new Date(now).toISOString();
+  for (const key of ['tokens', 'providerTokenSources']) Object.assign(data[key][0], { status: 'stale', checkedAt: new Date(now - 900000).toISOString() });
+  data.settings = [{ host: 'Mac', status: 'stale', checkedAt: new Date(now - 900000).toISOString(), profiles: [{ date: '2026-10-13', model: 'fictional', totalTokens: 10 }] }];
+  for (const period of ['day', 'week', 'month', 'all']) {
+    const result = view(data, { period });
+    for (const provider of ['codex', 'claude']) {
+      assertEmpty({ ...result[provider], days: [] }, 'unknown');
+      assert.deepEqual(result[provider].days, [{ date: '2026-10-13', total: 10 }]);
+      assert.match(result[provider].note, /as of/);
+    }
+    assert.equal(result.settings[0].status, 'unknown');
+  }
+  const earlier = view(data, { date: '2026-10-13' });
+  for (const provider of ['codex', 'claude']) {
+    assert.equal(earlier[provider].totals.total, 10);
+    assert.equal(earlier[provider].estimate.usd, 1);
+    assert.equal(earlier[provider].note, '');
+  }
+  assert.equal(earlier.settings[0].rows[0].totalTokens, 10);
 });
