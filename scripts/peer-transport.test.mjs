@@ -44,6 +44,10 @@ test('SSH uses verified keys, bounded fixed commands, and stdin for private reco
   const result=await sshPeerExchange(transport(),record,async(args,input)=>{
     assert.ok(args.includes('StrictHostKeyChecking=yes'));assert.ok(args.includes('BatchMode=yes'));
     assert.ok(args.includes('PasswordAuthentication=no'));assert.ok(args.includes('KbdInteractiveAuthentication=no'));
+    for(const option of ['ForwardAgent=no','ClearAllForwardings=yes']) {
+      const index=args.indexOf(option);
+      assert.ok(index>0 && index<args.indexOf(transport().hostAlias));assert.equal(args[index-1],'-o');
+    }
     assert.ok(!args.join(' ').includes(record.privateFixture));assert.deepEqual(JSON.parse(input),{version:1,record});
     const command=Buffer.from(args.at(-1).split(' ').at(-1),'base64').toString('utf16le');
     assert.ok(command.includes("Example''s Account"));assert.ok(!command.includes(record.privateFixture));
@@ -121,7 +125,8 @@ test('migration receipt uses only the derived runtime and fixed SSH options',asy
   const record={schema:1,ssh:{from:{},to:{}}};
   assert.deepEqual(await sshMigrationReceipt(target,async(args,input,limit)=>{
     assert.deepEqual(args.slice(0,-1),['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',
-      '-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8',target.hostAlias]);
+      '-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8',
+      '-o','ForwardAgent=no','-o','ClearAllForwardings=yes',target.hostAlias]);
     assert.equal(input,'');assert.equal(limit,65536);
     assert.match(args.at(-1),/^powershell -NoProfile -NonInteractive -EncodedCommand /);
     const command=Buffer.from(args.at(-1).split(' ').at(-1),'base64').toString('utf16le');

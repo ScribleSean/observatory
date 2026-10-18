@@ -510,8 +510,7 @@ final class MacBridgeHost: BridgeHost {
         if action == "pairing-copy-invitation" {
             guard !preview else { completion(.unavailable, nil); return }
             let code = session?.copyInvitation { invitation in
-                NSPasteboard.general.clearContents()
-                return NSPasteboard.general.setString(invitation, forType: .string)
+                return writePairingInvitation(invitation)
             } ?? .unavailable
             completion(code, nil); return
         }

@@ -47,7 +47,7 @@ async function sshRequest(transport,request,endpoint,invoke,limit) {
   const command=`& ${quote(safe.remoteNode)} ${quote(script)} ${quote(safe.remoteRuntime)}; exit $LASTEXITCODE`;
   const encoded=Buffer.from(command,'utf16le').toString('base64');
   const args=['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','PasswordAuthentication=no',
-    '-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8',safe.hostAlias,
+    '-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8','-o','ForwardAgent=no','-o','ClearAllForwardings=yes',safe.hostAlias,
     `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`];
   const input=JSON.stringify(request);
   if(Buffer.byteLength(input)>limit)throw Error('Private SSH request limit');
@@ -113,7 +113,7 @@ if (Test-Path -LiteralPath ${quote(recordPath)}) {
 record=$record} | ConvertTo-Json -Compress -Depth 5`;
   const encoded=Buffer.from(command,'utf16le').toString('base64');
   const args=['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','PasswordAuthentication=no',
-    '-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8',safe.hostAlias,
+    '-o','KbdInteractiveAuthentication=no','-o','ConnectTimeout=8','-o','ForwardAgent=no','-o','ClearAllForwardings=yes',safe.hostAlias,
     `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`];
   const output=await invoke(args,'',65536);
   if(typeof output!=='string' || Buffer.byteLength(output)>65536)throw Error('Private SSH response limit');

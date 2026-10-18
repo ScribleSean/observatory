@@ -43,9 +43,21 @@ internal sealed class ShellBridgeHost(
     public void CopyInvitation(string invitation)
     {
         var owner = Owner;
-        if (owner.InvokeRequired) owner.Invoke(new Action(() => Clipboard.SetText(invitation)));
-        else Clipboard.SetText(invitation);
+        if (owner.InvokeRequired) owner.Invoke(new Action(() => WriteInvitationClipboard(invitation)));
+        else WriteInvitationClipboard(invitation);
     }
+
+    internal static DataObject InvitationClipboardData(string invitation)
+    {
+        var data = new DataObject();
+        data.SetText(invitation);
+        data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
+        data.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
+        data.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
+        return data;
+    }
+
+    internal static void WriteInvitationClipboard(string invitation) => Clipboard.SetDataObject(InvitationClipboardData(invitation), true);
 
     public Task RefreshAllowancesThenAll() => collector.RefreshAllowancesThenAll();
     public Task Refresh() => collector.Refresh();
