@@ -245,7 +245,7 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   if(!live.length)return {...base,status:'unavailable',windows:[],...sessionCost};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
   return {...base,...sessionCost,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
-    windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],
+    windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],checkedAt:new Date(window.observedAt*1000).toISOString(),
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
