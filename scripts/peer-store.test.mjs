@@ -1,3 +1,4 @@
+import {privateSyncDirectory} from './peer-directory.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,mkdir,readdir,symlink,stat} from 'node:fs/promises';
@@ -134,4 +135,32 @@ test('independent publishers allocate distinct sequences', {timeout:45000},async
   }));
   assert.deepEqual(sequences.sort((a,b)=>a-b),[2,3,4,5]);
   assert.equal((await readPeerState(runtime,config,now,'local')).revision.sequence,5);
+});
+
+for(const operation of ['read','write'])test(`empty private peer database recovers on ${operation}`,async t=>{
+  const runtime=await fixture(t);
+  const directory=await privateSyncDirectory(runtime,true);
+  await writeFile(path.join(directory,'state.sqlite'),'',{mode:0o600});
+  if(operation==='read')assert.equal(await readPeerState(runtime,config,now),null);
+  await acceptPeerState(runtime,record(1),config,now);
+  assert.deepEqual(await readPeerState(runtime,config,now),record(1));
+  await acceptPeerState(runtime,record(2),config,now);
+  assert.deepEqual(await readPeerState(runtime,config,now),record(2));
+});
+
+for(const kind of ['table','non-SQLite','schema-free'])test(`peer database refuses ${kind} file`,async t=>{
+  const runtime=await fixture(t);
+  const directory=await privateSyncDirectory(runtime,true);
+  const file=path.join(directory,'state.sqlite');
+  await writeFile(file,kind==='non-SQLite'?'synthetic invalid database':'',{mode:0o600});
+  if(kind!=='non-SQLite') {
+    const db=new DatabaseSync(file);
+    db.exec(kind==='table'?'CREATE TABLE other(value TEXT)':'PRAGMA user_version=1');
+    db.close();
+  }
+  const before=await readFile(file);
+  const error=kind==='non-SQLite'?/file is not a database/:/Invalid peer database schema/;
+  await assert.rejects(readPeerState(runtime,config,now),error);
+  await assert.rejects(acceptPeerState(runtime,record(1),config,now),error);
+  assert.deepEqual(await readFile(file),before);
 });

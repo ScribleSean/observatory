@@ -83,11 +83,9 @@ class SettingsCache:
         self.scanned_bytes = 0
         self.hits = 0
         file = root / 'events.sqlite'
-        created = False
         try:
             descriptor = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             os.close(descriptor)
-            created = True
         except FileExistsError:
             pass
         before = file.lstat()
@@ -108,13 +106,22 @@ class SettingsCache:
         self.db.execute('PRAGMA synchronous=FULL')
         self.db.execute('PRAGMA max_page_count=32768')
         schema = 'CREATE TABLE events (key TEXT PRIMARY KEY, signature TEXT NOT NULL, data TEXT NOT NULL)'
-        if created:
-            self.db.execute(schema)
-            self.db.execute('PRAGMA user_version=1')
-        objects = self.db.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").fetchall()
-        if self.db.execute('PRAGMA user_version').fetchone()[0] != 1 or self.db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete' or self.db.execute('PRAGMA page_size').fetchone()[0] != 4096 or objects != [('table', 'events', schema)]:
+        try:
+            if self.db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete' or self.db.execute('PRAGMA page_size').fetchone()[0] != 4096:
+                raise ValueError('Unsupported cache format')
+            self.db.execute('BEGIN IMMEDIATE')
+            objects = self.db.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").fetchall()
+            version = self.db.execute('PRAGMA user_version').fetchone()[0]
+            if before.st_size == 0 and not objects and version == 0:
+                self.db.execute(schema)
+                self.db.execute('PRAGMA user_version=1')
+                objects = self.db.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").fetchall()
+            if self.db.execute('PRAGMA user_version').fetchone()[0] != 1 or objects != [('table', 'events', schema)]:
+                raise ValueError('Unsupported cache format')
+            self.db.execute('COMMIT')
+        except Exception:
             self.db.close()
-            raise ValueError('Unsupported cache format')
+            raise
 
     @staticmethod
     def signature(info):
