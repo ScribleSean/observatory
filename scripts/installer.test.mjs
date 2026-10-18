@@ -86,7 +86,7 @@ test('installer writes registration after payload, envelope and shortcut success
   assert.ok(shortcut>envelopeEnd && shortcutCheck>shortcut);
   for(const write of writes)assert.ok(write.index>shortcutCheck);
 });
-test('installer refuses folders before checking uninstall command and subkeys',()=>{
+test('installer refuses folders before checking uninstall command, location and subkeys',()=>{
   const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
   const init=script.match(/^Function \.onInit\r?\n([\s\S]*?)^FunctionEnd/m)?.[1];
   assert.ok(init);
@@ -99,7 +99,17 @@ test('installer refuses folders before checking uninstall command and subkeys',(
     'check_registration:'
   ];
   assert.ok(init.includes(folders.join('\n  ')));
-  assert.match(init,/check_registration:\s+ClearErrors\s+ReadRegStr \$0 HKCU "\$\{UNINSTALL_KEY\}" "UninstallString"\s+StrCmp \$0 "" registration_subkeys existing_install/);
+  assert.match(init,/check_registration:\s+ClearErrors\s+ReadRegStr \$0 HKCU "\$\{UNINSTALL_KEY\}" "UninstallString"\s+StrCmp \$0 "" registration_location existing_install/);
+  const location=[
+    'registration_location:',
+    'ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"',
+    'StrCmp $0 "" registration_subkeys',
+    'StrCmp $0 "$INSTDIR" registration_subkeys',
+    'System::Call \'kernel32::GetFileAttributesW(w r0) i .r1\'',
+    'IntCmp $1 -1 registration_subkeys existing_install existing_install',
+    'registration_subkeys:'
+  ];
+  assert.ok(init.includes(location.join('\n  ')));
   assert.match(init,/registration_subkeys:\s+ClearErrors\s+EnumRegKey \$0 HKCU "\$\{UNINSTALL_KEY\}" 0\s+IfErrors new_install existing_install/);
   assert.match(init,/existing_install:\s+MessageBox [^\r\n]+\s+SetErrorLevel 14\s+Quit\s+new_install:\s*$/);
   assert.doesNotMatch(init,/EnumRegValue|DeleteReg(?:Key|Value)/);

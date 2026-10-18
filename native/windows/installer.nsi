@@ -108,7 +108,13 @@ Function .onInit
   check_registration:
   ClearErrors
   ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "UninstallString"
-  StrCmp $0 "" registration_subkeys existing_install
+  StrCmp $0 "" registration_location existing_install
+  registration_location:
+  ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
+  StrCmp $0 "" registration_subkeys
+  StrCmp $0 "$INSTDIR" registration_subkeys
+  System::Call 'kernel32::GetFileAttributesW(w r0) i .r1'
+  IntCmp $1 -1 registration_subkeys existing_install existing_install
   registration_subkeys:
   ClearErrors
   EnumRegKey $0 HKCU "${UNINSTALL_KEY}" 0
