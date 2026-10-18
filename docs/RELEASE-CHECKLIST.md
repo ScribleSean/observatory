@@ -1,8 +1,53 @@
 # Desktop release checklist
 
-Status reviewed September 26, 2026 UTC. A passing development-machine test is not a clean-install result. This checklist tracks the requested desktop release, not every future integration in the [roadmap](ROADMAP.md).
+Status reviewed October 18, 2026 UTC for build 43. A passing development-machine test is not a clean-install result. This checklist tracks the requested desktop release, not every future integration in the [roadmap](ROADMAP.md). The sections dated September 26, 2026 are kept below as the historical record of build 35 and earlier.
 
-## Current development state
+## Build 43, October 18, 2026 UTC
+
+Release candidate: 0.3.14, build 43, source `02555e8` (`native/Release.props`). The planned tag is `v0.3.14-build.43`, the form `native/update-appcast.mjs` uses. Nothing is tagged or published yet.
+
+Installed revisions:
+
+- Mac: build 43 from `02555e8`, installed on October 17, 2026 by replacing build 42 with a recoverable copy kept beside it. The installed `build-info.json` names `02555e8` with `sourceDirty` false. The main binary declares macOS 14.0 and the 26.5 SDK.
+- Windows PC: build 42 from `a5a1d3c`, installed on October 16, 2026. Build 43 is not installed on the PC.
+
+Neither install has a section in [the state record](STATE.md) yet.
+
+The checks of "What done means" in [the build plan](BUILD-PLAN.md) and the README checklist on issue 105 have not been run against build 43 on either device. Their results go in [the state record](STATE.md), not here.
+
+### Release steps
+
+Each step names what was done for build 43. "Not run" means the step has not happened.
+
+1. **Script suite on the exact revision.** Run `script-suite.yml` on the release revision on both hosted runners. Build 43: run 38994239128, dispatched on `main` at `02555e8`, succeeded.
+2. **Windows package, gated on that suite.** Dispatch `windows-package.yml` on the same revision with installer verification on. Before it builds, it refuses a commit that has no successful Script suite run (push or dispatch) for the same SHA. It uploads the installer and package as workflow artifacts kept for one day only. Download the installer artifact the same day and check its ZIP digest against the one in the run log, the setup file against its `.sha256` sidecar, and `installer-build.json` (version, build number, source revision, clean, not a test identity). Build 43: run 38996117293 succeeded at `02555e8` on October 17, 2026, but its artifacts expired before they were downloaded. A new package run at the same revision is needed, and the PC installs that file. A rebuild is a new file even at the same revision, so its digests are recorded fresh and the expired run's values are never reused.
+3. **Mac build on the Mac.** From a clean worktree at the release revision, build with the macOS 26.5 SDK and package the ZIP:
+
+   ```sh
+   SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk node native/build.mjs
+   node native/mac/package.mjs --bundle "<bundle named in .native-build/app.json>" --output "<folder>" --zip-only
+   ```
+
+   Build 43: `Observatory-0.3.14-macos-arm64.zip`, 66,394,917 bytes, SHA-256 `d792b69a7feb7c5bbff84b981ad4b7ceb5033c9180790fb9ff18a3adddf3f37e`. `zip-verification.json` names source `02555e8` and lists the source-clean, privacy-scan, full-file-manifest, nested-signatures, ZIP round-trip and relocated collector, WebKit and window-lifecycle checks. It is ad hoc signed, not notarized, ZIP only (no DMG).
+4. **Install the release files on both devices.** Each device installs the exact file that will be published, matched by SHA-256 in its install record. Build 43: installed on the Mac from the build 43 package. The SHA-256 match between the installed bundle and the ZIP above is not yet in an install record. Not run on the PC.
+5. **Dependency review.** Record a dated review of the current lock file in [the security notes](../SECURITY.md), and repeat it if the lock file changes before publication. Build 43: the npm review of October 18, 2026 found no advisory in a shipped package. The NuGet query has not run on the PC yet.
+6. **One checksum file.** Write `SHA256SUMS.txt` with one line for each asset, then check it with `shasum -a 256 -c` on the Mac and with the install guide's `Get-FileHash` snippet on the PC. Repeat both checks against the published file after publication. Build 43: not run, because the Windows installer has to be rebuilt.
+7. **Unsigned warnings.** The Mac build is ad hoc signed and not notarized, and the Windows installer is unsigned. The install guides say so and give the supported steps: [Open an unsigned app](MAC.md#open-an-unsigned-app) for Gatekeeper and [Run an unsigned installer](WINDOWS.md#run-an-unsigned-installer) for SmartScreen. Neither tells people to turn off a system protection. The exact warning text is recorded in the guides after a browser download of the published assets. Build 43: guides written, warning text not yet recorded.
+8. **Tag.** An annotated tag on the installed revision, not on a later `main`. Build 43: not run.
+9. **Draft release, checked, then published once.** Create the GitHub release as a draft with the two assets and `SHA256SUMS.txt`, and check each asset's name, size and `sha256:` digest against `SHA256SUMS.txt` before publishing. If something is wrong after publishing, return the release to draft and report. Deleting a release, tag or asset needs the owner. Nothing else is published: no update feed, no appcast and no DMG. Build 43: not run.
+10. **Demo deploy.** Dispatch `demo.yml` on `main` once. The deploy step must read `success`, not `skipped` (it skips when `main` moved during the run). Then check the live `build-info.json` revision, its fixture digest against `local/usage.json`, and its asset digests against the published files. The demo builds from `main`'s head, which can be later than the release revision. Build 43: not run.
+
+### Gates still open for build 43
+
+- Build 43 installed and checked on the PC, from a new package run (step 2).
+- "What done means" verified on both devices against installed build 43, including Tailscale pairing with a pasted invitation between the installed apps (P1-6). That pairing has passed only in the synthetic two-device harness (P1-4). The existing SSH pairing stays until it passes.
+- The NuGet vulnerable-package query on the PC (step 5).
+- The runtime review that the September 13 section of [the security notes](../SECURITY.md) names as a gate on final publication. It is archived and has not been repeated for build 43.
+- Clean-machine installation and first launch on each platform. The development devices are not clean machines.
+- Signing and notarization. The release ships with the unsigned-app warnings described in step 7.
+- Automatic updates. No production update feed, keys or appcast exist, and none is published with this release. See [desktop updates](UPDATES.md).
+
+## Build 35 state, September 26, 2026 (historical)
 
 Both development apps run **0.3.13, build 35**, with Mac source `ced6698` and Windows source `7c7ae25` retaining identical production application code. Mac local Claude and Antigravity checks passed, and its 14:44 UTC publication read **15 of 15 configured sources**. This does not establish coverage of every provider or combined totals. Missing readings remain Unknown.
 
@@ -38,7 +83,7 @@ The table below retains revision-specific historical evidence. Older installed o
 
 Binary candidates retain their embedded source revisions even when later source-only changes are synced. Never relabel an older artifact as a newer build. Rebuild and reverify affected binaries before final publication.
 
-## Required release gates still open
+## Release gates as of September 26, 2026 (historical)
 
 The recorded development installations supersede the older installation blockers. The remaining gates below still require evidence beyond those successful upgrades.
 
