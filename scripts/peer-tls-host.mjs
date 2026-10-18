@@ -1,6 +1,6 @@
 import {X509Certificate} from 'node:crypto';
 import {constants} from 'node:fs';
-import {lstat,open,unlink} from 'node:fs/promises';
+import {lstat,open,unlink,rmdir} from 'node:fs/promises';
 import path from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {createPairingConfigurations,validatePairing,readPairing} from './peer-pairing.mjs';
@@ -136,9 +136,17 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
       if(!pending || pending.claimId!==claimId || listener.pending()?.claimId!==claimId ||
         !current || fingerprint(current.cert)!==localFingerprint ||
         request?.localEndpoint?.address!==address)throw fail();
+      // Refuse a malformed request before the claim, so it does not use up the invitation.
+      try {
+        if(validatePeerTransport(request.localEndpoint).kind!=='tls' ||
+          validatePeerTransport(request.peerEndpoint).kind!=='tls')throw fail();
+      } catch {throw fail();}
+      const directory=path.join(runtime,'private-sync');
+      let directoryExisted=true;
+      try {await lstat(directory);}catch(error){if(error.code!=='ENOENT')throw fail();directoryExisted=false;}
       const handle=listener.claimSetup(claimId),created=new Map();
       try {
-        const directory=path.join(runtime,'private-sync'),absent=[];
+        const absent=[];
         for(const name of ['pairing.json','tls-trust.json',offerFile]) {
           const filename=path.join(directory,name);
           try {await lstat(filename);}catch(error){if(error.code!=='ENOENT')throw error;absent.push(filename);}
@@ -174,6 +182,9 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
               current.dev===identity.dev && current.ino===identity.ino)await unlink(filename);
           }));
           if(rollback.some(result=>result.status==='rejected'))throw fail();
+          // A private-sync folder this confirmation created is removed only when it is empty again,
+          // so a shell does not read it as an existing pairing.
+          if(!directoryExisted)await rmdir(directory).catch(error=>{if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(error.code))throw fail();});
         } finally {await listener.cancel();}
         throw fail();
       }

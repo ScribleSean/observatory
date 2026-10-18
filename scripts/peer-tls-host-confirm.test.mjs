@@ -80,6 +80,11 @@ test('host confirmation claims before committing and rolls back refused publicat
         for(const name of names)assert.ok(existsSync(file(name)));
       } else {
         await assert.rejects(host.confirm(claimId,mode==='prepare failure'?{...input,peerEndpoint:{}}:input));
+        // A malformed request is refused before the claim, so the invitation stays confirmable.
+        if(mode==='prepare failure')assert.equal(host.pending()?.claimId,claimId);
+        // A private-sync folder created by the refused confirmation does not stay behind.
+        if(!['existing pairing','existing all','partial prepare failure','prepare failure'].includes(mode))
+          assert.equal(existsSync(path.join(runtime,'private-sync')),mode==='replacement');
         for(const name of names) {
           if(existing.has(name)) {
             assert.deepEqual(await readFile(file(name)),existing.get(name).bytes);
