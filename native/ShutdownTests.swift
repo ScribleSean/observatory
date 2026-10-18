@@ -83,3 +83,65 @@ private func testModalChildDrain(root: URL) {
     }
     precondition(drained == true && !collecting.refreshing && !child.isRunning)
 }
+
+@MainActor
+func testPairingQuitDrain() {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("observatory-pairing-quit-" + UUID().uuidString)
+    do { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false) }
+    catch { preconditionFailure("Pairing quit fixture could not be created") }
+    defer { try? FileManager.default.removeItem(at: root) }
+    for stopped: Bool? in [true, nil, false] {
+        let store = ObservatoryStore(runtime: root.appendingPathComponent(UUID().uuidString), collectionAllowed: false)
+        store.pairingMaintenance = true
+        var open = true
+        var closeCompleted = false
+        var drained: Bool?
+        let timeout: TimeInterval = stopped == nil ? 0.2 : 2
+        let started = ProcessInfo.processInfo.systemUptime
+        store.drainForQuit(timeout: timeout, closePairing: {
+            precondition(store.shuttingDown && store.pairingMaintenance)
+            open = false
+            guard let stopped else { return }
+            // Fake the asynchronous closeAndWait completion on the termination run loop.
+            let close = Timer(timeInterval: 0.05, repeats: false) { _ in
+                MainActor.assumeIsolated {
+                    precondition(store.pairingMaintenance && drained == nil)
+                    store.directPairingClosed(stopped: stopped)
+                    closeCompleted = true
+                }
+            }
+            RunLoop.main.add(close, forMode: .modalPanel)
+        }) { drained = $0 }
+        precondition(!open && !closeCompleted && store.pairingMaintenance && drained == nil)
+        let deadline = Date().addingTimeInterval(3)
+        while drained == nil && Date() < deadline {
+            RunLoop.main.run(mode: .modalPanel, before: Date().addingTimeInterval(0.05))
+        }
+        let elapsed = ProcessInfo.processInfo.systemUptime - started
+        precondition(!open)
+        if let stopped {
+            precondition(drained == true && closeCompleted && !store.pairingMaintenance && store.shuttingDown)
+            precondition(store.collectionPausedForPairing == !stopped && elapsed < 1)
+        } else {
+            precondition(drained == false && !closeCompleted && store.pairingMaintenance && !store.shuttingDown)
+            precondition(!store.collectionPausedForPairing && elapsed >= timeout && elapsed < 1)
+        }
+    }
+    let refused = ObservatoryStore(runtime: root.appendingPathComponent("refused"), collectionAllowed: false)
+    var closeCalls = 0
+    var result: Bool?
+    refused.drainForQuit(timeout: 0, closePairing: { closeCalls += 1 }) { result = $0 }
+    precondition(result == false && closeCalls == 0 && !refused.shuttingDown)
+    refused.drainForQuit(timeout: 2) { result = $0 }
+    result = nil
+    refused.drainForQuit(closePairing: { closeCalls += 1 }) { result = $0 }
+    precondition(result == false && closeCalls == 0 && refused.shuttingDown)
+    // Finish the accepted drain before removing its fixture.
+    result = nil
+    let deadline = Date().addingTimeInterval(3)
+    while result == nil && Date() < deadline {
+        RunLoop.main.run(mode: .modalPanel, before: Date().addingTimeInterval(0.05))
+    }
+    precondition(result == true)
+    print("Pairing quit drain: 5 passed, 0 failed, 0 skipped")
+}
