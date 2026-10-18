@@ -87,7 +87,8 @@ test('installer writes registration after payload, envelope and shortcut success
   for(const write of writes)assert.ok(write.index>shortcutCheck);
 });
 test('installer refuses folders before checking uninstall command, location and subkeys',()=>{
-  const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
+  // Windows checkouts may use CRLF line endings. Compare the text with LF only.
+  const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8').replace(/\r\n/g,'\n');
   const init=script.match(/^Function \.onInit\r?\n([\s\S]*?)^FunctionEnd/m)?.[1];
   assert.ok(init);
   const folders=[
