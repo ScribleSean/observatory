@@ -1738,6 +1738,14 @@ internal sealed class BridgeHandler : IDisposable
                 shape = unknown.DeepClone().AsObject(); shape["sharing"]![channel] = new JsonObject();
                 Check(!ValidStatusShape(shape), "Broken sharing channel accepted");
             }
+            locked.Dispose();
+            unread.RefreshFilesNow();
+            Check(unread.Status().Value!["limitsConsent"]!.GetValue<bool>(), "Consent recovered after first locked read");
+            unreadHost.CollectorBusy = false; unreadHost.SharingThrows = false;
+            await unread.RefreshSharing(0); await unread.RefreshSharing(1);
+            var recovered = unread.Status().Value!;
+            foreach (var channel in new[] { "codex-limits", "claude-code-tokens" })
+                Check(JsonNode.DeepEquals(recovered["sharing"]![channel], SharingValue(new(false, true, "ready", new string('a', 64)))), "Sharing recovered after first failed read");
         }
         using var local = new TestDriver(root);
         var initial = (await local.Run("status"))["value"]!;
