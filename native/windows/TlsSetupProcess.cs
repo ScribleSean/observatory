@@ -215,7 +215,6 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
             foreach (var item in pending) item.Value.TrySetException(new InvalidOperationException("Setup process stopped."));
             pending.Clear();
         }
-        try { process.StandardInput.Close(); } catch { }
         _ = ForceStopAfter(TimeSpan.FromSeconds(2));
     }
 
@@ -223,6 +222,15 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
     {
         try
         {
+            // Close input only between command writes, so a write in progress cannot keep it open.
+            var held = false;
+            try
+            {
+                held = await writer.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+                process.StandardInput.Close();
+            }
+            catch { }
+            finally { if (held) writer.Release(); }
             using var timeout = new CancellationTokenSource(grace);
             try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
             catch (OperationCanceledException) when (timeout.IsCancellationRequested)

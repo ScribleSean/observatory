@@ -53,6 +53,22 @@ jobs:
             node --test scripts/verify-installation.test.mjs
             if ($LASTEXITCODE -ne 0) { throw 'Native updater script integration failed.' }
           } finally { Remove-Item Env:OBSERVATORY_TEST_UPDATE_EXTRACTOR }
+      - name: Verify setup helper bridge and graceful stop
+        shell: pwsh
+        run: |
+          $app = (Resolve-Path native-test).Path
+          $collector = Join-Path $app 'Collector'
+          New-Item -ItemType Directory -Path $collector -Force -ErrorAction Stop | Out-Null
+          Copy-Item -LiteralPath (Resolve-Path scripts).Path -Destination $collector -Recurse -ErrorAction Stop
+          $node = (Get-Command node).Source
+          # The control script refuses a runtime path that is not already canonical, such as a short 8.3 temp path.
+          $env:TEMP = $env:RUNNER_TEMP
+          $env:TMP = $env:RUNNER_TEMP
+          foreach ($flag in @('--test-tls-setup-bridge', '--test-tls-identity-bridge')) {
+            $test = Start-Process -FilePath (Join-Path $app 'WorkspaceObservatory.exe') -ArgumentList @($flag, $node) -PassThru -NoNewWindow
+            if (-not $test.WaitForExit(120000)) { $test.Kill(); throw "$flag timed out." }
+            if ($test.ExitCode -ne 0) { throw "$flag failed." }
+          }
   macos:
     runs-on: macos-14
     timeout-minutes: 10
