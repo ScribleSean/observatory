@@ -203,6 +203,13 @@ internal sealed class Collector : IDisposable
         var status = new JsonObject { ["state"] = state, ["intervalSeconds"] = 300 };
         status[state == "running" ? "startedAt" : "finishedAt"] = DateTimeOffset.UtcNow.ToString("O");
         if (quotaOnly) status["mode"] = "allowances-only";
+        if (state == "failed" && !quotaOnly)
+        {
+            var previousFile = Snapshot.DashboardFile(runtime, "collector.json");
+            var previous = previousFile is null ? null : Snapshot.Read(previousFile);
+            if (Snapshot.Text(previous?["state"]) == "failed" && Snapshot.Text(previous?["reason"]) == "snapshot-too-large")
+                status["reason"] = "snapshot-too-large";
+        }
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, status.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -359,6 +366,21 @@ internal sealed class Collector : IDisposable
             }
             if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change." || Directory.GetFiles(local, "*.tmp").Length != 0)
                 throw new Exception("Allowance attempt changed full collection status or left temporary files.");
+            foreach (var input in new[] {
+                "{\"state\":\"failed\",\"reason\":\"snapshot-too-large\",\"bytes\":17000000,\"private\":\"synthetic secret\"}",
+                "{\"state\":\"failed\",\"reason\":\"synthetic secret\"}",
+                "{\"state\":\"ok\",\"reason\":\"snapshot-too-large\"}",
+                "{\"state\":\"failed\",\"reason\":42}", "null", "{" })
+            {
+                File.WriteAllText(heavyStatus, input);
+                WriteAttemptStatus(root, false, "failed");
+                var attempt = Snapshot.Read(heavyStatus);
+                var expected = input.Contains("\"bytes\"") ? "snapshot-too-large" : "Unknown";
+                if (Snapshot.Text(attempt?["state"]) != "failed" || Snapshot.Text(attempt?["reason"]) != expected ||
+                    attempt is null || attempt.Count != (expected == "Unknown" ? 3 : 4))
+                    throw new Exception("Collector failure reason was not restricted to the allowlist.");
+            }
+            File.WriteAllText(heavyStatus, "Full collection freshness must not change.");
             using var collector = new Collector(root);
             collector.RequestResumeRefresh();
             collector.RequestResumeRefresh();

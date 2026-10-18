@@ -7,6 +7,7 @@ import os
 import pathlib
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,35 @@ def write_status(folder, value, name='collector.json'):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def failure_reason(folder):
+    try:
+        if folder.is_symlink() or folder.parent.is_symlink():
+            return None
+        file = folder / 'collector.json'
+        entry = file.lstat()
+        if not stat.S_ISREG(entry.st_mode) or entry.st_size > 16_000_000:
+            return None
+        handle = os.open(file, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(handle, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_size > 16_000_000
+                    or (info.st_dev, info.st_ino) != (entry.st_dev, entry.st_ino)):
+                return None
+            raw = stream.read(info.st_size + 1)
+            after = os.fstat(stream.fileno())
+            named = file.lstat()
+            if (len(raw) != info.st_size or after.st_size != info.st_size
+                    or after.st_mtime_ns != info.st_mtime_ns or not stat.S_ISREG(named.st_mode)
+                    or (named.st_dev, named.st_ino) != (info.st_dev, info.st_ino)):
+                return None
+        value = json.loads(raw)
+        if isinstance(value, dict) and value.get('state') == 'failed' and value.get('reason') == 'snapshot-too-large':
+            return 'snapshot-too-large'
+    except (OSError, ValueError, RecursionError):
+        pass
+    return None
 
 
 def stop_child(child):
@@ -118,6 +148,9 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
             if child is not None:
                 stop_child(child)
             state['state'] = 'failed'
+            reason = failure_reason(folder) if child is not None and not quota_only else None
+            if reason is not None:
+                state['reason'] = reason
         state['finishedAt'] = stamp()
         write_status(folder, state, status_name)
         return state['state']

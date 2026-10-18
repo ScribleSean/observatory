@@ -41,6 +41,36 @@ test('failure preserves the preceding snapshot and records no error text',async 
   assert.equal(run(root),'failed');assert.equal(await readFile(path.join(root,'public/local/usage.json'),'utf8'),'previous snapshot');
   assert.equal((await status(root)).state,'failed');
 });
+test('runner carries only the allowlisted failed collector reason',async t=>{
+  for(const [value,keep] of [
+    [{state:'failed',reason:'snapshot-too-large',bytes:17000000,private:'synthetic secret'},true],
+    [{state:'failed',reason:'synthetic secret'},false],
+    [{state:'ok',reason:'snapshot-too-large'},false],
+    [{state:'failed',reason:42},false],
+    [null,false],
+  ]) {
+    const root=await fixture(t,`require('fs').writeFileSync('public/local/collector.json',${JSON.stringify(JSON.stringify(value))})
+process.exit(1)`);
+    assert.equal(run(root),'failed');
+    const result=await status(root);
+    assert.equal(result.reason,keep?'snapshot-too-large':undefined);
+    assert.deepEqual(Object.keys(result).sort(),['state','startedAt','finishedAt','intervalSeconds','maxRunSeconds',...(keep?['reason']:[])].sort());
+  }
+});
+test('runner ignores malformed, oversized and linked refusal status',async t=>{
+  for(const script of [
+    `fs.writeFileSync('public/local/collector.json','{')`,
+    `fs.writeFileSync('public/local/collector.json',JSON.stringify({state:'failed',reason:'snapshot-too-large',padding:'x'.repeat(16_000_000)}))`,
+    `fs.writeFileSync('synthetic-status.json',JSON.stringify({state:'failed',reason:'snapshot-too-large'}))
+fs.unlinkSync('public/local/collector.json')
+fs.symlinkSync('../../synthetic-status.json','public/local/collector.json')`,
+  ]) {
+    const root=await fixture(t,`const fs=require('fs')
+${script}
+process.exit(1)`);
+    assert.equal(run(root),'failed');assert.equal((await status(root)).reason,undefined);
+  }
+});
 test('a partial optional source prevents an all-sources-success status',async t=>{
   const root=await fixture(t,success.replace("settings:[]","settings:[],agentSource:{status:'partial'}"));
   assert.equal(run(root),'partial');

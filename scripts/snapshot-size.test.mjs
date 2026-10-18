@@ -64,6 +64,33 @@ test('history drops whole oldest dates across hosts and keeps newest rows intact
   }
   assert.deepEqual(data.current,before.current);
 });
+test('non-history above budget preserves all dates below the hard limit',()=>{
+  const data={synthetic:'x'.repeat(snapshotHistoryBudget+1),activityHistory:maximalHistory().map(host=>({...host,days:host.days.slice(-2)}))};
+  const before=JSON.stringify(data),result=serializeSnapshot(data);
+  assert.ok(result.bytes<snapshotMaximumBytes);
+  assert.equal(result.text,before);assert.equal(JSON.stringify(data),before);
+});
+test('non-history above budget drops only the oldest dates needed for the hard limit',()=>{
+  const days=[3,2,1,0].map(index=>({date:date(index),synthetic:'x'.repeat(1_000_000),seconds:null}));
+  const data={synthetic:'x'.repeat(13_000_000),activityHistory:[{host:'Mac',status:'ok',days}]};
+  const result=serializeSnapshot(data);
+  assert.ok(result.bytes<=snapshotMaximumBytes);assert.ok(result.bytes>snapshotHistoryBudget);
+  assert.deepEqual(data.activityHistory[0].days,days.slice(2));
+  assert.ok(Buffer.byteLength(JSON.stringify({...data,activityHistory:[{host:'Mac',status:'ok',days:days.slice(1)}]}))>snapshotMaximumBytes);
+});
+test('exact budget boundary stops trimming and empty hosts use retained history status',()=>{
+  const days=[{date:date(1),seconds:null},{date:date(0),seconds:null}];
+  const data={synthetic:'',activityHistory:[{host:'Mac',status:'ok',days:days.slice(0,1)},
+    {host:'Windows',status:'ok',days}]};
+  const emptyStatus=retainActivityHistory([],[],at).find(host=>host.host==='Mac').status;
+  const expected={...data,activityHistory:[{host:'Mac',status:emptyStatus,days:[]},
+    {host:'Windows',status:'ok',days:days.slice(1)}]};
+  data.synthetic='x'.repeat(snapshotHistoryBudget-Buffer.byteLength(JSON.stringify(expected)));
+  expected.synthetic=data.synthetic;
+  const result=serializeSnapshot(data);
+  assert.equal(result.bytes,snapshotHistoryBudget);assert.deepEqual(data,expected);
+  assert.equal(result.text,JSON.stringify(expected));
+});
 test('missing history fields stay missing when dates are trimmed',()=>{
   const data={activityHistory:maximalHistory()};
   delete data.activityHistory[0].days.at(-1).trackedHours;
@@ -89,6 +116,7 @@ test('refusal leaves previous bytes untouched and never preserves the replacemen
     assert.equal(preserved,false);assert.deepEqual(await readFile(path.join(folder,'usage.json')),previous);
     const status=JSON.parse(await readFile(path.join(folder,'collector.json'),'utf8'));
     assert.equal(status.state,'failed');assert.equal(status.reason,'snapshot-too-large');assert.equal(status.startedAt,at);
+    assert.equal(status.intervalSeconds,300);assert.equal(status.maxRunSeconds,240);
     assert.ok(Number.isFinite(Date.parse(status.finishedAt)));assert.equal(status.bytes,Buffer.byteLength(JSON.stringify(data)));
     assert.equal(data.activityHistory[0].days.length,0);
   } finally {await rm(folder,{recursive:true,force:true});}
