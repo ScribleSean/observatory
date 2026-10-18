@@ -7,7 +7,34 @@ import math
 import pathlib
 import re
 import sys
+import time
 from zoneinfo import ZoneInfo
+
+MAX_FILES = 100_000
+MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+MAX_LINES = 3_000_000
+MAX_LINE_BYTES = 8_000_000
+MAX_READ_SECONDS = 45
+
+
+class ReadBudget:
+    """Count actual session reads, including inventory reads and retries."""
+    def __init__(self):
+        self.started = time.monotonic()
+        self.bytes = 0
+        self.lines = 0
+
+    def check(self):
+        if time.monotonic() - self.started > MAX_READ_SECONDS:
+            raise ValueError('Read time limit')
+
+    def charge(self, data, new_line=True):
+        self.check()
+        self.bytes += len(data)
+        self.lines += int(bool(data) and new_line)
+        if self.bytes > MAX_TOTAL_BYTES or self.lines > MAX_LINES:
+            raise ValueError('Session read limit')
+
 
 FIELDS = ['input_tokens', 'cached_input_tokens', 'cache_write_input_tokens', 'output_tokens', 'reasoning_output_tokens', 'total_tokens']
 EFFORTS = {'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'}
@@ -34,7 +61,7 @@ def inventory_metadata(meta, salt):
     parents = keys([payload.get('forked_from_id'), payload.get('parent_thread_id')])
     return dict(keys=owned, parents=parents) if owned else None
 
-def summarize(events, cutoff, retained=None, seen=None, hour_totals=None):
+def summarize(events, cutoff, retained=None, seen=None, hour_totals=None, read_budget=None):
     model, effort, speed = 'unknown', 'unknown', 'unknown'
     context_model = None
     selected_model = 'unknown'
@@ -44,6 +71,8 @@ def summarize(events, cutoff, retained=None, seen=None, hour_totals=None):
     profiles, tools = {}, {}
     seen_calls = set()
     for event in events:
+        if read_budget:
+            read_budget.check()
         p = event.get('payload') or {}
         if not isinstance(p, dict):
             continue
@@ -143,21 +172,29 @@ def summarize(events, cutoff, retained=None, seen=None, hour_totals=None):
                 row[dest] += value
     return list(profiles.values()), [dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in tools.items()]
 
-def summarize_sessions(sessions, cutoff, cache, lineages):
+def summarize_sessions(sessions, cutoff, cache, lineages, read_budget):
     profiles, tools, retained, seen, hour_totals = {}, {}, {}, {}, {}
     for identity, (file, info) in sorted(sessions.items()):
         def events():
-            with file.open(encoding='utf-8') as stream:
-                for line in stream:
-                    if len(line) > 8_000_000:
+            with file.open('rb') as stream:
+                skipping = False
+                while True:
+                    read_budget.check()
+                    line = stream.readline(MAX_LINE_BYTES + 1)
+                    if not line:
+                        break
+                    read_budget.charge(line, not skipping)
+                    if skipping or len(line) > MAX_LINE_BYTES:
+                        skipping = not line.endswith(b'\n')
                         continue
+                    line = line.decode('utf-8')
                     try:
                         row = json.loads(line)
                         if isinstance(row, dict):
                             yield row
                     except ValueError:
                         pass
-        rows, calls = summarize(cache.events(file, info) if cache else events(), cutoff, retained, seen.setdefault(lineages[identity], set()), hour_totals)
+        rows, calls = summarize(cache.events(file, info) if cache else events(), cutoff, retained, seen.setdefault(lineages[identity], set()), hour_totals, read_budget)
         for row in rows:
             key = (row['date'], row['model'], row['effort'], row['speed'])
             if key not in profiles:
@@ -171,14 +208,18 @@ def summarize_sessions(sessions, cutoff, cache, lineages):
     return profiles, tools, retained, hour_totals
 
 
-def collect(folder, *, retry_cache=True, cache_budget=None):
+def collect(folder, *, retry_cache=True, cache_budget=None, read_budget=None):
+    read_budget = read_budget if read_budget is not None else ReadBudget()
+    read_budget.check()
     root = pathlib.Path(folder).resolve(strict=True)
     cutoff = dt.datetime.now(dt.timezone.utc)-dt.timedelta(days=8)
     candidates = []
     for name in ('sessions', 'archived_sessions'):
-        candidates.extend((root/name).rglob('*.jsonl'))
-    if len(candidates) > 20000:
-        raise ValueError('Too many files')
+        for file in (root/name).rglob('*.jsonl'):
+            read_budget.check()
+            candidates.append(file)
+            if len(candidates) > MAX_FILES:
+                raise ValueError('Too many files')
     sessions, lineages, selected_metadata = {}, {}, {}
     def lineage(identity):
         lineages.setdefault(identity, identity)
@@ -189,12 +230,15 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
     inventory = dict(status='ok', keys=set(), parents=set())
     salt = globals().get('INVENTORY_SALT')
     for file in candidates:
+        read_budget.check()
         if file.is_symlink() or not file.resolve().is_relative_to(root):
             inventory['status'] = 'incomplete'
             continue
         info = file.stat()
-        with file.open(encoding='utf-8') as stream:
+        with file.open('rb') as stream:
             first = stream.readline(1_000_000)
+            read_budget.charge(first)
+        first = first.decode('utf-8')
         try:
             meta = json.loads(first)
         except ValueError:
@@ -215,16 +259,17 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
             sessions[identity] = (file,info)
             selected_metadata[identity] = payload if isinstance(payload, dict) else {}
     for identity, payload in selected_metadata.items():
+        read_budget.check()
         lineage(identity)
         for parent in (payload.get('forked_from_id'), payload.get('parent_thread_id')):
             if isinstance(parent, str) and parent:
                 lineages[lineage(identity)] = lineage(parent)
-    budget = globals().get('CACHE_SCAN_BUDGET', 1_000_000_000) if cache_budget is None else cache_budget
+    budget = globals().get('CACHE_SCAN_BUDGET', MAX_TOTAL_BYTES) if cache_budget is None else cache_budget
     cache = SettingsCache(globals()['CACHE_DIRECTORY'], budget) if globals().get('CACHE_DIRECTORY') else None
-    if not cache and sum(info.st_size for _,info in sessions.values()) > 1_000_000_000:
-        raise ValueError('Report exceeds scan budget')
+    if cache:
+        cache.read_budget = read_budget
     try:
-        profiles, tools, retained, hour_totals = summarize_sessions(sessions, cutoff, cache, {identity: lineage(identity) for identity in sessions})
+        profiles, tools, retained, hour_totals = summarize_sessions(sessions, cutoff, cache, {identity: lineage(identity) for identity in sessions}, read_budget)
     finally:
         if cache:
             cache.close()
@@ -234,11 +279,12 @@ def collect(folder, *, retry_cache=True, cache_budget=None):
             # second attempt shares the original byte budget and never returns
             # an incomplete first-pass total as a successful report.
             if retry_cache and cache.remaining > 0:
-                return collect(folder, retry_cache=False, cache_budget=cache.remaining)
+                return collect(folder, retry_cache=False, cache_budget=cache.remaining, read_budget=read_budget)
             raise ValueError('Private Codex cache warming; complete report unavailable')
     result = dict(status='ok',profiles=list(profiles.values()),tokenProfiles=list(retained.values()),hourTotals=[dict(date=date,hours=hours) for date,hours in sorted(hour_totals.items())],tools=[dict(date=d,category=c,tool=t,namespace=s,count=n) for (d,c,t,s),n in sorted(tools.items())],scope='Recent saved Codex logs only')
     if salt:
         result['inventory'] = {k:sorted(v) if isinstance(v,set) else v for k,v in inventory.items()}
+    read_budget.check()
     return result
 
 if __name__ == '__main__':
