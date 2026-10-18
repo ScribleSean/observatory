@@ -66,6 +66,18 @@ test('retirement checkpoint preserves bytes, private mode and the legacy folder'
   assert.equal(fs.statSync(path.join(f.target,relative)).mode&0o777,0o700);
   assert.deepEqual(snapshot(f.legacy),before);
 });
+test('retirement checkpoint hardlinks refuse with bounded entry names',mac,t=>{
+  const f=fixture(t),relative='.runtime/private-repair',source=path.join(f.root,'synthetic-receipt.json');
+  fs.mkdirSync(path.join(f.legacy,relative),{recursive:true,mode:0o700});
+  fs.writeFileSync(source,'{"synthetic":"receipt"}\n',{mode:0o600});
+  fs.linkSync(source,path.join(f.legacy,relative,'retirement-receipt.json'));
+  assert.throws(()=>migrateDataFolder(f),error=>{
+    assert.match(error.message,/Private file has multiple links/);
+    assert.doesNotMatch(error.message,/retirement-receipt\.json/);
+    return true;
+  });
+  assert.equal(fs.existsSync(f.target),false);
+});
 test('backup bundle links retain their text and report destinations outside Backups',mac,t=>{
   const f=fixture(t),bundle='Backups/Old.app.backup',versions=bundle+'/Sparkle.framework/Versions';
   fs.mkdirSync(path.join(f.legacy,versions,'A'),{recursive:true});
