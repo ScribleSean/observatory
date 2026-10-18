@@ -2,7 +2,7 @@ import {lstat,readdir,open,rename} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
-import {readDeviceIdentity,initializeDeviceIdentity,validateDeviceIdentity} from './peer-device-identity.mjs';
+import {readDeviceIdentity,initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {withPeerStateLock} from './peer-lock.mjs';
 
 async function assertNewDevice(runtime) {
@@ -29,7 +29,10 @@ async function repairableIdentity(runtime) {
       try {
         const {bytesRead}=await file.read(bytes,0,bytes.length,0),after=await file.stat();
         if(bytesRead!==before.size || after.size!==before.size || after.mtimeMs!==before.mtimeMs)return false;
-        try {validateDeviceIdentity(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,bytesRead))));}
+        // Only what an interrupted write can leave: no bytes, or bytes that are not
+        // complete UTF-8 JSON. A parseable identity that fails validation, such as
+        // an expired certificate or a newer format, still needs explicit recovery.
+        try {JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,bytesRead)));}
         catch {return true;}
         return false;
       } finally {bytes.fill(0);}

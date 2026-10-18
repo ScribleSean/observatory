@@ -18,7 +18,7 @@ test('explicit repair preserves only eligible damaged identities',{skip:!existsS
   execFileSync(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-sha256','-keyout',key,
     '-out',cert,'-days','1','-subj','/CN=Observatory synthetic identity'],{stdio:'ignore',timeout:15000});
   const identity={version:1,key:await readFile(key,'utf8'),cert:await readFile(cert,'utf8')};
-  for(const kind of ['empty folder','empty file','truncated JSON','invalid identity','extra file','valid identity','existing pairing','symbolic link','linked file','oversized file']) {
+  for(const kind of ['empty folder','empty file','truncated JSON','invalid UTF-8','invalid identity','newer version','unusable identity','extra file','valid identity','existing pairing','symbolic link','linked file','oversized file']) {
     await t.test(kind,{skip:process.platform==='win32' && ['symbolic link','linked file'].includes(kind)},async()=>{
       const runtime=await mkdtemp(path.join(root,'runtime-'));
       const folder=path.join(runtime,'private-device-identity');
@@ -28,8 +28,10 @@ test('explicit repair preserves only eligible damaged identities',{skip:!existsS
         await symlink(target,folder);
       } else {
         await privateCollectorDirectory(runtime,'private-device-identity',true);
-        if(['empty file','truncated JSON','invalid identity','oversized file'].includes(kind))
-          await writeFile(path.join(folder,'identity.json'),kind==='empty file'?'':kind==='truncated JSON'?'{':kind==='invalid identity'?'{}':'x'.repeat(32769),{mode:0o600});
+        const bodies={'empty file':'','truncated JSON':'{"version":1,"key":"','invalid UTF-8':Buffer.from([0x7b,0xff,0xfe]),
+          'invalid identity':'{}','newer version':JSON.stringify({...identity,version:2}),
+          'unusable identity':JSON.stringify({version:1,key:'synthetic',cert:'synthetic'}),'oversized file':'x'.repeat(32769)};
+        if(Object.hasOwn(bodies,kind))await writeFile(path.join(folder,'identity.json'),bodies[kind],{mode:0o600});
         if(kind==='extra file') {
           await writeFile(path.join(folder,'identity.json'),'',{mode:0o600});
           await writeFile(path.join(folder,'extra'),'synthetic retained content',{mode:0o600});
@@ -40,7 +42,7 @@ test('explicit repair preserves only eligible damaged identities',{skip:!existsS
       const original=await lstat(folder),entries=await readdir(folder);
       const contents=new Map();
       for(const name of entries)contents.set(name,await readFile(path.join(folder,name)));
-      const repairable=['empty folder','empty file','truncated JSON','invalid identity'].includes(kind);
+      const repairable=['empty folder','empty file','truncated JSON','invalid UTF-8'].includes(kind);
       const expected=kind==='valid identity'?'identity-ready':repairable?'identity-required':'identity-recovery-required';
       assert.deepEqual(await deviceIdentitySetupStatus(runtime),{status:expected});
       assert.deepEqual((await readdir(runtime)).filter(name=>name.includes('-damaged-')),[]);

@@ -561,11 +561,12 @@ interrupted write leaves only the pending folder, which never blocks a later
 attempt. Reads reject linked, oversized, changing or malformed files. An
 existing identity directory is never overwritten. On a device with no
 `private-sync` folder, an identity directory that is empty, or holds only an
-empty, truncated or invalid `identity.json` (as an interrupted older build could
-leave), is reported as `identity-required`. Explicit identity setup then moves
+`identity.json` that is empty or is not complete UTF-8 JSON (what an interrupted
+older build could leave), is reported as `identity-required`. Explicit identity setup then moves
 it aside to `private-device-identity-damaged-<random>`, never deleting it, and
-creates a new identity. Any other damaged identity directory still requires
-recovery.
+creates a new identity. Any other damaged identity directory, including a
+readable identity that fails validation such as an expired certificate or a
+newer format, still requires recovery.
 
 On macOS the directory and file use owner-only permissions. Windows uses the
 existing verified ACL policy for the current user, SYSTEM and Administrators.
