@@ -42,7 +42,7 @@ export function replaceMacApp({installed,staged,previousManifest,candidateManife
     const verify=(folder,kind)=>{
       assertStopped();
       const receipt=kind==='previous'?previousManifest:candidateManifest;
-      verifyMacPackage(folder,receipt,{allowRelocatedBundle:true});
+      verifyMacPackage(folder,receipt,{allowRelocatedBundle:true,requireCurrentLayout:kind!=='previous'});
       verifySignature(folder);
       const info=JSON.parse(readFileSync(path.join(folder,'Contents/Resources/build-info.json'),'utf8'));
       return {sourceRevision:info.sourceRevision,buildNumber:info.buildNumber};
