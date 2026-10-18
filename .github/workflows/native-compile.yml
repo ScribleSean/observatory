@@ -61,8 +61,10 @@ jobs:
           if (-not (Test-Path -LiteralPath (Join-Path $app 'Collector\scripts\peer-tls-control.mjs'))) { throw 'Setup control script missing from the published output.' }
           $node = (Get-Command node).Source
           # The control script refuses a runtime path that is not already canonical, such as a short 8.3 temp path.
-          $env:TEMP = $env:RUNNER_TEMP
-          $env:TMP = $env:RUNNER_TEMP
+          # The user's own temp folder, in long form, keeps the private-folder ancestry checks satisfied.
+          $temp = Join-Path $env:LOCALAPPDATA 'Temp'
+          $env:TEMP = $temp
+          $env:TMP = $temp
           foreach ($flag in @('--test-tls-setup-bridge', '--test-tls-identity-bridge')) {
             $test = Start-Process -FilePath (Join-Path $app 'WorkspaceObservatory.exe') -ArgumentList @($flag, $node) -PassThru -NoNewWindow
             if (-not $test.WaitForExit(120000)) { $test.Kill(); throw "$flag timed out." }
