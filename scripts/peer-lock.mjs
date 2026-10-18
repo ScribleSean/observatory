@@ -10,6 +10,10 @@ const held=new AsyncLocalStorage();
 // Keep the lock independent of garbage collection while an action is pending.
 const openLockDatabases=new Set();
 
+export function peerLockWaitMs(platform=process.platform) {
+  return platform==='win32'?15000:1000;
+}
+
 export async function checkLockSidecars(filename,{stat=lstat,wait=delay,boundMs=1000}={}) {
   for(const suffix of ['-journal','-wal','-shm']) {
     let deadline;
@@ -68,9 +72,11 @@ export async function withPeerStateLock(runtime,action) {
     if(after.dev!==before.dev || after.ino!==before.ino)throw Error('Changing pairing operation lock');
     if(database.prepare('PRAGMA journal_mode').get().journal_mode!=='delete')throw Error('Unsupported pairing lock mode');
     database.exec('PRAGMA busy_timeout=0; PRAGMA trusted_schema=OFF');
-    // Windows verifies protected ACLs through its system helper while holding
-    // the lease. Allow short normal writers to finish before treating it busy.
-    const deadline=performance.now()+(process.platform==='win32'?5000:1000);
+    // On Windows each private-folder check under the lock starts PowerShell,
+    // which may take up to 15 seconds. One exchange lease runs several checks,
+    // so a waiter allows at least one full check before reporting the lock busy.
+    // The bound still fails so callers can retry.
+    const deadline=performance.now()+peerLockWaitMs();
     for(;;) {
       try {database.exec('BEGIN IMMEDIATE');break;}
       catch(error) {

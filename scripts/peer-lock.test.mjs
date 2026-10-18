@@ -4,7 +4,7 @@ import {mkdtemp,realpath,rm,readFile,writeFile,chmod} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import path from 'node:path';
-import {checkLockSidecars,withPeerStateLock} from './peer-lock.mjs';
+import {checkLockSidecars,peerLockWaitMs,withPeerStateLock} from './peer-lock.mjs';
 import {testRuntimeBase} from './test-runtime-base.mjs';
 
 const runtimeBase=await testRuntimeBase('peer-lock');
@@ -13,6 +13,12 @@ async function fixture(t) {
   const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-peer-lock-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));return runtime;
 }
+
+test('the lock wait bound accounts for Windows private-folder checks',()=>{
+  assert.equal(peerLockWaitMs('win32'),15000);
+  assert.equal(peerLockWaitMs('darwin'),1000);
+  assert.equal(peerLockWaitMs(),peerLockWaitMs(process.platform));
+});
 
 test('a pending action keeps the lock across garbage collection',{timeout:120000},async t=>{
   const runtime=await fixture(t);

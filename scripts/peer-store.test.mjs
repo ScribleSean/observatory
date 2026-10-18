@@ -123,15 +123,22 @@ test('independent publishers allocate distinct sequences', {timeout:45000},async
   const runtime=await fixture(t);
   await publishLocalPayload(runtime,payload(),config,now);
   const moduleUrl=new URL('./peer-store.mjs',import.meta.url).href;
-  const code=`import {publishLocalPayload} from ${JSON.stringify(moduleUrl)};
-    const record=await publishLocalPayload(process.argv[1],${JSON.stringify(payload())},${JSON.stringify(config)},${now});
-    process.stdout.write(String(record.revision.sequence));`;
-  const sequences=await Promise.all(Array.from({length:4},async()=>{
+  const code=`import {publishLocalPayload} from ${JSON.stringify(moduleUrl)}
+    const started=performance.now()
+    const record=await publishLocalPayload(process.argv[1],${JSON.stringify(payload())},${JSON.stringify(config)},${now})
+    const elapsedMs=Math.round(performance.now()-started)
+    process.stdout.write(record.revision.sequence+' '+elapsedMs)`;
+  const results=await Promise.all(Array.from({length:4},async()=>{
     const child=spawn(process.execPath,['--input-type=module','-e',code,runtime],{stdio:['ignore','pipe','pipe']});
     let output='',errors='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>errors+=chunk);
     t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
-    const [exitCode]=await once(child,'close');assert.equal(exitCode,0,errors);return Number(output);
+    const [exitCode]=await once(child,'close');assert.equal(exitCode,0,errors);
+    const [sequence,elapsedMs]=output.split(' ').map(Number);
+    return {sequence,elapsedMs};
   }));
+  results.sort((a,b)=>a.sequence-b.sequence);
+  const sequences=results.map(result=>result.sequence);
   assert.deepEqual(sequences.sort((a,b)=>a-b),[2,3,4,5]);
+  t.diagnostic('publisher elapsed ms by sequence: '+results.map(result=>`${result.sequence}=${result.elapsedMs}`).join(', '));
   assert.equal((await readPeerState(runtime,config,now,'local')).revision.sequence,5);
 });
