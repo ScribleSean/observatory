@@ -30,7 +30,7 @@ function quota() {
 }
 function provider(host,modelCount=1,dayCount=3660) {
   const count=Math.floor(maximum/modelCount/4),part=count*modelCount;
-  const models=Array.from({length:modelCount},(_,index)=>({model:`claude-sonnet-99-99-${String(index).padStart(8,'0')}-latest`,
+  const models=Array.from({length:modelCount},(_,index)=>({model:`claude-sonnet-5-5-${String(index).padStart(8,'0')}-latest`,
     inputTokens:count,cacheReadTokens:count,cacheCreationTokens:count,outputTokens:count,totalTokens:count*4,requestCount:count}));
   const day={inputTokens:part,cacheReadTokens:part,cacheCreationTokens:part,outputTokens:part,totalTokens:part*4,requestCount:part,models};
   const hour=Math.floor(day.totalTokens/24);
