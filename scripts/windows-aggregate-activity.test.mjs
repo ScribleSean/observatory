@@ -103,6 +103,7 @@ test('reads cross-alias watchers and reports the latest window event', windowsOn
   assert.notEqual(alias.toLowerCase(), computer.toLowerCase());
   const result = await collect(t, [...pair(computer, 'current'), ...pair(alias, 'alias')], {crossOnly:true});
   const output = report(result);
+  assert.equal(result.stdout.toLowerCase().includes(alias.toLowerCase()), false);
   const combinations = ['window_current/idle_current', 'window_current/idle_alias', 'window_alias/idle_current', 'window_alias/idle_alias'];
   assert.deepEqual(result.queries.map(ids => ids.join('/')).sort(), [...combinations, ...combinations].sort());
   assert.deepEqual(result.events.sort(), ['window_alias', 'window_current']);
