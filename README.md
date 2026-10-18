@@ -14,11 +14,11 @@
 </div>
 
 <p align="center">
-  <img src="docs/images/panel-spike-dark.jpg" width="320" alt="The Observatory panel in dark appearance, showing limits for Claude Code and Codex, device and period filters, token totals and screen time, with sample data">
+  <img src="docs/images/panel-spike-dark.jpg" width="320" alt="The Observatory panel in dark appearance with sample data, showing limits for Claude Code and Codex, device and period filters, a Codex token total with Claude Code tokens listed by device, and screen time">
   <img src="docs/images/panel-spike-light.jpg" width="320" alt="The same panel in light appearance with sample data">
 </p>
 
-<p align="center">The panel with sample data. These images were taken during development and differ from the release in small details.</p>
+<p align="center">The panel with sample data.</p>
 
 ## What it shows
 

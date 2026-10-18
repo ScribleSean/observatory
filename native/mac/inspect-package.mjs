@@ -4,12 +4,9 @@ import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {forbiddenPackageName,containsBuildPath} from '../windows/package-content.mjs';
 
-export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedBundle=false}={}) {
+export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedBundle=false,requireCurrentLayout=true}={}) {
   const root=realpathSync(bundle);
   if((!allowRelocatedBundle && path.basename(root)!==appNames.visible.macBundle) || !lstatSync(root).isDirectory())throw Error('Expected the Observatory app bundle');
-  const info=JSON.parse(readFileSync(path.join(root,'Contents/Resources/build-info.json'),'utf8'));
-  if(info.sourceDirty!==false || !/^[a-f0-9]{40}$/.test(info.sourceRevision) ||
-    (revision && info.sourceRevision!==revision) || !/^\d+\.\d+\.\d+$/.test(info.version))throw Error('A matching clean-source app build is required');
   const files=[],symlinks=[];
   let bytes=0;
   function walk(directory) {
@@ -33,6 +30,13 @@ export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedB
   walk(root);
   const names=new Set(files.map(file=>file.path));
   for(const required of [`Contents/MacOS/${appNames.internal.macExecutable}`,'Contents/Info.plist',
+    'Contents/Resources/build-info.json','Contents/_CodeSignature/CodeResources']) {
+    if(!names.has(required))throw Error(`Required package file missing: ${required}`);
+  }
+  const info=JSON.parse(readFileSync(path.join(root,'Contents/Resources/build-info.json'),'utf8'));
+  if(info.sourceDirty!==false || !/^[a-f0-9]{40}$/.test(info.sourceRevision) ||
+    (revision && info.sourceRevision!==revision) || !/^\d+\.\d+\.\d+$/.test(info.version))throw Error('A matching clean-source app build is required');
+  if(requireCurrentLayout)for(const required of [`Contents/MacOS/${appNames.internal.macExecutable}`,'Contents/Info.plist',
     'Contents/Resources/LICENSE','Contents/Resources/THIRD-PARTY-NOTICES.md',
     'Contents/Resources/Web/dashboard.html','Contents/Resources/Web/assets/third-party-licenses.txt',
     'Contents/Resources/Runtime/node/bin/node','Contents/Resources/Runtime/node/LICENSE',
@@ -41,7 +45,7 @@ export function inspectMacPackage(bundle,{revision,buildRoots=[],allowRelocatedB
     'Contents/_CodeSignature/CodeResources']) {
     if(!names.has(required))throw Error(`Required package file missing: ${required}`);
   }
-  if(info.updaterVersion || files.some(file=>file.path.startsWith('Contents/Frameworks/Sparkle.framework/'))) {
+  if(requireCurrentLayout && (info.updaterVersion || files.some(file=>file.path.startsWith('Contents/Frameworks/Sparkle.framework/')))) {
     for(const required of ['Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle',
       'Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate',
       'Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Info.plist',
