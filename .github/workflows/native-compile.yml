@@ -57,9 +57,8 @@ jobs:
         shell: pwsh
         run: |
           $app = (Resolve-Path native-test).Path
-          $collector = Join-Path $app 'Collector'
-          New-Item -ItemType Directory -Path $collector -Force -ErrorAction Stop | Out-Null
-          Copy-Item -LiteralPath (Resolve-Path scripts).Path -Destination $collector -Recurse -ErrorAction Stop
+          # The published output already carries the collector scripts.
+          if (-not (Test-Path -LiteralPath (Join-Path $app 'Collector\scripts\peer-tls-control.mjs'))) { throw 'Setup control script missing from the published output.' }
           $node = (Get-Command node).Source
           # The control script refuses a runtime path that is not already canonical, such as a short 8.3 temp path.
           $env:TEMP = $env:RUNNER_TEMP
