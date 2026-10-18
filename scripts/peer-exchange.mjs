@@ -33,11 +33,11 @@ export function exchangePeerRequest(runtime,message,now=Date.now()) {
   return exchangePeerRecord(runtime,message,now);
 }
 
-export const peerLockDeadlineMs=15000;
+export const peerLockWaitCapMs=10000;
 
 async function main(runtime) {
-  // Stay inside the 30000 ms command-line deadline.
-  limitPeerLockWait(peerLockDeadlineMs);
+  // Fit inside the 30000 ms SSH client deadline, including connection and startup.
+  limitPeerLockWait(peerLockWaitCapMs);
   const chunks=[];let size=0;
   const timer=setTimeout(()=>{process.stderr.write('Peer exchange input timeout\n');process.exit(1);},30000);
   try {

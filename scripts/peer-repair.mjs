@@ -55,11 +55,11 @@ export async function preparePairingRepair(runtime) {
   });
 }
 
-export const peerLockDeadlineMs=8000;
+export const peerLockWaitCapMs=5000;
 
 async function main() {
   // Stay inside the 20000 ms Windows PairingMaintenance deadline.
-  limitPeerLockWait(peerLockDeadlineMs);
+  limitPeerLockWait(peerLockWaitCapMs);
   const args=process.argv.slice(2);
   if(args.length!==3 || args[0]!=='--runtime' || args[2]!=='--confirm-local-retirement')
     throw Error('Explicit local repair confirmation required');

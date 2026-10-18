@@ -7,11 +7,12 @@ import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
 
 const held=new AsyncLocalStorage();
-let lockDeadlineMs=null;
+let lockWaitCapMs=null;
 
-export function limitPeerLockWait(untilMs) {
-  if(untilMs!==null && (!Number.isFinite(untilMs) || untilMs<0))throw Error('Invalid peer lock deadline');
-  lockDeadlineMs=untilMs;
+// Cap each acquisition independently, after its private-folder check.
+export function limitPeerLockWait(waitMs) {
+  if(waitMs!==null && (!Number.isFinite(waitMs) || waitMs<0))throw Error('Invalid peer lock wait');
+  lockWaitCapMs=waitMs;
 }
 // Keep the lock independent of garbage collection while an action is pending.
 const openLockDatabases=new Set();
@@ -80,9 +81,9 @@ export async function withPeerStateLock(runtime,action) {
     database.exec('PRAGMA busy_timeout=0; PRAGMA trusted_schema=OFF');
     // On Windows each private-folder check under the lock starts PowerShell,
     // which may take up to 15 seconds. One exchange lease runs several checks,
-    // so a waiter allows at least one full check before reporting the lock busy.
-    // The bound still fails so callers can retry.
-    const deadline=Math.min(performance.now()+peerLockWaitMs(),lockDeadlineMs??Infinity);
+    // so the default wait allows one full check before reporting the lock busy.
+    // Command-line callers can cap each acquisition to fit their outer deadline.
+    const deadline=performance.now()+Math.min(peerLockWaitMs(),lockWaitCapMs??Infinity);
     for(;;) {
       try {database.exec('BEGIN IMMEDIATE');break;}
       catch(error) {

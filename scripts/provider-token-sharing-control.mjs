@@ -48,15 +48,16 @@ export async function providerTokenSharingControl(runtime,request={action:'statu
   });
 }
 
-export const peerLockDeadlineMs=4000;
+export const peerLockWaitCapMs=5000;
+export const commandExitMs=(platform=process.platform)=>platform==='win32'?18000:10000;
 
 async function main() {
-  // Stay inside the 10000 ms command-line deadline.
-  limitPeerLockWait(peerLockDeadlineMs);
+  // Fit inside the 20000 ms Windows QuotaSharing deadline and the command exit timer.
+  limitPeerLockWait(peerLockWaitCapMs);
   const args=process.argv.slice(2);
   if(args.length!==2 || args[0]!=='--runtime' || !path.isAbsolute(args[1]))throw Error('Invalid runtime');
   const chunks=[];let bytes=0;
-  const timeout=setTimeout(()=>process.exit(1),10000);
+  const timeout=setTimeout(()=>process.exit(1),commandExitMs());
   try {
     for await(const chunk of process.stdin) {bytes+=chunk.length;if(bytes>1024)throw Error('Provider settings request too large');chunks.push(chunk);}
     const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
