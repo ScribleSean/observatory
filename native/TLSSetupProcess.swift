@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Darwin
 
@@ -156,14 +157,20 @@ final class TLSSetupProcess {
 
     func close() { queue.async { [self] in stop() } }
 
-    func closeAndWait(completion: @escaping (Bool) -> Void) {
+    func closeAndWait(completion: @escaping @MainActor (Bool) -> Void) {
         close()
         let child = process
         DispatchQueue.global().async {
             let deadline = Date().addingTimeInterval(5)
             while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
             let stopped = !child.isRunning
-            DispatchQueue.main.async { completion(stopped) }
+            Self.deliverCloseCompletion(stopped, completion: completion)
+        }
+    }
+
+    static func deliverCloseCompletion(_ stopped: Bool, completion: @escaping @MainActor (Bool) -> Void) {
+        RunLoop.main.perform(inModes: [.default, .modalPanel, .eventTracking]) {
+            MainActor.assumeIsolated { completion(stopped) }
         }
     }
 

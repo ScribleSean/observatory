@@ -90,7 +90,7 @@ func testPairingQuitDrain() {
     do { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false) }
     catch { preconditionFailure("Pairing quit fixture could not be created") }
     defer { try? FileManager.default.removeItem(at: root) }
-    for stopped: Bool? in [true, nil, false] {
+    func checkClose(_ stopped: Bool?) {
         let store = ObservatoryStore(runtime: root.appendingPathComponent(UUID().uuidString), collectionAllowed: false)
         store.pairingMaintenance = true
         var open = true
@@ -102,15 +102,14 @@ func testPairingQuitDrain() {
             precondition(store.shuttingDown && store.pairingMaintenance)
             open = false
             guard let stopped else { return }
-            // Fake the asynchronous closeAndWait completion on the termination run loop.
-            let close = Timer(timeInterval: 0.05, repeats: false) { _ in
-                MainActor.assumeIsolated {
+            // Use the production close completion delivery from a background queue.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                TLSSetupProcess.deliverCloseCompletion(stopped) { stopped in
                     precondition(store.pairingMaintenance && drained == nil)
                     store.directPairingClosed(stopped: stopped)
                     closeCompleted = true
                 }
             }
-            RunLoop.main.add(close, forMode: .modalPanel)
         }) { drained = $0 }
         precondition(!open && !closeCompleted && store.pairingMaintenance && drained == nil)
         let deadline = Date().addingTimeInterval(3)
@@ -127,6 +126,18 @@ func testPairingQuitDrain() {
             precondition(!store.collectionPausedForPairing && elapsed >= timeout && elapsed < 1)
         }
     }
+    var dispatched = false
+    DispatchQueue.main.async {
+        // SIGTERM starts delayed termination from inside a main queue block.
+        checkClose(true)
+        dispatched = true
+    }
+    let dispatchDeadline = Date().addingTimeInterval(4)
+    while !dispatched && Date() < dispatchDeadline {
+        RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+    }
+    precondition(dispatched)
+    for stopped: Bool? in [true, nil, false] { checkClose(stopped) }
     let refused = ObservatoryStore(runtime: root.appendingPathComponent("refused"), collectionAllowed: false)
     var closeCalls = 0
     var result: Bool?
@@ -143,5 +154,5 @@ func testPairingQuitDrain() {
         RunLoop.main.run(mode: .modalPanel, before: Date().addingTimeInterval(0.05))
     }
     precondition(result == true)
-    print("Pairing quit drain: 5 passed, 0 failed, 0 skipped")
+    print("Pairing quit drain: 6 passed, 0 failed, 0 skipped")
 }
