@@ -421,6 +421,8 @@ internal sealed class Collector : IDisposable
             collector.operations.Complete();
             if (!collector.timer.Enabled || !collector.allowanceTimer.Enabled)
                 throw new Exception("Temporary pairing release did not restart collection timers.");
+            // Configured with every source off, so an immediate refresh would take the operation gate and the collection lock.
+            collector.Configure(activity: false, codex: false);
             collector.BeginDirectPairing(refreshOnRelease: false)(true);
             if (collector.Busy || File.Exists(Path.Combine(root, "collection.lock")) ||
                 File.ReadAllText(heavyStatus) != "Full collection freshness must not change.")
