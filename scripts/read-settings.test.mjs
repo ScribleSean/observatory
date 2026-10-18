@@ -198,6 +198,33 @@ with tempfile.TemporaryDirectory() as directory:
   assert.deepEqual(JSON.parse(output),{ok:true});
 });
 
+test('a long non-ASCII session metadata line keeps its identity and invalid UTF-8 still fails closed',()=>{
+  runLimitFixture(`
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True)
+    file=logs/'sessions/one.jsonl'
+    m=patched()
+    m.INVENTORY_SALT='synthetic-salt'
+    tail=json.dumps(event)+'\\n'
+    meta=dict(type='session_meta',payload=dict(id='synthetic-session',note=chr(0x20ac)*400_000))
+    line=json.dumps(meta,ensure_ascii=False)+'\\n'
+    assert len(line.encode())>1_000_000 and len(line)<1_000_000
+    file.write_text(line+tail,encoding='utf-8')
+    result=m.collect(logs)
+    assert result['status']=='ok'
+    assert result['inventory']['status']=='ok'
+    file.write_bytes(b'{"type":"session_meta","payload":{"id":"synthetic\\xff"}}\\n'+tail.encode())
+    try:
+        m.collect(logs)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Invalid UTF-8 metadata was accepted')
+`);
+});
+
 test('retained tokens include old archives, canonical copies and fork continuations with warm-cache parity',()=>{
   const fixture=code.slice(0,code.indexOf('print(json.dumps'))+`
 import pathlib,tempfile,os
@@ -356,7 +383,7 @@ assert m.DEFAULT_SCAN_BYTES==2*1024**3
 `);
 });
 
-test('a first line cut inside a UTF-8 character follows the invalid metadata path',()=>{
+test('a first line longer than the first line limit follows the invalid metadata path without decoding',()=>{
   runLimitFixture(`
 for cached in (False,True):
     with tempfile.TemporaryDirectory() as directory:
@@ -373,8 +400,8 @@ for cached in (False,True):
         tail=json.dumps(event)+'\\n'
         file.write_text('invalid metadata\\n'+tail,encoding='utf-8')
         expected=m.collect(logs)
-        first=' '*999_999+chr(0x20ac)+'\\n'
-        assert first.encode()[999_999:1_000_002]==bytes([0xe2,0x82,0xac])
+        first=' '*3_999_999+chr(0x20ac)+'\\n'
+        assert first.encode()[3_999_999:4_000_002]==bytes([0xe2,0x82,0xac])
         file.write_text(first+tail,encoding='utf-8')
         result=m.collect(logs)
         assert result==expected

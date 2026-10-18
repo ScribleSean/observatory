@@ -6,6 +6,7 @@ import stat
 MAX_CACHE_BYTES = 2 * 1024 * 1024 * 1024
 CACHE_PAGE_SIZE = 4096
 MAX_CACHE_PAGES = MAX_CACHE_BYTES // CACHE_PAGE_SIZE
+# Parsing a saved entry peaks at about 7.6 times its size, so 64 MiB can use about 500 MiB.
 MAX_RETAINED_BYTES = 64 * 1024 * 1024
 DEFAULT_SCAN_BYTES = 2 * 1024 * 1024 * 1024
 

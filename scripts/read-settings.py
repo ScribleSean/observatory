@@ -15,6 +15,8 @@ MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_LINES = 3_000_000
 MAX_LINE_BYTES = 8_000_000
 MAX_READ_SECONDS = 45
+# One million characters of at most four UTF-8 bytes, the first line limit when it was read as text.
+FIRST_LINE_BYTES = 4_000_000
 
 
 class ReadBudget:
@@ -236,12 +238,18 @@ def collect(folder, *, retry_cache=True, cache_budget=None, read_budget=None):
             continue
         info = file.stat()
         with file.open('rb') as stream:
-            first = stream.readline(1_000_000)
+            first = stream.readline(FIRST_LINE_BYTES)
             read_budget.charge(first)
-        try:
-            meta = json.loads(first.decode('utf-8'))
-        except ValueError:
+        if len(first) >= FIRST_LINE_BYTES and not first.endswith(b'\n'):
+            # Longer than the earlier 1,000,000 character limit allows, so unparseable as before.
             meta = {}
+        else:
+            # A complete line with invalid UTF-8 still fails the whole read, as before.
+            text = first.decode('utf-8')
+            try:
+                meta = json.loads(text)
+            except ValueError:
+                meta = {}
         payload = meta.get('payload') if isinstance(meta, dict) and meta.get('type') == 'session_meta' else None
         identity = payload.get('id') if isinstance(payload, dict) else None
         if not isinstance(identity, str) or not identity:
