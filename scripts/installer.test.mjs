@@ -69,26 +69,47 @@ test('payload commands name individual files and remove deepest empty folders fi
   assert.ok(lists.checks.includes('Call un.NoLinkedPath'));
   assert.throws(()=>payloadLists({files:[{path:'Uninstall.exe'}]},'C:/candidate'));
 });
-test('installer writes InstallLocation once after payload, envelope and shortcut success',()=>{
+test('installer writes registration after payload, envelope and shortcut success',()=>{
   const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
   const install=script.match(/^Section "Install"\r?\n([\s\S]*?)^SectionEnd/m)?.[1];
   assert.ok(install);
-  const writes=[...install.matchAll(/^\s*WriteRegStr HKCU "\$\{UNINSTALL_KEY\}" "InstallLocation" "\$INSTDIR"\s*$/gm)];
-  assert.equal(writes.length,1);
+  const writes=[...install.matchAll(/^\s*WriteReg(?:Str|DWORD) HKCU "\$\{UNINSTALL_KEY\}"[^\r\n]*/gm)];
+  const locations=writes.filter(write=>/"InstallLocation"/.test(write[0]));
+  assert.equal(locations.length,1);
+  assert.match(locations[0][0],/"InstallLocation" "\$INSTDIR"\s*$/);
   const payload=install.indexOf('!include "install-files.nsh"');
   const envelope=install.indexOf('!ifdef UPDATE_ENVELOPE');
   const envelopeEnd=install.indexOf('!endif',envelope);
   const shortcut=install.indexOf('CreateShortcut ');
   const shortcutCheck=install.indexOf('IfErrors install_failed',shortcut);
   assert.ok(payload>=0 && envelope>payload && envelopeEnd>envelope);
-  assert.ok(shortcut>envelopeEnd && shortcutCheck>shortcut && writes[0].index>shortcutCheck);
+  assert.ok(shortcut>envelopeEnd && shortcutCheck>shortcut);
+  for(const write of writes)assert.ok(write.index>shortcutCheck);
+});
+test('installer refuses folders before checking uninstall command and subkeys',()=>{
+  const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
+  const init=script.match(/^Function \.onInit\r?\n([\s\S]*?)^FunctionEnd/m)?.[1];
+  assert.ok(init);
+  const folders=[
+    'System::Call \'kernel32::GetFileAttributesW(w "$INSTDIR") i .r0\'',
+    'IntCmp $0 -1 check_shortcuts existing_install existing_install',
+    'check_shortcuts:',
+    'System::Call \'kernel32::GetFileAttributesW(w "$SMPROGRAMS\\${APP_NAME}") i .r0\'',
+    'IntCmp $0 -1 check_registration existing_install existing_install',
+    'check_registration:'
+  ];
+  assert.ok(init.includes(folders.join('\n  ')));
+  assert.match(init,/check_registration:\s+ClearErrors\s+ReadRegStr \$0 HKCU "\$\{UNINSTALL_KEY\}" "UninstallString"\s+StrCmp \$0 "" registration_subkeys existing_install/);
+  assert.match(init,/registration_subkeys:\s+ClearErrors\s+EnumRegKey \$0 HKCU "\$\{UNINSTALL_KEY\}" 0\s+IfErrors new_install existing_install/);
+  assert.match(init,/existing_install:\s+MessageBox [^\r\n]+\s+SetErrorLevel 14\s+Quit\s+new_install:\s*$/);
+  assert.doesNotMatch(init,/EnumRegValue|DeleteReg(?:Key|Value)/);
 });
 test('installer is per-user, source startup is opt-in and uninstall has ownership gates',()=>{
   const script=readFileSync(new URL('../native/windows/installer.nsi',import.meta.url),'utf8');
   assert.match(script,/RequestExecutionLevel user/);
   assert.match(script,/StrCmp \$INSTDIR \$1 0 wrong_owner/);
   assert.match(script,/ReadINIStr \$0 .* "Revision"/);
-  assert.match(script,/EnumRegValue \$0 HKCU/);
+  assert.match(script,/EnumRegKey \$0 HKCU/);
   assert.doesNotMatch(script,/RMDir\s+\/r\b|Delete\s+.*\*|WriteReg\w+ HKLM|Reboot\b/);
   assert.doesNotMatch(script,/WriteReg\w+ .*CurrentVersion\\Run"/);
   assert.match(script,/ReadRegStr .*CurrentVersion\\Run"/);

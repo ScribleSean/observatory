@@ -107,8 +107,8 @@ Function .onInit
   IntCmp $0 -1 check_registration existing_install existing_install
   check_registration:
   ClearErrors
-  EnumRegValue $0 HKCU "${UNINSTALL_KEY}" 0
-  IfErrors registration_subkeys existing_install
+  ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "UninstallString"
+  StrCmp $0 "" registration_subkeys existing_install
   registration_subkeys:
   ClearErrors
   EnumRegKey $0 HKCU "${UNINSTALL_KEY}" 0

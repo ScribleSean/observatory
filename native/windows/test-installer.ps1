@@ -129,7 +129,13 @@ try {
     Remove-Item -LiteralPath (Join-Path $shortcuts 'unrelated-test.txt')
     [IO.Directory]::Delete($shortcuts, $false)
     $registry.DeleteSubKey($keyName, $false)
+    # A failed install cleaned up by hand can leave registration values without an uninstall command.
+    $stale = $registry.CreateSubKey($keyName)
+    try { $stale.SetValue('InstallLocation', $install) } finally { $stale.Dispose() }
     Invoke-CheckedProcess $InstallerPath '/S'
+    $key = $registry.OpenSubKey($keyName)
+    try { Check ($key.GetValue('UninstallString') -eq ('"' + $install + '\Uninstall.exe"')) 'Stale registration was not replaced.' } finally { $key.Dispose() }
+    Write-Output 'PASS: registration without an uninstall command and without folders does not block install'
     $run.SetValue($startupName, 'another test installation')
     Invoke-TestUninstall
     Check ($run.GetValue($startupName) -eq 'another test installation') 'Unrelated startup value was removed.'
