@@ -91,7 +91,8 @@ export function mergePeerPayloads(local,peer,localConfig,peerConfig,previous=[],
   const isFresh=payload=>now-Date.parse(payload.collectedAt)<=600000;
   const checked=source=>{
     const payload=payloads.find(p=>p.host===source.host);
-    return {...source,status:isFresh(payload)?source.status:'stale',checkedAt:payload.collectedAt};
+    // Only a reading can become stale. A source that was not read keeps its status.
+    return {...source,status:isFresh(payload) || source.status!=='ok'?source.status:'stale',checkedAt:payload.collectedAt};
   };
   const normalized=payloads.map(p=>checked(p.activity.status==='ok'?cleanActivity(p.activity,p.host):p.activity));
   const activity=normalized.map(({intervals,trackingIntervals,...safe})=>safe);

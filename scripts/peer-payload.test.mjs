@@ -172,3 +172,14 @@ for (const age of [9, 11]) test(`peer sources at ${age} minutes preserve reading
     assert.deepEqual(history.days, baseline.activityHistory.find(row => row.host === 'Windows').days);
   }
 });
+
+test('a late peer source that was not read keeps its status instead of becoming stale', () => {
+  const local = packet('Mac'), peer = packet('Windows');
+  peer.activity = { host: 'Windows', status: 'unavailable' };
+  peer.collectedAt = new Date(now - 11 * 60000).toISOString();
+  const result = mergePeerPayloads(local, peer, config('Mac'), config('Windows'), [], now);
+  const row = result.activity.find(row => row.host === 'Windows');
+  assert.equal(row.status, 'unavailable');
+  assert.equal(row.checkedAt, peer.collectedAt);
+  assert.equal(result.tokens.find(row => row.host === 'Windows').status, 'stale');
+});

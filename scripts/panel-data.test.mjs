@@ -359,3 +359,11 @@ test('a failed device read stays Unknown without an as of time', () => {
   assert.equal(result.codexTokens, null);
   assert.equal(result.codexNote, '');
 });
+
+test('the panel note for an old device reading says Unknown before the reading time', () => {
+  const at = '2026-10-18T12:00:00Z';
+  const snapshot = { collectedAt: at, timezone: 'UTC', tokens: [{ host: 'Windows', status: 'stale', checkedAt: '2026-10-18T11:00:00Z', days: [] }] };
+  const result = totals(snapshot, 'Windows', 'day', new Date(at));
+  assert.equal(result.codexTokens, null);
+  assert.match(result.codexNote, /^Unknown · as of /);
+});
