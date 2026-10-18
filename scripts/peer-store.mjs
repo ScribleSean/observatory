@@ -84,6 +84,8 @@ async function database(runtime,create) {
     db.exec('PRAGMA max_page_count=16384');
     let objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
     if(!objects.length && before.size===0) {
+      const locked=await safeFile(location.file);
+      if(locked.dev!==before.dev || locked.ino!==before.ino || locked.size!==0)throw Error('Changing peer database');
       db.exec(schema);
       objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
     }

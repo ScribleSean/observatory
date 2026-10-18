@@ -87,6 +87,9 @@ async function withState(runtime,{create=false,disabled=false,now=Date.now()}={}
       db.exec('BEGIN IMMEDIATE; PRAGMA max_page_count=16384');
       let objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
       if(!objects.length && before.size===0) {
+        const locked=await safeFile(file);
+        if(locked.dev!==before.dev || locked.ino!==before.ino || locked.size!==0)throw Error('Changing provider database');
+        if(disabled && !pair)return null;
         db.exec(schema);
         objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
       }
@@ -94,6 +97,7 @@ async function withState(runtime,{create=false,disabled=false,now=Date.now()}={}
         throw Error('Invalid provider database schema');
       const saved=db.prepare('SELECT record FROM provider_token_state WHERE slot=1').get();
       if(saved && (typeof saved.record!=='string' || Buffer.byteLength(saved.record)>stateLimit))throw Error('Invalid provider state size');
+      if(disabled && !saved && !pair)return null;
       const state=saved?parseState(JSON.parse(saved.record),now):pair?initial(pair):null;
       if(!state || (!disabled && !isDeepStrictEqual(state.binding,providerTokenBinding(pair))))throw Error('Provider pairing superseded');
       const result=action(state,pair);

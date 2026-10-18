@@ -113,6 +113,9 @@ class SettingsCache:
             objects = self.db.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").fetchall()
             version = self.db.execute('PRAGMA user_version').fetchone()[0]
             if before.st_size == 0 and not objects and version == 0:
+                locked = file.lstat()
+                if (locked.st_dev, locked.st_ino) != (before.st_dev, before.st_ino) or locked.st_size != 0:
+                    raise ValueError('Changing cache file')
                 self.db.execute(schema)
                 self.db.execute('PRAGMA user_version=1')
                 objects = self.db.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").fetchall()

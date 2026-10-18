@@ -316,7 +316,7 @@ import pathlib,tempfile,os,sqlite3
 exec(pathlib.Path('scripts/read-settings-cache.py').read_text(encoding='utf-8'),m.__dict__)
 with tempfile.TemporaryDirectory() as directory:
     root=pathlib.Path(directory).resolve()
-    for kind in ('empty','table','non-SQLite','schema-free','version'):
+    for kind in ('empty','table','non-SQLite','schema-free','version','application-id'):
         cache=root/kind
         cache.mkdir(mode=0o700)
         file=cache/'events.sqlite'
@@ -324,10 +324,12 @@ with tempfile.TemporaryDirectory() as directory:
         os.close(descriptor)
         if kind=='non-SQLite':
             file.write_bytes(b'synthetic invalid database')
-        elif kind in ('table','schema-free','version'):
+        elif kind in ('table','schema-free','version','application-id'):
             db=sqlite3.connect(file)
             if kind=='table':
                 db.execute('CREATE TABLE other(value TEXT)')
+            elif kind=='application-id':
+                db.execute('PRAGMA application_id=123')
             elif kind=='version':
                 db.execute('CREATE TABLE events (key TEXT PRIMARY KEY, signature TEXT NOT NULL, data TEXT NOT NULL)')
                 db.execute('PRAGMA user_version=2')
@@ -350,6 +352,7 @@ with tempfile.TemporaryDirectory() as directory:
                 check.close()
         else:
             before=file.read_bytes()
+            assert len(before)>0
             try:
                 m.SettingsCache(cache)
             except (ValueError,sqlite3.DatabaseError) as error:

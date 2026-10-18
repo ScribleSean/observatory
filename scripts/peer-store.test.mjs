@@ -148,19 +148,32 @@ for(const operation of ['read','write'])test(`empty private peer database recove
   assert.deepEqual(await readPeerState(runtime,config,now),record(2));
 });
 
-for(const kind of ['table','non-SQLite','schema-free'])test(`peer database refuses ${kind} file`,async t=>{
+for(const kind of ['table','non-SQLite','schema-free','application-id'])test(`peer database refuses ${kind} file`,async t=>{
   const runtime=await fixture(t);
   const directory=await privateSyncDirectory(runtime,true);
   const file=path.join(directory,'state.sqlite');
   await writeFile(file,kind==='non-SQLite'?'synthetic invalid database':'',{mode:0o600});
   if(kind!=='non-SQLite') {
     const db=new DatabaseSync(file);
-    db.exec(kind==='table'?'CREATE TABLE other(value TEXT)':'PRAGMA user_version=1');
+    db.exec(kind==='table'?'CREATE TABLE other(value TEXT)':kind==='application-id'?'PRAGMA application_id=123':'PRAGMA user_version=1');
     db.close();
   }
   const before=await readFile(file);
+  assert.ok(before.length>0);
   const error=kind==='non-SQLite'?/file is not a database/:/Invalid peer database schema/;
   await assert.rejects(readPeerState(runtime,config,now),error);
   await assert.rejects(acceptPeerState(runtime,record(1),config,now),error);
   assert.deepEqual(await readFile(file),before);
+});
+
+
+test('empty peer database recovers beside an interrupted first create journal',async t=>{
+  const runtime=await fixture(t);
+  const directory=await privateSyncDirectory(runtime,true);
+  const file=path.join(directory,'state.sqlite');
+  await writeFile(file,'',{mode:0o600});
+  await writeFile(file+'-journal',Buffer.alloc(512),{mode:0o600});
+  assert.equal(await readPeerState(runtime,config,now),null);
+  await acceptPeerState(runtime,record(1),config,now);
+  assert.deepEqual(await readPeerState(runtime,config,now),record(1));
 });

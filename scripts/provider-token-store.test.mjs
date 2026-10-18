@@ -33,15 +33,16 @@ for(const operation of ['read','write'])test(`empty private provider database re
   }
 });
 
-for(const kind of ['table','non-SQLite','schema-free'])test(`provider database refuses ${kind} file`,async t=>{
+for(const kind of ['table','non-SQLite','schema-free','application-id'])test(`provider database refuses ${kind} file`,async t=>{
   const {runtime,file}=await fixture(t);
   if(kind==='non-SQLite')await writeFile(file,'synthetic invalid database');
   else {
     const db=new DatabaseSync(file);
-    db.exec(kind==='table'?'CREATE TABLE other(value TEXT)':'PRAGMA user_version=1');
+    db.exec(kind==='table'?'CREATE TABLE other(value TEXT)':kind==='application-id'?'PRAGMA application_id=123':'PRAGMA user_version=1');
     db.close();
   }
   const before=await readFile(file);
+  assert.ok(before.length>0);
   const error=kind==='non-SQLite'?/file is not a database/:/Invalid provider database schema/;
   await assert.rejects(readProviderTokenState(runtime,now),error);
   await assert.rejects(updateProviderTokenSource(runtime,source(now),now),error);
