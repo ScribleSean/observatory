@@ -33,7 +33,7 @@ def write_status(folder, value, name='collector.json'):
             os.unlink(temporary)
 
 
-def failure_reason(folder):
+def failure_reason(folder, started):
     try:
         if folder.is_symlink() or folder.parent.is_symlink():
             return None
@@ -56,7 +56,11 @@ def failure_reason(folder):
                 return None
         value = json.loads(raw)
         if isinstance(value, dict) and value.get('state') == 'failed' and value.get('reason') == 'snapshot-too-large':
-            return 'snapshot-too-large'
+            started_at = value.get('startedAt')
+            if isinstance(started_at, str):
+                observed = dt.datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                if observed.tzinfo is not None and observed >= dt.datetime.fromisoformat(started.replace('Z', '+00:00')):
+                    return 'snapshot-too-large'
     except (OSError, ValueError, RecursionError):
         pass
     return None
@@ -148,7 +152,7 @@ def run_collection(root, node, interval=0, timeout=240, *, collector=None, pytho
             if child is not None:
                 stop_child(child)
             state['state'] = 'failed'
-            reason = failure_reason(folder) if child is not None and not quota_only else None
+            reason = failure_reason(folder, started) if child is not None and not quota_only else None
             if reason is not None:
                 state['reason'] = reason
         state['finishedAt'] = stamp()
