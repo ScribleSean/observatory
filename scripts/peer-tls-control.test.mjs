@@ -41,9 +41,41 @@ test('cancellation closes a host that finishes starting after cancellation',asyn
   const operation=controller.run({action:'host-start',address:'10.0.0.2',port:0});
   assert.equal((await controller.run({action:'status'})).status,'working');
   await assert.rejects(controller.run({action:'join-claim',invitation:encodeInvitation(invite())}));
-  await controller.cancel();
+  let cancelled=false,secondCancelled=false;
+  const cancellation=controller.cancel().then(result=>{cancelled=true;return result;});
+  const second=controller.run({action:'cancel'}).then(result=>{secondCancelled=true;return result;});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(cancelled,false);assert.equal(secondCancelled,false);
+  assert.equal((await controller.run({action:'status'})).status,'idle');
+  assert.equal((await controller.run({action:'pending-peer'})).peerAddress,null);
+  await assert.rejects(controller.run({action:'host-start',address:'10.0.0.2',port:0}));
   finish({cancel:async()=>{closed++;}});
+  assert.deepEqual(await cancellation,{status:'cancelled'});
+  assert.deepEqual(await second,{status:'cancelled'});
   assert.deepEqual(await operation,{status:'cancelled'});assert.equal(closed,1);
+});
+
+test('cancel closes the listener before waiting for confirmation settlement',async()=>{
+  for(const rejected of [false,true]) {
+    let finish,listenerClosed=false,cancelled=false;
+    const host={invitation:invite(),status:()=> 'confirming',
+      pending:()=>({claimId:'synthetic',peerCertificateSha256:'b'.repeat(64)}),
+      confirm:()=>new Promise((resolve,reject)=>{finish=()=>rejected?reject(Error('Synthetic failure')):resolve();}),
+      cancel:async()=>{listenerClosed=true;}};
+    const controller=createTLSSetupController('/fixture',{startHost:async()=>host});
+    await controller.run({action:'host-start',address:'10.0.0.2',port:0});
+    const operation=controller.run({action:'host-confirm',peerCertificateSha256:'b'.repeat(64),localEndpoint:{},peerEndpoint:{}})
+      .catch(()=>({status:'unavailable'}));
+    const cancellation=controller.cancel().then(result=>{cancelled=true;return result;});
+    const second=controller.cancel();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(listenerClosed,true);assert.equal(cancelled,false);
+    assert.equal((await controller.run({action:'status'})).status,'idle');
+    finish();
+    assert.ok(['cancelled','unavailable'].includes((await operation).status));
+    assert.deepEqual(await cancellation,{status:'cancelled'});
+    assert.deepEqual(await second,{status:'cancelled'});
+  }
 });
 
 test('joining keeps private identity out of responses and aborts an in-flight claim',async()=>{

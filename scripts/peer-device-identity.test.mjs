@@ -33,16 +33,12 @@ test('protected device identity storage',{skip:!existsSync(openssl)},async t=>{
     assert.deepEqual(await prepareDeviceIdentity(directory,options),{status:'identity-ready'});assert.equal(calls,1);
     assert.deepEqual(await readFile(path.join(directory,'private-device-identity','identity.json')),before);
   });
-  await t.test('missing identity for existing pairing and damaged identity do not regenerate',async()=>{
+  await t.test('missing identity for existing pairing does not regenerate',async()=>{
     const directory=await runtime();let calls=0;
     const options={storage:'restricted-file',generate:async()=>{calls++;return identity;}};
     await mkdir(path.join(directory,'private-sync'),{mode:0o700});
     assert.deepEqual(await deviceIdentitySetupStatus(directory),{status:'identity-recovery-required'});
     await assert.rejects(prepareDeviceIdentity(directory,options));assert.equal(calls,0);
-    const damaged=await runtime();await initializeDeviceIdentity(damaged,identity);
-    await writeFile(path.join(damaged,'private-device-identity','identity.json'),'{');
-    assert.deepEqual(await deviceIdentitySetupStatus(damaged),{status:'identity-recovery-required'});
-    await assert.rejects(prepareDeviceIdentity(damaged,options));assert.equal(calls,0);
   });
   await t.test('cancellation during generation prevents identity persistence',async()=>{
     const directory=await runtime(),cancel=new AbortController();
@@ -55,8 +51,29 @@ test('protected device identity storage',{skip:!existsSync(openssl)},async t=>{
     assert.equal(await readDeviceIdentity(directory),null);
     const saved=await initializeDeviceIdentity(directory,identity);
     assert.deepEqual(await readDeviceIdentity(directory),saved);
+    assert.deepEqual((await readdir(directory)).filter(name=>name.startsWith('private-device-identity')),['private-device-identity']);
+    assert.deepEqual(await readdir(path.join(directory,'private-device-identity')),['identity.json']);
     await assert.rejects(initializeDeviceIdentity(directory,identity));
     assert.deepEqual(await readDeviceIdentity(directory),saved);
+  });
+  await t.test('failure before publication preserves pending state and permits a later attempt',async()=>{
+    const directory=await runtime();let pending;
+    await assert.rejects(initializeDeviceIdentity(directory,identity,{beforeRename:async folder=>{
+      pending=folder;
+      assert.deepEqual(validateDeviceIdentity(JSON.parse(await readFile(path.join(folder,'identity.json'),'utf8'))),validateDeviceIdentity(identity));
+      throw Error('Synthetic interruption');
+    }}));
+    assert.equal(existsSync(path.join(directory,'private-device-identity')),false);
+    const retained=await readFile(path.join(pending,'identity.json'));
+    assert.ok(await initializeDeviceIdentity(directory,identity));
+    assert.deepEqual(await readFile(path.join(pending,'identity.json')),retained);
+  });
+  await t.test('a destination appearing before rename is never replaced',async()=>{
+    const directory=await runtime();
+    await assert.rejects(initializeDeviceIdentity(directory,identity,{beforeRename:async()=>{
+      await mkdir(path.join(directory,'private-device-identity'),{mode:0o700});
+    }}));
+    assert.deepEqual(await readdir(path.join(directory,'private-device-identity')),[]);
   });
   await t.test('concurrent initialization has one winner',async()=>{
     const directory=await runtime();

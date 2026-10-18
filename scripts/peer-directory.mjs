@@ -112,7 +112,8 @@ export const verifyPrivateDirectory=directory=>verifiedDirectory(directory,true)
 
 export async function privateCollectorDirectory(runtime,name,create=false) {
   if(!['private-sync','private-codex','private-repair','private-quota','private-device-identity'].includes(name) &&
-    !/^private-sync-retired-[a-f0-9]{64}$/.test(name))throw Error('Invalid private directory purpose');
+    !/^private-sync-retired-[a-f0-9]{64}$/.test(name) &&
+    !/^private-device-identity-pending-[a-f0-9]{32}$/.test(name))throw Error('Invalid private directory purpose');
   try {
     await directoryChain(runtime);
     const directory=path.join(runtime,name);
