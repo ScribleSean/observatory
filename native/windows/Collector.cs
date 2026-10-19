@@ -25,7 +25,13 @@ internal sealed class Collector : IDisposable
         allowanceTimer.Tick += async (_, _) => await RefreshAfterResumeOrAllowances();
     }
 
-    internal void Start() { if (operations.Stopping || CollectionPaused || !FirstRunSetup.AllowsCollection(runtime)) return; timer.Start(); allowanceTimer.Start(); EnsureTrustedSync(); _ = Refresh(); }
+    internal void Start() => Start(refresh: true);
+    private void Start(bool refresh)
+    {
+        if (operations.Stopping || CollectionPaused || !FirstRunSetup.AllowsCollection(runtime)) return;
+        timer.Start(); allowanceTimer.Start(); EnsureTrustedSync();
+        if (refresh) _ = Refresh();
+    }
     private void EnsureTrustedSync()
     {
         if (Busy) return;
@@ -81,7 +87,7 @@ internal sealed class Collector : IDisposable
     internal Task DisconnectPairing() => MaintainPairing(false);
     internal Task PreparePairingRepair() => MaintainPairing(true);
 
-    internal Action<bool> BeginDirectPairing()
+    internal Action<bool> BeginDirectPairing(bool refreshOnRelease = true)
     {
         if (pairingPaused || lifetime.IsCancellationRequested || !FirstRunSetup.AllowsCollection(runtime) || !operations.TryBegin())
             throw new InvalidOperationException("Collection or setup is active.");
@@ -92,7 +98,7 @@ internal sealed class Collector : IDisposable
             // Retain a collection pause if the owned helper may still be writing.
             pairingPaused = !exitVerified;
             operations.Complete();
-            if (exitVerified && FirstRunSetup.AllowsCollection(runtime)) Start();
+            if (exitVerified && FirstRunSetup.AllowsCollection(runtime)) Start(refreshOnRelease);
         };
     }
 
@@ -410,6 +416,22 @@ internal sealed class Collector : IDisposable
             if (!collector.operations.Busy || collector.operations.Stopping || collector.lifetime.IsCancellationRequested)
                 throw new Exception("Timeout cancelled work or failed to resume.");
             collector.operations.Complete();
+            // Allow the schedule without configuring any collection sources.
+            File.WriteAllText(Path.Combine(root, "setup-state.json"), "{\"version\":1,\"completed\":true}");
+            if (collector.Configured || !FirstRunSetup.AllowsCollection(root)) throw new Exception("Invalid unconfigured pairing fixture.");
+            var releaseWithoutRefresh = collector.BeginDirectPairing(refreshOnRelease: false);
+            releaseWithoutRefresh(true);
+            if (collector.Busy || collector.CollectionPaused || !collector.operations.TryBegin())
+                throw new Exception("Temporary pairing release retained collection reservation.");
+            collector.operations.Complete();
+            if (!collector.timer.Enabled || !collector.allowanceTimer.Enabled)
+                throw new Exception("Temporary pairing release did not restart collection timers.");
+            // Configured with every source off, so an immediate refresh would take the operation gate and the collection lock.
+            collector.Configure(activity: false, codex: false);
+            collector.BeginDirectPairing(refreshOnRelease: false)(true);
+            if (collector.Busy || File.Exists(Path.Combine(root, "collection.lock")) ||
+                File.ReadAllText(heavyStatus) != "Full collection freshness must not change.")
+                throw new Exception("Temporary pairing release started collection.");
             collector.Configure(activity: false, codex: false);
             var releasePairing = collector.BeginDirectPairing();
             if (!collector.Busy || collector.operations.TryBegin()) throw new Exception("Pairing did not reserve collection.");
