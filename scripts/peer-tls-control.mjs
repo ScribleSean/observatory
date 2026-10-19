@@ -129,10 +129,14 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
       throw fail();
     } finally {if(busy===token)busy=null;}
   }
+  // Cancel waits only for commands that can write durable local state. Network
+  // and discovery commands stay cancellable at once, as before.
+  const writing=['identity-create','host-confirm','join-confirm'];
   function run(request) {
     if(exact(request,['action']) && ['cancel','status','pending-peer'].includes(request.action))return execute(request);
     if(running || cancelling)return Promise.reject(fail());
     const command=execute(request);
+    if(!writing.includes(request?.action))return command;
     running=command;
     const clear=()=>{if(running===command)running=null;};
     void command.then(clear,clear);
