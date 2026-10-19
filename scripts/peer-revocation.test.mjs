@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,symlink,lstat,readlink,mkdir} from 'node:fs/promises';
 import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,initializePairing,readPairing} from './peer-pairing.mjs';
@@ -141,4 +142,27 @@ test('status write failure does not fail revocation',async t=>{
   await mkdir(path.join(runtime,'pairing-status.json'));
   assert.deepEqual(await revokePairing(runtime),{status:'revoked'});
   await assert.rejects(readPairing(runtime),/revoked/);
+});
+
+
+for(const kind of ['empty','schema'])test(`revocation completes with a ${kind} provider database and no record`,async t=>{
+  const runtime=await fixture(t);
+  await initializePairing(runtime,createPairingConfigurations().Mac);
+  const file=path.join(runtime,'private-sync/provider-tokens.sqlite');
+  await writeFile(file,'',{mode:0o600});
+  if(kind==='schema') {
+    const db=new DatabaseSync(file);
+    db.exec('CREATE TABLE provider_token_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 52000000))');
+    db.close();
+  }
+  const before=await readFile(file);
+  assert.deepEqual(await revokePairing(runtime),{status:'revoked'});
+  assert.deepEqual(await readPairingStatusFile(runtime),{version:1,state:'revoked'});
+  await assert.rejects(readPairing(runtime),/revoked/);
+  assert.deepEqual(await readFile(file),before);
+  const db=new DatabaseSync(file,{readOnly:true});
+  try {
+    if(kind==='schema')assert.equal(db.prepare('SELECT count(*) AS count FROM provider_token_state').get().count,0);
+    else assert.deepEqual(db.prepare('SELECT name FROM sqlite_schema').all(),[]);
+  } finally {db.close();}
 });
