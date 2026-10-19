@@ -1,6 +1,16 @@
 import AppKit
 import SwiftUI
 
+func writePairingInvitation(_ invitation: String, to pasteboard: NSPasteboard = .general) -> Bool {
+    let item = NSPasteboardItem()
+    // These markers use presence only, so empty data avoids duplicating the secret.
+    guard item.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")),
+          item.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType")),
+          item.setString(invitation, forType: .string) else { return false }
+    pasteboard.prepareForNewContents(with: .currentHostOnly)
+    return pasteboard.writeObjects([item])
+}
+
 protocol DirectPairingBridge: AnyObject {
     func send(_ command: [String: Any], completion: @escaping TLSSetupProcess.Completion)
     func prepareIdentity(storageConsent: Bool, completion: @escaping TLSSetupProcess.Completion)
@@ -142,7 +152,7 @@ final class DirectPairingModel: ObservableObject {
 
     func copyInvitation() {
         guard hosting, !invitation.isEmpty else { return }
-        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(invitation, forType: .string)
+        _ = writePairingInvitation(invitation)
     }
 }
 
