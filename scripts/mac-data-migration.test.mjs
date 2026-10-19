@@ -53,6 +53,28 @@ test('full migration preserves nested permissions, timestamps and every legacy b
   assert.equal(receipt.manifestSha256,result.manifestSha256);
   assert.equal(fs.statSync(path.join(f.target,'observatory-migration.json')).mode&0o777,0o600);
 });
+test('pending and damaged identity folders preserve bytes and private modes',mac,t=>{
+  const f=fixture(t);
+  const files=[
+    ['private-device-identity-pending-'+'a'.repeat(32),'key.json'],
+    ['private-device-identity-damaged-'+'b'.repeat(32),'partial.json']
+  ];
+  for(const [folder,name] of files) {
+    fs.mkdirSync(path.join(f.legacy,folder),{mode:0o700});
+    fs.writeFileSync(path.join(f.legacy,folder,name),'{"synthetic":true}',{mode:0o600});
+  }
+  const before=snapshot(f.legacy);
+  assert.equal(migrateDataFolder(f).state,'migrated');
+  const after=snapshot(f.target);
+  for(const [folder,name] of files) {
+    const relative=folder+'/'+name;
+    assert.deepEqual(after[folder],before[folder]);
+    assert.deepEqual(after[relative],before[relative]);
+    assert.equal(after[folder].mode&0o777,0o700);
+    assert.equal(after[relative].mode&0o777,0o600);
+  }
+  assert.deepEqual(snapshot(f.legacy),before);
+});
 test('retirement checkpoint preserves bytes, private mode and the legacy folder',mac,t=>{
   const f=fixture(t),relative='.runtime/private-repair';
   fs.mkdirSync(path.join(f.legacy,relative),{recursive:true,mode:0o700});
