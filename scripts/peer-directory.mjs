@@ -5,7 +5,7 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
-import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
+import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
 
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 export {REFUSAL_CODES};
@@ -45,8 +45,8 @@ export async function windowsPermissions(directory,initialize=false,ancestor=fal
   for(let attempt=0;attempt<2;attempt++) {
     try {
       powershellStarts++;
-      const {stdout}=await run(executable,['-NoProfile','-NonInteractive','-File',script,'-Directory',directory,'-Diagnostic',
-        ...(ancestor?['-Ancestor']:[]),...(initialize && attempt===0?['-Initialize']:[])],
+      const {stdout}=await run(executable,windowsPowerShellFileArguments(script,'-Directory',directory,'-Diagnostic',
+        ...(ancestor?['-Ancestor']:[]),...(initialize && attempt===0?['-Initialize']:[])),
       {windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
       if(stdout.trim()!=='private-sync-acl: ok')throw Error('Invalid verification result');
       return;
