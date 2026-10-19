@@ -159,9 +159,15 @@ final class ObservatoryStore: ObservableObject {
         } catch { lastAttempt = "failed" }
     }
 
-    func drainForQuit(timeout: TimeInterval = 260, completion: @escaping (Bool) -> Void) {
+    func directPairingClosed(stopped: Bool) {
+        if !stopped { collectionPausedForPairing = true }
+        pairingMaintenance = false
+    }
+
+    func drainForQuit(timeout: TimeInterval = 260, closePairing: () -> Void = {}, completion: @escaping (Bool) -> Void) {
         guard timeout > 0, timeout <= 300, !shuttingDown else { completion(false); return }
         shuttingDown = true
+        closePairing()
         trustedSync?.requestStop()
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] timer in

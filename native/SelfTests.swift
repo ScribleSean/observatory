@@ -5,6 +5,7 @@ func runSelfTests() {
     runRuntimeSetupSelfTests()
     runBridgeSelfTests()
     runBridgeActionSelfTests()
+    MainActor.assumeIsolated { testPairingQuitDrain() }
     MacUpdateTrust.selfTest()
     let emptyArchive = Data(#"{"version":1,"accounts":[],"next":null,"storageBytes":0,"storageLimitBytes":8589934592}"#.utf8)
     precondition((try? ArchiveReply.parse(emptyArchive))?.accounts?.count == 0)

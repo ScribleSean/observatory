@@ -486,8 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 self?.directPairingWindow = nil
                 bridge.closeAndWait { [weak self] stopped in
                     guard let self else { return }
-                    if !stopped { self.store.collectionPausedForPairing = true }
-                    self.store.pairingMaintenance = false
+                    self.store.directPairingClosed(stopped: stopped)
                 }
             }
             directPairingWindow = controller; controller.showWindow(nil)
@@ -981,7 +980,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard let store else { return .terminateNow }
         if store.shuttingDown { return .terminateLater }
         bridgeHost?.documentEnded()
-        store.drainForQuit { completed in
+        store.drainForQuit(closePairing: { self.directPairingWindow?.close() }) { completed in
             sender.reply(toApplicationShouldTerminate: completed)
             if !completed {
                 let alert = NSAlert()
