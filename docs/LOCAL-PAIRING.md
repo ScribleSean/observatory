@@ -372,11 +372,37 @@ since the claim. If the commit fails, or the listener was cancelled or expired
 during it, the host removes only the private files this confirmation created
 (checked by file identity), removes a `private-sync` folder it created once that
 folder is empty again, and closes the listener. While the helper keeps running,
-a refused confirmation therefore leaves no one-sided trust. A helper that is
-killed or crashes during the commit, or a cancel after `configuration-ready`
-and before the joining device fetches its configuration, can still leave
-one-sided trust on the host. Issue 284 tracks both. `confirmSetup` combines
-both steps for a caller that already holds its offer.
+a refused confirmation therefore leaves no one-sided trust. `confirmSetup`
+combines both steps for a caller that already holds its offer.
+
+Since issue 284 the host also keeps a durable record of an unfinished
+confirmation. Before it writes anything, it takes a session lease (a SQLite
+lock in `private-repair/host-commit.sqlite` that the operating system releases
+when the helper process ends) and writes the private marker
+`private-sync/tls-host-commit.json`. The marker names the pairing, both
+certificate fingerprints, which of `pairing.json`, `tls-trust.json` and
+`tls-offer.json` were absent before, and whether `private-sync` existed. After
+the commit it is replaced with a copy that also records each created file's
+device and inode. When the joining device's acknowledgement is saved, the host
+removes the marker and releases the lease, and the pairing is complete. A
+cancel in the helper rolls the unfinished confirmation back at once. A helper
+that is killed or crashes leaves the marker, and the next recovery rolls it back:
+before `host-start` and `join-claim`, when the trusted sync service starts or
+re-checks its binding, when `pairing-status.json` is written, and when the
+collector reads the pairing. Recovery does nothing while another process holds
+the lease. When the acknowledgement was already saved, it only removes the
+marker. Otherwise it removes only the files the marker lists as created, each
+checked by its recorded device and inode, or, when the crash came before those
+were recorded, by content bound to the marker's pairing and certificates. A
+file whose identity no longer matches is left alone. A file that cannot be read
+or does not bind, such as a partial write, is also left, and the marker stays.
+While the marker exists, trusted sync does not start (neither shell starts the
+sync service, and the service, the sync listener and outbound exchanges refuse),
+the pairing state reads `unavailable`, and a new pairing cannot start on top of
+it. `initializePairing` accepts a `private-sync` folder that holds only a valid
+marker for the same pairing. Every other entry still refuses. A joining device
+that already saved the configuration before the host rolled back keeps its own
+side at `local-ready`, as before.
 
 `requestPeerSetup` fetches this configuration over pinned TLS and verifies the
 joining user's expected host and source scope. `receiveConfirmedTLSPairing`
