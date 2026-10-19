@@ -1967,7 +1967,7 @@ internal sealed class BridgeHandler : IDisposable
             Check(defaultsTest.Host.Calls.Contains("release-no-refresh") && !defaultsTest.Host.Calls.Contains("release"),
                 "Temporary defaults release without refresh");
             await defaultsTest.Run("pairing-host-start", HostArgs());
-            Check(defaultsTest.Host.Reserved && !defaultsTest.Host.Session!.Disposed, "Host start after defaults reserves collection");
+            Check(defaultsTest.Host.Reserved && !defaultsTest.Host.Session!.Disposed, "Host start after defaults opens a session instead of busy");
             await defaultsTest.Run("pairing-cancel");
             Check(defaultsTest.Host.Session!.Disposed && !defaultsTest.Host.Reserved && defaultsTest.Host.Releases == 2 &&
                 defaultsTest.Host.Calls.Contains("release"), "Host session release retains refresh");

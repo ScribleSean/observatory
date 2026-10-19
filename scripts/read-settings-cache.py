@@ -3,6 +3,13 @@ import os
 import sqlite3
 import stat
 
+MAX_CACHE_BYTES = 2 * 1024 * 1024 * 1024
+CACHE_PAGE_SIZE = 4096
+MAX_CACHE_PAGES = MAX_CACHE_BYTES // CACHE_PAGE_SIZE
+# Parsing a saved entry peaks at about 7.6 times its size, so 64 MiB can use about 500 MiB.
+MAX_RETAINED_BYTES = 64 * 1024 * 1024
+DEFAULT_SCAN_BYTES = 2 * 1024 * 1024 * 1024
+
 
 def cache_event(event, cached=False):
     if not isinstance(event, dict) or not isinstance(event.get('payload'), dict):
@@ -71,12 +78,13 @@ class SettingsCache:
     only. A cold cache advances within the existing per-run scan budget and
     withholds the report until every selected file has complete coverage.
     """
-    def __init__(self, directory, budget=1_000_000_000):
+    def __init__(self, directory, budget=DEFAULT_SCAN_BYTES):
         root = pathlib.Path(directory)
         if not root.is_absolute() or root.resolve(strict=True) != root or root.is_symlink():
             raise ValueError('Unsafe cache directory')
         if os.name != 'nt' and root.stat().st_mode & 0o077:
             raise ValueError('Unsafe cache permissions')
+        self.read_budget = None
         self.remaining = budget
         self.used = set()
         self.pending = False
@@ -89,7 +97,7 @@ class SettingsCache:
         except FileExistsError:
             pass
         before = file.lstat()
-        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > 134_217_728 or (os.name != 'nt' and before.st_mode & 0o077):
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > MAX_CACHE_BYTES or (os.name != 'nt' and before.st_mode & 0o077):
             raise ValueError('Unsafe cache file')
         for suffix in ('-journal', '-wal', '-shm'):
             sidecar = pathlib.Path(str(file) + suffix)
@@ -106,8 +114,8 @@ class SettingsCache:
         try:
             self.db.execute('PRAGMA trusted_schema=OFF')
             self.db.execute('PRAGMA synchronous=FULL')
-            self.db.execute('PRAGMA max_page_count=32768')
-            if self.db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete' or self.db.execute('PRAGMA page_size').fetchone()[0] != 4096:
+            self.db.execute(f'PRAGMA max_page_count={MAX_CACHE_PAGES}')
+            if self.db.execute('PRAGMA journal_mode').fetchone()[0] != 'delete' or self.db.execute('PRAGMA page_size').fetchone()[0] != CACHE_PAGE_SIZE:
                 raise ValueError('Unsupported cache format')
             self.db.execute('BEGIN IMMEDIATE')
             objects = self.db.execute("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").fetchall()
@@ -136,6 +144,8 @@ class SettingsCache:
         return json.dumps(values)
 
     def events(self, file, expected):
+        if self.read_budget:
+            self.read_budget.check()
         key = hashlib.sha256(str(file).encode('utf-8')).hexdigest()
         self.used.add(key)
         signature = self.signature(expected)
@@ -144,14 +154,29 @@ class SettingsCache:
             self.pending = True
             return []
         row = self.db.execute('SELECT signature, data FROM events WHERE key=?', (key,)).fetchone()
-        if row and row[0] == signature and len(row[1]) <= 16_000_000:
+        if row and row[0] == signature:
+            # Each retained event adds at most a comma and a space, plus two list brackets.
+            if len(row[1]) > MAX_RETAINED_BYTES + 2 * MAX_LINES + 2:
+                raise ValueError('Private event cache entry limit')
             try:
                 saved = json.loads(row[1])
-                if isinstance(saved, list) and all(isinstance(event, dict) and cache_event(event, cached=True) == event for event in saved):
+            except (ValueError, TypeError):
+                saved = None
+            if isinstance(saved, list):
+                retained = 0
+                valid = True
+                for event in saved:
+                    if self.read_budget:
+                        self.read_budget.check()
+                    if not isinstance(event, dict) or cache_event(event, cached=True) != event:
+                        valid = False
+                        break
+                    retained += len(json.dumps(event))
+                    if retained > MAX_RETAINED_BYTES:
+                        raise ValueError('Private event cache entry limit')
+                if valid:
                     self.hits += 1
                     return saved
-            except (ValueError, TypeError):
-                pass
         if expected.st_size > self.remaining:
             self.pending = True
             return []
@@ -165,11 +190,15 @@ class SettingsCache:
             remaining = expected.st_size
             skipping = False
             while remaining:
-                line = stream.readline(min(8_000_001, remaining))
+                if self.read_budget:
+                    self.read_budget.check()
+                line = stream.readline(min(MAX_LINE_BYTES + 1, remaining))
                 if not line:
                     break
+                if self.read_budget:
+                    self.read_budget.charge(line, not skipping)
                 remaining -= len(line)
-                if skipping or len(line) > 8_000_000:
+                if skipping or len(line) > MAX_LINE_BYTES:
                     skipping = not line.endswith(b'\n')
                     continue
                 try:
@@ -178,7 +207,7 @@ class SettingsCache:
                     continue
                 if safe is not None:
                     retained += len(json.dumps(safe))
-                    if retained > 16_000_000:
+                    if retained > MAX_RETAINED_BYTES:
                         raise ValueError('Private event cache entry limit')
                     events.append(safe)
             if remaining or self.signature(os.fstat(stream.fileno())) != signature:
@@ -187,11 +216,17 @@ class SettingsCache:
         self.db.execute('INSERT INTO events VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET signature=excluded.signature, data=excluded.data', (key, signature, json.dumps(events)))
         return events
 
-    def close(self):
+    def close(self, *, completed=False):
         # Remove metadata for logs no longer in the selected session and archive set.
         try:
+            if not completed:
+                return
+            self.db.execute('BEGIN')
             for (key,) in self.db.execute('SELECT key FROM events').fetchall():
+                if self.read_budget:
+                    self.read_budget.check()
                 if key not in self.used:
                     self.db.execute('DELETE FROM events WHERE key=?', (key,))
+            self.db.commit()
         finally:
             self.db.close()

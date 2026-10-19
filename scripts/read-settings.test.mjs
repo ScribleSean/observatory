@@ -179,9 +179,9 @@ with tempfile.TemporaryDirectory() as directory:
             if ChangingCache.attempts==1 or ChangingCache.change_always:
                 with file.open('a',encoding='utf-8') as stream: stream.write('\\n')
             return super().events(file,expected)
-        def close(self):
+        def close(self,**kwargs):
             ChangingCache.spent+=self.scanned_bytes
-            super().close()
+            super().close(**kwargs)
     m.SettingsCache=ChangingCache; m.CACHE_DIRECTORY=str(cache); m.CACHE_SCAN_BUDGET=100000
     assert m.collect(logs)==expected
     assert ChangingCache.attempts==2 and ChangingCache.spent<=m.CACHE_SCAN_BUDGET
@@ -196,6 +196,33 @@ with tempfile.TemporaryDirectory() as directory:
 `;
   const output=execPython(['-c',fixture],{input:JSON.stringify([settings('high','standard'),usage(100)])}).toString();
   assert.deepEqual(JSON.parse(output),{ok:true});
+});
+
+test('a long non-ASCII session metadata line keeps its identity and invalid UTF-8 still fails closed',()=>{
+  runLimitFixture(`
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True)
+    file=logs/'sessions/one.jsonl'
+    m=patched()
+    m.INVENTORY_SALT='synthetic-salt'
+    tail=json.dumps(event)+'\\n'
+    meta=dict(type='session_meta',payload=dict(id='synthetic-session',note=chr(0x20ac)*400_000))
+    line=json.dumps(meta,ensure_ascii=False)+'\\n'
+    assert len(line.encode())>1_000_000 and len(line)<1_000_000
+    file.write_text(line+tail,encoding='utf-8')
+    result=m.collect(logs)
+    assert result['status']=='ok'
+    assert result['inventory']['status']=='ok'
+    file.write_bytes(b'{"type":"session_meta","payload":{"id":"synthetic\\xff"}}\\n'+tail.encode())
+    try:
+        m.collect(logs)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Invalid UTF-8 metadata was accepted')
+`);
 });
 
 test('retained tokens include old archives, canonical copies and fork continuations with warm-cache parity',()=>{
@@ -363,4 +390,287 @@ with tempfile.TemporaryDirectory() as directory:
 print('ok')
 `;
   assert.equal(execPython(['-c',fixture]).toString().trim(),'ok');
+});
+
+const limitFixture = `
+import pathlib,tempfile,types,json,subprocess,sys
+reader_source=pathlib.Path('scripts/read-settings.py').read_text(encoding='utf-8')
+cache_source=pathlib.Path('scripts/read-settings-cache.py').read_text(encoding='utf-8')
+def patched(changes=None):
+    source=reader_source+'\\n'+cache_source
+    for name,value in (changes or {}).items():
+        import re
+        source,count=re.subn(r'^'+name+r' = .+$',name+' = '+repr(value),source,flags=re.M)
+        assert count==1
+    module=types.ModuleType('fixture_reader')
+    exec(source,module.__dict__)
+    return module
+
+def unavailable(action):
+    try:
+        action()
+    except ValueError:
+        return
+    raise AssertionError('Over-limit history returned a partial or successful report')
+
+meta=json.dumps(dict(type='session_meta',payload=dict(id='synthetic')))+'\\n'
+event=dict(timestamp='2026-10-01T12:00:00Z',type='event_msg',payload=dict(type='token_count',info=dict(total_token_usage=dict(input_tokens=100,cached_input_tokens=50,output_tokens=10,reasoning_output_tokens=5,total_tokens=110))))
+content=meta+json.dumps(event)+'\\n'
+`;
+
+function runLimitFixture(body) {
+  assert.deepEqual(JSON.parse(execPython(['-c',limitFixture+body+`\nprint(json.dumps(dict(ok=True)))\n`])),{ok:true});
+}
+
+test('Codex reader constants pin the requested scale and unchanged line skip',()=>{
+  runLimitFixture(`
+m=patched()
+assert m.MAX_FILES==100_000
+assert m.MAX_TOTAL_BYTES==2*1024**3
+assert m.MAX_LINES==3_000_000
+assert m.MAX_LINE_BYTES==8_000_000
+assert m.MAX_READ_SECONDS==45
+assert m.MAX_CACHE_BYTES==2*1024**3
+assert m.CACHE_PAGE_SIZE==4096
+assert m.MAX_CACHE_PAGES==524288
+assert m.MAX_RETAINED_BYTES==64*1024**2
+assert m.DEFAULT_SCAN_BYTES==2*1024**3
+`);
+});
+
+test('a first line longer than the first line limit follows the invalid metadata path without decoding',()=>{
+  runLimitFixture(`
+for cached in (False,True):
+    with tempfile.TemporaryDirectory() as directory:
+        root=pathlib.Path(directory).resolve()
+        logs=root/'logs'
+        (logs/'sessions').mkdir(parents=True)
+        file=logs/'sessions/one.jsonl'
+        m=patched()
+        m.INVENTORY_SALT='synthetic-salt'
+        if cached:
+            cache=root/'cache'
+            cache.mkdir(mode=0o700)
+            m.CACHE_DIRECTORY=str(cache)
+        tail=json.dumps(event)+'\\n'
+        file.write_text('invalid metadata\\n'+tail,encoding='utf-8',newline='')
+        expected=m.collect(logs)
+        first=' '*3_999_999+chr(0x20ac)+'\\n'
+        assert first.encode()[3_999_999:4_000_002]==bytes([0xe2,0x82,0xac])
+        file.write_text(first+tail,encoding='utf-8',newline='')
+        result=m.collect(logs)
+        assert result==expected
+        assert result['status']=='ok'
+        assert result['inventory']['status']=='incomplete'
+        assert result['tokenProfiles'][0]['totalTokens']==110
+`);
+});
+
+test('an interrupted byte limited pass keeps cached entries for unreached files',()=>{
+  runLimitFixture(`
+import sqlite3
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True)
+    one=logs/'sessions/one.jsonl'
+    two=logs/'sessions/two.jsonl'
+    first=content.replace('synthetic','a')
+    second=content.replace('synthetic','b')
+    one.write_text(first,encoding='utf-8',newline='')
+    two.write_text(second,encoding='utf-8',newline='')
+    cache=root/'cache'
+    cache.mkdir(mode=0o700)
+    m=patched()
+    m.CACHE_DIRECTORY=str(cache)
+    assert m.collect(logs)['status']=='ok'
+    def saved_entries():
+        db=sqlite3.connect(cache/'events.sqlite')
+        try:
+            return db.execute('SELECT * FROM events ORDER BY key').fetchall()
+        finally:
+            db.close()
+    saved=saved_entries()
+    assert len(saved)==2
+    # Invalidate the first entry so its scan exceeds the inventory byte allowance.
+    one.write_text(first+'\\n',encoding='utf-8',newline='')
+    amount=len(first.splitlines(keepends=True)[0].encode())+len(second.splitlines(keepends=True)[0].encode())
+    m=patched({'MAX_TOTAL_BYTES':amount})
+    m.CACHE_DIRECTORY=str(cache)
+    m.CACHE_SCAN_BUDGET=2*1024**3
+    reached=[]
+    original=m.SettingsCache
+    class TrackingCache(original):
+        def events(self,file,expected):
+            reached.append(file)
+            return super().events(file,expected)
+    m.SettingsCache=TrackingCache
+    unavailable(lambda:m.collect(logs))
+    assert reached==[one]
+    assert saved_entries()==saved
+    m.MAX_TOTAL_BYTES=2*1024**3
+    assert m.collect(logs)['tokenProfiles'][0]['totalTokens']==220
+    two.rename(logs/'sessions/two.txt')
+    assert m.collect(logs)['tokenProfiles'][0]['totalTokens']==110
+    assert len(saved_entries())==1
+`);
+});
+
+for (const limit of ['MAX_FILES','MAX_TOTAL_BYTES','MAX_LINES']) {
+  test(`${limit} accepts below and at the cap and refuses one past it with and without cache`,()=>{
+    runLimitFixture(`
+for cached in (False,True):
+    for offset in (1,0,-1):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve()
+            logs=root/'logs'
+            (logs/'sessions').mkdir(parents=True)
+            (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
+            (logs/'sessions/two.jsonl').write_text(content.replace('synthetic','second-id'),encoding='utf-8',newline='')
+            # The inventory reads the first line before the full session scan.
+            amount={'MAX_FILES':2,'MAX_TOTAL_BYTES':2*len((meta+content).encode()),'MAX_LINES':6}['${limit}']
+            m=patched({'${limit}':amount+offset})
+            if cached:
+                cache=root/'cache'
+                cache.mkdir(mode=0o700)
+                m.CACHE_DIRECTORY=str(cache)
+            if offset<0:
+                unavailable(lambda:m.collect(logs))
+            else:
+                result=m.collect(logs)
+                assert result['status']=='ok'
+                assert result['tokenProfiles'][0]['totalTokens']==220
+`);
+  });
+}
+
+test('retained event limit accepts below and at the cap and refuses one past on cold and warm cache',()=>{
+  runLimitFixture(`
+for warm in (False,True):
+    for offset in (1,0,-1):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory).resolve()
+            logs=root/'logs'
+            (logs/'sessions').mkdir(parents=True)
+            (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
+            cache=root/'cache'
+            cache.mkdir(mode=0o700)
+            m=patched()
+            amount=len(json.dumps(m.cache_event(event)))
+            m.CACHE_DIRECTORY=str(cache)
+            if warm:
+                assert m.collect(logs)['status']=='ok'
+            m=patched({'MAX_RETAINED_BYTES':amount+offset})
+            m.CACHE_DIRECTORY=str(cache)
+            if offset<0:
+                unavailable(lambda:m.collect(logs))
+            else:
+                assert m.collect(logs)['tokenProfiles'][0]['totalTokens']==110
+`);
+});
+
+test('cache file size accepts below and at the cap and refuses one past it',()=>{
+  runLimitFixture(`
+for offset in (1,0,-1):
+    with tempfile.TemporaryDirectory() as directory:
+        root=pathlib.Path(directory).resolve()
+        root.chmod(0o700)
+        m=patched()
+        cache=m.SettingsCache(root)
+        assert cache.db.execute('PRAGMA max_page_count').fetchone()[0]==524288
+        cache.close()
+        amount=(root/'events.sqlite').stat().st_size
+        m=patched({'MAX_CACHE_BYTES':amount+offset})
+        if offset<0:
+            unavailable(lambda:m.SettingsCache(root))
+        else:
+            cache=m.SettingsCache(root)
+            cache.close()
+`);
+});
+
+test('tiny time budget exits without partial JSON through the existing collector failure path',()=>{
+  runLimitFixture(`
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    (root/'sessions').mkdir()
+    (root/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
+    script=root/'reader.py'
+    script.write_text(reader_source.replace('MAX_READ_SECONDS = 45','MAX_READ_SECONDS = 0.000000001'),encoding='utf-8',newline='')
+    result=subprocess.run([sys.executable,str(script),str(root)],capture_output=True,text=True)
+    assert result.returncode!=0
+    assert result.stdout==''
+    assert 'ValueError: Read time limit' in result.stderr
+`);
+});
+
+test('one synthetic retained history above the old 16 MB cap reads and reuses its cache',()=>{
+  runLimitFixture(`
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    logs=root/'logs'
+    (logs/'sessions').mkdir(parents=True)
+    cache=root/'cache'
+    cache.mkdir(mode=0o700)
+    m=patched()
+    safe=json.dumps(m.cache_event(event))
+    count=16_000_000//len(safe)+1
+    assert count*len(safe)>16_000_000
+    (logs/'sessions/one.jsonl').write_text(meta+(json.dumps(event)+'\\n')*count,encoding='utf-8',newline='')
+    m.CACHE_DIRECTORY=str(cache)
+    result=m.collect(logs)
+    assert result['status']=='ok'
+    assert result['tokenProfiles'][0]['totalTokens']==110
+    assert m.collect(logs)==result
+`);
+});
+
+test('elapsed budget during cold and warm reads withholds already accumulated totals',()=>{
+  runLimitFixture(`
+for warm in (False,True):
+    with tempfile.TemporaryDirectory() as directory:
+        root=pathlib.Path(directory).resolve()
+        logs=root/'logs'
+        (logs/'sessions').mkdir(parents=True)
+        (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
+        cache=root/'cache'
+        cache.mkdir(mode=0o700)
+        m=patched({'MAX_READ_SECONDS':0.001})
+        m.CACHE_DIRECTORY=str(cache)
+        clock=[0.0]
+        m.time=types.SimpleNamespace(monotonic=lambda:clock[0])
+        if warm:
+            assert m.collect(logs)['status']=='ok'
+        original=m.summarize
+        def slow_summary(*args,**kwargs):
+            result=original(*args,**kwargs)
+            clock[0]+=0.002
+            return result
+        m.summarize=slow_summary
+        unavailable(lambda:m.collect(logs))
+`);
+});
+
+test('skipped oversized lines still consume the total read budget',()=>{
+  runLimitFixture(`
+for cached in (False,True):
+    with tempfile.TemporaryDirectory() as directory:
+        root=pathlib.Path(directory).resolve()
+        logs=root/'logs'
+        (logs/'sessions').mkdir(parents=True)
+        skipped='x'*8_000_001+'\\n'
+        data=meta+skipped+json.dumps(event)+'\\n'
+        (logs/'sessions/one.jsonl').write_text(data,encoding='utf-8',newline='')
+        amount=len((meta+data).encode())
+        for offset in (0,-1):
+            m=patched({'MAX_TOTAL_BYTES':amount+offset,'MAX_LINES':4})
+            if cached:
+                cache=root/('cache'+str(offset))
+                cache.mkdir(mode=0o700)
+                m.CACHE_DIRECTORY=str(cache)
+            if offset<0:
+                unavailable(lambda:m.collect(logs))
+            else:
+                assert m.collect(logs)['tokenProfiles'][0]['totalTokens']==110
+`);
 });

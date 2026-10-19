@@ -75,8 +75,8 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     const before=saved.windows[name],after=next.windows[name];
     if(!before || !after) {if(before || after)merged.windows[name]=before ?? after;continue;}
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
-    merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage
-      ? {...before,observedAt:after.observedAt} : after;
+    // The kept higher value keeps its own observation time, so it shows as of when it was read.
+    merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage ? before : after;
   }
   const before=saved.sessionCost,after=next.sessionCost;
   const cost=after && (!before || after.observedAt>=before.observedAt)?after:before;
@@ -245,7 +245,7 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   if(!live.length)return {...base,status:'unavailable',windows:[],...sessionCost};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
   return {...base,...sessionCost,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
-    windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],
+    windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],checkedAt:new Date(window.observedAt*1000).toISOString(),
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
