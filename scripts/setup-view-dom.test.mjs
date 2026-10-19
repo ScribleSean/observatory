@@ -176,17 +176,21 @@ void test('setup renders null limits as Unknown in sources and summary', async t
   assert.equal(f.container.textContent.includes(strings.setup.finishNone), false);
 });
 
-void test('setup reads status again while Claude limits is Unknown and stops after unmount', async t => {
+for (const field of ['limitsConsent', 'sources']) void test(`setup recovers while ${field} is Unknown without overlapping reads`, async t => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const unknown = sampleSetupStatus();
-  unknown.limitsConsent = null;
-  const f = await fixture(t, { firstStatus: { ok: true, code: 'done', value: unknown } });
+  unknown[field] = null;
+  const f = await fixture(t, { firstStatus: { ok: true, code: 'done', value: unknown }, holdRetry: true });
   const reads = () => f.messages.filter(message => message.action === 'status').length;
-  const label = () => [...f.container.querySelectorAll('label')].find(node => node.textContent === strings.settings.claudeLimits);
+  const label = () => [...f.container.querySelectorAll('label')].find(node => node.textContent === strings.settings[field === 'sources' ? 'codex' : 'claudeLimits']);
   assert.equal(label().parentElement.querySelector('.ob-meta').textContent, 'Unknown');
   const interval = contract.limits.cacheRefreshSeconds * 1000;
   await act(async () => t.mock.timers.tick(interval));
   assert.equal(reads(), 2);
+  await act(async () => t.mock.timers.tick(interval * 3));
+  assert.equal(reads(), 2);
+  await f.releaseRetry();
+  assert.equal(label().querySelector('input').disabled, false);
   assert.equal(label().parentElement.querySelector('.ob-meta').textContent, 'Off');
   await act(async () => t.mock.timers.tick(interval * 3));
   assert.equal(reads(), 2);

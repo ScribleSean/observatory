@@ -361,10 +361,22 @@ digest replaces the two eight-second deadlines on its socket with one
 succeeds. A valid claim exposes its certificate fingerprint and
 confirmation handle only through the local module API. Explicit confirmation
 through `confirm` returns the fingerprint and closes the listener. It does not
-save trust. The separate `confirmSetup` operation keeps the bounded listener
-available to the claimed certificate only and publishes the supplied peer
-configuration after validating its TLS transport and local server pin. The
-local controller must persist its own complementary pairing before calling it.
+save trust. Host setup confirmation uses two listener steps. `claimSetup`
+consumes the confirming session first, so a cancelled or expired invitation
+refuses before anything is written. While the host then persists its own
+complementary pairing, trust and offer, the claimed certificate still hears
+`awaiting-confirmation`. `publishSetup` keeps the bounded listener available to
+that certificate only and publishes the peer configuration after validating its
+TLS transport and local server pin, but only if the listener has not closed
+since the claim. If the commit fails, or the listener was cancelled or expired
+during it, the host removes only the private files this confirmation created
+(checked by file identity), removes a `private-sync` folder it created once that
+folder is empty again, and closes the listener. While the helper keeps running,
+a refused confirmation therefore leaves no one-sided trust. A helper that is
+killed or crashes during the commit, or a cancel after `configuration-ready`
+and before the joining device fetches its configuration, can still leave
+one-sided trust on the host. Issue 284 tracks both. `confirmSetup` combines
+both steps for a caller that already holds its offer.
 
 `requestPeerSetup` fetches this configuration over pinned TLS and verifies the
 joining user's expected host and source scope. `receiveConfirmedTLSPairing`

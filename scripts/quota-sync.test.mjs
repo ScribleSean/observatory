@@ -44,6 +44,8 @@ test('two device runtimes exchange through the SSH adapter with readiness before
   const {Mac,Windows,request,requests}=await fixture(t);
   const result=await syncQuota(Mac,{request,clock:()=>now});
   assert.equal(result.status,'ok');assert.equal(result.peer.host,'Windows');
+  // A fresh shared reading reloads as ok on the sending side and shows ok here (issue 246).
+  assert.equal(result.peer.status,'ok');
   assert.equal(result.peer.history[0].windows[0].remainingPercent,70);
   assert.equal(result.peer.windows[0].remainingPercent,70);
   assert.equal(Object.hasOwn(result.peer,'generation'),false);

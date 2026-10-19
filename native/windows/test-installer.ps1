@@ -129,7 +129,46 @@ try {
     Remove-Item -LiteralPath (Join-Path $shortcuts 'unrelated-test.txt')
     [IO.Directory]::Delete($shortcuts, $false)
     $registry.DeleteSubKey($keyName, $false)
+    $command = '"' + $install + '\Uninstall.exe"'
+    $stale = $registry.CreateSubKey($keyName)
+    try { $stale.SetValue('UninstallString', $command) } finally { $stale.Dispose() }
+    Invoke-CheckedProcess $InstallerPath '/S' 14
+    Check (-not (Test-Path -LiteralPath $install)) 'Registration refusal created an install folder.'
+    Check (-not (Test-Path -LiteralPath $shortcuts)) 'Registration refusal created a shortcut folder.'
+    $key = $registry.OpenSubKey($keyName, $true)
+    try {
+        Check ($key.GetValue('UninstallString') -eq $command) 'Uninstall command was changed.'
+        Check ($key.ValueCount -eq 1 -and $key.SubKeyCount -eq 0) 'Registration refusal changed the test key.'
+        $key.DeleteValue('UninstallString')
+    } finally { $key.Dispose() }
+    $registry.DeleteSubKey($keyName, $false)
+    Write-Output 'PASS: uninstall command without folders blocks install'
+
+    $oldInstall = Join-Path $work 'old-install'
+    New-Item -ItemType Directory -Path $oldInstall | Out-Null
+    $stale = $registry.CreateSubKey($keyName)
+    try { $stale.SetValue('InstallLocation', $oldInstall) } finally { $stale.Dispose() }
+    Invoke-CheckedProcess $InstallerPath '/S' 14
+    Check (-not (Test-Path -LiteralPath $install)) 'Old-location refusal created an install folder.'
+    Check (-not (Test-Path -LiteralPath $shortcuts)) 'Old-location refusal created a shortcut folder.'
+    Check (Test-Path -LiteralPath $oldInstall -PathType Container) 'Old install folder was removed.'
+    $key = $registry.OpenSubKey($keyName, $true)
+    try {
+        Check ($key.GetValue('InstallLocation') -eq $oldInstall) 'Old install location was changed.'
+        Check ($key.ValueCount -eq 1 -and $key.SubKeyCount -eq 0) 'Old-location refusal changed the test key.'
+        $key.DeleteValue('InstallLocation')
+    } finally { $key.Dispose() }
+    $registry.DeleteSubKey($keyName, $false)
+    [IO.Directory]::Delete($oldInstall, $false)
+    Write-Output 'PASS: another existing install location without an uninstall command blocks install'
+
+    # A failed install cleaned up by hand can leave registration values without an uninstall command.
+    $stale = $registry.CreateSubKey($keyName)
+    try { $stale.SetValue('InstallLocation', $install) } finally { $stale.Dispose() }
     Invoke-CheckedProcess $InstallerPath '/S'
+    $key = $registry.OpenSubKey($keyName)
+    try { Check ($key.GetValue('UninstallString') -eq ('"' + $install + '\Uninstall.exe"')) 'Stale registration was not replaced.' } finally { $key.Dispose() }
+    Write-Output 'PASS: registration without an uninstall command and without folders does not block install'
     $run.SetValue($startupName, 'another test installation')
     Invoke-TestUninstall
     Check ($run.GetValue($startupName) -eq 'another test installation') 'Unrelated startup value was removed.'

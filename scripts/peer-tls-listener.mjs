@@ -27,7 +27,7 @@ function deviceCertificate(raw) {
 
 // Explicit setup only. No auto-start, discovery, file writes or trust activation.
 export async function startPairingListener({address,port=0,identity},
-  {createServer=tls.createServer,onAcknowledged}={}) {
+  {createServer=tls.createServer,onAcknowledged,sessionOptions,setExpiry=setTimeout}={}) {
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
     (port!==0 && (port<1024 || port>65535)) || !identity ||
     typeof identity.key!=='string' || identity.key.length>16384 ||
@@ -35,10 +35,10 @@ export async function startPairingListener({address,port=0,identity},
     (onAcknowledged!==undefined && typeof onAcknowledged!=='function'))throw failure();
   let fingerprint;
   try {fingerprint=deviceCertificate(identity.cert);}catch{throw failure();}
-  const session=new InvitationSession(),sockets=new Set(),connectionDeadlines=new Map();
-  let pending=null,delivery=null,attempts=0,server,expiry,closing;
+  const session=new InvitationSession(sessionOptions),sockets=new Set(),connectionDeadlines=new Map();
+  let pending=null,delivery=null,attempts=0,server,expiry,closing,commit=null,closed=false;
   const close=()=>{
-    session.cancel();pending=null;delivery=null;clearTimeout(expiry);
+    closed=true;commit=null;session.cancel();pending=null;delivery=null;clearTimeout(expiry);
     if(closing)return closing;
     for(const socket of sockets)socket.destroy();
     closing=new Promise(resolve=>{if(server)server.close(()=>resolve());else resolve();});
@@ -54,7 +54,7 @@ export async function startPairingListener({address,port=0,identity},
       let peerFingerprint,peerCertificate;
       socket.on('error',()=>{});
       try {
-        if(socket.alpnProtocol!=='observatory-pair/1' || (!delivery && session.status()==='inactive'))throw failure();
+        if(socket.alpnProtocol!=='observatory-pair/1' || (!delivery && !commit && session.status()==='inactive'))throw failure();
         peerFingerprint=deviceCertificate(socket.getPeerCertificate().raw);
         peerCertificate=new X509Certificate(socket.getPeerCertificate().raw).toString();
       } catch {socket.destroy();return;}
@@ -75,7 +75,9 @@ export async function startPairingListener({address,port=0,identity},
           const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
           if(request?.version===1 && ['setup','acknowledge'].includes(request.action)) {
             const expected=delivery?.peerCertificateSha256??pending?.peerCertificateSha256;
-            if(peerFingerprint!==expected || (!delivery && session.status()!=='confirming'))throw failure();
+            // While a confirmed setup is being committed, the claimed peer still hears
+            // awaiting-confirmation, as it did before the session was claimed.
+            if(peerFingerprint!==expected || (!delivery && !commit && session.status()!=='confirming'))throw failure();
             if(request.action==='setup' && Object.keys(request).length===2) {
               socket.end(JSON.stringify(delivery?{version:1,status:'configuration',pairing:delivery.pairing}:
                 {version:1,status:'awaiting-confirmation'}));
@@ -129,7 +131,25 @@ export async function startPairingListener({address,port=0,identity},
       });
     });
     const invitation=session.issue({address,port:server.address().port,certificateSha256:fingerprint});
-    expiry=setTimeout(()=>{void close();},invitationLifetimeMs);
+    expiry=setExpiry(()=>{void close();},invitationLifetimeMs);
+    const validateOffer=pairing=>{
+      const safe=validatePairing(pairing);
+      if(safe.transport?.kind!=='tls' || safe.peerCertificateSha256!==fingerprint)throw failure();
+      return {safe,digest:setupConfigurationDigest(safe)};
+    };
+    const claimSetup=claimId=>{
+      if(closed || commit)throw failure();
+      const result=session.confirm(claimId),handle=Object.freeze({});
+      commit={handle,result};
+      return handle;
+    };
+    const publishSetup=(handle,pairing)=>{
+      const {safe,digest}=validateOffer(pairing);
+      if(closed || !commit || commit.handle!==handle)throw failure();
+      delivery={...commit.result,pairing:safe,digest,acknowledged:false};
+      commit=null;pending=null;
+      return {digest};
+    };
     return {
       invitation,
       status:()=>delivery?(delivery.acknowledged?'acknowledged':'configuration-ready'):session.status(),
@@ -140,14 +160,11 @@ export async function startPairingListener({address,port=0,identity},
         await close();
         return result;
       },
-      // The native controller must commit its own complementary pairing before
-      // publishing this peer configuration. No storage or consent is implied.
+      claimSetup,publishSetup,
+      // Preserve validation before claiming for callers that already have an offer.
       confirmSetup:(claimId,pairing)=>{
-        const safe=validatePairing(pairing);
-        if(safe.transport?.kind!=='tls' || safe.peerCertificateSha256!==fingerprint)throw failure();
-        const digest=setupConfigurationDigest(safe),result=session.confirm(claimId);
-        delivery={...result,pairing:safe,digest,acknowledged:false};pending=null;
-        return {digest};
+        validateOffer(pairing);
+        return publishSetup(claimSetup(claimId),pairing);
       },
     };
   } catch {await close();throw failure();}

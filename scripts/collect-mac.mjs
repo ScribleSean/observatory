@@ -1,3 +1,4 @@
+import {writeSnapshot} from './snapshot-size.mjs';
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
 import {finalizeWithLocalAdditions} from './local-additions.mjs';
 import {spawn} from 'node:child_process';
@@ -58,9 +59,9 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
   let pairing=null;
   try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Mac',['Mac']);}catch{}
   const folder=path.join(runtime,'public/local');
-  const atomic=async(name,value,beforeReplace)=>{
+  const atomic=async(name,value,beforeReplace,serialized=false)=>{
     const temporary=path.join(folder,`.collector-${randomUUID()}.tmp`);
-    try{await writeFile(temporary,JSON.stringify(value),{flag:'wx',mode:0o600,flush:true});await beforeReplace?.();await rename(temporary,path.join(folder,name));}
+    try{await writeFile(temporary,serialized?value:JSON.stringify(value),{flag:'wx',mode:0o600,flush:true});await beforeReplace?.();await rename(temporary,path.join(folder,name));}
     finally{await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
   };
   const startedAt=new Date().toISOString();
@@ -109,7 +110,7 @@ export async function collectMac(runtime,python,peerConfig=null,{quotaOnly=false
     ...claudeLimitsSource(null,{enabled}),...(enabled?{usageCommand:'timed-out'}:{})})));
   attachDeviceName(result.data,'Mac',deviceName);
   const {data,status}=result;
-  await atomic('usage.json',data,replacement.preserve);
+  await writeSnapshot(data,{atomic,startedAt,beforeReplace:replacement.preserve});
   await atomic('collector.json',{...status,startedAt,finishedAt:new Date().toISOString(),snapshotAt:data.collectedAt,intervalSeconds:300,maxRunSeconds:240});
   console.log(JSON.stringify(status));
   return result;

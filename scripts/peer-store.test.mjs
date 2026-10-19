@@ -123,15 +123,27 @@ test('independent publishers allocate distinct sequences', {timeout:45000},async
   const runtime=await fixture(t);
   await publishLocalPayload(runtime,payload(),config,now);
   const moduleUrl=new URL('./peer-store.mjs',import.meta.url).href;
-  const code=`import {publishLocalPayload} from ${JSON.stringify(moduleUrl)};
-    const record=await publishLocalPayload(process.argv[1],${JSON.stringify(payload())},${JSON.stringify(config)},${now});
-    process.stdout.write(String(record.revision.sequence));`;
-  const sequences=await Promise.all(Array.from({length:4},async()=>{
+  const code=`import {publishLocalPayload} from ${JSON.stringify(moduleUrl)}
+    const started=performance.now()
+    try {
+      const record=await publishLocalPayload(process.argv[1],${JSON.stringify(payload())},${JSON.stringify(config)},${now})
+      process.stdout.write(String(record.revision.sequence))
+    } finally {
+      process.stderr.write('elapsedMs='+Math.round(performance.now()-started)+'\\n')
+    }`;
+  const results=await Promise.all(Array.from({length:4},async()=>{
     const child=spawn(process.execPath,['--input-type=module','-e',code,runtime],{stdio:['ignore','pipe','pipe']});
     let output='',errors='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>errors+=chunk);
     t.after(()=>{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');});
-    const [exitCode]=await once(child,'close');assert.equal(exitCode,0,errors);return Number(output);
+    const [exitCode]=await once(child,'close');
+    const sequence=output?Number(output):'failed';
+    const elapsedMs=errors.match(/^elapsedMs=(\d+)$/m)?.[1]??'Unknown';
+    return {exitCode,errors,sequence,elapsedMs};
   }));
+  results.sort((a,b)=>a.sequence-b.sequence);
+  t.diagnostic('publisher elapsed ms by sequence: '+results.map(result=>`${result.sequence}=${result.elapsedMs}`).join(', '));
+  for(const result of results)assert.equal(result.exitCode,0,result.errors);
+  const sequences=results.map(result=>result.sequence);
   assert.deepEqual(sequences.sort((a,b)=>a-b),[2,3,4,5]);
   assert.equal((await readPeerState(runtime,config,now,'local')).revision.sequence,5);
 });

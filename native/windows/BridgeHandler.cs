@@ -684,6 +684,7 @@ internal sealed class BridgeHandler : IDisposable
             case "pairing-disconnect": case "pairing-repair-prepare":
                 if (host.CollectorBusy) return new("busy");
                 var repair = request.Action == "pairing-repair-prepare";
+                if (!repair && !Directory.Exists(Path.Combine(runtime, "private-sync"))) return new("unavailable");
                 if (!Confirm(request, repair ? "Prepare pairing repair" : "Disconnect paired device", repair
                     ? "If this PC has pairing state, disable it and retain a private backup? Otherwise, confirm this PC is ready for repair. Nothing is deleted or sent. A transfer already in flight may finish. Confirm Prepare pairing repair on the Mac separately, then use Pair with Windows there to create fresh credentials. Retirement cannot be undone by this action."
                     : "Disable pairing on this Windows PC only? Local collection continues and saved data is retained. A transfer already in flight may finish. Disconnect the other device separately. To reconnect, prepare pairing repair on both devices and pair again from the Mac.")) return new("cancelled");
@@ -1879,6 +1880,17 @@ internal sealed class BridgeHandler : IDisposable
     private static async Task TestConsent(string runtime)
     {
         using var test = new TestDriver(runtime);
+        var sync = Path.Combine(runtime, "private-sync");
+        Check(!Directory.Exists(sync), "Unexpected private pairing folder");
+        await test.Run("pairing-disconnect", code: "unavailable");
+        Check(test.Host.Dialogs == 0 && !test.Host.Calls.Any(c => c == "disconnect" ||
+            c.StartsWith("confirm:", StringComparison.Ordinal)) && !Directory.Exists(sync), "Unpaired disconnect changed state");
+        test.Host.Consent = false;
+        await test.Run("pairing-repair-prepare", code: "cancelled");
+        Check(test.Host.Dialogs == 1 && test.Host.Calls.Contains("confirm:Prepare pairing repair") &&
+            !test.Host.Calls.Contains("repair") && !Directory.Exists(sync), "Unpaired repair confirmation");
+        test.Host.Calls.Clear(); test.Host.Consent = true;
+        Directory.CreateDirectory(sync);
         test.Host.ScriptThrows = true;
         await test.Run("set-limits-consent", new() { ["enabled"] = true }, "unavailable");
         test.Host.ScriptThrows = false;
@@ -1889,6 +1901,7 @@ internal sealed class BridgeHandler : IDisposable
         await test.Run("pairing-identity-create", code: "cancelled");
         await test.Run("set-limits-consent", new() { ["enabled"] = true }, "cancelled");
         await test.Run("pairing-disconnect", code: "cancelled");
+        Check(test.Host.Calls.Contains("confirm:Disconnect paired device"), "Paired disconnect confirmation");
         await test.Run("pairing-repair-prepare", code: "cancelled");
         Check(test.Host.Dialogs == 6 && !test.Host.Calls.Any(c => c is "config-write" or "reserve" or "disconnect" or "repair" ||
             c.StartsWith("sharing:", StringComparison.Ordinal) || c.StartsWith("script:", StringComparison.Ordinal)), "Declined consent changed state");
@@ -1933,10 +1946,14 @@ internal sealed class BridgeHandler : IDisposable
         Check(test.Host.CollectionPaused, "Busy maintenance lost pause");
         var paused = (await test.Run("status"))["value"]!;
         Check(paused["pairing"]!["state"]!.GetValue<string>() == "unavailable" && paused["collectionPaused"]!.GetValue<bool>(), "Pause status");
+        Directory.Delete(sync);
     }
 
     private static async Task TestDialogReload(string runtime)
     {
+        // Disconnect reaches its dialog only when this runtime has pairing state.
+        var sync = Path.Combine(runtime, "private-sync");
+        Directory.CreateDirectory(sync);
         foreach (var action in new[] { "set-source", "set-sharing", "pairing-disconnect", "export-data",
             "set-limits-consent", "pairing-repair-prepare", "pairing-identity-create" })
         {
@@ -1957,6 +1974,7 @@ internal sealed class BridgeHandler : IDisposable
                 "Reloaded dialog changed state: " + action);
             Check(test.Posts.Count == 0, "Reloaded dialog posted to stale document");
         }
+        Directory.Delete(sync);
     }
 
     private static async Task TestPairing(string runtime)
@@ -1967,7 +1985,7 @@ internal sealed class BridgeHandler : IDisposable
             Check(defaultsTest.Host.Calls.Contains("release-no-refresh") && !defaultsTest.Host.Calls.Contains("release"),
                 "Temporary defaults release without refresh");
             await defaultsTest.Run("pairing-host-start", HostArgs());
-            Check(defaultsTest.Host.Reserved && !defaultsTest.Host.Session!.Disposed, "Host start after defaults reserves collection");
+            Check(defaultsTest.Host.Reserved && !defaultsTest.Host.Session!.Disposed, "Host start after defaults opens a session instead of busy");
             await defaultsTest.Run("pairing-cancel");
             Check(defaultsTest.Host.Session!.Disposed && !defaultsTest.Host.Reserved && defaultsTest.Host.Releases == 2 &&
                 defaultsTest.Host.Calls.Contains("release"), "Host session release retains refresh");

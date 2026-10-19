@@ -107,12 +107,20 @@ Function .onInit
   IntCmp $0 -1 check_registration existing_install existing_install
   check_registration:
   ClearErrors
-  EnumRegValue $0 HKCU "${UNINSTALL_KEY}" 0
-  IfErrors registration_subkeys existing_install
+  ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "UninstallString"
+  StrCmp $0 "" registration_location existing_install
+  registration_location:
+  ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
+  StrCmp $0 "" registration_subkeys
+  StrCmp $0 "$INSTDIR" registration_subkeys
+  System::Call 'kernel32::GetFileAttributesW(w r0) i .r1'
+  IntCmp $1 -1 registration_subkeys existing_install existing_install
   registration_subkeys:
   ClearErrors
   EnumRegKey $0 HKCU "${UNINSTALL_KEY}" 0
-  IfErrors new_install existing_install
+  ; An existing key with no subkeys returns an empty name without the error flag.
+  IfErrors new_install
+  StrCmp $0 "" new_install existing_install
   existing_install:
     MessageBox MB_OK|MB_ICONSTOP "An install folder, shortcut folder or registration already exists. Uninstall the previous version first. Saved collection data is preserved. If unrelated files remain in an install folder, move that folder aside before reinstalling." /SD IDOK
     SetErrorLevel 14
@@ -128,7 +136,6 @@ Section "Install"
   WriteINIStr "$INSTDIR\installer-owner.ini" "Owner" "Product" "${SETUP_ID}"
   WriteINIStr "$INSTDIR\installer-owner.ini" "Owner" "Revision" "${SOURCE_REVISION}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
   IfErrors install_failed
   !include "install-files.nsh"
   IfErrors install_failed

@@ -103,7 +103,13 @@ function read(db,now) {
   let history=null;
   if(value.history) {
     if(value.history.status==='not-connected')history=retainQuotaHistory(null,null,{enabled:false,now});
-    else if(hex(value.history.scope))history=retainQuotaHistory(value.history,{status:value.history.latestReadStatus},{scope:value.history.scope,now});
+    else if(hex(value.history.scope)) {
+      if(!['ok','stale','unavailable','needs-auth','unsupported'].includes(value.history.status))throw Error('Invalid saved quota status');
+      history=retainQuotaHistory(value.history,{status:value.history.latestReadStatus},{scope:value.history.scope,now});
+      // Reloading validates retention without creating a new reading. A saved
+      // ok history stays ok only while its latest reading is still retained.
+      if(value.history.status==='ok' && history.status==='stale' && history.latestReadStatus==='ok' && history.asOf && history.asOf===value.history.asOf)history.status='ok';
+    }
     else throw Error('Invalid quota account scope');
   }
   const sharing=readSharing(value.sharing,history);

@@ -464,7 +464,7 @@ Both collectors write these after the provider exchange, in `attachProviderToken
 | Field | Meaning |
 | --- | --- |
 | `prices` | `{source, checkedOn}` from the shared price table, so the dashboard can name the table and the date it was checked. Written on every collection. |
-| `apiEstimate` on Claude Code day and model rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table, for each Claude Code row with status `ok`, local or peer. A row with any other status, including a peer row marked `stale`, gets no estimate. A model with no price is excluded. The price lookup matches the exact model name, so a dated name (such as `claude-sonnet-4-20250514`) or a `-latest` name is unpriced unless the table lists that exact name. Claude Fable models and the `unknown` model bucket are unpriced too. When nothing in a row is priced, `usd` and `parts` are null, never zero. |
+| `apiEstimate` on Claude Code day and model rows | The same shape Codex rows carry (`usd`, `parts`, `coveredTokens`, `excluded`, `checked`), computed from the row's model counts and the price table, for each Claude Code row with status `ok`, local or peer. A row with any other status, including a peer row marked `stale`, gets no estimate. A model with no price is excluded. The price lookup matches the exact model name, so a dated name (such as `claude-sonnet-4-20250514`) or a `-latest` name is unpriced unless the table lists that exact name. The `unknown` model bucket is unpriced too. Claude Fable models keep their names and are priced from the table (issue 248). When nothing in a row is priced, `usd` and `parts` are null, never zero. |
 
 ### Snapshot additions
 
@@ -537,6 +537,7 @@ Screen time for Now uses the activity `hours` in the same way. Limits in Now kee
 
 | Field | Shape |
 | --- | --- |
+| `claudeLimits.windows[].checkedAt` | ISO 8601 time of the reading the window's value came from (issue 245). The source `checkedAt` is the newest of them. A window carried from an earlier reading keeps its earlier time, and so does a higher earlier value that a lower reading in the same reset period does not replace. The panel shows "as of" that time, with the date when it is not today. A window whose `resetsAt` has passed reads Unknown with "Waiting for the reset to be observed." until the next reading. The history chart and pace still use the source time. |
 | `claudeLimits.sessionCost` | `{usd, observedAt}`. `usd` is a finite number from 0 to 10,000, rounded to the cent. `observedAt` is an ISO 8601 time. |
 
 - Only the status line bridge writes it, from Claude Code's `cost.total_cost_usd`. It is stored beside the windows in `claude-limits/limits.json` as `{usd, observedAt}` with `observedAt` in Unix seconds, like the windows. That file's 4 KiB read limit still holds.

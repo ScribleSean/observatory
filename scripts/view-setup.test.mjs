@@ -42,3 +42,14 @@ void test('first-run sample is valid and deeply independent', () => {
 void test('setup wording meets the writing constraints', () => {
   for (const text of Object.values(strings.setup)) assert.doesNotMatch(text, /\u2014|;|ssh/i);
 });
+
+void test('summary preserves Unknown source rows when sources is null', () => {
+  const status = sampleSetupStatus();
+  status.sources = null;
+  const summary = setupSummary(status);
+  assert.equal(summary.rows.length, 6);
+  assert.ok(summary.rows.slice(0, 5).every(row => row.on === undefined));
+  assert.equal(summary.rows[5].on, false);
+  assert.equal(summary.anyOn, false);
+  assert.equal(summary.noneOn, false);
+});

@@ -9,6 +9,8 @@ struct CollectorLaunch {
 enum CollectorConfiguration {
     static let defaults = ["activity": true, "codex": true, "claude": false, "wispr": false, "quota": false, "receipts": false, "benchmarks": false]
 
+    static let initial = defaults.mapValues { _ in false }
+
     static func validate(_ object: JSONObject) throws -> [String: Bool] {
         var result = defaults
         for (key, value) in object {
@@ -33,7 +35,7 @@ enum CollectorConfiguration {
             _ = try read(runtime: runtime)
             return true
         }
-        try save(defaults, runtime: runtime)
+        try save(initial, runtime: runtime)
         return true
     }
 

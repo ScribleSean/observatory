@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, sourceCounts, totals } from '../lib/panel-data.mjs';
+import { readingTime } from '../lib/panel-data.mjs';
 import { spawnSync } from 'node:child_process';
 import { SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
@@ -273,4 +274,63 @@ test('stored pace remains the default and can be omitted without changing other 
     assert.equal(row.note, 'Resets in 1h 0m · runs out in about 30m');
     assert.deepEqual(without[index], { ...row, note: 'Resets in 1h 0m' });
   });
+});
+
+test('window timestamps mark only the carried Claude reading stale', () => {
+  const fresh = new Date(now - 60000).toISOString();
+  const carried = new Date(now - 30 * 60000).toISOString();
+  const source = { status: 'ok', checkedAt: fresh, windows: [
+    { bucket: 'claude', window: 'five_hour', checkedAt: fresh, remainingPercent: 40 },
+    { bucket: 'claude', window: 'seven_day', checkedAt: carried, remainingPercent: 60 },
+  ] };
+  const rows = limits({ claudeLimits: source }, now).filter(row => row.provider === 'claude');
+  assert.deepEqual(rows.map(row => row.stale), [false, true]);
+  assert.doesNotMatch(rows[0].note, /as of/);
+  assert.ok(rows[1].note.includes(strings.formats.asOf.replace('{time}',
+    new Date(carried).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))));
+  const quota = { ...source, windows: source.windows.map(({ checkedAt, ...row }) => row) };
+  assert.deepEqual(limits({ quota }, now).filter(row => row.provider === 'codex').map(row =>
+    [row.remaining, row.stale, row.note]), [[40, false, strings.status.resetUnknown], [60, false, strings.status.resetUnknown]]);
+});
+
+test('reset values become Unknown while missing or invalid reset times keep their values', () => {
+  for (const resetsAt of [new Date(now - 60000).toISOString(), new Date(now).toISOString(), undefined, 'invalid']) {
+    const expired = Number.isFinite(Date.parse(resetsAt));
+    const source = { status: 'ok', checkedAt: new Date(now - 60000).toISOString(),
+      windows: [{ bucket: 'codex', window: 'primary', remainingPercent: 12, resetsAt }] };
+    for (const row of limits({ quota: source, claudeLimits: source }, now)) {
+      assert.equal(row.remaining, expired ? null : 12);
+      assert.equal(row.low, !expired);
+      assert.equal(row.note, expired ? strings.limits.resetPending : strings.status.resetUnknown);
+    }
+  }
+});
+
+test('a window time later than its source time cannot make an old limits reading current', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z');
+  const snapshot = { claudeLimits: { status: 'ok', checkedAt: '2026-10-18T10:00:00Z', windows: [
+    { bucket: 'claude', window: 'five_hour', durationMinutes: 300, remainingPercent: 50, resetsAt: '2026-10-18T14:00:00Z', checkedAt: '2026-10-18T11:59:00Z' }] } };
+  const row = limits(snapshot, now).find(item => item.provider === 'claude');
+  assert.equal(row.stale, true);
+  assert.match(row.note, /as of/);
+});
+
+test('an as of note names the date when the reading is from an earlier day', () => {
+  const now = new Date(2026, 9, 18, 15, 0).getTime();
+  const earlier = new Date(2026, 9, 15, 7, 10).getTime();
+  const sameDay = new Date(2026, 9, 18, 7, 10).getTime();
+  assert.equal(readingTime(sameDay, now), new Date(sameDay).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  assert.notEqual(readingTime(earlier, now), new Date(earlier).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  assert.match(readingTime(earlier, now), /15/);
+});
+
+test('a kept higher Claude Code reading shows as of its own earlier time', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z');
+  const snapshot = { claudeLimits: { status: 'ok', checkedAt: '2026-10-18T11:59:00Z', windows: [
+    { bucket: 'claude', window: 'five_hour', durationMinutes: 300, remainingPercent: 20, resetsAt: '2026-10-18T14:00:00Z', checkedAt: '2026-10-18T11:10:00Z' },
+    { bucket: 'claude', window: 'seven_day', durationMinutes: 10080, remainingPercent: 70, resetsAt: '2026-10-20T14:00:00Z', checkedAt: '2026-10-18T11:59:00Z' }] } };
+  const [kept, fresh] = limits(snapshot, now).filter(item => item.provider === 'claude');
+  assert.equal(kept.stale, true);
+  assert.match(kept.note, /as of/);
+  assert.equal(fresh.stale, false);
 });
