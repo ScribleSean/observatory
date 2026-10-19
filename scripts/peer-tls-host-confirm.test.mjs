@@ -7,6 +7,7 @@ import {existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {testRuntimeBase} from './test-runtime-base.mjs';
+import {privateCollectorDirectory} from './peer-directory.mjs';
 import {initializeDeviceIdentity} from './peer-device-identity.mjs';
 import {createPairingConfigurations,initializePairing} from './peer-pairing.mjs';
 import {prepareHostTLSSetup,startHostTLSSetup} from './peer-tls-host.mjs';
@@ -34,15 +35,16 @@ test('host confirmation claims before committing and rolls back refused publicat
         '-out',cert,'-days','1','-subj','/CN=Synthetic confirmation test'],{stdio:'ignore',timeout:15000});
       return {version:1,key:await readFile(key,'utf8'),cert:await readFile(cert,'utf8')};
     }
-    const local=await identity('local'),peer=await identity('peer');
+    const local=await identity('local'),peer=await identity('peer'),other=await identity('other');
     for(const mode of ['cancel before','expiry before','cancel during','expiry during','existing pairing',
-      'existing all','replacement','hook failure','prepare failure','partial prepare failure','success'])await t.test(mode,async t=>{
+      'existing all','existing empty folder','replacement','hook failure','prepare failure','partial prepare failure','success'])await t.test(mode,async t=>{
       const runtime=await realpath(await mkdtemp(path.join(base,'runtime-')));
       await initializeDeviceIdentity(runtime,local);
       const file=name=>path.join(runtime,'private-sync',name);
       if(['existing pairing','partial prepare failure'].includes(mode))await initializePairing(runtime,{
         ...createPairingConfigurations()[process.platform==='darwin'?'Mac':'Windows'],
         transport:input.peerEndpoint,localEndpoint:input.localEndpoint,peerCertificateSha256:fingerprint(peer.cert)});
+      if(mode==='existing empty folder')await privateCollectorDirectory(runtime,'private-sync',true);
       if(mode==='existing all')await prepareHostTLSSetup(runtime,{...input,
         peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert)});
       if(mode==='partial prepare failure')await writeFile(file('tls-offer.json'),'{}',{mode:0o600});
@@ -57,6 +59,10 @@ test('host confirmation claims before committing and rolls back refused publicat
           // The claimed peer keeps hearing awaiting-confirmation while the commit runs.
           assert.deepEqual(await requestPeerSetup(host.invitation,local.cert,peer,
             {host:process.platform==='darwin'?'Windows':'Mac'},{connect}),{status:'awaiting-confirmation'});
+          // Another certificate gets neither the setup reply nor a new claim while the commit runs.
+          await assert.rejects(requestPeerSetup(host.invitation,local.cert,other,
+            {host:process.platform==='darwin'?'Windows':'Mac'},{connect}));
+          await assert.rejects(requestPeerClaim(host.invitation,local.cert,other,{connect}));
           if(mode==='replacement') {
             await rename(file('tls-trust.json'),path.join(runtime,'retained-trust.json'));
             await writeFile(file('tls-trust.json'),'Synthetic replacement',{mode:0o600});
@@ -84,7 +90,7 @@ test('host confirmation claims before committing and rolls back refused publicat
         if(mode==='prepare failure')assert.equal(host.pending()?.claimId,claimId);
         // A private-sync folder created by the refused confirmation does not stay behind.
         if(!['existing pairing','existing all','partial prepare failure','prepare failure'].includes(mode))
-          assert.equal(existsSync(path.join(runtime,'private-sync')),mode==='replacement');
+          assert.equal(existsSync(path.join(runtime,'private-sync')),['replacement','existing empty folder'].includes(mode));
         for(const name of names) {
           if(existing.has(name)) {
             assert.deepEqual(await readFile(file(name)),existing.get(name).bytes);

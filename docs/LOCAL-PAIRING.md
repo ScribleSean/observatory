@@ -370,9 +370,13 @@ that certificate only and publishes the peer configuration after validating its
 TLS transport and local server pin, but only if the listener has not closed
 since the claim. If the commit fails, or the listener was cancelled or expired
 during it, the host removes only the private files this confirmation created
-(checked by file identity) and closes the listener, so no one-sided trust is
-left behind. `confirmSetup` combines both steps for a caller that already holds
-its offer.
+(checked by file identity), removes a `private-sync` folder it created once that
+folder is empty again, and closes the listener. While the helper keeps running,
+a refused confirmation therefore leaves no one-sided trust. A helper that is
+killed or crashes during the commit, or a cancel after `configuration-ready`
+and before the joining device fetches its configuration, can still leave
+one-sided trust on the host. Issue 284 tracks both. `confirmSetup` combines
+both steps for a caller that already holds its offer.
 
 `requestPeerSetup` fetches this configuration over pinned TLS and verifies the
 joining user's expected host and source scope. `receiveConfirmedTLSPairing`
