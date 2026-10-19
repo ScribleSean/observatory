@@ -111,7 +111,7 @@ test('installer refuses folders before checking uninstall command, location and 
     'registration_subkeys:'
   ];
   assert.ok(init.includes(location.join('\n  ')));
-  assert.match(init,/registration_subkeys:\s+ClearErrors\s+EnumRegKey \$0 HKCU "\$\{UNINSTALL_KEY\}" 0\s+IfErrors new_install existing_install/);
+  assert.match(init,/registration_subkeys:\s+ClearErrors\s+EnumRegKey \$0 HKCU "\$\{UNINSTALL_KEY\}" 0\s+(?:;[^\r\n]*\s+)?IfErrors new_install\s+StrCmp \$0 "" new_install existing_install/);
   assert.match(init,/existing_install:\s+MessageBox [^\r\n]+\s+SetErrorLevel 14\s+Quit\s+new_install:\s*$/);
   assert.doesNotMatch(init,/EnumRegValue|DeleteReg(?:Key|Value)/);
 });

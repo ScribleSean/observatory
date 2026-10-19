@@ -118,7 +118,9 @@ Function .onInit
   registration_subkeys:
   ClearErrors
   EnumRegKey $0 HKCU "${UNINSTALL_KEY}" 0
-  IfErrors new_install existing_install
+  ; An existing key with no subkeys returns an empty name without the error flag.
+  IfErrors new_install
+  StrCmp $0 "" new_install existing_install
   existing_install:
     MessageBox MB_OK|MB_ICONSTOP "An install folder, shortcut folder or registration already exists. Uninstall the previous version first. Saved collection data is preserved. If unrelated files remain in an install folder, move that folder aside before reinstalling." /SD IDOK
     SetErrorLevel 14
