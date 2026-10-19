@@ -1,8 +1,9 @@
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import tls from 'node:tls';
+import {setTimeout as delay} from 'node:timers/promises';
 import {X509Certificate} from 'node:crypto';
-import {mkdtemp,realpath,rm,readFile,lstat,rename,writeFile} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,readFile,lstat,rename,writeFile,link} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {execFileSync,spawn} from 'node:child_process';
 import path from 'node:path';
@@ -55,17 +56,69 @@ test('host commit recovery', {skip:!['darwin','win32'].includes(process.platform
     localCertificateSha256:fingerprint(local.cert),peerCertificateSha256:fingerprint(peer.cert),
     directoryCreated:true,created,files:{}});
   const saveMarker=async(runtime,value)=>writeFile(file(runtime,hostCommitFile),JSON.stringify(value),{mode:0o600});
-  const confirmed=async(runtime)=>{
-    const host=await startHostTLSSetup(runtime,{address:input.localEndpoint.address},{createServer});
+  const confirmed=async(runtime,options={})=>{
+    const host=await startHostTLSSetup(runtime,{address:input.localEndpoint.address},{createServer,...options});
     t.after(()=>host.cancel());
     await requestPeerClaim(host.invitation,local.cert,peer,{connect});
     await host.confirm(host.pending().claimId,input);
+    assert.equal(existsSync(file(runtime,hostCommitFile+'.next')),false);
     return host;
   };
   await t.test('absent marker creates no folders',async()=>{
     const runtime=await realpath(await mkdtemp(path.join(base,'runtime-')));
     assert.deepEqual(await recoverHostCommit(runtime),{status:'none'});
     for(const name of ['private-sync','private-repair'])assert.equal(existsSync(path.join(runtime,name)),false);
+  });
+  await t.test('lone next marker recovery and busy lease',async()=>{
+    const runtime=await fresh();
+    await privateCollectorDirectory(runtime,'private-sync',true);
+    const next=file(runtime,hostCommitFile+'.next');
+    await writeFile(next,'Synthetic partial marker',{mode:0o600});
+    const lease=await acquireHostCommitLease(runtime);
+    try {
+      assert.deepEqual(await recoverHostCommit(runtime),{status:'pending'});
+      assert.ok(existsSync(next));
+    } finally {lease.release();}
+    assert.deepEqual(await recoverHostCommit(runtime),{status:'rolled-back'});
+    assert.equal(existsSync(next),false);
+    assert.equal((await readPairingStatus(runtime)).state,'unpaired');
+    await initializePairing(runtime,pair());
+  });
+  await t.test('lone hard linked next marker is preserved',{skip:process.platform==='win32'},async()=>{
+    const runtime=await fresh();
+    await privateCollectorDirectory(runtime,'private-sync',true);
+    const next=file(runtime,hostCommitFile+'.next');
+    await writeFile(next,'Synthetic partial marker',{mode:0o600});
+    await link(next,path.join(runtime,'retained-next'));
+    assert.deepEqual(await recoverHostCommit(runtime),{status:'unavailable'});
+    assert.ok(existsSync(next));
+  });
+  await t.test('listener expiry rolls back configuration without cancellation',async()=>{
+    const runtime=await fresh();
+    let expire;
+    const host=await confirmed(runtime,{setExpiry:callback=>{expire=callback;}});
+    assert.equal(host.status(),'configuration-ready');
+    expire();
+    const deadline=Date.now()+10000;
+    while(existsSync(path.join(runtime,'private-sync')) && Date.now()<deadline)await delay(20);
+    for(const name of [...names,hostCommitFile,hostCommitFile+'.next'])assert.equal(existsSync(file(runtime,name)),false);
+    assert.equal(existsSync(path.join(runtime,'private-sync')),false);
+    await host.cancel();
+  });
+  await t.test('first marker write failure removes next and created folder',async()=>{
+    const runtime=await fresh();
+    let reached=false;
+    const host=await startHostTLSSetup(runtime,{address:input.localEndpoint.address},{createServer,beforeMarker:async()=>{
+      reached=true;
+      assert.ok(existsSync(file(runtime,hostCommitFile+'.next')));
+      throw Error('Synthetic marker write failure');
+    }});
+    t.after(()=>host.cancel());
+    await requestPeerClaim(host.invitation,local.cert,peer,{connect});
+    await assert.rejects(host.confirm(host.pending().claimId,input),/unavailable/);
+    assert.equal(reached,true);
+    assert.equal(existsSync(path.join(runtime,'private-sync')),false);
+    await host.cancel();
   });
   for(const mode of ['bound','partial','different pair'])await t.test('first phase '+mode,async()=>{
     const runtime=await fresh(),pairing=pair();

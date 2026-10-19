@@ -133,22 +133,34 @@ async function removeNext(directory) {
   if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1n)return;
   await unlink(filename);
 }
+async function syncDirectory(directory) {
+  if(process.platform==='win32')return;
+  const folder=await open(directory,constants.O_RDONLY);
+  try {await folder.sync();}finally{await folder.close();}
+}
 async function clearCommit(directory) {
   await unlink(path.join(directory,hostCommitFile));
   await removeNext(directory);
+  await syncDirectory(directory);
 }
-async function writeCommit(runtime,marker,replace=false) {
+async function writeCommit(runtime,marker,replace=false,beforeMarker) {
   const directory=await privateSyncDirectory(runtime);
   await removeNext(directory);
   const bytes=Buffer.from(JSON.stringify(marker));
   if(bytes.length>4096)throw fail();
-  const filename=path.join(directory,hostCommitFile+(replace?'.next':''));
+  const filename=path.join(directory,hostCommitFile+'.next');
   const file=await open(filename,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
   try {
+    if(beforeMarker)await beforeMarker();
     if((await file.write(bytes)).bytesWritten!==bytes.length)throw fail();
     await file.sync();
   } finally {await file.close();}
-  if(replace)await rename(filename,path.join(directory,hostCommitFile));
+  const target=path.join(directory,hostCommitFile);
+  if(!replace) {
+    try {await lstat(target);throw fail();}catch(error){if(error.code!=='ENOENT')throw error;}
+  }
+  await rename(filename,target);
+  await syncDirectory(directory);
   await privateSyncDirectory(runtime);
 }
 async function commitAcknowledged(runtime,marker) {
@@ -163,13 +175,25 @@ async function removeCreatedDirectory(directory) {
 }
 export async function recoverHostCommit(runtime) {
   try {lstatSync(path.join(runtime,'private-sync',hostCommitFile));}
-  catch(error) {if(error.code==='ENOENT')return {status:'none'};}
+  catch(error) {
+    if(error.code==='ENOENT') {
+      try {lstatSync(path.join(runtime,'private-sync',hostCommitFile+'.next'));}
+      catch(nextError){if(nextError.code==='ENOENT')return {status:'none'};}
+    }
+  }
   try {
     return await withPeerStateLock(runtime,async()=>{
       const lease=await acquireHostCommitLease(runtime);
       if(!lease)return {status:'pending'};
       try {
-        if(!await hostCommitUnfinished(runtime))return {status:'none'};
+        if(!await hostCommitUnfinished(runtime)) {
+          const directory=await privateSyncDirectory(runtime),filename=path.join(directory,hostCommitFile+'.next');
+          let info;
+          try {info=await lstat(filename);}catch(error){if(error.code==='ENOENT')return {status:'none'};throw error;}
+          if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1)return {status:'unavailable'};
+          await unlink(filename);
+          return {status:'rolled-back'};
+        }
         const directory=await privateSyncDirectory(runtime),marker=await readHostCommit(directory);
         if(await commitAcknowledged(runtime,marker)) {
           await clearCommit(directory);return {status:'completed'};
@@ -207,7 +231,7 @@ export async function recoverHostCommit(runtime) {
         return {status:'rolled-back'};
       } finally {lease.release();}
     });
-  } catch {return {status:'unavailable'};}
+  } catch(error) {return {status:error.errcode===5?'pending':'unavailable'};}
 }
 
 // Native host controller entrypoint. Starts only on an explicit setup action.
@@ -217,12 +241,20 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
   const identity=await readDeviceIdentity(runtime);
   if(!identity)throw fail();
   const localFingerprint=fingerprint(identity.cert);
-  let lease=null,marker=null;
+  let lease=null,marker=null,rollbackPromise,firstMarkerPending=false,confirming=0;
+  // A confirmation rolls back its own failure, so a listener close during it leaves the rollback to that path.
+  const guarded=async action=>{confirming++;try {return await action();}finally{confirming--;}};
   const created=new Map(),directory=path.join(runtime,'private-sync');
   const release=()=>{lease?.release();lease=null;};
-  const rollback=()=>withPeerStateLock(runtime,async()=>{
+  const rollback=()=>withPeerStateLock(runtime,()=>rollbackPromise??=(async()=>{
     try {
-      if(!marker || !await hostCommitUnfinished(runtime))return;
+      if(!marker)return;
+      if(!await hostCommitUnfinished(runtime)) {
+        if(!firstMarkerPending)return;
+        await removeNext(directory);
+        if(marker.directoryCreated)await removeCreatedDirectory(directory);
+        return;
+      }
       if(await commitAcknowledged(runtime,marker))return;
       for(const [filename,identity] of created) {
         let current;
@@ -233,9 +265,9 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
       await clearCommit(directory);
       if(marker.directoryCreated)await removeCreatedDirectory(directory);
     } finally {release();}
-  });
+  })());
   const listener=await startPairingListener({address,port,identity},{createServer:options.createServer,
-    sessionOptions:options.sessionOptions,setExpiry:options.setExpiry,
+    sessionOptions:options.sessionOptions,setExpiry:options.setExpiry,onClose:()=>confirming?undefined:rollback(),
     onAcknowledged:async ack=>{
       const result=await recordHostTLSAcknowledgement(runtime,ack);
       if(!await hostCommitUnfinished(runtime))release();
@@ -243,7 +275,7 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
     }});
   return {
     invitation:listener.invitation,status:listener.status,pending:listener.pending,cancel:async()=>{await listener.cancel();await rollback();},
-    confirm:(claimId,request)=>withPeerStateLock(runtime,async()=>{
+    confirm:(claimId,request)=>guarded(()=>withPeerStateLock(runtime,async()=>{
       const pending=listener.pending(),current=await readDeviceIdentity(runtime);
       if(!pending || pending.claimId!==claimId || listener.pending()?.claimId!==claimId ||
         !current || fingerprint(current.cert)!==localFingerprint ||
@@ -294,8 +326,11 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
             marker={version:1,pairId:pair.local.pairId,localCertificateSha256:localFingerprint,
               peerCertificateSha256:pending.peerCertificateSha256,directoryCreated:!directoryExisted,
               created:absent.map(filename=>path.basename(filename)),files:{}};
+            firstMarkerPending=true;
             await privateSyncDirectory(runtime,true);
-            await writeCommit(runtime,marker);
+            // Function-only test seam, never populated by the JSON controller.
+            await writeCommit(runtime,marker,false,options.beforeMarker);
+            firstMarkerPending=false;
           });
         } finally {await capture();}
         return listener.publishSetup(handle,offer);
@@ -304,6 +339,6 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
         await rollback();
         throw fail();
       }
-    }),
+    })),
   };
 }

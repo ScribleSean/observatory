@@ -36,10 +36,16 @@ internal sealed class Collector : IDisposable
     {
         if (Busy) return;
         if (pairingPaused || lifetime.IsCancellationRequested || !Configured || !FirstRunSetup.AllowsCollection(runtime) ||
-            File.Exists(Path.Combine(runtime, "private-sync", "tls-host-commit.json")) ||
-            Directory.Exists(Path.Combine(runtime, "private-sync", "tls-host-commit.json")) ||
+            HostCommitPresent(Path.Combine(runtime, "private-sync", "tls-host-commit.json")) ||
             !File.Exists(Path.Combine(runtime, "private-sync", "tls-trust.json"))) { trustedSync.RequestStop(); return; }
         try { trustedSync.Resume(); trustedSync.EnsureStarted(); } catch { /* Retry on the next normal tick. */ }
+    }
+    private static bool HostCommitPresent(string path)
+    {
+        try { File.GetAttributes(path); return true; }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
+        catch { return true; }
     }
     internal bool Configured => File.Exists(Path.Combine(runtime, "collector.config.json"));
     internal bool Busy => operations.Busy || operations.Stopping;
