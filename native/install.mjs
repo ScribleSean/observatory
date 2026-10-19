@@ -38,7 +38,7 @@ if(existsSync(app)) {
 }
 for(const legacy of legacyBundles)if(path.dirname(legacy)===applications)
   renameSync(legacy,path.join(backups,`${appNames.legacy.productName}-${stamp}.app.backup`));
-cpSync(source,app,{recursive:true,errorOnExist:true,force:false});
+cpSync(source,app,{recursive:true,errorOnExist:true,force:false,verbatimSymlinks:true});
 execFileSync('/usr/bin/codesign',['--verify','--strict',app]);
 cpSync(path.join(app,'Contents/Resources/Collector/scripts'),path.join(runtime,'scripts'),{recursive:true});
 writeFileSync(path.join(runtime,'native-runtime.json'),JSON.stringify({python,node:process.execPath}),{mode:0o600});
