@@ -17,7 +17,7 @@ import {privateCollectorDirectory} from './peer-directory.mjs';
 import {collectQuota,attachQuota} from './collect-quota.mjs';
 import {attachQuotaSync} from './quota-sync.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
-import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
+import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
 import {refreshAllowances} from './refresh-allowances.mjs';
 import {attachProviderTokenEstimates,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {attachProviderTokenSync} from './provider-token-sync.mjs';
@@ -27,6 +27,13 @@ import {windowsCollectorLease} from './windows-collector-lease.mjs';
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const unavailable=host=>({host,status:'unavailable',checkedAt:new Date().toISOString()});
 const disconnected=host=>({host,status:'not-connected'});
+
+export function screenTimeLaunch(environment=process.env) {
+  return {
+    file:path.join(environment.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe'),
+    args:windowsPowerShellFileArguments(path.join(scripts,'windows-aggregate-activity.ps1'))
+  };
+}
 
 function run(file,args,input='',environment=process.env) {
   return new Promise((resolve,reject)=>{
@@ -91,8 +98,8 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
       `CACHE_DIRECTORY = ${JSON.stringify(cache)}\n`+cacheScript+'\n'+settingsScript)),host:'Windows'};
   }),guarded('Windows',async()=>{
     if(!config.activity)return disconnected('Windows');
-    const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
-    const raw=JSON.parse(await run(powershell,['-NoProfile','-NonInteractive','-File',path.join(scripts,'windows-aggregate-activity.ps1')],'',windowsPowerShellEnvironment()));
+    const {file,args}=screenTimeLaunch();
+    const raw=JSON.parse(await run(file,args,'',windowsPowerShellEnvironment()));
     return {...raw,host:'Windows',status:'ok'};
   }),guarded('Windows',async()=>{
     if(!config.wispr)return {...disconnected('Windows'),source:'Wispr Flow'};
