@@ -203,12 +203,20 @@ internal sealed class Collector : IDisposable
 
     internal Task Refresh() => Refresh(quotaOnly: false);
 
-    private static void WriteAttemptStatus(string runtime, bool quotaOnly, string state)
+    private static void WriteAttemptStatus(string runtime, bool quotaOnly, string state, DateTimeOffset? collectorStartedAfter = null)
     {
         var file = Path.Combine(runtime, "public", "local", quotaOnly ? "allowance-collector.json" : "collector.json");
         var status = new JsonObject { ["state"] = state, ["intervalSeconds"] = 300 };
         status[state == "running" ? "startedAt" : "finishedAt"] = DateTimeOffset.UtcNow.ToString("O");
         if (quotaOnly) status["mode"] = "allowances-only";
+        if (state == "failed" && !quotaOnly && collectorStartedAfter is { } earliest)
+        {
+            var previousFile = Snapshot.DashboardFile(runtime, "collector.json");
+            var previous = previousFile is null ? null : Snapshot.Read(previousFile);
+            if (Snapshot.Text(previous?["state"]) == "failed" && Snapshot.Text(previous?["reason"]) == "snapshot-too-large" &&
+                DateTimeOffset.TryParse(Snapshot.Text(previous?["startedAt"]), out var startedAt) && startedAt >= earliest)
+                status["reason"] = "snapshot-too-large";
+        }
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { File.WriteAllText(temporary, status.ToJsonString()); File.Move(temporary, file, true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
@@ -220,6 +228,7 @@ internal sealed class Collector : IDisposable
         if (!FirstRunSetup.AllowsCollection(runtime)) return;
         if (!operations.TryBegin()) return;
         if (!quotaOnly) resumePending = false;
+        DateTimeOffset? failedCollectorStartedAfter = null;
         try
         {
             // Serialize app and command-line collection without relying on a stale PID file.
@@ -247,6 +256,7 @@ internal sealed class Collector : IDisposable
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             timeout.CancelAfter(TimeSpan.FromSeconds(240));
             timeout.Token.ThrowIfCancellationRequested();
+            var collectorStartedAfter = DateTimeOffset.UtcNow;
             process.Start();
             var output = process.StandardOutput.ReadToEndAsync();
             var error = process.StandardError.ReadToEndAsync();
@@ -262,7 +272,11 @@ internal sealed class Collector : IDisposable
             catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
             finally { try { process.StandardInput.Close(); } catch { } }
             await Task.WhenAll(output, error);
-            if (process.ExitCode != 0) throw new InvalidOperationException("Collection failed");
+            if (process.ExitCode != 0)
+            {
+                failedCollectorStartedAfter = collectorStartedAfter;
+                throw new InvalidOperationException("Collection failed");
+            }
             if (quotaOnly) WriteAttemptStatus(runtime, true, "ok");
         }
         catch (IOException) { /* An existing collector or unavailable storage remains visible through freshness. */ }
@@ -270,7 +284,7 @@ internal sealed class Collector : IDisposable
         {
             try
             {
-                WriteAttemptStatus(runtime, quotaOnly, "failed");
+                WriteAttemptStatus(runtime, quotaOnly, "failed", failedCollectorStartedAfter);
             }
             catch { }
         }
@@ -365,6 +379,36 @@ internal sealed class Collector : IDisposable
             }
             if (File.ReadAllText(heavyStatus) != "Full collection freshness must not change." || Directory.GetFiles(local, "*.tmp").Length != 0)
                 throw new Exception("Allowance attempt changed full collection status or left temporary files.");
+            var started = DateTimeOffset.Parse("2026-09-09T12:00:00Z");
+            foreach (var input in new[] {
+                "{\"state\":\"failed\",\"reason\":\"snapshot-too-large\",\"bytes\":17000000,\"private\":\"synthetic secret\"}",
+                "{\"state\":\"failed\",\"reason\":\"synthetic secret\"}",
+                "{\"state\":\"ok\",\"reason\":\"snapshot-too-large\"}",
+                "{\"state\":\"failed\",\"reason\":42}", "null", "{" })
+            foreach (var timestamp in new[] { "2026-09-09T12:00:00Z", "2026-09-09T12:00:01Z", "2026-09-09T11:59:59Z", null, "invalid" })
+            foreach (var cutoff in new DateTimeOffset?[] { started, null })
+            {
+                var record = input;
+                if (input.StartsWith("{\""))
+                {
+                    var value = JsonNode.Parse(input)!.AsObject();
+                    if (timestamp is not null) value["startedAt"] = timestamp;
+                    record = value.ToJsonString();
+                }
+                File.WriteAllText(heavyStatus, record);
+                WriteAttemptStatus(root, false, "failed", cutoff);
+                var attempt = Snapshot.Read(heavyStatus);
+                var keep = input.Contains("\"bytes\"") && cutoff is not null &&
+                    DateTimeOffset.TryParse(timestamp, out var observed) && observed >= started;
+                var expected = keep ? "snapshot-too-large" : "Unknown";
+                if (Snapshot.Text(attempt?["state"]) != "failed" || Snapshot.Text(attempt?["reason"]) != expected ||
+                    attempt is null || attempt.Count != (keep ? 4 : 3))
+                    throw new Exception("Collector failure reason was not restricted to this attempt.");
+                WriteAttemptStatus(root, false, "failed", started);
+                if (Snapshot.Read(heavyStatus)?["reason"] is not null)
+                    throw new Exception("App failure record carried a collector reason forward.");
+            }
+            File.WriteAllText(heavyStatus, "Full collection freshness must not change.");
             using var collector = new Collector(root);
             collector.RequestResumeRefresh();
             collector.RequestResumeRefresh();
