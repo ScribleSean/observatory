@@ -262,7 +262,7 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
   const identity=await readDeviceIdentity(runtime);
   if(!identity)throw fail();
   const localFingerprint=fingerprint(identity.cert);
-  let lease=null,marker=null,rollbackPromise,firstMarkerPending=false,confirming=0;
+  let lease=null,marker=null,rollbackPromise,firstMarkerPending=false,confirming=0,closed=null;
   // A confirmation rolls back its own failure, so a listener close during it leaves the rollback to that path.
   const guarded=async action=>{confirming++;try {return await action();}finally{confirming--;}};
   const created=new Map(),directory=path.join(runtime,'private-sync');
@@ -288,14 +288,14 @@ export async function startHostTLSSetup(runtime,{address,port=0},options={}) {
     } finally {release();}
   })());
   const listener=await startPairingListener({address,port,identity},{createServer:options.createServer,
-    sessionOptions:options.sessionOptions,setExpiry:options.setExpiry,onClose:()=>confirming?undefined:rollback(),
+    sessionOptions:options.sessionOptions,setExpiry:options.setExpiry,onClose:()=>{if(!confirming)closed=rollback().catch(()=>{});},
     onAcknowledged:async ack=>{
       const result=await recordHostTLSAcknowledgement(runtime,ack);
       if(!await hostCommitUnfinished(runtime))release();
       return result;
     }});
   return {
-    invitation:listener.invitation,status:listener.status,pending:listener.pending,cancel:async()=>{await listener.cancel();await rollback();},
+    invitation:listener.invitation,status:listener.status,pending:listener.pending,cancel:async()=>{await listener.cancel();await closed;await rollback();},
     confirm:(claimId,request)=>guarded(()=>withPeerStateLock(runtime,async()=>{
       const pending=listener.pending(),current=await readDeviceIdentity(runtime);
       if(!pending || pending.claimId!==claimId || listener.pending()?.claimId!==claimId ||
