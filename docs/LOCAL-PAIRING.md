@@ -381,11 +381,14 @@ lock in `private-repair/host-commit.sqlite` that the operating system releases
 when the helper process ends) and writes the private marker
 `private-sync/tls-host-commit.json`. The marker names the pairing, both
 certificate fingerprints, which of `pairing.json`, `tls-trust.json` and
-`tls-offer.json` were absent before, and whether `private-sync` existed. After
-the commit it is replaced with a copy that also records each created file's
-device and inode. When the joining device's acknowledgement is saved, the host
+`tls-offer.json` were absent before, and whether `private-sync` existed. Each
+version of the marker is written to `tls-host-commit.json.next` and renamed into
+place, so a crash never leaves a partial marker. After the commit it is replaced
+with a copy that also records each created file's device and inode. When the joining device's acknowledgement is saved, the host
 removes the marker and releases the lease, and the pairing is complete. A
-cancel in the helper rolls the unfinished confirmation back at once. A helper
+cancel in the helper, or the listener closing on its own after
+`configuration-ready` (invitation expiry or the attempts limit), rolls the
+unfinished confirmation back at once. A helper
 that is killed or crashes leaves the marker, and the next recovery rolls it back:
 before `host-start` and `join-claim`, when the trusted sync service starts or
 re-checks its binding, when `pairing-status.json` is written, and when the
@@ -394,8 +397,14 @@ the lease. When the acknowledgement was already saved, it only removes the
 marker. Otherwise it removes only the files the marker lists as created, each
 checked by its recorded device and inode, or, when the crash came before those
 were recorded, by content bound to the marker's pairing and certificates. A
-file whose identity no longer matches is left alone. A file that cannot be read
-or does not bind, such as a partial write, is also left, and the marker stays.
+file whose identity no longer matches is left alone. A file that is not one complete
+JSON value, such as an empty or partial write, is removed too, because every
+writer of those names holds the pairing lock and refuses while the marker
+exists. A complete file that does not bind is left, and the marker stays. The
+Settings page offers no repair in that state yet. A lone
+`tls-host-commit.json.next` left by a crash before the first marker was in place
+is removed, with the `private-sync` folder when that marker says the
+confirmation created it and the folder is empty.
 While the marker exists, trusted sync does not start (neither shell starts the
 sync service, and the service, the sync listener and outbound exchanges refuse),
 the pairing state reads `unavailable`, and a new pairing cannot start on top of

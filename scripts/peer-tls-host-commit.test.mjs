@@ -84,6 +84,13 @@ test('host commit recovery', {skip:!['darwin','win32'].includes(process.platform
     assert.equal((await readPairingStatus(runtime)).state,'unpaired');
     await initializePairing(runtime,pair());
   });
+  await t.test('lone complete next marker removes the folder it created',async()=>{
+    const runtime=await fresh(),pairing=pair();
+    await privateCollectorDirectory(runtime,'private-sync',true);
+    await writeFile(file(runtime,hostCommitFile+'.next'),JSON.stringify(marker(pairing)),{mode:0o600});
+    assert.deepEqual(await recoverHostCommit(runtime),{status:'rolled-back'});
+    assert.equal(existsSync(path.join(runtime,'private-sync')),false);
+  });
   await t.test('lone hard linked next marker is preserved',{skip:process.platform==='win32'},async()=>{
     const runtime=await fresh();
     await privateCollectorDirectory(runtime,'private-sync',true);
@@ -120,7 +127,7 @@ test('host commit recovery', {skip:!['darwin','win32'].includes(process.platform
     assert.equal(existsSync(path.join(runtime,'private-sync')),false);
     await host.cancel();
   });
-  for(const mode of ['bound','partial','different pair'])await t.test('first phase '+mode,async()=>{
+  for(const mode of ['bound','partial','empty','different pair'])await t.test('first phase '+mode,async()=>{
     const runtime=await fresh(),pairing=pair();
     await privateCollectorDirectory(runtime,'private-sync',true);
     await saveMarker(runtime,marker(pairing));
@@ -128,15 +135,18 @@ test('host commit recovery', {skip:!['darwin','win32'].includes(process.platform
     await saveConfirmedPeerTrust(runtime,{pairId:pairing.local.pairId,localCertificateSha256:fingerprint(local.cert),
       peerCertificate:peer.cert,peerCertificateSha256:fingerprint(peer.cert)});
     if(mode==='partial')await writeFile(file(runtime,'tls-trust.json'),'{"version":1');
+    if(mode==='empty')await writeFile(file(runtime,'tls-trust.json'),'');
     if(mode==='different pair') {
       const trust=JSON.parse(await readFile(file(runtime,'tls-trust.json'),'utf8'));
       trust.pairId='f'.repeat(64);
       await writeFile(file(runtime,'tls-trust.json'),JSON.stringify(trust));
     }
-    assert.deepEqual(await recoverHostCommit(runtime),{status:mode==='bound'?'rolled-back':'unavailable'});
-    assert.equal(await hostCommitUnfinished(runtime),mode!=='bound');
-    assert.equal(existsSync(file(runtime,'tls-trust.json')),mode!=='bound');
-    if(mode==='bound')assert.equal(existsSync(path.join(runtime,'private-sync')),false);
+    // An interrupted write cannot be bound, but no other writer can create a listed name while the marker exists.
+    const removed=mode!=='different pair';
+    assert.deepEqual(await recoverHostCommit(runtime),{status:removed?'rolled-back':'unavailable'});
+    assert.equal(await hostCommitUnfinished(runtime),!removed);
+    assert.equal(existsSync(file(runtime,'tls-trust.json')),!removed);
+    if(removed)assert.equal(existsSync(path.join(runtime,'private-sync')),false);
   });
   await t.test('lease is busy in this process and releases idempotently',async()=>{
     const runtime=await fresh(),lease=await acquireHostCommitLease(runtime);

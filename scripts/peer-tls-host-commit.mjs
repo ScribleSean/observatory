@@ -34,8 +34,8 @@ async function readStored(directory,name,bound=4096) {
 
 const exact=(value,keys)=>value && typeof value==='object' && !Array.isArray(value) &&
   Object.keys(value).length===keys.length && keys.every(key=>Object.hasOwn(value,key));
-export async function readHostCommit(directory) {
-  const value=await readStored(directory,hostCommitFile,4096);
+export async function readHostCommit(directory,name=hostCommitFile) {
+  const value=await readStored(directory,name,4096);
   if(value===null)return null;
   if(!exact(value,['version','pairId','localCertificateSha256','peerCertificateSha256','directoryCreated','created','files']) ||
     value.version!==1 || !['pairId','localCertificateSha256','peerCertificateSha256'].every(key=>

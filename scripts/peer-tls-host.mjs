@@ -173,6 +173,23 @@ async function commitAcknowledged(runtime,marker) {
 async function removeCreatedDirectory(directory) {
   await rmdir(directory).catch(error=>{if(!['ENOENT','ENOTEMPTY','EEXIST'].includes(error.code))throw error;});
 }
+// Every writer of a created name holds the peer state lock and refuses while the
+// marker exists, so a created file that is not one complete JSON value can only
+// be this confirmation's interrupted write. A complete file must bind to the marker.
+async function interruptedWrite(filename,info) {
+  if(info.size>20000n)return false;
+  const file=await open(filename,constants.O_RDONLY|(constants.O_NOFOLLOW??0));
+  try {
+    const opened=await file.stat({bigint:true});
+    if(opened.dev!==info.dev || opened.ino!==info.ino || opened.size!==info.size)return false;
+    const bytes=Buffer.alloc(Number(info.size)+1),{bytesRead}=await file.read(bytes,0,bytes.length,0);
+    if(bytesRead!==Number(info.size))return false;
+    try {
+      const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(0,bytesRead)));
+      return !value || typeof value!=='object' || Array.isArray(value);
+    } catch {return true;}
+  } finally {await file.close();}
+}
 export async function recoverHostCommit(runtime) {
   try {lstatSync(path.join(runtime,'private-sync',hostCommitFile));}
   catch(error) {
@@ -191,7 +208,11 @@ export async function recoverHostCommit(runtime) {
           let info;
           try {info=await lstat(filename);}catch(error){if(error.code==='ENOENT')return {status:'none'};throw error;}
           if(!info.isFile() || info.isSymbolicLink() || info.nlink!==1)return {status:'unavailable'};
+          let next=null;
+          try {next=await readHostCommit(directory,hostCommitFile+'.next');}catch {}
           await unlink(filename);
+          // Only a complete first-phase marker says whether this confirmation created the folder.
+          if(next?.directoryCreated)await removeCreatedDirectory(directory);
           return {status:'rolled-back'};
         }
         const directory=await privateSyncDirectory(runtime),marker=await readHostCommit(directory);
@@ -208,7 +229,7 @@ export async function recoverHostCommit(runtime) {
           const identity=marker.files[name];
           if(identity) {
             if(String(info.dev)!==identity.dev || String(info.ino)!==identity.ino)continue;
-          } else {
+          } else if(!await interruptedWrite(filename,info)) {
             try {
               const raw=await readStored(directory,name);
               if(name==='tls-trust.json') {
