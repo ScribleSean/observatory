@@ -1,3 +1,4 @@
+import {hostCommitFile,readHostCommit} from './peer-tls-host-commit.mjs';
 import {randomBytes} from 'node:crypto';
 import {open,lstat,readdir,unlink} from 'node:fs/promises';
 import {constants} from 'node:fs';
@@ -66,7 +67,13 @@ async function initializePairingLocked(runtime,value) {
   await checkLocalRepairConsent(runtime,safe);
   if(Buffer.byteLength(bytes)>4096)throw Error('Private pairing size limit');
   const directory=await privateSyncDirectory(runtime,true);
-  if((await readdir(directory)).length)throw Error('Private state already exists; explicit repair or rotation required');
+  const entries=await readdir(directory);
+  if(entries.length) {
+    let marker=null;
+    if(entries.length===1 && entries[0]===hostCommitFile)try {marker=await readHostCommit(directory);}catch {}
+    if(!marker || marker.pairId!==safe.local.pairId || marker.peerCertificateSha256!==safe.peerCertificateSha256 ||
+      !marker.created.includes('pairing.json'))throw Error('Private state already exists; explicit repair or rotation required');
+  }
   const file=await open(path.join(directory,'pairing.json'),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
   try {await file.writeFile(bytes);await file.sync();}finally{await file.close();}
   // Check the resulting inherited Windows ACL before any collector uses it.

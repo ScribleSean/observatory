@@ -401,7 +401,7 @@ internal sealed class BridgeSettingsStore(string runtime)
             if (Attributes(root) is null) return ("unpaired", "none");
             PlainFolder(root);
             // Check every relevant path before accepting any one of them.
-            var paths = new[] { "revoked", "tls-trust.json", "pairing.json" };
+            var paths = new[] { "revoked", "tls-trust.json", "pairing.json", "tls-host-commit.json" };
             var present = new bool[paths.Length];
             for (int i = 0; i < paths.Length; i++)
             {
@@ -412,6 +412,7 @@ internal sealed class BridgeSettingsStore(string runtime)
                 present[i] = true;
             }
             if (present[0]) return ("unpaired", "none");
+            if (present[3]) return ("unavailable", "none");
             if (present[1]) return ("paired", "tls");
             if (present[2]) return ("paired", "ssh");
             return ("unpaired", "none");
@@ -2678,6 +2679,7 @@ internal sealed class BridgeHandler : IDisposable
         var sync = Path.Combine(runtime, "private-sync"); Directory.CreateDirectory(sync);
         File.WriteAllText(Path.Combine(sync, "pairing.json"), "{}"); Check(store.ReadPairing() == ("paired", "ssh"), "SSH status");
         File.WriteAllText(Path.Combine(sync, "tls-trust.json"), "{}"); Check(store.ReadPairing() == ("paired", "tls"), "TLS status");
+        File.WriteAllText(Path.Combine(sync, "tls-host-commit.json"), "{}"); Check(store.ReadPairing() == ("unavailable", "none"), "Unfinished TLS status"); File.Delete(Path.Combine(sync, "tls-host-commit.json"));
         using (var locked = new FileStream(Path.Combine(sync, "tls-trust.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             Check(store.ReadPairing() == ("paired", "tls"), "Pairing status opened file contents");
         File.WriteAllText(Path.Combine(sync, "revoked"), ""); Check(store.ReadPairing() == ("unpaired", "none"), "Revoked status");

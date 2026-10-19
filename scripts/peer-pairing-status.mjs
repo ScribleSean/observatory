@@ -1,3 +1,5 @@
+import {recoverHostCommit} from './peer-tls-host.mjs';
+import {hostCommitUnfinished} from './peer-tls-host-commit.mjs';
 import {constants,realpathSync} from 'node:fs';
 import {lstat,open,readdir,realpath,rename,unlink} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
@@ -23,6 +25,7 @@ export async function readPairingStatus(runtime,now=Date.now()) {
       try {await assertPeerNotRevoked(directory);}
       catch {await lstat(path.join(directory,'revoked'));return result('revoked');}
     }
+    if(await hostCommitUnfinished(runtime))return result('unavailable');
     const pairing=await readPairing(runtime);
     if(!pairing)return result(!directory || !(await readdir(directory)).length?'unpaired':'unavailable');
     if(pairing.transport?.kind==='tls' && !await readPeerTrust(runtime))return result('establishing-trust');
@@ -60,6 +63,7 @@ async function readFileValue(name) {
 }
 
 export async function writePairingStatus(runtime,now=Date.now()) {
+  await recoverHostCommit(runtime);
   let status=await readPairingStatus(runtime,now);
   const name=path.join(runtime,filename),checkedAt=new Date(now).toISOString();
   const bytes=JSON.stringify({...status,checkedAt});

@@ -30,6 +30,7 @@ func bridgePairingFiles(runtime: URL) -> (state: String, transport: String) {
         let folder = runtime.appendingPathComponent("private-sync")
         guard try exists(folder) else { return ("unpaired", "none") }
         if try exists(folder.appendingPathComponent("revoked")) { return ("unpaired", "none") }
+        if try exists(folder.appendingPathComponent("tls-host-commit.json")) { return ("unavailable", "none") }
         if try exists(folder.appendingPathComponent("tls-trust.json")) { return ("paired", "tls") }
         if try exists(folder.appendingPathComponent("pairing.json")) { return ("paired", "ssh") }
         return ("unpaired", "none")
@@ -1261,6 +1262,9 @@ func runBridgeActionSelfTests() {
         precondition(bridgePairingFiles(runtime: runtime) == ("paired", "ssh"))
         try! Data().write(to: folder.appendingPathComponent("tls-trust.json"))
         precondition(bridgePairingFiles(runtime: runtime) == ("paired", "tls"))
+        try! Data().write(to: folder.appendingPathComponent("tls-host-commit.json"))
+        precondition(bridgePairingFiles(runtime: runtime) == ("unavailable", "none"))
+        try! FileManager.default.removeItem(at: folder.appendingPathComponent("tls-host-commit.json"))
         try! Data().write(to: folder.appendingPathComponent("revoked"))
         precondition(bridgePairingFiles(runtime: runtime) == ("unpaired", "none"))
         precondition((try? bridgeSwitchConsent(Data(#"{"given":true,"consentMarker":false,"statusLine":true}"#.utf8))) == false)

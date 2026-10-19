@@ -27,12 +27,13 @@ function deviceCertificate(raw) {
 
 // Explicit setup only. No auto-start, discovery, file writes or trust activation.
 export async function startPairingListener({address,port=0,identity},
-  {createServer=tls.createServer,onAcknowledged,sessionOptions,setExpiry=setTimeout}={}) {
+  {createServer=tls.createServer,onAcknowledged,onClose,sessionOptions,setExpiry=setTimeout}={}) {
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
     (port!==0 && (port<1024 || port>65535)) || !identity ||
     typeof identity.key!=='string' || identity.key.length>16384 ||
     typeof identity.cert!=='string' || identity.cert.length>16384 ||
-    (onAcknowledged!==undefined && typeof onAcknowledged!=='function'))throw failure();
+    (onAcknowledged!==undefined && typeof onAcknowledged!=='function') ||
+    (onClose!==undefined && typeof onClose!=='function'))throw failure();
   let fingerprint;
   try {fingerprint=deviceCertificate(identity.cert);}catch{throw failure();}
   const session=new InvitationSession(sessionOptions),sockets=new Set(),connectionDeadlines=new Map();
@@ -42,6 +43,7 @@ export async function startPairingListener({address,port=0,identity},
     if(closing)return closing;
     for(const socket of sockets)socket.destroy();
     closing=new Promise(resolve=>{if(server)server.close(()=>resolve());else resolve();});
+    void closing.then(()=>onClose?.()).catch(()=>{});
     return closing;
   };
   try {

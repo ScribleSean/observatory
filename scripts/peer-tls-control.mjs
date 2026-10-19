@@ -4,7 +4,7 @@ import {realpath} from 'node:fs/promises';
 import path from 'node:path';
 import net from 'node:net';
 import {fileURLToPath} from 'node:url';
-import {startHostTLSSetup} from './peer-tls-host.mjs';
+import {startHostTLSSetup,recoverHostCommit} from './peer-tls-host.mjs';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {claimFromInvitation} from './peer-tls-client.mjs';
 import {receiveConfirmedTLSPairing} from './peer-tls-join.mjs';
@@ -39,7 +39,7 @@ export function checkSyncPort(address,port) {
 // Sharing choice is recorded only after pairing commits. A recording failure
 // leaves sharing off without failing the committed confirmation.
 export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,readIdentity=readDeviceIdentity,
-  claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent,
+  recover=recoverHostCommit,claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent,
   selfAddresses=tailscaleSelfAddresses,checkPort=checkSyncPort,choose=chooseSharing}={}) {
   let host=null,invitation=null,joining='idle',epoch=0,busy=null,abort=new AbortController();
   let running=null,cancelling=null;
@@ -89,6 +89,8 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         return token===epoch?result:{status:'cancelled'};
       }
       if(exact(request,['action','address','port']) && request.action==='host-start') {
+        if(['pending','unavailable'].includes((await recover(runtime)).status))throw fail();
+        if(token!==epoch)return {status:'cancelled'};
         if(host || invitation)throw fail();
         const created=await startHost(runtime,{address:request.address,port:request.port});
         if(token!==epoch){await created.cancel();return {status:'cancelled'};}
@@ -105,6 +107,8 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
         return {status:token===epoch?'configuration-ready':'cancelled'};
       }
       if(exact(request,['action','invitation']) && request.action==='join-claim') {
+        if(['pending','unavailable'].includes((await recover(runtime)).status))throw fail();
+        if(token!==epoch)return {status:'cancelled'};
         if(host || invitation)throw fail();
         const proposed=decodeInvitation(request.invitation),identity=await readIdentity(runtime);
         if(!identity || token!==epoch)throw fail();

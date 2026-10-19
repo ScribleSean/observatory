@@ -1,3 +1,4 @@
+import {recoverHostCommit} from './peer-tls-host.mjs';
 import {writeSnapshot} from './snapshot-size.mjs';
 import {REFUSAL_CODES} from './refusal-codes.mjs';
 import {readDeviceName,attachDeviceName} from './device-name.mjs';
@@ -67,7 +68,7 @@ export async function collectWindows(runtime,peerConfig=null,{quotaOnly=false,re
     }});
   if(quotaOnly) return refreshAllowances(runtime,{enabled:config.quota,readQuota});
   let savedPairing=null,pairingFailed=false;
-  if(!peerConfig)try {savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
+  if(!peerConfig)try {try {await recoverHostCommit(runtime);}catch {}savedPairing=await readPairing(runtime);peerConfig=savedPairing?.local??null;}catch{pairingFailed=true;}
   let pairing=null;
   try {if(peerConfig)pairing=preparePeerCollection(peerConfig,'Windows');}catch{}
   const folder=path.join(runtime,'public/local');
