@@ -94,7 +94,7 @@ The Direction column says what [the design direction](DESIGN.md) asks for: Keep,
 
 | Element | Mac | Windows | Direction | Notes |
 | --- | --- | --- | --- | --- |
-| Codex totals and chart | Done | Done | Keep | |
+| Codex totals and chart | Done | Done | Keep | Since issue 242 (branch `shared/codex-reader-limits`) the Codex reader accepts up to 100,000 session files, 2 GiB and 3,000,000 lines read in one run and 64 MiB of retained events for one file, within a 45 second read budget that is usually reached first (about 600 MiB of retained events with synthetic data on a Mac, about half that while a session is writing, and close to the budget with 100,000 small files), and still reads unavailable above that. The earlier limits (20,000 files, a 128 MiB cache, 16 MB per file) made heavy histories read unavailable. Tested from source with synthetic data. Not in an installed build. |
 | Breakdown by model | Done | Done | Keep | |
 | Token classes | Done | Done | Keep | |
 | Recorded reasoning and speed settings | Done | Done | Keep | |
