@@ -1,5 +1,12 @@
 import path from 'node:path';
 
+// -ExecutionPolicy Bypass applies only to this child process. The app never calls
+// Set-ExecutionPolicy. Group Policy (MachinePolicy or UserPolicy) still takes
+// precedence, in which case a policy that blocks the script prevents it running.
+export function windowsPowerShellFileArguments(script,...scriptArguments) {
+  return ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,...scriptArguments];
+}
+
 // A Node parent can inherit PowerShell 7 module paths that Windows PowerShell
 // cannot load. This child needs only Windows' built-in modules, not user modules.
 export function windowsPowerShellEnvironment(environment=process.env) {

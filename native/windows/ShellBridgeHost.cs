@@ -73,7 +73,7 @@ internal sealed class ShellBridgeHost(
         if (quitting()) throw new InvalidOperationException("Application is closing.");
         return collector.Sharing(action, token, channel);
     }
-    public Action<bool> BeginDirectPairing() => collector.BeginDirectPairing();
+    public Action<bool> BeginDirectPairing(bool refreshOnRelease = true) => collector.BeginDirectPairing(refreshOnRelease);
     public IBridgePairingSession CreatePairingSession() => new BridgePairingSession(runtime);
     public Task DisconnectPairing() => collector.DisconnectPairing();
     public Task PreparePairingRepair() => collector.PreparePairingRepair();
