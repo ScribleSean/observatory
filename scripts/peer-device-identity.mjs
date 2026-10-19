@@ -1,5 +1,5 @@
-import {createPrivateKey,createPublicKey,X509Certificate} from 'node:crypto';
-import {open,lstat,readdir} from 'node:fs/promises';
+import {createPrivateKey,createPublicKey,X509Certificate,randomBytes} from 'node:crypto';
+import {open,lstat,readdir,rename} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
 import {privateCollectorDirectory} from './peer-directory.mjs';
@@ -30,6 +30,10 @@ export async function readDeviceIdentity(runtime) {
   let directory;
   try {directory=await privateCollectorDirectory(runtime,'private-device-identity');}
   catch(error){if(error.code==='ENOENT')return null;throw unavailable();}
+  return readIdentityDirectory(directory);
+}
+
+async function readIdentityDirectory(directory) {
   const entries=await readdir(directory);
   if(entries.length!==1 || entries[0]!=='identity.json')throw unavailable();
   const name=path.join(directory,'identity.json');
@@ -51,17 +55,35 @@ export async function readDeviceIdentity(runtime) {
 
 // Called only by explicit first-device setup with a newly generated identity.
 // No replacement, auto-generation, repair or existing pairing mutation occurs.
-export const initializeDeviceIdentity=(runtime,value)=>withPeerStateLock(runtime,async()=>{
+export const initializeDeviceIdentity=(runtime,value,{beforeRename}={})=>withPeerStateLock(runtime,async()=>{
   const safe=validateDeviceIdentity(value),bytes=JSON.stringify(safe);
   if(Buffer.byteLength(bytes)>limit)throw unavailable();
   try {
     await lstat(path.join(runtime,'private-device-identity'));
     throw unavailable();
   } catch(error) {if(error.code!=='ENOENT')throw unavailable();}
-  const directory=await privateCollectorDirectory(runtime,'private-device-identity',true);
+  const name='private-device-identity-pending-'+randomBytes(16).toString('hex');
+  const directory=await privateCollectorDirectory(runtime,name,true);
   if((await readdir(directory)).length)throw unavailable();
   const file=await open(path.join(directory,'identity.json'),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
   try {await file.writeFile(bytes);await file.sync();}finally{await file.close();}
+  const verified=await readIdentityDirectory(directory);
+  if(JSON.stringify(verified)!==bytes)throw unavailable();
+  // This injection is available to direct tests only, never control requests.
+  if(beforeRename)await beforeRename(directory);
+  try {
+    await lstat(path.join(runtime,'private-device-identity'));
+    throw unavailable();
+  } catch(error) {if(error.code!=='ENOENT')throw unavailable();}
+  try {await rename(directory,path.join(runtime,'private-device-identity'));}
+  catch {throw unavailable();}
+  if(process.platform!=='win32') {
+    // Best effort only. The identity is already in place, and the checks below decide the result.
+    let parent;
+    try {parent=await open(runtime,constants.O_RDONLY);await parent.sync();}
+    catch {}
+    finally {await parent?.close().catch(()=>{});}
+  }
   await privateCollectorDirectory(runtime,'private-device-identity');
   return readDeviceIdentity(runtime);
 });
