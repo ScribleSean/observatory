@@ -77,7 +77,10 @@ test('stale peer retains dated local views and history without current combined 
   const result=mergePeerPayloads(packet('Mac'),old,config('Mac'),config('Windows'),[],now);
   assert.equal(result.combined.status,'unavailable');assert.equal(result.combinedTokens.status,'unavailable');
   assert.equal(result.tokens.find(s=>s.host==='Windows').checkedAt,old.collectedAt);
+  // A late payload is still a reading. Its days are kept in history.
   assert.equal(result.activityHistory.find(s=>s.host==='Windows').asOf,old.collectedAt);
+  assert.ok(result.activityHistory.find(s=>s.host==='Windows').days.length>0);
+  assert.equal(result.activity.find(s=>s.host==='Windows').status,'stale');
 });
 test('two-slot configurations and payloads are refused',()=>{
   const value=raw('Windows'),legacy={...config('Windows'),codexHosts:['Windows','Ubuntu']};
@@ -151,4 +154,36 @@ test('Combined activity reading time is the earlier payload collection time',()=
     const result=mergePeerPayloads(mac,windows,config('Mac'),config('Windows'),[],now);
     assert.equal(result.combined.checkedAt,'2026-09-09T12:58:00.000Z');
   }
+});
+
+for (const age of [9, 11]) test(`peer sources at ${age} minutes preserve reading times and freshness`, () => {
+  const local = packet('Mac'), peer = packet('Windows');
+  const baseline = mergePeerPayloads(local, peer, config('Mac'), config('Windows'), [], now);
+  peer.collectedAt = new Date(now - age * 60000).toISOString();
+  const result = mergePeerPayloads(local, peer, config('Mac'), config('Windows'), baseline.activityHistory, now);
+  for (const key of ['activity', 'tokens', 'settings', 'dictation']) {
+    assert.deepEqual(result[key].find(row => row.host === 'Mac'), baseline[key].find(row => row.host === 'Mac'));
+    const row = result[key].find(row => row.host === 'Windows');
+    assert.equal(row.status, age > 10 ? 'stale' : 'ok');
+    assert.equal(row.checkedAt, peer.collectedAt);
+  }
+  if (age > 10) {
+    for (const key of ['combined', 'combinedTokens', 'combinedSettings']) assert.notEqual(result[key].status, 'ok');
+    const history = result.activityHistory.find(row => row.host === 'Windows');
+    assert.equal(history.latestReadStatus, 'ok');
+    assert.equal(history.asOf, peer.collectedAt);
+    assert.ok(result.tokens.find(row => row.host === 'Windows').days.length > 0);
+    assert.deepEqual(history.days, baseline.activityHistory.find(row => row.host === 'Windows').days);
+  }
+});
+
+test('a late peer source that was not read keeps its status instead of becoming stale', () => {
+  const local = packet('Mac'), peer = packet('Windows');
+  peer.activity = { host: 'Windows', status: 'unavailable' };
+  peer.collectedAt = new Date(now - 11 * 60000).toISOString();
+  const result = mergePeerPayloads(local, peer, config('Mac'), config('Windows'), [], now);
+  const row = result.activity.find(row => row.host === 'Windows');
+  assert.equal(row.status, 'unavailable');
+  assert.equal(row.checkedAt, peer.collectedAt);
+  assert.equal(result.tokens.find(row => row.host === 'Windows').status, 'stale');
 });

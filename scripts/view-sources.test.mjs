@@ -173,3 +173,46 @@ void test('a read row shows no refusal sentence, a refused row does', () => {
   assert.equal(read.refusal, null);
   assert.equal(refused.refusal, 'A private folder check failed at a parent folder, so this source was not read.');
 });
+
+void test('old ok device sources count as saved readings and dictation stays Unknown', () => {
+  const checkedAt = new Date(now - 660000).toISOString();
+  const row = { host: 'Windows', source: 'Synthetic A', status: 'ok', checkedAt, days: [] };
+  const data = { activity: [row], tokens: [row], settings: [row], dictation: [row],
+    providerTokenSources: [{ ...row, provider: 'claude-code' }] };
+  const groups = sourceGroups(data, now);
+  assert.deepEqual(sourceTotals(groups).read, 0);
+  for (const group of groups) for (const source of group.rows) {
+    assert.equal(source.status, 'stale');
+    assert.equal(source.check.iso, checkedAt);
+  }
+  const result = dictationView(data, {}, now).cards[0];
+  assert.deepEqual([result.records, result.words, result.audio], ['Unknown', 'Unknown', 'Unknown']);
+  assert.deepEqual(result.chart, []);
+});
+
+void test('sources and dictation measure lag within an old snapshot', () => {
+  for (const lag of [0, 9, 11]) {
+    const collectedAt = new Date(now - 1800000).toISOString();
+    const checkedAt = new Date(Date.parse(collectedAt) - lag * 60000).toISOString();
+    const data = { ...snapshot([{ ...source, checkedAt }]), collectedAt };
+    const result = dictationView(data, {}, now).cards[0];
+    assert.equal(result.records, lag <= 10 ? '4' : 'Unknown');
+    assert.equal(result.note.includes('as of'), lag > 10);
+    assert.equal(result.check.label.includes('as of'), lag > 10);
+    assert.equal(sourceTotals(sourceGroups(data, now)).read, lag <= 10 ? 1 : 0);
+    assert.equal(dictationView(data, { period: 'day' }, now + 86400000).cards[0].records, lag <= 10 ? 'No records' : 'Unknown');
+  }
+});
+
+test('late dictation keeps earlier chart days without reporting partial totals', () => {
+  const day = date => ({ date, transcriptions: 2, words: 10, wordRecords: 2, audioSeconds: 30, audioRecords: 2 });
+  const data = { timezone: 'UTC', collectedAt: new Date(now).toISOString(), dictation: [{ host: 'Windows', source: 'Wispr Flow', status: 'stale', checkedAt: new Date(now - 900000).toISOString(), days: [day('2026-10-13'), day('2026-10-14')] }] };
+  const card = dictationView(data, { period: 'week' }, now).cards[0];
+  assert.deepEqual([card.records, card.words, card.audio], ['Unknown', 'Unknown', 'Unknown']);
+  assert.match(card.note, /as of/);
+  assert.deepEqual(card.chart, [{ label: '2026-10-13', value: 30 }]);
+  const earlier = dictationView(data, { period: 'week', date: '2026-10-13' }, now).cards[0];
+  assert.equal(earlier.records, '2');
+  assert.equal(earlier.words, '10');
+  assert.equal(earlier.note, '');
+});

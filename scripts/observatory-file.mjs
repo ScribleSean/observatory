@@ -51,7 +51,7 @@ function days(source) {
   return result.sort((a,b)=>a.date<b.date?-1:1);
 }
 
-const readable=source=>isObject(source) && source.status==='ok';
+const readable=source=>isObject(source) && (source.status==='ok' || (Object.hasOwn(platforms,source.host) && source.status==='stale'));
 const rows=value=>Array.isArray(value)?value.filter(isObject):[];
 
 function limits(source,provider) {

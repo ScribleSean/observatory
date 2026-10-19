@@ -121,3 +121,15 @@ test('exports remove every token hour array and preserve activity hours',()=>{
   assert.deepEqual(document.records.find(row=>row.kind==='activity' && row.device==='Mac').days[1].hours,[0,60]);
   assert.deepEqual(input,before);
 });
+
+test('exports retain device records at eleven minutes as at ten minutes', () => {
+  const data = snapshot();
+  for (const key of ['tokens', 'dictation', 'providerTokenSources']) data[key][0].checkedAt = new Date(now.getTime() - 600000).toISOString();
+  const fresh = buildExport(data, { device: 'Mac', now });
+  for (const key of ['tokens', 'dictation', 'providerTokenSources']) Object.assign(data[key][0], { status: 'stale', checkedAt: new Date(now.getTime() - 660000).toISOString() });
+  const late = buildExport(data, { device: 'Mac', now });
+  assert.deepEqual(late.records, fresh.records);
+  assert.ok(late.records.some(row => row.kind === 'tokens' && row.provider === 'codex'));
+  assert.ok(late.records.some(row => row.kind === 'tokens' && row.provider === 'claude-code'));
+  assert.ok(late.records.some(row => row.kind === 'dictation'));
+});
