@@ -39,7 +39,7 @@ test('normal quit drains collection before releasing application resources',()=>
   assert.match(collector,/catch \(TimeoutException\)[\s\S]*operations.Resume\(\)/);
   const production=collector.slice(0,collector.indexOf('internal static void ShutdownSelfTest()'));
   const guardedOperations = [
-    ['internal Action<bool> BeginDirectPairing()', 'internal async Task<QuotaSharingStatus> Sharing('],
+    ['internal Action<bool> BeginDirectPairing(bool refreshOnRelease = true)', 'internal async Task<QuotaSharingStatus> Sharing('],
     ['internal async Task<QuotaSharingStatus> Sharing(', 'private async Task MaintainPairing('],
     ['private async Task MaintainPairing(', 'internal void Configure('],
     ['private async Task Refresh(bool quotaOnly)', 'internal static void ShutdownSelfTest()'],
