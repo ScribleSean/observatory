@@ -69,10 +69,9 @@ async function withState(runtime,{create=false,disabled=false,now=Date.now()}={}
     let directory;
     try {directory=await privateSyncDirectory(runtime);}catch(error) {if(error.code==='ENOENT')return null;throw error;}
     const file=path.join(directory,'provider-tokens.sqlite');
-    let created=false;
     if(create)try {
       const handle=await open(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
-      await handle.close();created=true;
+      await handle.close();
     } catch(error) {if(error.code!=='EEXIST')throw error;}
     const before=await safeFile(file,!create);
     if(!before)return null;
@@ -86,12 +85,19 @@ async function withState(runtime,{create=false,disabled=false,now=Date.now()}={}
       if(db.prepare('PRAGMA journal_mode').get().journal_mode!=='delete' || db.prepare('PRAGMA page_size').get().page_size!==4096)
         throw Error('Unsupported provider database mode');
       db.exec('BEGIN IMMEDIATE; PRAGMA max_page_count=16384');
-      if(created)db.exec(schema);
-      const objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
+      let objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
+      if(!objects.length && before.size===0) {
+        const locked=await safeFile(file);
+        if(locked.dev!==before.dev || locked.ino!==before.ino || locked.size!==0)throw Error('Changing provider database');
+        if(disabled && !pair)return null;
+        db.exec(schema);
+        objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
+      }
       if(objects.length!==1 || objects[0].type!=='table' || objects[0].name!=='provider_token_state' || objects[0].sql!==schema)
         throw Error('Invalid provider database schema');
       const saved=db.prepare('SELECT record FROM provider_token_state WHERE slot=1').get();
       if(saved && (typeof saved.record!=='string' || Buffer.byteLength(saved.record)>stateLimit))throw Error('Invalid provider state size');
+      if(disabled && !saved && !pair)return null;
       const state=saved?parseState(JSON.parse(saved.record),now):pair?initial(pair):null;
       if(!state || (!disabled && !isDeepStrictEqual(state.binding,providerTokenBinding(pair))))throw Error('Provider pairing superseded');
       const result=action(state,pair);

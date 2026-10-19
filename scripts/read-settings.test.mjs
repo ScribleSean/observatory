@@ -337,6 +337,61 @@ with tempfile.TemporaryDirectory() as directory:
   }
 });
 
+test('private settings cache recovers an empty file and refuses other formats',()=>{
+  const fixture=code.slice(0,code.indexOf('print(json.dumps'))+`
+import pathlib,tempfile,os,sqlite3
+exec(pathlib.Path('scripts/read-settings-cache.py').read_text(encoding='utf-8'),m.__dict__)
+with tempfile.TemporaryDirectory() as directory:
+    root=pathlib.Path(directory).resolve()
+    for kind in ('empty','table','non-SQLite','schema-free','version','application-id'):
+        cache=root/kind
+        cache.mkdir(mode=0o700)
+        file=cache/'events.sqlite'
+        descriptor=os.open(file,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        os.close(descriptor)
+        if kind=='non-SQLite':
+            file.write_bytes(b'synthetic invalid database')
+        elif kind in ('table','schema-free','version','application-id'):
+            db=sqlite3.connect(file)
+            if kind=='table':
+                db.execute('CREATE TABLE other(value TEXT)')
+            elif kind=='application-id':
+                db.execute('PRAGMA application_id=123')
+            elif kind=='version':
+                db.execute('CREATE TABLE events (key TEXT PRIMARY KEY, signature TEXT NOT NULL, data TEXT NOT NULL)')
+                db.execute('PRAGMA user_version=2')
+            else:
+                db.execute('PRAGMA user_version=1')
+            db.close()
+        if kind=='empty':
+            log=root/'synthetic.jsonl'
+            for effort in ('high','medium'):
+                event=dict(type='turn_context',payload=dict(model='synthetic-model',effort=effort))
+                log.write_text(json.dumps(event)+'\\n',encoding='utf-8')
+                check=m.SettingsCache(cache)
+                assert check.db.execute('PRAGMA user_version').fetchone()[0]==1
+                expected=[m.cache_event(event)]
+                assert check.events(log,log.stat())==expected
+                check.close()
+                check=m.SettingsCache(cache)
+                assert check.events(log,log.stat())==expected
+                assert check.hits==1
+                check.close()
+        else:
+            before=file.read_bytes()
+            assert len(before)>0
+            try:
+                m.SettingsCache(cache)
+            except (ValueError,sqlite3.DatabaseError) as error:
+                assert str(error)==('file is not a database' if kind=='non-SQLite' else 'Unsupported cache format')
+            else:
+                raise AssertionError('Invalid cache accepted')
+            assert file.read_bytes()==before
+print('ok')
+`;
+  assert.equal(execPython(['-c',fixture]).toString().trim(),'ok');
+});
+
 const limitFixture = `
 import pathlib,tempfile,types,json,subprocess,sys
 reader_source=pathlib.Path('scripts/read-settings.py').read_text(encoding='utf-8')

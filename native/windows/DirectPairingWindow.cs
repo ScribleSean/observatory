@@ -36,7 +36,7 @@ internal sealed class DirectPairingWindow : Form
         Field("Private invitation", invitation);
         ActionButton("Copy invitation", () =>
         {
-            if (hosting && invitation.Text.Length > 0) Clipboard.SetText(invitation.Text);
+            if (hosting && invitation.Text.Length > 0) ShellBridgeHost.WriteInvitationClipboard(invitation.Text);
             return Task.CompletedTask;
         });
         Note("Share invitations privately. They expire within ten minutes. Clipboard managers may retain copied invitations.");
@@ -131,6 +131,14 @@ internal sealed class DirectPairingWindow : Form
 
     internal static void CommandShapeSelfTest()
     {
+        var data = ShellBridgeHost.InvitationClipboardData("synthetic-invitation");
+        if (data.GetText() != "synthetic-invitation") throw new Exception("Invitation clipboard text did not match.");
+        foreach (var format in new[] { "ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard" })
+        {
+            if (!data.GetDataPresent(format, false) || data.GetData(format, false) is not MemoryStream stream ||
+                !stream.ToArray().SequenceEqual(new byte[4]))
+                throw new Exception("Invitation clipboard protection is missing or invalid.");
+        }
         var host = HostConfirmCommand(new string('a', 64),
             new JsonObject { ["kind"] = "tls", ["address"] = "192.168.1.2", ["port"] = 43128 },
             new JsonObject { ["kind"] = "tls", ["address"] = "192.168.1.3", ["port"] = 43128 });
