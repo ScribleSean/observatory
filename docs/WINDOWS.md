@@ -81,6 +81,12 @@ Settings, snapshots and history live in `%LOCALAPPDATA%\Observatory`. The app ke
 
 Original records stay with the tools that wrote them: ActivityWatch, Codex, Claude Code and Wispr Flow. Observatory only reads them.
 
+### PowerShell execution policy
+
+The app runs two bundled PowerShell scripts: one reads screen time, and the other checks the permissions of each private folder before Codex tokens, limits, pairing or sharing use it. Windows 10 and 11 refuse to run any script file by default (the Restricted policy), so the app starts each script with `-ExecutionPolicy Bypass`. That applies only to the one PowerShell process the app starts. The app never runs `Set-ExecutionPolicy` and does not change the policy for anything else.
+
+An execution policy set by Group Policy (usually on a work or school PC) takes precedence over `-ExecutionPolicy Bypass`. If that policy blocks unsigned scripts, the scripts do not run. Screen time is then reported as unavailable. Codex tokens are reported as unavailable with the code `private-folder-refused`, the same result a folder with the wrong permissions gives. Codex limits, pairing and sharing stop at the same check and show as unavailable without a code. To check, run `Get-ExecutionPolicy -List` in PowerShell. A value other than `Undefined` in the `MachinePolicy` or `UserPolicy` row comes from Group Policy, and only the PC's administrator can change it.
+
 ### Pairing and Windows Firewall
 
 Pairing is optional. The steps are in the [guide](GUIDE.md#pair-two-devices). Pairing listens for the other device on TCP port 43128 by default, on this PC's Tailscale address, through the `node.exe` bundled in the install folder.
