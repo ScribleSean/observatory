@@ -19,6 +19,7 @@ test('Mac fixture stays identical to the Swift self-test literal', () => {
   assert.deepEqual(shapes, JSON.parse(literal[1]));
 });
 const partialShapes = [
+  ['unknown sources', shapes.find(shape => shape.sources === null)],
   ['unknown limits consent', shapes.find(shape => shape.limitsConsent === null)],
   ['unknown Claude token sharing', shapes.find(shape => shape.sharing['claude-code-tokens'] === null)],
 ];

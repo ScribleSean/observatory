@@ -6,7 +6,7 @@ export type SharingChannel = 'codex-limits' | 'claude-code-tokens';
 export type BridgeStatus = {
   version: 1;
   app: { version: string; build: number };
-  sources: Record<'activity' | 'codex' | 'claude' | 'wispr' | 'quota', boolean>;
+  sources: Record<'activity' | 'codex' | 'claude' | 'wispr' | 'quota', boolean> | null;
   skin: { current: string; bundled: string[]; custom: string[] };
   deviceName: string | null;
   startup: boolean;
@@ -27,7 +27,7 @@ export function validateBridgeStatus(value: unknown): BridgeStatus | null {
     const { app, sources, skin, pairing, sharingChoice, sharing } = value;
     if (value.version !== contract.status.version || !keys(app, ['version', 'build']) || typeof app.version !== 'string' ||
       !/^[A-Za-z0-9][A-Za-z0-9 .+-]*$/.test(app.version) || Array.from(app.version).length > contract.status.appVersionMaxLength || !Number.isSafeInteger(app.build) || (app.build as number) < 0 ||
-      !keys(sources, ['activity', 'codex', 'claude', 'wispr', 'quota']) || Object.values(sources).some(v => typeof v !== 'boolean') ||
+      (sources !== null && (!keys(sources, ['activity', 'codex', 'claude', 'wispr', 'quota']) || Object.values(sources).some(v => typeof v !== 'boolean'))) ||
       typeof value.startup !== 'boolean' || (value.limitsConsent !== null && typeof value.limitsConsent !== 'boolean') || typeof value.collectionPaused !== 'boolean' ||
       !contract.values.appearance.includes(value.appearance as string) || !validateArgs('set-device-name', { name: value.deviceName }).ok) return null;
     const bundled = contract.actions['set-skin'].args.skin.bundled;

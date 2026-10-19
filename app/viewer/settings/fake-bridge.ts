@@ -5,7 +5,7 @@ import { validateBridgeStatus, type SharingChannel } from './status';
 
 export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs = 150): Bridge {
   const state = validateBridgeStatus(status);
-  if (!state || state.limitsConsent === null || Object.values(state.sharing).some(channel => channel === null)) throw new TypeError('Invalid sample status');
+  if (!state || state.sources === null || state.limitsConsent === null || Object.values(state.sharing).some(channel => channel === null)) throw new TypeError('Invalid sample status');
   let nextId = 1;
   let disposed = false;
   let hostPolls = 0;
@@ -45,7 +45,10 @@ export function createFakeBridge(status: unknown = sampleBridgeStatus(), delayMs
                 state.pairing.peerFingerprint = 'ab'.repeat(32);
               }
               result.value = structuredClone(state); break;
-            case 'set-source': state.sources[input.source as keyof typeof state.sources] = input.enabled as boolean; break;
+            case 'set-source':
+              if (state.sources === null) unavailable();
+              else state.sources[input.source as keyof typeof state.sources] = input.enabled as boolean;
+              break;
             case 'set-skin':
               if ([...state.skin.bundled, ...state.skin.custom].includes(input.skin as string)) state.skin.current = input.skin as string;
               else unavailable();

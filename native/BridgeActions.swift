@@ -670,8 +670,8 @@ final class MacBridgeHost: BridgeHost {
                 }
                 let sharingStatus = await shared
                 let limitsConsent = await limits
-                guard let sources = try? CollectorConfiguration.read(runtime: store.runtime),
-                      let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                let sources = try? CollectorConfiguration.read(runtime: store.runtime)
+                guard let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
                       let buildText = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String, let build = Int(buildText) else {
                     completion(.unavailable, nil); return
                 }
@@ -679,7 +679,7 @@ final class MacBridgeHost: BridgeHost {
                 let paired = reportedPairing
                 let visible = session?.defaultsOnly == true ? nil : session
                 let input = BridgeStatusInput(appVersion: version, appBuild: build,
-                    sources: sources.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
+                    sources: sources?.filter { ["activity", "codex", "claude", "wispr", "quota"].contains($0.key) },
                     skin: viewer.skin, customSkins: [], deviceName: DeviceNameFile.read(runtime: store.runtime),
                     startup: loginItemIsOn(), appearance: viewer.appearance, limitsConsent: limitsConsent,
                     collectionPaused: store.collectionPausedForPairing || store.pairingMaintenance,
