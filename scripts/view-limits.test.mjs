@@ -214,3 +214,57 @@ test('computed pace alone supplies every projected window note', () => {
   assert.equal(rows.find(row => row.provider === 'codex' && row.windowId === 'secondary').pace.status, 'projected');
   assert.equal(rows.find(row => row.provider === 'claude').pace.status, 'projected');
 });
+
+test('expired local and peer windows are Unknown with no low warning or pace', () => {
+  const data = snapshot();
+  for (const source of [data.claudeLimits, data.quota]) {
+    source.windows[0].resetsAt = iso(-1);
+    source.windows[0].remainingPercent = 12;
+  }
+  for (const row of limitRows(data, now).filter(row => row.window === '5-hour')) {
+    assert.equal(row.remaining, null);
+    assert.equal(row.low, false);
+    assert.equal(row.pace, null);
+    assert.equal(row.note, 'Waiting for the reset to be observed.');
+  }
+  const peer = peerLimits({ peerQuota: { ...data.quota, host: 'Mac' } }, now);
+  assert.equal(peer.rows[0].remaining, null);
+  assert.equal(peer.rows[0].low, false);
+  assert.equal(peer.rows[0].note, 'Waiting for the reset to be observed.');
+});
+
+test('a carried window cannot project pace from the fresh source timestamp', () => {
+  const data = snapshot();
+  data.claudeLimits.windows[1].checkedAt = iso(-30);
+  const rows = limitRows(data, now).filter(row => row.provider === 'claude');
+  assert.equal(rows[0].pace.status, 'projected');
+  assert.equal(rows[1].stale, true);
+  assert.equal(rows[1].pace.status, 'stale');
+  assert.equal(rows[1].pace.ratePerHour, null);
+  assert.doesNotMatch(rows[1].note, /runs out in about/);
+});
+
+test('limits view renders reset windows as Unknown in every limit style', async t => {
+  const { createServer } = await import('vite');
+  const { default: react } = await import('@vitejs/plugin-react');
+  const { fileURLToPath } = await import('node:url');
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)),
+    server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
+  t.after(() => server.close());
+  const { LimitsView } = await server.ssrLoadModule('/app/viewer/limits/LimitsView.tsx');
+  const { LimitRows } = await server.ssrLoadModule('/app/viewer/components/LimitRows.tsx');
+  const data = { claudeLimits: { status: 'ok', checkedAt: iso(-2),
+    windows: [{ ...reading('claude', 'five_hour', 300, 12), resetsAt: iso(-1) }] } };
+  for (const style of ['meter', 'numeral', 'text']) {
+    const html = renderToStaticMarkup(createElement(LimitRows, { rows: limitRows(data, now), style }));
+    assert.match(html, />Unknown</);
+    assert.match(html, /Waiting for the reset to be observed\./);
+    assert.doesNotMatch(html, />0%<|>12%<|width:0%|width:12%/);
+    if (style === 'meter') assert.match(html, /class="ob-bar" aria-hidden="true"><\/div>/);
+    if (style === 'text') assert.match(html, /class="ob-blocks" aria-hidden="true"/);
+    const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: style }));
+    assert.match(view, /class="ob-num big">Unknown<\/span><span class="ob-meta">Waiting for the reset to be observed\./);
+  }
+});

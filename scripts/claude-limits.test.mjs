@@ -53,7 +53,8 @@ test('several sessions keep the higher reading within one reset period', () => {
   const lower=extractClaudeLimits(input(35,12),now+60000);
   const merged=mergeClaudeLimits(first,lower,now+60000);
   assert.equal(merged.windows.five_hour.usedPercentage,40);
-  assert.equal(merged.windows.five_hour.observedAt,seconds+60);
+  // The kept higher value keeps its original observation time.
+  assert.equal(merged.windows.five_hour.observedAt,seconds);
   assert.equal(merged.windows.seven_day.usedPercentage,12);
   const later=input(2,12);later.rate_limits.five_hour.resets_at=seconds+7200+18000;
   assert.equal(mergeClaudeLimits(merged,extractClaudeLimits(later,now+120000),now+120000).windows.five_hour.usedPercentage,2);
@@ -69,8 +70,8 @@ test('the snapshot source separates off, missing, current, old and reset reading
   assert.equal(current.status,'ok');
   assert.equal(current.checkedAt,'2026-03-10T15:00:00.000Z');
   assert.deepEqual(current.windows,[
-    {bucket:'claude',window:'five_hour',durationMinutes:300,remainingPercent:76.5,resetsAt:'2026-03-10T17:00:00.000Z'},
-    {bucket:'claude',window:'seven_day',durationMinutes:10080,remainingPercent:58.8,resetsAt:'2026-03-13T15:00:00.000Z'}]);
+    {bucket:'claude',window:'five_hour',durationMinutes:300,checkedAt:'2026-03-10T15:00:00.000Z',remainingPercent:76.5,resetsAt:'2026-03-10T17:00:00.000Z'},
+    {bucket:'claude',window:'seven_day',durationMinutes:10080,checkedAt:'2026-03-10T15:00:00.000Z',remainingPercent:58.8,resetsAt:'2026-03-13T15:00:00.000Z'}]);
   assert.equal(claudeLimitsSource(record,{enabled:true,now:now+30*60000}).status,'stale');
   const afterReset=claudeLimitsSource(record,{enabled:true,now:now+3*3600000});
   assert.deepEqual(afterReset.windows.map(window=>window.window),['seven_day']);
@@ -390,8 +391,11 @@ test('reproduces the stale reading after the usage command from build 41', async
       return {status:outcome,usage:outcome==='read'?input():null};
     };
     const source=await readClaudeLimits(runtime,{now,readUsage});
-    assert.deepEqual(source,{...claudeLimitsSource(saved,{enabled:true,now}),
-      status:outcome==='read'?'ok':'stale',checkedAt:new Date(outcome==='read'?now:earlier).toISOString(),
+    const expected=claudeLimitsSource(saved,{enabled:true,now});
+    const checkedAt=new Date(outcome==='read'?now:earlier).toISOString();
+    assert.deepEqual(source,{...expected,
+      windows:expected.windows.map(window=>({...window,checkedAt})),
+      status:outcome==='read'?'ok':'stale',checkedAt,
       usageCommand:outcome==='throws'?'failed':outcome});
   }
 });
@@ -781,4 +785,16 @@ for(const [kind,text] of Object.entries({
   assert.deepEqual(await claudeLimitsConsent(runtime),{given:kind==='valid',consentMarker:false,statusLine:kind==='valid'});
   await writeFile(path.join(directory,'consent.json'),consentText);
   assert.deepEqual(await claudeLimitsConsent(runtime),{given:true,consentMarker:true,statusLine:kind==='valid'});
+});
+
+test('merged windows publish their own observation times', () => {
+  const first = extractClaudeLimits(input(), now - 30 * 60000);
+  const partial = input();
+  delete partial.rate_limits.seven_day;
+  const merged = mergeClaudeLimits(first, extractClaudeLimits(partial, now), now);
+  const source = claudeLimitsSource(merged, { enabled: true, now });
+  assert.equal(source.status, 'ok');
+  assert.equal(source.checkedAt, new Date(now).toISOString());
+  assert.deepEqual(source.windows.map(row => row.checkedAt),
+    [new Date(now).toISOString(), new Date(now - 30 * 60000).toISOString()]);
 });

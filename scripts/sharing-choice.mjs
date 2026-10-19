@@ -4,7 +4,7 @@ import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {privateSyncDirectory,privateRefusalBudget} from './peer-directory.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {recent} from './quota-sharing-control.mjs';
 import {readQuotaState,setQuotaSharing,revokeQuotaSharing} from './quota-store.mjs';
@@ -152,18 +152,28 @@ export const clearSharingChoice=runtime=>withPeerStateLock(runtime,async()=>{
   await unlink(filename);
 });
 
+export const peerLockWaitCapMs=5000;
+export const commandExitMs=(platform=process.platform)=>platform==='win32'?40000:10000;
+
 async function main() {
+  // Fit inside the 45000 ms Windows bridge deadline and the command exit timer.
+  limitPeerLockWait(peerLockWaitCapMs);
   const args=process.argv.slice(2);
   if(args.length!==2 || args[0]!=='--runtime' || !path.isAbsolute(args[1]))throw fail();
   const chunks=[];let bytes=0;
-  const timeout=setTimeout(()=>{process.stderr.write('Sharing choice unavailable.\n');process.exit(1);},10000);
+  const timeout=setTimeout(()=>{process.stderr.write('Sharing choice unavailable.\n');process.exit(1);},commandExitMs());
   try {
     for await(const chunk of process.stdin) {bytes+=chunk.length;if(bytes>1024)throw fail();chunks.push(chunk);}
     const request=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
+    let response;
     if(request?.action==='choose' && exact(request,['action','enabled']) && typeof request.enabled==='boolean')
-      await chooseSharing(args[1],{enabled:request.enabled});
+      response=await withPeerStateLock(args[1],async()=>{
+        await chooseSharing(args[1],{enabled:request.enabled});
+        return readSharingChoice(args[1]);
+      });
     else if(request?.action!=='status' || !exact(request,['action']))throw fail();
-    process.stdout.write(JSON.stringify(await readSharingChoice(args[1]))+'\n');
+    else response=await readSharingChoice(args[1]);
+    process.stdout.write(JSON.stringify(response)+'\n');
   } finally {clearTimeout(timeout);}
 }
 if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url)))main().catch(()=>{

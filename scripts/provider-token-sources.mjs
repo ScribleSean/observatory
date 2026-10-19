@@ -4,7 +4,7 @@ import {prices} from './price-table.mjs';
 const counters=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens','requestCount'];
 // Accept known Claude family/version shapes, including dated stable releases,
 // but never carry arbitrary local model text into the dashboard.
-const knownModel=/^claude-(?:(?:opus|sonnet|haiku)-[1-9]\d?(?:-\d{1,2})?(?:-\d{8})?(?:-latest)?|[1-9]\d?(?:-\d{1,2})?-(?:opus|sonnet|haiku)(?:-\d{8})?(?:-latest)?)$/;
+const knownModel=/^claude-(?:(?:opus|sonnet|haiku|fable)-[1-9]\d?(?:-\d{1,2})?(?:-\d{8})?(?:-latest)?|[1-9]\d?(?:-\d{1,2})?-(?:opus|sonnet|haiku|fable)(?:-\d{8})?(?:-latest)?)$/;
 
 const valid=value=>Number.isSafeInteger(value) && value>=0;
 const validDate=value=>typeof value==='string' && /^\d{4}-\d\d-\d\d$/.test(value) &&

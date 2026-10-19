@@ -4,7 +4,7 @@ import {constants,realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {privateSyncDirectory,privateCollectorDirectory} from './peer-directory.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 import {readRepairConsent,writeRepairConsent} from './peer-repair-consent.mjs';
 
@@ -55,7 +55,11 @@ export async function preparePairingRepair(runtime) {
   });
 }
 
+export const peerLockWaitCapMs=5000;
+
 async function main() {
+  // Stay inside the 20000 ms Windows PairingMaintenance deadline.
+  limitPeerLockWait(peerLockWaitCapMs);
   const args=process.argv.slice(2);
   if(args.length!==3 || args[0]!=='--runtime' || args[2]!=='--confirm-local-retirement')
     throw Error('Explicit local repair confirmation required');
