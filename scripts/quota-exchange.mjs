@@ -2,7 +2,7 @@ import {lstat} from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {readPairing} from './peer-pairing.mjs';
 import {readQuotaState,exchangeQuotaState} from './quota-store.mjs';
 import {createSharedQuota} from './quota-peer.mjs';
@@ -29,7 +29,11 @@ export const exchangeQuota=(runtime,request,now=Date.now())=>withPeerStateLock(r
   return {version:1,status:'ready',record};
 });
 
+export const peerLockWaitCapMs=10000;
+
 async function main(runtime) {
+  // Fit inside the 30000 ms Mac SSH client deadline, including connection and startup.
+  limitPeerLockWait(peerLockWaitCapMs);
   if(!path.isAbsolute(runtime??''))throw Error('Invalid runtime');
   const chunks=[];let bytes=0;
   const timer=setTimeout(()=>process.exit(1),30000);

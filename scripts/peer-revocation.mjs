@@ -3,7 +3,7 @@ import {constants,realpathSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {privateSyncDirectory} from './peer-directory.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {revokeQuotaSharing} from './quota-store.mjs';
 
 import {disableProviderTokenSharing} from './provider-token-store.mjs';
@@ -61,7 +61,11 @@ async function revokePairingLocked(runtime) {
   return {status:'revoked'};
 }
 
+export const peerLockWaitCapMs=5000;
+
 if(process.argv[1] && process.argv[1]!=='-' && realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))) {
+  // Stay inside the 20000 ms Windows PairingMaintenance deadline.
+  limitPeerLockWait(peerLockWaitCapMs);
   const args=process.argv.slice(2);
   if(args.length!==3 || args[0]!=='--runtime' || args[2]!=='--revoke') {
     process.stderr.write('Usage: node peer-revocation.mjs --runtime ABSOLUTE_RUNTIME --revoke\n');

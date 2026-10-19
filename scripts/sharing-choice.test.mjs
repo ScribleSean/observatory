@@ -189,6 +189,19 @@ test('collection hooks apply consent and preserve local results with corrupt int
     assert.equal(Boolean((await readProviderTokenState(runtime,now)).generation),!corrupt);
   }
 });
+for(const enabled of [true,false])test(`CLI choose ${enabled} reports the saved choice`,async t=>{
+  const {runtime}=await fixture(t);
+  const response=spawnSync(process.execPath,['scripts/sharing-choice.mjs','--runtime',runtime],
+    {input:JSON.stringify({action:'choose',enabled}),encoding:'utf8',timeout:45000,
+      env:{...process.env,NODE_NO_WARNINGS:'1'}});
+  assert.equal(response.signal,null);
+  assert.equal(response.status,0,response.stderr);
+  assert.equal(response.stderr,'');
+  const saved=await readSharingChoice(runtime);
+  assert.deepEqual(JSON.parse(response.stdout),saved);
+  assert.equal(saved.chosen,enabled);
+  for(const state of Object.values(saved.channels))assert.equal(state,enabled?'waiting-for-reading':'off');
+});
 test('CLI status is bounded and rejects extra keys with one generic error',async t=>{
   const {runtime}=await fixture(t);
   const run=input=>spawnSync(process.execPath,['scripts/sharing-choice.mjs','--runtime',runtime],
