@@ -51,7 +51,7 @@ internal static class WebHostsTests
         public void SetStartup(bool enabled) => throw new InvalidOperationException("Unexpected fixture action.");
         public Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel)
         { Calls++; return Task.FromResult(new QuotaSharingStatus(false, false, "pairing-unavailable", null)); }
-        public Action<bool> BeginDirectPairing() => throw new InvalidOperationException("Unexpected fixture action.");
+        public Action<bool> BeginDirectPairing(bool refreshOnRelease = true) => throw new InvalidOperationException("Unexpected fixture action.");
         public IBridgePairingSession CreatePairingSession() => throw new InvalidOperationException("Unexpected fixture action.");
         public Task DisconnectPairing() => throw new InvalidOperationException("Unexpected fixture action.");
         public Task PreparePairingRepair() => throw new InvalidOperationException("Unexpected fixture action.");
