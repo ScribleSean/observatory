@@ -6,6 +6,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import { windowsPowerShellFileArguments } from './windows-powershell.mjs';
 
 const exec = promisify(execFile);
 const script = fileURLToPath(new URL('./windows-aggregate-activity.ps1', import.meta.url));
@@ -69,7 +70,7 @@ async function collect(t, buckets, {crossOnly = false} = {}) {
   t.after(() => new Promise(resolve => server.close(resolve)));
   let stdout = '', error;
   try {
-    ({stdout} = await exec(powershell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', script, '-Port', String(server.address().port)], {
+    ({stdout} = await exec(powershell(), windowsPowerShellFileArguments(script, '-Port', String(server.address().port)), {
       env:{...process.env, COMPUTERNAME:computer}, timeout:30000, maxBuffer:1024 * 1024,
     }));
   } catch (caught) { error = caught; }
