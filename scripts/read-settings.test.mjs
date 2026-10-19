@@ -398,11 +398,11 @@ for cached in (False,True):
             cache.mkdir(mode=0o700)
             m.CACHE_DIRECTORY=str(cache)
         tail=json.dumps(event)+'\\n'
-        file.write_text('invalid metadata\\n'+tail,encoding='utf-8')
+        file.write_text('invalid metadata\\n'+tail,encoding='utf-8',newline='')
         expected=m.collect(logs)
         first=' '*3_999_999+chr(0x20ac)+'\\n'
         assert first.encode()[3_999_999:4_000_002]==bytes([0xe2,0x82,0xac])
-        file.write_text(first+tail,encoding='utf-8')
+        file.write_text(first+tail,encoding='utf-8',newline='')
         result=m.collect(logs)
         assert result==expected
         assert result['status']=='ok'
@@ -422,8 +422,8 @@ with tempfile.TemporaryDirectory() as directory:
     two=logs/'sessions/two.jsonl'
     first=content.replace('synthetic','a')
     second=content.replace('synthetic','b')
-    one.write_text(first,encoding='utf-8')
-    two.write_text(second,encoding='utf-8')
+    one.write_text(first,encoding='utf-8',newline='')
+    two.write_text(second,encoding='utf-8',newline='')
     cache=root/'cache'
     cache.mkdir(mode=0o700)
     m=patched()
@@ -438,7 +438,7 @@ with tempfile.TemporaryDirectory() as directory:
     saved=saved_entries()
     assert len(saved)==2
     # Invalidate the first entry so its scan exceeds the inventory byte allowance.
-    one.write_text(first+'\\n',encoding='utf-8')
+    one.write_text(first+'\\n',encoding='utf-8',newline='')
     amount=len(first.splitlines(keepends=True)[0].encode())+len(second.splitlines(keepends=True)[0].encode())
     m=patched({'MAX_TOTAL_BYTES':amount})
     m.CACHE_DIRECTORY=str(cache)
@@ -470,8 +470,8 @@ for cached in (False,True):
             root=pathlib.Path(directory).resolve()
             logs=root/'logs'
             (logs/'sessions').mkdir(parents=True)
-            (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8')
-            (logs/'sessions/two.jsonl').write_text(content.replace('synthetic','second-id'),encoding='utf-8')
+            (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
+            (logs/'sessions/two.jsonl').write_text(content.replace('synthetic','second-id'),encoding='utf-8',newline='')
             # The inventory reads the first line before the full session scan.
             amount={'MAX_FILES':2,'MAX_TOTAL_BYTES':2*len((meta+content).encode()),'MAX_LINES':6}['${limit}']
             m=patched({'${limit}':amount+offset})
@@ -497,7 +497,7 @@ for warm in (False,True):
             root=pathlib.Path(directory).resolve()
             logs=root/'logs'
             (logs/'sessions').mkdir(parents=True)
-            (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8')
+            (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
             cache=root/'cache'
             cache.mkdir(mode=0o700)
             m=patched()
@@ -539,9 +539,9 @@ test('tiny time budget exits without partial JSON through the existing collector
 with tempfile.TemporaryDirectory() as directory:
     root=pathlib.Path(directory).resolve()
     (root/'sessions').mkdir()
-    (root/'sessions/one.jsonl').write_text(content,encoding='utf-8')
+    (root/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
     script=root/'reader.py'
-    script.write_text(reader_source.replace('MAX_READ_SECONDS = 45','MAX_READ_SECONDS = 0.000000001'),encoding='utf-8')
+    script.write_text(reader_source.replace('MAX_READ_SECONDS = 45','MAX_READ_SECONDS = 0.000000001'),encoding='utf-8',newline='')
     result=subprocess.run([sys.executable,str(script),str(root)],capture_output=True,text=True)
     assert result.returncode!=0
     assert result.stdout==''
@@ -561,7 +561,7 @@ with tempfile.TemporaryDirectory() as directory:
     safe=json.dumps(m.cache_event(event))
     count=16_000_000//len(safe)+1
     assert count*len(safe)>16_000_000
-    (logs/'sessions/one.jsonl').write_text(meta+(json.dumps(event)+'\\n')*count,encoding='utf-8')
+    (logs/'sessions/one.jsonl').write_text(meta+(json.dumps(event)+'\\n')*count,encoding='utf-8',newline='')
     m.CACHE_DIRECTORY=str(cache)
     result=m.collect(logs)
     assert result['status']=='ok'
@@ -577,7 +577,7 @@ for warm in (False,True):
         root=pathlib.Path(directory).resolve()
         logs=root/'logs'
         (logs/'sessions').mkdir(parents=True)
-        (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8')
+        (logs/'sessions/one.jsonl').write_text(content,encoding='utf-8',newline='')
         cache=root/'cache'
         cache.mkdir(mode=0o700)
         m=patched({'MAX_READ_SECONDS':0.001})
@@ -605,7 +605,7 @@ for cached in (False,True):
         (logs/'sessions').mkdir(parents=True)
         skipped='x'*8_000_001+'\\n'
         data=meta+skipped+json.dumps(event)+'\\n'
-        (logs/'sessions/one.jsonl').write_text(data,encoding='utf-8')
+        (logs/'sessions/one.jsonl').write_text(data,encoding='utf-8',newline='')
         amount=len((meta+data).encode())
         for offset in (0,-1):
             m=patched({'MAX_TOTAL_BYTES':amount+offset,'MAX_LINES':4})
