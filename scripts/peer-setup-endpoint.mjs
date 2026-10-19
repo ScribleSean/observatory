@@ -2,7 +2,7 @@ import {realpathSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {validatePairing,readPairing,initializePairing} from './peer-pairing.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
+import {limitPeerLockWait,withPeerStateLock} from './peer-lock.mjs';
 import {readRepairConsent} from './peer-repair-consent.mjs';
 
 // This endpoint is reachable only through a separately authenticated local
@@ -40,7 +40,11 @@ export const windowsRepairReadiness=(runtime,platform=process.platform)=>withPee
   return {version:1,status:'repair-ready',nonce};
 });
 
+export const peerLockWaitCapMs=10000;
+
 async function main(runtime) {
+  // Fit inside the 30000 ms Mac SSH client deadline, including connection and startup.
+  limitPeerLockWait(peerLockWaitCapMs);
   const timer=setTimeout(()=>{process.stderr.write('Private setup input timeout\n');process.exit(1);},30000);
   const chunks=[];let size=0;
   try {

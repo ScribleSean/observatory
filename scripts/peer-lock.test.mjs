@@ -67,6 +67,7 @@ test('Windows waits for a holder that releases after ten seconds',{
 });
 
 test('the cap gives each acquisition its own full wait',async t=>{
+  // Windows pre-lock PowerShell checks usually outlast the 150 ms hold, so only macOS distinguishes per-acquisition from absolute deadlines here.
   const runtime=await fixture(t);
   try {
     limitPeerLockWait(1000);
