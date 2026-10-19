@@ -32,7 +32,7 @@ function SafeDirectory([string]$Path, [bool]$Required) {
         Refuse 'A data folder is a file or a reparse point.'
     }
 }
-function Manifest([string]$Root) {
+function Manifest([string]$Root, [switch]$Source) {
     $rootPath = [IO.Path]::GetFullPath((Item $Root).FullName)
     $prefix = $rootPath.TrimEnd([char]92) + '\'
     $pending = New-Object 'System.Collections.Generic.Stack[string]'
@@ -52,6 +52,12 @@ function Manifest([string]$Root) {
                 $links.Add((DisplayPath $relative))
                 continue
             }
+            $retirementParent = RetirementFolder ([IO.Path]::GetDirectoryName($relative))
+            if ($Source -and $retirementParent -and ($entry.PSIsContainer -or
+                (-not [string]::Equals($entry.Name, 'retirement-receipt.json', [StringComparison]::Ordinal) -and
+                 -not [string]::Equals($entry.Name, 'retirement-snapshot.json', [StringComparison]::Ordinal)))) {
+                Refuse ('Unexpected entry in the retirement checkpoint folder at relative path: ' + (DisplayPath $relative))
+            }
             $kind = 'file'
             $size = [long]0
             $hash = ''
@@ -62,7 +68,7 @@ function Manifest([string]$Root) {
                 $kind = 'directory'
                 $pending.Push($entry.FullName)
             } else {
-                if ((PrivateFolder ($relative.Split('\')[0])) -and [MigrationFileLinks]::Count($entry.FullName) -ne 1) {
+                if (((PrivateFolder ($relative.Split('\')[0])) -or $retirementParent) -and [MigrationFileLinks]::Count($entry.FullName) -ne 1) {
                     Refuse ('Hard links are not allowed at relative path: ' + (DisplayPath $relative))
                 }
                 $size = [long]$entry.Length
@@ -112,7 +118,11 @@ function Digest($Entries, [switch]$IgnoreDirectoryTimes) {
     try { Hex ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))) }
     finally { $sha.Dispose() }
 }
+function RetirementFolder([string]$Relative) {
+    return [string]::Equals($Relative, '.runtime\private-repair', [StringComparison]::Ordinal)
+}
 function PrivateFolder([string]$Relative) {
+    if (RetirementFolder $Relative) { return $true }
     return -not $Relative.Contains('\') -and ($Relative -cin @('private-sync','private-codex','private-repair','private-quota','private-device-identity') -or
         $Relative -cmatch '^private-sync-retired-[a-f0-9]{64}$')
 }
@@ -401,7 +411,7 @@ public static class MigrationFileLinks {
     $marker = 'observatory-migration.json'
     ExchangeLock
     $step = 'manifest'
-    $original = @(Manifest $Legacy)
+    $original = @(Manifest $Legacy -Source)
     if (@($original | Where-Object { $_.path -in @($marker, 'login-state.json', 'login-state-carried.json') }).Count) { Refuse 'The earlier folder already contains a migration record.' }
     $manifestHash = Digest $original
     $expected = @($original | Where-Object { $_.path -ne $receipt -or $_.type -ne 'file' })
@@ -558,7 +568,7 @@ public static class MigrationFileLinks {
     CollectionLock
     CheckRunning
     $step = 'manifest'
-    $second = @(Manifest $Legacy)
+    $second = @(Manifest $Legacy -Source)
     $step = 'verify'
     if ((Digest $second) -ne $manifestHash) { Refuse 'The earlier data folder changed during the copy. Quit every Observatory app and run again.' }
     $staged = @(Manifest $Stage)

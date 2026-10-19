@@ -81,6 +81,12 @@ Settings, snapshots and history live in `%LOCALAPPDATA%\Observatory`. The app ke
 
 Original records stay with the tools that wrote them: ActivityWatch, Codex, Claude Code and Wispr Flow. Observatory only reads them.
 
+### PowerShell execution policy
+
+The app runs two bundled PowerShell scripts: one reads screen time, and the other checks the permissions of each private folder before Codex tokens, limits, pairing or sharing use it. Windows 10 and 11 refuse to run any script file by default (the Restricted policy), so the app starts each script with `-ExecutionPolicy Bypass`. That applies only to the one PowerShell process the app starts. The app never runs `Set-ExecutionPolicy` and does not change the policy for anything else.
+
+An execution policy set by Group Policy (usually on a work or school PC) takes precedence over `-ExecutionPolicy Bypass`. If that policy blocks unsigned scripts, the scripts do not run. Screen time is then reported as unavailable. Codex tokens are reported as unavailable with the code `private-folder-refused`, the same result a folder with the wrong permissions gives. Codex limits, pairing and sharing stop at the same check and show as unavailable without a code. To check, run `Get-ExecutionPolicy -List` in PowerShell. A value other than `Undefined` in the `MachinePolicy` or `UserPolicy` row comes from Group Policy, and only the PC's administrator can change it.
+
 ### Pairing and Windows Firewall
 
 Pairing is optional. The steps are in the [guide](GUIDE.md#pair-two-devices). Pairing listens for the other device on TCP port 43128 by default, on this PC's Tailscale address, through the `node.exe` bundled in the install folder.
@@ -113,7 +119,7 @@ You need a checkout of the release's source revision. From the checkout, in this
    powershell -NoProfile -ExecutionPolicy Bypass -File native\windows\migrate-data.ps1 -Action copy -ConfirmAppQuit
    ```
 
-   `-ExecutionPolicy Bypass` applies only to that one PowerShell process. The copy re-creates each private folder with its restricted permissions, checks every file by SHA-256 and never changes the earlier folder. It refuses while the earlier app or the status line bridge is running, and each refusal prints `Migration refused` with a stage and a reason. If Start at login was on, it records that, turns off the earlier login entry, and the renamed app turns Start at login on again the first time it runs.
+   `-ExecutionPolicy Bypass` applies only to that one PowerShell process. The copy re-creates each private folder with its restricted permissions, checks every file by SHA-256 and never changes the earlier folder. It also copies `.runtime\private-repair`, the folder that the earlier Ubuntu source retirement left, with the same restricted permissions. It refuses while the earlier app or the status line bridge is running, and each refusal prints `Migration refused` with a stage and a reason. If Start at login was on, it records that, turns off the earlier login entry, and the renamed app turns Start at login on again the first time it runs.
 4. Uninstall Workspace Observatory from Settings, Apps, Installed apps. Your data folders are kept.
 5. Install Observatory as described above and start it from the Start menu. It should open with your history and settings, not the setup screen.
 6. If a Mac reaches this PC over the earlier SSH pairing, quit Observatory on this PC from its tray icon, then update the Mac as the [Mac guide](MAC.md#move-from-workspace-observatory) describes. The update refuses while the PC app runs. The copy in step 3 recorded the new paths the Mac needs. Start Observatory again from the Start menu afterwards.

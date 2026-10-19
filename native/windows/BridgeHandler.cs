@@ -36,7 +36,7 @@ internal interface IBridgeHost
     bool ReadStartup();
     void SetStartup(bool enabled);
     Task<QuotaSharingStatus> Sharing(string action, string? token, SharingChannel channel);
-    Action<bool> BeginDirectPairing();
+    Action<bool> BeginDirectPairing(bool refreshOnRelease = true);
     IBridgePairingSession CreatePairingSession();
     Task DisconnectPairing();
     Task PreparePairingRepair();
@@ -985,7 +985,7 @@ internal sealed class BridgeHandler : IDisposable
         finally { lock (gate) sharingReading[index] = false; }
     }
 
-    private bool BeginSession(bool onlyDefaults = false)
+    private bool BeginSession(bool onlyDefaults = false, bool temporary = false)
     {
         lock (gate)
         {
@@ -996,7 +996,7 @@ internal sealed class BridgeHandler : IDisposable
                 if (pairingOwner is not null) return false;
                 pairingOwner = this;
             }
-            try { release = host.BeginDirectPairing(); }
+            try { release = host.BeginDirectPairing(refreshOnRelease: !onlyDefaults && !temporary); }
             catch { lock (ownerGate) pairingOwner = null; return false; }
             try
             {
@@ -1066,7 +1066,7 @@ internal sealed class BridgeHandler : IDisposable
                 if (request.Epoch != epoch || closed) return new("unavailable");
                 // Guard for direct calls. The action queue runs page requests one at a time, so a page pairing start waits behind the lookup and does not reach this check.
                 if (defaultsOnly || (session is not null && action != "pairing-identity-create")) return new("busy");
-                if (!BeginSession(action == "pairing-host-defaults")) return new("busy");
+                if (!BeginSession(action == "pairing-host-defaults", temporary: temporary)) return new("busy");
             }
         }
         IBridgePairingSession current;
@@ -1352,11 +1352,11 @@ internal sealed class BridgeHandler : IDisposable
             if (SharingThrows) throw new IOException("Synthetic sharing failure");
             return Task.FromResult(new QuotaSharingStatus(action == "enable", true, "ready", new string('a', 64)));
         }
-        public Action<bool> BeginDirectPairing()
+        public Action<bool> BeginDirectPairing(bool refreshOnRelease = true)
         {
             if (CollectorBusy || Reserved) throw new InvalidOperationException("Reserved");
             Calls.Enqueue("reserve"); Reserved = true;
-            return verified => { Reserved = false; Releases++; CollectionPaused = !verified; Calls.Enqueue("release"); };
+            return verified => { Reserved = false; Releases++; CollectionPaused = !verified; Calls.Enqueue(refreshOnRelease ? "release" : "release-no-refresh"); };
         }
         public IBridgePairingSession CreatePairingSession() { Calls.Enqueue("session"); return Session = MakeSession?.Invoke() ?? new(); }
         public Task DisconnectPairing() { Calls.Enqueue("disconnect"); return Maintenance(); }
@@ -1961,11 +1961,23 @@ internal sealed class BridgeHandler : IDisposable
 
     private static async Task TestPairing(string runtime)
     {
+        using (var defaultsTest = new TestDriver(runtime))
+        {
+            await defaultsTest.Run("pairing-host-defaults");
+            Check(defaultsTest.Host.Calls.Contains("release-no-refresh") && !defaultsTest.Host.Calls.Contains("release"),
+                "Temporary defaults release without refresh");
+            await defaultsTest.Run("pairing-host-start", HostArgs());
+            Check(defaultsTest.Host.Reserved && !defaultsTest.Host.Session!.Disposed, "Host start after defaults reserves collection");
+            await defaultsTest.Run("pairing-cancel");
+            Check(defaultsTest.Host.Session!.Disposed && !defaultsTest.Host.Reserved && defaultsTest.Host.Releases == 2 &&
+                defaultsTest.Host.Calls.Contains("release"), "Host session release retains refresh");
+        }
         using var test = new TestDriver(runtime);
         await test.Run("pairing-copy-invitation", code: "unavailable");
         await test.Run("pairing-identity-create");
         Check(test.Host.Session!.Disposed && test.Host.Releases == 1 && !test.Host.Reserved &&
-            test.Host.Session.Commands.Any(c => c["action"]!.GetValue<string>() == "identity-create"), "Identity reservation");
+            test.Host.Session.Commands.Any(c => c["action"]!.GetValue<string>() == "identity-create") &&
+            test.Host.Calls.Contains("release-no-refresh") && !test.Host.Calls.Contains("release"), "Identity reservation");
         var start = await test.Run("pairing-host-start", HostArgs());
         Check(start["value"]!["invitation"]!.GetValue<string>() == "observatory-pair:v1:c3ludGhldGlj", "Invitation result");
         var session = test.Host.Session!;
@@ -2189,6 +2201,7 @@ internal sealed class BridgeHandler : IDisposable
         Check(defaults.ToJsonString() == "{\"address\":\"100.64.0.1\",\"port\":43128,\"portAvailable\":true}" &&
             test.Host.Session!.Disposed && test.Host.Releases == 1 && !test.Host.Reserved &&
             test.Host.Session.Commands.Single().ToJsonString() == "{\"action\":\"host-defaults\"}", "Host defaults lifecycle");
+        Check(test.Host.Calls.Contains("release-no-refresh") && !test.Host.Calls.Contains("release"), "Defaults release without refresh");
         async Task HeldDefaultsCheck()
         {
             var beforePairing = (await test.Run("status"))["value"]!["pairing"]!.ToJsonString();
