@@ -2,10 +2,9 @@ import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {PassThrough} from 'node:stream';
 import {once} from 'node:events';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {mkdtemp,realpath,rm,lstat,readdir,readFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
-import {execFileSync} from 'node:child_process';
 import {readDeviceIdentity} from './peer-device-identity.mjs';
 import {testRuntimeBase} from './test-runtime-base.mjs';
 import path from 'node:path';
@@ -283,20 +282,49 @@ test('cancel during identity creation waits and never leaves a partial identity'
   execFileSync(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-sha256','-keyout',key,
     '-out',cert,'-days','1','-subj','/CN=Observatory synthetic identity'],{stdio:'ignore',timeout:15000});
   const identity={version:1,key:await readFile(key,'utf8'),cert:await readFile(cert,'utf8')};
+  const create={action:'identity-create',storage:'restricted-file',identity};
   for(const delay of [0,1,5,20]) {
     const runtime=await realpath(await mkdtemp(path.join(root,'runtime-')));
     const controller=createTLSSetupController(runtime);
     let settled=false;
-    const command=controller.run({action:'identity-create',storage:'restricted-file',identity})
-      .then(result=>result.status,()=> 'unavailable').finally(()=>{settled=true;});
+    const command=controller.run(create).then(result=>result.status,()=> 'unavailable').finally(()=>{settled=true;});
+    // A second identity creation is refused while the first is running.
+    await assert.rejects(controller.run(create));
     if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
-    assert.deepEqual(await controller.run({action:'cancel'}),{status:'cancelled'});
+    const cancelledWhileRunning=!settled;
+    const cancellation=controller.run({action:'cancel'});
+    // Status keeps answering while cancel waits.
+    assert.equal((await controller.run({action:'status'})).status,'idle');
+    assert.deepEqual(await cancellation,{status:'cancelled'});
     // The cancel reply comes only after the running command has settled.
     assert.equal(settled,true);
-    assert.ok(['cancelled','unavailable','identity-ready'].includes(await command));
-    const names=(await readdir(runtime)).filter(name=>name==='private-device-identity');
+    const status=await command;
+    // A creation that cancel interrupted never reports identity-ready.
+    assert.ok((cancelledWhileRunning?['cancelled','unavailable']:['cancelled','unavailable','identity-ready']).includes(status));
     // Either no identity folder or a complete one, never an empty or partial folder.
-    if(names.length)assert.ok(await readDeviceIdentity(runtime));
+    const names=(await readdir(runtime)).filter(name=>name.startsWith('private-device-identity'));
+    for(const name of names)assert.match(name,/^private-device-identity(-pending-[a-f0-9]{32})?$/);
+    if(names.includes('private-device-identity'))assert.ok(await readDeviceIdentity(runtime));
     else assert.equal(await readDeviceIdentity(runtime),null);
   }
 });
+
+test('a new command is refused while cancel waits for a writing command and accepted after',async()=>{
+  let finish;
+  const host={invitation:invite(),status:()=> 'confirming',
+    pending:()=>({claimId:'synthetic',peerCertificateSha256:'b'.repeat(64)}),
+    confirm:()=>new Promise(resolve=>{finish=resolve;}),cancel:async()=>{}};
+  const controller=createTLSSetupController('/fixture',{startHost:async()=>host,
+    selfAddresses:async()=>({}),checkPort:async()=>true});
+  await controller.run({action:'host-start',address:'10.0.0.2',port:0});
+  const operation=controller.run({action:'host-confirm',peerCertificateSha256:'b'.repeat(64),localEndpoint:{},peerEndpoint:{}})
+    .catch(()=>({status:'unavailable'}));
+  const cancellation=controller.cancel();
+  await new Promise(resolve=>setImmediate(resolve));
+  await assert.rejects(controller.run({action:'host-defaults'}));
+  finish();
+  assert.deepEqual(await cancellation,{status:'cancelled'});
+  assert.ok(['cancelled','unavailable'].includes((await operation).status));
+  assert.deepEqual(await controller.run({action:'host-defaults'}),{status:'ready',address:null,port:43128,portAvailable:null});
+});
+
