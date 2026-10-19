@@ -36,6 +36,14 @@ test('migration uses named identities and stream copies', async () => {
   assert.match(source,/Flush\(\$true\)/);
 });
 
+test('identity recovery folders use exact case-sensitive migration and ACL patterns', async () => {
+  const source = await readFile(script,'utf8');
+  const body = source.slice(source.indexOf('function PrivateFolder'),source.indexOf('function DisplayPath'));
+  assert.ok(body.includes("$Relative -cmatch '^private-device-identity-(pending|damaged)-[a-f0-9]{32}$'"));
+  const acl = await readFile('scripts/private-sync-acl.ps1','utf8');
+  assert.ok(acl.includes("$leaf -cnotmatch '^(private-sync-retired-[a-f0-9]{64}|private-device-identity-(pending|damaged)-[a-f0-9]{32})$'"));
+});
+
 test('retirement checkpoint keeps its exact path and file names',async () => {
   const source = await readFile(script,'utf8');
   for(const literal of ['.runtime\\private-repair','retirement-receipt.json','retirement-snapshot.json'])
@@ -133,6 +141,25 @@ test('copies synthetic pairing, quota, settings and nested data with protected A
   const migrated = await snapshot(f.parent);
   success(run(f),'already-migrated');
   assert.deepEqual(await snapshot(f.parent),migrated);
+});
+
+test('pending and damaged identity folders migrate with identical bytes',windows,async t => {
+  const f = await fixture(t);
+  const files = [
+    ['private-device-identity-pending-'+'a'.repeat(32),'key.json'],
+    ['private-device-identity-damaged-'+'b'.repeat(32),'partial.json']
+  ];
+  for(const [folder,name] of files) {
+    await mkdir(path.join(f.legacy,folder));
+    await writeFile(path.join(f.legacy,folder,name),'{"synthetic":true}');
+  }
+  const before = await snapshot(f.legacy);
+  success(run(f),'migrated');
+  for(const [folder,name] of files) {
+    const relative = path.join(folder,name);
+    assert.deepEqual(await readFile(path.join(f.target,relative)),before[relative].bytes);
+  }
+  assert.deepEqual(await snapshot(f.legacy),before);
 });
 
 test('retirement checkpoint migrates with protected ACLs and unchanged legacy bytes',windows,async t => {
@@ -325,6 +352,12 @@ test('changed legacy data refuses the switch',windows,async t => {
 });
 
 for (const relative of ['private-unknown','nested/private-sync','Private-Sync','private-sync-retired-ABC',
+  'private-device-identity-pending-'+'A'.repeat(32),
+  'private-device-identity-pending-'+'a'.repeat(31),
+  'private-device-identity-pending-'+'a'.repeat(33),
+  'private-device-identity-other-'+'a'.repeat(32),
+  'Private-Device-Identity-damaged-'+'a'.repeat(32),
+  'nested/private-device-identity-damaged-'+'a'.repeat(32),
   '.runtime/private-sync','.Runtime/private-repair','.runtime/Private-Repair','x/.runtime/private-repair']) {
   test(`unknown private directory ${relative} refuses at manifest`,windows,async t => {
     const f = await fixture(t);

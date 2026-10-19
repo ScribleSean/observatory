@@ -124,7 +124,8 @@ function RetirementFolder([string]$Relative) {
 function PrivateFolder([string]$Relative) {
     if (RetirementFolder $Relative) { return $true }
     return -not $Relative.Contains('\') -and ($Relative -cin @('private-sync','private-codex','private-repair','private-quota','private-device-identity') -or
-        $Relative -cmatch '^private-sync-retired-[a-f0-9]{64}$')
+        $Relative -cmatch '^private-sync-retired-[a-f0-9]{64}$' -or
+        $Relative -cmatch '^private-device-identity-(pending|damaged)-[a-f0-9]{32}$')
 }
 function DisplayPath([string]$Relative) {
     $parts = $Relative.Split('\')

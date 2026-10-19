@@ -22,7 +22,7 @@ try {
     $leaf = [IO.Path]::GetFileName($Directory)
     if ($Directory -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Directory) -ne $Directory -or
         ($Initialize -and $Ancestor) -or
-        (-not $Ancestor -and $leaf -notin @('private-sync', 'private-codex', 'private-repair', 'private-quota', 'private-device-identity') -and $leaf -cnotmatch '^private-sync-retired-[a-f0-9]{64}$')) { throw 'Invalid directory' }
+        (-not $Ancestor -and $leaf -notin @('private-sync', 'private-codex', 'private-repair', 'private-quota', 'private-device-identity') -and $leaf -cnotmatch '^(private-sync-retired-[a-f0-9]{64}|private-device-identity-(pending|damaged)-[a-f0-9]{32})$')) { throw 'Invalid directory' }
     $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $allowed = @($userSid.Value, 'S-1-5-18', 'S-1-5-32-544')
     # TrustedInstaller is the Windows Modules Installer's OS-resource owner.

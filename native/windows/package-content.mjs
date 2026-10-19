@@ -3,7 +3,7 @@ const forbiddenNames=new Set(['usage.json','collector.json','collector.config.js
 
 export function forbiddenPackageName(name) {
   return forbiddenNames.has(name.toLowerCase()) || /\.(pdb|jsonl|(?:sqlite3?|db)(?:-wal|-shm|-journal)?)$/i.test(name) ||
-    /^private-sync-retired-/i.test(name) || /^\.env\./i.test(name);
+    /^private-sync-retired-/i.test(name) || /^private-device-identity(?:$|-)/i.test(name) || /^\.env\./i.test(name);
 }
 
 function lowerAscii(bytes) {
