@@ -252,7 +252,7 @@ process.stdin.once('data',async()=>{
     const line=()=>Promise.race([
       failed,
       lines.length?Promise.resolve(lines.shift()):new Promise(resolve=>waiters.push(resolve)),
-      new Promise((_,reject)=>{const timeout=setTimeout(()=>reject(Error('Child timeout '+error)),30000);timeout.unref();}),
+      new Promise((_,reject)=>{const timeout=setTimeout(()=>reject(Error('Child timeout '+error)),process.platform==='win32'?120000:30000);timeout.unref();}),
     ]);
     const invitation=JSON.parse(await line());
     await requestPeerClaim(invitation,local.cert,peer,{connect});

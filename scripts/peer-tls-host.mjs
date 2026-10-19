@@ -144,7 +144,8 @@ async function clearCommit(directory) {
   await syncDirectory(directory);
 }
 async function writeCommit(runtime,marker,replace=false,beforeMarker) {
-  const directory=await privateSyncDirectory(runtime);
+  // Both callers verify the folder just before this. It is verified again after the rename.
+  const directory=path.join(runtime,'private-sync');
   await removeNext(directory);
   const bytes=Buffer.from(JSON.stringify(marker));
   if(bytes.length>4096)throw fail();
