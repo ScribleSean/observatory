@@ -198,6 +198,33 @@ test('POSIX private folder refusals carry a bounded code',{skip:process.platform
   const runtime=await fixture(t);await mkdir(path.join(runtime,'private-sync'),{mode:0o755});
   await assert.rejects(privateSyncDirectory(runtime),{refusal:'private-folder-refused'});
 });
+test('Windows permissions preserve file arguments and options across initialization and retries',async()=>{
+  const {windowsPermissions}=await import('./peer-directory.mjs');
+  const script=fileURLToPath(new URL('./private-sync-acl.ps1',import.meta.url));
+  const base=['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,
+    '-Directory','C:/fixture','-Diagnostic'];
+  for(const [initialize,ancestor] of [[false,false],[true,false],[false,true],[true,true]]) {
+    const calls=[];
+    const run=async(file,args,options)=>{calls.push({file,args,options});return {stdout:'private-sync-acl: ok\n'};};
+    await windowsPermissions('C:/fixture',initialize,ancestor,run);
+    assert.equal(calls.length,1);
+    assert.ok(calls[0].file.endsWith('powershell.exe'));
+    assert.deepEqual(calls[0].args,[...base,...(ancestor?['-Ancestor']:[]),...(initialize?['-Initialize']:[])]);
+    assert.deepEqual(calls[0].options,{windowsHide:true,timeout:15000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
+  }
+  const calls=[];
+  const run=async(file,args,options)=>{
+    calls.push({file,args,options});
+    if(calls.length===1)throw Object.assign(Error('synthetic'),{code:2});
+    return {stdout:'private-sync-acl: ok\n'};
+  };
+  await windowsPermissions('C:/fixture',true,true,run);
+  assert.equal(calls.length,2);
+  assert.deepEqual(calls[0].args,[...base,'-Ancestor','-Initialize']);
+  assert.deepEqual(calls[1].args,[...base,'-Ancestor']);
+  assert.equal(calls[1].file,calls[0].file);
+  assert.deepEqual(calls[1].options,calls[0].options);
+});
 test('Windows diagnostic failures expose only a refusal code',async()=>{
   const {windowsPermissions,REFUSAL_CODES}=await import('./peer-directory.mjs');
   assert.equal(Object.isFrozen(REFUSAL_CODES),true);
