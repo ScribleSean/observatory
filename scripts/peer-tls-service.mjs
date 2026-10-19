@@ -1,3 +1,5 @@
+import {recoverHostCommit} from './peer-tls-host.mjs';
+import {hostCommitUnfinished} from './peer-tls-host-commit.mjs';
 import {realpathSync} from 'node:fs';
 import {realpath} from 'node:fs/promises';
 import path from 'node:path';
@@ -11,7 +13,9 @@ import {startTrustedSyncListener} from './peer-tls-sync.mjs';
 import {serveTLSSetupControl} from './peer-tls-control.mjs';
 
 async function readBinding(runtime) {
+  await recoverHostCommit(runtime);
   return withPeerStateLock(runtime,async()=>{
+    if(await hostCommitUnfinished(runtime))return null;
     const pairing=await readPairing(runtime);
     // Legacy SSH and incomplete TLS configurations never guess a bind address.
     if(pairing?.transport?.kind!=='tls' || !pairing.localEndpoint)return null;

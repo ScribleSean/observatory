@@ -1,3 +1,4 @@
+import {hostCommitUnfinished} from './peer-tls-host-commit.mjs';
 import tls from 'node:tls';
 import {X509Certificate} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
@@ -64,6 +65,7 @@ async function trustedRequest(runtime,transport,request,{connect,limit,authorize
   const safe=validatePeerTransport(transport);
   if(safe.kind!=='tls')throw failure();
   const state=await withPeerStateLock(runtime,async()=>{
+    if(await hostCommitUnfinished(runtime))throw failure();
     const pairing=await readPairing(runtime),trust=await readPeerTrust(runtime),identity=await readDeviceIdentity(runtime);
     if(!pairing || !trust || !identity || !isDeepStrictEqual(pairing.transport,safe))throw failure();
     await authorize(pairing);
@@ -88,6 +90,7 @@ async function trustedRequest(runtime,transport,request,{connect,limit,authorize
         checkServerIdentity:(_host,cert)=>cert.fingerprint256===expected?undefined:failure()});
       socket.once('secureConnect',()=>{
         void withPeerStateLock(runtime,async()=>{
+          if(await hostCommitUnfinished(runtime))throw failure();
           if(!socket.authorized || socket.alpnProtocol!=='observatory-sync/1' ||
             socket.getPeerCertificate().fingerprint256!==expected ||
             !isDeepStrictEqual(await readPeerTrust(runtime),state.trust) ||

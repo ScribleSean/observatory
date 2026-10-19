@@ -9,6 +9,8 @@ import {fileURLToPath} from 'node:url';
 import {createPairingConfigurations,validatePairing,initializePairing,readPairing} from './peer-pairing.mjs';
 import {createPeerPayload} from './peer-payload.mjs';
 import {createPeerRecord,acceptPeerState,readPeerState} from './peer-store.mjs';
+import {privateSyncDirectory} from './peer-directory.mjs';
+import {hostCommitFile,readHostCommit} from './peer-tls-host-commit.mjs';
 import {revokePairing} from './peer-revocation.mjs';
 
 const runtimeBase=await testRuntimeBase('peer-pairing');
@@ -152,4 +154,28 @@ test('local repair consent ignores only the other device key',async t=>{
   const runtime=await fixture(t),pair={...createPairingConfigurations().Mac,repair:{windows:'b'.repeat(64)}};
   await initializePairing(runtime,pair);
   assert.deepEqual(await readPairing(runtime),pair);
+});
+
+
+test('initial pairing permits only its matching host commit marker alone',async t=>{
+  for(const mode of ['matching','pairId','certificate','missing pairing','invalid','extra file','next file'])await t.test(mode,async t=>{
+    const runtime=await fixture(t),pair={...createPairingConfigurations().Mac,
+      transport:{kind:'tls',address:'10.0.0.3',port:43128},peerCertificateSha256:'a'.repeat(64)};
+    const directory=await privateSyncDirectory(runtime,true);
+    const marker={version:1,pairId:pair.local.pairId,localCertificateSha256:'b'.repeat(64),
+      peerCertificateSha256:pair.peerCertificateSha256,directoryCreated:true,
+      created:['pairing.json','tls-trust.json','tls-offer.json'],files:{}};
+    if(mode==='pairId')marker.pairId='c'.repeat(64);
+    if(mode==='certificate')marker.peerCertificateSha256='d'.repeat(64);
+    if(mode==='missing pairing')marker.created=['tls-trust.json','tls-offer.json'];
+    await writeFile(path.join(directory,hostCommitFile),mode==='invalid'?'{}':JSON.stringify(marker),{mode:0o600});
+    if(mode==='extra file' || mode==='next file')
+      await writeFile(path.join(directory,mode==='extra file'?'other.json':hostCommitFile+'.next'),'{}',{mode:0o600});
+    if(mode==='matching') {
+      await initializePairing(runtime,pair);
+      assert.deepEqual(await readPairing(runtime),pair);
+      assert.deepEqual(await readHostCommit(directory),marker);
+    } else await assert.rejects(initializePairing(runtime,pair),
+      {message:'Private state already exists; explicit repair or rotation required'});
+  });
 });

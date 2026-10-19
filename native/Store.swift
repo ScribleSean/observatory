@@ -123,10 +123,13 @@ final class ObservatoryStore: ObservableObject {
     }
 
     private func ensureTrustedSync() {
+        var commitInfo = stat()
+        let unfinishedCommit = lstat(runtime.appendingPathComponent("private-sync/tls-host-commit.json").path, &commitInfo) == 0 || errno != ENOENT
         guard runtimeIdentityValid?() != false else { lastAttempt = "runtime-unavailable"; trustedSync?.requestStop(); return }
         guard !shuttingDown else { return }
         guard collectionAllowed, !pairingMaintenance, !collectionPausedForPairing,
               (try? FirstRunSetup.required(runtime: runtime)) == false,
+              !unfinishedCommit,
               FileManager.default.fileExists(atPath: runtime.appendingPathComponent("private-sync/tls-trust.json").path),
               let resources = Bundle.main.resourceURL else { trustedSync?.requestStop(); return }
         if trustedSync == nil { trustedSync = TrustedSyncProcess(runtime: runtime, resources: resources) }

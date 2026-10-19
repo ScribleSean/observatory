@@ -41,12 +41,7 @@ export async function checkLockSidecars(filename,{stat=lstat,wait=delay,boundMs=
   }
 }
 
-// SQLite supplies a process-crash-safe local mutex outside the directory that
-// repair retires. No pairing records or credentials are stored in this file.
-// Short contention waits asynchronously. Longer operations fail within a bound
-// so callers can retry rather than blocking the UI or resetting peer state.
-export async function withPeerStateLock(runtime,action) {
-  if(held.getStore()?.get(runtime)?.active)return action();
+async function lockDirectory(runtime) {
   const verificationDeadline=performance.now()+1000;
   let directory;
   // Another process holding the lock creates and removes the SQLite journal in this folder.
@@ -61,6 +56,16 @@ export async function withPeerStateLock(runtime,action) {
       if(performance.now()>=verificationDeadline)throw error;
     }
   }
+  return directory;
+}
+
+// SQLite supplies a process-crash-safe local mutex outside the directory that
+// repair retires. No pairing records or credentials are stored in this file.
+// Short contention waits asynchronously. Longer operations fail within a bound
+// so callers can retry rather than blocking the UI or resetting peer state.
+export async function withPeerStateLock(runtime,action) {
+  if(held.getStore()?.get(runtime)?.active)return action();
+  const directory=await lockDirectory(runtime);
   const filename=path.join(directory,'operation.sqlite');
   try {
     const file=await open(filename,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
@@ -100,4 +105,36 @@ export async function withPeerStateLock(runtime,action) {
       try{database.close();}finally{openLockDatabases.delete(database);}
     }
   }
+}
+
+// A separate OS-held lease survives asynchronous work and ends on process exit.
+export async function acquireHostCommitLease(runtime) {
+  const directory=await lockDirectory(runtime);
+  const filename=path.join(directory,'host-commit.sqlite');
+  try {
+    const file=await open(filename,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
+    await file.close();
+  } catch(error) {if(error.code!=='EEXIST')throw error;}
+  const before=await lstat(filename);
+  if(!before.isFile() || before.isSymbolicLink() || before.nlink!==1 || before.size>4096 ||
+    (process.platform!=='win32' && (before.mode&0o077)))throw Error('Unsafe pairing operation lock');
+  await checkLockSidecars(filename);
+  let database;
+  const release=()=>{
+    if(!database)return;
+    const current=database;database=null;
+    try{current.exec('ROLLBACK');}catch{}
+    try{current.close();}finally{openLockDatabases.delete(current);}
+  };
+  try {
+    database=new DatabaseSync(filename);
+    openLockDatabases.add(database);
+    const after=await lstat(filename);
+    if(after.dev!==before.dev || after.ino!==before.ino)throw Error('Changing pairing operation lock');
+    if(database.prepare('PRAGMA journal_mode').get().journal_mode!=='delete')throw Error('Unsupported pairing lock mode');
+    database.exec('PRAGMA busy_timeout=0; PRAGMA trusted_schema=OFF');
+    try {database.exec('BEGIN IMMEDIATE');}
+    catch(error) {if(error.errcode===5){release();return null;}throw error;}
+    return {release};
+  } catch(error) {release();throw error;}
 }

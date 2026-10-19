@@ -1,3 +1,4 @@
+import {hostCommitUnfinished} from './peer-tls-host-commit.mjs';
 import tls from 'node:tls';
 import {X509Certificate,createHash} from 'node:crypto';
 import {isPairingAddress} from './peer-invitation.mjs';
@@ -19,6 +20,7 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
   if(!isPairingAddress(address) || !Number.isInteger(port) ||
     (port!==0 && (port<1024 || port>65535)))throw unavailable();
   const state=await withPeerStateLock(runtime,async()=>{
+    if(await hostCommitUnfinished(runtime))throw unavailable();
     const trust=await readPeerTrust(runtime),identity=await readDeviceIdentity(runtime);
     if(!trust || !identity)throw unavailable();
     if(expectedPairing && (!isDeepStrictEqual(await readPairing(runtime),expectedPairing) ||
@@ -52,6 +54,7 @@ export async function startTrustedSyncListener(runtime,{address,port=0},{createS
       });
       socket.once('end',()=>{
         const exchange=withPeerStateLock(runtime,async()=>{
+          if(await hostCommitUnfinished(runtime))throw unavailable();
           // Read trust again under the same lock as record acceptance. An open
           // TLS connection cannot outlive revocation or a generation change.
           const current=await readPeerTrust(runtime);

@@ -80,6 +80,8 @@ test('host confirmation claims before committing and rolls back refused publicat
         const result=await host.confirm(claimId,input);
         assert.match(result.digest,/^[a-f0-9]{64}$/);
         assert.equal(host.status(),'configuration-ready');
+        const marker=JSON.parse(await readFile(file('tls-host-commit.json'),'utf8'));
+        assert.deepEqual(Object.keys(marker.files),names);
         const response=await requestPeerSetup(host.invitation,local.cert,peer,
           {host:process.platform==='darwin'?'Windows':'Mac'},{connect});
         assert.equal(response.pairing.peerCertificateSha256,fingerprint(local.cert));
