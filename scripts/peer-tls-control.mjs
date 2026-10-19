@@ -42,13 +42,20 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
   recover=recoverHostCommit,claim=claimFromInvitation,receive=receiveConfirmedTLSPairing,readRepair=readRepairConsent,
   selfAddresses=tailscaleSelfAddresses,checkPort=checkSyncPort,choose=chooseSharing}={}) {
   let host=null,invitation=null,joining='idle',epoch=0,busy=null,abort=new AbortController();
-  async function cancel() {
+  let running=null,cancelling=null;
+  function cancel() {
+    if(cancelling)return cancelling;
+    const command=running;
     epoch++;busy=null;abort.abort();abort=new AbortController();invitation=null;joining='idle';
     const previous=host;host=null;
-    if(previous)await previous.cancel();
-    return {status:'cancelled'};
+    cancelling=(async()=>{
+      try {if(previous)await previous.cancel();}catch {}
+      await Promise.allSettled(command?[command]:[]);
+      return {status:'cancelled'};
+    })().finally(()=>{cancelling=null;});
+    return cancelling;
   }
-  async function run(request) {
+  async function execute(request) {
     if(exact(request,['action']) && request.action==='cancel')return cancel();
     if(exact(request,['action']) && request.action==='status') {
       const pending=host?.pending();
@@ -58,7 +65,7 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
     if(exact(request,['action']) && request.action==='pending-peer') {
       return {status:busy!==null?'working':host?.status()??joining,peerAddress:host?.pending()?.peerAddress??null};
     }
-    if(busy!==null)throw fail();
+    if(busy!==null || cancelling)throw fail();
     const token=epoch;busy=token;
     try {
       if(exact(request,['action']) && request.action==='host-defaults') {
@@ -125,6 +132,19 @@ export function createTLSSetupController(runtime,{startHost=startHostTLSSetup,re
       }
       throw fail();
     } finally {if(busy===token)busy=null;}
+  }
+  // Cancel waits only for commands that can write durable local state. Network
+  // and discovery commands stay cancellable at once, as before.
+  const writing=['identity-create','host-confirm','join-confirm'];
+  function run(request) {
+    if(exact(request,['action']) && ['cancel','status','pending-peer'].includes(request.action))return execute(request);
+    if(running || cancelling)return Promise.reject(fail());
+    const command=execute(request);
+    if(!writing.includes(request?.action))return command;
+    running=command;
+    const clear=()=>{if(running===command)running=null;};
+    void command.then(clear,clear);
+    return command;
   }
   return {run,cancel};
 }

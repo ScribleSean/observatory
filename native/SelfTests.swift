@@ -1,7 +1,19 @@
+import AppKit
 import Foundation
 import Darwin
 
 func runSelfTests() {
+    do {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        precondition(writePairingInvitation("synthetic-invitation", to: pasteboard))
+        precondition(pasteboard.string(forType: .string) == "synthetic-invitation")
+        for name in ["org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType"] {
+            let type = NSPasteboard.PasteboardType(name)
+            precondition(pasteboard.types?.contains(type) == true)
+            precondition(pasteboard.data(forType: type) == Data())
+        }
+    }
     runRuntimeSetupSelfTests()
     runBridgeSelfTests()
     runBridgeActionSelfTests()

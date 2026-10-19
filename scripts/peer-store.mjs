@@ -62,11 +62,10 @@ async function safeFile(file,optional=false) {
 
 async function database(runtime,create) {
   const location=await locations(runtime,create);
-  let created=false;
   if(create) {
     try {
       const file=await open(location.file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
-      await file.close();created=true;
+      await file.close();
     } catch(error){if(error.code!=='EEXIST')throw error;}
   }
   const before=await safeFile(location.file,!create);
@@ -83,10 +82,13 @@ async function database(runtime,create) {
     db.exec('BEGIN IMMEDIATE');
     await assertPeerNotRevoked(location.directory);
     db.exec('PRAGMA max_page_count=16384');
-    if(created) {
+    let objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
+    if(!objects.length && before.size===0) {
+      const locked=await safeFile(location.file);
+      if(locked.dev!==before.dev || locked.ino!==before.ino || locked.size!==0)throw Error('Changing peer database');
       db.exec(schema);
+      objects=db.prepare("SELECT type,name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
     }
-    const objects=db.prepare("SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
     if(objects.length!==1 || objects[0].type!=='table' || objects[0].name!=='peer_state' || objects[0].sql!==schema)
       throw Error('Invalid peer database schema');
     return db;

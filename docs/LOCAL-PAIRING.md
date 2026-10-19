@@ -565,10 +565,20 @@ persistence does not yet replace SSH exchange or complete the setup flow.
 
 The storage primitive in `scripts/peer-device-identity.mjs` validates that a
 supplied private key matches its current self-signed certificate. Explicit
-initialization writes once into `private-device-identity`, using the existing
-cross-process peer lock, exclusive file creation and a flushed write. Reads
-reject linked, oversized, changing or malformed files. Existing empty or
-damaged identity directories require recovery and are not overwritten.
+initialization writes `identity.json` into a new private
+`private-device-identity-pending-<random>` folder, using the existing
+cross-process peer lock, exclusive file creation and a flushed write, reads it
+back and then renames the folder to `private-device-identity` in one step. An
+interrupted write leaves only the pending folder, which never blocks a later
+attempt. Reads reject linked, oversized, changing or malformed files. An
+existing identity directory is never overwritten. On a device with no
+`private-sync` folder, an identity directory that is empty, or holds only an
+`identity.json` that is empty or is not complete UTF-8 JSON (what an interrupted
+older build could leave), is reported as `identity-required`. Explicit identity setup then moves
+it aside to `private-device-identity-damaged-<random>`, never deleting it, and
+creates a new identity. Any other damaged identity directory, including a
+readable identity that fails validation such as an expired certificate or a
+newer format, still requires recovery.
 
 On macOS the directory and file use owner-only permissions. Windows uses the
 existing verified ACL policy for the current user, SYSTEM and Administrators.
