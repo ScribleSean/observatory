@@ -109,9 +109,11 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
     private readonly object gate = new();
     private readonly Task reader;
     private readonly Task errors;
+    private readonly TaskCompletionSource<bool> forceStopCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task? disposal;
     private int nextId, closed;
     internal bool ExitVerified { get; private set; }
+    internal int? ExitCode { get; private set; }
 
     internal TlsSetupProcess(string runtime) : this(runtime,
         Path.Combine(AppContext.BaseDirectory, "Runtime", "node.exe"),
@@ -154,6 +156,8 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
             await writer.WaitAsync(timeout.Token);
             try
             {
+                // A command that waited for the write lock while Stop ran must never reach the helper.
+                lock (gate) if (closed != 0) throw new InvalidOperationException("Setup process stopped.");
                 await process.StandardInput.WriteLineAsync(line.AsMemory(), timeout.Token);
                 await process.StandardInput.FlushAsync(timeout.Token);
             }
@@ -213,7 +217,32 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
             foreach (var item in pending) item.Value.TrySetException(new InvalidOperationException("Setup process stopped."));
             pending.Clear();
         }
-        try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+        _ = ForceStopAfter(TimeSpan.FromSeconds(2));
+    }
+
+    private async Task ForceStopAfter(TimeSpan grace)
+    {
+        try
+        {
+            // Wait up to 1 second for a write in progress to finish, then close input. If a write is still running,
+            // the close fails and the forced kill below applies.
+            var held = false;
+            try
+            {
+                held = await writer.WaitAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+                process.StandardInput.Close();
+            }
+            catch { }
+            finally { if (held) writer.Release(); }
+            using var timeout = new CancellationTokenSource(grace);
+            try { await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+        }
+        catch { }
+        finally { forceStopCompletion.TrySetResult(true); }
     }
 
     public ValueTask DisposeAsync()
@@ -227,6 +256,9 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await process.WaitForExitAsync(timeout.Token);
         await Task.WhenAll(reader, errors).WaitAsync(timeout.Token);
+        // Stop can already be running on another caller after setting closed.
+        await forceStopCompletion.Task.WaitAsync(timeout.Token);
+        if (process.HasExited) ExitCode = process.ExitCode;
         ExitVerified = process.HasExited;
         process.Dispose();
     }
@@ -257,7 +289,50 @@ internal sealed class TlsSetupProcess : IAsyncDisposable
                 }
             }
             await bridge.DisposeAsync();
-            if (!bridge.ExitVerified) throw new InvalidOperationException("Setup bridge exit not verified.");
+            if (!bridge.ExitVerified || bridge.ExitCode != 0) throw new InvalidOperationException("Setup bridge graceful exit not verified.");
+
+            // The stub lives outside the control runtime so the final non-recursive delete still proves the control script left nothing behind.
+            var stubFolder = Path.Combine(Path.GetTempPath(), "observatory-native-stub-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(stubFolder);
+            try
+            {
+                var stubbornScript = Path.Combine(stubFolder, "ignore-input-end.mjs");
+                await File.WriteAllTextAsync(stubbornScript,
+                    "process.stdin.resume()\nprocess.stdin.on('end', () => {})\nsetInterval(() => {}, 1000)\n");
+                var stubborn = new TlsSetupProcess(stubFolder, node, stubbornScript);
+                var watch = Stopwatch.StartNew();
+                await using (stubborn) { await stubborn.DisposeAsync(); }
+                watch.Stop();
+                if (!stubborn.ExitVerified || watch.Elapsed < TimeSpan.FromSeconds(1.5) || watch.Elapsed >= TimeSpan.FromSeconds(7))
+                    throw new InvalidOperationException("Setup bridge forced exit not verified.");
+            }
+            finally { Directory.Delete(stubFolder, recursive: true); }
+
+            // A command queued behind the write lock when Stop runs is refused and never reaches the helper.
+            var recorderFolder = Path.Combine(Path.GetTempPath(), "observatory-native-recorder-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(recorderFolder);
+            try
+            {
+                var recorderScript = Path.Combine(recorderFolder, "record-input.mjs");
+                var received = Path.Combine(recorderFolder, "received.txt");
+                await File.WriteAllTextAsync(recorderScript,
+                    "import fs from 'node:fs'\nimport path from 'node:path'\nconst file = path.join(process.argv[3], 'received.txt')\n" +
+                    "process.stdin.on('data', chunk => fs.appendFileSync(file, chunk))\nprocess.stdin.on('end', () => process.exit(0))\n");
+                var recorder = new TlsSetupProcess(recorderFolder, node, recorderScript);
+                await using (recorder)
+                {
+                    await recorder.writer.WaitAsync();
+                    var late = recorder.Send(new JsonObject { ["action"] = "status" });
+                    recorder.Stop();
+                    recorder.writer.Release();
+                    var refused = false;
+                    try { await late; } catch (InvalidOperationException) { refused = true; }
+                    await recorder.DisposeAsync();
+                    if (!refused || !recorder.ExitVerified || recorder.ExitCode != 0 || File.Exists(received) && new FileInfo(received).Length != 0)
+                        throw new InvalidOperationException("Setup bridge wrote a command after stop.");
+                }
+            }
+            finally { Directory.Delete(recorderFolder, recursive: true); }
             Console.WriteLine("Windows setup process bridge passed.");
         }
         finally { Directory.Delete(runtime, recursive: identitySetup); }
