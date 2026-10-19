@@ -131,7 +131,7 @@ internal sealed class Collector : IDisposable
         if (FirstRunSetup.AllowsCollection(runtime)) Start();
     }
 
-    internal void Configure(bool wispr = false, bool quota = false, bool activity = true, bool codex = true, bool claude = false)
+    internal void Configure(bool wispr = false, bool quota = false, bool activity = false, bool codex = false, bool claude = false)
     {
         if (Busy) throw new InvalidOperationException("Collection or shutdown is active.");
         var file = Path.Combine(runtime, "collector.config.json");
@@ -314,9 +314,14 @@ internal sealed class Collector : IDisposable
         Directory.CreateDirectory(root);
         try
         {
+            using var collector = new Collector(root);
+            collector.Configure();
+            var configured = collector.ReadConfiguration();
+            foreach (var key in new[] { "activity", "codex", "claude", "wispr", "quota" })
+                if (configured[key] is not JsonValue value || !value.TryGetValue<bool>(out var enabled) || enabled)
+                    throw new Exception("New source settings must be disabled.");
             var initial = JsonNode.Parse("""{"activity":false,"codex":false,"wispr":false,"quota":true,"futureSetting":"preserved"}""")!.AsObject();
             File.WriteAllText(Path.Combine(root, "collector.config.json"), initial.ToJsonString());
-            using var collector = new Collector(root);
             var desired = initial.DeepClone().AsObject();
             desired["activity"] = true;
             desired["wispr"] = true;
