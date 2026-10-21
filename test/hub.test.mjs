@@ -100,7 +100,9 @@ test('Windows commands run PowerShell with no Node and no inline paths from the 
   const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
   assert.match(decode(pullCommand(pc)),/\$env:LOCALAPPDATA 'Observatory'/);
   assert.match(decode(pullCommand(pc)),/ToBase64String/);
-  const push=decode(pushCommand(pc));
+  const push=decode(pushCommand(pc,1234));
+  assert.match(push,/if\(\$b\.Length -ne 1234\)\{exit 4\}/);
+  assert.throws(()=>pushCommand(pc,0),/empty/);
   assert.match(push,/FromBase64String/);
   assert.match(push,/\[IO\.File\]::Replace/);
   assert.match(decode(pullCommand({...pc,dataFolder:"D:\\it's"})),/'D:\\it''s'/);
@@ -109,7 +111,7 @@ test('Windows commands run PowerShell with no Node and no inline paths from the 
 test('Mac spoke commands use sh and base64',()=>{
   const mac={name:'Mac',ssh:'mac',platform:'mac',dataFolder:null};
   assert.match(pullCommand(mac),/base64 < "\$f"/);
-  assert.match(pushCommand(mac),/base64 -D > "\$t" && mv -f/);
+  assert.match(pushCommand(mac,99),/base64 -D > "\$t" && test "\$\(wc -c < "\$t"\)" -eq 99 && mv -f/);
   assert.match(pullCommand({...mac,dataFolder:"/Users/it's"}),/'\/Users\/it'\\''s'/);
 });
 

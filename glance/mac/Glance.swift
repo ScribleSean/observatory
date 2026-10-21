@@ -43,7 +43,9 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return URL(fileURLWithPath: settings.dataFolder).appendingPathComponent("public/local/combined.json")
   }
 
-  func node(_ arguments: [String], done: (() -> Void)? = nil) -> Process? {
+  var nodeMissing = false
+
+  func node(_ arguments: [String], done: ((Process) -> Void)? = nil) -> Process? {
     guard let settings else { return nil }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: settings.node)
@@ -54,8 +56,9 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     process.environment = environment
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
-    process.terminationHandler = { _ in DispatchQueue.main.async { done?() } }
-    do { try process.run() } catch { return nil }
+    process.terminationHandler = { finished in DispatchQueue.main.async { done?(finished) } }
+    do { try process.run() } catch { nodeMissing = true; return nil }
+    nodeMissing = false
     return process
   }
 
@@ -69,7 +72,11 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     tickStarted = Date()
     guard let settings else { return }
-    tick = node([settings.repo + "/scripts/tick.mjs"]) { [weak self] in self?.tick = nil; self?.show() }
+    // Clear only if this is still the current tick: a stopped one finishes after its replacement starts.
+    tick = node([settings.repo + "/scripts/tick.mjs"]) { [weak self] finished in
+      if self?.tick === finished { self?.tick = nil }
+      self?.show()
+    }
     show()
   }
 
@@ -84,6 +91,10 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let row = NSMenuItem(title: text, action: nil, keyEquivalent: "")
       row.isEnabled = false
       menu.addItem(row)
+    }
+    if nodeMissing {
+      line("Node was not found at the saved path. Run npm run setup again.")
+      menu.addItem(.separator())
     }
     if settings == nil {
       line("glance.json is missing. Run npm run setup again.")
@@ -139,7 +150,9 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       if up { NSWorkspace.shared.open(url); return }
       if self.server?.isRunning != true {
-        self.server = self.node([settings.repo + "/serve-local.mjs"]) { [weak self] in self?.server = nil }
+        self.server = self.node([settings.repo + "/serve-local.mjs"]) { [weak self] finished in
+          if self?.server === finished { self?.server = nil }
+        }
       }
       // Give the server a moment to listen before the browser asks.
       DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSWorkspace.shared.open(url) }

@@ -67,6 +67,11 @@ A Codex review of the spec and spike raised five points. How the build handles e
 4. **Freshness at display time.** Menu lines carry clock times ("as of 1:05 PM"), and the apps and dashboard compute ages when they draw. `tick.mjs` stops itself after 4 minutes, and the apps end a tick that runs past 4.5 minutes.
 5. **Hub offline and migration.** A spoke recombines its own fresh snapshot with the last copy from the hub on every tick. Before the first write over the old app's `usage.json`, the collector copies it once to `usage.before-hub.json`, so returning to build 43 or 42 is a matter of quitting the new app and restoring that file.
 
+## Known limits
+
+- When a tick hits its 4 minute deadline, or an app stops a hung tick, child processes it started (ssh, the screen time PowerShell script, the Codex client) are not stopped with it. The next tick takes over the lock correctly.
+- The C# tray app has been compiled only by CI configuration on paper. It has not run yet. It is compiled by `npm run setup` on the PC and by the Windows CI job.
+
 ## Proposed AGENTS.md rewrite (not applied)
 
 Replace the "Scope and priorities" bullets 2, 5 and 7 and the "Sessions and branches" section with:

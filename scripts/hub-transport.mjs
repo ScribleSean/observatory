@@ -30,18 +30,23 @@ export function pullCommand(spoke) {
   return `f=${macFolder(spoke)}/public/local/usage.json; test "$(wc -c < "$f")" -le ${MAX_FILE_BYTES} && base64 < "$f"`;
 }
 
-export function pushCommand(spoke) {
+// The expected size is checked before replacing, so a cut-off or empty transfer
+// changes nothing. The temporary name is fixed, so a failed push leaves no litter.
+export function pushCommand(spoke,bytes) {
+  if(!Number.isSafeInteger(bytes) || bytes<1)throw Error('combined file is empty');
   if(spoke.platform==='windows') return encoded([
     "$ErrorActionPreference='Stop'",
     `$d=Join-Path ${windowsFolder(spoke)} 'public\\local'`,
     'New-Item -ItemType Directory -Force -Path $d | Out-Null',
     '$b=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())',
-    "$t=Join-Path $d ('.combined-'+[guid]::NewGuid().ToString()+'.tmp')",
+    `if($b.Length -ne ${bytes}){exit 4}`,
+    "$t=Join-Path $d '.combined.incoming'",
     "$f=Join-Path $d 'combined.json'",
     '[IO.File]::WriteAllBytes($t,$b)',
-    'if(Test-Path -LiteralPath $f){[IO.File]::Replace($t,$f,[NullString]::Value)}else{[IO.File]::Move($t,$f)}',
+    // A reader can hold the file for a moment, so retry the replace briefly.
+    'for($i=0;$i -lt 8;$i++){try{if(Test-Path -LiteralPath $f){[IO.File]::Replace($t,$f,[NullString]::Value)}else{[IO.File]::Move($t,$f)};break}catch{if($i -eq 7){throw};Start-Sleep -Milliseconds (100*($i+1))}}',
   ].join('; '));
-  return `d=${macFolder(spoke)}/public/local; mkdir -p "$d" && t="$d/.combined-$$.tmp" && base64 -D > "$t" && mv -f "$t" "$d/combined.json"`;
+  return `d=${macFolder(spoke)}/public/local; mkdir -p "$d" && t="$d/.combined.incoming" && base64 -D > "$t" && test "$(wc -c < "$t")" -eq ${bytes} && mv -f "$t" "$d/combined.json"`;
 }
 
 export function runSSH(alias,command,input='') {
@@ -68,7 +73,8 @@ export function sshTransport(invoke=runSSH) {
     },
     async push(spoke,text) {
       if(Buffer.byteLength(text)>MAX_FILE_BYTES)throw Error('combined file too large');
-      await invoke(spoke.ssh,pushCommand(spoke),Buffer.from(text).toString('base64'));
+      const bytes=Buffer.from(text);
+      await invoke(spoke.ssh,pushCommand(spoke,bytes.length),bytes.toString('base64'));
     },
   };
 }

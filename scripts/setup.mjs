@@ -71,6 +71,14 @@ export function glanceSettings(config,node=process.execPath,repo=REPO,configFile
   return {node,repo,config:configFile,dataFolder:config.dataFolder,port:config.dashboard.port};
 }
 
+// The PATH entry for node, not the resolved file: a version manager or Homebrew
+// upgrade removes the versioned folder that process.execPath points into.
+export async function stableNode(platform=process.platform) {
+  const found=platform==='win32'?await quiet('where.exe',['node']):await quiet('/bin/sh',['-lc','command -v node']);
+  const first=found?.split(/\r?\n/).map(line=>line.trim()).find(line=>path.isAbsolute(line));
+  return first && existsSync(first)?first:process.execPath;
+}
+
 async function quiet(file,args,options={}) {
   try {return (await execute(file,args,{windowsHide:true,timeout:120000,maxBuffer:8_000_000,...options})).stdout;}
   catch {return null;}
@@ -137,19 +145,23 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
       await mkdir(path.dirname(target.settings),{recursive:true});
       await writeFile(path.join(target.app,'Contents','Info.plist'),infoPlist());
       await execute('/usr/bin/xcrun',['swiftc','-O','-swift-version','5',path.join(REPO,'glance','mac','Glance.swift'),'-o',target.executable],{timeout:300000});
-      // Ad hoc signature so macOS runs the locally built app without a download warning.
-      await quiet('/usr/bin/codesign',['--force','--sign','-',target.app]);
     });
   } else {
     await act(`build the tray app at ${path.relative(REPO,target.app)}`,async()=>{
       if(!existsSync(target.compiler))throw Error(`The .NET Framework C# compiler was not found at ${target.compiler}.`);
       await mkdir(target.app,{recursive:true});
+      // Windows locks a running program file, so stop the tray app before replacing it.
+      await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute(target.compiler,['/nologo','/target:winexe','/optimize+',`/out:${target.executable}`,
         '/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Web.Extensions.dll',
         path.win32.join(REPO,'glance','windows','Glance.cs')],{windowsHide:true,timeout:300000});
     });
   }
-  await act('write the app settings (glance.json)',()=>writeFile(target.settings,JSON.stringify(glanceSettings(config,process.execPath,REPO,path.resolve(configFile)),null,2)+'\n'));
+  await act('write the app settings (glance.json)',async()=>{
+    await writeFile(target.settings,JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n');
+    // Ad hoc signature last, so it covers glance.json too. macOS then runs the locally built app without a download warning.
+    if(platform==='darwin')await quiet('/usr/bin/codesign',['--force','--sign','-',target.app]);
+  });
 
   if(config.role==='hub') for(const spoke of config.hub.spokes) {
     if(dryRun) {step(`would check SSH to ${spoke.name} (${spoke.ssh})`);continue;}
@@ -164,7 +176,15 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
       await writeFile(target.launchAgent,launchAgent(target.executable));
       const domain=`gui/${process.getuid()}`;
       await quiet('/bin/launchctl',['bootout',`${domain}/${LABEL}`]);
-      await execute('/bin/launchctl',['bootstrap',domain,target.launchAgent]);
+      // bootout returns before the old job has gone, and bootstrap fails until it has.
+      for(let attempt=0;attempt<20 && await quiet('/bin/launchctl',['print',`${domain}/${LABEL}`])!==null;attempt++)
+        await new Promise(resolve=>setTimeout(resolve,250));
+      let failure=null;
+      for(let attempt=0;attempt<5;attempt++) {
+        try {await execute('/bin/launchctl',['bootstrap',domain,target.launchAgent]);failure=null;break;}
+        catch(error) {failure=error;await new Promise(resolve=>setTimeout(resolve,500));}
+      }
+      if(failure)throw Error('launchctl could not start the menu bar app. Log out and in, or run setup again.');
     });
   } else {
     await act('start the tray app now and at login',async()=>{

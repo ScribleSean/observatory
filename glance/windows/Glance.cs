@@ -41,6 +41,9 @@ namespace Observatory
         Icon icon;
         SynchronizationContext ui;
         DateTime tickStarted = DateTime.MinValue;
+        bool nodeMissing;
+        readonly System.Windows.Forms.Timer openTimer = new System.Windows.Forms.Timer();
+        int openTries;
 
         Glance()
         {
@@ -58,6 +61,7 @@ namespace Observatory
             readTimer.Interval = 30 * 1000;
             readTimer.Tick += (sender, e) => Show();
             readTimer.Start();
+            openTimer.Tick += (sender, e) => CheckServer();
             Show();
             RunTick();
         }
@@ -100,9 +104,10 @@ namespace Observatory
                     process.BeginOutputReadLine();
                     process.BeginErrorReadLine();
                 }
+                nodeMissing = false;
                 return process;
             }
-            catch { return null; }
+            catch { nodeMissing = true; return null; }
         }
 
         void RunTick()
@@ -143,6 +148,7 @@ namespace Observatory
             menu.Items.Clear();
             string title = "?";
             bool stale = true;
+            if (nodeMissing) { Line("Node was not found at the saved path. Run npm run setup again."); Line(""); }
             if (settings == null)
             {
                 Line("glance.json is missing. Run npm run setup again.");
@@ -155,22 +161,24 @@ namespace Observatory
                     string file = Path.Combine(settings.dataFolder, "public", "local", "combined.json");
                     var serializer = new JavaScriptSerializer();
                     serializer.MaxJsonLength = 32 * 1024 * 1024;
-                    json = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(file, Encoding.UTF8));
+                    json = serializer.Deserialize<Dictionary<string, object>>(ReadShared(file));
                 }
                 catch { json = null; }
-                var glance = json != null && json.ContainsKey("glance") ? json["glance"] as Dictionary<string, object> : null;
+                object glanceValue = null;
+                var glance = json != null && json.TryGetValue("glance", out glanceValue) ? glanceValue as Dictionary<string, object> : null;
                 if (glance == null)
                 {
                     Line("No combined.json yet. The first collection is running.");
                 }
                 else
                 {
-                    if (glance["title"] is string) title = (string)glance["title"];
-                    var lines = glance["lines"] as ArrayList;
+                    object value;
+                    if (glance.TryGetValue("title", out value) && value is string) title = (string)value;
+                    var lines = glance.TryGetValue("lines", out value) ? value as IList : null;
                     if (lines != null) foreach (object line in lines) Line(line as string ?? "");
                     Line("");
                     DateTime at;
-                    if (json["generatedAt"] is string && DateTime.TryParse((string)json["generatedAt"], CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out at))
+                    if (json.TryGetValue("generatedAt", out value) && value is string && DateTime.TryParse((string)value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out at))
                     {
                         var age = DateTime.UtcNow - at;
                         stale = age.TotalMinutes > 15;
@@ -237,12 +245,32 @@ namespace Observatory
         {
             if (settings == null) return;
             string url = "http://127.0.0.1:" + settings.port + "/";
-            if (!Reachable(url))
-            {
-                if (server == null || server.HasExited) server = Node("serve-local.mjs", true);
-                Thread.Sleep(1000);
-            }
+            if (Reachable(url)) { Browse(url); return; }
+            if (server == null || server.HasExited) server = Node("serve-local.mjs", true);
+            // Wait for the server without freezing the menu: check every half second for up to 10 seconds.
+            openTries = 0;
+            openTimer.Stop();
+            openTimer.Interval = 500;
+            openTimer.Start();
+        }
+
+        void Browse(string url)
+        {
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
+        }
+
+        void CheckServer()
+        {
+            string url = "http://127.0.0.1:" + settings.port + "/";
+            openTries++;
+            if (Reachable(url) || openTries >= 20) { openTimer.Stop(); Browse(url); }
+        }
+
+        // The tray app reads while the hub or tick may be replacing the file, so allow both.
+        static string ReadShared(string file)
+        {
+            using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(stream, Encoding.UTF8)) return reader.ReadToEnd();
         }
 
         void Quit()
