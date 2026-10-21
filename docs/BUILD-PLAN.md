@@ -1,5 +1,7 @@
 # Build plan
 
+> Historical. This records the full app up to build 44. The hub rebuild replaced the parity table and the workstream plan, see [the hub plan](HUB-PLAN.md).
+
 Written on 2026-10-13 from `main` at `11ba4ea`, with additions the same day through `02b83ac`, and corrected on 2026-10-14 after the orchestrator read the plan against the repository before the autonomous run (the "Corrections of 2026-10-14" section lists what changed and why). This is a plan. Nothing in it is built unless [the parity table](PARITY.md) or [the state record](STATE.md) says so. [The design direction](DESIGN.md) is the source for what to build. This file says who builds what, in which order, and how the pieces stay out of each other's way.
 
 ## Decision this plan rests on
