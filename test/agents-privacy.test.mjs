@@ -69,3 +69,26 @@ test('a session name is shortened and stripped of control characters',()=>withFo
   // oxlint-disable-next-line no-control-regex -- checking that control characters are gone
   assert.ok(!/[\u0000-\u001f]/.test(session.name));
 }));
+
+test('a pulled spoke snapshot goes through the same allowlist, and bad rows fail only that spoke',()=>withFolder(async folder=>{
+  const {runHub}=await import('../scripts/hub.mjs');
+  const {testConfig}=await import('./helpers.mjs');
+  const {mkdir:make,writeFile:write,readFile}=await import('node:fs/promises');
+  const local=path.join(folder,'public','local');
+  await make(local,{recursive:true});
+  await write(path.join(local,'usage.json'),JSON.stringify(ownSnapshot('Mac',now)));
+  const at=new Date(now).toISOString();
+  const hostile=ownSnapshot('Windows',now,s=>({...s,agentActivity:[{host:'Windows',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'ok',
+    prompt:'PROMPT-TEXT',sessions:[null,7,{status:'waiting',project:'p',name:'n',lastPrompt:'PROMPT-TEXT',transcript:'/Users/private-person/x.jsonl'}],
+    jobs:[{status:'done',project:'q',output:'JOB-OUTPUT'}]}]}));
+  const pc={name:'PC',ssh:'pc',platform:'windows',dataFolder:null};
+  const transport={pull:async()=>JSON.stringify(hostile),push:async()=>{}};
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
+  const combined=await runHub(config,{transport,now:()=>now});
+  assert.equal(combined.hub.spokes[0].pull,'ok');
+  const text=await readFile(path.join(local,'combined.json'),'utf8');
+  for(const secret of SECRETS)assert.ok(!text.includes(secret),secret);
+  const pcAgents=combined.glance.agents.find(device=>device.host==='Windows');
+  assert.deepEqual(pcAgents.sessions.map(s=>s.project),['p']);
+  assert.equal(combined.glance.waiting,1);
+}));

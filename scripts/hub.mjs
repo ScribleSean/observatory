@@ -4,7 +4,7 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {localFolder} from '../lib/config.mjs';
-import {combine,carriedDevice,HOSTS,CLOCK_SKEW_MS} from '../lib/combine.mjs';
+import {combine,carriedDevice,ownRows,HOSTS,CLOCK_SKEW_MS} from '../lib/combine.mjs';
 import {writeAtomic} from '../lib/atomic-file.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {sshTransport,MAX_FILE_BYTES} from './hub-transport.mjs';
@@ -31,6 +31,9 @@ function parseSnapshot(text,host,now) {
   const own=key=>Array.isArray(value[key]) && value[key].some(row=>row?.host===host && row.status!=='not-connected');
   if(claimed!==undefined ? claimed!==host : !['activity','tokens','settings'].some(own))
     throw Error('snapshot is for another computer');
+  // Run the allowlists here, inside the pull's own error handling, so a
+  // malformed spoke file fails only that spoke.
+  if(!ownRows(value,host))throw Error('invalid snapshot');
   return value;
 }
 

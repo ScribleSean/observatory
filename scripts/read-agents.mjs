@@ -133,3 +133,36 @@ export async function readAgents({folders=defaultAgentFolders(),now=Date.now(),a
   ]);
   return {claudeStatus:claude.status,codexStatus:codex.status,sessions:claude.sessions,jobs:codex.jobs};
 }
+
+// The one allowlist for agent status, applied to local reads and to every
+// snapshot pulled from another computer. Anything not listed here is dropped,
+// so a field added by another version (or a tampered file) never reaches the view.
+const SESSION_STATUSES=['working','waiting','idle','done','unknown'];
+const JOB_STATUSES=['working','done','stopped'];
+const SOURCE_STATUSES=['ok','not-found','unavailable'];
+const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
+const pickStatus=(value,allowed,fallback)=>allowed.includes(value)?value:fallback;
+
+export function cleanSession(value) {
+  if(!object(value))return null;
+  return {tool:'claude-code',status:pickStatus(value.status,SESSION_STATUSES,'unknown'),
+    name:cleanName(value.name),project:cleanName(value.project,40),
+    startedAt:stamp(value.startedAt),updatedAt:stamp(value.updatedAt),
+    ...(typeof value.via==='string' && /^[a-z-]{1,32}$/.test(value.via)?{via:value.via}:{})};
+}
+
+export function cleanJob(value) {
+  if(!object(value))return null;
+  return {tool:'codex',status:pickStatus(value.status,JOB_STATUSES,'stopped'),project:cleanName(value.project,40),
+    startedAt:stamp(value.startedAt),finishedAt:stamp(value.finishedAt)};
+}
+
+export function cleanAgentActivity(value,host) {
+  if(!object(value) || value.host!==host)return null;
+  if(value.status==='not-connected')return {host,status:'not-connected'};
+  const list=(items,clean,max)=>Array.isArray(items)?items.slice(0,max).map(clean).filter(Boolean):[];
+  return {host,status:value.status==='ok'?'ok':'unavailable',checkedAt:stamp(value.checkedAt),
+    claudeStatus:pickStatus(value.claudeStatus,SOURCE_STATUSES,'unavailable'),
+    codexStatus:pickStatus(value.codexStatus,SOURCE_STATUSES,'unavailable'),
+    sessions:list(value.sessions,cleanSession,MAX_SESSIONS),jobs:list(value.jobs,cleanJob,MAX_JOBS)};
+}

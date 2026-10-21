@@ -23,7 +23,7 @@ import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime}
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
 import {collectSettings} from './read-settings.mjs';
 import {collectClaudeUsage} from './read-claude-usage.mjs';
-import {readAgents} from './read-agents.mjs';
+import {readAgents,cleanAgentActivity} from './read-agents.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
@@ -112,7 +112,9 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('codexLimits',value=>value),
     read('claudeCode',raw=>cleanClaudeTokenSource(raw,host,at,{hours:true})),
     read('claudeLimits',value=>value),
-    read('agents',value=>({host,status:'ok',checkedAt:at,claudeStatus:value.claudeStatus,codexStatus:value.codexStatus,sessions:value.sessions,jobs:value.jobs})),
+    // A read where neither tool could be read is unavailable, not "nothing running".
+    read('agents',value=>cleanAgentActivity({host,status:value.claudeStatus==='unavailable' && value.codexStatus!=='ok'?'unavailable':'ok',checkedAt:at,
+      claudeStatus:value.claudeStatus,codexStatus:value.codexStatus,sessions:value.sessions,jobs:value.jobs},host)),
   ]);
   const pick=(value,fallback,failed)=>value===null?fallback:value.failed?failed(value.error):value;
   const activity=pick(activityRead,disconnected(host),unavailable);
