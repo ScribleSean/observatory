@@ -57,6 +57,16 @@ This plan maps the hub spec (the draft Sean approved on 2026-10-21, kept outside
 6. **Unused development packages.** `happy-dom` and `lucide-react` may no longer be needed. Removing them changes `package-lock.json`, which needs a network install. Fine to do in a later small pull request?
 7. **Reader edge cases kept from Python.** The Codex reader fails the whole read on some malformed events (for example a null timestamp), exactly as the Python did. Keep that strictness or skip bad events?
 
+## Independent critique, 2026-10-21
+
+A Codex review of the spec and spike raised five points. How the build handles each:
+
+1. **SSH contract.** `scripts/hub-transport.mjs` runs SSH in batch mode with strict host key checking, no agent, X11 or port forwarding, and a 30 second kill. It sends two fixed commands. The pull reads `<data>\public\local\usage.json`. The write-back writes a temporary file in `<data>\public\local` and renames it to `combined.json`. Nothing in the spoke's reply chooses a path. One nuance: for a Windows spoke `<data>` comes from the spoke account's own `LOCALAPPDATA`, unless the hub's config sets `dataFolder`.
+2. **Pulled JSON is validated.** Size is capped at 16 MB, `schema` must be 2, the snapshot must be about the spoke, and a `collectedAt` more than 2 minutes in the future is refused. A limit reading dated in the future never wins "freshest". When a pull is refused or fails, the last good copy from `combined.json` is kept and shown with its age.
+3. **Unknown never becomes zero.** A computer's token total is Unknown when any enabled provider is Unknown, and the "Both computers" sum is Unknown when any part is. "No records" (read, nothing today) is the only case that counts as zero.
+4. **Freshness at display time.** Menu lines carry clock times ("as of 1:05 PM"), and the apps and dashboard compute ages when they draw. `tick.mjs` stops itself after 4 minutes, and the apps end a tick that runs past 4.5 minutes.
+5. **Hub offline and migration.** A spoke recombines its own fresh snapshot with the last copy from the hub on every tick. Before the first write over the old app's `usage.json`, the collector copies it once to `usage.before-hub.json`, so returning to build 43 or 42 is a matter of quitting the new app and restoring that file.
+
 ## Proposed AGENTS.md rewrite (not applied)
 
 Replace the "Scope and priorities" bullets 2, 5 and 7 and the "Sessions and branches" section with:
