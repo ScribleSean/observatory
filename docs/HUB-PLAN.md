@@ -78,6 +78,18 @@ These were open questions earlier in this file. Each is settled with its reason.
 - Claude Code on Windows keeps its session files in `%USERPROFILE%\.claude\sessions`, the same layout as the Mac.
 - The SSH pull and write-back work with the PC.
 
+## Second Codex review, 2026-10-21
+
+A Codex review of `dac7ee0` found seven issues. All are fixed:
+
+1. **Pulled snapshots and the agents allowlist (high).** Agent rows from any computer now pass the same field allowlist as local reads (`cleanAgentActivity` in `scripts/read-agents.mjs`). Unknown fields are dropped, non-objects are skipped, lists are capped, and the check runs inside the pull's own error handling, so a bad spoke file fails only that spoke.
+2. **Run lock.** Each lock has a random token. A stale takeover checks that the file it moved aside is the one it judged stale and puts a fresh lock back otherwise. Release deletes the lock only while it still holds this run's token.
+3. **Write-back.** The hub now writes `combined.incoming.json`. The spoke merges it on its own cycle under its own lock, taking whichever copy is newer, so the hub never replaces a newer spoke result.
+4. **Windows `codexPath`.** Honoured, as on the Mac.
+5. **Failed agent reads.** Shown as Unknown in the menu, the Agents tile and the Agents page, never as "nothing running".
+6. **Staleness.** The dashboard judges limits, agents and today's numbers against the time it draws. Agents older than 15 minutes are not counted as current, and today's numbers from an earlier day show Unknown with the last update time.
+7. **Push results.** Saved in `combined.json` after the write-backs, and the menus show a failed read or write-back.
+
 ## Second pass, 2026-10-21: agents, one computer first, design
 
 - **Agents.** `scripts/read-agents.mjs` reads `~/.claude/sessions/<pid>.json` (status, session name, folder name, times; a session whose process has gone is "done") and the file names in `~/.local/state/codex-jobs` (`<id>.running` while running, `<id>.md` when finished). It never opens transcripts, the `.key` files or job output. Status shows as a word with a dot. The glance block counts sessions waiting on you and working, and the menu bar title gets an amber dot when one is waiting.
