@@ -49,18 +49,34 @@ This plan maps the hub spec (the draft Sean approved on 2026-10-21, kept outside
 
 ## Open questions for Sean
 
-1. **AGENTS.md.** The spec says the sections that describe the old app get rewritten in one pass when the rebuild starts. Only the approved sum sentence was applied. A proposed rewrite is below. Apply it, change it, or leave it?
-2. **Old apps.** Build 43 (Mac) and build 42 (PC) write the same `usage.json`. For the live check, they need to be quit and their login items turned off. Uninstalling them is your call.
-3. **Claude Code status line.** If the old app installed its status-line bridge into `~/.claude/settings.json`, that command points into the old app bundle and breaks when the bundle goes. Keep the bridge (repoint it with `node scripts/claude-statusline-install.mjs`) or remove it and rely on `/usage` every tick?
-4. **Time zone.** Days are counted in America/New_York on every computer, as before. Making it follow each computer's own zone touches the readers and the viewer. Worth doing before others use it?
-5. **Another Mac as the second computer.** Needs the viewer to accept more than the two host names. Later?
-6. **Unused development packages.** `happy-dom` and `lucide-react` may no longer be needed. Removing them changes `package-lock.json`, which needs a network install. Fine to do in a later small pull request?
-7. **Reader edge cases kept from Python.** The Codex reader fails the whole read on some malformed events (for example a null timestamp), exactly as the Python did. Keep that strictness or skip bad events?
+Two questions need you. Each has a recommendation.
 
-8. **Session names and the "no raw titles" rule.** AGENTS.md says stored dashboard data holds no raw titles. That rule was written for window titles. The agents panel stores Claude Code session names, as you asked. Keep that, or show project names only?
-9. **codex-job is your own tool.** Other people will not have `~/.local/state/codex-jobs`, so the Codex jobs list shows "Not found on this computer" for them. Fine, or hide the section when the folder is missing?
-10. **Windows agents.** The Claude Code session folder on Windows is assumed to be `%USERPROFILE%\.claude\sessions`, the same layout as the Mac. Not checked on the PC yet.
-11. **Menu bar look.** The Swift and C# menus were restyled (bold sections, readable rows, amber dot) but have not been looked at on screen. Worth a glance in the live sitting.
+1. **Apply the AGENTS.md rewrite below?** It replaces the sections about pairing, parity, workstreams and the F1 release with the hub design. It also says that the "no raw titles" rule means window titles, so Claude Code session names may be stored, as you asked for the Agents panel.
+   - **Recommended: apply it as written.**
+   - Apply it, but keep session names out (show project names only).
+   - Leave AGENTS.md as it is for now.
+2. **What happens to the build 43 and build 42 apps?** They write the same `usage.json` as the rebuild, so they cannot run at the same time.
+   - **Recommended: at the live check, quit both and turn off their login items, keep them installed until the check passes, then uninstall them.** The first collection keeps a copy of the old snapshot as `usage.before-hub.json`, so going back stays possible.
+   - Uninstall both before the live check.
+
+## Decided without asking
+
+These were open questions earlier in this file. Each is settled with its reason.
+
+- **Time zone.** Days now follow each computer's own time zone (`lib/timezone.mjs`), because a fixed New York zone is wrong for anyone else. Nothing changes for you in New York. `OBSERVATORY_TIMEZONE` overrides it, and the tests pin New York so their saved results match on any machine and in CI.
+- **Claude Code status line.** The bridge files stay but setup does not install them, so `/usage` on each tick is the main source. Setup now notices a status line left pointing at a bridge that no longer exists, and prints the one command that repoints it at this copy. Nothing is changed without you running that command.
+- **codex-job.** It is your own tool, so other people will not have its folder. The Codex jobs section is now left out when the folder is missing, instead of showing an empty "not found".
+- **Another Mac as the second computer.** Later. It needs the viewer to accept more host names, and no one needs it yet.
+- **Unused development packages.** Left as they are. Removing them changes `package-lock.json`, which needs a networked install, and they do not ship in the dashboard.
+- **Strict Codex reader.** Kept strict for now. It matches the Python reader that the golden files came from. If a real log ever fails the whole read, the fix is to skip the bad event, with a new golden file.
+- **Session names.** Kept, because you asked for them. They are cut to 80 characters with control characters removed, and AGENTS.md question 1 covers the wording.
+
+## Checks for the live sitting
+
+- The Windows tray app compiles with the built-in C# compiler and its menu looks right.
+- The Mac menu bar item and its open menu look right, including the amber dot.
+- Claude Code on Windows keeps its session files in `%USERPROFILE%\.claude\sessions`, the same layout as the Mac.
+- The SSH pull and write-back work with the PC.
 
 ## Second pass, 2026-10-21: agents, one computer first, design
 
@@ -92,6 +108,14 @@ Replace the "Scope and priorities" bullets 2, 5 and 7 and the "Sessions and bran
 - There is no demo page or release until the owner asks for one. Builds are made locally by `npm run setup`. This scope does not authorize publication, releases or repository-visibility changes.
 - Work happens on branches and reaches `main` by pull request. One review per pull request. Tests cover the readers, the combine step and the local server.
 - On Windows, a live check starts the tray app from the Start menu or at login, not from inside a Claude desktop session (issue 58).
+
+In "Data and execution boundaries", replace the sentence that begins "No raw titles" with:
+
+- No window titles, prompts, messages, arguments, environment variables or credentials in stored dashboard data or Git. Claude Code session names and project folder names may be stored, cut to 80 characters with control characters removed. Test adapters using synthetic data.
+
+Add to "Scope and priorities":
+
+- Observatory is monitor-only. It never starts, stops or answers an agent, and never writes to the tools it reads.
 
 ## Live check with Sean
 
