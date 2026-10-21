@@ -5,7 +5,7 @@ Observatory runs on your own computers. It has no account, no hosted service and
 ## What talks to what
 
 - The dashboard server (`serve-local.mjs`) binds to 127.0.0.1. It answers only requests addressed to `127.0.0.1:<port>` or `localhost:<port>`, refuses cross-site reads, accepts only GET and HEAD, and serves only the built pages and `combined.json`. It has no write routes and runs no commands.
-- The hub connects to each spoke with your existing SSH alias. It runs one fixed command that reads `usage.json` and one that writes `combined.json`. SSH runs in batch mode with strict host key checking and no agent, X11 or port forwarding. No Node or other program from this project is needed on the spoke for this.
+- The hub connects to each spoke with your existing SSH alias. It runs one fixed command that reads `usage.json` and one that writes `combined.incoming.json`, which the spoke merges itself. SSH runs in batch mode with strict host key checking and no agent, X11 or port forwarding. No Node or other program from this project is needed on the spoke for this.
 - Codex limits are read by asking the installed Codex client. Claude Code limits are read with Claude Code's own `/usage` command. Both use the sign-in those apps already have. Observatory does not read or store credentials.
 - No model requests are made.
 

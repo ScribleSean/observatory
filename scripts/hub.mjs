@@ -68,9 +68,15 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
   return combined;
 }
 
+// The newer of the spoke's own combined.json and the hub's inbox copy.
+const newer=(a,b)=>!b?a:!a?b:(Date.parse(b.generatedAt)>Date.parse(a.generatedAt)?b:a);
+
 export async function recombine(config,{now=()=>Date.now()}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
-  const previous=await readJson(path.join(folder,'combined.json'));
+  const mine=await readJson(path.join(folder,'combined.json'));
+  const inbox=await readJson(path.join(folder,'combined.incoming.json'));
+  // Only a copy the hub wrote counts as inbox data.
+  const previous=newer(mine,inbox?.hub?.role==='hub' && Date.parse(inbox.generatedAt)<=now()+CLOCK_SKEW_MS?inbox:null);
   const own=await readJson(path.join(folder,'usage.json'));
   const devices=[{host:config.host,name:config.device.name,snapshot:own,...(own?{}:{error:'no local snapshot'})}];
   for(const host of HOSTS.filter(host=>host!==config.host)) {

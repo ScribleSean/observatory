@@ -139,3 +139,27 @@ test('a pulled snapshot from the future or of another schema is refused, and the
   const other=await runHub(config,{transport:fakeTransport(JSON.stringify({...ownSnapshot('Windows',now),schema:3})),now:()=>now});
   assert.equal(other.hub.spokes[0].pull,'invalid snapshot');
 }));
+
+test('write-back lands in an inbox that the spoke merges under its own lock',()=>withFolder(async folder=>{
+  const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
+  assert.match(decode(pushCommand(pc,10)),/'combined\.incoming\.json'/);
+  assert.match(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10),/combined\.incoming\.json"$/);
+  // The hub's copy arrives in the inbox and is newer than the spoke's last result.
+  const hubCopy=await withFolder(async hub=>{
+    await seed(hub,'usage.json',ownSnapshot('Mac',now));
+    const transport=fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000)));
+    await runHub(testConfig(hub,{role:'hub',hub:{spokes:[pc]}}),{transport,now:()=>now});
+    return JSON.parse(transport.pushed[0].text);
+  });
+  const config=testConfig(folder,{platform:'windows',host:'Windows',device:{name:'PC'}});
+  await seed(folder,'usage.json',ownSnapshot('Windows',now+60000));
+  await seed(folder,'combined.incoming.json',hubCopy);
+  const merged=await recombine(config,{now:()=>now+60000});
+  assert.ok(merged.devices.some(device=>device.host==='Mac'));
+  assert.equal(merged.hub.hubWroteAt,hubCopy.generatedAt);
+  // An older inbox copy never replaces a newer combined.json the spoke made.
+  const older={...hubCopy,generatedAt:new Date(now-3600000).toISOString(),snapshots:{}};
+  await seed(folder,'combined.incoming.json',older);
+  const again=await recombine(config,{now:()=>now+120000});
+  assert.ok(again.devices.some(device=>device.host==='Mac'));
+}));
