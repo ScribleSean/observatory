@@ -7,10 +7,10 @@ Observatory works on one computer with no setup beyond `npm run setup`. This gui
 ```
  PC                                      Mac (hub)
  every 5 min: collect                    every 5 min: collect
-   -> usage.json                           -> usage.json
-                 <-- the Mac reads it over SSH --
-                 --- and writes back ----------> combined.json
-   combined.json                           combined.json
+   -> usage.json  ---- read over SSH ---->  combines both
+                                            -> combined.json
+   combined.incoming.json <-- written back over SSH --
+   merged into combined.json on the PC's next cycle
 ```
 
 - The Mac, called the hub, reads the PC's `usage.json` over SSH, combines it with its own and writes `combined.json`. It sends the result to the PC as `combined.incoming.json`, which the PC merges into its own `combined.json` on its next cycle. Neither computer opens a network port.
