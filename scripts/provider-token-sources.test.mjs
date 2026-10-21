@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
-import {mkdtemp,mkdir,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {attachProviderTokenEstimates,attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
 import {estimate} from './api-estimate.mjs';
 import {prices} from './price-table.mjs';
-import {pythonTestCommand} from './test-python.mjs';
+import {collectClaudeUsage} from './read-claude-usage.mjs';
+import priceData from './price-data.mjs';
 
 const counters={inputTokens:5,cacheReadTokens:2,cacheCreationTokens:0,outputTokens:3,totalTokens:10,requestCount:1};
 const report={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...counters,models:[{model:'claude-sonnet-4-20250514',...counters,privateId:'PRIVATE'}]}]};
@@ -37,15 +37,11 @@ for(const model of ['claude-fable-5','claude-fable-5-1']) {
     await writeFile(file,JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r1',
       message:{role:'assistant',id:'m1',model,usage:{input_tokens:1,cache_read_input_tokens:2,
         cache_creation_input_tokens:3,output_tokens:4}}})+'\n');
-    const reader=await readFile(new URL('./read-claude-usage.py',import.meta.url),'utf8');
-    const command=pythonTestCommand(['-I','-',root]);
-    const run=spawnSync(command.executable,command.args,{cwd:path.resolve('.'),input:reader,encoding:'utf8'});
-    assert.equal(run.status,0,run.stderr);
-    const source=cleanClaudeTokenSource(JSON.parse(run.stdout),'Mac','2026-09-25T12:00:00Z');
+    const source=cleanClaudeTokenSource(await collectClaudeUsage(root),'Mac','2026-09-25T12:00:00Z');
     const result=attachProviderTokenEstimates({data:{providerTokenSources:[source]}});
     const day=result.data.providerTokenSources[0].days[0];
     assert.equal(day.models[0].model,model);
-    const nativePrices=JSON.parse(await readFile(new URL('../native/prices.json',import.meta.url),'utf8'));
+    const nativePrices=priceData;
     const price=nativePrices.models[model];
     assert.deepEqual(prices.models[model],price);
     const expected=(price.input+2*price.cachedInput+3*price.cacheWrite+4*price.output)/1e6;
@@ -226,17 +222,13 @@ test('disabled source is not counted and enabled failure is Unknown, not zero',(
   assert.equal(result.peer.payload.providerTokenSources,undefined);
 });
 
-test('collector Python invocation passes the Claude root as its explicit argument',async t=>{
+test('the Node reader output passes through the Claude source cleaner',async t=>{
   const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-integration-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const file=path.join(root,'projects','fixture','usage.jsonl');
   await mkdir(path.dirname(file),{recursive:true});
   await writeFile(file,JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r1',message:{role:'assistant',id:'m1',model:'claude-opus-5-5',usage:{input_tokens:1,cache_read_input_tokens:2,cache_creation_input_tokens:3,output_tokens:4},content:'PRIVATE'}})+'\n');
-  const reader=await readFile(new URL('./read-claude-usage.py',import.meta.url),'utf8');
-  const command=pythonTestCommand(['-I','-',root]);
-  const run=spawnSync(command.executable,command.args,{cwd:path.resolve('.'),input:reader,encoding:'utf8'});
-  assert.equal(run.status,0,run.stderr);
-  const source=cleanClaudeTokenSource(JSON.parse(run.stdout),'Mac');
+  const source=cleanClaudeTokenSource(await collectClaudeUsage(root),'Mac');
   assert.equal(source.days[0].totalTokens,10);
   assert.equal(source.days[0].models[0].model,'claude-opus-5-5');
   assert.ok(!JSON.stringify(source).includes('PRIVATE'));

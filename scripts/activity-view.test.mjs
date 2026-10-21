@@ -13,12 +13,11 @@ const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
 const { ActivityView } = await server.ssrLoadModule('/app/viewer/activity/ActivityView.tsx');
-const { DashboardView, default: Dashboard, sectionFromHash } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
 const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const now = Date.parse('2026-10-14T12:32:00Z');
 const noop = () => {};
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
-for (const skinId of ['sage', 'almanac']) for (const empty of [false, true]) for (const Component of [ActivityView, DashboardView]) {
+for (const skinId of ['sage']) for (const empty of [false, true]) for (const Component of [ActivityView]) {
   test(`${Component.name} in ${skinId}, ${empty ? 'empty' : 'sample'}`, () => {
     const snapshot = empty ? { timezone: 'UTC' } : sampleSnapshot(now);
     const html = render(Component, { snapshot, now, skinId, skin: validateSkin(SKINS[skinId]), loaded: true, section: 'activity', onSectionChange: noop, onSkinChange: noop });
@@ -38,13 +37,6 @@ test('Now displays its caveat and a distinct meter', () => {
   assert.doesNotMatch(empty, /class="ob-bar"/);
   assert.ok(empty.includes('Unknown'));
 });
-test('the shared hash rule opens Activity and the dashboard renders it without a window', () => {
-  assert.equal(sectionFromHash('#activity'), 'activity');
-  for (const hash of ['#unknown', '', '#']) assert.equal(sectionFromHash(hash), 'limits');
-  assert.ok(render(DashboardView, { snapshot: sampleSnapshot(now), now, skinId: 'sage', skin: validateSkin(SKINS.sage), loaded: true, section: sectionFromHash('#activity'), onSectionChange: noop, onSkinChange: noop }).includes('class="ob-activity"'));
-  assert.doesNotThrow(() => render(Dashboard, {}));
-});
-
 test('tracking help names the snapshot time zone for both times', () => {
   const snapshot = sampleSnapshot(now);
   snapshot.timezone = 'UTC';

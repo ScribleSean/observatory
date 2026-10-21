@@ -10,7 +10,7 @@ export function serializeSnapshot(data) {
   const history=Array.isArray(data?.activityHistory)?data.activityHistory:null;
   if(!history || bytes<=snapshotHistoryBudget)return {text,bytes};
   const dates=[...new Set(history.flatMap(host=>(Array.isArray(host?.days)?host.days:[])
-    .map(day=>day?.date).filter(date=>typeof date==='string')))].sort();
+    .map(day=>day?.date).filter(date=>typeof date==='string')))].sort((a,b)=>a.localeCompare(b));
   if(!dates.length)return {text,bytes};
   const emptyStatus=retainActivityHistory([],[],data.collectedAt)[0].status;
   const candidate=count=>{

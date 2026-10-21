@@ -348,7 +348,7 @@ test('window timestamps mark only the carried Claude reading stale', () => {
   assert.doesNotMatch(rows[0].note, /as of/);
   assert.ok(rows[1].note.includes(strings.formats.asOf.replace('{time}',
     new Date(carried).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))));
-  const quota = { ...source, windows: source.windows.map(({ checkedAt, ...row }) => row) };
+  const quota = { ...source, windows: source.windows.map(({ checkedAt: _checkedAt, ...row }) => row) };
   assert.deepEqual(limits({ quota }, now).filter(row => row.provider === 'codex').map(row =>
     [row.remaining, row.stale, row.note]), [[40, false, strings.status.resetUnknown], [60, false, strings.status.resetUnknown]]);
 });

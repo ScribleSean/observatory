@@ -34,7 +34,7 @@ test('complete days survive truncated rolling-window boundary reads',()=>{
   assert.equal(next.find(r=>r.host==='Mac').days[0].seconds,300);
 });
 test('broader reads replace partial days and repeated reads never add totals',()=>{
-  let prior=retainActivityHistory([],[source('Mac','2026-09-01T12:00Z',at,[day('2026-09-01',100),day('2026-09-08',100)])],at);
+  const prior=retainActivityHistory([],[source('Mac','2026-09-01T12:00Z',at,[day('2026-09-01',100),day('2026-09-08',100)])],at);
   const current=[source('Mac','2026-08-31T12:00Z','2026-09-08T17:00Z',[day('2026-09-01',300),day('2026-09-08',200)])];
   const next=retainActivityHistory(prior,current,at);
   assert.deepEqual(next.find(r=>r.host==='Mac').days.map(r=>r.seconds),[300,200]);

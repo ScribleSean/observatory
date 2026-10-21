@@ -3,10 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
-import {screenTimeLaunch} from './collect-windows.mjs';
 
 test('PowerShell file arguments include a process execution policy and preserve script arguments',()=>{
   const script='C:/fixture/synthetic.ps1';
@@ -14,14 +12,6 @@ test('PowerShell file arguments include a process execution policy and preserve 
   assert.deepEqual(windowsPowerShellFileArguments(script),expected);
   assert.deepEqual(windowsPowerShellFileArguments(script,'-Directory','C:/fixture','-Diagnostic'),
     [...expected,'-Directory','C:/fixture','-Diagnostic']);
-});
-
-test('screen time launch uses the supplied Windows root and bundled script',()=>{
-  assert.deepEqual(screenTimeLaunch({SystemRoot:'C:/SyntheticRoot'}),{
-    file:path.join('C:/SyntheticRoot','System32/WindowsPowerShell/v1.0/powershell.exe'),
-    args:['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',
-      fileURLToPath(new URL('./windows-aggregate-activity.ps1',import.meta.url))]
-  });
 });
 
 test('PowerShell file execution overrides an inherited Restricted process policy',

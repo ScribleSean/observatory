@@ -30,7 +30,7 @@ export function TodaySummary({ glance }: { glance: Glance }) {
     <div className="ob-today"><Card label={STRINGS.today.title}>
       <h2>{STRINGS.today.title}</h2>
       <table>
-        <thead><tr><th scope="col" /><th scope="col">{STRINGS.today.screenTime}</th><th scope="col">{STRINGS.today.tokens}</th><th scope="col" /></tr></thead>
+        <thead><tr><th scope="col">{STRINGS.today.device}</th><th scope="col">{STRINGS.today.screenTime}</th><th scope="col">{STRINGS.today.tokens}</th><th scope="col">{STRINGS.today.status}</th></tr></thead>
         <tbody>
           {glance.today.map(device => (
             <tr key={device.host}>

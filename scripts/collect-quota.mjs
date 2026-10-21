@@ -23,7 +23,8 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates,
       if(!config || typeof config!=='object' || Array.isArray(config))throw Error('Invalid configuration');
       const executable=config.codexExecutable;
       if(executable!==undefined && executable!==null && executable!=='') {
-        if(typeof executable!=='string' || executable.length>4096 || !path.isAbsolute(executable) || /[\x00-\x1f\x7f]/.test(executable))
+        // oxlint-disable-next-line no-control-regex -- control characters in a path are refused on purpose
+        if(typeof executable!=='string' || executable.length>4096 || !path.isAbsolute(executable) || /[\u0000-\u001f\u007f]/.test(executable))
           throw Error('Invalid configured client');
         const resolved=await realpath(executable),stat=await lstat(resolved);
         if(!stat.isFile())throw Error('Invalid configured client');

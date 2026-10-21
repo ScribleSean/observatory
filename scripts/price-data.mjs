@@ -1,4 +1,4 @@
-// Generated from native/prices.json by scripts/price-refresh.mjs. Do not edit by hand.
+// Static price table (first written by the retired price refresh script). Edit by hand to update.
 export default {
   "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
   "checkedOn": "2026-10-14",

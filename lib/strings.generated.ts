@@ -375,7 +375,9 @@ export const STRINGS = {
     "noSnapshot": "No snapshot",
     "screenTimeOff": "Off",
     "stale": "Not updated recently",
-    "unreachable": "Last pull failed: {reason}"
+    "unreachable": "Last pull failed: {reason}",
+    "device": "Computer",
+    "status": "Updated"
   }
 } as const;
 

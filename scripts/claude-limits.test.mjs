@@ -697,7 +697,7 @@ test('uninstall ignores an invalid marker when settings do not point at the brid
   await assert.rejects(lstat(file),{code:'ENOENT'});
 });
 
-for(const [kind,earlier] of [['string','echo earlier'],['number',42],['array',['synthetic']]])test(`install over ${kind} status line saves no previous object`,async t=>{
+for(const [kind,earlier] of [['string','echo earlier'],['number',42],['array',['synthetic']]])test(`install over ${String(kind)} status line saves no previous object`,async t=>{
   const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
   const settings={model:'synthetic',statusLine:earlier};
   await writeFile(settingsPath,JSON.stringify(settings));
@@ -732,9 +732,9 @@ for(const [kind,previous] of [['string','echo earlier'],['number',42]])test(`old
 test('saved status line reader refuses a FIFO promptly',{skip:process.platform==='win32'},async t=>{
   const runtime=await folder(t),file=path.join(runtime,'claude-limits/statusline.json');
   await mkdir(path.dirname(file));await run('mkfifo',[file]);
-  const module=new URL('./claude-limits.mjs',import.meta.url).href;
+  const moduleUrl=new URL('./claude-limits.mjs',import.meta.url).href;
   const code=`import assert from 'node:assert/strict'
-    import {readClaudeStatuslineMarker} from ${JSON.stringify(module)}
+    import {readClaudeStatuslineMarker} from ${JSON.stringify(moduleUrl)}
     await assert.rejects(readClaudeStatuslineMarker(${JSON.stringify(runtime)}),{message:'Unsafe saved status line file'})`;
   await run(process.execPath,['--input-type=module','-e',code],{timeout:3000});
 });

@@ -13,13 +13,6 @@ test('accepts the shipped price data', () => {
   assert.deepEqual(prices, rawPrices);
 });
 
-test('generated module matches the source and generated text', () => {
-  const source = JSON.parse(fs.readFileSync(new URL('../native/prices.json', import.meta.url), 'utf8'));
-  assert.deepEqual(source, rawPrices);
-  assert.equal(normalizeNewlines(fs.readFileSync(new URL('../native/prices.json', import.meta.url), 'utf8')), JSON.stringify(loadPrices(source), null, 2) + '\n');
-  assert.equal(priceDataModule(loadPrices(source)), normalizeNewlines(fs.readFileSync(new URL('./price-data.mjs', import.meta.url), 'utf8')));
-});
-
 test('normalizes a CRLF generated price module to LF', () => {
   const output = priceDataModule(loadPrices(fixture()));
   assert.equal(normalizeNewlines(output.replace(/\n/g, '\r\n')), output);

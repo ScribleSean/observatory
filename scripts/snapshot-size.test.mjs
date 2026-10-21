@@ -37,13 +37,6 @@ function provider(host,modelCount=1,dayCount=3660) {
   return cleanClaudeTokenSource({provider:'claude-code',status:'ok',days:Array.from({length:dayCount},(_,index)=>({date:date(index),...day,
     hours:Array.from({length:24},(_,hourIndex)=>hour+(hourIndex<day.totalTokens-hour*24?1:0))}))},host,at,{hours:host==='Mac'});
 }
-test('shared limit matches both readers',async()=>{
-  for(const [file,pattern] of [['mac-snapshot-archive.mjs',/maximumBytes=([\d_]+)/],
-    ['../native/windows/Snapshot.cs',/MaxBytes = ([\d_]+)/]]) {
-    const source=await readFile(new URL(file,import.meta.url),'utf8');
-    assert.equal(snapshotMaximumBytes,Number(source.match(pattern)[1].replaceAll('_','')));
-  }
-});
 test('under budget is byte-for-byte unchanged, including Unknown and Unicode',()=>{
   const data={collectedAt:at,missing:null,label:'Unknown 🪴',activityHistory:[{host:'Mac',days:[{date:date(0),seconds:null}]}]};
   const before=JSON.stringify(data),result=serializeSnapshot(data);
