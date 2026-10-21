@@ -1,145 +1,136 @@
 import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
-import { demoSnapshot, freshness } from '../../lib/panel-data.mjs';
-import { skinCss, validateSkin } from '../../lib/skins.mjs';
-import { SKINS, useSkin } from './skin';
+import { compact, duration, format, freshness } from '../../lib/panel-data.mjs';
+import { useSkin } from './skin';
 
-import { EmptyState, Row } from './components';
-import LimitsView from './limits/LimitsView';
+import { Card, Row } from './components';
+import { LimitsView } from './limits/LimitsView';
 import { ActivityView } from './activity/ActivityView';
 import { TokensView } from './tokens/tokens';
 import { SourcesView } from './sources/SourcesView';
-import { DictationView } from './dictation/DictationView';
-import { SetupView } from './setup/SetupView';
-import { SettingsView } from './settings/settings';
-import { createBridge } from './bridge';
-import { createSettingsController } from './settings/controller';
 
+// The dashboard is read-only. It fetches combined.json, written every five
+// minutes by scripts/tick.mjs, and draws its merged snapshot.
 type Snapshot = Record<string, unknown>;
+type DeviceToday = { host: string; name: string; missing?: boolean; seconds: number | null; tokens: number | null; screenTimeOn?: boolean; freshness: { label: string; stale: boolean }; error?: string };
+type Glance = { today: DeviceToday[]; both: { seconds: number | null; tokens: number | null } | null };
+export type Combined = { generatedAt: string; view: Snapshot; glance: Glance };
+
 const SECTIONS = [
   ['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity], ['tokens', STRINGS.sections.tokens],
-  ['dictation', STRINGS.sections.dictation], ['sources', STRINGS.sections.sources], ['settings', STRINGS.sections.settings],
+  ['sources', STRINGS.sections.sources],
 ] as const;
 type Section = typeof SECTIONS[number][0];
-export type DashboardSection = Section | 'setup';
-export const sectionFromHash = (hash: string): DashboardSection => hash === '#setup' ? 'setup' : SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
+export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
 
-export function followSectionHash(target: Pick<Window, 'addEventListener' | 'removeEventListener'> & { location: Pick<Location, 'hash'> }, onSection: (section: DashboardSection) => void) {
-  const follow = () => onSection(sectionFromHash(target.location.hash));
-  target.addEventListener('hashchange', follow);
-  return () => target.removeEventListener('hashchange', follow);
+const value = (amount: number | null, show: (n: number) => string) => amount === null ? STRINGS.status.unknown : show(amount);
+
+export function TodaySummary({ glance }: { glance: Glance }) {
+  return (
+    <div className="ob-today"><Card label={STRINGS.today.title}>
+      <h2>{STRINGS.today.title}</h2>
+      <table>
+        <thead><tr><th scope="col" /><th scope="col">{STRINGS.today.screenTime}</th><th scope="col">{STRINGS.today.tokens}</th><th scope="col" /></tr></thead>
+        <tbody>
+          {glance.today.map(device => (
+            <tr key={device.host}>
+              <th scope="row">{device.name}</th>
+              <td>{device.screenTimeOn === false ? STRINGS.today.screenTimeOff : value(device.seconds, duration)}</td>
+              <td>{value(device.tokens, compact)}</td>
+              <td className={device.freshness.stale ? 'ob-meta warn' : 'ob-meta'}>
+                {device.missing ? STRINGS.today.noSnapshot : device.freshness.label}
+                {device.error ? `${STRINGS.formats.separator}${format(STRINGS.today.unreachable, { reason: device.error })}` : ''}
+              </td>
+            </tr>
+          ))}
+          {glance.both && (
+            <tr className="ob-today-both">
+              <th scope="row">{STRINGS.today.both}</th>
+              <td>{value(glance.both.seconds, duration)}</td>
+              <td>{value(glance.both.tokens, compact)}</td>
+              <td className="ob-meta">{STRINGS.today.notDeduplicated}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </Card></div>
+  );
 }
 
-export function writeSectionHash(target: { location: Pick<Location, 'hash' | 'pathname' | 'search'>; history: Pick<History, 'state' | 'replaceState'> }, id: DashboardSection) {
-  if (target.location.hash !== `#${id}`) {
-    const { pathname, search } = target.location;
-    target.history.replaceState(target.history.state, '', `${pathname}${search}#${id}`);
-  }
-}
-
-export default function Dashboard({ demo = false, initialSkin = 'sage' }: { demo?: boolean; initialSkin?: string }) {
-  const { skinId, setSkinId, skin, css, className } = useSkin(initialSkin);
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(() => demo ? demoSnapshot() as Snapshot : null);
-  const [loaded, setLoaded] = useState(demo);
-  const [collectionPaused, setCollectionPaused] = useState(false);
-  const [actionsAvailable, setActionsAvailable] = useState(demo);
-  const [section, setSection] = useState<DashboardSection>(() => sectionFromHash(typeof window === 'undefined' ? '' : window.location.hash));
+export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: string }) {
+  const { css, className, skin } = useSkin(initialSkin);
+  const [combined, setCombined] = useState<Combined | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [section, setSection] = useState<Section>(() => sectionFromHash(window.location.hash));
   const [now, setNow] = useState(() => Date.now());
 
-  useEffect(() => followSectionHash(window, setSection), []);
-
-  const load = useCallback(async () => {
-    if (demo) return;
-    try {
-      const response = await fetch('./local/usage.json', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
-      setSnapshot(response.ok ? await response.json() as Snapshot : null);
-    } catch { setSnapshot(null); }
-    setNow(Date.now());
-    setLoaded(true);
-  }, [demo]);
-
   useEffect(() => {
-    const bridge = demo ? null : createBridge();
-    const controller = bridge?.available ? createSettingsController(bridge) : null;
-    controller?.subscribe(status => setCollectionPaused(status?.collectionPaused === true));
-    const readStatus = () => { void controller?.status(); };
-    readStatus();
-    const first = setTimeout(() => { setActionsAvailable(demo || bridge?.available === true); void load(); if (!controller) setCollectionPaused(false); }, 0);
-    const reload = () => { void load(); readStatus(); };
-    const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) reload(); }, 30000);
-    window.addEventListener('observatory:snapshot-changed', reload);
-    document.addEventListener('visibilitychange', reload);
-    return () => { clearTimeout(first); clearInterval(tick); window.removeEventListener('observatory:snapshot-changed', reload); document.removeEventListener('visibilitychange', reload); controller?.dispose(); bridge?.dispose(); };
-  }, [load, demo]);
-
-  useEffect(() => {
-    try { Object.defineProperty(window, 'observatoryDashboardReady', { value: true, configurable: true }); } catch { /* The shell may already have defined the flag. */ }
+    const follow = () => setSection(sectionFromHash(window.location.hash));
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
   }, []);
 
-  // A #dictation request is kept as asked. DashboardView shows Limits while no dictation source is enabled.
-  return <DashboardView actionsAvailable={actionsAvailable} collectionPaused={!demo && collectionPaused} demo={demo} snapshot={snapshot} loaded={loaded} now={now} skinId={skinId} skin={skin} css={css} className={className}
-    section={section} onSectionChange={id => { setSection(id); writeSectionHash(window, id); }} onSkinChange={setSkinId} onSetupFinished={() => { setSection('limits'); writeSectionHash(window, 'limits'); }} />;
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch('./local/combined.json', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+      const body = response.ok ? await response.json() as Combined : null;
+      setCombined(body && typeof body === 'object' && body.view ? body : null);
+    } catch { setCombined(null); }
+    setNow(Date.now());
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    const first = setTimeout(() => { void load(); }, 0);
+    const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) void load(); }, 30000);
+    const visible = () => { if (!document.hidden) void load(); };
+    document.addEventListener('visibilitychange', visible);
+    return () => { clearTimeout(first); clearInterval(tick); document.removeEventListener('visibilitychange', visible); };
+  }, [load]);
+
+  return <DashboardView combined={combined} loaded={loaded} now={now} limitStyle={skin.limitStyle} css={css} className={className} section={section}
+    onSectionChange={id => { setSection(id); history.replaceState(history.state, '', `#${id}`); }} />;
 }
 
 type DashboardViewProps = {
-  actionsAvailable?: boolean;
-  collectionPaused?: boolean;
-  onSetupFinished?: () => void;
-  demo?: boolean;
-  snapshot: Snapshot | null;
+  combined: Combined | null;
+  limitStyle: string;
   loaded: boolean;
   now: number;
-  skinId: string;
-  skin: ReturnType<typeof validateSkin>;
-  css?: string;
-  className?: string;
-  section: DashboardSection;
-  onSectionChange: (section: DashboardSection) => void;
-  onSkinChange: (skin: string) => void;
+  css: string;
+  className: string;
+  section: Section;
+  onSectionChange: (section: Section) => void;
 };
 
-export function DashboardView({ actionsAvailable = true, collectionPaused = false, demo = false, snapshot, loaded, now, skinId, skin, css = skinCss(skin), className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`, section, onSectionChange, onSkinChange, onSetupFinished = () => {} }: DashboardViewProps) {
-  const [setupBlocked, setSetupBlocked] = useState(false);
-  const hasDictation = Array.isArray(snapshot?.dictation) && snapshot.dictation.some(source =>
-    source && typeof source === 'object' && !Array.isArray(source) && typeof source.status === 'string' && source.status !== 'not-connected');
-  const selected = section === 'dictation' && !hasDictation ? 'limits' : section;
-  const sections = SECTIONS.filter(([id]) => id !== 'dictation' || hasDictation);
-  const title = selected === 'setup' ? STRINGS.setup.title : SECTIONS.find(([id]) => id === selected)![1];
-  const fresh = freshness(typeof snapshot?.collectedAt === 'string' ? snapshot.collectedAt : '', now);
-
+export function DashboardView({ combined, limitStyle, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
+  const snapshot = combined?.view ?? null;
+  const title = SECTIONS.find(([id]) => id === section)![1];
+  const fresh = freshness(combined?.generatedAt ?? '', now);
   return (
     <div className={`ob-dashboard ${className}`}>
       <style>{css}</style>
       <Row as="header">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
-        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The paused note uses the requested span status markup. */}
-        {collectionPaused && <span role="status" className="ob-meta warn">{STRINGS.settings.collectionPaused}</span>}
-        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : snapshot ? fresh.label : STRINGS.labels.noSnapshot}</span>
+        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>
       </Row>
-
+      {combined && <TodaySummary glance={combined.glance} />}
       <div className="ob-dashboard-layout">
-        {(selected !== 'setup' || !actionsAvailable || setupBlocked) && <nav aria-label={STRINGS.sections.navigation}>
-          {sections.map(([id, name]) => (
-            <button key={id} type="button" aria-current={id === selected ? 'page' : undefined} className={id === selected ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>
+        <nav aria-label={STRINGS.sections.navigation}>
+          {SECTIONS.map(([id, name]) => (
+            <button key={id} type="button" aria-current={id === section ? 'page' : undefined} className={id === section ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>
           ))}
-        </nav>}
+        </nav>
         <main>
-          <section aria-labelledby={`ob-section-${selected}`}>
-            <h2 id={`ob-section-${selected}`}>{title}</h2>
-            {selected === 'setup' ? <SetupView demo={demo} onFinished={onSetupFinished} onBlockedChange={setSetupBlocked} /> : selected === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={skin.limitStyle} /> : selected === 'activity' ? <ActivityView snapshot={snapshot} now={now} /> : selected === 'tokens' ? <TokensView snapshot={snapshot} now={now} /> : selected === 'sources' ? <SourcesView snapshot={snapshot} now={now} /> : selected === 'dictation' ? <DictationView snapshot={snapshot} now={now} /> : selected === 'settings' ? <SettingsView demo={demo} skinId={skinId} onSkinChange={onSkinChange} /> : <EmptyState text={STRINGS.sections.emptyState} />}
+          <section aria-labelledby={`ob-section-${section}`}>
+            <h2 id={`ob-section-${section}`}>{title}</h2>
+            {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={limitStyle} />
+              : section === 'activity' ? <ActivityView snapshot={snapshot} now={now} />
+              : section === 'tokens' ? <TokensView snapshot={snapshot} now={now} />
+              : <SourcesView snapshot={snapshot} now={now} />}
           </section>
         </main>
       </div>
-
-      {demo && snapshot?.demo === true && (
-        <Row as="footer" className="ob-meta ob-foot">
-          <label>{STRINGS.labels.sampleData}{STRINGS.formats.separator}{STRINGS.labels.skin}{' '}
-            <select value={skinId} onChange={event => onSkinChange(event.target.value)}>
-              {Object.keys(SKINS).map(id => <option key={id} value={id}>{validateSkin(SKINS[id]).name}</option>)}
-            </select>
-          </label>
-        </Row>
-      )}
     </div>
   );
 }

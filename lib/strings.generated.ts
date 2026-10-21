@@ -74,7 +74,8 @@ export const STRINGS = {
     "waiting": "Waiting for the first collection",
     "loading": "Loading",
     "refreshing": "Refreshing",
-    "noSnapshot": "No snapshot yet"
+    "noSnapshot": "No snapshot yet",
+    "noCombined": "No combined.json yet. Run npm run tick, or wait for the next five-minute cycle."
   },
   "status": {
     "unknown": "Unknown",
@@ -364,6 +365,17 @@ export const STRINGS = {
     "next": "Continue",
     "finish": "Finish",
     "appOnly": "Open Observatory to finish setup."
+  },
+  "today": {
+    "title": "Today",
+    "both": "Both computers",
+    "notDeduplicated": "sum, not deduplicated",
+    "screenTime": "Screen time",
+    "tokens": "Tokens",
+    "noSnapshot": "No snapshot",
+    "screenTimeOff": "Off",
+    "stale": "Not updated recently",
+    "unreachable": "Last pull failed: {reason}"
   }
 } as const;
 

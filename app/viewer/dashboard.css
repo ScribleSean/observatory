@@ -43,3 +43,11 @@
 @media (prefers-reduced-motion: reduce) {
   .ob-dashboard nav button { transition: none; }
 }
+
+/* Today summary: per computer, then the labeled sum. */
+.ob-today { margin-bottom: 16px; }
+.ob-today table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ob-today th, .ob-today td { text-align: left; padding: 6px 12px 6px 0; vertical-align: baseline; }
+.ob-today thead th { font-weight: normal; opacity: 0.7; font-size: 0.85em; }
+.ob-today tbody th { font-weight: 600; white-space: nowrap; }
+.ob-today .ob-today-both { border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); }
