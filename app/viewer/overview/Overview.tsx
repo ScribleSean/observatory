@@ -61,7 +61,7 @@ function AgentsCard({ glance, now }: { glance: Glance; now: number }) {
       {waiting && working ? <p className="ob-meta">{format(STRINGS.overview.agentsWorking, { count: working })}</p> : <p className="ob-meta">&nbsp;</p>}
       <ul className="ob-tile-list">
         {sessions.slice(0, 4).map((session, index) => (
-          <li key={index}><StatusPill status={session.status} /><span>{session.project ?? unknown}</span>{devices.length > 1 ? <span className="ob-meta">{session.device}</span> : null}</li>
+          <li key={index}><StatusPill status={session.status} /><span className="ob-tile-who"><span>{session.project ?? unknown}</span>{devices.length > 1 ? <span className="ob-meta">{session.device}</span> : null}</span></li>
         ))}
       </ul>
     </section>

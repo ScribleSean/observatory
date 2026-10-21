@@ -42,7 +42,11 @@
 .ob-tile-label { display: flex; align-items: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ob-tile-list li { display: flex; align-items: center; gap: var(--ob-space-2); font-size: 13px; min-width: 0; }
 .ob-tile-list li > span:not(.ob-status) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-tile-list li .ob-meta { margin-left: auto; }
+.ob-tile-list li { align-items: flex-start; }
+.ob-tile-list .ob-status { margin-top: 1px; }
+.ob-tile-who { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.ob-tile-who > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-tile-who .ob-meta { font-size: 11.5px; }
 .ob-tile-devices li { display: flex; justify-content: space-between; gap: var(--ob-space-2); font-size: 13px; }
 .ob-tile-devices li + li { padding-top: 10px; border-top: 1px solid var(--ob-track); }
 .ob-tile-foot { margin-top: auto !important; padding-top: var(--ob-space-4); }

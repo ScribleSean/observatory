@@ -27,6 +27,13 @@
 | **Where did my time go?** | Screen time today and over time, by app and category, from [ActivityWatch](https://activitywatch.net/). |
 | **What did it cost?** | Tokens today and over time, and what they would cost at public API prices. |
 
+<p align="center">
+  <img src="docs/images/menu-bar-item.png" height="28" alt="The menu bar item: binoculars, 47 percent, and an amber dot">
+</p>
+<p align="center">
+  <img src="docs/images/menu-bar-menu.png" width="520" alt="The menu bar menu with fictional data: Limits, Agents and Today sections, then Open dashboard, Refresh and Quit">
+</p>
+
 Observatory is monitor-only. It never starts, stops or answers an agent, and it never changes the tools it reads.
 
 ## Quick start
@@ -116,13 +123,12 @@ Shots already in the repository:
 1. `docs/images/dashboard-one-computer-light.png`: one computer, Limits page, light.
 2. `docs/images/dashboard-agents-dark.png`: two computers, Agents page, dark.
 3. `docs/images/dashboard-{limits,agents,activity,tokens}-{light,dark}.png`: every page in both appearances.
+4. `docs/images/menu-bar-item.png` and `docs/images/menu-bar-menu.png`: the real Mac menu bar app showing the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json` for the app to read.
 
-Shots that need a real desktop, still to take:
+Shots still to take:
 
-4. Mac menu bar, closed: the telescope and the lowest percent, with the amber dot showing.
-5. Mac menu bar, open: the Limits, Agents and Today sections, then Open dashboard, Refresh and Quit.
-6. Windows tray icon with its number, and the tray menu open.
-7. The dashboard beside a terminal running Claude Code, with one session waiting on you.
+5. Windows tray icon with its number, and the tray menu open.
+6. The dashboard beside a terminal running Claude Code, with one session waiting on you.
 
 ## Development
 
