@@ -1,0 +1,15 @@
+name: Idea
+description: Suggest a change. Observatory stays small and monitor-only, so say what question it would answer.
+labels: [idea]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like to know at a glance?
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Where does that information already live on your computer?
+      description: Observatory only reads records other tools already keep.
