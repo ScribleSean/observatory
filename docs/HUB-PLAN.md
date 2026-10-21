@@ -57,6 +57,11 @@ This plan maps the hub spec (the draft Sean approved on 2026-10-21, kept outside
 6. **Unused development packages.** `happy-dom` and `lucide-react` may no longer be needed. Removing them changes `package-lock.json`, which needs a network install. Fine to do in a later small pull request?
 7. **Reader edge cases kept from Python.** The Codex reader fails the whole read on some malformed events (for example a null timestamp), exactly as the Python did. Keep that strictness or skip bad events?
 
+8. **Session names and the "no raw titles" rule.** AGENTS.md says stored dashboard data holds no raw titles. That rule was written for window titles. The agents panel stores Claude Code session names, as you asked. Keep that, or show project names only?
+9. **codex-job is your own tool.** Other people will not have `~/.local/state/codex-jobs`, so the Codex jobs list shows "Not found on this computer" for them. Fine, or hide the section when the folder is missing?
+10. **Windows agents.** The Claude Code session folder on Windows is assumed to be `%USERPROFILE%\.claude\sessions`, the same layout as the Mac. Not checked on the PC yet.
+11. **Menu bar look.** The Swift and C# menus were restyled (bold sections, readable rows, amber dot) but have not been looked at on screen. Worth a glance in the live sitting.
+
 ## Second pass, 2026-10-21: agents, one computer first, design
 
 - **Agents.** `scripts/read-agents.mjs` reads `~/.claude/sessions/<pid>.json` (status, session name, folder name, times; a session whose process has gone is "done") and the file names in `~/.local/state/codex-jobs` (`<id>.running` while running, `<id>.md` when finished). It never opens transcripts, the `.key` files or job output. Status shows as a word with a dot. The glance block counts sessions waiting on you and working, and the menu bar title gets an amber dot when one is waiting.
@@ -72,11 +77,6 @@ A Codex review of the spec and spike raised five points. How the build handles e
 3. **Unknown never becomes zero.** A computer's token total is Unknown when any enabled provider is Unknown, and the "Both computers" sum is Unknown when any part is. "No records" (read, nothing today) is the only case that counts as zero.
 4. **Freshness at display time.** Menu lines carry clock times ("as of 1:05 PM"), and the apps and dashboard compute ages when they draw. `tick.mjs` stops itself after 4 minutes, and the apps end a tick that runs past 4.5 minutes.
 5. **Hub offline and migration.** A spoke recombines its own fresh snapshot with the last copy from the hub on every tick. Before the first write over the old app's `usage.json`, the collector copies it once to `usage.before-hub.json`, so returning to build 43 or 42 is a matter of quitting the new app and restoring that file.
-
-8. **Session names and the "no raw titles" rule.** AGENTS.md says stored dashboard data holds no raw titles. That rule was written for window titles. The agents panel stores Claude Code session names, as you asked. Keep that, or show project names only?
-9. **codex-job is your own tool.** Other people will not have `~/.local/state/codex-jobs`, so the Codex jobs list shows "Not found on this computer" for them. Fine, or hide the section when the folder is missing?
-10. **Windows agents.** The Claude Code session folder on Windows is assumed to be `%USERPROFILE%\.claude\sessions`, the same layout as the Mac. Not checked on the PC yet.
-11. **Menu bar look.** The Swift and C# menus were restyled (bold sections, readable rows, amber dot) but have not been looked at on screen. Worth a glance in the live sitting.
 
 ## Known limits
 
