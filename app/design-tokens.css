@@ -1,4 +1,4 @@
-/* Generated from native/design-tokens.json by scripts/build-design-tokens.mjs. */
+/* Base design tokens. Colours match app/viewer/sage.json, which the skin applies on top. */
 :root {
   --ob-background: #edeae5;
   --ob-surface: #f4f1ec;
@@ -8,7 +8,7 @@
   --ob-accent: #586f50;
   --ob-track: #dadbd3;
   --ob-claude: #b5633c;
-  --ob-codex: #3f6e8c;
+  --ob-codex: #2e6e9e;
   --ob-warning: #94620f;
   --ob-error: #a23b32;
   --ob-card-shadow: 0.07;
@@ -39,8 +39,8 @@
   --ob-strong: #dce6d2;
   --ob-accent: #adc29d;
   --ob-track: #3b3e37;
-  --ob-claude: #e0916b;
-  --ob-codex: #8fb8d4;
+  --ob-claude: #cb7550;
+  --ob-codex: #4f95cf;
   --ob-warning: #e2b866;
   --ob-error: #e58a80;
   --ob-card-shadow: 0.22;
@@ -54,8 +54,8 @@
   --ob-strong: #dce6d2;
   --ob-accent: #adc29d;
   --ob-track: #3b3e37;
-  --ob-claude: #e0916b;
-  --ob-codex: #8fb8d4;
+  --ob-claude: #cb7550;
+  --ob-codex: #4f95cf;
   --ob-warning: #e2b866;
   --ob-error: #e58a80;
   --ob-card-shadow: 0.22;

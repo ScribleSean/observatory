@@ -33,7 +33,8 @@
     "sources": "Sources",
     "settings": "Settings",
     "navigation": "Sections",
-    "emptyState": "This section is not built yet."
+    "emptyState": "This section is not built yet.",
+    "agents": "Agents"
   },
   "periods": {
     "now": "Now",
@@ -377,5 +378,39 @@
     "unreachable": "Last pull failed: {reason}",
     "device": "Computer",
     "status": "Updated"
+  },
+  "overview": {
+    "limitsTitle": "Limits",
+    "limitsCaption": "lowest left: {name}",
+    "limitsNone": "No current reading",
+    "agentsTitle": "Agents",
+    "agentsWaiting": "{count} waiting on you",
+    "agentsWorking": "{count} working",
+    "agentsQuiet": "Nothing running",
+    "agentsOff": "Agents are off",
+    "timeTitle": "Screen time today",
+    "costTitle": "Cost today",
+    "costCaption": "API-equivalent estimate, not a bill",
+    "tokens": "{value} tokens",
+    "bothNote": "both computers, not deduplicated",
+    "asOf": "as of {time}"
+  },
+  "agents": {
+    "waiting": "Waiting on you",
+    "working": "Working",
+    "idle": "Idle",
+    "done": "Done",
+    "stopped": "Stopped",
+    "unknown": "Unknown",
+    "claudeSessions": "Claude Code sessions",
+    "codexJobs": "Codex jobs",
+    "none": "No sessions in the last day",
+    "noJobs": "No Codex jobs in the last day",
+    "notFound": "Not found on this computer",
+    "off": "Turned off in settings",
+    "since": "since {time}",
+    "finished": "finished {time}",
+    "started": "started {time}",
+    "privacy": "Status, project names and session names only. Messages, prompts and job output are never read."
   }
 }

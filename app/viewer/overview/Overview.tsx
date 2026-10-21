@@ -1,0 +1,109 @@
+import { STRINGS } from '../../../lib/strings.generated';
+import { compact, duration, format, readingTime } from '../../../lib/panel-data.mjs';
+import type { AgentDevice } from '../agents/AgentsView';
+import { StatusPill } from '../agents/AgentsView';
+
+// Four answers at a glance: am I near my limits, what are my agents doing,
+// where did my time go, and what did it cost. Every number keeps Unknown as Unknown.
+export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
+export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string };
+export type Glance = {
+  lowest: number | null; waiting?: number; working?: number;
+  limits: LimitRow[]; agents?: AgentDevice[]; today: DeviceToday[];
+  both: { seconds: number | null; tokens: number | null; usd: number | null } | null;
+};
+
+const unknown = STRINGS.status.unknown;
+const money = (value: number | null) => value === null ? unknown : format(STRINGS.formats.usd, { value: value < 100 ? value.toFixed(2) : Math.round(value).toLocaleString('en-US') });
+const percent = (value: number | null) => value === null ? unknown : `${Math.round(value)}%`;
+
+function LimitsCard({ glance }: { glance: Glance }) {
+  const current = glance.limits.filter(row => row.remaining !== null && !row.stale);
+  const lowest = current.reduce<LimitRow | null>((low, row) => low === null || (row.remaining ?? 101) < (low.remaining ?? 101) ? row : low, null);
+  return (
+    <section className="ob-tile" aria-labelledby="ob-tile-limits">
+      <h2 id="ob-tile-limits">{STRINGS.overview.limitsTitle}</h2>
+      <div className={lowest?.low ? 'ob-hero warn' : 'ob-hero'}>{percent(lowest?.remaining ?? null)}</div>
+      <p className="ob-meta">{lowest ? format(STRINGS.overview.limitsCaption, { name: `${lowest.name} ${lowest.window}` }) : STRINGS.overview.limitsNone}</p>
+      <ul className="ob-tile-bars">
+        {glance.limits.map((row, index) => (
+          <li key={index}>
+            <span className="ob-tile-label"><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name}{row.window ? ` ${row.window}` : ''}</span>
+            <span className={row.stale ? 'ob-num ob-meta' : row.low ? 'ob-num warn' : 'ob-num'}>{percent(row.remaining)}</span>
+            <span className="ob-bar" aria-hidden="true"><i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining ?? 0}%`, opacity: row.stale ? 0.45 : 1 }} /></span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function AgentsCard({ glance }: { glance: Glance }) {
+  const devices = (glance.agents ?? []).filter(device => device.status !== 'off');
+  const sessions = devices.flatMap(device => (device.stale ? [] : device.sessions ?? []).filter(s => s.status === 'waiting' || s.status === 'working')
+    .map(session => ({ ...session, device: device.name })));
+  const waiting = glance.waiting ?? 0, working = glance.working ?? 0;
+  const headline = devices.length === 0 ? STRINGS.overview.agentsOff
+    : waiting ? format(STRINGS.overview.agentsWaiting, { count: waiting })
+    : working ? format(STRINGS.overview.agentsWorking, { count: working }) : STRINGS.overview.agentsQuiet;
+  return (
+    <section className="ob-tile" aria-labelledby="ob-tile-agents">
+      <h2 id="ob-tile-agents">{STRINGS.overview.agentsTitle}</h2>
+      <div className={waiting ? 'ob-hero ob-hero-text warn' : 'ob-hero ob-hero-text'}>{headline}</div>
+      {waiting && working ? <p className="ob-meta">{format(STRINGS.overview.agentsWorking, { count: working })}</p> : <p className="ob-meta">&nbsp;</p>}
+      <ul className="ob-tile-list">
+        {sessions.slice(0, 4).map((session, index) => (
+          <li key={index}><StatusPill status={session.status} /><span>{session.project ?? unknown}</span>{devices.length > 1 ? <span className="ob-meta">{session.device}</span> : null}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function PerDevice({ glance, value, now }: { glance: Glance; value: (device: DeviceToday) => string; now: number }) {
+  if (glance.today.length < 2) {
+    const [device] = glance.today;
+    return device && device.collectedAt ? <p className="ob-meta">{format(STRINGS.overview.asOf, { time: readingTime(Date.parse(device.collectedAt), now) })}</p> : null;
+  }
+  return (
+    <ul className="ob-tile-devices">
+      {glance.today.map(device => <li key={device.host}><span>{device.name}</span><span className="ob-num">{device.missing ? unknown : value(device)}</span></li>)}
+    </ul>
+  );
+}
+
+function TimeCard({ glance, now }: { glance: Glance; now: number }) {
+  const total = glance.both ? glance.both.seconds : glance.today[0]?.seconds ?? null;
+  return (
+    <section className="ob-tile" aria-labelledby="ob-tile-time">
+      <h2 id="ob-tile-time">{STRINGS.overview.timeTitle}</h2>
+      <div className="ob-hero">{total === null ? unknown : duration(total)}</div>
+      <p className="ob-meta">{glance.both ? STRINGS.overview.bothNote : ' '}</p>
+      <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
+    </section>
+  );
+}
+
+function CostCard({ glance, now }: { glance: Glance; now: number }) {
+  const source = glance.both ?? glance.today[0] ?? { usd: null, tokens: null };
+  return (
+    <section className="ob-tile" aria-labelledby="ob-tile-cost">
+      <h2 id="ob-tile-cost">{STRINGS.overview.costTitle}</h2>
+      <div className="ob-hero">{money(source.usd)}</div>
+      <p className="ob-meta">{format(STRINGS.overview.tokens, { value: compact(source.tokens) })}{glance.both ? ` · ${STRINGS.overview.bothNote}` : ''}</p>
+      <PerDevice glance={glance} now={now} value={device => money(device.usd)} />
+      <p className="ob-meta ob-tile-foot">{STRINGS.overview.costCaption}</p>
+    </section>
+  );
+}
+
+export function Overview({ glance, now }: { glance: Glance; now: number }) {
+  return (
+    <div className="ob-overview">
+      <LimitsCard glance={glance} />
+      <AgentsCard glance={glance} />
+      <TimeCard glance={glance} now={now} />
+      <CostCard glance={glance} now={now} />
+    </div>
+  );
+}

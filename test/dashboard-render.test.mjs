@@ -23,12 +23,11 @@ const both=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows'
 const noPc=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',name:'PC',snapshot:null,error:'unreachable'}],{now});
 const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,limitStyle:'bar',css:'',className:'',onSectionChange:()=>{},...props}));
 
-for(const section of ['limits','activity','tokens','sources']) {
+for(const section of ['limits','agents','activity','tokens','sources']) {
   test(`the ${section} page renders from combined.json`,()=>{
     const html=render({combined:both,section});
-    assert.ok(html.includes('Today'));
-    assert.ok(html.includes('Both computers'));
-    assert.ok(html.includes('sum, not deduplicated'));
+    for(const title of ['Limits','Agents','Screen time today','Cost today'])assert.ok(html.includes(title),title);
+    assert.ok(html.includes('both computers, not deduplicated'));
     assert.ok(!html.includes('NaN'));
     assert.ok(!html.includes('undefined'));
   });
@@ -38,17 +37,31 @@ test('a missing computer shows Unknown and the reason, never zero',()=>{
   const html=render({combined:noPc,section:'limits'});
   assert.ok(html.includes('No snapshot'));
   assert.ok(html.includes('Last pull failed: unreachable'));
-  const row=html.slice(html.indexOf('Both computers'));
-  assert.ok(row.startsWith('Both computers</th><td>Unknown</td><td>Unknown</td>'));
+  const time=html.slice(html.indexOf('Screen time today'));
+  assert.ok(time.includes('class="ob-hero">Unknown<'));
+  const cost=html.slice(html.indexOf('Cost today'));
+  assert.ok(cost.includes('class="ob-hero">Unknown<'));
+});
+
+test('the Agents page lists status words with each session',()=>{
+  const at=new Date(now).toISOString();
+  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'not-found',
+    sessions:[{tool:'claude-code',status:'waiting',project:'portfolio',name:'Case study',updatedAt:at}],jobs:[]}]}));
+  const combined=combine([{host:'Mac',snapshot:mac}],{now});
+  const html=render({combined,section:'agents'});
+  assert.ok(html.includes('Waiting on you'));
+  assert.ok(html.includes('portfolio'));
+  assert.ok(html.includes('1 waiting on you'));
+  assert.ok(html.includes('Messages, prompts and job output are never read'));
 });
 
 test('without combined.json the page says how to get one',()=>{
   const html=render({combined:null,section:'limits'});
   assert.ok(html.includes('No combined.json yet'));
-  assert.ok(!html.includes('Both computers'));
+  assert.ok(!html.includes('Cost today'));
 });
 
-test('unknown hashes open Limits and only the four read-only pages exist',()=>{
+test('unknown hashes open Limits and only the read-only pages exist',()=>{
   assert.equal(sectionFromHash('#tokens'),'tokens');
   assert.equal(sectionFromHash('#settings'),'limits');
   assert.equal(sectionFromHash('#setup'),'limits');
