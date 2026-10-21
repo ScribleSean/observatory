@@ -59,7 +59,19 @@ export function createLocalServer({assets=path.join(here,'dist/dashboard'),dataF
   });
 }
 
+// With --with-parent the server lives only as long as the app that started it.
+// It checks every few seconds and exits once that app has gone, however it ended.
+// On macOS an orphan is handed to launchd, so its parent id changes. On Windows
+// the parent id stays, so the check also asks whether that process still exists.
+export function watchParent(parent,{intervalMs=2000,exit=()=>process.exit(0),currentParent=()=>process.ppid}={}) {
+  const alive=pid=>{try {process.kill(pid,0);return true;}catch(error) {return error.code==='EPERM';}};
+  const timer=setInterval(()=>{if(currentParent()!==parent || !alive(parent))exit();},intervalMs);
+  timer.unref();
+  return ()=>clearInterval(timer);
+}
+
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  if(process.argv.includes('--with-parent'))watchParent(process.ppid,{intervalMs:Number(process.env.OBSERVATORY_PARENT_CHECK_MS) || 2000});
   const config=await loadConfig();
   const port=config.dashboard.port;
   createLocalServer({dataFolder:config.dataFolder}).listen(port,'127.0.0.1',()=>console.log(`Observatory dashboard: http://127.0.0.1:${port}`))

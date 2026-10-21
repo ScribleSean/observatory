@@ -84,10 +84,13 @@ namespace Observatory
             if (method != null) method.Invoke(tray, null);
         }
 
-        Process Node(string script, bool keep)
+        Process Node(string script, bool keep) { return Node(script, keep, ""); }
+
+        // The server is started with --with-parent, so it exits on its own if the tray app ends.
+        Process Node(string script, bool keep, string extra)
         {
             if (settings == null) return null;
-            var start = new ProcessStartInfo(settings.node, "\"" + Path.Combine(settings.repo, script) + "\"");
+            var start = new ProcessStartInfo(settings.node, "\"" + Path.Combine(settings.repo, script) + "\"" + extra);
             start.WorkingDirectory = settings.repo;
             start.EnvironmentVariables["OBSERVATORY_CONFIG"] = settings.config;
             start.UseShellExecute = false;
@@ -275,7 +278,7 @@ namespace Observatory
             if (settings == null) return;
             string url = "http://127.0.0.1:" + settings.port + "/";
             if (Reachable(url)) { Browse(url); return; }
-            if (server == null || server.HasExited) server = Node("serve-local.mjs", true);
+            if (server == null || server.HasExited) server = Node("serve-local.mjs", true, " --with-parent");
             // Wait for the server without freezing the menu: check every half second for up to 10 seconds.
             openTries = 0;
             openTimer.Stop();

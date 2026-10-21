@@ -19,6 +19,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
   var lastTitle = "…"
 
   func applicationDidFinishLaunching(_ note: Notification) {
+    stopOnTerminate()
     let file = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/glance.json")
     if let data = try? Data(contentsOf: file) { settings = try? JSONDecoder().decode(Settings.self, from: data) }
     // The telescope matches the brand mark. Older systems without it get binoculars.
@@ -40,6 +41,21 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   func applicationWillTerminate(_ note: Notification) {
     server?.terminate()
+  }
+
+  // launchd stops the app with SIGTERM, which skips applicationWillTerminate.
+  // Catch it, stop the dashboard server and any running tick, then exit.
+  var termination: DispatchSourceSignal?
+  func stopOnTerminate() {
+    signal(SIGTERM, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+    source.setEventHandler { [weak self] in
+      self?.server?.terminate()
+      self?.tick?.terminate()
+      exit(0)
+    }
+    source.resume()
+    termination = source
   }
 
   var combinedFile: URL? {
@@ -172,7 +188,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
       guard let self else { return }
       if up { NSWorkspace.shared.open(url); return }
       if self.server?.isRunning != true {
-        self.server = self.node([settings.repo + "/serve-local.mjs"]) { [weak self] finished in
+        self.server = self.node([settings.repo + "/serve-local.mjs", "--with-parent"]) { [weak self] finished in
           if self?.server === finished { self?.server = nil }
         }
       }
