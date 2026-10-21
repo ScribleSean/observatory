@@ -21,7 +21,9 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func applicationDidFinishLaunching(_ note: Notification) {
     let file = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/glance.json")
     if let data = try? Data(contentsOf: file) { settings = try? JSONDecoder().decode(Settings.self, from: data) }
-    item.button?.image = NSImage(systemSymbolName: "binoculars", accessibilityDescription: "Observatory")
+    // The telescope matches the brand mark. Older systems without it get binoculars.
+    item.button?.image = NSImage(systemSymbolName: "telescope", accessibilityDescription: "Observatory")
+      ?? NSImage(systemSymbolName: "binoculars", accessibilityDescription: "Observatory")
     item.button?.imagePosition = .imageLeading
     let menu = NSMenu()
     // Rows have no action but should read as text, not as greyed-out items.
