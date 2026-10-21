@@ -89,3 +89,16 @@ test('sum is Unknown when any part is Unknown',()=>{
 test('two entries for the same host are refused',()=>{
   assert.throws(()=>combine([{host:'Mac',snapshot:null},{host:'Mac',snapshot:null}],{now}),/distinct host/);
 });
+
+test('a limit reading dated in the future does not win',()=>{
+  const ahead=ownSnapshot('Windows',now,snapshot=>({...snapshot,quota:{...snapshot.quota,checkedAt:new Date(now+3600000).toISOString(),
+    windows:snapshot.quota.windows.map(row=>({...row,remainingPercent:5}))}}));
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ahead}],{now});
+  assert.equal(combined.view.quota.observedOn,'Mac');
+});
+
+test('menu lines carry clock times, never an age that goes out of date',()=>{
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ownSnapshot('Windows',now)}],{now});
+  assert.ok(combined.glance.lines.some(line=>line.includes('as of ')));
+  assert.ok(!combined.glance.lines.some(line=>/ ago\b|Updated/.test(line)));
+});

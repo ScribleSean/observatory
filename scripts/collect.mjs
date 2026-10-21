@@ -2,7 +2,8 @@
 // Only sources set to true in observatory.config.json are read.
 import {spawn,execFile} from 'node:child_process';
 import {homedir} from 'node:os';
-import {readFile,realpath} from 'node:fs/promises';
+import {copyFile,readFile,realpath} from 'node:fs/promises';
+import {constants as fsConstants} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {loadConfig} from '../lib/config.mjs';
@@ -71,6 +72,15 @@ export function defaultReaders(config) {
   };
 }
 
+// One-time, reversible migration: before the first write over a snapshot made
+// by the old app (it has no device field), keep a copy beside it.
+export const OLD_APP_BACKUP='usage.before-hub.json';
+async function keepOldAppSnapshot(folder) {
+  const previous=await previousSnapshot(path.join(folder,'usage.json'));
+  if(!previous || previous.device)return;
+  await copyFile(path.join(folder,'usage.json'),path.join(folder,OLD_APP_BACKUP),fsConstants.COPYFILE_EXCL).catch(error=>{if(error.code!=='EEXIST')throw error;});
+}
+
 async function previousSnapshot(file) {
   try {
     const text=await readFile(file,'utf8');
@@ -131,6 +141,7 @@ export async function collect(config,{readers=defaultReaders(config),now=()=>new
   const startedAt=now().toISOString();
   await writeJsonAtomic(path.join(folder,'collector.json'),{state:'running',startedAt,intervalSeconds:300});
   try {
+    await keepOldAppSnapshot(folder);
     const previous=await previousSnapshot(path.join(folder,'usage.json'));
     const {data,status}=await buildSnapshot(config,readers,{previous,now:now()});
     const {text,bytes}=serializeSnapshot(data);

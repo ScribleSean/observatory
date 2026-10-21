@@ -125,3 +125,15 @@ test('the SSH transport moves bytes as base64 both ways',async()=>{
   assert.equal(calls[0].alias,'windows-codex');
   assert.equal(Buffer.from(calls[1].input,'base64').toString('utf8'),text);
 });
+
+test('a pulled snapshot from the future or of another schema is refused, and the last copy kept',()=>withFolder(async folder=>{
+  await seed(folder,'usage.json',ownSnapshot('Mac',now));
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
+  await runHub(config,{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000))),now:()=>now-600000});
+  const future=ownSnapshot('Windows',now,snapshot=>({...snapshot,collectedAt:new Date(now+3600000).toISOString()}));
+  const combined=await runHub(config,{transport:fakeTransport(JSON.stringify(future)),now:()=>now});
+  assert.equal(combined.hub.spokes[0].pull,'snapshot is dated in the future');
+  assert.equal(combined.devices[1].collectedAt,ownSnapshot('Windows',now-600000).collectedAt);
+  const other=await runHub(config,{transport:fakeTransport(JSON.stringify({...ownSnapshot('Windows',now),schema:3})),now:()=>now});
+  assert.equal(other.hub.spokes[0].pull,'invalid snapshot');
+}));

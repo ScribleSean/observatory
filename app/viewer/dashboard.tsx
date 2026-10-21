@@ -12,7 +12,7 @@ import { SourcesView } from './sources/SourcesView';
 // The dashboard is read-only. It fetches combined.json, written every five
 // minutes by scripts/tick.mjs, and draws its merged snapshot.
 type Snapshot = Record<string, unknown>;
-type DeviceToday = { host: string; name: string; missing?: boolean; seconds: number | null; tokens: number | null; screenTimeOn?: boolean; freshness: { label: string; stale: boolean }; error?: string };
+type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string; seconds: number | null; tokens: number | null; screenTimeOn?: boolean; error?: string };
 type Glance = { today: DeviceToday[]; both: { seconds: number | null; tokens: number | null } | null };
 export type Combined = { generatedAt: string; view: Snapshot; glance: Glance };
 
@@ -25,24 +25,24 @@ export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) =
 
 const value = (amount: number | null, show: (n: number) => string) => amount === null ? STRINGS.status.unknown : show(amount);
 
-export function TodaySummary({ glance }: { glance: Glance }) {
+export function TodaySummary({ glance, now }: { glance: Glance; now: number }) {
   return (
     <div className="ob-today"><Card label={STRINGS.today.title}>
       <h2>{STRINGS.today.title}</h2>
       <table>
         <thead><tr><th scope="col">{STRINGS.today.device}</th><th scope="col">{STRINGS.today.screenTime}</th><th scope="col">{STRINGS.today.tokens}</th><th scope="col">{STRINGS.today.status}</th></tr></thead>
         <tbody>
-          {glance.today.map(device => (
+          {glance.today.map(device => { const age = freshness(device.collectedAt ?? '', now); return (
             <tr key={device.host}>
               <th scope="row">{device.name}</th>
               <td>{device.screenTimeOn === false ? STRINGS.today.screenTimeOff : value(device.seconds, duration)}</td>
               <td>{value(device.tokens, compact)}</td>
-              <td className={device.freshness.stale ? 'ob-meta warn' : 'ob-meta'}>
-                {device.missing ? STRINGS.today.noSnapshot : device.freshness.label}
+              <td className={age.stale ? 'ob-meta warn' : 'ob-meta'}>
+                {device.missing ? STRINGS.today.noSnapshot : age.label}
                 {device.error ? `${STRINGS.formats.separator}${format(STRINGS.today.unreachable, { reason: device.error })}` : ''}
               </td>
             </tr>
-          ))}
+          ); })}
           {glance.both && (
             <tr className="ob-today-both">
               <th scope="row">{STRINGS.today.both}</th>
@@ -114,7 +114,7 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>
       </Row>
-      {combined && <TodaySummary glance={combined.glance} />}
+      {combined && <TodaySummary glance={combined.glance} now={now} />}
       <div className="ob-dashboard-layout">
         <nav aria-label={STRINGS.sections.navigation}>
           {SECTIONS.map(([id, name]) => (

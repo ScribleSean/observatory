@@ -4,7 +4,7 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {localFolder} from '../lib/config.mjs';
-import {combine,carriedDevice,HOSTS} from '../lib/combine.mjs';
+import {combine,carriedDevice,HOSTS,CLOCK_SKEW_MS} from '../lib/combine.mjs';
 import {writeAtomic} from '../lib/atomic-file.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {sshTransport,MAX_FILE_BYTES} from './hub-transport.mjs';
@@ -19,11 +19,13 @@ async function readJson(file) {
   } catch {return null;}
 }
 
-function parseSnapshot(text,host) {
+function parseSnapshot(text,host,now) {
   let value;
   try {value=JSON.parse(text);}catch {throw Error('invalid snapshot');}
-  if(!value || typeof value!=='object' || Array.isArray(value) || !Number.isFinite(Date.parse(value.collectedAt)))
+  if(!value || typeof value!=='object' || Array.isArray(value) || value.schema!==2 || !Number.isFinite(Date.parse(value.collectedAt)))
     throw Error('invalid snapshot');
+  // A clock far ahead would make this copy look newest forever.
+  if(Date.parse(value.collectedAt)>now+CLOCK_SKEW_MS)throw Error('snapshot is dated in the future');
   // A spoke's snapshot must be about itself. Older snapshots have no device field.
   const claimed=value.device?.host;
   const own=key=>Array.isArray(value[key]) && value[key].some(row=>row?.host===host && row.status!=='not-connected');
@@ -41,7 +43,7 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
   for(const spoke of config.hub.spokes) {
     const host=HOST[spoke.platform];
     try {
-      const snapshot=parseSnapshot(await transport.pull(spoke),host);
+      const snapshot=parseSnapshot(await transport.pull(spoke),host,now());
       devices.push({host,name:spoke.name,snapshot});
       report.push({name:spoke.name,host,pull:'ok'});
     } catch(error) {

@@ -15,7 +15,7 @@ export function ownSnapshot(host,now=Date.now(),change=snapshot=>snapshot) {
   const sample=sampleSnapshot(now);
   const other=host==='Mac'?'Windows':'Mac';
   const keep=rows=>(rows??[]).filter(row=>row.host===host);
-  const snapshot={...sample,
+  const snapshot={...sample,schema:2,
     device:{host,name:host==='Mac'?'Test Mac':'Test PC'},
     activity:[...keep(sample.activity),{host:other,status:'not-connected'}],
     tokens:[...keep(sample.tokens),{host:other,status:'not-connected'}],

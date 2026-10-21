@@ -23,7 +23,11 @@ export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=
   });
 }
 
+// A stuck reader or SSH call must not hold the lock past the next cycle.
+export const TICK_DEADLINE_MS=4*60000;
+
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  setTimeout(()=>{console.error('Tick stopped at its deadline');process.exit(2);},TICK_DEADLINE_MS).unref();
   try {
     const outcome=await tick(await loadConfig());
     console.log(JSON.stringify(outcome.busy?{busy:true}:outcome.value));

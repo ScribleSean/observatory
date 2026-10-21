@@ -59,8 +59,15 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return process
   }
 
+  var tickStarted = Date.distantPast
+
   @objc func runTick() {
-    if tick?.isRunning == true { return }
+    // tick.mjs stops itself after 4 minutes. This is the backstop if it hangs anyway.
+    if let running = tick, running.isRunning {
+      if Date().timeIntervalSince(tickStarted) < 270 { return }
+      running.terminate()
+    }
+    tickStarted = Date()
     guard let settings else { return }
     tick = node([settings.repo + "/scripts/tick.mjs"]) { [weak self] in self?.tick = nil; self?.show() }
     show()

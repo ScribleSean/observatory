@@ -39,10 +39,14 @@ namespace Observatory
         Process tick;
         Process server;
         Icon icon;
+        SynchronizationContext ui;
+        DateTime tickStarted = DateTime.MinValue;
 
         Glance()
         {
             settings = LoadSettings();
+            // The menu strip is a control, so a UI context exists from here on.
+            ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
             tray.ContextMenuStrip = menu;
             tray.Visible = true;
             tray.MouseUp += (sender, e) => { if (e.Button == MouseButtons.Left) ShowMenu(); };
@@ -103,12 +107,18 @@ namespace Observatory
 
         void RunTick()
         {
-            if (tick != null && !tick.HasExited) return;
+            // tick.mjs stops itself after 4 minutes. This is the backstop if it hangs anyway.
+            if (tick != null && !tick.HasExited)
+            {
+                if ((DateTime.UtcNow - tickStarted).TotalSeconds < 270) return;
+                try { tick.Kill(); } catch { }
+            }
+            tickStarted = DateTime.UtcNow;
             tick = Node(Path.Combine("scripts", "tick.mjs"), false);
             if (tick == null) { Show(); return; }
             tick.EnableRaisingEvents = true;
-            var context = SynchronizationContext.Current;
-            tick.Exited += (s, e) => context.Post(_ => Show(), null);
+            // Exited fires on a pool thread, so hand the update back to the UI thread.
+            tick.Exited += (s, e) => ui.Post(_ => Show(), null);
             Show();
         }
 
