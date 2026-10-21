@@ -15,8 +15,12 @@ const alive=pid=>{try {process.kill(pid,0);return true;}catch {return false;}};
 const freePort=()=>new Promise(resolve=>{const server=createServer();server.listen(0,'127.0.0.1',()=>{const {port}=server.address();server.close(()=>resolve(port));});});
 const until=async(check,ms)=>{const end=Date.now()+ms;while(Date.now()<end){if(await check())return true;await new Promise(r=>setTimeout(r,100));}return false;};
 
+// The server refuses to start outside macOS and Windows (lib/config.mjs).
+const unsupported=!['darwin','win32'].includes(process.platform) && 'The dashboard server runs on macOS and Windows only';
+
 for(const signal of ['SIGTERM','SIGKILL']) {
-  test(`the dashboard server exits when the app that started it gets ${signal}`,{skip:process.platform==='win32' && signal==='SIGTERM'},()=>withFolder(async folder=>{
+  test(`the dashboard server exits when the app that started it gets ${signal}`,
+    {skip:unsupported || (process.platform==='win32' && signal==='SIGTERM' && 'Windows cannot send SIGTERM to a process')},()=>withFolder(async folder=>{
     const port=await freePort();
     const config=path.join(folder,'observatory.config.json');
     await mkdir(path.join(folder,'data','public','local'),{recursive:true});
@@ -29,15 +33,20 @@ for(const signal of ['SIGTERM','SIGKILL']) {
       require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(child.pid));
       setInterval(()=>{},1000);`],
     {stdio:'ignore',env:{...process.env,OBSERVATORY_CONFIG:config,OBSERVATORY_PARENT_CHECK_MS:'200'}});
-    assert.ok(await until(async()=>(await readFile(pidFile,'utf8').catch(()=>'')).length>0,5000),'server started');
-    const server=Number(await readFile(pidFile,'utf8'));
-    // Wait until the server answers, as it would before the app opens the browser.
-    assert.ok(await until(async()=>Boolean(await fetch(`http://127.0.0.1:${port}/`).catch(()=>null)),10000),'server listening');
-    assert.equal(alive(server),true);
-    app.kill(signal);
-    const gone=await until(()=>!alive(server),5000);
-    if(!gone)process.kill(server,'SIGKILL');
-    assert.equal(gone,true,'server outlived its app');
+    try {
+      assert.ok(await until(async()=>(await readFile(pidFile,'utf8').catch(()=>'')).length>0,5000),'server started');
+      const server=Number(await readFile(pidFile,'utf8'));
+      // Wait until the server answers, as it would before the app opens the browser.
+      assert.ok(await until(async()=>Boolean(await fetch(`http://127.0.0.1:${port}/`).catch(()=>null)),10000),'server listening');
+      assert.equal(alive(server),true);
+      app.kill(signal);
+      const gone=await until(()=>!alive(server),5000);
+      if(!gone)process.kill(server,'SIGKILL');
+      assert.equal(gone,true,'server outlived its app');
+    } finally {
+      // A failed check must not leave the stand-in app running, or the test run never ends.
+      if(app.exitCode===null && app.signalCode===null)app.kill('SIGKILL');
+    }
   }));
 }
 
