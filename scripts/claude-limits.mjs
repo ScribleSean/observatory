@@ -252,8 +252,9 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
 // With consent given, each collection also asks the installed CLI for the
 // current figures, so limits stay current when no terminal session is open.
 // A failed or unexpected command result preserves the older reading.
-export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage}={}) {
-  const {given:enabled}=await claudeLimitsConsent(runtime);
+// The settings file is the consent. A caller that passes enabled skips the old marker check.
+export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage,enabled:configured}={}) {
+  const enabled=typeof configured==='boolean'?configured:(await claudeLimitsConsent(runtime)).given;
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
   let usageCommand='failed';
   try {

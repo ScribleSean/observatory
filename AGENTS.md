@@ -31,7 +31,7 @@
 
 - $0 additional spend. No model calls are needed to collect existing records.
 - Local-only delivery. Never deploy snapshots or raw source records, even to a private hosted URL, without new explicit authorization.
-- Keep activity, tokens, account allowances, billed cost and estimates distinct. Preserve source provenance and original observation times. Unknown is not zero. No cross-host token or active-time sum until deduplication is verified.
+- Keep activity, tokens, account allowances, billed cost and estimates distinct. Preserve source provenance and original observation times. Unknown is not zero. A cross-host token or screen-time sum is shown only next to the per-device numbers and labeled "not deduplicated", and it is Unknown when any device's value is Unknown. Only a sum whose deduplication is verified may drop the label. Account limits are never summed across hosts.
 - Authenticate device exchange, preserve revocation and require explicit source and sharing consent. Provider authentication is separate from pairing. Keep credentials on the owning device and use supported sign-in mechanisms.
 - No raw titles, prompts, arguments, environment variables or credentials in stored dashboard data or Git. Test adapters using synthetic data.
 - Local config and generated data remain ignored. Do not weaken private host bindings or turn the dashboard into a shell-command API.

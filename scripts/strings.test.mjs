@@ -15,9 +15,9 @@ test('generated strings contain no carriage returns', () => {
   for (const [path, content] of generatedStrings()) assert.ok(!content.includes('\r'), path);
 });
 
-test('all three generated strings files are current', () => {
+test('the generated strings module is current', () => {
   const generated = generatedStrings();
-  assert.equal(generated.size, 3);
+  assert.equal(generated.size, 1);
   for (const [path, expected] of generated) assert.equal(read(path).replace(/\r\n/g, '\n'), expected, path);
 });
 
@@ -52,7 +52,7 @@ test('existing rendered wording remains unchanged', () => {
 });
 
 test('views read shared wording instead of literal labels', () => {
-  for (const path of ['app/viewer/panel/panel.tsx', 'app/viewer/dashboard.tsx', 'app/viewer/components/ActionBar.tsx', 'app/viewer/components/Card.tsx', 'app/viewer/components/EmptyState.tsx', 'app/viewer/components/FilterGroup.tsx', 'app/viewer/components/InfoControl.tsx', 'app/viewer/components/Meter.tsx', 'app/viewer/components/Numeral.tsx', 'app/viewer/components/ProviderDot.tsx', 'app/viewer/components/Row.tsx', 'app/viewer/components/TextBar.tsx']) {
+  for (const path of ['app/viewer/dashboard.tsx', 'app/viewer/components/ActionBar.tsx', 'app/viewer/components/Card.tsx', 'app/viewer/components/EmptyState.tsx', 'app/viewer/components/FilterGroup.tsx', 'app/viewer/components/InfoControl.tsx', 'app/viewer/components/Meter.tsx', 'app/viewer/components/Numeral.tsx', 'app/viewer/components/ProviderDot.tsx', 'app/viewer/components/Row.tsx', 'app/viewer/components/TextBar.tsx']) {
     const source = read(path);
     for (const value of unchanged) {
       assert.ok(!source.includes(`'${value}'`) && !source.includes(`"${value}"`), `${path}: ${value}`);

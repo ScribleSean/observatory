@@ -1,13 +1,11 @@
 import {open,lstat} from 'node:fs/promises';
 import {constants,openSync,closeSync,fsyncSync} from 'node:fs';
-import {randomBytes,createHash} from 'node:crypto';
+import {randomBytes} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
-import {privateCollectorDirectory} from './peer-directory.mjs';
+import {privateFolder} from '../lib/private-folder.mjs';
 import {retainQuotaHistory} from './quota-history.mjs';
-import {parseQuotaRecord,selectQuotaRecord} from './quota-record.mjs';
 import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage,readQuotaArchiveChart} from './quota-archive.mjs';
-import {withPeerStateLock} from './peer-lock.mjs';
 
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
@@ -55,7 +53,7 @@ async function safeFile(file,optional=false) {
 }
 
 async function withDatabase(runtime,action) {
-  const directory=await privateCollectorDirectory(runtime,'private-quota',true);
+  const directory=await privateFolder(runtime,'private-quota');
   const file=path.join(directory,'state.sqlite');
   // Exclusive file creation preserves private permissions before SQLite opens it.
   try {const handle=await open(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);await handle.close();}
@@ -113,14 +111,8 @@ function read(db,now) {
     else throw Error('Invalid quota account scope');
   }
   const sharing=readSharing(value.sharing,history);
-  let remote=null;
-  if(sharing.enabled && value.remote) {
-    const saved=value.remote;
-    if(!timestamp(saved.receivedAt) || !['Mac','Windows'].includes(saved.host) || saved.pairingId!==sharing.pairingId)
-      throw Error('Invalid saved peer allowance');
-    remote={receivedAt:saved.receivedAt,host:saved.host,pairingId:saved.pairingId,
-      record:parseQuotaRecord(saved.record,saved.host,saved.receivedAt)};
-  }
+  // Allowance sharing between paired devices is retired. A saved peer copy is ignored.
+  const remote=null;
   return {version:1,revision:value.revision,salt:value.salt,history,nextAttemptAt:value.nextAttemptAt,failures:value.failures,
     sharing,remote};
 }
@@ -158,119 +150,3 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
 
 export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
 export const readQuotaChart=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchiveChart(db,query));
-
-// Owner-local account discovery. Scope keys are opaque identifiers, not account
-// names or credentials. Page the catalogue too, rather than loading all history.
-export const listQuotaArchives=(runtime,{after=null,limit=50}={},now=Date.now())=>withDatabase(runtime,db=>{
-  if((after!==null && !hex(after)) || !Number.isSafeInteger(limit) || limit<1 || limit>100 || !timestamp(now))
-    throw Error('Invalid archive catalogue query');
-  const state=read(db,now);
-  const rows=db.prepare('SELECT scope,COUNT(*) AS records,MIN(observed_at) AS firstAt,MAX(observed_at) AS lastAt FROM quota_archive WHERE scope>? GROUP BY scope ORDER BY scope LIMIT ?')
-    .all(after??'',limit+1);
-  const accounts=rows.slice(0,limit).map(row=>({...row,current:row.scope===state.history?.scope}));
-  return {accounts,next:rows.length>limit?accounts.at(-1).scope:null,
-    storageBytes:db.prepare('PRAGMA page_count').get().page_count*4096,storageLimitBytes:8*1024*1024*1024};
-});
-
-const archiveDeletionToken=(state,scope)=>createHash('sha256')
-  .update(JSON.stringify(['observatory-quota-archive-delete-v1',state.salt,state.revision,scope])).digest('hex');
-
-// Internal owner-local API. Native controls must resolve the selected account
-// locally, never accept arbitrary database paths or expose scope keys to peers.
-export const inspectQuotaArchive=(runtime,{scope},now=Date.now())=>withDatabase(runtime,db=>{
-  if(!hex(scope) || !timestamp(now))throw Error('Invalid archive selection');
-  const state=read(db,now);
-  const groups=db.prepare('SELECT kind,COUNT(*) AS count,MIN(observed_at) AS firstAt,MAX(observed_at) AS lastAt FROM quota_archive WHERE scope=? GROUP BY kind').all(scope);
-  const bytes=db.prepare('PRAGMA page_count').get().page_count*4096;
-  return {groups,storageBytes:bytes,storageLimitBytes:8*1024*1024*1024,
-    token:groups.length?archiveDeletionToken(state,scope):null};
-});
-
-// Logical deletion is atomic with invalidation of pending collectors. It does
-// not claim secure erasure of backups, filesystem snapshots or paired devices.
-export const deleteQuotaArchive=async(runtime,{scope,token,confirmation},now=Date.now())=>{
-  if(!hex(scope) || !hex(token) || confirmation!=='delete-account-history' || !timestamp(now))throw Error('Invalid archive deletion confirmation');
-  await lstat(path.join(runtime,'private-quota'));
-  return withPeerStateLock(runtime,()=>withDatabase(runtime,db=>{
-  const previous=read(db,now);
-  if(token!==archiveDeletionToken(previous,scope))throw Error('Archive deletion confirmation expired');
-  if(!db.prepare('SELECT 1 FROM quota_archive WHERE scope=? LIMIT 1').get(scope))throw Error('Archive already empty');
-  const next={...previous,revision:previous.revision+1};
-  if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
-  if(previous.history?.scope===scope) {
-    next.history=retainQuotaHistory(null,null,{enabled:false,now});
-    next.sharing=sharingOff();next.remote=null;
-  }
-  const removed=db.prepare('DELETE FROM quota_archive WHERE scope=?').run(scope).changes;
-  save(db,next);
-  return {deletedRecords:removed};
-  }));
-};
-
-// Called only after explicit consent for this account and paired device. A new
-// consent rotates the public generation, including when the pairing changes.
-// Disabling changes the revision so an in-flight collection cannot undo it.
-export const setQuotaSharing=(runtime,{revision,enabled,pairingId},now=Date.now())=>withDatabase(runtime,db=>{
-  if(!timestamp(now) || typeof enabled!=='boolean')throw Error('Invalid quota sharing consent');
-  const previous=read(db,now);
-  if(previous.revision!==revision)throw Error('Quota sharing superseded');
-  if(enabled && (!hex(pairingId) || !hex(previous.history?.scope) ||
-      !['ok','stale'].includes(previous.history?.status) || previous.history.latestReadStatus!=='ok'))
-    throw Error('Read the current account before sharing');
-  const next={...previous,revision:previous.revision+1,remote:null,sharing:enabled?
-    {enabled:true,generation:randomBytes(16).toString('hex'),scope:previous.history.scope,pairingId}:sharingOff()};
-  if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
-  save(db,next);return next;
-});
-
-// Pairing retirement is unconditional and atomic with respect to collectors.
-// Do not initialize quota storage for users who never enabled monitoring.
-export async function revokeQuotaSharing(runtime,now=Date.now()) {
-  try {await lstat(path.join(runtime,'private-quota'));}
-  catch(error) {if(error.code==='ENOENT')return;throw error;}
-  return withDatabase(runtime,db=>{
-    if(!timestamp(now))throw Error('Invalid observation time');
-    const previous=read(db,now);
-    const next={...previous,revision:previous.revision+1,sharing:sharingOff(),remote:null};
-    if(!Number.isSafeInteger(next.revision))throw Error('Quota revision exhausted');
-    save(db,next);
-  });
-}
-
-// Caller authenticates the peer and holds the pairing lock. Recheck consent in
-// the same transaction as the saved watermark so disable cannot race acceptance.
-export const exchangeQuotaState=(runtime,{revision,pairingId,host,record,outgoing},now=Date.now())=>withDatabase(runtime,db=>{
-  if(!timestamp(now))throw Error('Invalid allowance exchange time');
-  const previous=read(db,now);
-  if(previous.revision!==revision || !previous.sharing.enabled || previous.sharing.pairingId!==pairingId)
-    throw Error('Allowance sharing superseded');
-  const incoming=parseQuotaRecord(record,host,now);
-  const prior=previous.remote?.host===host?previous.remote.record:null;
-  const selected=selectQuotaRecord(prior,incoming);
-  const sequence=previous.revision+1;
-  if(!Number.isSafeInteger(sequence))throw Error('Quota revision exhausted');
-  const exported=parseQuotaRecord({version:1,sequence,payload:outgoing},host==='Mac'?'Windows':'Mac',now);
-  const next={...previous,revision:sequence,remote:selected===prior?previous.remote:{receivedAt:now,host,pairingId,record:incoming}};
-  save(db,next);
-  return exported;
-});
-
-export const publishQuotaState=(runtime,{revision,pairingId,host,payload},now=Date.now())=>withDatabase(runtime,db=>{
-  const previous=read(db,now);
-  if(previous.revision!==revision || !previous.sharing.enabled || previous.sharing.pairingId!==pairingId)
-    throw Error('Allowance sharing superseded');
-  const record=parseQuotaRecord({version:1,sequence:previous.revision+1,payload},host,now);
-  save(db,{...previous,revision:record.sequence});
-  return record;
-});
-
-export const acceptQuotaReply=(runtime,{revision,pairingId,host,record},now=Date.now())=>withDatabase(runtime,db=>{
-  if(!timestamp(now))throw Error('Invalid allowance reply time');
-  const previous=read(db,now);
-  if(previous.revision!==revision || !previous.sharing.enabled || previous.sharing.pairingId!==pairingId)
-    throw Error('Allowance sharing superseded');
-  if(record===null) {save(db,{...previous,remote:null});return;}
-  const incoming=parseQuotaRecord(record,host,now),prior=previous.remote?.host===host?previous.remote.record:null;
-  if(selectQuotaRecord(prior,incoming)===prior)return;
-  save(db,{...previous,remote:{receivedAt:now,host,pairingId,record:incoming}});
-});

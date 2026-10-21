@@ -1,0 +1,15 @@
+{
+ "plain": {
+  "error": true
+ },
+ "cached": {
+  "ok": {
+   "status": "ok",
+   "profiles": [],
+   "tokenProfiles": [],
+   "hourTotals": [],
+   "tools": [],
+   "scope": "Recent saved Codex logs only"
+  }
+ }
+}

@@ -80,12 +80,6 @@ test('quota discovery does not consult configuration without an absolute runtime
   for(const runtime of [undefined,'relative',42])
     await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});
 }));
-test('Mac quota collection uses installed client discovery without the legacy adapter',async()=>{
-  const source=await readFile(new URL('./collect-mac.mjs',import.meta.url),'utf8');
-  assert.equal(source.includes('legacy-quota'),false);
-  assert.equal(source.includes('collectConfiguredMacQuota'),false);
-  assert.ok(source.includes('findCodexExecutable({runtime})'));
-});
 test('collector opt-out preserves the archive without polling or fabricating records',async()=>fixture(async runtime=>{
   const scope='a'.repeat(64);
   let calls=0;

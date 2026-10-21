@@ -5,7 +5,8 @@ export function appLabel(raw) {
   for (const [pattern, label] of [[/codex/,'Codex'],[/chatgpt/,'ChatGPT / Codex'],[/antigravity/,'Antigravity'],[/cursor/,'Cursor'],[/code\.exe|visual studio code/,'VS Code'],[/chrome/,'Chrome'],[/msedge|microsoft edge/,'Edge'],[/safari/,'Safari'],[/firefox/,'Firefox'],[/terminal|powershell|cmd\.exe|conhost|wezterm|ubuntu|iterm/,'Terminal']]) if (pattern.test(app)) return label;
   return 'Other app';
 }
-export const timezone = 'America/New_York';
+import { TIME_ZONE } from '../lib/timezone.mjs';
+export const timezone = TIME_ZONE;
 const clock = new Intl.DateTimeFormat('en-CA', {
   timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
 });

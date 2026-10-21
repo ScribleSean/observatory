@@ -22,7 +22,7 @@ export function defaultSettingsPath(environment=process.env) {
 // Forward slashes and double quotes are accepted by POSIX shells, Git Bash and cmd.
 export function bridgeCommand(node,bridge,runtime,platform=process.platform) {
   const values=[node,bridge,runtime];
-  const absolute=platform==='win32'?path.win32.isAbsolute:path.posix.isAbsolute;
+  const absolute=value=>platform==='win32'?path.win32.isAbsolute(value):path.posix.isAbsolute(value);
   if(values.some(value=>typeof value!=='string' || !absolute(value) || /["`$\r\n]/.test(value) || value.includes('\0') || (platform!=='win32' && value.includes('\\')) || (platform==='win32' && /[%!]/.test(value))))
     throw Error('Paths must be absolute and free of quotes and shell characters');
   const quote=value=>`"${platform==='win32'?value.replaceAll('\\','/'):value}"`;

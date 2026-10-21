@@ -83,7 +83,7 @@ export function BarChart({ title, data, series, formatValue, max }: BarChartProp
   const barWidth = width / Math.max(1, data.length) * 0.7;
   return <ChartFrame title={title} labels={data.map(item => item.label)} columns={[STRINGS.charts.value]} rows={values.map(value => [value])} maximum={available.length ? formatValue(maximum) : null} formatValue={formatValue}>
     {values.map((value, index) => value === null ? <UnknownSlot key={index} index={index} count={data.length} /> : (
-      <rect key={index} data-bar={index} x={x(index, data.length) - barWidth / 2} y={bottom - Math.max(0, value) * scale} width={barWidth} height={Math.max(0, value) * scale} style={{ fill: colors[series] }} />
+      <rect key={index} data-bar={index} x={x(index, data.length) - barWidth / 2} y={bottom - Math.max(0, value) * scale} width={barWidth} height={Math.max(0, value) * scale} rx={Math.min(2, barWidth / 4)} style={{ fill: colors[series] }} />
     ))}
   </ChartFrame>;
 }

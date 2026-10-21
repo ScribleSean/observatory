@@ -1,0 +1,22 @@
+{
+ "plain": {
+  "ok": {
+   "status": "ok",
+   "profiles": [],
+   "tokenProfiles": [],
+   "hourTotals": [],
+   "tools": [],
+   "scope": "Recent saved Codex logs only"
+  }
+ },
+ "cached": {
+  "ok": {
+   "status": "ok",
+   "profiles": [],
+   "tokenProfiles": [],
+   "hourTotals": [],
+   "tools": [],
+   "scope": "Recent saved Codex logs only"
+  }
+ }
+}

@@ -1,20 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFileSync,readdirSync} from 'node:fs';
-import {LIMIT_STYLES,contrast,skinContrastProblems,skinCss,validateSkin} from '../lib/skins.mjs';
+import {contrast,skinContrastProblems,skinCss,validateSkin} from '../lib/skins.mjs';
 
-const folder=new URL('../native/skins/',import.meta.url);
+const folder=new URL('../app/viewer/',import.meta.url);
 const read=name=>JSON.parse(readFileSync(new URL(name,folder),'utf8'));
 const files=readdirSync(folder).filter(name=>name.endsWith('.json')).sort((a,b)=>a.localeCompare(b));
+// The rebuild bundles one skin. Others can come back as data files.
 
-test('the bundled skins are the four agreed ones and each is valid', () => {
-  assert.deepEqual(files,['almanac.json','amber-crt.json','instrument.json','sage.json']);
+test('the bundled skin is Sage and it is valid', () => {
+  assert.deepEqual(files,['sage.json']);
   for(const file of files) assert.equal(validateSkin(read(file)).name.length>0,true,file);
-});
-
-test('Sage uses the shared token colours', () => {
-  const tokens=JSON.parse(readFileSync(new URL('../native/design-tokens.json',import.meta.url),'utf8')).colors;
-  assert.deepEqual(read('sage.json').colors,tokens);
 });
 
 test('every bundled skin muted text meets 4.5:1 contrast on filter hover, surface and background in light and dark', () => {
@@ -40,12 +36,6 @@ test('every bundled skin passes the contrast check in light and dark', () => {
   assert.equal(Math.round(contrast('000000','ffffff')),21);
 });
 
-test('every limit style is used by a bundled skin or documented as available', () => {
-  const used=new Set(files.map(file=>read(file).limitStyle));
-  const order=(a,b)=>a.localeCompare(b);
-  assert.deepEqual([...used].sort(order),[...LIMIT_STYLES].sort(order));
-});
-
 test('a skin cannot carry code, markup, remote files or unknown fields', () => {
   const good=read('sage.json');
   const bad=change=>{const copy=structuredClone(good);change(copy);return copy;};
@@ -68,9 +58,9 @@ test('a skin cannot carry code, markup, remote files or unknown fields', () => {
 });
 
 test('skin CSS holds only colour variables, a bundled font stack and a radius', () => {
-  const css=skinCss(read('almanac.json'));
-  assert.match(css,/^:root\{--ob-background:#f5f0e4;/);
-  assert.match(css,/--ob-radius:0px;/);
+  const css=skinCss(read('sage.json'));
+  assert.match(css,/^:root\{--ob-background:#edeae5;/);
+  assert.match(css,/--ob-radius:12px;/);
   assert.match(css,/prefers-color-scheme: dark/);
   assert.doesNotMatch(css,/url\(|@import|<|expression|javascript/i);
 });

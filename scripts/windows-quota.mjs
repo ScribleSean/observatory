@@ -2,8 +2,9 @@ import {spawn} from 'node:child_process';
 import {findCodexExecutable} from './collect-quota.mjs';
 import {readAccountSnapshot} from './read-quota.mjs';
 
-export async function findWindowsQuotaClient({findNative=findCodexExecutable}={}) {
-  return {executable:await findNative(),prefix:[]};
+// codexPath in the settings file wins over looking for the installed app.
+export async function findWindowsQuotaClient({findNative=findCodexExecutable,configured=null}={}) {
+  return {executable:configured || await findNative(),prefix:[]};
 }
 
 export function readWindowsQuotaSnapshot(client,salt,{spawnProcess=spawn,read=readAccountSnapshot,dailyUsageScope=null}={}) {

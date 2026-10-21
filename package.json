@@ -1,21 +1,18 @@
 {
   "name": "observatory",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "node --import ./native/tests/test-source-runtime.mjs --test scripts/*.test.mjs",
-    "test:server": "node scripts/check-local-server.mjs",
-    "demo": "node scripts/demo.mjs",
-    "collect": "python3 scripts/run-collector.py",
-    "serve:local": "node serve-local.mjs",
-    "build:demo": "vite build --config native/vite.demo.config.mts && node scripts/prepare-pages.mjs",
-    "build:web": "vite build --config native/vite.config.mts",
-    "preview:web": "vite preview --config native/vite.config.mts",
-    "prebuild:native": "node scripts/build-brand.mjs",
-    "build:native": "node native/build.mjs",
+    "setup": "node scripts/setup.mjs",
+    "tick": "node scripts/tick.mjs",
+    "collect": "node scripts/collect.mjs",
+    "dashboard": "node serve-local.mjs",
+    "build": "vite build",
+    "preview": "node scripts/preview.mjs",
+    "test": "node --import ./test/pin-timezone.mjs --test \"test/*.test.mjs\" \"scripts/*.test.mjs\"",
     "lint": "oxlint",
     "format": "oxfmt"
   },

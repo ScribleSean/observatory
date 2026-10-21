@@ -1,0 +1,53 @@
+{
+  "provider": "claude-code",
+  "status": "ok",
+  "scope": "Recorded Claude Code requests",
+  "days": [
+    {
+      "date": "2026-09-25",
+      "inputTokens": 1,
+      "cacheReadTokens": 1,
+      "cacheCreationTokens": 0,
+      "outputTokens": 1,
+      "totalTokens": 3,
+      "requestCount": 1,
+      "models": [
+        {
+          "model": "claude-sonnet-4-20250514",
+          "inputTokens": 1,
+          "cacheReadTokens": 1,
+          "cacheCreationTokens": 0,
+          "outputTokens": 1,
+          "totalTokens": 3,
+          "requestCount": 1
+        }
+      ],
+      "hours": [
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

@@ -109,8 +109,8 @@ test('reads cross-alias watchers and reports the latest window event', windowsOn
   const output = report(result);
   assert.equal(result.stdout.toLowerCase().includes(alias.toLowerCase()), false);
   const combinations = ['window_current/idle_current', 'window_current/idle_alias', 'window_alias/idle_current', 'window_alias/idle_alias'];
-  assert.deepEqual(result.queries.map(ids => ids.join('/')).sort(), [...combinations, ...combinations].sort());
-  assert.deepEqual(result.events.sort(), ['window_alias', 'window_current']);
+  assert.deepEqual(result.queries.map(ids => ids.join('/')).sort((a,b)=>a.localeCompare(b)), [...combinations, ...combinations].sort((a,b)=>a.localeCompare(b)));
+  assert.deepEqual(result.events.sort((a,b)=>a.localeCompare(b)), ['window_alias', 'window_current']);
   assert.equal(output.intervals.length, 1);
   assert.equal(output.trackingIntervals.length, 1);
   assert.equal(output.latestEvent, late);

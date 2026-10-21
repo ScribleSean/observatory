@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
-import { validateSkin } from '../lib/skins.mjs';
 
 process.env.TZ = 'UTC';
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -14,8 +13,6 @@ const { default: react } = await load('@vitejs/plugin-react');
 const server = await createServer({ configFile: false, root, server: { middlewareMode: true }, appType: 'custom', logLevel: 'silent', plugins: [react()] });
 after(() => server.close());
 const { default: LimitsView, LimitsView: NamedLimitsView } = await server.ssrLoadModule('/app/viewer/limits/LimitsView.tsx');
-const { DashboardView } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
-const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const now = Date.parse('2026-10-14T12:00:00Z');
 const iso = minutes => new Date(now + minutes * 60000).toISOString();
 const snapshot = () => {
@@ -112,18 +109,6 @@ void test('history renders every window in each period', () => {
   }
 });
 
-void test('dashboard selects Limits and preserves other empty sections', () => {
-  const noop = () => {};
-  const props = { snapshot: snapshot(), loaded: true, now, skinId: 'sage', skin: validateSkin(SKINS.sage), onSectionChange: noop, onSkinChange: noop };
-  const limits = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'limits' }));
-  assert.match(limits, /class="ob-limits"/);
-  assert.doesNotMatch(limits, /This section is not built yet/);
-  // Settings now has its own view (B1-2), so it shows neither the empty state nor the limits.
-  const settings = renderToStaticMarkup(createElement(DashboardView, { ...props, section: 'settings' }));
-  assert.match(settings, /class="ob-settings"/);
-  assert.doesNotMatch(settings, /This section is not built yet/);
-  assert.doesNotMatch(settings, /class="ob-limits"/);
-});
 
 void test('sample provider cards and Now agree on each window projection and span', () => {
   const html = render(sampleSnapshot(now));

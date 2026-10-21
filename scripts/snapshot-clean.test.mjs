@@ -1,6 +1,5 @@
 import { test } from 'node:test'; // Synthetic fixtures only, no personal records.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import {
   numeric,
   category,
@@ -108,10 +107,4 @@ test('per-model pricing excludes inferred labels and preserves token categories'
   assert.equal(result.days[0].models[0].apiEstimate.usd,61);
   assert.equal(result.days[0].models[1].apiEstimate.usd,null);
   assert.equal(result.days[0].models[0].cacheReadTokens,1000000);
-});
-test('native collectors and payloads do not import the legacy dashboard', async () => {
-  for (const file of ['collect-mac.mjs', 'mac-snapshot.mjs', 'windows-snapshot.mjs', 'windows-dashboard.mjs', 'peer-payload.mjs']) {
-    const source = await readFile(new URL(file, import.meta.url), 'utf8');
-    assert.ok(!source.includes('collect-dashboard'), file);
-  }
 });

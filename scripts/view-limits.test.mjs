@@ -265,6 +265,6 @@ test('limits view renders reset windows as Unknown in every limit style', async 
     if (style === 'meter') assert.match(html, /class="ob-bar" aria-hidden="true"><\/div>/);
     if (style === 'text') assert.match(html, /class="ob-blocks" aria-hidden="true"/);
     const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: style }));
-    assert.match(view, /class="ob-num big">Unknown<\/span><span class="ob-meta">Waiting for the reset to be observed\./);
+    assert.match(view, /class="ob-num big">Unknown<\/div><div class="ob-meta">Waiting for the reset to be observed\./);
   }
 });

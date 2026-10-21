@@ -34,7 +34,8 @@ export const STRINGS = {
     "sources": "Sources",
     "settings": "Settings",
     "navigation": "Sections",
-    "emptyState": "This section is not built yet."
+    "emptyState": "This section is not built yet.",
+    "agents": "Agents"
   },
   "periods": {
     "now": "Now",
@@ -74,7 +75,8 @@ export const STRINGS = {
     "waiting": "Waiting for the first collection",
     "loading": "Loading",
     "refreshing": "Refreshing",
-    "noSnapshot": "No snapshot yet"
+    "noSnapshot": "No snapshot yet",
+    "noCombined": "No combined.json yet. Run npm run tick, or wait for the next five-minute cycle."
   },
   "status": {
     "unknown": "Unknown",
@@ -364,6 +366,62 @@ export const STRINGS = {
     "next": "Continue",
     "finish": "Finish",
     "appOnly": "Open Observatory to finish setup."
+  },
+  "today": {
+    "title": "Today",
+    "both": "Both computers",
+    "notDeduplicated": "sum, not deduplicated",
+    "screenTime": "Screen time",
+    "tokens": "Tokens",
+    "noSnapshot": "No snapshot",
+    "screenTimeOff": "Off",
+    "stale": "Not updated recently",
+    "unreachable": "Last pull failed: {reason}",
+    "device": "Computer",
+    "status": "Updated"
+  },
+  "overview": {
+    "limitsTitle": "Limits",
+    "limitsCaption": "lowest left: {name}",
+    "limitsNone": "No current reading",
+    "agentsTitle": "Agents",
+    "agentsWaiting": "{count} waiting on you",
+    "agentsWorking": "{count} working",
+    "agentsQuiet": "Nothing running",
+    "agentsOff": "Agents are off",
+    "timeTitle": "Screen time today",
+    "costTitle": "Cost today",
+    "costCaption": "API-equivalent estimate, not a bill",
+    "tokens": "{value} tokens",
+    "bothNote": "both computers, not deduplicated",
+    "asOf": "as of {time}",
+    "topApps": "largest app categories",
+    "agentsUnknown": "Unknown",
+    "lastDay": "Last update was {time}"
+  },
+  "agents": {
+    "waiting": "Waiting on you",
+    "working": "Working",
+    "idle": "Idle",
+    "done": "Done",
+    "stopped": "Stopped",
+    "unknown": "Unknown",
+    "claudeSessions": "Claude Code sessions",
+    "codexJobs": "Codex jobs",
+    "none": "No sessions in the last day",
+    "noJobs": "No Codex jobs in the last day",
+    "notFound": "Not found on this computer",
+    "off": "Turned off in settings",
+    "since": "since {time}",
+    "finished": "finished {time}",
+    "started": "started {time}",
+    "privacy": "Status, project names and session names only. Messages, prompts and job output are never read.",
+    "empty": "No agent status yet. It appears after the next five-minute collection.",
+    "unavailable": "Agent status could not be read on this computer. It is tried again every five minutes.",
+    "offHint": "Turned off. Set sources.agents to true in observatory.config.json to show it.",
+    "claudeNotFound": "Claude Code sessions were not found on this computer.",
+    "computers": "Computers",
+    "claudeUnavailable": "Claude Code sessions could not be read. Unknown until the next collection."
   }
 } as const;
 
