@@ -29,3 +29,9 @@ test('the app settings hold paths only, no source data',()=>{
   const settings=glanceSettings({dataFolder:'/d',dashboard:{port:5601}},'/n/node','/r','/r/observatory.config.json');
   assert.deepEqual(settings,{node:'/n/node',repo:'/r',config:'/r/observatory.config.json',dataFolder:'/d',port:5601});
 });
+
+test('the computer name falls back to Mac or PC and drops control characters',async()=>{
+  const {computerName}=await import('../scripts/setup.mjs');
+  assert.equal(await computerName('win32',{COMPUTERNAME:'DESK\u0007TOP'}),'DESKTOP');
+  assert.equal(await computerName('win32',{}),'PC');
+});

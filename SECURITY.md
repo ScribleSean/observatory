@@ -11,7 +11,9 @@ Observatory runs on your own computers. It has no account, no hosted service and
 
 ## What is saved
 
-`usage.json` and `combined.json` hold daily and hourly totals, model names, limit readings and the time each was observed. They do not hold prompts, responses, window titles, commands, file paths from the logs or credentials. The readers are tested with synthetic logs that contain private text, and the tests check that the text does not appear in the output.
+`usage.json` and `combined.json` hold daily and hourly totals, model names, limit readings, agent status with project and session names, and the time each was observed. They do not hold prompts, responses, window titles, commands, job output, file paths or credentials.
+
+Agent status is read from `~/.claude/sessions/<pid>.json` (status, session name, folder name and times only, never the `.key` files beside them or any transcript) and from the names of the files in `~/.local/state/codex-jobs` (never their contents). The readers are tested with synthetic logs that contain private text, and the tests check that the text does not appear in the output.
 
 Local processes running as your user can read these files. That is the trust boundary. Do not expose the dashboard port to a network.
 

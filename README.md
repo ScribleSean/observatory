@@ -1,47 +1,31 @@
 <div align="center">
-  <img src="public/favicon.svg" width="80" height="80" alt="Observatory telescope">
+  <img src="public/favicon.svg" width="72" height="72" alt="Observatory telescope">
   <h1>Observatory</h1>
-  <p>Your Claude Code and Codex limits, screen time and tokens, for your Mac and PC together, in the menu bar and the Windows tray.</p>
+  <p>A quiet menu bar app and local dashboard for people who work with AI coding agents.<br>It answers four questions at a glance: am I near my limits, what are my agents doing, where did my time go, and what did it cost.</p>
 </div>
+
+<p align="center">
+  <img src="docs/images/dashboard-limits-light.png" width="860" alt="The Observatory dashboard in light appearance with fictional data: four tiles for limits, agents, screen time and cost, then the Limits page">
+</p>
 
 ## What it shows
 
-- **Limits left.** Claude Code and Codex, each window (5-hour and weekly), with the percent left and the reset time. Limits belong to the account, so the freshest reading from either computer is shown. They are never added together.
-- **Screen time today**, read from [ActivityWatch](https://activitywatch.net/), for each computer.
-- **Tokens today**, from the logs Claude Code and Codex already keep, for each computer, with an estimate of what they would cost at public API prices.
+- **Limits.** Claude Code and Codex, each window (5-hour and weekly), with the percent left, the reset time and how fast it is going.
+- **Agents.** Which Claude Code sessions are working, idle, waiting on you or done, and recent Codex jobs, with project and session names.
+- **Time.** Screen time today and over time, by app category, from [ActivityWatch](https://activitywatch.net/).
+- **Cost.** Tokens today and over time, with what they would cost at public API prices.
 
-The menu bar title is one number: the lowest limit left. The menu lists everything else and has three actions: Open dashboard, Refresh and Quit. The dashboard opens in your normal browser and shows the same numbers over time on four read-only pages: Limits, Activity, Tokens and Sources.
+The menu bar shows one number, the lowest limit left, with an amber dot when an agent is waiting on you. Its menu lists the rest and has Open dashboard, Refresh and Quit. The dashboard opens in your normal browser at http://127.0.0.1:5601.
 
-## How it works
+Observatory only watches. It never starts, stops or answers an agent, and it changes nothing in the tools it reads.
 
-```
- PC (spoke)                              Mac (hub)
- every 5 min: collect                    every 5 min: collect
-   -> usage.json                           -> usage.json
-                 <-- hub reads it over SSH --
-                 --- hub writes back -------> combined.json
-   combined.json                           combined.json
- tray reads combined.json                menu bar reads combined.json
- dashboard on 127.0.0.1                  dashboard on 127.0.0.1
-```
-
-1. On each computer, the small menu bar or tray app runs `scripts/tick.mjs` every five minutes. It collects that computer's own numbers into `usage.json`.
-2. The hub reads each spoke's `usage.json` over SSH, combines them into `combined.json`, and writes that file back to each spoke. No computer opens a network port. A spoke recombines its own fresh numbers with the last copy it received, so its own numbers stay current even when the hub is away.
-3. The menu bar and tray apps print the summary in `combined.json`. The dashboard server listens on 127.0.0.1 only and serves the built pages and `combined.json`, nothing else.
-
-One computer on its own works the same way, without the SSH step.
+<p align="center">
+  <img src="docs/images/dashboard-agents-dark.png" width="860" alt="The Agents page in dark appearance with fictional data: sessions on two computers with Waiting on you, Working, Idle and Done labels">
+</p>
 
 ## Install
 
-You need:
-
-- [Node.js](https://nodejs.org/) 22.13 or later.
-- [ActivityWatch](https://activitywatch.net/), running, for screen time.
-- On a Mac, the Xcode Command Line Tools (`xcode-select --install`), to build the menu bar app.
-- On Windows, nothing else. The tray app is built with the C# compiler that comes with Windows.
-- For a second computer: SSH from the hub to the spoke without a password prompt, for example over [Tailscale](https://tailscale.com/). The hub must be able to run `ssh <alias>` on its own.
-
-On each computer:
+You need [Node.js](https://nodejs.org/) 22.13 or later. For screen time, install and run [ActivityWatch](https://activitywatch.net/). On a Mac you also need the Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
 git clone https://github.com/ScribleSean/observatory.git
@@ -55,53 +39,48 @@ cd observatory
 npm run setup
 ```
 
-The first run writes `observatory.config.json` and stops. Edit it, then run `npm run setup` again. Setup installs the build tools, builds the dashboard and the menu bar or tray app inside the clone, and starts the app now and at login. Nothing is installed in Applications or Program Files.
+That is all. Setup writes a settings file with every source on, builds the dashboard and the menu bar app (the tray app on Windows) inside the folder you cloned, and starts it now and at login. Nothing is installed in Applications or Program Files, and nothing needs an account.
 
-To update, run `git pull` and then `npm run setup` again. To stop the app and remove its login item, run `npm run setup -- --remove`. Your data and settings stay.
-
-On a MacBook with a notch and a busy menu bar, a new menu bar item can land behind the notch. Hold Command and drag it to the right to bring it into view.
+- To update: `git pull`, then `npm run setup` again.
+- To stop it and remove the login item: `npm run setup -- --remove`. Your data and settings stay.
+- On a MacBook with a notch and a busy menu bar, a new item can hide behind the notch. Hold Command and drag it to the right.
 
 ## Settings
 
-Everything is in one hand-edited file, `observatory.config.json`, next to `package.json`. Git ignores it.
+Settings are in `observatory.config.json`, next to `package.json`. Setup writes it the first time. Edit it to turn a source off, then run `npm run setup` again.
 
 ```json
 {
-  "device": { "name": "Mac" },
+  "device": { "name": "Studio Mac" },
   "sources": {
     "screenTime": true,
     "codex": true,
     "codexLimits": true,
     "claudeCode": true,
-    "claudeLimits": true
-  },
-  "hub": {
-    "spokes": [
-      { "name": "PC", "ssh": "my-pc", "platform": "windows" }
-    ]
+    "claudeLimits": true,
+    "agents": true
   }
 }
 ```
 
-- A source is read only when it is `true`. Listing it is your consent.
-- `hub.spokes` makes this computer the hub. Leave it empty on the spoke and on a computer used alone. `ssh` is a host alias from your SSH configuration. The hub finds the spoke's data folder itself, or you can set `dataFolder` on the spoke entry.
-- Optional: `dashboard.port` (default 5601), `dataFolder`, and `codexPath` if Codex is installed somewhere unusual.
-- One Mac and one Windows PC are supported in total.
+A source is read only while it is `true`. Optional settings: `dashboard.port` (default 5601), `dataFolder`, and `codexPath` if Codex is installed somewhere unusual.
 
-Data lives in `~/Library/Application Support/Observatory` on a Mac and `%LOCALAPPDATA%\Observatory` on Windows.
+## A second computer (optional)
+
+A Mac and a Windows PC can share one view. The Mac reads the PC's numbers over SSH every five minutes and writes the combined view back, so both menus and both dashboards show both computers. See [Two computers](docs/TWO-COMPUTERS.md).
 
 ## How to read the numbers
 
-- Unknown means a value was not read. It never means zero. A computer that has not reported recently shows its last update time, and its numbers for today show Unknown.
-- The "Both computers" row adds the two computers' screen time and tokens. It is labeled "not deduplicated", because the same tokens could be counted twice if the same logs exist on both computers. It is Unknown if either computer's value is Unknown.
+- Unknown means a value was not read. It never means zero.
 - A limit percentage comes from the provider. A dollar figure is an estimate at public API prices, not a bill.
-- Days are counted in the America/New_York time zone on every computer.
+- With two computers, sums are labeled "not deduplicated", and a sum is Unknown if either computer's value is Unknown. Limits are never added, because they belong to the account.
+- Days are counted in the America/New_York time zone.
 
-## Data and privacy
+## Privacy
 
-- Everything stays on your computers. The only network traffic is the hub's SSH connection to your own spoke, and each provider's own installed client asking for the account's current limits.
-- Saved data holds daily and hourly totals and limit readings, not prompts, window titles, commands or credentials.
-- Provider sign-ins stay in their own apps. Observatory does not read or store credentials.
+- Everything stays on your computer. The dashboard listens on 127.0.0.1 only and cannot change anything.
+- Saved data holds totals, limit readings, agent status and project and session names. It never holds prompts, messages, window titles, commands, job output or credentials.
+- Agent status comes from the small state files Claude Code and codex-job already keep. Transcripts and job output are never opened.
 
 See [security](SECURITY.md).
 
@@ -119,15 +98,14 @@ npm run lint
 npm run preview
 ```
 
-`npm run preview` serves the dashboard with fictional data at http://127.0.0.1:5602. `npm run tick` runs one collection and combine by hand. [The hub plan](docs/HUB-PLAN.md) maps the code to the design and lists open questions. The full app this replaced is described in [docs/history](docs/history/README.md).
+`npm run preview` serves the dashboard with fictional data at http://127.0.0.1:5602. `npm run tick` runs one collection by hand. [The hub plan](docs/HUB-PLAN.md) maps the code to the design.
 
 | Part | Files |
 | --- | --- |
 | Settings | `lib/config.mjs` |
-| Readers | `scripts/read-settings.mjs`, `scripts/read-claude-usage.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
-| Collect | `scripts/collect.mjs` |
-| Combine | `lib/combine.mjs` |
-| Hub | `scripts/hub.mjs`, `scripts/hub-transport.mjs`, `scripts/tick.mjs` |
+| Readers | `scripts/read-settings.mjs`, `scripts/read-claude-usage.mjs`, `scripts/read-agents.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
+| Collect and combine | `scripts/collect.mjs`, `lib/combine.mjs`, `scripts/tick.mjs` |
+| Second computer | `scripts/hub.mjs`, `scripts/hub-transport.mjs` |
 | Dashboard | `serve-local.mjs`, `app/viewer`, `lib/panel-data.mjs` |
 | Menu bar and tray | `glance/mac/Glance.swift`, `glance/windows/Glance.cs` |
 | Setup | `scripts/setup.mjs` |

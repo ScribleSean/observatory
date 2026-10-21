@@ -79,6 +79,13 @@ export async function stableNode(platform=process.platform) {
   return first && existsSync(first)?first:process.execPath;
 }
 
+// The name people know the computer by, cleaned to fit the settings file.
+export async function computerName(platform=process.platform,environment=process.env) {
+  const raw=platform==='darwin'?await quiet('/usr/sbin/scutil',['--get','ComputerName']):environment.COMPUTERNAME;
+  const name=typeof raw==='string'?raw.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,40):'';
+  return name || (platform==='win32'?'PC':'Mac');
+}
+
 async function quiet(file,args,options={}) {
   try {return (await execute(file,args,{windowsHide:true,timeout:120000,maxBuffer:8_000_000,...options})).stdout;}
   catch {return null;}
@@ -112,16 +119,18 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
   step(`Node ${process.versions.node}`);
 
   const configFile=process.env.OBSERVATORY_CONFIG || CONFIG_FILE;
+  // Zero setup: with no settings file, write one with every source on and this
+  // computer's own name. It is plain JSON beside package.json, ready to edit.
   if(!existsSync(configFile)) {
-    await act('write observatory.config.json from the example. Edit it, then run setup again',async()=>{
+    await act('write observatory.config.json with every source on (edit it any time)',async()=>{
       const example=JSON.parse(await readFile(path.join(REPO,'observatory.config.example.json'),'utf8'));
-      if(platform==='win32')example.device.name='PC';
+      example.device.name=await computerName(platform);
       await writeFile(configFile,JSON.stringify(example,null,2)+'\n',{flag:'wx'});
     });
     if(dryRun)return;
   }
   const config=await loadConfig(configFile,{platform});
-  step(`Settings: ${config.device.name}, ${config.role}, sources on: ${Object.entries(config.sources).filter(([,on])=>on).map(([key])=>key).join(', ') || 'none'}`);
+  step(`Settings: ${config.device.name}, ${config.role==='hub'?`combining with ${config.hub.spokes.map(spoke=>spoke.name).join(', ')}`:'this computer'}, sources on: ${Object.entries(config.sources).filter(([,on])=>on).map(([key])=>key).join(', ') || 'none'}`);
 
   // The older app writes usage.json in the same default data folder.
   if(config.dataFolder===defaultDataFolder(platform) && await oldAppRunning(platform)) {
