@@ -48,7 +48,7 @@ test('a status line that points at a missing bridge is noticed',()=>import('./he
   assert.equal(await brokenStatusline(path.join(folder,'missing.json')),null);
 })));
 
-test('a dry run on a fresh clone lists every step and writes nothing',()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
+test('a dry run on a fresh clone lists every step and writes nothing',{skip:!['darwin','win32'].includes(process.platform) && 'Setup runs on macOS and Windows only'},()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
   const {execFileSync}=await import('node:child_process');
   const {existsSync}=await import('node:fs');
   const path=(await import('node:path')).default;
