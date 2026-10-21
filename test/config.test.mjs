@@ -14,9 +14,9 @@ test('sources are off unless listed as true',()=>{
 });
 
 test('a hub lists spokes by SSH alias',()=>{
-  const config=parseConfig({hub:{spokes:[{name:'PC',ssh:'windows-codex',platform:'windows'}]}},mac);
+  const config=parseConfig({hub:{spokes:[{name:'PC',ssh:'my-pc',platform:'windows'}]}},mac);
   assert.equal(config.role,'hub');
-  assert.deepEqual(config.hub.spokes,[{name:'PC',ssh:'windows-codex',platform:'windows',dataFolder:null}]);
+  assert.deepEqual(config.hub.spokes,[{name:'PC',ssh:'my-pc',platform:'windows',dataFolder:null}]);
 });
 
 test('Windows uses LOCALAPPDATA for its data folder',()=>{

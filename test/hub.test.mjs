@@ -6,7 +6,7 @@ import {runHub,recombine} from '../scripts/hub.mjs';
 import {pullCommand,pushCommand,sshTransport} from '../scripts/hub-transport.mjs';
 import {withFolder,ownSnapshot,testConfig} from './helpers.mjs';
 
-const pc={name:'PC',ssh:'windows-codex',platform:'windows',dataFolder:null};
+const pc={name:'PC',ssh:'my-pc',platform:'windows',dataFolder:null};
 const now=Date.parse('2026-10-21T17:00:00Z');
 
 async function seed(folder,file,value) {
@@ -124,7 +124,7 @@ test('the SSH transport moves bytes as base64 both ways',async()=>{
   });
   assert.equal(await transport.pull(pc),text);
   await transport.push(pc,text);
-  assert.equal(calls[0].alias,'windows-codex');
+  assert.equal(calls[0].alias,'my-pc');
   assert.equal(Buffer.from(calls[1].input,'base64').toString('utf8'),text);
 });
 

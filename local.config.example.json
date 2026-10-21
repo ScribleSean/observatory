@@ -1,8 +1,0 @@
-{
-  "macCcusage": "/absolute/path/to/ccusage",
-  "windowsHost": "your-windows-ssh-alias",
-  "macCodexHome": "/Users/YOUR_USER/.codex",
-  "codexExecutable": "/absolute/path/to/codex",
-  "receiptDirectory": "/absolute/path/to/review-receipts",
-  "dictation": { "mac": false, "windows": false }
-}
