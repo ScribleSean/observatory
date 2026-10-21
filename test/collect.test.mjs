@@ -11,7 +11,7 @@ const activity={host:'Mac',status:'ok',start:'2026-10-21T04:00:00.000Z',end:'202
 const readers={
   screenTime:async()=>({...activity}),
   codex:async()=>({profiles:[],tools:[],tokenProfiles:[],hourTotals:[]}),
-  codexLimits:async()=>({status:'ok',provider:'Codex',scope:'account',checkedAt:at.toISOString(),windows:[{bucket:'codex',window:'primary',durationMinutes:300,remainingPercent:80,resetsAt:'2026-10-21T19:00:00Z'}]}),
+  codexLimits:async()=>({status:'ok',provider:'Codex',scope:'account',checkedAt:at.toISOString(),windows:[{bucket:'codex',window:'primary',durationMinutes:300,remainingPercent:80,resetsAt:'2099-01-01T00:00:00Z'}]}),
   claudeCode:async()=>({status:'ok',days:[]}),
   claudeLimits:async()=>{throw Error('no CLI');},
 };
