@@ -24,6 +24,8 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     item.button?.image = NSImage(systemSymbolName: "binoculars", accessibilityDescription: "Observatory")
     item.button?.imagePosition = .imageLeading
     let menu = NSMenu()
+    // Rows have no action but should read as text, not as greyed-out items.
+    menu.autoenablesItems = false
     menu.delegate = self
     item.menu = menu
     show()
@@ -87,9 +89,18 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.removeAllItems()
     var title = "?"
     var stale = true
-    func line(_ text: String) {
+    var waiting = 0
+    // Section names in bold, rows in the normal colour, detail rows a step quieter.
+    func line(_ text: String, quiet: Bool = false) {
       let row = NSMenuItem(title: text, action: nil, keyEquivalent: "")
-      row.isEnabled = false
+      let trimmed = text.trimmingCharacters(in: .whitespaces)
+      let depth = text.prefix { $0 == " " }.count
+      let font: NSFont = depth == 0 && !quiet ? .menuFont(ofSize: 0).bold : .menuFont(ofSize: depth >= 4 ? 12 : 0)
+      let color: NSColor = quiet || depth >= 4 ? .secondaryLabelColor : .labelColor
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.firstLineHeadIndent = CGFloat(depth == 0 ? 0 : depth >= 4 ? 24 : 10)
+      paragraph.headIndent = paragraph.firstLineHeadIndent
+      row.attributedTitle = NSAttributedString(string: trimmed, attributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
       menu.addItem(row)
     }
     if nodeMissing {
@@ -102,6 +113,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let glance = json["glance"] as? [String: Any] {
       title = glance["title"] as? String ?? title
+      waiting = glance["waiting"] as? Int ?? 0
       for text in glance["lines"] as? [String] ?? [] {
         if text.isEmpty { menu.addItem(.separator()) } else { line(text) }
       }
@@ -109,9 +121,9 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
       if let generated = json["generatedAt"] as? String, let at = ISO8601DateFormatter.withFractions.date(from: generated) {
         let age = Date().timeIntervalSince(at)
         stale = age > 15 * 60
-        line(stale ? "Combined \(Glance.span(age)) ago, not updated recently" : "Combined \(Glance.span(age)) ago")
+        line(stale ? "Updated \(Glance.span(age)) ago, not recently" : "Updated \(Glance.span(age)) ago", quiet: true)
       } else {
-        line("Combined: Unknown time")
+        line("Updated: Unknown time", quiet: true)
       }
       if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
         for spoke in spokes where (spoke["pull"] as? String) != "ok" {
@@ -133,7 +145,12 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.addItem(NSMenuItem(title: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     // Short title: one number, the lowest limit left. The menu has the rest.
     lastTitle = title
-    item.button?.title = stale ? " \(title)?" : " \(title)"
+    // One number, the lowest limit left, and an amber dot when an agent is waiting on you.
+    let text = NSMutableAttributedString(string: stale ? " \(title)?" : " \(title)", attributes: [.font: NSFont.menuBarFont(ofSize: 0)])
+    if waiting > 0 && !stale {
+      text.append(NSAttributedString(string: " ●", attributes: [.font: NSFont.menuBarFont(ofSize: 9), .foregroundColor: NSColor.systemOrange, .baselineOffset: 1.5]))
+    }
+    item.button?.attributedTitle = text
     item.button?.toolTip = stale ? "Observatory: not updated recently" : "Observatory: lowest limit left"
   }
 
@@ -168,6 +185,10 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
       DispatchQueue.main.async { done(up) }
     }.resume()
   }
+}
+
+extension NSFont {
+  var bold: NSFont { NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask) }
 }
 
 extension ISO8601DateFormatter {

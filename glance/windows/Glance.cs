@@ -42,6 +42,7 @@ namespace Observatory
         SynchronizationContext ui;
         DateTime tickStarted = DateTime.MinValue;
         bool nodeMissing;
+        Font boldFont;
         readonly System.Windows.Forms.Timer openTimer = new System.Windows.Forms.Timer();
         int openTries;
 
@@ -135,11 +136,17 @@ namespace Observatory
             return (minutes / 60) + " h " + (minutes % 60) + " min";
         }
 
-        void Line(string text)
+        // Section names in bold, rows in the normal colour, detail rows a step quieter.
+        // Rows stay enabled so they read as text, not greyed-out items. Clicking one does nothing.
+        void Line(string text) { Line(text, false); }
+        void Line(string text, bool quiet)
         {
             if (text.Length == 0) { menu.Items.Add(new ToolStripSeparator()); return; }
-            var item = new ToolStripMenuItem(text);
-            item.Enabled = false;
+            int depth = text.Length - text.TrimStart(' ').Length;
+            var item = new ToolStripMenuItem(text.Trim());
+            item.Padding = new Padding(depth >= 4 ? 14 : depth > 0 ? 6 : 0, 0, 0, 0);
+            if (depth == 0 && !quiet) item.Font = boldFont ?? (boldFont = new Font(menu.Font, FontStyle.Bold));
+            if (quiet || depth >= 4) item.ForeColor = SystemColors.GrayText;
             menu.Items.Add(item);
         }
 
@@ -147,6 +154,7 @@ namespace Observatory
         {
             menu.Items.Clear();
             string title = "?";
+            int waiting = 0;
             bool stale = true;
             if (nodeMissing) { Line("Node was not found at the saved path. Run npm run setup again."); Line(""); }
             if (settings == null)
@@ -174,6 +182,7 @@ namespace Observatory
                 {
                     object value;
                     if (glance.TryGetValue("title", out value) && value is string) title = (string)value;
+                    if (glance.TryGetValue("waiting", out value) && value is int) waiting = (int)value;
                     var lines = glance.TryGetValue("lines", out value) ? value as IList : null;
                     if (lines != null) foreach (object line in lines) Line(line as string ?? "");
                     Line("");
@@ -182,9 +191,9 @@ namespace Observatory
                     {
                         var age = DateTime.UtcNow - at;
                         stale = age.TotalMinutes > 15;
-                        Line("Combined " + Span(age) + " ago" + (stale ? ", not updated recently" : ""));
+                        Line("Updated " + Span(age) + " ago" + (stale ? ", not recently" : ""), true);
                     }
-                    else Line("Combined: Unknown time");
+                    else Line("Updated: Unknown time", true);
                 }
             }
             if (tick != null && !tick.HasExited) Line("Refreshing...");
@@ -193,13 +202,13 @@ namespace Observatory
             var refresh = menu.Items.Add("Refresh", null, (s, e) => RunTick());
             refresh.Enabled = tick == null || tick.HasExited;
             menu.Items.Add("Quit Observatory", null, (s, e) => Quit());
-            string tip = "Observatory " + title + (stale ? " (not updated recently)" : " lowest limit left");
+            string tip = "Observatory " + title + (stale ? " (not updated recently)" : waiting > 0 ? " left, " + waiting + " waiting on you" : " lowest limit left");
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
-            SetIcon(stale ? title + "?" : title);
+            SetIcon(stale ? title + "?" : title, waiting > 0 && !stale);
         }
 
         // The tray has no room for text, so the number is drawn into the icon.
-        void SetIcon(string text)
+        void SetIcon(string text, bool attention)
         {
             string shown = text.Replace("%", "");
             if (shown.Length > 3) shown = shown.Substring(0, 3);
@@ -216,6 +225,11 @@ namespace Observatory
                 format.Alignment = StringAlignment.Center;
                 format.LineAlignment = StringAlignment.Center;
                 graphics.DrawString(shown, font, foreground, new RectangleF(0, 0, 32, 32), format);
+                // An amber dot in the corner when an agent is waiting on you.
+                if (attention)
+                    using (var dot = new SolidBrush(Color.FromArgb(240, 160, 40)))
+                    using (var ring = new Pen(Color.FromArgb(9, 9, 11), 2f))
+                    { graphics.FillEllipse(dot, 21, 1, 10, 10); graphics.DrawEllipse(ring, 21, 1, 10, 10); }
                 var handle = bitmap.GetHicon();
                 var next = (Icon)Icon.FromHandle(handle).Clone();
                 DestroyIcon(handle);
