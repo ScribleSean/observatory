@@ -47,3 +47,6 @@ __pycache__/
 /native/windows/bin/
 /native/windows/obj/
 /native/windows/release/
+
+# hub rebuild
+/observatory.config.json

@@ -1,0 +1,13 @@
+{
+  "device": { "name": "Mac" },
+  "sources": {
+    "screenTime": true,
+    "codex": true,
+    "codexLimits": true,
+    "claudeCode": true,
+    "claudeLimits": true
+  },
+  "hub": {
+    "spokes": []
+  }
+}
