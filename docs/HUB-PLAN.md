@@ -70,7 +70,7 @@ A Codex review of the spec and spike raised five points. How the build handles e
 ## Known limits
 
 - When a tick hits its 4 minute deadline, or an app stops a hung tick, child processes it started (ssh, the screen time PowerShell script, the Codex client) are not stopped with it. The next tick takes over the lock correctly.
-- The C# tray app has been compiled only by CI configuration on paper. It has not run yet. It is compiled by `npm run setup` on the PC and by the Windows CI job.
+- The C# tray app has not been compiled or run yet, because this Mac has no C# compiler. `npm run setup` on the PC and the Windows CI job compile it.
 
 ## Proposed AGENTS.md rewrite (not applied)
 
