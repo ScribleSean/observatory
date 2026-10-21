@@ -1,6 +1,6 @@
 # Roadmap
 
-> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the hub plan](HUB-PLAN.md).
+> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the design notes](HUB-PLAN.md).
 
 Observatory is Sean's personal Windows and Mac app, built in public. Native collection, the application windows and tray/menu-bar panels are the priority. The source stays public. There is no consumer launch, hosted service or standalone Linux app in this plan.
 

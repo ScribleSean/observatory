@@ -142,7 +142,7 @@ npm test
 npm run lint
 ```
 
-`npm run tick` runs one collection by hand. [The hub plan](docs/HUB-PLAN.md) maps the code to the design, and [the intro storyboard](docs/INTRO-STORYBOARD.md) describes a short product video.
+`npm run tick` runs one collection by hand. [The design notes](docs/HUB-PLAN.md) maps the code to the design, and [the intro storyboard](docs/INTRO-STORYBOARD.md) describes a short product video.
 
 | Part | Files |
 | --- | --- |

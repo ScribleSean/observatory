@@ -1,6 +1,6 @@
 # Design direction
 
-> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the hub plan](HUB-PLAN.md).
+> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the design notes](HUB-PLAN.md).
 
 Agreed on 2026-10-13 between the owner and the coordinator session, from `main` at `57518b7` (version 0.3.14 build 40). This document records direction. It is not a build, an installed-app result or a verification record. Nothing described here as planned exists until [the parity table](PARITY.md) marks it Done for a platform.
 

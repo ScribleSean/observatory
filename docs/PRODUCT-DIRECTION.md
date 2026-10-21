@@ -1,6 +1,6 @@
 # Product direction
 
-> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the hub plan](HUB-PLAN.md).
+> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the design notes](HUB-PLAN.md).
 
 Scope revised October 4, 2026. Earlier implementation notes below are historical evidence, not a new build or installed-app verification.
 
