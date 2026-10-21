@@ -1,0 +1,71 @@
+{
+ "plain": {
+  "error": true
+ },
+ "cached": {
+  "ok": {
+   "status": "ok",
+   "profiles": [
+    {
+     "date": "2026-10-14",
+     "model": "unknown",
+     "effort": "unknown",
+     "speed": "unknown",
+     "inputTokens": 40,
+     "cacheReadTokens": 50,
+     "cacheCreationTokens": 10,
+     "outputTokens": 20,
+     "reasoningOutputTokens": 5,
+     "totalTokens": 120
+    }
+   ],
+   "tokenProfiles": [
+    {
+     "date": "2026-10-14",
+     "model": "unknown",
+     "effort": "unknown",
+     "speed": "unknown",
+     "inputTokens": 40,
+     "cacheReadTokens": 50,
+     "cacheCreationTokens": 10,
+     "outputTokens": 20,
+     "reasoningOutputTokens": 5,
+     "totalTokens": 120
+    }
+   ],
+   "hourTotals": [
+    {
+     "date": "2026-10-14",
+     "hours": [
+      0,
+      0,
+      0,
+      0,
+      120,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "tools": [],
+   "scope": "Recent saved Codex logs only"
+  }
+ }
+}

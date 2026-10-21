@@ -1,0 +1,134 @@
+{
+ "plain": {
+  "ok": {
+   "status": "ok",
+   "profiles": [
+    {
+     "date": "2026-10-14",
+     "model": "gpt-6-astra",
+     "effort": "high",
+     "speed": "unknown",
+     "inputTokens": 2920,
+     "cacheReadTokens": 3650,
+     "cacheCreationTokens": 730,
+     "outputTokens": 1460,
+     "reasoningOutputTokens": 365,
+     "totalTokens": 8760
+    }
+   ],
+   "tokenProfiles": [
+    {
+     "date": "2026-10-14",
+     "model": "gpt-6-astra",
+     "effort": "high",
+     "speed": "unknown",
+     "inputTokens": 2920,
+     "cacheReadTokens": 3650,
+     "cacheCreationTokens": 730,
+     "outputTokens": 1460,
+     "reasoningOutputTokens": 365,
+     "totalTokens": 8760
+    }
+   ],
+   "hourTotals": [
+    {
+     "date": "2026-10-14",
+     "hours": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      8760,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "tools": [],
+   "scope": "Recent saved Codex logs only"
+  }
+ },
+ "cached": {
+  "ok": {
+   "status": "ok",
+   "profiles": [
+    {
+     "date": "2026-10-14",
+     "model": "gpt-6-astra",
+     "effort": "high",
+     "speed": "unknown",
+     "inputTokens": 2920,
+     "cacheReadTokens": 3650,
+     "cacheCreationTokens": 730,
+     "outputTokens": 1460,
+     "reasoningOutputTokens": 365,
+     "totalTokens": 8760
+    }
+   ],
+   "tokenProfiles": [
+    {
+     "date": "2026-10-14",
+     "model": "gpt-6-astra",
+     "effort": "high",
+     "speed": "unknown",
+     "inputTokens": 2920,
+     "cacheReadTokens": 3650,
+     "cacheCreationTokens": 730,
+     "outputTokens": 1460,
+     "reasoningOutputTokens": 365,
+     "totalTokens": 8760
+    }
+   ],
+   "hourTotals": [
+    {
+     "date": "2026-10-14",
+     "hours": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      8760,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    }
+   ],
+   "tools": [],
+   "scope": "Recent saved Codex logs only"
+  }
+ }
+}
