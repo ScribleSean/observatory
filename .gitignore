@@ -51,3 +51,4 @@ __pycache__/
 # hub rebuild
 /observatory.config.json
 /build/
+/docs/screens/
