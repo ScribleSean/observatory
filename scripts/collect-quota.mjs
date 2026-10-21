@@ -13,7 +13,8 @@ import {quotaPace} from './quota-pace.mjs';
 const execute=promisify(execFile);
 const disconnected=()=>({status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]});
 
-export async function findCodexExecutable({runtime,appCandidates,toolCandidates}={}) {
+export async function findCodexExecutable({runtime,appCandidates,toolCandidates,configured}={}) {
+  if(configured)return configured;
   if(process.platform==='darwin' && typeof runtime==='string' && path.isAbsolute(runtime)) {
     try {
       const file=path.join(runtime,'local.config.json'),info=await lstat(file);
@@ -34,7 +35,9 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates}
   if(process.platform==='darwin') {
     const apps=appCandidates??['/Applications',path.join(homedir(),'Applications')].flatMap(root=>
       ['ChatGPT.app','Codex.app'].map(app=>path.join(root,app,'Contents/Resources/codex')));
-    candidates=[...apps,...(toolCandidates??['/opt/homebrew/bin/codex','/usr/local/bin/codex'])];
+    // Login items start with a short PATH, so the usual install folders are listed too.
+    const onPath=(process.env.PATH??'').split(path.delimiter).filter(folder=>path.isAbsolute(folder)).map(folder=>path.join(folder,'codex'));
+    candidates=[...apps,...(toolCandidates??['/opt/homebrew/bin/codex','/usr/local/bin/codex',path.join(homedir(),'.local/bin/codex'),...onPath])];
   } else if(process.platform==='win32') {
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
     const {stdout}=await execute(powershell,['-NoProfile','-NonInteractive','-Command',

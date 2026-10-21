@@ -21,7 +21,7 @@ test('only sources set to true are read, and a failed read is Unknown',async()=>
   const spy=Object.fromEntries(Object.entries(readers).map(([key,read])=>[key,()=>{called.push(key);return read();}]));
   const config=testConfig('/unused',{sources:{screenTime:false,codex:true,codexLimits:true,claudeCode:false,claudeLimits:true}});
   const {data,status}=await buildSnapshot(config,spy,{now:at});
-  assert.deepEqual(called.sort(),['claudeLimits','codex','codexLimits']);
+  assert.deepEqual(called.sort((a,b)=>a.localeCompare(b)),['claudeLimits','codex','codexLimits']);
   assert.equal(data.activity[0].status,'not-connected');
   assert.equal(data.providerTokenSources[0].status,'not-connected');
   assert.equal(data.claudeLimits.status,'unavailable');

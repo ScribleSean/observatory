@@ -2,7 +2,7 @@
 // Only sources set to true in observatory.config.json are read.
 import {spawn,execFile} from 'node:child_process';
 import {homedir} from 'node:os';
-import {readFile} from 'node:fs/promises';
+import {readFile,realpath} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {loadConfig} from '../lib/config.mjs';
@@ -58,9 +58,10 @@ export function defaultReaders(config) {
       }
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
-    codex:async()=>collectSettings(path.join(homedir(),'.codex'),{cacheDirectory:await privateFolder(config.dataFolder,'private-codex')}),
+    // The cache refuses a path that runs through a link, so pass the resolved one.
+    codex:async()=>collectSettings(path.join(homedir(),'.codex'),{cacheDirectory:await realpath(await privateFolder(config.dataFolder,'private-codex'))}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
-      ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder})}
+      ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient(),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:()=>collectClaudeUsage(claudeFolder()),
     claudeLimits:async()=>{
