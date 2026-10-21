@@ -1,5 +1,7 @@
 # Design direction
 
+> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the hub plan](HUB-PLAN.md).
+
 Agreed on 2026-10-13 between the owner and the coordinator session, from `main` at `57518b7` (version 0.3.14 build 40). This document records direction. It is not a build, an installed-app result or a verification record. Nothing described here as planned exists until [the parity table](PARITY.md) marks it Done for a platform.
 
 This file replaces a short note about the earlier Material 3 web dashboard. That note remains in Git history at `57518b7`. [Brand guidance](BRAND.md) still owns the mark and the palette values. Where an older document disagrees with this one about scope or audience, this one is newer.

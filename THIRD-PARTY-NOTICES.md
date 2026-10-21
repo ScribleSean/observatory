@@ -1,28 +1,24 @@
 # Third-party software
 
-This project was scaffolded with OpenAI Sites and uses React, Vite and the dependencies declared in package.json. Their respective licenses remain applicable. Inspect the installed packages for full notices.
+Observatory's own code is under the [MIT license](LICENSE). The pieces below come from others.
 
-ActivityWatch and ccusage are independent external tools. They are not bundled, re-licensed or represented as this project's original work.
+## Shipped in the dashboard
 
-Inter Tight is bundled from the Google Fonts repository under the SIL Open Font License 1.1. Its complete copyright and license text is retained in `public/fonts/OFL.txt`, copied into Mac Resources and included in generated web notices. The app makes no font-service requests.
+`npm run setup` builds the dashboard into `dist/dashboard` on your computer. That build contains:
 
-Fraunces and JetBrains Mono are bundled from the Google Fonts repository under the SIL Open Font License 1.1, for the Almanac, Instrument and Amber CRT skins of the shared web viewer. Their complete copyright and license texts are retained in `public/fonts/Fraunces-OFL.txt` and `public/fonts/JetBrainsMono-OFL.txt` and included in the generated web notices. Fraunces is copyright 2018 The Fraunces Project Authors. JetBrains Mono is copyright 2020 The JetBrains Mono Project Authors. They are used by the web viewer only and are not copied into the native Mac resources or the Windows Fonts folder.
+| Package | License |
+| --- | --- |
+| [React](https://github.com/facebook/react) and React DOM, with their scheduler | MIT |
+| [Inter Tight](https://github.com/googlefonts/inter-tight) | SIL Open Font License 1.1, in `public/fonts/OFL.txt` |
+| [Fraunces](https://github.com/undercasetype/Fraunces) | SIL Open Font License 1.1, in `public/fonts/Fraunces-OFL.txt` |
+| [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) | SIL Open Font License 1.1, in `public/fonts/JetBrainsMono-OFL.txt` |
 
-## Native package notices
+## Used only to build and test
 
-Mac candidates include Node and the Astral python-build-standalone distribution of CPython. Versions and archive checksums are pinned in `native/mac/runtime-assets.json`. Their original notices, Python dependency notices, and the generated web notices live inside the app's Resources directory. See [Mac packaging](docs/MAC.md) for the documented system-zlib manifest exception. The app does not replace system runtimes.
+Vite, the React plugin for Vite, TypeScript, oxlint and oxfmt run on your computer during setup or development. They are listed in `package.json` with their versions, and none of them ships in the dashboard or the menu bar and tray apps.
 
-Mac builds made with `--updater-archive` include the pinned Sparkle framework. Its archive checksum is recorded in `native/mac/updater-tool.json`. The original combined license notice is included as `Contents/Resources/Sparkle-LICENSE.txt`.
+## Not bundled
 
-The native dashboard build generates `assets/third-party-licenses.txt` from JavaScript packages present in the emitted chunks and the explicitly imported CSS packages. A required package without a license file fails the build. Source checkout paths are not included in the generated notice.
+Observatory uses Node.js, ActivityWatch, Claude Code and Codex as they are already installed on your computer. It downloads and bundles none of them. The menu bar app is built with the Swift compiler from Apple's command line tools, and the tray app with the C# compiler that comes with Windows.
 
-Windows package candidates include private copies of Node, Python with timezone data, and the .NET desktop runtime. Their versions and download checksums are pinned in `native/windows/runtime-assets.json` and the Windows project file. These copies do not replace system installations.
-
-The Windows package recipe also includes the pinned WinSparkle x64 updater DLL.
-Its distribution and runtime checksums are recorded in
-`native/windows/updater-tool.json`. The original WinSparkle and Expat notices
-are included beside the DLL as `Updater/COPYING` and `Updater/COPYING.expat`.
-
-The package's `Licenses` directory contains the Node and Python distribution notices, timezone-data license files, .NET notices, WebView2 SDK license and notice, and generated dashboard notices. Original notices inside the Python distribution are also retained. The installed Microsoft Edge WebView2 Runtime is a separate system prerequisite and is not bundled by this packaging script.
-
-Python uses the official [embeddable distribution](https://docs.python.org/3/using/windows.html#the-embeddable-package), with timezone data vendored alongside it. No pip installation or package download occurs when the application collects records.
+The notices for the full app up to build 44, which did bundle runtimes, are in the `archive/full-app` tag.

@@ -1,5 +1,7 @@
 # Product direction
 
+> Historical. This describes the full app up to build 44. The current app is described in the [README](../README.md) and [the hub plan](HUB-PLAN.md).
+
 Scope revised October 4, 2026. Earlier implementation notes below are historical evidence, not a new build or installed-app verification.
 
 Audience and interface direction revised October 13, 2026. See [the design direction](DESIGN.md) and [the parity table](PARITY.md). Where this document says consumer onboarding, a new pairing flow or the demo are not goals, the design direction is newer: the app should be usable by anyone who installs it, Tailscale with a pairing code is the intended pairing route for other people, and the demo is to mirror the native apps. Collection reliability and the verification gates below are unchanged.
