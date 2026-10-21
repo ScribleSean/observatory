@@ -35,3 +35,15 @@ test('the computer name falls back to Mac or PC and drops control characters',as
   assert.equal(await computerName('win32',{COMPUTERNAME:'DESK\u0007TOP'}),'DESKTOP');
   assert.equal(await computerName('win32',{}),'PC');
 });
+
+test('a status line that points at a missing bridge is noticed',()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
+  const {writeFile}=await import('node:fs/promises');
+  const path=(await import('node:path')).default;
+  const {brokenStatusline}=await import('../scripts/setup.mjs');
+  const settings=path.join(folder,'settings.json');
+  await writeFile(settings,JSON.stringify({statusLine:{type:'command',command:'"/n/node" "/gone/Observatory.app/claude-statusline-bridge.mjs" --runtime "/d"'}}));
+  assert.equal(await brokenStatusline(settings),'/gone/Observatory.app/claude-statusline-bridge.mjs');
+  await writeFile(settings,JSON.stringify({statusLine:{type:'command',command:'echo hi'}}));
+  assert.equal(await brokenStatusline(settings),null);
+  assert.equal(await brokenStatusline(path.join(folder,'missing.json')),null);
+})));

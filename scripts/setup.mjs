@@ -11,6 +11,7 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {REPO,CONFIG_FILE,loadConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
+import {defaultSettingsPath} from './claude-statusline-install.mjs';
 
 const execute=promisify(execFile);
 export const LABEL='io.github.observatory.glance';
@@ -79,6 +80,17 @@ export async function stableNode(platform=process.platform) {
   return first && existsSync(first)?first:process.execPath;
 }
 
+// The old app may have pointed Claude Code's status line at a bridge inside its
+// own bundle. When that file is gone the status line breaks, so say how to fix it.
+export async function brokenStatusline(settingsPath) {
+  let settings;
+  try {settings=JSON.parse(await readFile(settingsPath,'utf8'));}catch {return null;}
+  const command=settings?.statusLine?.command;
+  if(typeof command!=='string')return null;
+  const bridge=[...command.matchAll(/"([^"]+)"/g)].map(match=>match[1]).find(value=>value.endsWith('claude-statusline-bridge.mjs'));
+  return bridge && !existsSync(bridge)?bridge:null;
+}
+
 // The name people know the computer by, cleaned to fit the settings file.
 export async function computerName(platform=process.platform,environment=process.env) {
   const raw=platform==='darwin'?await quiet('/usr/sbin/scutil',['--get','ComputerName']):environment.COMPUTERNAME;
@@ -139,6 +151,10 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
     if(!dryRun)throw Error(message);
     log(`  Note: ${message}`);
   }
+  try {
+    if(await brokenStatusline(defaultSettingsPath()))
+      log(`  Note: Claude Code's status line points at a bridge file that no longer exists. To use this copy instead, run: node scripts/claude-statusline-install.mjs install --runtime "${config.dataFolder}" --consent`);
+  } catch {}
   if(config.sources.screenTime && !await activityWatchUp())
     log('  Note: ActivityWatch is not answering on 127.0.0.1:5600. Screen time stays Unknown until it runs.');
 

@@ -81,8 +81,11 @@ export function AgentsView({ agents, now }: { agents: AgentDevice[]; now: number
             : <>
               <h4>{STRINGS.agents.claudeSessions}</h4>
               <Sessions device={device} now={now} />
-              <h4>{STRINGS.agents.codexJobs}</h4>
-              <Jobs device={device} now={now} />
+              {/* codex-job is optional. Without its folder the section is left out, not shown empty. */}
+              {device.codexFound || (device.jobs ?? []).length ? <>
+                <h4>{STRINGS.agents.codexJobs}</h4>
+                <Jobs device={device} now={now} />
+              </> : null}
             </>}
         </Card>
       ))}
