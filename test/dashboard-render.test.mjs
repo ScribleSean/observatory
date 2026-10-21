@@ -84,3 +84,16 @@ test('the skin hook returns Sage',()=>{
   assert.equal(seen[0].skinId,'sage');
   assert.match(seen[0].css,/--ob-background/);
 });
+
+test('the Agents page has clear empty, off and error states',()=>{
+  const empty=render({combined:{...both,glance:{...both.glance,agents:[]}},section:'agents'});
+  assert.ok(empty.includes('No agent status yet'));
+  const off=render({combined:{...both,glance:{...both.glance,agents:[{host:'Mac',name:'Mac',status:'off'}]}},section:'agents'});
+  assert.ok(off.includes('Set sources.agents to true'));
+  const failed=render({combined:{...both,glance:{...both.glance,agents:[{host:'Mac',name:'Mac',status:'unknown'}]}},section:'agents'});
+  assert.ok(failed.includes('could not be read'));
+  assert.ok(failed.includes('>Unknown<'));
+  const noCodexJob=render({combined:{...both,glance:{...both.glance,agents:[{host:'Mac',name:'Mac',status:'ok',counts:{},sessions:[],jobs:[],claudeFound:true,codexFound:false}]}},section:'agents'});
+  assert.ok(!noCodexJob.includes('Codex jobs'));
+  assert.ok(noCodexJob.includes('No sessions in the last day'));
+});
