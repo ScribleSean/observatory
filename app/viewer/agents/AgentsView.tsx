@@ -28,7 +28,7 @@ const when = (value: string | null | undefined, now: number) => {
 
 function Sessions({ device, now }: { device: AgentDevice; now: number }) {
   const sessions = device.sessions ?? [];
-  if (!device.claudeFound && sessions.length === 0) return <p className="ob-meta">{STRINGS.agents.notFound}</p>;
+  if (!device.claudeFound && sessions.length === 0) return <p className="ob-meta">{STRINGS.agents.claudeNotFound}</p>;
   if (sessions.length === 0) return <p className="ob-meta">{STRINGS.agents.none}</p>;
   return (
     <ul className="ob-agent-list">
@@ -66,6 +66,7 @@ function Jobs({ device, now }: { device: AgentDevice; now: number }) {
 }
 
 export function AgentsView({ agents, now }: { agents: AgentDevice[]; now: number }) {
+  if (agents.length === 0) return <output className="ob-meta ob-agents-empty ob-block">{STRINGS.agents.empty}</output>;
   return (
     <>
     <div className="ob-agents">
@@ -76,8 +77,8 @@ export function AgentsView({ agents, now }: { agents: AgentDevice[]; now: number
             {device.status === 'ok' && device.stale && device.checkedAt
               ? <span className="ob-meta warn">{format(STRINGS.overview.asOf, { time: when(device.checkedAt, now) })}</span> : null}
           </div>
-          {device.status === 'off' ? <p className="ob-meta">{STRINGS.agents.off}</p>
-            : device.status !== 'ok' ? <p className="ob-meta">{STRINGS.status.unknown}</p>
+          {device.status === 'off' ? <p className="ob-meta">{STRINGS.agents.offHint}</p>
+            : device.status !== 'ok' ? <output className="ob-meta warn ob-block">{STRINGS.agents.unavailable}</output>
             : <>
               <h4>{STRINGS.agents.claudeSessions}</h4>
               <Sessions device={device} now={now} />

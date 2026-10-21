@@ -395,7 +395,8 @@ export const STRINGS = {
     "tokens": "{value} tokens",
     "bothNote": "both computers, not deduplicated",
     "asOf": "as of {time}",
-    "topApps": "largest app categories"
+    "topApps": "largest app categories",
+    "agentsUnknown": "Unknown"
   },
   "agents": {
     "waiting": "Waiting on you",
@@ -413,7 +414,12 @@ export const STRINGS = {
     "since": "since {time}",
     "finished": "finished {time}",
     "started": "started {time}",
-    "privacy": "Status, project names and session names only. Messages, prompts and job output are never read."
+    "privacy": "Status, project names and session names only. Messages, prompts and job output are never read.",
+    "empty": "No agent status yet. It appears after the next five-minute collection.",
+    "unavailable": "Agent status could not be read on this computer. It is tried again every five minutes.",
+    "offHint": "Turned off. Set sources.agents to true in observatory.config.json to show it.",
+    "claudeNotFound": "Claude Code sessions were not found on this computer.",
+    "computers": "Computers"
   }
 } as const;
 

@@ -14,7 +14,9 @@
 .ob-dashboard h1 { display: flex; align-items: center; gap: 10px; font-size: var(--ob-title-size); font-weight: 600; letter-spacing: var(--ob-title-tracking); }
 .ob-dashboard h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
 .ob-dashboard h4 { margin: var(--ob-space-4) 0 var(--ob-space-2); font-size: var(--ob-meta-size); font-weight: 500; color: var(--ob-muted); text-transform: uppercase; letter-spacing: 0.6px; }
-.ob-dashboard button:focus-visible, .ob-dashboard select:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.ob-dashboard button:focus-visible, .ob-dashboard select:focus-visible, .ob-dashboard summary:focus-visible, .ob-dashboard input:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.ob-agents-empty { padding: var(--ob-space-5) 0; }
+.ob-dashboard output.ob-block { display: block; }
 .ob-dashboard main { min-width: 0; overflow-wrap: anywhere; }
 .ob-dashboard .ob-card { margin-top: var(--ob-space-3); padding: 18px 20px; border-radius: var(--ob-card-radius, 16px); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 .ob-dashboard .ob-card p { margin: 0; }
@@ -62,7 +64,9 @@
 .ob-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .ob-status-working { color: var(--ob-strong); background: color-mix(in srgb, var(--ob-accent) 18%, transparent); }
 .ob-status-working i { background: var(--ob-accent); animation: ob-pulse 1.8s ease-in-out infinite; }
-.ob-status-waiting { color: var(--ob-warning); background: color-mix(in srgb, var(--ob-warning) 15%, transparent); }
+/* Darkened toward the text colour so small text keeps 4.5:1 on the tint in both modes. */
+.ob-status-waiting { color: color-mix(in srgb, var(--ob-warning) 75%, var(--ob-text)); background: color-mix(in srgb, var(--ob-warning) 12%, transparent); }
+.ob-status-waiting i { background: var(--ob-warning); }
 .ob-status-stopped { color: var(--ob-error); background: color-mix(in srgb, var(--ob-error) 12%, transparent); }
 @keyframes ob-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 

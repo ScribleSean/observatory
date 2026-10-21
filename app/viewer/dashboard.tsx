@@ -26,7 +26,7 @@ export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) =
 function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
   if (devices.length < 2) return null;
   return (
-    <ul className="ob-chips" aria-label={STRINGS.devices.device}>
+    <ul className="ob-chips" aria-label={STRINGS.agents.computers}>
       {devices.map(device => {
         const age = freshness(device.collectedAt ?? '', now);
         return (

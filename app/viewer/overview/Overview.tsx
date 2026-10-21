@@ -44,7 +44,9 @@ function AgentsCard({ glance }: { glance: Glance }) {
   const sessions = devices.flatMap(device => (device.stale ? [] : device.sessions ?? []).filter(s => s.status === 'waiting' || s.status === 'working')
     .map(session => ({ ...session, device: device.name })));
   const waiting = glance.waiting ?? 0, working = glance.working ?? 0;
+  const readable = devices.filter(device => device.status === 'ok');
   const headline = devices.length === 0 ? STRINGS.overview.agentsOff
+    : readable.length === 0 ? STRINGS.overview.agentsUnknown
     : waiting ? format(STRINGS.overview.agentsWaiting, { count: waiting })
     : working ? format(STRINGS.overview.agentsWorking, { count: working }) : STRINGS.overview.agentsQuiet;
   return (
