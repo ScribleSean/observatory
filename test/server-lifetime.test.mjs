@@ -31,7 +31,8 @@ for(const signal of ['SIGTERM','SIGKILL']) {
     {stdio:'ignore',env:{...process.env,OBSERVATORY_CONFIG:config,OBSERVATORY_PARENT_CHECK_MS:'200'}});
     assert.ok(await until(async()=>(await readFile(pidFile,'utf8').catch(()=>'')).length>0,5000),'server started');
     const server=Number(await readFile(pidFile,'utf8'));
-    assert.ok(await until(async()=>(await fetch(`http://127.0.0.1:${port}/`).catch(()=>null))?.status===404 || alive(server),5000));
+    // Wait until the server answers, as it would before the app opens the browser.
+    assert.ok(await until(async()=>Boolean(await fetch(`http://127.0.0.1:${port}/`).catch(()=>null)),10000),'server listening');
     assert.equal(alive(server),true);
     app.kill(signal);
     const gone=await until(()=>!alive(server),5000);
@@ -47,4 +48,15 @@ test('both apps start the server with --with-parent, and the Mac app stops it on
   assert.match(swift,/server\?\.terminate\(\)\n\s+self\?\.tick\?\.terminate\(\)/);
   const cs=await readFile(path.join(repo,'glance/windows/Glance.cs'),'utf8');
   assert.match(cs,/Node\("serve-local\.mjs", true, " --with-parent"\)/);
+});
+
+test('a server whose app was already gone when it started exits at once',async()=>{
+  const {watchParent}=await import('../serve-local.mjs');
+  let exited=0;
+  watchParent(process.pid,{exit:()=>{exited++;},currentParent:()=>12345})();
+  assert.equal(exited,1);
+  if(process.platform!=='win32') {watchParent(1,{exit:()=>{exited++;}})();assert.equal(exited,2);}
+  const stop=watchParent(process.pid,{exit:()=>{exited+=10;},currentParent:()=>process.pid});
+  stop();
+  assert.ok(exited<10);
 });

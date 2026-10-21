@@ -65,7 +65,10 @@ export function createLocalServer({assets=path.join(here,'dist/dashboard'),dataF
 // the parent id stays, so the check also asks whether that process still exists.
 export function watchParent(parent,{intervalMs=2000,exit=()=>process.exit(0),currentParent=()=>process.ppid}={}) {
   const alive=pid=>{try {process.kill(pid,0);return true;}catch(error) {return error.code==='EPERM';}};
-  const timer=setInterval(()=>{if(currentParent()!==parent || !alive(parent))exit();},intervalMs);
+  // On macOS a parent id of 1 means the app was already gone when the server started.
+  const gone=()=>(process.platform!=='win32' && parent===1) || currentParent()!==parent || !alive(parent);
+  if(gone()) {exit();return ()=>{};}
+  const timer=setInterval(()=>{if(gone())exit();},intervalMs);
   timer.unref();
   return ()=>clearInterval(timer);
 }
