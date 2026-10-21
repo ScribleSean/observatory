@@ -98,7 +98,7 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
         <DeviceChips devices={combined?.devices ?? []} now={now} />
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>
       </header>
-      {combined && <Overview glance={combined.glance} now={now} />}
+      {combined && <Overview glance={combined.glance} view={combined.view} generatedAt={combined.generatedAt} now={now} />}
       <nav className="ob-tabs" aria-label={STRINGS.sections.navigation}>
         {SECTIONS.map(([id, name]) => (
           <button key={id} type="button" aria-current={id === section ? 'page' : undefined} className={id === section ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>

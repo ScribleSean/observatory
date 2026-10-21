@@ -128,8 +128,11 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
         line("Updated: Unknown time", quiet: true)
       }
       if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
-        for spoke in spokes where (spoke["pull"] as? String) != "ok" {
-          line("\(spoke["name"] as? String ?? "Spoke"): \(spoke["pull"] as? String ?? "Unknown")")
+        // Say when reading from or writing back to the other computer failed.
+        for spoke in spokes {
+          let name = spoke["name"] as? String ?? "Other computer"
+          if let pull = spoke["pull"] as? String, pull != "ok" { line("\(name): could not read (\(pull))", quiet: true) }
+          else if let push = spoke["push"] as? String, push != "ok", push != "skipped" { line("\(name): could not write back (\(push))", quiet: true) }
         }
       }
     } else {

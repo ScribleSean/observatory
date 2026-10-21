@@ -163,3 +163,11 @@ test('write-back lands in an inbox that the spoke merges under its own lock',()=
   const again=await recombine(config,{now:()=>now+120000});
   assert.ok(again.devices.some(device=>device.host==='Mac'));
 }));
+
+test('a failed write-back is saved in combined.json',()=>withFolder(async folder=>{
+  await seed(folder,'usage.json',ownSnapshot('Mac',now));
+  const transport={pull:async()=>JSON.stringify(ownSnapshot('Windows',now)),push:async()=>{throw Error('timed out');}};
+  await runHub(testConfig(folder,{role:'hub',hub:{spokes:[pc]}}),{transport,now:()=>now});
+  const saved=await read(folder,'combined.json');
+  assert.deepEqual(saved.hub.spokes,[{name:'PC',host:'Windows',pull:'ok',push:'timed out'}]);
+}));

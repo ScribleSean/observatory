@@ -97,3 +97,27 @@ test('the Agents page has clear empty, off and error states',()=>{
   assert.ok(!noCodexJob.includes('Codex jobs'));
   assert.ok(noCodexJob.includes('No sessions in the last day'));
 });
+
+test('staleness is judged when the page draws, not when the file was written',()=>{
+  const at=new Date(now).toISOString();
+  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'ok',
+    sessions:[{tool:'claude-code',status:'waiting',project:'portfolio',updatedAt:at}],jobs:[]}]}));
+  const combined=combine([{host:'Mac',snapshot:mac}],{now});
+  // Drawn an hour later with no new file: the waiting agent is no longer claimed as current.
+  const later=render({combined,section:'limits',now:now+3600000});
+  assert.ok(!later.includes('1 waiting on you'));
+  assert.ok(later.includes('as of'));
+  // Drawn the next day: today's numbers are Unknown, with the last update time.
+  const nextDay=render({combined,section:'limits',now:now+26*3600000});
+  assert.ok(nextDay.includes('Last update was'));
+  const time=nextDay.slice(nextDay.indexOf('Screen time today'));
+  assert.ok(time.includes('class="ob-hero">Unknown<'));
+});
+
+test('a failed agent read shows Unknown, not nothing running',()=>{
+  const at=new Date(now).toISOString();
+  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'unavailable',codexStatus:'not-found',sessions:[],jobs:[]}]}));
+  const html=render({combined:combine([{host:'Mac',snapshot:mac}],{now}),section:'agents'});
+  assert.ok(!html.includes('Nothing running'));
+  assert.ok(html.includes('could not be read'));
+});

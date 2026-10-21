@@ -41,3 +41,8 @@ test('older WSL settings keys are ignored and never change the account switch',(
   assert.deepEqual(raw,{quota:true,quotaWslDistribution:'Ubuntu',wslDistribution:'Ubuntu',codex:false});
   assert.equal(windowsCollectorConfig({quota:false,quotaWslDistribution:'Ubuntu'}).quota,false);
 });
+
+test('a configured Codex path is used without searching',async()=>{
+  const client=await findWindowsQuotaClient({configured:'C:\\Tools\\codex.exe',findNative:async()=>{throw Error('should not search');}});
+  assert.deepEqual(client,{executable:'C:\\Tools\\codex.exe',prefix:[]});
+});

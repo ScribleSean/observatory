@@ -396,7 +396,8 @@ export const STRINGS = {
     "bothNote": "both computers, not deduplicated",
     "asOf": "as of {time}",
     "topApps": "largest app categories",
-    "agentsUnknown": "Unknown"
+    "agentsUnknown": "Unknown",
+    "lastDay": "Last update was {time}"
   },
   "agents": {
     "waiting": "Waiting on you",
@@ -419,7 +420,8 @@ export const STRINGS = {
     "unavailable": "Agent status could not be read on this computer. It is tried again every five minutes.",
     "offHint": "Turned off. Set sources.agents to true in observatory.config.json to show it.",
     "claudeNotFound": "Claude Code sessions were not found on this computer.",
-    "computers": "Computers"
+    "computers": "Computers",
+    "claudeUnavailable": "Claude Code sessions could not be read. Unknown until the next collection."
   }
 } as const;
 

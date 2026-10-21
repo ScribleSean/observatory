@@ -58,6 +58,7 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
   }
   const combined=combine(devices,{now:now(),generatedBy:config.host});
   combined.hub={role:'hub',spokes:report};
+  // Write locally first, so the hub's own view never waits on a slow spoke.
   const text=JSON.stringify(combined);
   await writeAtomic(path.join(folder,'combined.json'),text);
   for(const entry of report) {
@@ -65,6 +66,8 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
     try {await transport.push(config.hub.spokes.find(s=>s.name===entry.name),text);entry.push='ok';}
     catch(error) {entry.push=error.message;}
   }
+  // Then save how each write-back went, so the menu can say when one failed.
+  await writeAtomic(path.join(folder,'combined.json'),JSON.stringify(combined));
   return combined;
 }
 

@@ -65,7 +65,7 @@ export function defaultReaders(config) {
     codex:async()=>collectSettings(path.join(homedir(),'.codex'),{cacheDirectory:await realpath(await privateFolder(config.dataFolder,'private-codex'))}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
-      :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient(),readSnapshot:readWindowsQuotaSnapshot}),
+      :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:()=>collectClaudeUsage(claudeFolder()),
     agents:()=>readAgents(),
     claudeLimits:async()=>{

@@ -9,12 +9,21 @@ export type AgentJob = { tool: string; status: string; project?: string | null; 
 export type AgentDevice = {
   host: string; name: string; status: 'ok' | 'off' | 'unknown'; checkedAt?: string | null; stale?: boolean;
   counts?: Record<string, number>; sessions?: AgentSession[]; jobs?: AgentJob[]; claudeFound?: boolean; codexFound?: boolean;
+  claudeStatus?: string; codexStatus?: string;
 };
 
 const WORDS: Record<string, string> = {
   waiting: STRINGS.agents.waiting, working: STRINGS.agents.working, idle: STRINGS.agents.idle,
   done: STRINGS.agents.done, stopped: STRINGS.agents.stopped, unknown: STRINGS.agents.unknown,
 };
+
+// Judged when the page draws, not when the file was written, so a computer
+// that stopped reporting never shows old agents as current.
+export const AGENT_STALE_MS = 15 * 60000;
+export function agentsCurrent(device: AgentDevice, now: number) {
+  const checked = Date.parse(device.checkedAt ?? '');
+  return device.status === 'ok' && Number.isFinite(checked) && now - checked <= AGENT_STALE_MS && now - checked >= -2 * 60000;
+}
 
 export function StatusPill({ status }: { status: string }) {
   const known = Object.hasOwn(WORDS, status) ? status : 'unknown';
@@ -28,6 +37,7 @@ const when = (value: string | null | undefined, now: number) => {
 
 function Sessions({ device, now }: { device: AgentDevice; now: number }) {
   const sessions = device.sessions ?? [];
+  if (device.claudeStatus === 'unavailable' && sessions.length === 0) return <p className="ob-meta warn">{STRINGS.agents.claudeUnavailable}</p>;
   if (!device.claudeFound && sessions.length === 0) return <p className="ob-meta">{STRINGS.agents.claudeNotFound}</p>;
   if (sessions.length === 0) return <p className="ob-meta">{STRINGS.agents.none}</p>;
   return (
@@ -74,7 +84,7 @@ export function AgentsView({ agents, now }: { agents: AgentDevice[]; now: number
         <Card key={device.host} label={device.name}>
           <div className="ob-row">
             <h3>{device.name}</h3>
-            {device.status === 'ok' && device.stale && device.checkedAt
+            {device.status === 'ok' && !agentsCurrent(device, now) && device.checkedAt
               ? <span className="ob-meta warn">{format(STRINGS.overview.asOf, { time: when(device.checkedAt, now) })}</span> : null}
           </div>
           {device.status === 'off' ? <p className="ob-meta">{STRINGS.agents.offHint}</p>
