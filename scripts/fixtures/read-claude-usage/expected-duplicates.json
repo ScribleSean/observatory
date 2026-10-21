@@ -1,0 +1,99 @@
+{
+  "provider": "claude-code",
+  "status": "ok",
+  "scope": "Recorded Claude Code requests",
+  "days": [
+    {
+      "date": "2026-09-24",
+      "inputTokens": 9,
+      "cacheReadTokens": 4,
+      "cacheCreationTokens": 0,
+      "outputTokens": 26,
+      "totalTokens": 39,
+      "requestCount": 2,
+      "models": [
+        {
+          "model": "claude-sonnet-4-20250514",
+          "inputTokens": 9,
+          "cacheReadTokens": 4,
+          "cacheCreationTokens": 0,
+          "outputTokens": 26,
+          "totalTokens": 39,
+          "requestCount": 2
+        }
+      ],
+      "hours": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        12,
+        27
+      ]
+    },
+    {
+      "date": "2026-09-25",
+      "inputTokens": 7,
+      "cacheReadTokens": 1,
+      "cacheCreationTokens": 1,
+      "outputTokens": 7,
+      "totalTokens": 16,
+      "requestCount": 2,
+      "models": [
+        {
+          "model": "claude-sonnet-4-20250514",
+          "inputTokens": 7,
+          "cacheReadTokens": 1,
+          "cacheCreationTokens": 1,
+          "outputTokens": 7,
+          "totalTokens": 16,
+          "requestCount": 2
+        }
+      ],
+      "hours": [
+        16,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

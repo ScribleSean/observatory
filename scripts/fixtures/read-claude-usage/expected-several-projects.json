@@ -1,0 +1,163 @@
+{
+  "provider": "claude-code",
+  "status": "ok",
+  "scope": "Recorded Claude Code requests",
+  "days": [
+    {
+      "date": "2026-09-20",
+      "inputTokens": 11,
+      "cacheReadTokens": 202,
+      "cacheCreationTokens": 33,
+      "outputTokens": 44,
+      "totalTokens": 290,
+      "requestCount": 2,
+      "models": [
+        {
+          "model": "claude-opus-4-1-20250805",
+          "inputTokens": 1,
+          "cacheReadTokens": 2,
+          "cacheCreationTokens": 3,
+          "outputTokens": 4,
+          "totalTokens": 10,
+          "requestCount": 1
+        },
+        {
+          "model": "claude-sonnet-4-20250514",
+          "inputTokens": 10,
+          "cacheReadTokens": 200,
+          "cacheCreationTokens": 30,
+          "outputTokens": 40,
+          "totalTokens": 280,
+          "requestCount": 1
+        }
+      ],
+      "hours": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        280,
+        10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "date": "2026-09-21",
+      "inputTokens": 12,
+      "cacheReadTokens": 5,
+      "cacheCreationTokens": 5,
+      "outputTokens": 14,
+      "totalTokens": 36,
+      "requestCount": 2,
+      "models": [
+        {
+          "model": "claude-haiku-3-5",
+          "inputTokens": 7,
+          "cacheReadTokens": 0,
+          "cacheCreationTokens": 0,
+          "outputTokens": 9,
+          "totalTokens": 16,
+          "requestCount": 1
+        },
+        {
+          "model": "claude-sonnet-4-20250514",
+          "inputTokens": 5,
+          "cacheReadTokens": 5,
+          "cacheCreationTokens": 5,
+          "outputTokens": 5,
+          "totalTokens": 20,
+          "requestCount": 1
+        }
+      ],
+      "hours": [
+        0,
+        0,
+        0,
+        16,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        20
+      ]
+    },
+    {
+      "date": "2026-09-22",
+      "inputTokens": 2,
+      "cacheReadTokens": 0,
+      "cacheCreationTokens": 0,
+      "outputTokens": 1,
+      "totalTokens": 3,
+      "requestCount": 1,
+      "models": [
+        {
+          "model": "unknown",
+          "inputTokens": 2,
+          "cacheReadTokens": 0,
+          "cacheCreationTokens": 0,
+          "outputTokens": 1,
+          "totalTokens": 3,
+          "requestCount": 1
+        }
+      ],
+      "hours": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}
