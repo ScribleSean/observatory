@@ -7,6 +7,7 @@ import {constants as fsConstants} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {loadConfig} from '../lib/config.mjs';
+import {TIME_ZONE} from '../lib/timezone.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {writeJsonAtomic,writeAtomic} from '../lib/atomic-file.mjs';
 import {REFUSAL_CODES} from './refusal-codes.mjs';
@@ -26,7 +27,7 @@ import {readAgents} from './read-agents.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
-export const TIMEZONE='America/New_York';
+export const TIMEZONE=TIME_ZONE;
 
 function runPowerShellFile(script) {
   return new Promise((resolve,reject)=>{

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { TIME_ZONE } from '../lib/timezone.mjs';
 
 // These limits are a coarse guard on the reader's time and memory, and the line limit
 // also bounds requests held in memory. A history over any limit reads unavailable,
@@ -290,7 +291,7 @@ function timestamp(value) {
 }
 
 const newYork = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'America/New_York',
+  timeZone: TIME_ZONE,
   hourCycle: 'h23',
   hour: '2-digit',
   minute: '2-digit',

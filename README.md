@@ -74,7 +74,7 @@ A Mac and a Windows PC can share one view. The Mac reads the PC's numbers over S
 - Unknown means a value was not read. It never means zero.
 - A limit percentage comes from the provider. A dollar figure is an estimate at public API prices, not a bill.
 - With two computers, sums are labeled "not deduplicated", and a sum is Unknown if either computer's value is Unknown. Limits are never added, because they belong to the account.
-- Days are counted in the America/New_York time zone.
+- Days are counted in your computer's own time zone.
 
 ## Privacy
 

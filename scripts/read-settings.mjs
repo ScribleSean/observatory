@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {SettingsCache} from './read-settings-cache.mjs';
+import {TIME_ZONE} from '../lib/timezone.mjs';
 
 export const MAX_FILES=100_000;
 export const MAX_TOTAL_BYTES=2*1024*1024*1024;
@@ -443,14 +444,14 @@ export function utcMicros(stamp) {
   if(utc<MIN_MICROS||utc>MAX_MICROS)throw new OverflowError('date value out of range');
   return utc;
 }
-const newYorkFormat=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',timeZoneName:'longOffset'});
+const newYorkFormat=new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,timeZoneName:'longOffset'});
 const newYorkOffsets=new Map();
-// Transitions in this zone fall on whole UTC hours, so one lookup serves an hour.
+// Zone transitions fall on quarter hours in UTC, so one lookup serves a quarter hour.
 function newYorkOffset(seconds) {
-  const hour=Math.floor(seconds/3600);
+  const hour=Math.floor(seconds/900);
   let offset=newYorkOffsets.get(hour);
   if(offset===undefined) {
-    const name=newYorkFormat.formatToParts(new Date(hour*3600*1000)).find(part=>part.type==='timeZoneName').value;
+    const name=newYorkFormat.formatToParts(new Date(hour*900*1000)).find(part=>part.type==='timeZoneName').value;
     const match=/^GMT(?:([+-])(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(name);
     if(!match)throw Error('Unsupported time zone data');
     offset=match[1]?(match[1]==='-'?-1:1)*(Number(match[2])*3600+Number(match[3])*60+Number(match[4]??0)):0;
