@@ -394,7 +394,8 @@ export const STRINGS = {
     "costCaption": "API-equivalent estimate, not a bill",
     "tokens": "{value} tokens",
     "bothNote": "both computers, not deduplicated",
-    "asOf": "as of {time}"
+    "asOf": "as of {time}",
+    "topApps": "largest app categories"
   },
   "agents": {
     "waiting": "Waiting on you",

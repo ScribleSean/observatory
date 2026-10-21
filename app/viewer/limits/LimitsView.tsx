@@ -47,12 +47,12 @@ export function LimitsView({ snapshot, now, limitStyle, initialPeriod = 'day' }:
             <h4><ProviderDot provider={provider} />{name}</h4>
             {rows.filter(row => row.provider === provider).map((row, index) => <div key={index}
               className={row.low ? 'ob-limits-pace warn' : 'ob-limits-pace'} data-provider={provider} data-window={row.window || 'unknown'}>
-              {row.remaining === null ? <Row><span className="ob-num big">{STRINGS.status.unknown}</span><span className="ob-meta">{row.note}</span></Row> : <>
-                <span className="ob-num big">{typeof row.pace?.ratePerHour === 'number' ? format(STRINGS.limits.perHour, { value: row.pace.ratePerHour > 0 && row.pace.ratePerHour < 0.05 ? STRINGS.limits.belowTenth : row.pace.ratePerHour.toFixed(1) }) : STRINGS.status.unknown}</span>
-                <div className="ob-meta">{row.window}</div>
-                <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{paceSentence(row.pace)}</div>
-                <div className={row.low ? 'ob-num warn' : 'ob-num'}>{percent(row.remaining)}</div>
-              </>}
+              {/* Percent left leads. Pace follows, and an unknown pace stays a quiet note. */}
+              <Row><span className="ob-meta">{row.window || STRINGS.status.unknownWindow}</span></Row>
+              <div className={row.low ? 'ob-num big warn' : 'ob-num big'}>{row.remaining === null ? STRINGS.status.unknown : percent(row.remaining)}</div>
+              {row.remaining === null ? <div className="ob-meta">{row.note}</div> : <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>
+                {typeof row.pace?.ratePerHour === 'number' ? `${format(STRINGS.limits.perHour, { value: row.pace.ratePerHour > 0 && row.pace.ratePerHour < 0.05 ? STRINGS.limits.belowTenth : row.pace.ratePerHour.toFixed(1) })}${STRINGS.formats.separator}` : ''}{paceSentence(row.pace)}
+              </div>}
             </div>)}
           </div>)}
         </div>
@@ -61,7 +61,7 @@ export function LimitsView({ snapshot, now, limitStyle, initialPeriod = 'day' }:
     <div className="ob-limits-providers">
       {providers.map(([provider, name]) => <Card key={provider} label={name}>
         <h3><ProviderDot provider={provider} />{name}</h3>
-        <LimitRows rows={rows.filter(row => row.provider === provider)} style={limitStyle} />
+        <LimitRows rows={rows.filter(row => row.provider === provider).map(row => ({ ...row, name: '' }))} style={limitStyle} />
         {provider === 'claude' && <Row className="ob-limits-cost ob-meta"><span>{STRINGS.limits.sessionCost}</span>
           <span className="ob-num">{cost ? format(STRINGS.formats.usd, { value: cost.usd.toFixed(2) }) : STRINGS.status.unknown}</span></Row>}
       </Card>)}

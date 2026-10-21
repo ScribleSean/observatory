@@ -6,7 +6,8 @@ import { StatusPill } from '../agents/AgentsView';
 // Four answers at a glance: am I near my limits, what are my agents doing,
 // where did my time go, and what did it cost. Every number keeps Unknown as Unknown.
 export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
-export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string };
+export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string;
+  categories?: { name: string; seconds: number }[]; costs?: { codex?: number | null; claude?: number | null } };
 export type Glance = {
   lowest: number | null; waiting?: number; working?: number;
   limits: LimitRow[]; agents?: AgentDevice[]; today: DeviceToday[];
@@ -60,16 +61,28 @@ function AgentsCard({ glance }: { glance: Glance }) {
   );
 }
 
-function PerDevice({ glance, value, now }: { glance: Glance; value: (device: DeviceToday) => string; now: number }) {
-  if (glance.today.length < 2) {
-    const [device] = glance.today;
-    return device && device.collectedAt ? <p className="ob-meta">{format(STRINGS.overview.asOf, { time: readingTime(Date.parse(device.collectedAt), now) })}</p> : null;
-  }
+function PerDevice({ glance, value }: { glance: Glance; value: (device: DeviceToday) => string; now?: number }) {
+  if (glance.today.length < 2) return null;
   return (
     <ul className="ob-tile-devices">
       {glance.today.map(device => <li key={device.host}><span>{device.name}</span><span className="ob-num">{device.missing ? unknown : value(device)}</span></li>)}
     </ul>
   );
+}
+
+// With one computer the tile shows a breakdown instead: categories for time, providers for cost.
+function Breakdown({ rows }: { rows: [string, string, string?][] }) {
+  if (rows.length === 0) return null;
+  return (
+    <ul className="ob-tile-devices">
+      {rows.map(([label, value, dot]) => <li key={label}><span className="ob-tile-label">{dot ? <i className={`ob-dot ${dot}`} aria-hidden="true" /> : null}{label}</span><span className="ob-num">{value}</span></li>)}
+    </ul>
+  );
+}
+
+function AsOf({ glance, now }: { glance: Glance; now: number }) {
+  const at = Date.parse(glance.today[0]?.collectedAt ?? '');
+  return glance.today.length === 1 && Number.isFinite(at) ? <p className="ob-meta ob-tile-foot">{format(STRINGS.overview.asOf, { time: readingTime(at, now) })}</p> : null;
 }
 
 function TimeCard({ glance, now }: { glance: Glance; now: number }) {
@@ -78,8 +91,10 @@ function TimeCard({ glance, now }: { glance: Glance; now: number }) {
     <section className="ob-tile" aria-labelledby="ob-tile-time">
       <h2 id="ob-tile-time">{STRINGS.overview.timeTitle}</h2>
       <div className="ob-hero">{total === null ? unknown : duration(total)}</div>
-      <p className="ob-meta">{glance.both ? STRINGS.overview.bothNote : ' '}</p>
-      <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
+      <p className="ob-meta">{glance.both ? STRINGS.overview.bothNote : STRINGS.overview.topApps}</p>
+      {glance.both ? <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
+        : <Breakdown rows={(glance.today[0]?.categories ?? []).map(row => [row.name, duration(row.seconds)] as [string, string])} />}
+      <AsOf glance={glance} now={now} />
     </section>
   );
 }
@@ -91,7 +106,10 @@ function CostCard({ glance, now }: { glance: Glance; now: number }) {
       <h2 id="ob-tile-cost">{STRINGS.overview.costTitle}</h2>
       <div className="ob-hero">{money(source.usd)}</div>
       <p className="ob-meta">{format(STRINGS.overview.tokens, { value: compact(source.tokens) })}{glance.both ? ` · ${STRINGS.overview.bothNote}` : ''}</p>
-      <PerDevice glance={glance} now={now} value={device => money(device.usd)} />
+      {glance.both ? <PerDevice glance={glance} now={now} value={device => money(device.usd)} />
+        : <Breakdown rows={([['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const)
+          .filter(([key]) => glance.today[0]?.costs?.[key] !== undefined)
+          .map(([key, label]) => [label, money(glance.today[0]?.costs?.[key] ?? null), key] as [string, string, string])} />}
       <p className="ob-meta ob-tile-foot">{STRINGS.overview.costCaption}</p>
     </section>
   );

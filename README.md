@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/images/dashboard-limits-light.png" width="860" alt="The Observatory dashboard in light appearance with fictional data: four tiles for limits, agents, screen time and cost, then the Limits page">
+  <img src="docs/images/dashboard-one-computer-light.png" width="860" alt="The Observatory dashboard on one computer, light appearance, fictional data: tiles for limits, agents, screen time by category and cost by provider, then the Limits page">
 </p>
 
 ## What it shows

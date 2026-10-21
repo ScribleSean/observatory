@@ -82,6 +82,7 @@ export async function stableNode(platform=process.platform) {
 // The name people know the computer by, cleaned to fit the settings file.
 export async function computerName(platform=process.platform,environment=process.env) {
   const raw=platform==='darwin'?await quiet('/usr/sbin/scutil',['--get','ComputerName']):environment.COMPUTERNAME;
+  // oxlint-disable-next-line no-control-regex -- control characters are removed on purpose
   const name=typeof raw==='string'?raw.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,40):'';
   return name || (platform==='win32'?'PC':'Mac');
 }

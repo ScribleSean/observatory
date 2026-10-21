@@ -12,3 +12,5 @@
 @media (min-width: 720px) {
   .ob-limits-providers { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
+.ob-limits-pace .ob-num.big { margin: 2px 0; font-size: 28px; letter-spacing: -0.5px; }
+.ob-limits-pace + .ob-limits-pace { padding-top: var(--ob-space-3); border-top: 1px solid var(--ob-track); }

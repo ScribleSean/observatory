@@ -102,3 +102,16 @@ test('menu lines carry clock times, never an age that goes out of date',()=>{
   assert.ok(combined.glance.lines.some(line=>line.includes('as of ')));
   assert.ok(!combined.glance.lines.some(line=>/ ago\b|Updated/.test(line)));
 });
+
+test('one computer gets its largest categories and cost by provider, and an unknown part keeps the total unknown',()=>{
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)}],{now});
+  const mac=combined.glance.today[0];
+  assert.ok(mac.categories.length>0 && mac.categories.every(row=>row.seconds>0));
+  assert.ok(mac.categories.every((row,index,list)=>index===0 || list[index-1].seconds>=row.seconds));
+  assert.equal(typeof mac.costs.claude,'number');
+  assert.equal(typeof mac.costs.codex,'number');
+  assert.equal(Math.round((mac.costs.claude+mac.costs.codex)*100),Math.round(mac.usd*100));
+  const noClaudePrice=ownSnapshot('Mac',now,s=>({...s,providerTokenSources:s.providerTokenSources.map(row=>({...row,days:row.days.map(day=>({...day,apiEstimate:undefined}))}))}));
+  const unknown=combine([{host:'Mac',snapshot:noClaudePrice}],{now}).glance.today[0];
+  if(unknown.claudeTokens>0)assert.equal(unknown.usd,null);
+});
