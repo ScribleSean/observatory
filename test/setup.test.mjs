@@ -47,3 +47,14 @@ test('a status line that points at a missing bridge is noticed',()=>import('./he
   assert.equal(await brokenStatusline(settings),null);
   assert.equal(await brokenStatusline(path.join(folder,'missing.json')),null);
 })));
+
+test('a dry run on a fresh clone lists every step and writes nothing',()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
+  const {execFileSync}=await import('node:child_process');
+  const {existsSync}=await import('node:fs');
+  const path=(await import('node:path')).default;
+  const config=path.join(folder,'observatory.config.json');
+  const output=execFileSync(process.execPath,['scripts/setup.mjs','--dry-run'],{env:{...process.env,OBSERVATORY_CONFIG:config},encoding:'utf8'});
+  for(const step of ['would write observatory.config.json','would build the dashboard','would write the app settings','Dry run: nothing was changed.'])
+    assert.ok(output.includes(step),step);
+  assert.equal(existsSync(config),false);
+})),{skip:!['darwin','win32'].includes(process.platform) && 'setup runs on macOS and Windows only'});

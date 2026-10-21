@@ -56,8 +56,10 @@ That is the whole install. Setup writes a settings file with every source on, bu
 
 Click the number in the menu bar, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601 in your normal browser.
 
+- **Preview first:** `npm run setup -- --dry-run` lists what setup would do and changes nothing.
 - **Update:** `git pull`, then `npm run setup` again.
 - **Remove:** `npm run setup -- --remove` stops the app and removes the login item. Then delete the cloned folder, and the data folder if you want the history gone: `~/Library/Application Support/Observatory` on a Mac, `%LOCALAPPDATA%\Observatory` on Windows.
+- **npm warning about `fsevents`:** npm may say an install script for `fsevents` was not run. That package is only used by the development server, and setup does not need it.
 - **Hidden menu bar item:** on a MacBook with a notch and a busy menu bar, hold Command and drag the item to the right.
 
 ## A second computer (optional)

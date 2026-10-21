@@ -9,7 +9,7 @@ import {homedir} from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
-import {REPO,CONFIG_FILE,loadConfig,defaultDataFolder} from '../lib/config.mjs';
+import {REPO,CONFIG_FILE,loadConfig,parseConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
 import {defaultSettingsPath} from './claude-statusline-install.mjs';
 
@@ -134,15 +134,15 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
   const configFile=process.env.OBSERVATORY_CONFIG || CONFIG_FILE;
   // Zero setup: with no settings file, write one with every source on and this
   // computer's own name. It is plain JSON beside package.json, ready to edit.
+  let config;
   if(!existsSync(configFile)) {
-    await act('write observatory.config.json with every source on (edit it any time)',async()=>{
-      const example=JSON.parse(await readFile(path.join(REPO,'observatory.config.example.json'),'utf8'));
-      example.device.name=await computerName(platform);
-      await writeFile(configFile,JSON.stringify(example,null,2)+'\n',{flag:'wx'});
-    });
-    if(dryRun)return;
-  }
-  const config=await loadConfig(configFile,{platform});
+    const example=JSON.parse(await readFile(path.join(REPO,'observatory.config.example.json'),'utf8'));
+    example.device.name=await computerName(platform);
+    await act('write observatory.config.json with every source on (edit it any time)',()=>
+      writeFile(configFile,JSON.stringify(example,null,2)+'\n',{flag:'wx'}));
+    // A dry run carries on with the settings it would have written.
+    config=dryRun?parseConfig(example,{platform}):await loadConfig(configFile,{platform});
+  } else config=await loadConfig(configFile,{platform});
   step(`Settings: ${config.device.name}, ${config.role==='hub'?`combining with ${config.hub.spokes.map(spoke=>spoke.name).join(', ')}`:'this computer'}, sources on: ${Object.entries(config.sources).filter(([,on])=>on).map(([key])=>key).join(', ') || 'none'}`);
 
   // The older app writes usage.json in the same default data folder.
@@ -219,6 +219,7 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
       spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
     });
   }
+  if(dryRun) {log('Dry run: nothing was changed.');return;}
   log(`Done. Dashboard: http://127.0.0.1:${config.dashboard.port} (use Open dashboard in the ${platform==='darwin'?'menu bar':'tray'} menu).`);
 }
 
