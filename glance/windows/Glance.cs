@@ -194,6 +194,21 @@ namespace Observatory
                         Line("Updated " + Span(age) + " ago" + (stale ? ", not recently" : ""), true);
                     }
                     else Line("Updated: Unknown time", true);
+                    // Say when reading from or writing back to the other computer failed.
+                    object hubValue;
+                    var hub = json.TryGetValue("hub", out hubValue) ? hubValue as Dictionary<string, object> : null;
+                    object spokesValue = null;
+                    var spokes = hub != null && hub.TryGetValue("spokes", out spokesValue) ? spokesValue as IList : null;
+                    if (spokes != null)
+                        foreach (object item in spokes)
+                        {
+                            var spoke = item as Dictionary<string, object>;
+                            if (spoke == null) continue;
+                            object name, pull, push;
+                            string label = spoke.TryGetValue("name", out name) && name is string ? (string)name : "Other computer";
+                            if (spoke.TryGetValue("pull", out pull) && pull is string && (string)pull != "ok") Line(label + ": could not read (" + pull + ")", true);
+                            else if (spoke.TryGetValue("push", out push) && push is string && (string)push != "ok" && (string)push != "skipped") Line(label + ": could not write back (" + push + ")", true);
+                        }
                 }
             }
             if (tick != null && !tick.HasExited) Line("Refreshing...");
