@@ -94,7 +94,7 @@ test('recording writes one small private file and reading needs the install mark
   assert.equal(result.data.claudeLimits.windows.length,2);
 });
 
-test('a linked folder or file is refused', {skip:process.platform==='win32'}, async t => {
+test('a linked folder or file is refused', {skip:process.platform==='win32' && 'Requires POSIX file link semantics'}, async t => {
   const runtime=await folder(t),elsewhere=await folder(t);
   await symlink(elsewhere,path.join(runtime,'claude-limits'));
   await assert.rejects(recordClaudeLimits(runtime,input(),now),/Unsafe/);
@@ -302,7 +302,7 @@ test('invalid consent markers do not grant consent', async t => {
   assert.deepEqual(await claudeLimitsConsent(null),{given:false,consentMarker:false,statusLine:false});
 });
 
-test('linked consent is ignored and cannot be cleared', {skip:process.platform==='win32'}, async t => {
+test('linked consent is ignored and cannot be cleared', {skip:process.platform==='win32' && 'Requires POSIX file link semantics'}, async t => {
   const runtime=await folder(t),target=path.join(await folder(t),'marker.json');
   await mkdir(path.join(runtime,'claude-limits'));
   await writeFile(target,consentText);
@@ -335,7 +335,7 @@ test('uninstall preserves independent consent and status reports it', async t =>
 });
 
 for(const kind of ['relative','missing','directory','link','wrong name','copy','parent segments','linked parent'])test(`bridge rejects ${kind} without writes`,
-  {skip:['link','linked parent'].includes(kind) && process.platform==='win32'}, async t => {
+  {skip:(['link','linked parent'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'}, async t => {
     const runtime=await folder(t),home=await folder(t),settingsPath=path.join(home,'settings.json');
     const text='{"model":"synthetic"}\n';
     await writeFile(settingsPath,text);
@@ -426,7 +426,7 @@ test('a recording error reports failed without exposing the error or command det
 });
 
 
-test('a linked limits folder cannot grant consent or run usage', {skip:process.platform==='win32'}, async t => {
+test('a linked limits folder cannot grant consent or run usage', {skip:process.platform==='win32' && 'Requires POSIX file link semantics'}, async t => {
   const runtime=await folder(t),target=await folder(t);
   await writeFile(path.join(target,'consent.json'),JSON.stringify({consent:true,givenAt:new Date(now).toISOString()}));
   await writeFile(path.join(target,'statusline.json'),JSON.stringify(savedStatusline(null)));
@@ -467,7 +467,7 @@ test('Windows rejects expansion characters in each command path and POSIX preser
   }
 });
 
-test('consent replaced by a link is no longer honoured',{skip:process.platform==='win32'},async t=>{
+test('consent replaced by a link is no longer honoured',{skip:process.platform==='win32' && 'Requires POSIX file link semantics'},async t=>{
   const runtime=await folder(t),target=path.join(await folder(t),'consent.json');
   await setLimitsConsent({runtime,consent:true});
   assert.equal((await claudeLimitsConsent(runtime)).given,true);
@@ -478,7 +478,7 @@ test('consent replaced by a link is no longer honoured',{skip:process.platform==
   assert.equal((await claudeLimitsConsent(runtime)).given,false);
 });
 
-test('consent swapped for a link after lstat is refused',{skip:process.platform==='win32'},async t=>{
+test('consent swapped for a link after lstat is refused',{skip:process.platform==='win32' && 'Requires POSIX file link semantics'},async t=>{
   const runtime=await folder(t),target=path.join(await folder(t),'consent.json');
   await setLimitsConsent({runtime,consent:true});
   await writeFile(target,consentText);
@@ -626,7 +626,7 @@ for(const [kind,text] of Object.entries(invalidStatuslines))test(`saved status l
 });
 
 for(const kind of ['symbolic link','hard link','linked folder','file folder','directory marker'])test(`saved status line reader refuses ${kind}`,
-  {skip:['symbolic link','hard link','linked folder'].includes(kind) && process.platform==='win32'},async t=>{
+  {skip:(['symbolic link','hard link','linked folder'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
     const runtime=await folder(t),target=await folder(t),directory=path.join(runtime,'claude-limits');
     const source=path.join(target,'statusline.json');
     await writeJsonAtomic(source,savedStatusline({type:'command',command:'echo earlier'}));
@@ -642,7 +642,7 @@ for(const kind of ['symbolic link','hard link','linked folder','file folder','di
   });
 
 for(const kind of ['valid','hard link','symbolic link','linked folder','repeated command','prototype member'])test(`bridge handles ${kind} saved status line`,
-  {skip:['hard link','symbolic link','linked folder'].includes(kind) && process.platform==='win32'},async t=>{
+  {skip:(['hard link','symbolic link','linked folder'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
     const runtime=await folder(t),file=path.join(runtime,'claude-limits/statusline.json');
     if(kind!=='linked folder')await mkdir(path.dirname(file));
     const command=`"${process.execPath}" -e "process.stdout.write('earlier line')"`;
@@ -664,7 +664,7 @@ for(const kind of ['valid','hard link','symbolic link','linked folder','repeated
   });
 
 for(const action of ['reinstall','uninstall'])for(const kind of ['hard link','symbolic link','repeated command',...(action==='uninstall'?['prototype member']:[])])test(`${action} refuses ${kind} marker without writes`,
-  {skip:['hard link','symbolic link'].includes(kind) && process.platform==='win32'},async t=>{
+  {skip:(['hard link','symbolic link'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
     const runtime=await folder(t),home=await folder(t),settingsPath=path.join(home,'settings.json');
     const directory=path.join(runtime,'claude-limits'),file=path.join(directory,'statusline.json');
     await mkdir(directory);
@@ -729,7 +729,7 @@ for(const [kind,previous] of [['string','echo earlier'],['number',42]])test(`old
   await assert.rejects(lstat(file),{code:'ENOENT'});
 });
 
-test('saved status line reader refuses a FIFO promptly',{skip:process.platform==='win32'},async t=>{
+test('saved status line reader refuses a FIFO promptly',{skip:process.platform==='win32' && 'Requires POSIX FIFO support'},async t=>{
   const runtime=await folder(t),file=path.join(runtime,'claude-limits/statusline.json');
   await mkdir(path.dirname(file));await run('mkfifo',[file]);
   const moduleUrl=new URL('./claude-limits.mjs',import.meta.url).href;
@@ -742,7 +742,7 @@ test('saved status line reader refuses a FIFO promptly',{skip:process.platform==
 for(const [name,read] of [['saved status line',readClaudeStatuslineMarker],['installed status line',claudeStatuslineInstalled],['consent',claudeLimitsConsent]])
   for(const kind of ['unchanged','symbolic link','different folder'])
     for(const markers of (read===claudeLimitsConsent?['statusline','consent','both']:['statusline']))
-      test(`${String(name)} folder recheck with ${kind} and ${markers} marker`,{skip:kind==='symbolic link' && process.platform==='win32'},async t=>{
+      test(`${String(name)} folder recheck with ${kind} and ${markers} marker`,{skip:(kind==='symbolic link' && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
         const runtime=await folder(t),directory=path.join(runtime,'claude-limits'),replacement=path.join(runtime,'replacement');
         await mkdir(directory);
         const marker=savedStatusline(null);

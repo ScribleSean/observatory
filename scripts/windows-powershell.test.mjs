@@ -15,7 +15,7 @@ test('PowerShell file arguments include a process execution policy and preserve 
 });
 
 test('PowerShell file execution overrides an inherited Restricted process policy',
-  {skip:process.platform!=='win32'},async t=>{
+  {skip:process.platform!=='win32' && 'Requires Windows PowerShell on Windows'},async t=>{
     const directory=await mkdtemp(path.join(tmpdir(),'observatory-powershell-policy-'));
     t.after(()=>rm(directory,{recursive:true,force:true}));
     const script=path.join(directory,'synthetic.ps1');

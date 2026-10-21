@@ -133,7 +133,7 @@ test('the command gets a fixed small environment and never a parent session\'s v
   assert.deepEqual(usageEnvironment({...source,USERPROFILE:'C:\\Users\\synthetic'},'win32'),{USERPROFILE:'C:\\Users\\synthetic',PATH:'/synthetic/bin',CLAUDE_CONFIG_DIR:'/synthetic/config'});
 });
 
-test('a command that ignores a stop request cannot outlive the time limit', {skip:process.platform==='win32'}, async t => {
+test('a command that ignores a stop request cannot outlive the time limit', {skip:process.platform==='win32' && 'Requires POSIX executable scripts and signal handling'}, async t => {
   const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-hang-')));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const fake=path.join(folder,'claude'),pidFile=path.join(folder,'pid');
@@ -148,7 +148,7 @@ test('a command that ignores a stop request cannot outlive the time limit', {ski
   assert.equal(alive,false,'the stuck command must be gone');
 });
 
-test('a working command is read, and a parent session variable never reaches it', {skip:process.platform==='win32'}, async t => {
+test('a working command is read, and a parent session variable never reaches it', {skip:process.platform==='win32' && 'Requires POSIX executable scripts and signal handling'}, async t => {
   const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-ok-')));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const fake=path.join(folder,'claude');
@@ -179,7 +179,7 @@ test('consent alone runs usage and clearing it stops collection', async t => {
   assert.equal(runs,1);
 });
 
-test('readClaudeUsage reports timed-out and force-stops a command that ignores a stop request', {skip:process.platform==='win32'}, async t => {
+test('readClaudeUsage reports timed-out and force-stops a command that ignores a stop request', {skip:process.platform==='win32' && 'Requires POSIX executable scripts and signal handling'}, async t => {
   const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-hang-')));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const fake=path.join(folder,'claude'),pidFile=path.join(folder,'pid');
@@ -202,7 +202,7 @@ test('readClaudeUsage reports missing executables and relative working directori
   assert.equal(finds,0);
 });
 
-test('readClaudeUsage reports only a status and sanitized reading from fake commands', {skip:process.platform==='win32'}, async t => {
+test('readClaudeUsage reports only a status and sanitized reading from fake commands', {skip:process.platform==='win32' && 'Requires POSIX executable scripts and signal handling'}, async t => {
   const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-outcomes-')));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const fake=path.join(folder,'claude');

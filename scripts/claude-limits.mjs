@@ -278,8 +278,9 @@ export function attachClaudeLimits(result,source) {
 }
 
 // Rejects when the work has not settled in time, so the caller's fallback runs.
+// Keep the timer referenced so pending work cannot let Node exit before the fallback.
 export function withinTime(work,milliseconds) {
   let timer;
-  const limit=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Timed out')),milliseconds);timer.unref?.();});
+  const limit=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Timed out')),milliseconds);});
   return Promise.race([Promise.resolve(work),limit]).finally(()=>clearTimeout(timer));
 }

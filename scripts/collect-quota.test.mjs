@@ -9,14 +9,15 @@ import {readQuotaArchive,readQuotaState} from './quota-store.mjs';
 const runtimeBase=await testRuntimeBase('collect-quota');
 after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.parse('2026-09-09T12:00:00Z');
-const macOnly={skip:process.platform!=='darwin'};
-const emptyCandidates={appCandidates:[],toolCandidates:[]};
+// Exercise macOS discovery with fictional paths on any POSIX host.
+const posixOnly={skip:process.platform==='win32' && 'Requires POSIX executable permissions and symbolic links'};
+const emptyCandidates={platform:'darwin',appCandidates:[],toolCandidates:[]};
 async function executable(runtime,name='codex') {
   const file=path.join(runtime,name);
   await writeFile(file,'#!/bin/sh\nexit 0\n',{mode:0o700});
   return file;
 }
-test('quota discovery uses a validated configured executable without changing configuration',macOnly,async()=>fixture(async runtime=>{
+test('quota discovery uses a validated configured executable without changing configuration',posixOnly,async()=>fixture(async runtime=>{
   const target=await executable(runtime),link=path.join(runtime,'codex-link');
   await symlink(target,link);
   const file=path.join(runtime,'local.config.json'),original=Buffer.from(JSON.stringify({codexExecutable:link}));
@@ -24,21 +25,21 @@ test('quota discovery uses a validated configured executable without changing co
   assert.equal(await findCodexExecutable({runtime,...emptyCandidates}),await realpath(target));
   assert.deepEqual(await readFile(file),original);
 }));
-for(const kind of ['app','tool'])test(`quota discovery prefers configuration over the ${kind} candidate`,macOnly,async()=>fixture(async runtime=>{
+for(const kind of ['app','tool'])test(`quota discovery prefers configuration over the ${kind} candidate`,posixOnly,async()=>fixture(async runtime=>{
   const configured=await executable(runtime),preferred=await executable(runtime,kind),other=await executable(runtime,'other');
   await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:configured}));
   const options=kind==='app'?{appCandidates:[preferred,other],toolCandidates:[other]}:
     {appCandidates:[path.join(runtime,'missing-app')],toolCandidates:[preferred,other]};
-  assert.equal(await findCodexExecutable({runtime,...options}),await realpath(configured));
+  assert.equal(await findCodexExecutable({runtime,platform:'darwin',...options}),await realpath(configured));
 }));
-test('quota discovery prefers app candidates over tools without configuration',macOnly,async()=>fixture(async runtime=>{
+test('quota discovery prefers app candidates over tools without configuration',posixOnly,async()=>fixture(async runtime=>{
   const app=await executable(runtime,'app'),tool=await executable(runtime,'tool');
-  assert.equal(await findCodexExecutable({runtime,appCandidates:[app],toolCandidates:[tool]}),await realpath(app));
+  assert.equal(await findCodexExecutable({runtime,platform:'darwin',appCandidates:[app],toolCandidates:[tool]}),await realpath(app));
 }));
-test('quota discovery falls through to app candidates after refusing configuration',macOnly,async()=>fixture(async runtime=>{
+test('quota discovery falls through to app candidates after refusing configuration',posixOnly,async()=>fixture(async runtime=>{
   const app=await executable(runtime,'app');
   await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:'relative/codex'}));
-  assert.equal(await findCodexExecutable({runtime,appCandidates:[app],toolCandidates:[]}),await realpath(app));
+  assert.equal(await findCodexExecutable({runtime,platform:'darwin',appCandidates:[app],toolCandidates:[]}),await realpath(app));
 }));
 const refusedValues={
   relative:async()=> 'relative/codex',
@@ -52,12 +53,12 @@ const refusedValues={
   oversized:async runtime=>path.join(runtime,'x'.repeat(4097)),
   'non-string':async()=>42
 };
-for(const [name,value] of Object.entries(refusedValues))test(`quota discovery refuses configured ${name}`,macOnly,async()=>fixture(async runtime=>{
+for(const [name,value] of Object.entries(refusedValues))test(`quota discovery refuses configured ${name}`,posixOnly,async()=>fixture(async runtime=>{
   await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:await value(runtime)}));
   await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});
 }));
 for(const kind of ['symlink','array','oversized','malformed','directory','missing','undefined','null','empty'])
-  test(`quota discovery refuses ${kind} configuration without a candidate`,macOnly,async()=>fixture(async runtime=>{
+  test(`quota discovery refuses ${kind} configuration without a candidate`,posixOnly,async()=>fixture(async runtime=>{
     const file=path.join(runtime,'local.config.json'),target=await executable(runtime);
     if(kind==='symlink') {
       const config=path.join(runtime,'config.json');
@@ -67,7 +68,7 @@ for(const kind of ['symlink','array','oversized','malformed','directory','missin
       kind==='malformed'?'{':JSON.stringify(kind==='undefined'?{}:{codexExecutable:kind==='null'?null:''}));
     await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});
   }));
-test('refused configured client is unavailable without reading a snapshot',macOnly,async()=>fixture(async runtime=>{
+test('refused configured client is unavailable without reading a snapshot',posixOnly,async()=>fixture(async runtime=>{
   await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:'relative/codex'}));
   let calls=0;
   const result=await collectQuota(runtime,{enabled:true,clock:()=>now,
@@ -75,7 +76,7 @@ test('refused configured client is unavailable without reading a snapshot',macOn
     readSnapshot:async()=>{calls++;throw Error('Should not run');}});
   assert.equal(result.status,'unavailable');assert.equal(calls,0);
 }));
-test('quota discovery does not consult configuration without an absolute runtime',macOnly,async()=>fixture(async runtime=>{
+test('quota discovery does not consult configuration without an absolute runtime',posixOnly,async()=>fixture(async runtime=>{
   await writeFile(path.join(runtime,'local.config.json'),JSON.stringify({codexExecutable:await executable(runtime)}));
   for(const runtime of [undefined,'relative',42])
     await assert.rejects(findCodexExecutable({runtime,...emptyCandidates}),{message:'Installed Codex client unavailable'});

@@ -78,7 +78,7 @@ test('quota store rejects late writes after disabling and does not resurrect rea
   const final=await readQuotaState(runtime,now);
   assert.equal(final.history.status,'not-connected');assert.deepEqual(final.history.samples,[]);
 }));
-test('quota store refuses symlinked state without modifying its target',{skip:process.platform==='win32'},async()=>fixture(async runtime=>{
+test('quota store refuses symlinked state without modifying its target',{skip:process.platform==='win32' && 'Requires POSIX symbolic links'},async()=>fixture(async runtime=>{
   const directory=path.join(runtime,'private-quota');await mkdir(directory,{mode:0o700});
   const target=path.join(runtime,'sentinel');await writeFile(target,'preserve');
   await symlink(target,path.join(directory,'state.sqlite'));
