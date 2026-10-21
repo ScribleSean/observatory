@@ -31,3 +31,28 @@ test('a young unreadable lock is left alone, an old one is taken over',()=>withF
   await utimes(file,old,old);
   assert.deepEqual(await withRunLock(file,()=>'ran'),{busy:false,value:'ran'});
 }));
+
+test('release leaves a lock that is no longer ours',()=>withFolder(async folder=>{
+  const file=path.join(folder,'tick.lock');
+  const result=await withRunLock(file,async()=>{
+    // Another process replaced the lock while this run held it.
+    await writeFile(file,JSON.stringify({pid:process.pid,token:'someone-else'}));
+    return 'ran';
+  });
+  assert.equal(result.value,'ran');
+  assert.equal(JSON.parse(await readFile(file,'utf8')).token,'someone-else');
+}));
+
+test('two runs that both find a stale lock do not both take it',()=>withFolder(async folder=>{
+  const file=path.join(folder,'tick.lock');
+  await writeFile(file,JSON.stringify({pid:2147483646,token:'dead'}));
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const results=await Promise.all([
+    withRunLock(file,async()=>{await gate;return 'a';}),
+    withRunLock(file,async()=>{await gate;return 'b';}),
+    new Promise(resolve=>setTimeout(()=>{release();resolve(null);},100)),
+  ]);
+  const ran=results.slice(0,2).filter(result=>!result.busy);
+  assert.equal(ran.length,1);
+}));
