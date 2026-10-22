@@ -6,9 +6,9 @@ import { format } from '../../../lib/panel-data.mjs';
 // identity, and the computer is shown by line style plus a legend, never colour alone.
 type Point = { host: string; t: number; r: number; x: number; source: string };
 type Series = { host: string; name: string; points: Point[]; segments: Point[][] };
-export type HistoryData = { provider: string; window: string; range: string; from: number; to: number; series: Series[]; resets: number[]; empty: boolean };
+export type HistoryData = { provider: string; window: string; range: string; from: number; to: number; series: Series[]; resets: number[]; firstAt: number | null; startsHere: boolean; empty: boolean };
 
-const HEIGHT = 168, PAD = { left: 40, right: 12, top: 10, bottom: 26 };
+const PAD = { left: 40, right: 12, top: 10, bottom: 26 };
 // The Mac is a solid line and the PC a dotted one, which stays distinct from a solid line broken by gaps.
 const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '0.1 6' };
 
@@ -44,15 +44,26 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   const { ref, width } = useWidth();
   const id = useId();
   const [active, setActive] = useState<number | null>(null);
+  // Computers whose line the viewer has hidden from the legend.
+  const [hidden, setHidden] = useState<string[]>([]);
+  // Taller on a wide card, so a wide screen gets a readable chart rather than a strip.
+  const HEIGHT = Math.round(Math.min(300, Math.max(168, width * 0.36)));
+  const visible = data.series.filter(series => !hidden.includes(series.host));
   const plotWidth = width - PAD.left - PAD.right, plotHeight = HEIGHT - PAD.top - PAD.bottom;
   const span = Math.max(1, data.to - data.from);
   const sx = (t: number) => PAD.left + (t - data.from) / span * plotWidth;
   const sy = (r: number) => PAD.top + (1 - r / 100) * plotHeight;
   // Every point, in time order, for the hover and arrow-key readout.
-  const points = data.series.flatMap(series => series.points.map(point => ({ ...point, name: series.name }))).sort((a, b) => a.t - b.t);
+  const points = visible.flatMap(series => series.points.map(point => ({ ...point, name: series.name }))).sort((a, b) => a.t - b.t);
   const tickCount = Math.max(3, Math.min(6, Math.floor(plotWidth / 80)));
   const ticks = Array.from({ length: tickCount }, (_: unknown, index: number) => data.from + span * index / (tickCount - 1));
-  const shown = active !== null ? points[active] : null;
+  const shown = active !== null ? points[active] ?? null : null;
+  // Every other visible computer's reading closest to that moment, if it is close enough to compare.
+  const others = shown ? visible.filter(series => series.host !== shown.host).flatMap(series => {
+    const near = series.points.reduce<Point | null>((best, point) => !best || Math.abs(point.t - shown.t) < Math.abs(best.t - shown.t) ? point : best, null);
+    return near && Math.abs(near.t - shown.t) <= Math.max(20 * 60000, span / 60) ? [{ ...near, name: series.name }] : [];
+  }) : [];
+  const toggle = (host: string) => { setActive(null); setHidden(list => list.includes(host) ? list.filter(item => item !== host) : [...list, host]); };
 
   const nearest = (event: PointerEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -94,8 +105,14 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
           </g>)}
           {ticks.map((t, index) => <text key={index} className="ob-history-tick" x={sx(t)} y={HEIGHT - 6}
             textAnchor={index === 0 ? 'start' : index === ticks.length - 1 ? 'end' : 'middle'}>{tickLabel(t, span)}</text>)}
+          {/* Before the first reading there is nothing to draw, so that span is shaded and labelled instead of left blank. */}
+          {!data.empty && data.firstAt !== null && sx(data.firstAt) - PAD.left > 60 && <g className="ob-history-before">
+            <rect x={PAD.left} y={PAD.top} width={sx(data.firstAt) - PAD.left} height={plotHeight} />
+            <text x={PAD.left + (sx(data.firstAt) - PAD.left) / 2} y={PAD.top + plotHeight / 2} textAnchor="middle">
+              {data.startsHere && sx(data.firstAt) - PAD.left > 150 ? format(STRINGS.limitHistory.startsAt, { time: stamp(data.firstAt) }) : STRINGS.limitHistory.noneBefore}</text>
+          </g>}
           {data.resets.map(t => <line key={t} className="ob-history-reset" x1={sx(t)} x2={sx(t)} y1={PAD.top} y2={PAD.top + plotHeight}><title>{format(STRINGS.limitHistory.resetAt, { time: stamp(t) })}</title></line>)}
-          {data.series.map(series => series.segments.map((segment, index) => segment.length === 1
+          {visible.map(series => series.segments.map((segment, index) => segment.length === 1
             ? <circle key={`${series.host}${index}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.5} className={`ob-history-dot ${color}`} />
             : <g key={`${series.host}${index}`}>
               {/* The PC's dots sit on a ring of the card colour, so they stay visible where both computers read the same value. */}
@@ -106,20 +123,24 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
             </g>))}
           {shown && <g className="ob-history-cursor">
             <line x1={sx(shown.t)} x2={sx(shown.t)} y1={PAD.top} y2={PAD.top + plotHeight} />
-            <circle cx={sx(shown.t)} cy={sy(shown.r)} r={4.5} className={color} />
+            {[shown, ...others].map(point => <circle key={point.host} cx={sx(point.t)} cy={sy(point.r)} r={4.5} className={color} />)}
           </g>}
           {data.empty && <text className="ob-history-empty" x={PAD.left + plotWidth / 2} y={PAD.top + plotHeight / 2} textAnchor="middle">{STRINGS.limitHistory.noReadings}</text>}
         </svg>
-        {shown && <div className="ob-history-tip" style={{ left: Math.min(Math.max(sx(shown.t) - 80, 0), width - 168) }} aria-live="polite">
-          <strong>{format(STRINGS.limitHistory.left, { value: Math.round(shown.r) })}</strong>
-          <span>{shown.name} · {stamp(shown.t)}</span>
+        {shown && <div className="ob-history-tip" style={{ left: Math.min(Math.max(sx(shown.t) - 90, 0), width - 188) }} aria-live="polite">
+          <span>{stamp(shown.t)}</span>
+          {[shown, ...others].map(point => <div key={point.host} className="ob-history-tip-row">
+            <span>{point.name}</span><strong>{format(STRINGS.limitHistory.left, { value: Math.round(point.r) })}</strong>
+          </div>)}
         </div>}
       </div>
       <figcaption className="ob-history-legend">
-        {data.series.map(series => <span key={series.host}>
+        {data.series.map(series => <button type="button" key={series.host} className="ob-history-key"
+          aria-pressed={!hidden.includes(series.host)} disabled={data.series.length < 2}
+          title={data.series.length < 2 ? undefined : format(STRINGS.limitHistory.toggle, { device: series.name })} onClick={() => toggle(series.host)}>
           <svg width="22" height="8" aria-hidden="true"><line x1="1" x2="21" y1="4" y2="4" className={`ob-history-line ${color}${DASH[series.host] ? ' dotted' : ''}`} strokeDasharray={DASH[series.host]} /></svg>
           {series.name}
-        </span>)}
+        </button>)}
         {data.resets.length > 0 && <span><svg width="10" height="12" aria-hidden="true"><line x1="5" x2="5" y1="0" y2="12" className="ob-history-reset" /></svg>{STRINGS.limitHistory.reset}</span>}
         <details className="ob-history-values">
           <summary>{STRINGS.charts.showValues}</summary>

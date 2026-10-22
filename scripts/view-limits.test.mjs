@@ -268,3 +268,16 @@ test('limits view renders reset windows as Unknown in every limit style', async 
     assert.match(view, /class="ob-num big">Unknown<\/span>[\s\S]*?<div class="ob-meta">Waiting for the reset to be observed\./);
   }
 });
+
+test('Claude Code pace comes from the limit history when the reading keeps no samples, across a minute-rounded reset', () => {
+  const now = Date.parse('2026-10-21T22:00:30Z');
+  const at = minutes => new Date(now - 30000 - minutes * 60000).toISOString();
+  const window = { bucket: 'claude', window: 'seven_day', durationMinutes: 10080, remainingPercent: 50, resetsAt: '2026-10-25T00:00:00.000Z', checkedAt: at(0) };
+  const points = [[20, 53, '2026-10-24T23:59:00.000Z'], [10, 52, '2026-10-25T00:00:00.000Z'], [0, 50, '2026-10-25T00:00:00.000Z']]
+    .map(([minutes, r, x]) => ({ p: 'claude', w: 'seven_day', o: 'Mac', t: at(minutes), r, x, d: 10080 }));
+  const snapshot = { claudeLimits: { status: 'ok', checkedAt: at(0), observedOn: 'Mac', windows: [window] },
+    limitHistory: [{ host: 'Mac', points }, { host: 'Windows', points: points.map(point => ({ ...point, o: 'Windows', r: 99 })) }] };
+  const row = limitRows(snapshot, now).find(item => item.provider === 'claude');
+  assert.equal(row.pace.status, 'projected');
+  assert.equal(row.pace.ratePerHour, 9);
+});

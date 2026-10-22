@@ -2,9 +2,9 @@
 .ob-dashboard {
   box-sizing: border-box;
   width: 100%;
-  max-width: 1120px;
+  max-width: 1720px;
   margin: 0 auto;
-  padding: 28px 24px 48px;
+  padding: 28px clamp(16px, 2.5vw, 40px) 48px;
   color: var(--ob-text);
   font: 400 var(--ob-body-size)/1.4 var(--ob-font, 'Inter Tight', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
@@ -55,7 +55,7 @@
 .ob-tile-foot { margin-top: auto !important; padding-top: var(--ob-space-4); }
 
 /* Tabs: one row under the overview. */
-.ob-tabs { display: flex; gap: 2px; margin: 36px 0 var(--ob-space-2); padding: 3px; width: fit-content; max-width: 100%; overflow-x: auto; background: var(--ob-surface); border-radius: 999px; }
+.ob-tabs { display: flex; gap: 2px; margin: 28px 0 var(--ob-space-2); padding: 3px; width: fit-content; max-width: 100%; overflow-x: auto; background: var(--ob-surface); border-radius: 999px; }
 .ob-tabs button { flex: none; padding: 7px 16px; font: 500 13px/1.2 inherit; font-family: inherit; color: var(--ob-muted); background: transparent; border: 0; border-radius: 999px; cursor: pointer; transition: background-color 140ms ease-out, color 140ms ease-out; }
 .ob-tabs button:hover:not(.on) { color: var(--ob-text); }
 .ob-tabs button.on { background: var(--ob-background); color: var(--ob-text); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }

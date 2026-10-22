@@ -440,6 +440,9 @@
     "time": "Time",
     "computer": "Computer",
     "remaining": "Left",
+    "toggle": "Show or hide {device}",
+    "startsAt": "Readings start {time}",
+    "noneBefore": "No readings",
     "caveat": "Each line is one computer's own readings of the account limit. Lines are never added together, and a gap means no reading was taken."
   },
   "firstRun": {

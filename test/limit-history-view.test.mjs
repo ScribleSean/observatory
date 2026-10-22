@@ -51,3 +51,15 @@ test('the line breaks at a reset, so two windows are never joined',()=>{
   const data=limitHistorySeries(snapshot([point('Mac',90,20,{x:minutes(60)}),point('Mac',75,15,{x:minutes(60)}),point('Mac',45,100,{x:minutes(-240)})]),{provider:'claude',window:'5h',range:'today',now});
   assert.deepEqual(data.series[0].segments.map(segment=>segment.length),[2,1]);
 });
+
+test('a reset reported a minute apart is the same window, and readings that start inside the range are marked',()=>{
+  const now=Date.parse('2026-10-21T22:00:00Z');
+  const at=minutes=>new Date(now-minutes*60000).toISOString();
+  const points=[[60,'2026-10-21T23:00:00Z',90],[45,'2026-10-21T22:59:00Z',89],[30,'2026-10-21T23:00:00Z',88]]
+    .map(([ago,x,r])=>({p:'claude',w:'five_hour',o:'Mac',t:at(ago),r,x,d:300}));
+  const data=limitHistorySeries({limitHistory:[{host:'Mac',points}]},{provider:'claude',window:'5h',range:'week',now});
+  assert.equal(data.series[0].segments.length,1);
+  assert.equal(data.resets.length,0);
+  assert.equal(data.firstAt,Date.parse(at(60)));
+  assert.equal(data.startsHere,true);
+});
