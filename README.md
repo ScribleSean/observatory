@@ -27,9 +27,6 @@
 | **What did it cost?** | Tokens today and over time, and what they would cost at public API prices. |
 
 <p align="center">
-  <img src="docs/images/menu-bar-item.png" height="28" alt="The menu bar item: binoculars and 47 percent">
-</p>
-<p align="center">
   <img src="docs/images/menu-bar-menu.png" width="520" alt="The menu bar menu with fictional data: Limits and Today sections, then Open dashboard, Refresh and Quit">
 </p>
 
@@ -116,7 +113,7 @@ Shots already in the repository:
 
 1. `docs/images/dashboard-one-computer-light.png`: one computer, Limits page, light.
 2. `docs/images/dashboard-{limits,activity,tokens}-{light,dark}.png`: every page in both appearances.
-3. `docs/images/menu-bar-item.png` and `docs/images/menu-bar-menu.png`: the real Mac menu bar app showing the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json` for the app to read.
+3. `docs/images/menu-bar-menu.png`: the real Mac menu bar app showing the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json` for the app to read.
 
 Shots still to take:
 
