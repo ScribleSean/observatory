@@ -23,8 +23,3 @@ export function tokensFromSettings(raw,host) {
     })};
 }
 
-export function windowsCollectorConfig(raw={}) {
-  if(!raw || typeof raw!=='object' || Array.isArray(raw))throw Error('Invalid local Windows source settings');
-  for(const key of ['activity','codex','claude','wispr','typewhisper','quota','antigravity'])if(raw[key]!==undefined && typeof raw[key]!=='boolean')throw Error('Invalid source setting');
-  return {activity:raw.activity!==false,codex:raw.codex!==false,claude:raw.claude===true,wispr:raw.wispr===true,quota:raw.quota===true};
-}

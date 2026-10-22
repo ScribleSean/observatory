@@ -1,4 +1,3 @@
-import { estimate } from './api-estimate.mjs';
 import { cleanIntervals, summarizeTracked } from './activity-timeline.mjs';
 const fields = [
   'inputTokens',
@@ -52,26 +51,6 @@ export function category(app) {
   if (/chrome|firefox|msedge|brave|safari/i.test(app)) return 'Browser';
   return 'Other';
 }
-export function cleanTokens(raw, host) {
-  if (!Array.isArray(raw.daily)) throw Error('Unsupported report');
-  const days = raw.daily
-    .map((d) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) throw Error('Invalid date');
-      const models = Object.entries(d.models || {}).map(([model, m]) => ({
-        model: /^[a-zA-Z0-9._:/-]{1,100}$/.test(model) ? model : 'unknown',
-        ...Object.fromEntries(fields.map((k) => [k, numeric(m[k])])),
-        inferred: m.isFallback === true,
-      }));
-      return {
-        date: d.date,
-        ...Object.fromEntries(fields.map((k) => [k, numeric(d[k])])),
-        models: models.map(m => ({ ...m, apiEstimate: estimate([m]) })),
-        apiEstimate: estimate(models),
-      };
-    })
-    .sort((a, b) => a.date.localeCompare(b.date));
-  return { host, status: 'ok', days };
-}
 export function cleanActivity(raw, host) {
   if (Array.isArray(raw.intervals)) {
     const intervals = cleanIntervals(raw.intervals, raw.start, raw.end);
@@ -103,14 +82,4 @@ export function cleanActivity(raw, host) {
     latestEvent: stamp(raw.latestEvent),
     categories,
   };
-}
-export async function guarded(host, fn) {
-  try {
-    const result=await fn();
-    const checkedAt=typeof result.checkedAt==='string' && Number.isFinite(Date.parse(result.checkedAt))
-      ? result.checkedAt : new Date().toISOString();
-    return {...result, checkedAt};
-  } catch {
-    return { host, status: 'unavailable', checkedAt:new Date().toISOString() };
-  }
 }

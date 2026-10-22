@@ -42,9 +42,6 @@ export function cleanAccountUsage(result) {
     checkedAt:new Date().toISOString(),provider:'Codex',scope:'account',summary,dailyUsageBuckets};
 }
 
-export const readQuota = executable => withAccountClient(executable,async request=>cleanQuota(await request('account/rateLimits/read')));
-export const readAccountUsage = executable => withAccountClient(executable,async request=>cleanAccountUsage(await request('account/usage/read')));
-
 function unavailable(status='unavailable',stage='client') {return Object.assign(Error('Account usage unavailable'),{status,stage});}
 function accountScope(result,salt) {
   const account=result?.account;

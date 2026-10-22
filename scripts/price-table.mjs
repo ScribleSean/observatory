@@ -1,7 +1,6 @@
 import rawPrices from './price-data.mjs';
 
 const fields = ['input', 'cachedInput', 'cacheWrite', 'output'];
-const header = '// Generated from native/prices.json by scripts/price-refresh.mjs. Do not edit by hand.';
 
 function isPlainObject(value) {
   if (value === null || typeof value !== 'object') return false;
@@ -48,10 +47,6 @@ export function loadPrices(raw) {
     models[model] = Object.freeze(copy);
   }
   return Object.freeze({ source: raw.source, checkedOn: raw.checkedOn, models: Object.freeze(models) });
-}
-
-export function priceDataModule(prices) {
-  return `${header}\nexport default ${JSON.stringify(prices, null, 2)};\n`;
 }
 
 export const prices = loadPrices(rawPrices);

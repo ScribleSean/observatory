@@ -104,12 +104,3 @@ export async function collectQuota(runtime,{enabled=false,isEnabled=async()=>ena
   return project(state,now);
 }
 
-export function attachQuota(result,quota) {
-  result.data.quota=quota;
-  if(quota.status!=='not-connected') {
-    result.status.sourcesConfigured++;
-    if(quota.status==='ok')result.status.sourcesRead++;
-    result.status.state=result.status.sourcesConfigured===result.status.sourcesRead?'ok':'partial';
-  }
-  return result;
-}

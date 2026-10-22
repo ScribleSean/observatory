@@ -57,16 +57,6 @@ export function unavailableClaudeTokenSource(host,checkedAt=new Date().toISOStri
   return {provider:'claude-code',host,status,checkedAt:new Date(checkedAt).toISOString(),scope:'Recorded Claude Code requests'};
 }
 
-export function attachProviderTokenSources(result,sources) {
-  if(!result?.data || !result?.status || !Array.isArray(sources)) throw Error('Invalid provider attachment');
-  result.data.providerTokenSources=sources;
-  const configured=sources.filter(source=>source?.status!=='not-connected');
-  result.status.sourcesConfigured+=configured.length;
-  result.status.sourcesRead+=configured.filter(source=>source.status==='ok').length;
-  result.status.state=result.status.sourcesConfigured>0 && result.status.sourcesConfigured===result.status.sourcesRead?'ok':'partial';
-  return result;
-}
-
 export function attachProviderTokenEstimates(result) {
   if(!result?.data || typeof result.data!=='object' || Array.isArray(result.data)) throw Error('Invalid provider estimate attachment');
   if(Array.isArray(result.data.providerTokenSources)) {
