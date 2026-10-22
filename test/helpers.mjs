@@ -17,7 +17,7 @@ export function ownSnapshot(host,now=Date.now(),change=snapshot=>snapshot) {
     device:{host,name:host==='Mac'?'Test Mac':'Test PC'},
     activity:[...keep(sample.activity),{host:other,status:'not-connected'}],
     tokens:[...keep(sample.tokens),{host:other,status:'not-connected'}],
-    settings:keep(sample.settings),dictation:[],
+    settings:keep(sample.settings),
     providerTokenSources:keep(sample.providerTokenSources),
     activityHistory:keep(sample.activityHistory)};
   return change(snapshot);

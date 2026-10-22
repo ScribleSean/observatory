@@ -148,14 +148,6 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.equal(snapshot.peerQuota.windows[0].durationMinutes, 300);
     assert.notEqual(snapshot.peerQuota.windows[0].remainingPercent, snapshot.quota.windows[0].remainingPercent);
     assert.deepEqual(snapshot.prices, { source: 'https://example.invalid/model-prices.json', checkedOn: new Date(now - 3 * 86400000).toISOString().slice(0, 10) });
-    assert.equal(snapshot.dictation[0].host, 'Mac');
-    assert.equal(snapshot.dictation[0].status, 'ok');
-    assert.equal(snapshot.dictation[0].source, 'Wispr Flow');
-    assert.equal(snapshot.dictation[0].days.length, 40);
-    assert.ok(snapshot.dictation[0].days.every(day => ['transcriptions', 'words', 'audioSeconds'].every(key => Number.isFinite(day[key]))));
-    assert.equal(snapshot.dictation[1].status, 'unavailable');
-    assert.equal(snapshot.dictation[1].refusal, 'private-folder-refused');
-    assert.equal(snapshot.dictation[1].days, undefined);
     for (const host of ['All', 'Mac', 'Windows']) for (const period of ['day', 'week', 'month', 'all']) {
       const values = totals(snapshot, host, period, new Date(now));
       const untrackedToday = recordedDays(snapshot, 'activity', host, now).some(day => day.untracked && day.date === new Date(now).toISOString().slice(0, 10));
@@ -188,7 +180,6 @@ const requiredPaths = [
   'prices.source', 'prices.checkedOn',
   'activity.*.days.*.seconds', 'activity.*.days.*.hours', 'activity.*.days.*.categories', 'activity.*.days.*.apps',
   'combined.days.*.hours', 'activityHistory.*.days', 'settings.*.profiles', 'settings.*.tools',
-  'dictation.0.days', 'dictation.1.days', 'dictation.1.refusal',
 ];
 
 function incompletePaths(snapshot) {

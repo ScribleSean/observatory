@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { statusWord, refusalText, checkTime, sourceGroups, sourceTotals, dictationView } from '../lib/view-sources.mjs';
+import { statusWord, refusalText, checkTime, sourceGroups, sourceTotals } from '../lib/view-sources.mjs';
 
 const now = Date.parse('2026-10-14T12:00:00Z');
 const codes = ['ok', 'not-connected', 'partial', 'unavailable', 'not-found', 'stale', 'needs-auth', 'unsupported', 'rate-limited'];
@@ -29,22 +29,21 @@ void test('check times preserve exact time and handle unknown and future reading
   }
   for (const at of [undefined, null, '', 'garbage', 0]) assert.deepEqual(checkTime(at, now), { label: 'Last check: Unknown', exact: null, iso: null });
 });
-void test('all six source groups retain supported rows and device names', () => {
+void test('all five source groups retain supported rows and device names', () => {
   const mac = { host: 'Mac', status: 'ok' }, win = { host: 'Windows', status: 'partial' }, other = { host: 'Other', status: 'ok' };
   const snapshot = { deviceNames: { Mac: '  Synthetic laptop  ', Windows: ' ' }, claudeLimits: mac, quota: win, peerQuota: win,
     activity: [mac, win, other], tokens: [mac, other], providerTokenSources: [{ ...win, provider: 'claude-code' }, { ...mac, provider: 'other' }],
-    settings: [win], dictation: [{ ...mac, source: 'Synthetic voice' }, win] };
+    settings: [win] };
   const groups = sourceGroups(snapshot, now);
-  assert.deepEqual(groups.map(group => group.id), ['limits', 'activity', 'codexTokens', 'claudeTokens', 'settings', 'dictation']);
-  assert.deepEqual(groups.map(group => group.rows.length), [3, 2, 1, 1, 1, 2]);
+  assert.deepEqual(groups.map(group => group.id), ['limits', 'activity', 'codexTokens', 'claudeTokens', 'settings']);
+  assert.deepEqual(groups.map(group => group.rows.length), [3, 2, 1, 1, 1]);
   assert.deepEqual(groups[0].rows.map(row => row.device), [null, null, 'Windows']);
   assert.equal(groups[1].rows[0].device, 'Synthetic laptop (Mac)');
-  assert.equal(groups[5].rows[1].name, 'Unknown');
   assert.equal(sourceGroups({ activity: [mac] }, now)[1].rows[0].device, 'macOS');
   assert.equal(sourceGroups({ peerQuota: other }, now)[0].rows.length, 0);
   for (const empty of [{}, null, undefined]) {
     const groups = sourceGroups(empty, now);
-    assert.equal(groups.length, 6);
+    assert.equal(groups.length, 5);
     assert.ok(groups.every(group => group.rows.length === 0));
   }
 });
@@ -55,9 +54,6 @@ void test('totals exclude disconnected rows and order status words', () => {
   assert.deepEqual(sourceTotals(sourceGroups({})), { read: 0, total: 0, byStatus: [] });
   assert.deepEqual(sourceTotals(sourceGroups({ quota: { status: 'not-connected' } })), { read: 0, total: 0, byStatus: [] });
 });
-const day = { date: '2026-10-14', transcriptions: 4, wordRecords: 4, words: 120, audioRecords: 4, audioSeconds: 120 };
-const source = { host: 'Mac', source: 'Synthetic A', status: 'ok', days: [day] };
-const snapshot = sources => ({ timezone: 'UTC', dictation: sources });
 void test('a read row shows no refusal sentence, a refused row does', () => {
   const snapshot = { activity: [
     { host: 'Mac', status: 'ok', refusal: 'private-folder-refused' },
@@ -68,10 +64,10 @@ void test('a read row shows no refusal sentence, a refused row does', () => {
   assert.equal(refused.refusal, 'A private folder check failed at a parent folder, so this source was not read.');
 });
 
-void test('old ok device sources count as saved readings and dictation stays Unknown', () => {
+void test('old ok device sources count as saved readings', () => {
   const checkedAt = new Date(now - 660000).toISOString();
   const row = { host: 'Windows', source: 'Synthetic A', status: 'ok', checkedAt, days: [] };
-  const data = { activity: [row], tokens: [row], settings: [row], dictation: [row],
+  const data = { activity: [row], tokens: [row], settings: [row],
     providerTokenSources: [{ ...row, provider: 'claude-code' }] };
   const groups = sourceGroups(data, now);
   assert.deepEqual(sourceTotals(groups).read, 0);
@@ -79,21 +75,15 @@ void test('old ok device sources count as saved readings and dictation stays Unk
     assert.equal(source.status, 'stale');
     assert.equal(source.check.iso, checkedAt);
   }
-  const result = dictationView(data, {}, now).cards[0];
-  assert.deepEqual([result.records, result.words, result.audio], ['Unknown', 'Unknown', 'Unknown']);
-  assert.deepEqual(result.chart, []);
 });
 
-void test('sources and dictation measure lag within an old snapshot', () => {
+void test('sources measure lag within an old snapshot', () => {
   for (const lag of [0, 9, 11]) {
     const collectedAt = new Date(now - 1800000).toISOString();
     const checkedAt = new Date(Date.parse(collectedAt) - lag * 60000).toISOString();
-    const data = { ...snapshot([{ ...source, checkedAt }]), collectedAt };
-    const result = dictationView(data, {}, now).cards[0];
-    assert.equal(result.records, lag <= 10 ? '4' : 'Unknown');
-    assert.equal(result.note.includes('as of'), lag > 10);
-    assert.equal(result.check.label.includes('as of'), lag > 10);
+    const data = { activity: [{ host: 'Mac', status: 'ok', checkedAt, days: [] }], collectedAt };
+    const [row] = sourceGroups(data, now)[1].rows;
+    assert.equal(row.status, lag > 10 ? 'stale' : 'ok');
     assert.equal(sourceTotals(sourceGroups(data, now)).read, lag <= 10 ? 1 : 0);
-    assert.equal(dictationView(data, { period: 'day' }, now + 86400000).cards[0].records, lag <= 10 ? 'No records' : 'Unknown');
   }
 });

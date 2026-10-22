@@ -28,7 +28,6 @@
     "limits": "Limits",
     "activity": "Activity",
     "tokens": "Tokens",
-    "dictation": "Dictation",
     "sources": "Sources",
     "settings": "Settings",
     "navigation": "Sections",
@@ -147,21 +146,6 @@
     "noRecords": "No source records",
     "statusCount": "{word}: {count}",
     "namedDevice": "{name} ({platform})"
-  },
-  "dictation": {
-    "notImplemented": "Not implemented",
-    "allTools": "All tools",
-    "allDevices": "All devices",
-    "tool": "Tool",
-    "records": "Records",
-    "words": "Words",
-    "audio": "Recorded audio time",
-    "chartTitle": "Recorded audio time by day",
-    "partial": "{value} (partial)",
-    "caveat": "Device histories may overlap, so they are not added together.",
-    "detail": "Missing dates are gaps, not zeros. Transcripts, recordings and credentials are not collected.",
-    "info": "About dictation records",
-    "noMatch": "No dictation records match these filters"
   },
   "tokens": {
     "input": "Input",
