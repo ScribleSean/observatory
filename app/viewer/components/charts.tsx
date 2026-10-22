@@ -48,12 +48,15 @@ function ChartFrame({ title, labels, columns, rows, maximum, children, formatVal
           <text x={left} y={14}>{maximum}</text>
           {children}
           {labels.map((label, index) => {
-            if (index % stride !== 0) return null;
-            const labelX = x(index, labels.length);
-            const labelLimit = Math.max(1, Math.floor(Math.min(stride * width / labels.length, left + width - labelX) / 7));
-            return <text key={index} x={labelX} y={170} textAnchor="start">
-              {label.length > labelLimit ? `${label.slice(0, Math.max(0, labelLimit - 1))}…` : label}
-            </text>;
+            // Count from the newest label, so the latest date is always shown.
+            if ((labels.length - 1 - index) % stride !== 0) return null;
+            const center = x(index, labels.length);
+            // Centre each label on its bar. At either end, keep it inside the frame instead of cutting it.
+            const half = Math.min(label.length, 16) * 7 / 2;
+            const anchor = center - half < 0 ? 'start' : center + half > left + width + 8 ? 'end' : 'middle';
+            const labelX = anchor === 'start' ? Math.max(0, center - 4) : anchor === 'end' ? left + width + 8 : center;
+            const shown = label.length > 16 ? `${label.slice(0, 15)}…` : label;
+            return <text key={index} x={labelX} y={170} textAnchor={anchor}>{shown}</text>;
           })}
         </>}
       </svg>

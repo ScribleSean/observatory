@@ -121,3 +121,13 @@ test('a failed agent read shows Unknown, not nothing running',()=>{
   assert.ok(!html.includes('Nothing running'));
   assert.ok(html.includes('could not be read'));
 });
+
+test('chart date labels are never cut, and the newest date is always shown',async()=>{
+  const {BarChart}=await server.ssrLoadModule('/app/viewer/components/charts.tsx');
+  const data=Array.from({length:30},(_,index)=>{const date=new Date(Date.UTC(2026,8,22+index));return {label:date.toISOString().slice(5,10),value:index*60};});
+  const html=renderToStaticMarkup(createElement(BarChart,{title:'Screen time by day',data,series:'accent',formatValue:String}));
+  const labels=[...html.matchAll(/<text[^>]*y="170"[^>]*>([^<]*)<\/text>/g)].map(match=>match[1]);
+  assert.ok(labels.length>2);
+  assert.equal(labels.at(-1),'10-21');
+  assert.ok(labels.every(label=>!label.includes('…')),labels.join(' '));
+});
