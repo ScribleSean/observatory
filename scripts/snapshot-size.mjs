@@ -39,13 +39,3 @@ export function serializeSnapshot(data) {
   return {text,bytes};
 }
 
-export async function writeSnapshot(data,{atomic,startedAt,beforeReplace}) {
-  const {text,bytes}=serializeSnapshot(data);
-  if(bytes>snapshotMaximumBytes) {
-    await atomic('collector.json',{state:'failed',reason:'snapshot-too-large',startedAt,
-      finishedAt:new Date().toISOString(),intervalSeconds:300,maxRunSeconds:240,bytes:Math.round(bytes)});
-    throw Error('Snapshot size limit of 16000000 bytes exceeded');
-  }
-  await atomic('usage.json',text,beforeReplace,true);
-  return bytes;
-}

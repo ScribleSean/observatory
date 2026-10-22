@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rename,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import path from 'node:path';
-import {snapshotMaximumBytes,snapshotHistoryBudget,serializeSnapshot,writeSnapshot} from './snapshot-size.mjs';
+import {snapshotMaximumBytes,snapshotHistoryBudget,serializeSnapshot} from './snapshot-size.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
 import {categories,appLabels} from './activity-timeline.mjs';
 import {quotaRetention,retainQuotaHistory} from './quota-history.mjs';
@@ -91,38 +88,6 @@ test('missing history fields stay missing when dates are trimmed',()=>{
   serializeSnapshot(data);
   assert.equal(Object.hasOwn(data.activityHistory[0].days.at(-1),'trackedHours'),false);
   assert.equal(data.activityHistory[0].days.at(-1).windowStart,null);
-});
-test('refusal leaves previous bytes untouched and never preserves the replacement',async()=>{
-  const folder=await mkdtemp(path.join(tmpdir(),'snapshot-size-'));
-  try {
-    const previous=Buffer.from('{"synthetic":"previous 🪴"}');
-    await writeFile(path.join(folder,'usage.json'),previous);
-    let preserved=false;
-    const atomic=async(name,value,beforeReplace,serialized=false)=>{
-      const temporary=path.join(folder,'temporary');
-      await writeFile(temporary,serialized?value:JSON.stringify(value));
-      await beforeReplace?.();await rename(temporary,path.join(folder,name));
-    };
-    const data={activityHistory:[{host:'Mac',days:[{date:date(0),seconds:null}]}],synthetic:'🪴'.repeat(4_000_001)};
-    await assert.rejects(writeSnapshot(data,{atomic,startedAt:at,beforeReplace:()=>{preserved=true;}}),
-      {message:'Snapshot size limit of 16000000 bytes exceeded'});
-    assert.equal(preserved,false);assert.deepEqual(await readFile(path.join(folder,'usage.json')),previous);
-    const status=JSON.parse(await readFile(path.join(folder,'collector.json'),'utf8'));
-    assert.equal(status.state,'failed');assert.equal(status.reason,'snapshot-too-large');assert.equal(status.startedAt,at);
-    assert.equal(status.intervalSeconds,300);assert.equal(status.maxRunSeconds,240);
-    assert.ok(Number.isFinite(Date.parse(status.finishedAt)));assert.equal(status.bytes,Buffer.byteLength(JSON.stringify(data)));
-    assert.equal(data.activityHistory[0].days.length,0);
-  } finally {await rm(folder,{recursive:true,force:true});}
-});
-test('accepted writes use the exact measured serialization and preserve before replacing',async()=>{
-  let calls=0,preserved=false;
-  const data={activityHistory:[],unknown:null,label:'🪴'};
-  const bytes=await writeSnapshot(data,{startedAt:at,beforeReplace:()=>{preserved=true;},
-    atomic:async(name,text,beforeReplace,serialized)=>{
-      calls++;assert.equal(name,'usage.json');assert.equal(serialized,true);
-      assert.equal(text,JSON.stringify(data));await beforeReplace();
-    }});
-  assert.equal(bytes,Buffer.byteLength(JSON.stringify(data)));assert.equal(calls,1);assert.equal(preserved,true);
 });
 test('maximal activity and quota with full provider day retention fit after trimming',t=>{
   const result={data:{activityHistory:maximalHistory(),quota:quota(),providerTokenSources:[provider('Mac'),provider('Windows')]},status:{}};
