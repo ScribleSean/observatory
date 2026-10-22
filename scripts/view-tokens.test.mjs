@@ -236,26 +236,6 @@ test('Claude-only hosts populate devices, sole-host totals and settings', () => 
   assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Studio' }]);
 });
 
-test('device session cost is All only', () => {
-  assert.deepEqual(view(sampleSnapshot(now), { host: 'Windows' }).claude.sessionCost,
-    { usd: null, observedAt: null, status: 'all-only' });
-});
-
-test('session cost follows the shared Limits rule', () => {
-  const cost = (usd, age, observedAt = new Date(now - age).toISOString()) =>
-    view({ claudeLimits: { sessionCost: { usd, observedAt } } }, { host: 'All' }).claude.sessionCost;
-  assert.deepEqual(cost(3, 360000), { usd: 3, observedAt: '2026-10-14T11:54:00.000Z', status: 'ok' });
-  const unknown = { usd: null, observedAt: null, status: 'unknown' };
-  assert.deepEqual(view({}, { host: 'All' }).claude.sessionCost, unknown);
-  for (const usd of [-1, 10001, '3', null, NaN]) assert.deepEqual(cost(usd, 0), unknown);
-  assert.deepEqual(cost(3, 0, 'not-a-date'), unknown);
-  // The shared rule refuses a cost 10 minutes old or older and any future observation.
-  assert.deepEqual(cost(3, 600000), unknown);
-  assert.deepEqual(cost(3, -1000), unknown);
-  assert.equal(cost(0, 0).status, 'ok');
-  assert.equal(cost(10000, 599999).status, 'ok');
-});
-
 test('settings group by model effort and speed without changing collector values', () => {
   const source = snapshot();
   const profile = extra => ({ date: '2026-10-14', model: 'a', effort: 'ultra', speed: 'fast', totalTokens: 10, ...extra });

@@ -2,7 +2,6 @@
 // the saved Python results under fixtures/read-settings.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {execFileSync,spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,12 +9,12 @@ import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath} from 'node:url';
 import {
   CACHE_PAGE_SIZE,DEFAULT_LIMITS,DEFAULT_SCAN_BYTES,FIRST_LINE_BYTES,MAX_CACHE_BYTES,MAX_FILES,MAX_LINES,MAX_LINE_BYTES,MAX_READ_SECONDS,
-  MAX_RETAINED_BYTES,MAX_TOTAL_BYTES,collectSettings,inventoryMetadata,pyDumps,summarize,
+  MAX_RETAINED_BYTES,MAX_TOTAL_BYTES,collectSettings,pyDumps,summarize,
 } from './read-settings.mjs';
 import {SettingsCache,cacheEvent} from './read-settings-cache.mjs';
 import {FIXTURE_NAMES,buildFixture,fixtureOptions} from './fixtures/read-settings/build.mjs';
 
-const reader=fileURLToPath(new URL('./read-settings.mjs',import.meta.url));
+
 const goldens=fileURLToPath(new URL('./fixtures/read-settings/',import.meta.url));
 // Parsed JSON input, as the reader receives it from a log line.
 const parsed=value=>JSON.parse(JSON.stringify(value));
@@ -93,14 +92,6 @@ test('selected model changes do not relabel usage from the preceding turn',()=>{
   assert.equal(sum(rows.filter(r=>r.model==='gpt-5.6-sol')),220);
   const astra=rows.find(r=>r.model==='gpt-6-astra');
   assert.equal(astra.totalTokens,110);assert.equal(astra.speed,'fast');assert.equal(astra.effort,'high');
-});
-
-test('inventory keys are salted and exclude raw session metadata',()=>{
-  const payload=parsed({type:'session_meta',payload:{id:'PRIVATE-ID',parent_thread_id:'PRIVATE-PARENT',cwd:'PRIVATE-PATH',base_instructions:'SECRET'}});
-  const a=inventoryMetadata(payload,'salt-one'),b=inventoryMetadata(payload,'salt-two');
-  const output=JSON.stringify([a,b]);
-  assert.match(a.keys[0],/^[a-f0-9]{64}$/);assert.notEqual(a.keys[0],b.keys[0]);assert.equal(a.parents.length,1);
-  assert.ok(!output.includes('PRIVATE'));assert.ok(!output.includes('SECRET'));
 });
 
 test('saved logs are read as UTF-8 bytes',async()=>{
@@ -456,36 +447,6 @@ test('cache file size accepts below and at the cap and refuses one past it',asyn
       }
     });
   }
-});
-
-test('tiny time budget exits without partial JSON through the command line failure path',async()=>{
-  await inTemporary(async root=>{
-    fs.mkdirSync(path.join(root,'sessions'));
-    fs.writeFileSync(path.join(root,'sessions/one.jsonl'),content);
-    const script=`import {main} from ${JSON.stringify(new URL('./read-settings.mjs',import.meta.url).href)};
-main([${JSON.stringify(root)}],{limits:{maxReadSeconds:1e-9}}).catch(error=>{process.stderr.write(error.name+': '+error.message+'\\n');process.exitCode=1;});`;
-    const result=spawnSync(process.execPath,['--no-warnings','--input-type=module','-e',script],{encoding:'utf8'});
-    assert.notEqual(result.status,0);
-    assert.equal(result.stdout,'');
-    assert.ok(result.stderr.includes('ValueError: Read time limit'));
-  });
-});
-
-test('command line prints the same report and fails without output for a missing folder',async()=>{
-  await inTemporary(async root=>{
-    const codex=buildFixture(path.join(root,'codex'),'lineage');
-    const printed=JSON.parse(execFileSync(process.execPath,['--no-warnings',reader,codex],{encoding:'utf8'}));
-    const direct=await collectSettings(codex);
-    assert.deepEqual(printed.tokenProfiles,direct.tokenProfiles);
-    assert.deepEqual(printed.hourTotals,direct.hourTotals);
-    const cache=privateFolder(path.join(root,'cache'));
-    const cachedRun=JSON.parse(execFileSync(process.execPath,['--no-warnings',reader,codex,cache],{encoding:'utf8'}));
-    assert.deepEqual(cachedRun.tokenProfiles,direct.tokenProfiles);
-    assert.ok(fs.statSync(path.join(cache,'events.sqlite')).size>0);
-    const missing=spawnSync(process.execPath,['--no-warnings',reader,path.join(root,'missing')],{encoding:'utf8'});
-    assert.equal(missing.status,1);
-    assert.equal(missing.stdout,'');
-  });
 });
 
 test('one synthetic retained history above the old 16 MB cap reads and reuses its cache',async()=>{

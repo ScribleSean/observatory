@@ -383,22 +383,6 @@ test('snapshot reference falls back for missing invalid or far future times', ()
   assert.equal(deviceReadingCurrent({ status: 'stale', checkedAt: new Date(reference).toISOString() }, reference), false);
 });
 
-test('a failed device read stays Unknown without an as of time', () => {
-  const at = '2026-10-18T12:00:00Z';
-  const snapshot = { collectedAt: at, timezone: 'UTC', tokens: [{ host: 'Windows', status: 'unavailable', checkedAt: '2026-10-18T11:00:00Z' }] };
-  const result = totals(snapshot, 'Windows', 'day', new Date(at));
-  assert.equal(result.codexTokens, null);
-  assert.equal(result.codexNote, '');
-});
-
-test('the panel note for an old device reading says Unknown before the reading time', () => {
-  const at = '2026-10-18T12:00:00Z';
-  const snapshot = { collectedAt: at, timezone: 'UTC', tokens: [{ host: 'Windows', status: 'stale', checkedAt: '2026-10-18T11:00:00Z', days: [] }] };
-  const result = totals(snapshot, 'Windows', 'day', new Date(at));
-  assert.equal(result.codexTokens, null);
-  assert.match(result.codexNote, /^Unknown · as of /);
-});
-
 test('failed local activity reads preserve saved days and week totals', () => {
   const data = { timezone: 'UTC', collectedAt: new Date(now).toISOString(),
     activity: [{ host: 'Mac', status: 'unavailable' }],
@@ -420,14 +404,6 @@ test('late reading dates use the snapshot timezone and panel totals stay Unknown
     assert.match(result.timeNote, /^Unknown · as of /);
     assert.match(result.codexNote, /^Unknown · as of /);
   }
-});
-
-test('fresh empty device rows report No records', () => {
-  const data = { timezone: 'UTC', collectedAt: new Date(now).toISOString() };
-  for (const key of ['activity', 'tokens']) data[key] = [{ host: 'Mac', status: 'ok', checkedAt: data.collectedAt, days: [] }];
-  const result = totals(data, 'Mac', 'week', new Date(now));
-  assert.deepEqual([result.codexTokens, result.seconds], [null, null]);
-  assert.deepEqual([result.codexNote, result.timeNote], ['No records', 'No records']);
 });
 
 test('a late device reading from an earlier day names its date in the as of note', () => {

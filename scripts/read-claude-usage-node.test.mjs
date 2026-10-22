@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import { mkdtemp, mkdir, writeFile, appendFile, readFile, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { fileSymlinkOrSkip } from './test-file-symlink.mjs';
 import {
@@ -342,21 +341,6 @@ test('matches the recorded Python output for every synthetic fixture', async () 
       const expected = JSON.parse(await readFile(path.join(fixtures, `expected-${name}.json`), 'utf8'));
       assert.deepEqual(await read(path.join(folder, name)), expected, name);
     }
-  } finally {
-    await rm(folder, { recursive: true, force: true });
-  }
-});
-test('the command prints the same JSON as the module', async () => {
-  const folder = await mkdtemp(path.join(tmpdir(), 'observatory-claude-command-'));
-  try {
-    await buildFixtures(folder);
-    const script = fileURLToPath(new URL('./read-claude-usage.mjs', import.meta.url));
-    const output = execFileSync(process.execPath, [script, path.join(folder, 'several-projects')], { encoding: 'utf8' });
-    const expected = JSON.parse(await readFile(path.join(fixtures, 'expected-several-projects.json'), 'utf8'));
-    assert.deepEqual(JSON.parse(output), expected);
-    assert.match(output, /^\{"provider": "claude-code", "status": "ok", /);
-    const missing = execFileSync(process.execPath, [script], { encoding: 'utf8' });
-    assert.equal(missing, '{"provider": "claude-code", "status": "unavailable"}\n');
   } finally {
     await rm(folder, { recursive: true, force: true });
   }

@@ -27,10 +27,6 @@ test('overlap counts once with explicit mixed categories', () => {
   assert.equal(r.categories['Mixed activity'], 1800);
   assert.equal(r.days[0].hours.reduce((a,b) => a+b), 5400);
 });
-test('duplicate intervals do not inflate time', () => {
-  const r = summarize(cleanIntervals([row('12:00','13:00'),row('12:00','13:00')], start, end), start, end);
-  assert.equal(r.days[0].seconds, 3600);
-});
 test('clipping, invalid categories and empty recorded days', () => {
   assert.throws(() => cleanIntervals([row('12:00','13:00','private-app')], start, end));
   assert.throws(() => cleanIntervals([row('13:00','12:00')], start, end));

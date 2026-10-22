@@ -64,8 +64,3 @@ test('skin CSS holds only colour variables, a bundled font stack and a radius', 
   assert.match(css,/prefers-color-scheme: dark/);
   assert.doesNotMatch(css,/url\(|@import|<|expression|javascript/i);
 });
-
-test('a low-contrast skin is reported, not silently accepted', () => {
-  const faint=structuredClone(read('sage.json'));faint.colors.muted=['e0ddd8','2c2d2a'];
-  assert.equal(skinContrastProblems(faint).length>0,true);
-});

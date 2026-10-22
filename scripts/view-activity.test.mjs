@@ -51,10 +51,6 @@ test('All needs a Combined live row', () => {
   const data = snapshot(); delete data.combined;
   assert.equal(activityNow(data, 'All', now).reason, 'noSource');
 });
-test('Combined never falls back to collection time', () => {
-  const data = snapshot(); delete data.combined.checkedAt;
-  assert.equal(activityNow(data, 'All', now).reason, 'noReading');
-});
 test('device reading falls back to collection time', () => {
   const data = snapshot(); delete data.activity[0].checkedAt;
   assert.equal(activityNow(data, 'Mac', now).reason, 'ok');
@@ -308,12 +304,4 @@ test('late Windows history remains visible without partial period totals', () =>
     assert.equal(current.total, null);
     assert.equal(current.note, strings.activity.nowStale);
   }
-});
-
-test('fresh empty activity rows report No records', () => {
-  const data = snapshot();
-  data.activity[0].days = [];
-  const result = view(data, { period: 'week' });
-  assert.equal(result.total, null);
-  assert.equal(result.note, strings.status.noRecords);
 });

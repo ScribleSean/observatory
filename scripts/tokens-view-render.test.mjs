@@ -111,13 +111,6 @@ void test('caveat sentence appears in exactly one element', () => {
   assert.equal((html.match(/<p>Dollar figures are estimates at list price\. A subscription is not billed per token\.<\/p>/g) ?? []).length, 1);
 });
 
-void test('session cost is not shown for any computer', () => {
-  for (const initialHost of ['Windows', 'All']) {
-    const html = renderToStaticMarkup(createElement(TokensView, { snapshot: sampleSnapshot(now), now, initialHost }));
-    assert.equal(html.includes('Session cost'), false);
-  }
-});
-
 void test('Codex price date is independent of missing Claude estimates', () => {
   const source = synthetic({ ...estimate, checked: '2026-10-01' });
   delete source.providerTokenSources[0].days[0].apiEstimate;

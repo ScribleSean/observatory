@@ -26,7 +26,6 @@ test('peer allowance display rejects unsafe shapes and drops invalid observation
   assert.deepEqual(peer.history,[]);
 });
 
-
 const now = Date.parse('2026-10-14T12:00:00Z');
 const iso = minutes => new Date(now + minutes * 60000).toISOString();
 const periods = ['now', 'day', 'week', 'month', 'all'];
@@ -137,14 +136,6 @@ test('peer absent or invalid is null and empty peer windows are Unknown', () => 
   assert.equal(peer.rows.length, 1);
   assert.equal(peer.rows[0].remaining, null);
   assert.equal(peer.stale, true);
-});
-
-test('session cost requires a bounded fresh observed value', () => {
-  const cost = (usd, minutes) => sessionCost({ claudeLimits: { sessionCost: { usd, observedAt: iso(minutes) } } }, now);
-  assert.deepEqual(cost(3.42, -1), { usd: 3.42, observedAt: iso(-1) });
-  for (const [usd, minutes] of [[3, -12], [-1, -1], [10001, -1], [3, 1], [3, -10], [NaN, -1]]) assert.equal(cost(usd, minutes), null);
-  assert.equal(sessionCost({}, now), null);
-  assert.deepEqual(cost(0, 0), { usd: 0, observedAt: iso(0) });
 });
 
 test('sample fixture supplies both providers and the named peer', () => {

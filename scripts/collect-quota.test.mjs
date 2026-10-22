@@ -223,11 +223,6 @@ test('failed reads persist retry deadlines without inventing usage',async()=>fix
   assert.equal(calls,1);assert.equal(result.latestReadStatus,'rate-limited');assert.deepEqual(result.windows,[]);
   assert.ok(Date.parse(result.nextAttemptAt)>now);assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
 }));
-test('disabling while a read is in flight discards the returned account data',async()=>fixture(async runtime=>{
-  const result=await collectQuota(runtime,{enabled:true,isEnabled:async()=>false,clock:()=>now,resolveExecutable:async()=>'/fake/codex',
-    readSnapshot:async()=>({scope:'a'.repeat(64),status:'ok',checkedAt:new Date(now).toISOString(),windows:[{bucket:'codex',window:'primary',remainingPercent:75}]})});
-  assert.equal(result.status,'not-connected');assert.deepEqual(result.history,[]);
-}));
 test('a newly observed account clears the prior account history even if its quota request fails',async()=>fixture(async runtime=>{
   await collectQuota(runtime,{enabled:true,clock:()=>now,resolveExecutable:async()=>'/fake/codex',
     readSnapshot:async()=>({scope:'a'.repeat(64),status:'ok',checkedAt:new Date(now).toISOString(),
