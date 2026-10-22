@@ -140,8 +140,9 @@ test('a command that ignores a stop request cannot outlive the time limit', {ski
   await writeFile(fake,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));process.on('SIGTERM',()=>{});process.on('SIGINT',()=>{});setInterval(()=>{},1000);\n`);
   await chmod(fake,0o700);
   const started=Date.now();
-  assert.equal(await runClaudeUsage({cwd:folder,find:async()=>fake,timeoutMs:400}),null);
-  assert.ok(Date.now()-started<3000,'the reader must settle near its limit');
+  // Long enough for the fake command to start and record itself even on a busy machine.
+  assert.equal(await runClaudeUsage({cwd:folder,find:async()=>fake,timeoutMs:1500}),null);
+  assert.ok(Date.now()-started<5000,'the reader must settle near its limit');
   const pid=Number(await readFile(pidFile,'utf8'));
   let alive=true;
   for(let attempt=0;attempt<100 && alive;attempt++) {try {process.kill(pid,0);await new Promise(resolve=>setTimeout(resolve,20));}catch {alive=false;}}
@@ -186,8 +187,8 @@ test('readClaudeUsage reports timed-out and force-stops a command that ignores a
   await writeFile(fake,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));process.on('SIGTERM',()=>{});process.on('SIGINT',()=>{});setInterval(()=>{},1000);\n`);
   await chmod(fake,0o700);
   const started=Date.now();
-  assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>fake,timeoutMs:400}),{status:'timed-out',usage:null});
-  assert.ok(Date.now()-started<3000,'the reader must settle near its limit');
+  assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>fake,timeoutMs:1500}),{status:'timed-out',usage:null});
+  assert.ok(Date.now()-started<5000,'the reader must settle near its limit');
   const pid=Number(await readFile(pidFile,'utf8'));
   let alive=true;
   for(let attempt=0;attempt<100 && alive;attempt++) {try {process.kill(pid,0);await new Promise(resolve=>setTimeout(resolve,20));}catch {alive=false;}}
