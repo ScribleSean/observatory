@@ -61,7 +61,7 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   // Every other visible computer's reading closest to that moment, if it is close enough to compare.
   const others = shown ? visible.filter(series => series.host !== shown.host).flatMap(series => {
     const near = series.points.reduce<Point | null>((best, point) => !best || Math.abs(point.t - shown.t) < Math.abs(best.t - shown.t) ? point : best, null);
-    return near && Math.abs(near.t - shown.t) <= Math.max(20 * 60000, span / 60) ? [{ ...near, name: series.name }] : [];
+    return near && Math.abs(near.t - shown.t) <= Math.max(20 * 60000, span / 300) ? [{ ...near, name: series.name }] : [];
   }) : [];
   const toggle = (host: string) => { setActive(null); setHidden(list => list.includes(host) ? list.filter(item => item !== host) : [...list, host]); };
 
