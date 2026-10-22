@@ -9,7 +9,8 @@ type Series = { host: string; name: string; points: Point[]; segments: Point[][]
 export type HistoryData = { provider: string; window: string; range: string; from: number; to: number; series: Series[]; resets: number[]; empty: boolean };
 
 const HEIGHT = 168, PAD = { left: 40, right: 12, top: 10, bottom: 26 };
-const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '6 4' };
+// The Mac is a solid line and the PC a dotted one, which stays distinct from a solid line broken by gaps.
+const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '0.1 4.5' };
 
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);

@@ -46,3 +46,8 @@ test('no readings in range is empty, not zero, and ranges filter by time',()=>{
   // The freshest reading is shown even when it is outside the chosen range.
   assert.equal(limitHistorySeries(snapshot([point('Mac',3*24*60,45)]),{provider:'claude',window:'5h',range:'today',now}).latest.remaining,45);
 });
+
+test('the line breaks at a reset, so two windows are never joined',()=>{
+  const data=limitHistorySeries(snapshot([point('Mac',90,20,{x:minutes(60)}),point('Mac',75,15,{x:minutes(60)}),point('Mac',45,100,{x:minutes(-240)})]),{provider:'claude',window:'5h',range:'today',now});
+  assert.deepEqual(data.series[0].segments.map(segment=>segment.length),[2,1]);
+});

@@ -34,21 +34,24 @@ const pc=ownSnapshot('Windows',now-4*60000,agents('Windows',ago(4),[
 // is in use, nothing at night, and the PC only on weekdays. 5-hour windows drain and
 // reset, weekly ones fall slowly. Deterministic, so screenshots repeat.
 function fictionalHistory(host) {
+  // One account curve, which each computer samples while it is in use. The account
+  // limit is the same whichever computer reads it, so the lines agree where they overlap.
   const points=[];
-  let seed=host==='Mac'?7:13;
+  let seed=11;
   const random=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
   const start=now-30*86400000;
   for(const [p,w5,ww] of [['claude','five_hour','seven_day'],['codex','primary','secondary']]) {
     let reset5=start,left5=100,resetWeek=start,leftWeek=100;
     for(let t=start;t<=now-60000;t+=15*60000) {
       const date=new Date(t),hour=date.getHours(),day=date.getDay();
-      const awake=hour>=8 && hour<23 && (host==='Mac' || (day>0 && day<6 && hour>=9 && hour<18));
+      const working=hour>=8 && hour<23;
       if(t-reset5>=5*3600000) {reset5=t;left5=100;}
       if(t-resetWeek>=7*86400000) {resetWeek=t;leftWeek=100;}
-      if(!awake)continue;
-      const burn=(p==='claude'?1.6:0.9)*random();
+      const burn=working?(p==='claude'?1.6:0.9)*random():0;
       left5=Math.max(0,left5-burn*2.2);leftWeek=Math.max(0,leftWeek-burn*0.12);
-      const at=new Date(t).toISOString();
+      const uses=host==='Mac'?working:working && day>0 && day<6 && hour>=9 && hour<18;
+      if(!uses)continue;
+      const at=new Date(t+(host==='Mac'?0:4*60000)).toISOString();
       points.push({p,w:w5,o:host,t:at,r:Math.round(left5*10)/10,x:new Date(reset5+5*3600000).toISOString(),d:300},
         {p,w:ww,o:host,t:at,r:Math.round(leftWeek*10)/10,x:new Date(resetWeek+7*86400000).toISOString(),d:10080});
     }
