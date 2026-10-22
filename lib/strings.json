@@ -421,5 +421,25 @@
     "claudeNotFound": "Claude Code sessions were not found on this computer.",
     "computers": "Computers",
     "claudeUnavailable": "Claude Code sessions could not be read. Unknown until the next collection."
+  },
+  "limitHistory": {
+    "title": "Limit history",
+    "range": "Range",
+    "today": "Today",
+    "week": "7 days",
+    "month": "30 days",
+    "all": "All",
+    "fiveHour": "5-hour",
+    "weekly": "weekly",
+    "chartTitle": "{provider} {window} limit left over time",
+    "from": "from {device} at {time}",
+    "left": "{value}% left",
+    "noReadings": "No readings in this range",
+    "reset": "Reset",
+    "resetAt": "Window reset at {time}",
+    "time": "Time",
+    "computer": "Computer",
+    "remaining": "Left",
+    "caveat": "Each line is one computer's own readings of the account limit. Lines are never added together, and a gap means no reading was taken."
   }
 }

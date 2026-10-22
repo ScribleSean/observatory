@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { STRINGS, format } from '../../../lib/strings.generated';
-import { limitRows, limitHistory, peerLimits, sessionCost } from '../../../lib/view-limits.mjs';
+import { limitRows, peerLimits, sessionCost } from '../../../lib/view-limits.mjs';
+import { limitHistorySeries } from '../../../lib/view-limit-history.mjs';
+import { LimitHistoryChart, type HistoryData } from './LimitHistoryChart';
 import { span } from '../../../lib/panel-data.mjs';
-import { Card, Row, ProviderDot, FilterGroup, InfoControl, LineChart } from '../components';
+import { Card, Row, ProviderDot, FilterGroup, InfoControl } from '../components';
 import { LimitRows } from '../components/LimitRows';
 import './limits.css';
 
 const providers = [['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const;
-const periods: [string, string][] = Object.entries(STRINGS.periods);
-type HistoryWindow = { bucket: string; windowId: string; label: string; points: { label: string; value: number | null }[] };
+const ranges: [string, string][] = [['today', STRINGS.limitHistory.today], ['week', STRINGS.limitHistory.week], ['month', STRINGS.limitHistory.month], ['all', STRINGS.limitHistory.all]];
+const windows = [['5h', STRINGS.limitHistory.fiveHour], ['week', STRINGS.limitHistory.weekly]] as const;
 const percent = (value: number) => format(STRINGS.formats.percent, { value: Math.round(value) });
 const paceMessages: Record<string, string> = {
   'resets-first': STRINGS.limits.resetsFirst,
@@ -28,13 +30,40 @@ function paceSentence(pace: ReturnType<typeof limitRows>[number]['pace']) {
   return paceMessages[pace.status] ?? STRINGS.status.unknown;
 }
 
-export function LimitsView({ snapshot, now, limitStyle, initialPeriod = 'day' }: {
+// Limit % over time for each provider and window, one line per computer.
+// The freshest reading leads each card, with the computer and time it came from.
+function LimitHistorySection({ snapshot, now }: { snapshot: Record<string, unknown> | null; now: number }) {
+  const [range, setRange] = useState('week');
+  return <section className="ob-history" aria-labelledby="ob-history-title">
+    <Row><h3 id="ob-history-title">{STRINGS.limitHistory.title}</h3>
+      <FilterGroup label={STRINGS.limitHistory.range} options={ranges} value={range} onChange={setRange} /></Row>
+    <div className="ob-history-grid-cards">
+      {providers.flatMap(([provider, name]) => windows.map(([window, label]) => {
+        const data = limitHistorySeries(snapshot, { provider, window, range, now });
+        const latest = data.latest;
+        const title = format(STRINGS.limitHistory.chartTitle, { provider: name, window: label });
+        return <Card key={provider + window} label={title}>
+          <div className="ob-history-head">
+            <h4><ProviderDot provider={provider} />{name} <span className="ob-meta">{label}</span></h4>
+            <div className="ob-history-latest">
+              <span className="ob-num">{latest ? percent(latest.remaining) : STRINGS.status.unknown}</span>
+              <span className="ob-meta">{latest ? format(STRINGS.limitHistory.from, { device: latest.name, time: new Date(latest.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) }) : STRINGS.limitHistory.noReadings}</span>
+            </div>
+          </div>
+          <LimitHistoryChart data={data as unknown as HistoryData} color={provider} title={title} />
+        </Card>;
+      }))}
+    </div>
+    <p className="ob-meta ob-limits-caveat">{STRINGS.limitHistory.caveat}{' '}
+      <InfoControl label={STRINGS.limits.historyInfo} detail={STRINGS.limits.historyDetail} /></p>
+  </section>;
+}
+
+export function LimitsView({ snapshot, now, limitStyle }: {
   snapshot: Record<string, unknown> | null;
   now: number;
   limitStyle: string;
-  initialPeriod?: string;
 }) {
-  const [period, setPeriod] = useState(initialPeriod);
   const rows = limitRows(snapshot, now);
   const cost = sessionCost(snapshot, now);
   const peer = peerLimits(snapshot, now);
@@ -66,25 +95,7 @@ export function LimitsView({ snapshot, now, limitStyle, initialPeriod = 'day' }:
           <span className="ob-num">{cost ? format(STRINGS.formats.usd, { value: cost.usd.toFixed(2) }) : STRINGS.status.unknown}</span></Row>}
       </Card>)}
     </div>
-    <Card label={STRINGS.limits.history}>
-      <h3>{STRINGS.limits.history}</h3>
-      <FilterGroup label={STRINGS.devices.period} options={periods} value={period} onChange={setPeriod} />
-      <div className="ob-limits-providers">
-        {providers.map(([provider, name]) => {
-          const history = limitHistory(snapshot, provider, period, now) as { windows: HistoryWindow[] };
-          return <div key={provider}>
-            <h4><ProviderDot provider={provider} />{name}</h4>
-            {history.windows.length ? history.windows.map(window => <LineChart key={window.bucket + window.windowId}
-              title={format(STRINGS.limits.chartTitle, { provider: name, window: window.label })}
-              series={provider} data={window.points.map(({ label, value }) => ({ label, value }))} min={0} max={100} formatValue={percent} />)
-              : <div className="ob-meta">{STRINGS.status.unknown}</div>}
-          </div>;
-        })}
-      </div>
-      <div className="ob-meta ob-limits-caveat">{STRINGS.limits.historyCaveat}{' '}
-        <InfoControl label={STRINGS.limits.historyInfo} detail={STRINGS.limits.historyDetail} />
-      </div>
-    </Card>
+    <LimitHistorySection snapshot={snapshot} now={now} />
     {peer && <Card label={format(STRINGS.limits.sharedFrom, { device: peer.device })}>
       <h3>{format(STRINGS.limits.sharedFrom, { device: peer.device })}</h3>
       <div className={peer.stale ? 'ob-meta warn' : 'ob-meta'} title={peer.observedAt ? new Date(peer.observedAt).toLocaleString() : undefined}>

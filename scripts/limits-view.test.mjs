@@ -63,7 +63,8 @@ void test('low remaining value warns on the affected row', () => {
 
 for (const data of [{ quota: { status: 'unavailable' } }, null]) {
   void test('unknown remains unknown for ' + (data ? 'unavailable quota' : 'null snapshot'), () => {
-    const html = render(data);
+    // The history charts' axis labels (0% to 100%) are not readings, so they are left out of this check.
+    const html = render(data).replace(/<section class="ob-history"[\s\S]*<\/section>/, '');
     assert.match(html, /Unknown/);
     assert.doesNotMatch(html, /(^|[^0-9.])0 ?%|>0</);
     assert.match(html, /Session cost \(estimate\)<\/span><span class="ob-num">Unknown/);
@@ -99,14 +100,13 @@ void test('styles preserve the same provider rows', () => {
   assert.ok(counts[0].every(value => value >= 4));
 });
 
-void test('history renders every window in each period', () => {
-  for (const initialPeriod of ['now', 'day', 'week', 'month', 'all']) {
-    const html = render(snapshot(), { initialPeriod });
-    assert.equal(count(html, /<figure class="ob-chart"/g), 4);
-    for (const name of ['Claude Code', 'Codex']) for (const window of ['5-hour', 'weekly'])
-      assert.ok(html.includes(name + ' ' + window + ' remaining'));
-    assert.equal(count(html, /History covers the readings this device keeps/g), 1);
-  }
+void test('limit history has a card for every provider and window, with the freshest reading or Unknown', () => {
+  const html = render(snapshot());
+  assert.equal(count(html, /<figure class="ob-history-chart"/g), 4);
+  for (const name of ['Claude Code', 'Codex']) for (const window of ['5-hour', 'weekly'])
+    assert.ok(html.includes(name + ' ' + window + ' limit left over time'), name + ' ' + window);
+  assert.ok(html.includes('Lines are never added together'));
+  assert.ok(html.includes('No readings in this range'));
 });
 
 

@@ -30,6 +30,33 @@ const pc=ownSnapshot('Windows',now-4*60000,agents('Windows',ago(4),[
   {tool:'claude-code',status:'working',project:'tray-app',name:'Icon rendering',startedAt:ago(25),updatedAt:ago(4)},
   {tool:'claude-code',status:'idle',project:'observatory',name:'Windows check',startedAt:ago(200),updatedAt:ago(60)},
 ]));
+// Fictional limit history: 30 days of readings, every 15 minutes while a computer
+// is in use, nothing at night, and the PC only on weekdays. 5-hour windows drain and
+// reset, weekly ones fall slowly. Deterministic, so screenshots repeat.
+function fictionalHistory(host) {
+  const points=[];
+  let seed=host==='Mac'?7:13;
+  const random=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+  const start=now-30*86400000;
+  for(const [p,w5,ww] of [['claude','five_hour','seven_day'],['codex','primary','secondary']]) {
+    let reset5=start,left5=100,resetWeek=start,leftWeek=100;
+    for(let t=start;t<=now-60000;t+=15*60000) {
+      const date=new Date(t),hour=date.getHours(),day=date.getDay();
+      const awake=hour>=8 && hour<23 && (host==='Mac' || (day>0 && day<6 && hour>=9 && hour<18));
+      if(t-reset5>=5*3600000) {reset5=t;left5=100;}
+      if(t-resetWeek>=7*86400000) {resetWeek=t;leftWeek=100;}
+      if(!awake)continue;
+      const burn=(p==='claude'?1.6:0.9)*random();
+      left5=Math.max(0,left5-burn*2.2);leftWeek=Math.max(0,leftWeek-burn*0.12);
+      const at=new Date(t).toISOString();
+      points.push({p,w:w5,o:host,t:at,r:Math.round(left5*10)/10,x:new Date(reset5+5*3600000).toISOString(),d:300},
+        {p,w:ww,o:host,t:at,r:Math.round(leftWeek*10)/10,x:new Date(resetWeek+7*86400000).toISOString(),d:10080});
+    }
+  }
+  return [{host,status:'ok',checkedAt:new Date(now).toISOString(),points}];
+}
+mac.limitHistory=fictionalHistory('Mac');pc.limitHistory=fictionalHistory('Windows');
+
 // Collected a minute and four minutes ago, so every "as of" reads naturally.
 mac.collectedAt=ago(1);pc.collectedAt=ago(4);
 // PREVIEW_ONE=1 shows the one-computer view, which is what a new install sees.
