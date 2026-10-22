@@ -134,20 +134,7 @@
     }
    ],
    "tools": [],
-   "scope": "Recent saved Codex logs only",
-   "inventory": {
-    "status": "incomplete",
-    "keys": [
-     "0f0e30ac7fe586f81564d692c9a8958932b525289035e971402bb7cc5043cb46",
-     "202fd8eceed08d0fe526ec4727154d4c4fe73a94807b515ce274c4488f5596fa",
-     "600c4d32448a9656403fe1b2639adb5b377667d1372670f1c7e8920feb38d401",
-     "78b905d76029f8b463d50f64e0ef6d4fe83078f937dcfcaf6ac71aea99de0251",
-     "7de5d4f9868944f19a6a75da07238ce82a960b5410135d89388a741ad720c6e9",
-     "81727e26a1ab81a0bf1e434d6788cbafa3bee3750cf92b52286614bd10d7afea",
-     "b144d8405d98999697849f772eadab6c9bf92bf8ae5bdfe3614cd64a84b5de5c"
-    ],
-    "parents": []
-   }
+   "scope": "Recent saved Codex logs only"
   }
  },
  "cached": {
@@ -285,20 +272,7 @@
     }
    ],
    "tools": [],
-   "scope": "Recent saved Codex logs only",
-   "inventory": {
-    "status": "incomplete",
-    "keys": [
-     "0f0e30ac7fe586f81564d692c9a8958932b525289035e971402bb7cc5043cb46",
-     "202fd8eceed08d0fe526ec4727154d4c4fe73a94807b515ce274c4488f5596fa",
-     "600c4d32448a9656403fe1b2639adb5b377667d1372670f1c7e8920feb38d401",
-     "78b905d76029f8b463d50f64e0ef6d4fe83078f937dcfcaf6ac71aea99de0251",
-     "7de5d4f9868944f19a6a75da07238ce82a960b5410135d89388a741ad720c6e9",
-     "81727e26a1ab81a0bf1e434d6788cbafa3bee3750cf92b52286614bd10d7afea",
-     "b144d8405d98999697849f772eadab6c9bf92bf8ae5bdfe3614cd64a84b5de5c"
-    ],
-    "parents": []
-   }
+   "scope": "Recent saved Codex logs only"
   }
  }
 }

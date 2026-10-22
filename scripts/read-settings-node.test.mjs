@@ -192,11 +192,10 @@ test('a long non-ASCII session metadata line keeps its identity and invalid UTF-
     const line=JSON.stringify({type:'session_meta',payload:{id:'synthetic-session',note:'€'.repeat(400_000)}})+'\n';
     assert.ok(bytes(line)>1_000_000&&line.length<1_000_000);
     fs.writeFileSync(file,line+tail);
-    const result=await collectSettings(logs,{inventorySalt:'synthetic-salt'});
+    const result=await collectSettings(logs);
     assert.equal(result.status,'ok');
-    assert.equal(result.inventory.status,'ok');
     fs.writeFileSync(file,Buffer.concat([Buffer.from('{"type":"session_meta","payload":{"id":"synthetic'),Buffer.from([0xff]),Buffer.from('"}}\n'+tail)]));
-    await assert.rejects(collectSettings(logs,{inventorySalt:'synthetic-salt'}));
+    await assert.rejects(collectSettings(logs));
   });
 });
 
@@ -235,15 +234,15 @@ test('retained tokens include old archives, canonical copies and fork continuati
   });
 });
 
-test('malformed session metadata preserves local token counts but withholds inventory eligibility',async()=>{
+test('malformed session metadata preserves local token counts',async()=>{
   await inTemporary(async root=>{
     fs.mkdirSync(path.join(root,'sessions'));fs.mkdirSync(path.join(root,'archived_sessions'));
     const stamp=now();
     [null,[],'PRIVATE_METADATA'].forEach((payload,index)=>{
       fs.writeFileSync(path.join(root,'sessions',`${index}.jsonl`),jsonl([{type:'session_meta',payload},{...usage(100),timestamp:stamp}]));
     });
-    const result=await collectSettings(root,{inventorySalt:'test-salt'});
-    assert.equal(result.status,'ok');assert.equal(result.inventory.status,'incomplete');
+    const result=await collectSettings(root);
+    assert.equal(result.status,'ok');
     assert.equal(sum(result.profiles),330);
     assert.equal(sum(result.tokenProfiles),330);
   });
@@ -341,7 +340,7 @@ test('a first line longer than the first line limit follows the invalid metadata
     await inTemporary(async root=>{
       const logs=sessionsFolder(root);
       const file=path.join(logs,'sessions/one.jsonl');
-      const options={inventorySalt:'synthetic-salt',cacheDirectory:cached?privateFolder(path.join(root,'cache')):null};
+      const options={cacheDirectory:cached?privateFolder(path.join(root,'cache')):null};
       const tail=pyDumps(event)+'\n';
       fs.writeFileSync(file,'invalid metadata\n'+tail);
       const expected=await collectSettings(logs,options);
@@ -351,7 +350,6 @@ test('a first line longer than the first line limit follows the invalid metadata
       const result=await collectSettings(logs,options);
       assert.deepEqual(result,expected);
       assert.equal(result.status,'ok');
-      assert.equal(result.inventory.status,'incomplete');
       assert.equal(result.tokenProfiles[0].totalTokens,110);
     });
   }

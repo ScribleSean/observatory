@@ -1,7 +1,6 @@
-import {createHash,createHmac} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {pathToFileURL} from 'node:url';
 import {SettingsCache} from './read-settings-cache.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 
@@ -458,17 +457,6 @@ function newYorkDay(utc) {
   return {date:`${pad(y,4)}-${pad(m)}-${pad(d)}`,hour:Math.floor((seconds-days*86400)/3600)};
 }
 
-export function inventoryMetadata(meta,salt) {
-  // Ephemeral comparison keys only. The collector never saves these keys.
-  const payload=isDict(meta)&&get(meta,'type')==='session_meta'?(has(meta,'payload')?meta.payload:{}):{};
-  if(!isDict(payload))return null;
-  const keys=values=>values.filter(value=>typeof value==='string'&&value.length>0&&cpLen(value)<=128)
-    .map(value=>createHmac('sha256',utf8(salt)).update(utf8(value)).digest('hex'));
-  const owned=keys([get(payload,'id'),get(payload,'session_id')]);
-  const parents=keys([get(payload,'forked_from_id'),get(payload,'parent_thread_id')]);
-  return owned.length?{keys:owned,parents}:null;
-}
-
 let distinctTurns=0;
 function turnIdentity(value) {
   if(typeof value==='string')return 's'+value;
@@ -721,7 +709,7 @@ function within(file,root) {
 }
 
 function collect(folder,options,{retryCache=true,cacheBudget=null,readBudget=null}={}) {
-  const {limits,now,inventorySalt:salt,cacheDirectory,cacheScanBudget,cacheClass}=options;
+  const {limits,now,cacheDirectory,cacheScanBudget,cacheClass}=options;
   readBudget??=new ReadBudget({limits,clock:options.clock});
   readBudget.check();
   const root=realpath(folder);
@@ -743,11 +731,9 @@ function collect(folder,options,{retryCache=true,cacheBudget=null,readBudget=nul
     }
     return identity;
   };
-  const inventory={status:'ok',keys:new Set(),parents:new Set()};
   for(const file of candidates) {
     readBudget.check();
     if(fs.lstatSync(file).isSymbolicLink()||!within(realpath(file),root)) {
-      inventory.status='incomplete';
       continue;
     }
     const info=fs.statSync(file,{bigint:true});
@@ -766,14 +752,6 @@ function collect(folder,options,{retryCache=true,cacheBudget=null,readBudget=nul
     }
     const payload=isDict(meta)&&get(meta,'type')==='session_meta'?get(meta,'payload'):null;
     let identity=isDict(payload)?get(payload,'id'):null;
-    if(typeof identity!=='string'||!identity)inventory.status='incomplete';
-    if(pyTruthy(salt)) {
-      const metadata=inventoryMetadata(meta,salt);
-      if(metadata) {
-        for(const key of metadata.keys)inventory.keys.add(key);
-        for(const key of metadata.parents)inventory.parents.add(key);
-      } else inventory.status='incomplete';
-    }
     identity=typeof identity==='string'&&identity?identity:file;
     if(!sessions.has(identity)||info.size>sessions.get(identity).info.size) {
       sessions.set(identity,{file,info});
@@ -811,31 +789,11 @@ function collect(folder,options,{retryCache=true,cacheBudget=null,readBudget=nul
     tools:[...tools.values()].sort((a,b)=>compareTuples(a.key,b.key))
       .map(({key:[date,category,tool,namespace],count})=>({date,category,tool,namespace,count})),
     scope:'Recent saved Codex logs only'};
-  if(pyTruthy(salt))result.inventory={status:inventory.status,keys:[...inventory.keys].sort(compareText),parents:[...inventory.parents].sort(compareText)};
   readBudget.check();
   return result;
 }
 
-export async function collectSettings(codexFolder,{cacheDirectory=null,now=new Date(),inventorySalt=null,cacheScanBudget=null,
+export async function collectSettings(codexFolder,{cacheDirectory=null,now=new Date(),cacheScanBudget=null,
   limits={},clock,cacheClass=SettingsCache,readBudget=null}={}) {
-  return collect(codexFolder,{cacheDirectory,now,inventorySalt,cacheScanBudget,limits:readerLimits(limits),clock,cacheClass},{readBudget});
-}
-
-export async function main(argv=process.argv.slice(2),options={}) {
-  const [folder,cacheDirectory=null]=argv;
-  if(!folder)throw new ValueError('Usage: read-settings.mjs <codexFolder> [cacheDirectory]');
-  const result=await collectSettings(folder,{...options,cacheDirectory});
-  // Python refuses NaN and infinity in the printed report.
-  process.stdout.write(pyDumps(result,{allowNan:false})+'\n');
-}
-
-const invoked=(()=>{
-  try {return Boolean(process.argv[1])&&import.meta.url===pathToFileURL(fs.realpathSync(process.argv[1])).href;}
-  catch {return false;}
-})();
-if(invoked) {
-  main().catch(error=>{
-    process.stderr.write(`${error?.name??'Error'}: ${error?.message??error}\n`);
-    process.exitCode=1;
-  });
+  return collect(codexFolder,{cacheDirectory,now,cacheScanBudget,limits:readerLimits(limits),clock,cacheClass},{readBudget});
 }

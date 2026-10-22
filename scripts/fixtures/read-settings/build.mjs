@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const FIXED_NOW='2026-10-15T12:00:00.000Z';
-export const SALT='synthetic-salt';
 
 const usage=(n,extra={})=>({input_tokens:n,cached_input_tokens:Math.floor(n/2),cache_write_input_tokens:Math.floor(n/10),
   output_tokens:Math.floor(n/5),reasoning_output_tokens:Math.floor(n/20),total_tokens:n+Math.floor(n/5),...extra});
@@ -203,7 +202,7 @@ const FIXTURES={
 
 // Fixtures whose result depends on directory order are compared live but not saved.
 export const FIXTURE_NAMES=Object.keys(FIXTURES);
-export const fixtureOptions=name=>({now:new Date(FIXED_NOW),inventorySalt:name==='inventory'||name==='malformed'?SALT:null});
+export const fixtureOptions=()=>({now:new Date(FIXED_NOW)});
 
 export function buildFixture(root,name) {
   if(!FIXTURES[name])throw Error(`Unknown fixture ${name}`);

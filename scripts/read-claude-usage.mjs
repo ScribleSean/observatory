@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
 import { TIME_ZONE } from '../lib/timezone.mjs';
 
 export const MAX_FILES = 10_000;
@@ -574,15 +573,3 @@ export async function collectClaudeUsage(claudeFolder, { now = new Date(), limit
 }
 
 // Serialize like Python's json.dumps, with ", " and ": " separators.
-export function pythonJson(value) {
-  if (Array.isArray(value)) return `[${value.map(pythonJson).join(', ')}]`;
-  if (value !== null && typeof value === 'object')
-    return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}: ${pythonJson(item)}`).join(', ')}}`;
-  return JSON.stringify(value);
-}
-
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  const folder = process.argv[2];
-  const result = folder === undefined ? unavailable() : await collectClaudeUsage(folder);
-  process.stdout.write(`${pythonJson(result)}\n`);
-}

@@ -17,7 +17,9 @@ test('a reader counts days in the chosen zone',()=>withFolder(async folder=>{
   await mkdir(path.dirname(file),{recursive:true});
   await writeFile(file,JSON.stringify({type:'assistant',timestamp:'2026-09-25T20:30:00Z',requestId:'r',message:{role:'assistant',id:'m',model:'claude-opus-5-5',
     usage:{input_tokens:1,cache_read_input_tokens:0,cache_creation_input_tokens:0,output_tokens:1}}})+'\n');
-  const day=zone=>JSON.parse(execFileSync(process.execPath,['scripts/read-claude-usage.mjs',folder],
+  // A fresh process, because the zone is read once when the reader loads.
+  const script=`const {collectClaudeUsage}=await import('./scripts/read-claude-usage.mjs');process.stdout.write(JSON.stringify(await collectClaudeUsage(${JSON.stringify(folder)})));`;
+  const day=zone=>JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',script],
     {env:{...process.env,OBSERVATORY_TIMEZONE:zone},encoding:'utf8'})).days[0].date;
   assert.equal(day('Asia/Tokyo'),'2026-09-26');
   assert.equal(day('America/New_York'),'2026-09-25');

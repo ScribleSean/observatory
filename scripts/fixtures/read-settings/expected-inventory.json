@@ -62,20 +62,7 @@
     }
    ],
    "tools": [],
-   "scope": "Recent saved Codex logs only",
-   "inventory": {
-    "status": "incomplete",
-    "keys": [
-     "06be3c6c0262d044ba1a61fee5898181d70db050d8a6e9a8d14d36e32bc4b144",
-     "23cdef13f20f7f70daf58d3090f7db33f4a1ae45b403827a00dea612e61336ea",
-     "3df29ccc48b32057f4458923ca0198362de85eb36f29135d444ff3a773f32806",
-     "410b51b30805553488c83072e419f6290a45b6ec7e6061483f6b9c28e7d5d450"
-    ],
-    "parents": [
-     "23cdef13f20f7f70daf58d3090f7db33f4a1ae45b403827a00dea612e61336ea",
-     "58036906d5ed24a2bf241a8ebbd30d4bdc1bfe34bd885627b228380ddd729f76"
-    ]
-   }
+   "scope": "Recent saved Codex logs only"
   }
  },
  "cached": {
@@ -141,20 +128,7 @@
     }
    ],
    "tools": [],
-   "scope": "Recent saved Codex logs only",
-   "inventory": {
-    "status": "incomplete",
-    "keys": [
-     "06be3c6c0262d044ba1a61fee5898181d70db050d8a6e9a8d14d36e32bc4b144",
-     "23cdef13f20f7f70daf58d3090f7db33f4a1ae45b403827a00dea612e61336ea",
-     "3df29ccc48b32057f4458923ca0198362de85eb36f29135d444ff3a773f32806",
-     "410b51b30805553488c83072e419f6290a45b6ec7e6061483f6b9c28e7d5d450"
-    ],
-    "parents": [
-     "23cdef13f20f7f70daf58d3090f7db33f4a1ae45b403827a00dea612e61336ea",
-     "58036906d5ed24a2bf241a8ebbd30d4bdc1bfe34bd885627b228380ddd729f76"
-    ]
-   }
+   "scope": "Recent saved Codex logs only"
   }
  }
 }
