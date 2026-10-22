@@ -54,7 +54,7 @@ test('a dry run on a fresh clone lists every step and writes nothing',{skip:!['d
   const path=(await import('node:path')).default;
   const config=path.join(folder,'observatory.config.json');
   const output=execFileSync(process.execPath,['scripts/setup.mjs','--dry-run'],{env:{...process.env,OBSERVATORY_CONFIG:config},encoding:'utf8'});
-  for(const step of ['would write observatory.config.json','would build the dashboard','would write the app settings','Dry run: nothing was changed.'])
+  for(const step of ['would write observatory.config.json','would build the dashboard','would import limit history','would write the app settings','Dry run: nothing was changed.'])
     assert.ok(output.includes(step),step);
   assert.equal(existsSync(config),false);
 })),{skip:!['darwin','win32'].includes(process.platform) && 'setup runs on macOS and Windows only'});

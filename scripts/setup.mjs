@@ -11,6 +11,7 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {REPO,CONFIG_FILE,loadConfig,parseConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
+import {importHistory} from './import-history.mjs';
 import {defaultSettingsPath} from './claude-statusline-install.mjs';
 
 const execute=promisify(execFile);
@@ -183,6 +184,12 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
         path.win32.join(REPO,'glance','windows','Glance.cs')],{windowsHide:true,timeout:300000});
     });
   }
+  // Bring in limit history kept by earlier versions. Safe to repeat: known readings are skipped.
+  await act('import limit history kept by earlier versions',async()=>{
+    const report=await importHistory(config);
+    const added=report.reduce((total,row)=>total+row.added,0);
+    if(added)log(`  Imported ${added} earlier limit readings.`);
+  });
   await act('write the app settings (glance.json)',async()=>{
     await writeFile(target.settings,JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n');
     // Ad hoc signature last, so it covers glance.json too. macOS then runs the locally built app without a download warning.

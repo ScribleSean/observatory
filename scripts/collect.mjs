@@ -24,6 +24,7 @@ import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './win
 import {collectSettings} from './read-settings.mjs';
 import {collectClaudeUsage} from './read-claude-usage.mjs';
 import {readAgents,cleanAgentActivity} from './read-agents.mjs';
+import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
@@ -82,6 +83,22 @@ async function keepOldAppSnapshot(folder) {
   const previous=await previousSnapshot(path.join(folder,'usage.json'));
   if(!previous || previous.device)return;
   await copyFile(path.join(folder,'usage.json'),path.join(folder,OLD_APP_BACKUP),fsConstants.COPYFILE_EXCL).catch(error=>{if(error.code!=='EEXIST')throw error;});
+}
+
+// Keep every limit reading this computer observed, then ship a compact history
+// with the snapshot for the charts. A failure here never stops collection.
+async function recordLimitHistory(config,data,now) {
+  const host=config.host;
+  let db;
+  try {
+    db=await openHistory(config.dataFolder);
+    recordReadings(db,[
+      ...readingsFrom(data.quota,{provider:'codex',observer:host,source:'live'}),
+      ...readingsFrom(data.claudeLimits,{provider:'claude',observer:host,source:'live'}),
+    ]);
+    return {host,status:'ok',checkedAt:now.toISOString(),points:compactHistory(db,{now:now.getTime(),observer:host})};
+  } catch {return {host,status:'unavailable',checkedAt:now.toISOString(),points:[]};}
+  finally {db?.close();}
 }
 
 async function previousSnapshot(file) {
@@ -151,6 +168,7 @@ export async function collect(config,{readers=defaultReaders(config),now=()=>new
     await keepOldAppSnapshot(folder);
     const previous=await previousSnapshot(path.join(folder,'usage.json'));
     const {data,status}=await buildSnapshot(config,readers,{previous,now:now()});
+    data.limitHistory=[await recordLimitHistory(config,data,now())];
     const {text,bytes}=serializeSnapshot(data);
     if(bytes>snapshotMaximumBytes)throw Object.assign(Error('Snapshot too large'),{reason:'snapshot-too-large'});
     await writeAtomic(path.join(folder,'usage.json'),text);
