@@ -1,10 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { hostname } from 'node:os';
-import { activityCombinations, selectActivityPairs } from './activity-buckets.mjs';
+import { localActivityPairs } from './activity-buckets.mjs';
 import { appLabel } from './activity-timeline.mjs';
 import { numeric, category, cleanActivity } from './snapshot-clean.mjs';
-const exec = promisify(execFile);
 async function api(suffix, body) {
   const r = await fetch('http://127.0.0.1:5600/api/0' + suffix, {
     method: body ? 'POST' : 'GET',
@@ -17,14 +13,9 @@ async function api(suffix, body) {
 }
 export async function macActivity({raw=false}={}) {
   const buckets = Object.values(await api('/buckets/'));
-  const hostnames = [hostname()];
-  // Watchers can use the Bonjour name while the server uses the Unix hostname.
-  if (process.platform === 'darwin') {
-    const {stdout} = await exec('/usr/sbin/scutil', ['--get','LocalHostName'], {timeout:5000,maxBuffer:4096});
-    hostnames.push(stdout.trim());
-  }
-  const pairs = activityCombinations(selectActivityPairs(buckets,hostnames));
   const end = new Date(), start = new Date(end - 7 * 86400000);
+  // Pair this computer's watchers by what is active, not by hostname. See localActivityPairs.
+  const pairs = localActivityPairs(buckets, { since: start.getTime() });
   const reports = await Promise.all(pairs.map(async ({window:w,afk:a}) => {
   const q = `w = query_bucket(${JSON.stringify(w)}); a = query_bucket(${JSON.stringify(a)}); a = filter_keyvals(a, "status", ["not-afk"]); RETURN = filter_period_intersect(w, a);`;
   const [events] = await api('/query/', {
