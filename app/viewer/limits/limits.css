@@ -32,6 +32,8 @@
 .ob-history-grid line { stroke: var(--ob-track); stroke-width: 1; }
 .ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .ob-history-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ob-history-line.dotted { stroke-width: 3.5; }
+.ob-history-halo { fill: none; stroke: var(--ob-surface); stroke-width: 7; stroke-linecap: round; }
 .ob-history-line.claude { stroke: var(--ob-claude); }
 .ob-history-line.codex { stroke: var(--ob-codex); }
 .ob-history-dot.claude, .ob-history-cursor circle.claude { fill: var(--ob-claude); }

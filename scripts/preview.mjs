@@ -55,6 +55,9 @@ function fictionalHistory(host) {
       points.push({p,w:w5,o:host,t:at,r:Math.round(left5*10)/10,x:new Date(reset5+5*3600000).toISOString(),d:300},
         {p,w:ww,o:host,t:at,r:Math.round(leftWeek*10)/10,x:new Date(resetWeek+7*86400000).toISOString(),d:10080});
     }
+    // The Mac read its limits a minute ago, as the current readings below say.
+    if(host==='Mac')points.push({p,w:w5,o:host,t:new Date(now-60000).toISOString(),r:Math.round(left5*10)/10,x:new Date(reset5+5*3600000).toISOString(),d:300},
+      {p,w:ww,o:host,t:new Date(now-60000).toISOString(),r:Math.round(leftWeek*10)/10,x:new Date(resetWeek+7*86400000).toISOString(),d:10080});
   }
   return [{host,status:'ok',checkedAt:new Date(now).toISOString(),points}];
 }
@@ -75,6 +78,13 @@ for(const [key,provider] of [['claudeLimits','claude'],['quota','codex']]) {
     return {...row,remainingPercent:point.r,resetsAt:new Date(reset).toISOString(),checkedAt:source.checkedAt};
   });
 }
+
+// Three days ago nothing was tracked on either computer, so the Activity page shows
+// that day as Unknown rather than zero.
+const untracked=day=>({...day,seconds:0,trackedSeconds:0,hours:Array(24).fill(0),categories:{},apps:{}});
+const gapDate=mac.activity.find(row=>row.host==='Mac')?.days?.[3]?.date;
+for(const snapshot of [mac,pc])for(const row of [...(snapshot.activity??[]),...(snapshot.activityHistory??[]),snapshot.combined].filter(Boolean))
+  if(Array.isArray(row.days))row.days=row.days.map(day=>day.date===gapDate?untracked(day):day);
 
 // Collected a minute and four minutes ago, so every "as of" reads naturally.
 mac.collectedAt=ago(1);pc.collectedAt=ago(4);

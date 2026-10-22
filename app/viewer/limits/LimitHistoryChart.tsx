@@ -10,7 +10,7 @@ export type HistoryData = { provider: string; window: string; range: string; fro
 
 const HEIGHT = 168, PAD = { left: 40, right: 12, top: 10, bottom: 26 };
 // The Mac is a solid line and the PC a dotted one, which stays distinct from a solid line broken by gaps.
-const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '0.1 4.5' };
+const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '0.1 6' };
 
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
@@ -63,10 +63,16 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   };
   const keys = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!points.length) return;
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+    // Arrows step one reading, Page Up and Page Down a tenth of them, Home and End go to the first and last.
+    const last = points.length - 1, page = Math.max(1, Math.round(points.length / 10));
+    const steps: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: page, PageDown: -page };
+    if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
-      const step = event.key === 'ArrowRight' ? 1 : -1;
-      setActive(current => Math.max(0, Math.min(points.length - 1, (current ?? (step > 0 ? -1 : points.length)) + step)));
+      setActive(event.key === 'Home' ? 0 : last);
+    } else if (event.key in steps) {
+      event.preventDefault();
+      const step = steps[event.key];
+      setActive(current => Math.max(0, Math.min(last, (current ?? (step > 0 ? -1 : points.length)) + step)));
     }
     if (event.key === 'Escape') setActive(null);
   };
@@ -91,8 +97,13 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
           {data.resets.map(t => <line key={t} className="ob-history-reset" x1={sx(t)} x2={sx(t)} y1={PAD.top} y2={PAD.top + plotHeight}><title>{format(STRINGS.limitHistory.resetAt, { time: stamp(t) })}</title></line>)}
           {data.series.map(series => series.segments.map((segment, index) => segment.length === 1
             ? <circle key={`${series.host}${index}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.5} className={`ob-history-dot ${color}`} />
-            : <polyline key={`${series.host}${index}`} className={`ob-history-line ${color}`} strokeDasharray={DASH[series.host]}
-              points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />))}
+            : <g key={`${series.host}${index}`}>
+              {/* The PC's dots sit on a ring of the card colour, so they stay visible where both computers read the same value. */}
+              {DASH[series.host] && <polyline className="ob-history-halo" strokeDasharray={DASH[series.host]}
+                points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />}
+              <polyline className={`ob-history-line ${color}${DASH[series.host] ? ' dotted' : ''}`} strokeDasharray={DASH[series.host]}
+                points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />
+            </g>))}
           {shown && <g className="ob-history-cursor">
             <line x1={sx(shown.t)} x2={sx(shown.t)} y1={PAD.top} y2={PAD.top + plotHeight} />
             <circle cx={sx(shown.t)} cy={sy(shown.r)} r={4.5} className={color} />
@@ -106,7 +117,7 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
       </div>
       <figcaption className="ob-history-legend">
         {data.series.map(series => <span key={series.host}>
-          <svg width="22" height="8" aria-hidden="true"><line x1="1" x2="21" y1="4" y2="4" className={`ob-history-line ${color}`} strokeDasharray={DASH[series.host]} /></svg>
+          <svg width="22" height="8" aria-hidden="true"><line x1="1" x2="21" y1="4" y2="4" className={`ob-history-line ${color}${DASH[series.host] ? ' dotted' : ''}`} strokeDasharray={DASH[series.host]} /></svg>
           {series.name}
         </span>)}
         {data.resets.length > 0 && <span><svg width="10" height="12" aria-hidden="true"><line x1="5" x2="5" y1="0" y2="12" className="ob-history-reset" /></svg>{STRINGS.limitHistory.reset}</span>}

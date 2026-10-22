@@ -133,3 +133,14 @@ void test('peer without windows shows its observation time and Unknown value', (
   assert.match(card, /Unknown/);
   assert.equal(count(card, /data-window="unknown"/g), 1);
 });
+
+void test('a PC history line is drawn on a ring, so it stays visible over a matching Mac line', () => {
+  const data = snapshot();
+  const points = host => [0, 15, 30].map(minutes => ({ p: 'claude', w: 'five_hour', o: host, t: iso(-60 + minutes), r: 50, d: 300 }));
+  data.limitHistory = [{ host: 'Mac', status: 'ok', points: points('Mac') }, { host: 'Windows', status: 'ok', points: points('Windows') }];
+  const html = render(data);
+  assert.equal(count(html, /class="ob-history-halo"/g), 1);
+  assert.equal(count(html, /class="ob-history-line claude dotted"/g), 2);
+  // The Mac line comes first, so the PC's dots are drawn on top of it.
+  assert.ok(html.indexOf('ob-history-line claude"') < html.indexOf('ob-history-halo'));
+});
