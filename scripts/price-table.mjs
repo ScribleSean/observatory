@@ -51,7 +51,3 @@ export function loadPrices(raw) {
 
 export const prices = loadPrices(rawPrices);
 
-export function rateFor(model) {
-  if (typeof model !== 'string' || ['__proto__', 'constructor', 'toString'].includes(model)) return null;
-  return Object.hasOwn(prices.models, model) ? prices.models[model] : null;
-}

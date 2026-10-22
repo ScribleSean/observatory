@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanIntervals, summarize, summarizeTracked, trackingState, threeHourBands } from './activity-timeline.mjs';
+import { cleanIntervals, summarize, summarizeTracked } from './activity-timeline.mjs';
 test('app detail is allowlisted and overlap is counted once', () => {
   const start='2026-09-06T04:00:00Z', end='2026-09-06T06:00:00Z';
   const a={start,end:'2026-09-06T05:00:00Z',category:'AI apps',app:'Codex'};
@@ -49,18 +49,10 @@ test('coverage distinguishes missing history from tracked idle time', () => {
   const idle=summarizeTracked([],tracked,start,end).days[0];
   assert.equal(idle.seconds,0);
   assert.equal(idle.trackedSeconds,3600);
-  assert.equal(trackingState(idle),'tracked');
-  assert.equal(trackingState(summarizeTracked([],[],start,end).days[0]),'untracked');
-  assert.equal(trackingState(summarize([],start,end).days[0]),'unknown');
-  assert.equal(trackingState(undefined),'untracked');
 });
-test('coverage unions duplicates and three-hour bands preserve active totals', () => {
+test('coverage unions duplicates', () => {
   const active=cleanIntervals([row('12:00','13:00')],start,end);
   const day=summarizeTracked(active,[...active,...active],start,end).days[0];
   assert.equal(day.trackedSeconds,3600);
   assert.equal(day.seconds,3600);
-  const bands=threeHourBands(day);
-  assert.equal(bands.length,8);
-  assert.equal(bands.reduce((n,b)=>n+b.seconds,0),day.seconds);
-  assert.equal(bands.reduce((n,b)=>n+b.trackedSeconds,0),day.trackedSeconds);
 });

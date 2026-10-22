@@ -78,14 +78,3 @@ export function summarizeTracked(rows, tracking, start, end) {
   });
   return result;
 }
-export function trackingState(record) {
-  if (!record) return 'untracked';
-  if (record.seconds>0 || record.trackedSeconds>0) return 'tracked';
-  return record.trackedSeconds===0?'untracked':'unknown';
-}
-export function threeHourBands(record) {
-  return Array.from({length:8},(_,i)=>({hour:i*3,
-    seconds:(record?.hours || []).slice(i*3,i*3+3).reduce((n,v)=>n+v,0),
-    trackedSeconds:record?.trackedHours?(record.trackedHours.slice(i*3,i*3+3).reduce((n,v)=>n+v,0)):null,
-  }));
-}

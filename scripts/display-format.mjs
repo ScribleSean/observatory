@@ -7,7 +7,3 @@ export function durationText(seconds) {
   return `${days ? days + 'd ' : ''}${hours || days ? hours + 'h ' : ''}${minutes % 60}m`;
 }
 
-export function compactCount(value) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Unknown';
-  return new Intl.NumberFormat('en-US', {notation:'compact', maximumFractionDigits:1}).format(value);
-}

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {quotaPace} from './quota-pace.mjs';
-import {quotaChartSegments} from './quota-history.mjs';
 
 const now = Date.parse('2026-09-13T12:00:00Z');
 const iso = value => new Date(value).toISOString();
@@ -17,7 +16,6 @@ test('reset timestamp rounding is bounded and does not join real resets',()=>{
     const q=fixture();
     for(const s of q.history.slice(0,-1))s.windows[0].resetsAt=iso(Date.parse(q.windows[0].resetsAt)+delta);
     assert.equal(pace(q).status,Math.abs(delta)<=2000?'projected':'insufficient-history');
-    assert.equal(quotaChartSegments({samples:q.history},'codex','primary').length,Math.abs(delta)<=2000?1:2);
   }
 });
 test('timer jitter preserves history but longer gaps and stale readings do not',()=>{
@@ -26,12 +24,10 @@ test('timer jitter preserves history but longer gaps and stale readings do not',
     q.history=Array.from({length:4},(_,i)=>({checkedAt:iso(now-(3-i)*gap),windows:[{...q.windows[0],remainingPercent:56-2*i}]}));
     assert.equal(pace(q).status,'resets-first');
     assert.ok(pace(q).percentagePointsPerHour>0);
-    assert.equal(quotaChartSegments({samples:q.history},'codex','primary').length,1);
     assert.equal(quotaPace(q,now+600000)[0].status,'stale');
   }
   const q=fixture();q.history=Array.from({length:4},(_,i)=>({checkedAt:iso(now-(3-i)*630001),windows:[{...q.windows[0],remainingPercent:56-2*i}]}));
   assert.equal(pace(q).status,'insufficient-history');
-  assert.equal(quotaChartSegments({samples:q.history},'codex','primary').length,4);
 });
 test('observed hourly pace projects hours and minutes without changing readings',()=>{
   const quota=fixture(), before=structuredClone(quota), result=pace(quota);

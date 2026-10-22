@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleSnapshot, SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
-import { demoSnapshot, devices, limits, recordedDays, span, totals } from '../lib/panel-data.mjs';
+import { devices, limits, recordedDays, span, totals } from '../lib/panel-data.mjs';
 import { quotaPace } from './quota-pace.mjs';
 
 const sum = values => values.reduce((total, value) => total + value, 0);
@@ -11,7 +11,6 @@ const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9
 for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14T00:30:00Z', '2026-10-14T18:45:00Z']) {
   test(`shared sample invariants at ${stamp}`, () => {
     const now = Date.parse(stamp), snapshot = sampleSnapshot(now);
-    assert.equal(demoSnapshot, sampleSnapshot);
     assert.deepEqual(snapshot, sampleSnapshot(now));
     assert.equal(snapshot.demo, true);
     assert.equal(snapshot.timezone, 'UTC');

@@ -110,6 +110,3 @@ export async function readClaudeUsage({cwd,now=Date.now(),find=findClaude,timeou
   } catch {return {status:'failed',usage:null};}
 }
 
-export async function runClaudeUsage(options) {
-  return (await readClaudeUsage(options)).usage;
-}

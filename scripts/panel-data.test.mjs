@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deviceReadingReference, deviceReadingCurrent, compact, demoSnapshot, devices, duration, limits, periodDays, recordedDays, sourceCounts, totals } from '../lib/panel-data.mjs';
+import { deviceReadingReference, deviceReadingCurrent, compact, devices, duration, limits, periodDays, recordedDays, totals } from '../lib/panel-data.mjs';
+import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { readingTime } from '../lib/panel-data.mjs';
 import { spawnSync } from 'node:child_process';
 import { SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
@@ -157,15 +158,9 @@ test('Now caveat appears when only one value is known, including an observed zer
   assert.equal(totals({}, 'Mac', 'now', nowTime).note, strings.status.hourlyUnavailable);
 });
 
-test('source counts include consented Claude limits and only count ok as read', () => {
-  for (const [status, read, total] of [['ok', 2, 2], ['stale', 1, 2], ['not-connected', 1, 1]])
-    assert.deepEqual(sourceCounts({ quota: { status: 'ok' }, claudeLimits: { status } }), { read, total });
-  for (const claudeLimits of [undefined, null, [], 'ok']) assert.deepEqual(sourceCounts({ claudeLimits }), { read: 0, total: 0 });
-});
-
 test('sample All Codex Now stays Unknown as declared by SAMPLE_UNKNOWN', () => {
   assert.ok(SAMPLE_UNKNOWN.some(row => row.path === 'combinedTokens.days.0.hours'));
-  assert.equal(totals(demoSnapshot(nowTime), 'All', 'now', nowTime).codexTokens, null);
+  assert.equal(totals(sampleSnapshot(nowTime), 'All', 'now', nowTime).codexTokens, null);
 });
 
 test('All uses the verified aggregate and never adds device records', () => {
@@ -244,7 +239,7 @@ test('device labels use a custom name or the platform name', () => {
 });
 
 test('the sample snapshot renders every row with a value', () => {
-  const demo = demoSnapshot(now);
+  const demo = sampleSnapshot(now);
   assert.equal(limits(demo, now).every(row => row.remaining !== null), true);
   const sums = totals(demo, 'All', 'month', new Date(now));
   assert.equal(sums.codexTokens > 0 && sums.seconds > 0 && sums.usd > 0, true);
@@ -308,12 +303,6 @@ test('fresh empty periods keep No records and the ten-minute boundary is inclusi
   }
 });
 
-test('source counts exclude old ok device rows while preserving account counts', () => {
-  const checkedAt = new Date(now - 660000).toISOString();
-  assert.deepEqual(sourceCounts({ tokens: [{ host: 'Mac', status: 'ok', checkedAt }],
-    quota: { status: 'ok' } }, now), { read: 1, total: 2 });
-});
-
 test('snapshot time preserves local history and measures peer lag', () => {
   for (const lag of [0, 9, 10, 11]) {
     const data = snapshot();
@@ -325,7 +314,6 @@ test('snapshot time preserves local history and measures peer lag', () => {
     const result = totals(data, 'Mac', 'all', new Date(now));
     assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds], lag <= 10 ? [150, 150, 42] : [null, null, null]);
     for (const note of [result.codexNote, result.claudeNote, result.timeNote]) assert.equal(note.includes('as of'), lag > 10);
-    assert.equal(sourceCounts(data, now).read, lag <= 10 ? 4 : 0);
     const empty = totals(data, 'Mac', 'day', new Date(now + 86400000));
     for (const note of [empty.codexNote, empty.claudeNote, empty.timeNote]) {
       if (lag <= 10) assert.equal(note, 'No records');

@@ -1,5 +1,4 @@
 import {visibleQuotaBucket} from './quota-buckets.mjs';
-import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
 
 const stamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 const scopeKey = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -74,19 +73,3 @@ export function retainQuotaHistory(previous, current, {scope,enabled=true,now=Da
     latestReadStatus,asOf,dailyAsOf,samples:retained,dailyUsageBuckets:[...days.values()].sort((a,b)=>a.startDate.localeCompare(b.startDate)).slice(-quotaRetention.maxDailyBuckets)};
 }
 
-export function quotaChartSegments(history,bucket,window,maxGapMs=quotaHistoryMaxGapMs) {
-  if (!Number.isSafeInteger(maxGapMs) || maxGapMs < 1) throw Error('Invalid chart gap');
-  const result=[];
-  let segment=[],previous=null;
-  for (const sample of history?.samples || []) {
-    const row=sample.windows.find(value=>value.bucket===bucket && value.window===window);
-    if (!row) {if(segment.length)result.push(segment);segment=[];previous=null;continue;}
-    const point={at:sample.checkedAt,usedPercent:100-row.remainingPercent,resetsAt:row.resetsAt};
-    if (previous && (Date.parse(point.at)-Date.parse(previous.at)>maxGapMs || !sameQuotaReset(point.resetsAt,previous.resetsAt) || point.usedPercent<previous.usedPercent)) {
-      result.push(segment);segment=[];
-    }
-    segment.push(point);previous=point;
-  }
-  if(segment.length)result.push(segment);
-  return result;
-}

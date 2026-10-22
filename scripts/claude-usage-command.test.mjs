@@ -5,7 +5,7 @@ import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {chmod} from 'node:fs/promises';
-import {parseClaudeUsage,parseResetTime,readClaudeUsage,runClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
+import {parseClaudeUsage,parseResetTime,readClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
 import {readClaudeLimits,withinTime} from './claude-limits.mjs';
 
 
@@ -138,9 +138,9 @@ test('a working command is read, and a parent session variable never reaches it'
   const reply=JSON.stringify(envelope(text('23% used · resets Oct 13 at 11:09pm (America/New_York)','75% used · resets Oct 16 at 6pm (America/New_York)')));
   await writeFile(fake,`#!${process.execPath}\nif(process.env.CLAUDECODE||process.env.SYNTHETIC_PARENT){process.exit(3);}process.stdout.write(${JSON.stringify(reply)});\n`);
   await chmod(fake,0o700);
-  const parsed=await runClaudeUsage({cwd:folder,now,find:async()=>fake,environment:usageEnvironment({...process.env,CLAUDECODE:'1',SYNTHETIC_PARENT:'1'})});
+  const parsed=(await readClaudeUsage({cwd:folder,now,find:async()=>fake,environment:usageEnvironment({...process.env,CLAUDECODE:'1',SYNTHETIC_PARENT:'1'})})).usage;
   assert.deepEqual(Object.keys(parsed.rate_limits),['five_hour','seven_day']);
-  assert.equal(await runClaudeUsage({cwd:folder,now,find:async()=>fake,environment:{...process.env,SYNTHETIC_PARENT:'1'}}),null);
+  assert.equal((await readClaudeUsage({cwd:folder,now,find:async()=>fake,environment:{...process.env,SYNTHETIC_PARENT:'1'}})).usage,null);
 });
 
 test('a limits read that never settles is cut off', async () => {

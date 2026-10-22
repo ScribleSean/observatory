@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import rawPrices from './price-data.mjs';
-import { loadPrices, prices, rateFor } from './price-table.mjs';
+import { loadPrices, prices } from './price-table.mjs';
 
 const entry = () => ({ input: 1, cachedInput: 0, cacheWrite: 2, output: 3 });
 const fixture = () => ({ source: 'https://example.com/prices', checkedOn: '2026-10-14', models: { synthetic: entry() } });
@@ -71,18 +71,6 @@ test('accepts null prototypes and leap dates and freezes an independent copy', (
   assert.throws(() => { loaded.models.synthetic.input = 8; }, TypeError);
 });
 
-test('looks up exact model ids and returns null for unknown or inherited names', () => {
-  assert.equal(rateFor('unknown-model'), null);
-  assert.equal(rateFor('__proto__'), null);
-  assert.equal(rateFor('constructor'), null);
-  assert.equal(rateFor('toString'), null);
-  assert.equal(rateFor(null), null);
-  assert.equal(rateFor('gpt-6-astra'), prices.models['gpt-6-astra']);
-  assert.ok(Object.isFrozen(rateFor('gpt-6-astra')));
-  assert.equal(rateFor('gpt-' + '6-astra-extra'), null);
-  assert.equal(rateFor('gpt-' + '6-ast'), null);
-});
-
 test('all fixture models are priced or deliberately unpriced', () => {
   const deliberatelyUnpriced = new Set([
     'claude-sonnet-4-20250514',
@@ -97,6 +85,6 @@ test('all fixture models are priced or deliberately unpriced', () => {
       names.add(match[0].replace(/[-.]+$/, ''));
     }
   }
-  const missing = [...names].filter(name => rateFor(name) === null && !deliberatelyUnpriced.has(name)).sort((a, b) => a.localeCompare(b));
+  const missing = [...names].filter(name => !Object.hasOwn(prices.models, name) && !deliberatelyUnpriced.has(name)).sort((a, b) => a.localeCompare(b));
   assert.deepEqual(missing, [], `Unpriced fixture models: ${missing.join(', ')}`);
 });
