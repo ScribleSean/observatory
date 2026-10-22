@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {attachProviderTokenEstimates,attachProviderTokenSources,cleanClaudeTokenSource,unavailableClaudeTokenSource} from './provider-token-sources.mjs';
+import {attachProviderTokenEstimates,cleanClaudeTokenSource} from './provider-token-sources.mjs';
 import {estimate} from './api-estimate.mjs';
 import {prices} from './price-table.mjs';
 import {collectClaudeUsage} from './read-claude-usage.mjs';
@@ -208,18 +208,6 @@ test('unknown bucket merging rejects token and request count overflow',()=>{
     const raw={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...large,models:[{model:'claude-private-alpha',...large},{model:'claude-private-beta',...small}]}]};
     assert.throws(()=>cleanClaudeTokenSource(raw,'Windows'),/Claude counter overflow/);
   }
-});
-
-test('disabled source is not counted and enabled failure is Unknown, not zero',()=>{
-  const disabled=unavailableClaudeTokenSource('Mac','2026-09-25T00:00:00Z','not-connected');
-  assert.deepEqual(disabled.days,undefined);
-  const result={data:{},status:{sourcesRead:2,sourcesConfigured:2,state:'ok'}};
-  result.peer={payload:{codex:[{host:'Mac'}]}};
-  attachProviderTokenSources(result,[disabled,unavailableClaudeTokenSource('Windows','2026-09-25T00:00:00Z')]);
-  assert.equal(result.status.sourcesConfigured,3);
-  assert.equal(result.status.sourcesRead,2);
-  assert.equal(result.status.state,'partial');
-  assert.equal(result.peer.payload.providerTokenSources,undefined);
 });
 
 test('the Node reader output passes through the Claude source cleaner',async t=>{

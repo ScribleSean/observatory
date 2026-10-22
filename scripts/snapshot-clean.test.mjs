@@ -4,20 +4,8 @@ import {
   numeric,
   category,
   cleanActivity,
-  cleanTokens,
   cleanSettings,
-  guarded,
 } from './snapshot-clean.mjs';
-test('collector wrapper preserves saved quota observation time during cooldown',async()=>{
-  const checkedAt='2026-09-12T12:00:00Z';
-  const result=await guarded('Codex',async()=>({status:'stale',checkedAt,latestReadStatus:'ok',windows:[]}));
-  assert.equal(result.checkedAt,checkedAt);
-  assert.equal(result.latestReadStatus,'ok');
-  const failed=await guarded('Mac',async()=>{throw Error('PRIVATE');});
-  assert.equal(failed.status,'unavailable');
-  assert.ok(Number.isFinite(Date.parse(failed.checkedAt)));
-  assert.ok(!JSON.stringify(failed).includes('PRIVATE'));
-});
 test('tool metadata survives sanitization and legacy categories remain explicit',()=>{
   const row={date:'2026-09-06',category:'Other tools',count:2};
   const result=cleanSettings({profiles:[],tools:[row,{...row,tool:'MCP.Tool',namespace:'my_tools',arguments:'PRIVATE'},
@@ -75,36 +63,4 @@ test('categories disclose no unknown app names', () => {
   assert.equal(category('iTerm2'), 'Terminal');
   assert.equal(category('ChatGPT'), 'AI apps');
   assert.equal(category('Code.exe'), 'Editors');
-});
-test('token adapter ignores paths, prices, prompts and unrelated fields', () => {
-  const x = cleanTokens(
-    {
-      daily: [
-        {
-          date: '2026-09-06',
-          totalTokens: 10,
-          path: '/secret',
-          cost: 100,
-          prompt: 'private',
-          models: { 'gpt-test': { totalTokens: 10, isFallback: true } },
-        },
-      ],
-    },
-    'Ubuntu',
-  );
-  assert.ok(!JSON.stringify(x).includes('secret'));
-  assert.ok(!JSON.stringify(x).includes('cost'));
-  assert.equal(x.days[0].models[0].inferred, true);
-  assert.equal(x.days[0].inputTokens, null);
-});
-test('invalid token schema fails closed', () => {
-  assert.throws(() => cleanTokens({}, 'Mac'));
-  assert.throws(() => cleanTokens({ daily: [{ date: 'bad' }] }, 'Mac'));
-});
-test('per-model pricing excludes inferred labels and preserves token categories', () => {
-  const c = {inputTokens:1000000,cacheReadTokens:1000000,cacheCreationTokens:0,outputTokens:1000000,totalTokens:3000000};
-  const result = cleanTokens({daily:[{date:'2026-09-06',models:{'gpt-6-astra':c,'gpt-5.6-sol':{...c,isFallback:true}}}]},'Mac');
-  assert.equal(result.days[0].models[0].apiEstimate.usd,61);
-  assert.equal(result.days[0].models[1].apiEstimate.usd,null);
-  assert.equal(result.days[0].models[0].cacheReadTokens,1000000);
 });

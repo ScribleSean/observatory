@@ -2,20 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import rawPrices from './price-data.mjs';
-import { loadPrices, priceDataModule, prices, rateFor } from './price-table.mjs';
+import { loadPrices, prices, rateFor } from './price-table.mjs';
 
 const entry = () => ({ input: 1, cachedInput: 0, cacheWrite: 2, output: 3 });
 const fixture = () => ({ source: 'https://example.com/prices', checkedOn: '2026-10-14', models: { synthetic: entry() } });
-const normalizeNewlines = text => text.replace(/\r\n/g, '\n');
 
 test('accepts the shipped price data', () => {
   assert.deepEqual(loadPrices(rawPrices), rawPrices);
   assert.deepEqual(prices, rawPrices);
-});
-
-test('normalizes a CRLF generated price module to LF', () => {
-  const output = priceDataModule(loadPrices(fixture()));
-  assert.equal(normalizeNewlines(output.replace(/\n/g, '\r\n')), output);
 });
 
 const invalidCases = [

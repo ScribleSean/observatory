@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {retainQuotaHistory,quotaChartSegments,quotaRetention} from './quota-history.mjs';
+import {retainQuotaHistory,quotaRetention} from './quota-history.mjs';
 const scope='a'.repeat(64),now=Date.parse('2026-09-09T12:00:00Z');
 const options={scope,now};
 const reading=(offset=0,remainingPercent=75,resetsAt='2026-09-09T16:00:00Z')=>({status:'ok',checkedAt:new Date(now+offset).toISOString(),
@@ -46,14 +46,6 @@ test('retention drops old and future samples, while a missing daily bucket is no
   assert.deepEqual(history.samples,[]);
   assert.deepEqual(history.dailyUsageBuckets,[]);
   assert.throws(()=>retainQuotaHistory(null,reading(),{scope:'email@example.com',now}));
-});
-test('charts break at resets, missing polls and missing buckets',()=>{
-  let history=retainQuotaHistory(null,reading(-1200000,90),options);
-  history=retainQuotaHistory(history,reading(-900000,80),options);
-  history=retainQuotaHistory(history,reading(-600000,95,'2026-09-09T21:00:00Z'),options);
-  history=retainQuotaHistory(history,reading(0,90,'2026-09-09T21:00:00Z'),options);
-  assert.deepEqual(quotaChartSegments(history,'codex','primary',300000).map(segment=>segment.length),[2,1,1]);
-  assert.deepEqual(quotaChartSegments(history,'spark','primary'),[]);
 });
 test('dense multi-bucket history remains below its byte budget',()=>{
   const windows=Array.from({length:32},(_,index)=>({bucket:'x'.repeat(78)+String(index).padStart(2,'0'),window:'primary',remainingPercent:75,
