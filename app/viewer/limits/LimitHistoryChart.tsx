@@ -28,10 +28,11 @@ function useWidth() {
 
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const stamp = (t: number) => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-function tickLabel(t: number, range: string) {
+// The label format follows the time actually shown, so labels never repeat.
+function tickLabel(t: number, span: number) {
   const date = new Date(t);
-  if (range === 'today') return date.toLocaleTimeString([], { hour: 'numeric' });
-  if (range === 'week') return date.toLocaleDateString([], { weekday: 'short' });
+  if (span <= 36 * 3600000) return date.toLocaleTimeString([], { hour: 'numeric' });
+  if (span <= 8 * 86400000) return date.toLocaleDateString([], { weekday: 'short', hour: 'numeric' });
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
@@ -86,7 +87,7 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
             <text x={PAD.left - 8} y={sy(value) + 4} textAnchor="end">{value}%</text>
           </g>)}
           {ticks.map((t, index) => <text key={index} className="ob-history-tick" x={sx(t)} y={HEIGHT - 6}
-            textAnchor={index === 0 ? 'start' : index === ticks.length - 1 ? 'end' : 'middle'}>{tickLabel(t, data.range)}</text>)}
+            textAnchor={index === 0 ? 'start' : index === ticks.length - 1 ? 'end' : 'middle'}>{tickLabel(t, span)}</text>)}
           {data.resets.map(t => <line key={t} className="ob-history-reset" x1={sx(t)} x2={sx(t)} y1={PAD.top} y2={PAD.top + plotHeight}><title>{format(STRINGS.limitHistory.resetAt, { time: stamp(t) })}</title></line>)}
           {data.series.map(series => series.segments.map((segment, index) => segment.length === 1
             ? <circle key={`${series.host}${index}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.5} className={`ob-history-dot ${color}`} />

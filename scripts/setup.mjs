@@ -1,7 +1,7 @@
 // npm run setup: check prerequisites, write a starter settings file, build the
 // dashboard and the glance app on this computer, and start it at login.
 // Run it again after `git pull`. `npm run setup -- --dry-run` changes nothing.
-// `--no-login` builds without starting the app. `npm run setup -- --remove` removes the login item and stops the app.
+// `--no-login` builds without starting the app. `--no-start` registers the login item without starting it now. `npm run setup -- --remove` removes the login item and stops the app.
 import {execFile,spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {mkdir,readFile,writeFile,rm} from 'node:fs/promises';
@@ -125,7 +125,7 @@ function npm(args) {
   });
 }
 
-export async function setup({dryRun=false,login=true,platform=process.platform,log=console.log}={}) {
+export async function setup({dryRun=false,login=true,start=true,platform=process.platform,log=console.log}={}) {
   const step=(text)=>log(`- ${text}`);
   const act=async(text,action)=>{step(dryRun?`would ${text}`:text);if(!dryRun)return action();};
   if(!['darwin','win32'].includes(platform))throw Error('Observatory runs on macOS and Windows only.');
@@ -220,11 +220,14 @@ export async function setup({dryRun=false,login=true,platform=process.platform,l
       if(failure)throw Error('launchctl could not start the menu bar app. Log out and in, or run setup again.');
     });
   } else {
-    await act('start the tray app now and at login',async()=>{
+    await act(start?'start the tray app now and at login':'start the tray app at login (not now)',async()=>{
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute('reg.exe',['add','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/t','REG_SZ','/d',`"${target.executable}"`,'/f'],{windowsHide:true});
-      spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
+      // Started from a remote or background session, the tray icon would not appear on the desktop,
+      // so --no-start leaves starting it to the next sign-in or the Start menu.
+      if(start)spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
     });
+    if(!start)log(`  Start it now by opening ${target.executable}, or sign out and back in.`);
   }
   if(dryRun) {log('Dry run: nothing was changed.');return;}
   log(`Done. Dashboard: http://127.0.0.1:${config.dashboard.port} (use Open dashboard in the ${platform==='darwin'?'menu bar':'tray'} menu).`);
@@ -245,7 +248,7 @@ export async function remove({platform=process.platform,log=console.log}={}) {
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
     if(process.argv.includes('--remove'))await remove();
-    else await setup({dryRun:process.argv.includes('--dry-run'),login:!process.argv.includes('--no-login')});
+    else await setup({dryRun:process.argv.includes('--dry-run'),login:!process.argv.includes('--no-login'),start:!process.argv.includes('--no-start')});
   } catch(error) {
     console.error(`Setup stopped: ${error.message}`);
     process.exitCode=1;
