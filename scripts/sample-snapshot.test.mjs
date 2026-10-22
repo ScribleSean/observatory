@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleSnapshot, SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
-import { demoSnapshot, devices, limits, span, totals } from '../lib/panel-data.mjs';
+import { demoSnapshot, devices, limits, recordedDays, span, totals } from '../lib/panel-data.mjs';
 import { quotaPace } from './quota-pace.mjs';
 
 const sum = values => values.reduce((total, value) => total + value, 0);
@@ -163,7 +163,12 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     // All Claude tokens remain intentionally per device, with the By device label.
     for (const host of ['All', 'Mac', 'Windows']) for (const period of ['day', 'week', 'month', 'all']) {
       const values = totals(snapshot, host, period, new Date(now));
-      for (const key of ['codexTokens', 'seconds', 'usd', ...(host === 'All' ? [] : ['claudeTokens'])]) assert.ok(Number.isFinite(values[key]), `${host} ${period} ${key}`);
+      // In the first seconds of a day nothing has been tracked yet, so screen time is Unknown, never zero.
+      const untrackedToday = recordedDays(snapshot, 'activity', host, now).some(day => day.untracked && day.date === new Date(now).toISOString().slice(0, 10));
+      for (const key of ['codexTokens', 'seconds', 'usd', ...(host === 'All' ? [] : ['claudeTokens'])]) {
+        if (key === 'seconds' && untrackedToday) assert.equal(values.seconds, null, `${host} ${period} seconds`);
+        else assert.ok(Number.isFinite(values[key]), `${host} ${period} ${key}`);
+      }
     }
     close(totals(snapshot, 'All', 'day', new Date(now)).usd, 26.10);
     assert.ok(Object.isFrozen(SAMPLE_UNKNOWN));
