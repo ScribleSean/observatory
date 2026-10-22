@@ -22,6 +22,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - Device pairing with invitations and its TLS service, consent and sharing sync, the settings and setup screens, signed packages, installers and updates, dictation, three of the four skins, and the demo page. Everything removed is on the `archive/full-app` tag.
 - The Agents view, which showed Claude Code sessions and codex-job runs, and the amber "waiting on you" dot on the menu bar and tray icon. Observatory no longer reads `~/.claude/sessions` or the codex-job folder. An older settings file that lists `agents` still loads, and that key is ignored.
 - The Claude Code status-line bridge and its installer. Claude Code limits still come from the installed `claude` CLI's usage command, run at each collection.
+- The empty Dictation card on the Sources page, and code left over from the full app that nothing used any more: the old consent marker, session cost, the chart rasterizer and the old combine modules.
 
 ### Before you update from build 43 or 42
 
