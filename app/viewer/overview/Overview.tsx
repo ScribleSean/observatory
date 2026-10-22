@@ -33,7 +33,7 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
           <li key={index}>
             <span className="ob-tile-label"><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name}{row.window ? ` ${row.window}` : ''}</span>
             <span className={row.stale ? 'ob-num ob-meta' : row.low ? 'ob-num warn' : 'ob-num'}>{percent(row.remaining)}</span>
-            <span className="ob-bar" aria-hidden="true"><i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining ?? 0}%`, opacity: row.stale ? 0.45 : 1 }} /></span>
+            <span className="ob-bar" aria-hidden="true">{row.remaining !== null && <i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining}%`, opacity: row.stale ? 0.45 : 1 }} />}</span>
           </li>
         ))}
       </ul>

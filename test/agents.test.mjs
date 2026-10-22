@@ -81,3 +81,12 @@ test('agents on a stale computer are shown with their time and not counted as cu
   assert.equal(combined.glance.working,0);
   assert.ok(combined.glance.lines.some(line=>line.includes('as of')));
 });
+
+test('a long session name is shortened in the menu',()=>{
+  const at=new Date(now).toISOString();
+  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'ok',
+    sessions:[{tool:'claude-code',status:'working',project:'observatory',name:'x'.repeat(80)}],jobs:[]}]}));
+  const line=combine([{host:'Mac',snapshot:mac}],{now}).glance.lines.find(row=>row.includes('observatory ·'));
+  assert.ok(line.length<=70,line);
+  assert.ok(line.includes('…'));
+});

@@ -14,7 +14,8 @@ const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '0.1
 
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(560);
+  // Starts small, then takes the container's measured width.
+  const [width, setWidth] = useState(320);
   useEffect(() => {
     const element = ref.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
@@ -48,7 +49,7 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   const sy = (r: number) => PAD.top + (1 - r / 100) * plotHeight;
   // Every point, in time order, for the hover and arrow-key readout.
   const points = data.series.flatMap(series => series.points.map(point => ({ ...point, name: series.name }))).sort((a, b) => a.t - b.t);
-  const tickCount = Math.max(2, Math.min(6, Math.floor(plotWidth / 90)));
+  const tickCount = Math.max(3, Math.min(6, Math.floor(plotWidth / 80)));
   const ticks = Array.from({ length: tickCount }, (_: unknown, index: number) => data.from + span * index / (tickCount - 1));
   const shown = active !== null ? points[active] : null;
 

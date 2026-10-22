@@ -67,30 +67,37 @@ export function LimitsView({ snapshot, now, limitStyle }: {
   const rows = limitRows(snapshot, now);
   const cost = sessionCost(snapshot, now);
   const peer = peerLimits(snapshot, now);
+  // Where each provider's reading came from: the computer and the time it was observed.
+  const names = (snapshot?.deviceNames ?? {}) as Record<string, string>;
+  const origin = (provider: string) => {
+    const source = (provider === 'claude' ? snapshot?.claudeLimits : snapshot?.quota) as { observedOn?: string; checkedAt?: string } | undefined;
+    const at = Date.parse(source?.checkedAt ?? '');
+    return source?.observedOn && Number.isFinite(at)
+      ? format(STRINGS.limitHistory.from, { device: names[source.observedOn] ?? source.observedOn, time: new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) })
+      : null;
+  };
   return <div className="ob-limits">
-    <div className="ob-limits-now">
-      <Card label={STRINGS.periods.now}>
-        <Row><h3>{STRINGS.periods.now}</h3><span className="ob-meta">{STRINGS.limits.nowCaption}</span></Row>
-        <div className="ob-limits-providers">
-          {providers.map(([provider, name]) => <div key={provider}>
-            <h4><ProviderDot provider={provider} />{name}</h4>
-            {rows.filter(row => row.provider === provider).map((row, index) => <div key={index}
-              className={row.low ? 'ob-limits-pace warn' : 'ob-limits-pace'} data-provider={provider} data-window={row.window || 'unknown'}>
-              {/* Percent left leads. Pace follows, and an unknown pace stays a quiet note. */}
-              <Row><span className="ob-meta">{row.window || STRINGS.status.unknownWindow}</span></Row>
-              <div className={row.low ? 'ob-num big warn' : 'ob-num big'}>{row.remaining === null ? STRINGS.status.unknown : percent(row.remaining)}</div>
-              {row.remaining === null ? <div className="ob-meta">{row.note}</div> : <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>
-                {typeof row.pace?.ratePerHour === 'number' ? `${format(STRINGS.limits.perHour, { value: row.pace.ratePerHour > 0 && row.pace.ratePerHour < 0.05 ? STRINGS.limits.belowTenth : row.pace.ratePerHour.toFixed(1) })}${STRINGS.formats.separator}` : ''}{paceSentence(row.pace)}
-              </div>}
-            </div>)}
-          </div>)}
-        </div>
-      </Card>
-    </div>
     <div className="ob-limits-providers">
       {providers.map(([provider, name]) => <Card key={provider} label={name}>
-        <h3><ProviderDot provider={provider} />{name}</h3>
-        <LimitRows rows={rows.filter(row => row.provider === provider).map(row => ({ ...row, name: '' }))} style={limitStyle} />
+        <div className="ob-limits-card-head">
+          <h3><ProviderDot provider={provider} />{name}</h3>
+          {origin(provider) && <span className="ob-meta">{origin(provider)}</span>}
+        </div>
+        {rows.filter(row => row.provider === provider).map((row, index) => <div key={index}
+          className={row.low ? 'ob-limit-window warn' : 'ob-limit-window'} data-provider={provider} data-window={row.window || 'unknown'}>
+          <div className="ob-limit-window-head">
+            <span className="ob-limit-window-name">{row.window || STRINGS.status.unknownWindow}</span>
+            <span className={row.low ? 'ob-num big warn' : 'ob-num big'}>{row.remaining === null ? STRINGS.status.unknown : percent(row.remaining)}</span>
+          </div>
+          {/* An Unknown value draws an empty track, never a bar at zero. */}
+          <div className="ob-bar" aria-hidden="true">{row.remaining !== null && <i className={row.low ? 'warn' : provider} style={{ width: `${row.remaining}%`, opacity: row.stale ? 0.45 : 1 }} />}</div>
+          <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>
+          {row.remaining !== null && <div className="ob-meta">
+            {/* The reset line already says when a projected window runs out, so the pace line does not repeat it. */}
+            {[typeof row.pace?.ratePerHour === 'number' ? format(STRINGS.limits.perHour, { value: row.pace.ratePerHour > 0 && row.pace.ratePerHour < 0.05 ? STRINGS.limits.belowTenth : row.pace.ratePerHour.toFixed(1) }) : null,
+              row.pace?.status === 'projected' ? null : paceSentence(row.pace)].filter(Boolean).join(STRINGS.formats.separator)}
+          </div>}
+        </div>)}
         {provider === 'claude' && <Row className="ob-limits-cost ob-meta"><span>{STRINGS.limits.sessionCost}</span>
           <span className="ob-num">{cost ? format(STRINGS.formats.usd, { value: cost.usd.toFixed(2) }) : STRINGS.status.unknown}</span></Row>}
       </Card>)}

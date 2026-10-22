@@ -26,7 +26,8 @@ const snapshot = () => {
     quota: source('codex', ['primary', 'secondary']) };
 };
 const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar', ...props }));
-const nowCard = html => html.match(/<div class="ob-limits-now">([\s\S]*?)<\/section>/)?.[1] ?? assert.fail('Now card missing');
+// The provider cards at the top of the page, one block per window.
+const nowCard = html => html.match(/<div class="ob-limits-providers">([\s\S]*?)(?:<section class="ob-history"|$)/)?.[1] ?? assert.fail('Provider cards missing');
 const count = (html, pattern) => [...html.matchAll(pattern)].length;
 
 void test('ok shows pace and projections for both providers and current session cost', () => {
@@ -34,7 +35,7 @@ void test('ok shows pace and projections for both providers and current session 
   const html = render();
   const current = nowCard(html);
   for (const provider of ['claude', 'codex']) {
-    const lines = [...current.matchAll(new RegExp('data-provider="' + provider + '" data-window="[^"]+">([\\s\\S]*?)(?=<div class="ob-limits-pace"|</section>|$)', 'g'))];
+    const lines = [...current.matchAll(new RegExp('data-provider="' + provider + '" data-window="[^"]+">([\\s\\S]*?)(?=<div class="ob-limit-window(?: warn)?" data-provider|</section>|$)', 'g'))];
     assert.equal(lines.length, 2);
     for (const line of lines) {
       assert.match(line[1], /24\.0% per hour/);
@@ -57,8 +58,8 @@ void test('low remaining value warns on the affected row', () => {
   const data = snapshot();
   data.quota.windows[0].remainingPercent = 12;
   const html = render(data);
-  assert.match(nowCard(html), /class="ob-limits-pace warn" data-provider="codex" data-window="5-hour"/);
-  assert.match(html, /class="ob-num warn">12%/);
+  assert.match(nowCard(html), /class="ob-limit-window warn" data-provider="codex" data-window="5-hour"/);
+  assert.match(html, /class="ob-num big warn">12%/);
 });
 
 for (const data of [{ quota: { status: 'unavailable' } }, null]) {
@@ -70,7 +71,8 @@ for (const data of [{ quota: { status: 'unavailable' } }, null]) {
     assert.match(html, /Session cost \(estimate\)<\/span><span class="ob-num">Unknown/);
     for (const name of ['Claude Code', 'Codex']) assert.ok(html.includes('<section class="ob-card" aria-label="' + name + '">'));
     assert.equal(count(nowCard(html), /data-window="unknown"/g), 2);
-    assert.equal(count(nowCard(html), />Unknown</g), 2);
+    // One Unknown per provider row, plus the Claude session cost.
+    assert.equal(count(nowCard(html), />Unknown</g), 3);
   });
 }
 
@@ -88,18 +90,6 @@ void test('peer absent has no pairing card', () => {
   assert.doesNotMatch(render(), /Shared from/);
 });
 
-void test('styles preserve the same provider rows', () => {
-  const counts = [];
-  for (const [limitStyle, className] of [['bar', 'ob-bar'], ['numeral', 'ob-figure'], ['text', 'ob-blocks']]) {
-    const html = render(sampleSnapshot(now), { limitStyle });
-    assert.ok(html.includes('class="' + className));
-    counts.push(['claude', 'codex'].map(provider => count(html, new RegExp('data-provider="' + provider + '"', 'g'))));
-  }
-  assert.deepEqual(counts[0], counts[1]);
-  assert.deepEqual(counts[1], counts[2]);
-  assert.ok(counts[0].every(value => value >= 4));
-});
-
 void test('limit history has a card for every provider and window, with the freshest reading or Unknown', () => {
   const html = render(snapshot());
   assert.equal(count(html, /<figure class="ob-history-chart"/g), 4);
@@ -110,24 +100,14 @@ void test('limit history has a card for every provider and window, with the fres
 });
 
 
-void test('sample provider cards and Now agree on each window projection and span', () => {
+void test('each sample window shows its projection once, in its provider card', () => {
   const html = render(sampleSnapshot(now));
-  const current = nowCard(html);
-  const projection = text => text.match(/runs out in about ([^<]+)/)?.[0] ?? null;
   for (const [provider, name] of [['claude', 'Claude Code'], ['codex', 'Codex']]) {
     const card = html.split('<section class="ob-card" aria-label="' + name + '">')[1]?.split('</section>')[0];
     assert.ok(card);
-    const rows = text => [...text.matchAll(new RegExp('data-provider="' + provider + '" data-window="([^"]+)">([\\s\\S]*?)(?=data-provider=|$)', 'g'))];
-    const currentRows = rows(current);
-    const providerRows = rows(card);
-    assert.equal(currentRows.length, 2);
-    assert.equal(providerRows.length, 2);
-    for (const [, window, body] of currentRows) {
-      const matching = providerRows.find(row => row[1] === window);
-      assert.ok(matching);
-      assert.equal(projection(body), projection(matching[2]), provider + ' ' + window);
-    }
+    assert.equal(count(card, new RegExp('data-provider="' + provider + '"', 'g')), 2);
   }
+  assert.equal(count(nowCard(html), /data-provider="codex" data-window="5-hour"/g), 1);
 });
 
 void test('small positive rates render below a tenth instead of zero', () => {

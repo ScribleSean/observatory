@@ -21,7 +21,7 @@
 .ob-history > .ob-row h3 { margin: 0; }
 .ob-history-grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--ob-space-3); }
 .ob-history-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-2); }
-.ob-history-head h4 { margin: 0; display: flex; align-items: center; gap: 2px; }
+.ob-dashboard .ob-history-head h4 { margin: 0; display: flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 600; color: var(--ob-text); text-transform: none; letter-spacing: -0.2px; }
 .ob-history-head h4 .ob-meta { margin-left: 6px; font-weight: 400; }
 .ob-history-latest { display: flex; align-items: baseline; gap: var(--ob-space-2); min-width: 0; }
 .ob-history-latest .ob-num { font-size: 20px; color: var(--ob-strong); }
@@ -48,3 +48,17 @@
 .ob-history-values[open] { flex-basis: 100%; margin-left: 0; }
 .ob-history-values table { width: 100%; margin-top: var(--ob-space-2); border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .ob-history-values th, .ob-history-values td { text-align: left; padding: 3px 8px 3px 0; }
+
+/* One card per provider, one block per window. */
+.ob-limits-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-2); }
+.ob-limits-card-head h3 { margin: 0; display: flex; align-items: center; }
+.ob-limit-window { padding: var(--ob-space-3) 0; display: grid; gap: 6px; }
+.ob-limit-window + .ob-limit-window { border-top: 1px solid var(--ob-track); }
+.ob-limit-window-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ob-space-2); }
+.ob-limit-window-name { color: var(--ob-muted); font-size: 13px; }
+.ob-limit-window .ob-num.big { font-size: clamp(22px, 3.2vw, 28px); letter-spacing: -0.5px; }
+.ob-limit-window .ob-num.big.warn { color: var(--ob-warning); }
+.ob-limit-window .ob-bar { margin: 0; height: 6px; }
+/* Cards may shrink below their content, so a chart that has not measured itself yet cannot widen the page. */
+.ob-history-grid-cards > *, .ob-limits-providers > * { min-width: 0; }
+.ob-history-plot { overflow: hidden; }
