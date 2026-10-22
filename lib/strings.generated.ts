@@ -442,6 +442,11 @@ export const STRINGS = {
     "computer": "Computer",
     "remaining": "Left",
     "caveat": "Each line is one computer's own readings of the account limit. Lines are never added together, and a gap means no reading was taken."
+  },
+  "firstRun": {
+    "title": "Waiting for the first collection",
+    "body": "Observatory collects every five minutes while the menu bar or tray app is running. The first numbers appear here after that.",
+    "hint": "To collect now, choose Refresh in the menu, or run npm run tick in the Observatory folder."
   }
 } as const;
 

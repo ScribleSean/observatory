@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { combine } from '../lib/combine.mjs';
+import { ownSnapshot } from '../test/helpers.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { tokensView } from '../lib/view-tokens.mjs';
 import { compact } from '../lib/panel-data.mjs';
@@ -100,8 +102,9 @@ void test('session cost 10 minutes old or older is Unknown', () => {
 });
 
 void test('dashboard tokens section mounts the view', () => {
+  const combined = combine([{ host: 'Mac', snapshot: ownSnapshot('Mac', now) }, { host: 'Windows', snapshot: ownSnapshot('Windows', now) }], { now });
   const html = renderToStaticMarkup(createElement(DashboardView, {
-    snapshot: sampleSnapshot(now), now, loaded: true, section: 'tokens',
+    combined, limitStyle: 'bar', css: '', className: '', now, loaded: true, section: 'tokens',
     skinId: 'sage', skin: validateSkin(SKINS.sage), onSectionChange: noop, onSkinChange: noop,
   }));
   card(html, 'Claude Code');

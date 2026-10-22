@@ -99,12 +99,19 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
         <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>
       </header>
       {combined && <Overview glance={combined.glance} view={combined.view} generatedAt={combined.generatedAt} now={now} />}
-      <nav className="ob-tabs" aria-label={STRINGS.sections.navigation}>
+      {!combined && <div className="ob-first-run">
+        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- a status message, not a form output */}
+        <div className="ob-card" role="status">
+          <h2>{loaded ? STRINGS.firstRun.title : STRINGS.labels.loading}</h2>
+          {loaded && <><p>{STRINGS.firstRun.body}</p><p className="ob-meta">{STRINGS.firstRun.hint}</p></>}
+        </div>
+      </div>}
+      {combined && <nav className="ob-tabs" aria-label={STRINGS.sections.navigation}>
         {SECTIONS.map(([id, name]) => (
           <button key={id} type="button" aria-current={id === section ? 'page' : undefined} className={id === section ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>
         ))}
-      </nav>
-      <main>
+      </nav>}
+      {combined && <main>
         <section aria-label={SECTIONS.find(([id]) => id === section)![1]}>
           {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={limitStyle} />
             : section === 'agents' ? <AgentsView agents={combined?.glance.agents ?? []} now={now} />
@@ -112,7 +119,7 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
             : section === 'tokens' ? <TokensView key={home} snapshot={snapshot} now={now} initialHost={home} />
             : <SourcesView snapshot={snapshot} now={now} />}
         </section>
-      </main>
+      </main>}
     </div>
   );
 }

@@ -131,3 +131,13 @@ test('chart date labels are never cut, and the newest date is always shown',asyn
   assert.equal(labels.at(-1),'10-21');
   assert.ok(labels.every(label=>!label.includes('…')),labels.join(' '));
 });
+
+test('loading and first run show one calm message, not pages of Unknown',()=>{
+  const loading=render({combined:null,loaded:false,section:'limits'});
+  assert.ok(loading.includes('Loading'));
+  assert.ok(!loading.includes('ob-tabs'));
+  const first=render({combined:null,loaded:true,section:'limits'});
+  assert.ok(first.includes('Waiting for the first collection'));
+  assert.ok(first.includes('npm run tick'));
+  assert.ok(!first.includes('>Unknown<'));
+});

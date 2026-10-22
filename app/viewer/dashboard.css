@@ -105,3 +105,9 @@
   .ob-tabs button { transition: none; }
   .ob-status-working i { animation: none; }
 }
+
+/* Loading and first run: one calm message instead of pages of Unknown. */
+.ob-first-run { display: grid; place-items: center; min-height: 50vh; }
+.ob-first-run .ob-card { max-width: 520px; padding: 28px 32px; text-align: center; }
+.ob-first-run h2 { font-size: var(--ob-section-size); margin-bottom: var(--ob-space-2); }
+.ob-first-run p + p { margin-top: var(--ob-space-2); }
