@@ -59,6 +59,22 @@ function fictionalHistory(host) {
   return [{host,status:'ok',checkedAt:new Date(now).toISOString(),points}];
 }
 mac.limitHistory=fictionalHistory('Mac');pc.limitHistory=fictionalHistory('Windows');
+// The current readings are the newest history points, so every view agrees.
+for(const [key,provider] of [['claudeLimits','claude'],['quota','codex']]) {
+  const source=mac[key];
+  if(!source?.windows)continue;
+  const latest=new Map();
+  for(const point of mac.limitHistory[0].points)if(point.p===provider)latest.set(point.w,point);
+  source.status='ok';source.checkedAt=new Date(now-60000).toISOString();
+  source.windows=source.windows.map(row=>{
+    const point=latest.get(row.window);
+    if(!point)return row;
+    // Fictional data only: keep the reset ahead of now so the preview shows a current reading.
+    let reset=Date.parse(point.x);
+    while(reset<=now)reset+=(point.d ?? 300)*60000;
+    return {...row,remainingPercent:point.r,resetsAt:new Date(reset).toISOString(),checkedAt:source.checkedAt};
+  });
+}
 
 // Collected a minute and four minutes ago, so every "as of" reads naturally.
 mac.collectedAt=ago(1);pc.collectedAt=ago(4);

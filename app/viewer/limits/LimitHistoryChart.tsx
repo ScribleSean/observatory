@@ -79,7 +79,8 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
         aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)} aria-valuenow={active ?? Math.max(0, points.length - 1)}
         aria-valuetext={readout(shown ?? points.at(-1)) ?? STRINGS.limitHistory.noReadings}
         onPointerMove={nearest} onPointerLeave={() => setActive(null)} onKeyDown={keys} onBlur={() => setActive(null)}>
-        <svg width={width} height={HEIGHT} aria-hidden="true">
+        {/* The viewBox lets the chart fill its card from the first frame. Once measured, one unit is one pixel. */}
+        <svg viewBox={`0 0 ${width} ${HEIGHT}`} width="100%" aria-hidden="true">
           {([0, 50, 100] as number[]).map(value => <g key={value} className="ob-history-grid">
             <line x1={PAD.left} x2={width - PAD.right} y1={sy(value)} y2={sy(value)} />
             <text x={PAD.left - 8} y={sy(value) + 4} textAnchor="end">{value}%</text>

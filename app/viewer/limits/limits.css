@@ -27,7 +27,7 @@
 .ob-history-latest .ob-num { font-size: 20px; color: var(--ob-strong); }
 .ob-history-chart { margin: 0; min-width: 0; }
 .ob-history-plot { position: relative; }
-.ob-history-plot svg { display: block; max-width: 100%; overflow: visible; touch-action: pan-y; }
+.ob-history-plot svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
 .ob-history-plot:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 4px; border-radius: 6px; }
 .ob-history-grid line { stroke: var(--ob-track); stroke-width: 1; }
 .ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
