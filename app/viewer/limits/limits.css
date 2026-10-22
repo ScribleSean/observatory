@@ -22,7 +22,7 @@
 .ob-history-grid-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
 .ob-history-grid-cards > .ob-card { margin-top: 0; }
 @media (min-width: 900px) { .ob-history-grid-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.ob-history-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-2); }
+.ob-history-head { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-2); }
 .ob-dashboard .ob-history-head h4 { margin: 0; display: flex; align-items: center; gap: 2px; font-size: 15px; font-weight: 600; color: var(--ob-text); text-transform: none; letter-spacing: -0.2px; }
 .ob-history-head h4 .ob-meta { margin-left: 6px; font-weight: 400; }
 .ob-history-latest { display: flex; align-items: baseline; gap: var(--ob-space-2); min-width: 0; }

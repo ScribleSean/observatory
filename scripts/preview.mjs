@@ -39,10 +39,12 @@ function fictionalHistory(host) {
   const points=[];
   let seed=11;
   const random=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
-  const start=now-30*86400000;
+  // Offset so a 5-hour window is part way through now, not resetting this minute.
+  const start=now-30*86400000-137*60000;
   for(const [p,w5,ww] of [['claude','five_hour','seven_day'],['codex','primary','secondary']]) {
     let reset5=start,left5=100,resetWeek=start,leftWeek=100;
-    for(let t=start;t<=now-60000;t+=15*60000) {
+    // Every 15 minutes, and every 5 minutes in the last two hours, as a computer that is on reads its limits.
+    for(let t=start;t<=now-60000;t+=(now-t<=2*3600000?5:15)*60000) {
       const date=new Date(t),hour=date.getHours(),day=date.getDay();
       const working=hour>=8 && hour<23;
       if(t-reset5>=5*3600000) {reset5=t;left5=100;}
@@ -69,6 +71,8 @@ for(const [key,provider] of [['claudeLimits','claude'],['quota','codex']]) {
   const latest=new Map();
   for(const point of mac.limitHistory[0].points)if(point.p===provider)latest.set(point.w,point);
   source.status='ok';source.checkedAt=new Date(now-60000).toISOString();
+  // Pace comes from the limit history, as it does for a real Claude Code reading.
+  delete source.history;
   source.windows=source.windows.map(row=>{
     const point=latest.get(row.window);
     if(!point)return row;
