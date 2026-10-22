@@ -15,7 +15,6 @@
 .ob-limits-pace .ob-num.big { margin: 2px 0; font-size: 28px; letter-spacing: -0.5px; }
 .ob-limits-pace + .ob-limits-pace { padding-top: var(--ob-space-3); border-top: 1px solid var(--ob-track); }
 
-/* Limit history: one card per provider and window, lines per computer. */
 .ob-history { margin-top: var(--ob-space-5); }
 .ob-history > .ob-row { align-items: center; flex-wrap: wrap; gap: var(--ob-space-2) var(--ob-space-4); }
 .ob-history > .ob-row h3 { margin: 0; }
@@ -63,7 +62,6 @@
 .ob-history-values table { width: 100%; margin-top: var(--ob-space-2); border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .ob-history-values th, .ob-history-values td { text-align: left; padding: 3px 8px 3px 0; }
 
-/* One card per provider, one block per window. */
 .ob-limits-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-2); }
 .ob-limits-card-head h3 { margin: 0; display: flex; align-items: center; }
 .ob-limit-window { padding: var(--ob-space-3) 0; display: grid; gap: 6px; }
@@ -77,7 +75,6 @@
 .ob-history-grid-cards > *, .ob-limits-providers > * { min-width: 0; }
 .ob-history-plot { overflow: hidden; }
 
-/* A wide screen puts the current readings in a column beside the history charts. */
 @media (min-width: 1280px) {
   .ob-limits { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); column-gap: var(--ob-space-4); align-items: start; }
   .ob-limits > .ob-limits-providers { grid-column: 1; grid-row: 1 / span 3; grid-template-columns: minmax(0, 1fr); align-content: start; }

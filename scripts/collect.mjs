@@ -1,5 +1,3 @@
-// Collect this computer's own snapshot into <data>/public/local/usage.json.
-// Only sources set to true in observatory.config.json are read.
 import {spawn,execFile} from 'node:child_process';
 import {homedir} from 'node:os';
 import {copyFile,readFile,realpath} from 'node:fs/promises';
@@ -45,7 +43,6 @@ function runPowerShellFile(script) {
   });
 }
 
-// The real readers. Tests pass their own.
 export function defaultReaders(config) {
   const claudeFolder=()=>{
     const configured=process.env.CLAUDE_CONFIG_DIR;
@@ -61,7 +58,6 @@ export function defaultReaders(config) {
       }
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
-    // The cache refuses a path that runs through a link, so pass the resolved one.
     codex:async()=>collectSettings(path.join(homedir(),'.codex'),{cacheDirectory:await realpath(await privateFolder(config.dataFolder,'private-codex'))}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
@@ -74,8 +70,6 @@ export function defaultReaders(config) {
   };
 }
 
-// One-time, reversible migration: before the first write over a snapshot made
-// by the old app (it has no device field), keep a copy beside it.
 export const OLD_APP_BACKUP='usage.before-hub.json';
 async function keepOldAppSnapshot(folder) {
   const previous=await previousSnapshot(path.join(folder,'usage.json'));
@@ -83,8 +77,6 @@ async function keepOldAppSnapshot(folder) {
   await copyFile(path.join(folder,'usage.json'),path.join(folder,OLD_APP_BACKUP),fsConstants.COPYFILE_EXCL).catch(error=>{if(error.code!=='EEXIST')throw error;});
 }
 
-// Keep every limit reading this computer observed, then ship a compact history
-// with the snapshot for the charts. A failure here never stops collection.
 async function recordLimitHistory(config,data,now) {
   const host=config.host;
   let db;
@@ -107,7 +99,6 @@ async function previousSnapshot(file) {
   } catch {return null;}
 }
 
-// Turn completed reads into this computer's own snapshot. Pure apart from the readers.
 export async function buildSnapshot(config,readers,{previous=null,now=new Date()}={}) {
   const at=now.toISOString(),host=config.host,other=OTHER[host];
   const disconnected=h=>({host:h,status:'not-connected'});
@@ -144,7 +135,6 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
     dictation:[],
     quota,claudeLimits,providerTokenSources:[claude]};
-  // Keep this computer's own retained screen time history only.
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};

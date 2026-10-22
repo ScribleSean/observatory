@@ -1,6 +1,3 @@
-// Reads Claude Code limits by running the installed CLI's own usage command
-// in print mode. The command is local: it reports zero turns and zero cost.
-// Only the two limit lines are kept. The rest of the text is discarded.
 import {spawn} from 'node:child_process';
 import {lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
@@ -15,7 +12,7 @@ function offsetMinutes(instant,timeZone) {
   return (Date.UTC(parts.year,parts.month-1,parts.day,parts.hour,parts.minute,parts.second)-Math.floor(instant/1000)*1000)/60000;
 }
 
-// Accept both ICU date separators and an optional explicit year.
+// Accept both ICU date separators.
 export function parseResetTime(text,now=Date.now()) {
   const match=/^([A-Z][a-z]{2}) (\d{1,2})(?:, (\d{4}))?(?: at |, )(\d{1,2})(?::(\d{2}))?[ \u202f]?(am|pm|AM|PM) \(([A-Za-z0-9_+/-]{1,64})\)$/.exec(text ?? '');
   if(!match)return null;
@@ -36,8 +33,6 @@ export function parseResetTime(text,now=Date.now()) {
   return null;
 }
 
-// Returns the same shape the status line passes, or null when the output is
-// not the expected local command result.
 export function parseClaudeUsage(envelope,now=Date.now()) {
   if(!envelope || typeof envelope!=='object' || envelope.is_error!==false || envelope.num_turns!==0 || envelope.total_cost_usd!==0 ||
     envelope.local_command!=='usage' || typeof envelope.result!=='string' || envelope.result.length>20000)return null;
@@ -68,9 +63,9 @@ const keep={
   win32:['SystemRoot','SystemDrive','USERPROFILE','HOMEDRIVE','HOMEPATH','USERNAME','APPDATA','LOCALAPPDATA','TEMP','TMP','PATH','Path','PATHEXT','COMSPEC','CLAUDE_CONFIG_DIR'],
 };
 
-// The command gets a small fixed environment. A collector started from
+// A collector started from
 // another Claude session inherits that session's variables, and passing them
-// on made the command hang (issue 90).
+// on made the command hang.
 export function usageEnvironment(source=process.env,platform=process.platform) {
   const result={};
   for(const name of platform==='win32'?keep.win32:keep.posix)if(typeof source[name]==='string')result[name]=source[name];
@@ -84,9 +79,6 @@ function forceStop(child,platform) {
   } catch {}
 }
 
-// Always settles within the time limit, whatever the child does. A command
-// that ignores a polite stop or leaves a helper holding its output open
-// cannot hold up a collection.
 function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
   return new Promise(resolve=>{
     let output='',bytes=0,done=false,child;

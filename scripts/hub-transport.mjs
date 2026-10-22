@@ -1,5 +1,3 @@
-// The hub reads one file from a spoke and writes one file back, over the
-// SSH alias the user already set up. No Node is needed on the remote side.
 // Files travel as base64 so console code pages cannot change the bytes.
 import {execFile} from 'node:child_process';
 
@@ -30,11 +28,8 @@ export function pullCommand(spoke) {
   return `f=${macFolder(spoke)}/public/local/usage.json; test "$(wc -c < "$f")" -le ${MAX_FILE_BYTES} && base64 < "$f"`;
 }
 
-// The hub writes an inbox file, combined.incoming.json. The spoke merges it into its
-// own combined.json on its next cycle, under its own lock, so a write-back can never
-// replace a newer result the spoke made itself. The expected size is checked before
-// replacing, so a cut-off or empty transfer changes nothing. The temporary name is
-// fixed, so a failed push leaves no litter.
+// The expected size is checked before
+// replacing, so a cut-off or empty transfer changes nothing.
 export function pushCommand(spoke,bytes) {
   if(!Number.isSafeInteger(bytes) || bytes<1)throw Error('combined file is empty');
   if(spoke.platform==='windows') return encoded([
@@ -65,7 +60,6 @@ export function runSSH(alias,command,input='') {
   });
 }
 
-// The transport the hub uses. Tests pass a fake with the same two methods.
 export function sshTransport(invoke=runSSH) {
   return {
     async pull(spoke) {

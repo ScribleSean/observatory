@@ -1,5 +1,3 @@
-// One five-minute cycle: collect this computer, then combine.
-// The glance app runs this hidden every 5 minutes and on Refresh.
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {loadConfig} from '../lib/config.mjs';
@@ -14,7 +12,6 @@ export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=
     const result={role:config.role,collect:'ok'};
     try {result.sources=(await collectStep(config)).status;}
     catch(error) {result.collect=error.message;}
-    // Combine even when collection failed, so the other computer still shows.
     const combined=config.role==='hub'?await hubStep(config):await spokeStep(config);
     result.combined=combined.generatedAt;
     result.title=combined.glance.title;
@@ -23,7 +20,6 @@ export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=
   });
 }
 
-// A stuck reader or SSH call must not hold the lock past the next cycle.
 export const TICK_DEADLINE_MS=4*60000;
 
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

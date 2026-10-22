@@ -44,7 +44,6 @@ void test('sample All week keeps providers and settings per device', () => {
   const claude = card(html, 'Claude Code');
   const codex = card(html, 'Codex');
   for (const text of ['By device', 'Studio', 'Desk']) assert.ok(claude.includes(text), text);
-  // Session cost came only from the removed status line bridge, so it is no longer shown.
   assert.ok(!claude.includes('Session cost'));
   for (const provider of [claude, codex]) {
     assert.ok(provider.includes('API-equivalent (estimate)'));

@@ -23,7 +23,6 @@ test('two fresh computers combine into per-device numbers and a labeled sum',()=
   assert.equal(combined.glance.both.seconds,mac.seconds+pc.seconds);
   assert.equal(combined.glance.both.tokens,mac.tokens+pc.tokens);
   assert.ok(combined.glance.lines.some(line=>line.includes('not deduplicated')));
-  // The merged view keeps exactly one row per host for the viewer.
   assert.deepEqual(combined.view.activity.map(row=>row.host).sort(),['Mac','Windows']);
   assert.deepEqual(combined.view.tokens.map(row=>row.host).sort(),['Mac','Windows']);
   assert.equal(combined.devices.every(device=>!device.stale),true);

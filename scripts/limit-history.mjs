@@ -1,7 +1,3 @@
-// Limit history: every Claude Code and Codex limit reading this computer has
-// observed, with when it was observed, which computer observed it and where it
-// came from. Readings are only ever recorded as observed. Nothing is filled in,
-// so a gap between readings stays a gap.
 import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {privateFolder} from '../lib/private-folder.mjs';
@@ -34,9 +30,6 @@ export async function openHistory(dataFolder) {
   return db;
 }
 
-// Readings from one limits source as it appears in a snapshot (quota or
-// claudeLimits), or from a Codex archive record. Only real percentages with a
-// real observation time are kept.
 export function readingsFrom(source,{provider,observer,source:origin,checkedAt}={}) {
   if(!PROVIDERS.includes(provider) || !OBSERVERS.includes(observer) || typeof origin!=='string')return [];
   if(!source || typeof source!=='object' || !Array.isArray(source.windows))return [];
@@ -45,7 +38,6 @@ export function readingsFrom(source,{provider,observer,source:origin,checkedAt}=
   return source.windows.flatMap(row=>{
     const window=windowId(row?.window);
     const remaining=row?.remainingPercent;
-    // A window's own time can only make it older, as in the dashboard.
     const own=time(row?.checkedAt);
     const observed=own!==null && (sourceTime===null || own<=sourceTime)?own:sourceTime;
     if(!window || observed===null || typeof remaining!=='number' || !Number.isFinite(remaining) || remaining<0 || remaining>100)return [];
@@ -55,8 +47,6 @@ export function readingsFrom(source,{provider,observer,source:origin,checkedAt}=
   });
 }
 
-// Insert readings. A reading that is already stored is left as it is, which
-// makes recording and importing safe to repeat.
 export function recordReadings(db,readings) {
   const insert=db.prepare(`INSERT OR IGNORE INTO limit_readings
     (provider,window,observed_at,observer,remaining,resets_at,duration_minutes,source) VALUES (?,?,?,?,?,?,?,?)`);
@@ -70,9 +60,6 @@ export function recordReadings(db,readings) {
 }
 
 const HOUR=3600000,DAY=24*HOUR;
-// Detail for charts without shipping every reading: every reading in the last two
-// days, the last reading of each hour for 30 days, then the last of each day.
-// Each kept point is a real reading. Nothing between readings is invented.
 export function compactHistory(db,{now=Date.now(),observer}={}) {
   const rows=db.prepare(`SELECT provider,window,observed_at,observer,remaining,resets_at,duration_minutes,source
     FROM limit_readings WHERE observed_at<=? ${observer?'AND observer=?':''} ORDER BY provider,window,observer,observed_at`)
@@ -81,7 +68,6 @@ export function compactHistory(db,{now=Date.now(),observer}={}) {
   for(const row of rows) {
     const age=now-row.observed_at;
     const bucket=age<=2*DAY?`r${row.observed_at}`:age<=30*DAY?`h${Math.floor(row.observed_at/HOUR)}`:`d${Math.floor(row.observed_at/DAY)}`;
-    // Later rows replace earlier ones in the same bucket, so each bucket keeps its last reading.
     kept.set(`${row.provider}|${row.window}|${row.observer}|${bucket}`,row);
   }
   return [...kept.values()].map(row=>({p:row.provider,w:row.window,o:row.observer,t:new Date(row.observed_at).toISOString(),
@@ -89,8 +75,6 @@ export function compactHistory(db,{now=Date.now(),observer}={}) {
     ...(row.source==='live'?{}:{s:row.source})}));
 }
 
-// The same shape as compactHistory, checked field by field. Used for every
-// snapshot, including one pulled from another computer.
 export function cleanHistoryPoints(points,observer) {
   if(!Array.isArray(points))return [];
   return points.slice(0,20000).flatMap(point=>{

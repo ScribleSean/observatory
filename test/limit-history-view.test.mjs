@@ -43,7 +43,6 @@ test('no readings in range is empty, not zero, and ranges filter by time',()=>{
   const old=snapshot([point('Mac',10*24*60,50),point('Mac',60,40)]);
   assert.equal(limitHistorySeries(old,{provider:'claude',window:'5h',range:'week',now}).total,1);
   assert.equal(limitHistorySeries(old,{provider:'claude',window:'5h',range:'all',now}).total,2);
-  // The freshest reading is shown even when it is outside the chosen range.
   assert.equal(limitHistorySeries(snapshot([point('Mac',3*24*60,45)]),{provider:'claude',window:'5h',range:'today',now}).latest.remaining,45);
 });
 

@@ -8,7 +8,7 @@ export function windowsPowerShellFileArguments(script,...scriptArguments) {
 }
 
 // A Node parent can inherit PowerShell 7 module paths that Windows PowerShell
-// cannot load. This child needs only Windows' built-in modules, not user modules.
+// cannot load.
 export function windowsPowerShellEnvironment(environment=process.env) {
   const result=Object.fromEntries(Object.entries(environment).filter(([key])=>key.toLowerCase()!=='psmodulepath'));
   const systemRoot=Object.entries(environment).find(([key])=>key.toLowerCase()==='systemroot')?.[1] || 'C:/Windows';

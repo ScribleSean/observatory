@@ -12,9 +12,7 @@ const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
 const timestamp=value=>Number.isSafeInteger(value) && value>=0 && value<=8640000000000000;
 const sharingOff=()=>({enabled:false,generation:null,scope:null,pairingId:null});
 
-// Keep an independently readable legacy database before changing its schema.
-// The caller holds BEGIN IMMEDIATE on the original, so the saved row cannot race
-// another writer. Never restore this automatically over newer observations.
+// Never restore this automatically over newer observations.
 function backupLegacyQuota(directory,record) {
   const file=path.join(directory,'migration-v1-'+randomBytes(16).toString('hex')+'.sqlite');
   const descriptor=openSync(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
@@ -55,7 +53,6 @@ async function safeFile(file,optional=false) {
 async function withDatabase(runtime,action) {
   const directory=await privateFolder(runtime,'private-quota');
   const file=path.join(directory,'state.sqlite');
-  // Exclusive file creation preserves private permissions before SQLite opens it.
   try {const handle=await open(file,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);await handle.close();}
   catch(error) {if(error.code!=='EEXIST')throw error;}
   const before=await safeFile(file);
@@ -104,14 +101,11 @@ function read(db,now) {
     else if(hex(value.history.scope)) {
       if(!['ok','stale','unavailable','needs-auth','unsupported'].includes(value.history.status))throw Error('Invalid saved quota status');
       history=retainQuotaHistory(value.history,{status:value.history.latestReadStatus},{scope:value.history.scope,now});
-      // Reloading validates retention without creating a new reading. A saved
-      // ok history stays ok only while its latest reading is still retained.
       if(value.history.status==='ok' && history.status==='stale' && history.latestReadStatus==='ok' && history.asOf && history.asOf===value.history.asOf)history.status='ok';
     }
     else throw Error('Invalid quota account scope');
   }
   const sharing=readSharing(value.sharing,history);
-  // Allowance sharing between paired devices is retired. A saved peer copy is ignored.
   const remote=null;
   return {version:1,revision:value.revision,salt:value.salt,history,nextAttemptAt:value.nextAttemptAt,failures:value.failures,
     sharing,remote};
@@ -127,12 +121,9 @@ function save(db,value) {
 export const readQuotaState=(runtime,now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now))throw Error('Invalid observation time');
   const state=read(db,now);
-  // Persist the initial salt before any network read, including concurrent runs.
   save(db,state);return state;
 });
 
-// Collection occurs outside the transaction. Reject a late result if another
-// collector or a source-disable operation has already changed this generation.
 export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,nextAttemptAt=0,failures=0},now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now) || !timestamp(nextAttemptAt) || !Number.isSafeInteger(failures) || failures<0 || failures>32)
     throw Error('Invalid quota polling state');

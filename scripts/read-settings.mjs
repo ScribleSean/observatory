@@ -1,6 +1,3 @@
-// Summarize saved Codex settings and tool-call categories without exporting text.
-// This is a port of read-settings.py. It keeps the Python reader's results,
-// limits and failure cases, including the cases where Python stops with an error.
 import {createHash,createHmac} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,11 +10,9 @@ export const MAX_TOTAL_BYTES=2*1024*1024*1024;
 export const MAX_LINES=3_000_000;
 export const MAX_LINE_BYTES=8_000_000;
 export const MAX_READ_SECONDS=45;
-// One million characters of at most four UTF-8 bytes, the first line limit when it was read as text.
 export const FIRST_LINE_BYTES=4_000_000;
 export const MAX_CACHE_BYTES=2*1024*1024*1024;
 export const CACHE_PAGE_SIZE=4096;
-// Parsing a saved entry peaks at about 7.6 times its size, so 64 MiB can use about 500 MiB.
 export const MAX_RETAINED_BYTES=64*1024*1024;
 export const DEFAULT_SCAN_BYTES=2*1024*1024*1024;
 
@@ -29,7 +24,6 @@ export function readerLimits(overrides={}) {
   return Object.freeze({...DEFAULT_LIMITS,...overrides});
 }
 
-// Python exception families. Only the families Python catches are distinguished.
 export class ValueError extends Error {get name() {return 'ValueError';}}
 export class UnicodeError extends ValueError {get name() {return 'UnicodeError';}}
 export class PyTypeError extends Error {get name() {return 'TypeError';}}
@@ -37,7 +31,6 @@ export class AttributeError extends Error {get name() {return 'AttributeError';}
 export class OverflowError extends Error {get name() {return 'OverflowError';}}
 
 export class ReadBudget {
-  // Count actual session reads, including inventory reads and retries.
   constructor({limits=DEFAULT_LIMITS,clock=()=>performance.now()/1000}={}) {
     this.limits=limits;
     this.clock=clock;
@@ -60,7 +53,6 @@ export const FIELDS=['input_tokens','cached_input_tokens','cache_write_input_tok
 export const EFFORTS=new Set(['none','minimal','low','medium','high','xhigh','max','ultra']);
 export const TIERS=new Map([['default','standard'],['standard','standard'],['priority','fast'],['fast','fast']]);
 
-// Python dictionary helpers over parsed JSON.
 export const isDict=x=>x!==null&&typeof x==='object'&&!Array.isArray(x)&&!(x instanceof Uint8Array);
 export const has=(o,k)=>Object.hasOwn(o,k);
 export const get=(o,k)=>Object.hasOwn(o,k)?o[k]:undefined;
@@ -159,7 +151,6 @@ class ConstantParser {
     return Number(found[0]);
   }
   string() {
-    // Find the closing quote, then let JSON.parse check escapes and control characters.
     let end=this.i+1;
     for(;;) {
       if(end>=this.s.length)this.fail();
@@ -333,7 +324,6 @@ function digitsAt(b,at,count) {
   return value;
 }
 function parseClock(b,start,end) {
-  // Returns [code, values, next] like parse_hh_mm_ss_ff.
   const values=[0,0,0,0];
   let p=start;
   for(let i=0;i<3;i++) {
@@ -446,7 +436,6 @@ export function utcMicros(stamp) {
 }
 const newYorkFormat=new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,timeZoneName:'longOffset'});
 const newYorkOffsets=new Map();
-// Zone transitions fall on quarter hours in UTC, so one lookup serves a quarter hour.
 function newYorkOffset(seconds) {
   const hour=Math.floor(seconds/900);
   let offset=newYorkOffsets.get(hour);
@@ -513,7 +502,6 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
       if(nextSelected!==selectedModel)selectedSpeed='unknown';
       selectedModel=nextSelected;
       if(has(s,'service_tier'))selectedSpeed=tierOf(s.service_tier);
-      // A newly selected model does not relabel the preceding turn.
       if(contextModel===null)model=selectedModel;
       if(selectedModel===model) {
         if(has(s,'reasoning_effort'))effort=inEfforts(s.reasoning_effort)?s.reasoning_effort:'unknown';
@@ -578,8 +566,6 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
     let delta=current.map((v,i)=>v-(prior?prior[i]:0));
     prior=current;
     if(repeated)continue;
-    // Match the daily reader: use the recorded request counters when the
-    // cumulative counter advances. Deltas alone can lose usage after resets.
     const last=get(info(),'last_token_usage');
     if(isDict(last)) {
       delta=counters(last);
@@ -590,8 +576,6 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
     // Codex input includes cache reads and writes. Output includes reasoning.
     const uncached=input-cachedInput-cacheWrite;
     if(uncached<0||Math.abs(input+output-total)>1)continue;
-    // Copies inherited by related sessions count once. Each file still
-    // advances its own cumulative baseline before this shared check.
     if(seen!==null&&!isNone(turnKey)) {
       if(turnKeyIdentity===null)throw new PyTypeError('unhashable type');
       const identity=JSON.stringify([turnKeyIdentity,isoformat(stamp),model,effort,speed,current,delta]);
@@ -614,7 +598,6 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
   return [[...profiles.values()],[...tools.values()]];
 }
 
-// Buffered readline(limit) over a file descriptor.
 export class LineReader {
   constructor(fd) {this.fd=fd;this.buffer=Buffer.alloc(0);this.position=0;this.ended=false;}
   fill() {
@@ -775,10 +758,8 @@ function collect(folder,options,{retryCache=true,cacheBudget=null,readBudget=nul
     readBudget.charge(first.length);
     let meta;
     if(first.length>=limits.firstLineBytes&&first.at(-1)!==10) {
-      // Longer than the earlier 1,000,000 character limit allows, so unparseable as before.
       meta={};
     } else {
-      // A complete line with invalid UTF-8 still fails the whole read, as before.
       const text=decodeUtf8(first);
       try {meta=pyLoads(text);}
       catch(error) {if(!(error instanceof ValueError))throw error;meta={};}
@@ -821,9 +802,6 @@ function collect(folder,options,{retryCache=true,cacheBudget=null,readBudget=nul
     cache?.close({completed});
   }
   if(cache?.pending) {
-    // Rebuild metadata and inventory after a transient file change. A
-    // second attempt shares the original byte budget and never returns
-    // an incomplete first-pass total as a successful report.
     if(retryCache&&cache.remaining>0)return collect(folder,options,{retryCache:false,cacheBudget:cache.remaining,readBudget});
     throw new ValueError('Private Codex cache warming; complete report unavailable');
   }

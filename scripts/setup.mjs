@@ -80,14 +80,11 @@ export async function stableNode(platform=process.platform) {
   return first && existsSync(first)?first:process.execPath;
 }
 
-// Claude Code's settings file. Setup only reads it, and never changes it.
 export function claudeSettingsPath(environment=process.env) {
   const configured=environment.CLAUDE_CONFIG_DIR;
   return path.join(configured && path.isAbsolute(configured)?configured:path.join(homedir(),'.claude'),'settings.json');
 }
 
-// Earlier versions could point Claude Code's status line at an Observatory bridge.
-// The bridge was removed, so a status line that still runs it is reported, with the file to edit.
 export async function leftoverStatusline(settingsPath) {
   let settings;
   try {settings=JSON.parse(await readFile(settingsPath,'utf8'));}catch {return null;}
@@ -96,7 +93,6 @@ export async function leftoverStatusline(settingsPath) {
   return [...command.matchAll(/"([^"]+)"/g)].map(match=>match[1]).find(value=>value.endsWith('claude-statusline-bridge.mjs')) ?? null;
 }
 
-// The name people know the computer by, cleaned to fit the settings file.
 export async function computerName(platform=process.platform,environment=process.env) {
   const raw=platform==='darwin'?await quiet('/usr/sbin/scutil',['--get','ComputerName']):environment.COMPUTERNAME;
   // oxlint-disable-next-line no-control-regex -- control characters are removed on purpose
@@ -137,20 +133,16 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
   step(`Node ${process.versions.node}`);
 
   const configFile=process.env.OBSERVATORY_CONFIG || CONFIG_FILE;
-  // Zero setup: with no settings file, write one with every source on and this
-  // computer's own name. It is plain JSON beside package.json, ready to edit.
   let config;
   if(!existsSync(configFile)) {
     const example=JSON.parse(await readFile(path.join(REPO,'observatory.config.example.json'),'utf8'));
     example.device.name=await computerName(platform);
     await act('write observatory.config.json with every source on (edit it any time)',()=>
       writeFile(configFile,JSON.stringify(example,null,2)+'\n',{flag:'wx'}));
-    // A dry run carries on with the settings it would have written.
     config=dryRun?parseConfig(example,{platform}):await loadConfig(configFile,{platform});
   } else config=await loadConfig(configFile,{platform});
   step(`Settings: ${config.device.name}, ${config.role==='hub'?`combining with ${config.hub.spokes.map(spoke=>spoke.name).join(', ')}`:'this computer'}, sources on: ${Object.entries(config.sources).filter(([,on])=>on).map(([key])=>key).join(', ') || 'none'}`);
 
-  // The older app writes usage.json in the same default data folder.
   if(config.dataFolder===defaultDataFolder(platform) && await oldAppRunning(platform)) {
     const message='The older Observatory app is running and writes the same files. Quit it (and turn off its login item) first, then run setup again.';
     if(!dryRun)throw Error(message);
@@ -189,7 +181,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
         path.win32.join(REPO,'glance','windows','Glance.cs')],{windowsHide:true,timeout:300000});
     });
   }
-  // Bring in limit history kept by earlier versions. Safe to repeat: known readings are skipped.
   await act('import limit history kept by earlier versions',async()=>{
     const report=await importHistory(config);
     const added=report.reduce((total,row)=>total+row.added,0);
@@ -228,8 +219,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     await act(start?'start the tray app now and at login':'start the tray app at login (not now)',async()=>{
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute('reg.exe',['add','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/t','REG_SZ','/d',`"${target.executable}"`,'/f'],{windowsHide:true});
-      // Started from a remote or background session, the tray icon would not appear on the desktop,
-      // so --no-start leaves starting it to the next sign-in or the Start menu.
+      // Started from a remote or background session, the tray icon would not appear on the desktop
       if(start)spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
     });
     if(!start)log(`  Start it now by opening ${target.executable}, or sign out and back in.`);

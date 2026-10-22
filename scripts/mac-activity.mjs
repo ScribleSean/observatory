@@ -14,7 +14,6 @@ async function api(suffix, body) {
 export async function macActivity({raw=false}={}) {
   const buckets = Object.values(await api('/buckets/'));
   const end = new Date(), start = new Date(end - 7 * 86400000);
-  // Pair this computer's watchers by what is active, not by hostname. See localActivityPairs.
   const pairs = localActivityPairs(buckets, { since: start.getTime() });
   const reports = await Promise.all(pairs.map(async ({window:w,afk:a}) => {
   const q = `w = query_bucket(${JSON.stringify(w)}); a = query_bucket(${JSON.stringify(a)}); a = filter_keyvals(a, "status", ["not-afk"]); RETURN = filter_period_intersect(w, a);`;

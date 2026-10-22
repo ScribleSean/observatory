@@ -7,7 +7,6 @@ import {combine} from '../lib/combine.mjs';
 import {refusalText} from '../lib/view-sources.mjs';
 import {ownSnapshot} from './helpers.mjs';
 
-// Vite loads the TSX views for server rendering, as the build does.
 const root=fileURLToPath(new URL('..',import.meta.url));
 const load=specifier=>import(specifier);
 const {createServer}=await load('vite');
@@ -27,7 +26,6 @@ for(const section of ['limits','activity','tokens','sources']) {
   test(`the ${section} page renders from combined.json`,()=>{
     const html=render({combined:both,section});
     for(const title of ['Limits','Screen time today','Cost today'])assert.ok(html.includes(title),title);
-    // The Agents view was removed. Neither the tab nor the tile comes back.
     assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
     assert.ok(html.includes('both computers, not deduplicated'));
     assert.ok(!html.includes('NaN'));
@@ -79,10 +77,8 @@ test('staleness is judged when the page draws, not when the file was written',()
   const at=new Date(now).toISOString();
   const mac=ownSnapshot('Mac',now,s=>({...s,collectedAt:at}));
   const combined=combine([{host:'Mac',snapshot:mac}],{now});
-  // Drawn an hour later with no new file: the numbers carry their time.
   const later=render({combined,section:'limits',now:now+3600000});
   assert.ok(later.includes('as of'));
-  // Drawn the next day: today's numbers are Unknown, with the last update time.
   const nextDay=render({combined,section:'limits',now:now+26*3600000});
   assert.ok(nextDay.includes('Last update was'));
   const time=nextDay.slice(nextDay.indexOf('Screen time today'));

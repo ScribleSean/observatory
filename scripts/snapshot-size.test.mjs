@@ -133,8 +133,6 @@ test('maximal activity and quota with full provider day retention fit after trim
   assert.equal(sized.text,JSON.stringify(result.data));
 });
 test('maximal provider model cardinality alone cannot fit the snapshot limit',t=>{
-  // All dates have equal encoded length. Measure one validated maximal day
-  // without allocating two multi-gigabyte JSON strings for 3660 copies each.
   const sources=['Mac','Windows'].map(host=>provider(host,1000,1));
   const result={data:{providerTokenSources:sources},status:{}};
   attachProviderTokenEstimates(result);

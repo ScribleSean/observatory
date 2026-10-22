@@ -60,8 +60,6 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates,
 function project(state,now) {
   const history=state.history;
   if(!history || history.status==='not-connected')return {...disconnected(),status:'unavailable',latestReadStatus:'waiting',nextAttemptAt:new Date(state.nextAttemptAt).toISOString()};
-  // Loading retained history is not a failed poll. Keep a successful sample
-  // healthy for two five-minute polling intervals without changing its time.
   const age=now-Date.parse(history.asOf);
   const status=history.latestReadStatus==='ok' && ['ok','stale'].includes(history.status)?
     (Number.isFinite(age) && age>=0 && age<600000?'ok':'stale'):history.status;

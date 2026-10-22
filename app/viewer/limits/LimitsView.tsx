@@ -30,8 +30,6 @@ function paceSentence(pace: ReturnType<typeof limitRows>[number]['pace']) {
   return paceMessages[pace.status] ?? STRINGS.status.unknown;
 }
 
-// Limit % over time for each provider and window, one line per computer.
-// The freshest reading leads each card, with the computer and time it came from.
 function LimitHistorySection({ snapshot, now }: { snapshot: Record<string, unknown> | null; now: number }) {
   const [range, setRange] = useState('week');
   return <section className="ob-history" aria-labelledby="ob-history-title">
@@ -66,7 +64,6 @@ export function LimitsView({ snapshot, now, limitStyle }: {
 }) {
   const rows = limitRows(snapshot, now);
   const peer = peerLimits(snapshot, now);
-  // Where each provider's reading came from: the computer and the time it was observed.
   const names = (snapshot?.deviceNames ?? {}) as Record<string, string>;
   const origin = (provider: string) => {
     const source = (provider === 'claude' ? snapshot?.claudeLimits : snapshot?.quota) as { observedOn?: string; checkedAt?: string } | undefined;
@@ -92,7 +89,6 @@ export function LimitsView({ snapshot, now, limitStyle }: {
           <div className="ob-bar" aria-hidden="true">{row.remaining !== null && <i className={row.low ? 'warn' : provider} style={{ width: `${row.remaining}%`, opacity: row.stale ? 0.45 : 1 }} />}</div>
           <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>
           {row.remaining !== null && <div className="ob-meta">
-            {/* The reset line already says when a projected window runs out, so the pace line does not repeat it. */}
             {[typeof row.pace?.ratePerHour === 'number' ? format(STRINGS.limits.perHour, { value: row.pace.ratePerHour > 0 && row.pace.ratePerHour < 0.05 ? STRINGS.limits.belowTenth : row.pace.ratePerHour.toFixed(1) }) : null,
               row.pace?.status === 'projected' ? null : paceSentence(row.pace)].filter(Boolean).join(STRINGS.formats.separator)}
           </div>}

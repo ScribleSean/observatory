@@ -26,7 +26,6 @@ const snapshot = () => {
     quota: source('codex', ['primary', 'secondary']) };
 };
 const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar', ...props }));
-// The provider cards at the top of the page, one block per window.
 const nowCard = html => html.match(/<div class="ob-limits-providers">([\s\S]*?)(?:<section class="ob-history"|$)/)?.[1] ?? assert.fail('Provider cards missing');
 const count = (html, pattern) => [...html.matchAll(pattern)].length;
 
@@ -64,13 +63,11 @@ void test('low remaining value warns on the affected row', () => {
 
 for (const data of [{ quota: { status: 'unavailable' } }, null]) {
   void test('unknown remains unknown for ' + (data ? 'unavailable quota' : 'null snapshot'), () => {
-    // The history charts' axis labels (0% to 100%) are not readings, so they are left out of this check.
     const html = render(data).replace(/<section class="ob-history"[\s\S]*<\/section>/, '');
     assert.match(html, /Unknown/);
     assert.doesNotMatch(html, /(^|[^0-9.])0 ?%|>0</);
     for (const name of ['Claude Code', 'Codex']) assert.ok(html.includes('<section class="ob-card" aria-label="' + name + '">'));
     assert.equal(count(nowCard(html), /data-window="unknown"/g), 2);
-    // One Unknown per provider row.
     assert.equal(count(nowCard(html), />Unknown</g), 2);
   });
 }
@@ -140,6 +137,5 @@ void test('a PC history line is drawn on a ring, so it stays visible over a matc
   const html = render(data);
   assert.equal(count(html, /class="ob-history-halo"/g), 1);
   assert.equal(count(html, /class="ob-history-line claude dotted"/g), 2);
-  // The Mac line comes first, so the PC's dots are drawn on top of it.
   assert.ok(html.indexOf('ob-history-line claude"') < html.indexOf('ob-history-halo'));
 });

@@ -21,9 +21,7 @@ test('local watchers pair by activity, not by hostname', async () => {
     bucket('aw-watcher-afk_new-name.local', 'afkstatus', 'new-name.local', '2026-10-12T15:41:00Z'),
     bucket('aw-watcher-window_other-synced-from-other', 'currentwindow', 'other', '2026-10-21T00:00:00Z'),
   ];
-  // The active window watcher and the active idle watcher are read together, though their hostnames differ.
   assert.deepEqual(localActivityPairs(buckets, { since }), [{ window: 'aw-watcher-window_new-name.local', afk: 'aw-watcher-afk_old-name' }]);
-  // With no recent pair at all, every local watcher is read, synced ones excepted.
   const all = localActivityPairs(buckets, { since: Date.parse('2027-01-01T00:00:00Z') });
   assert.equal(all.length, 4);
   assert.ok(all.every(pair => !pair.window.includes('synced')));

@@ -45,7 +45,6 @@ test('several sessions keep the higher reading within one reset period', () => {
   const lower=extractClaudeLimits(input(35,12),now+60000);
   const merged=mergeClaudeLimits(first,lower,now+60000);
   assert.equal(merged.windows.five_hour.usedPercentage,40);
-  // The kept higher value keeps its original observation time.
   assert.equal(merged.windows.five_hour.observedAt,seconds);
   assert.equal(merged.windows.seven_day.usedPercentage,12);
   const later=input(2,12);later.rate_limits.five_hour.resets_at=seconds+7200+18000;
@@ -79,7 +78,6 @@ test('recording writes one small private file and reading needs the install mark
   assert.doesNotMatch(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'),/synthetic|project|transcript/i);
   assert.equal((await readClaudeLimits(runtime,{now})).status,'not-connected');
   await writeFile(path.join(runtime,'claude-limits/consent.json'),consentText);
-  // Tests never start the real Claude Code command.
   const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({status:'unrecognized',usage:null})});
   assert.equal(source.status,'ok');
   const result={data:{}};attachClaudeLimits(result,source);
@@ -125,7 +123,6 @@ test('invalid usage results fail without exposing details or inventing a reading
     assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>result}),
       {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'failed'});
   }
-  // A reading the store cannot use counts as not recognized.
   for(const usage of [{},'synthetic',null])assert.deepEqual(await readClaudeLimits(runtime,{now,readUsage:async()=>({status:'read',usage})}),
     {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],usageCommand:'unrecognized'});
   for(const status of ['not-found','failed','timed-out','unrecognized']) {

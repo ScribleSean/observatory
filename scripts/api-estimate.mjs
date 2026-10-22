@@ -1,6 +1,3 @@
-// USD per million tokens from the shared price table (native/prices.json,
-// mirrored by scripts/price-data.mjs).
-// Comparison scenarios, not subscription charges or billing records.
 import { prices } from './price-table.mjs';
 
 export const rates = Object.freeze(Object.assign(Object.create(null), Object.fromEntries(

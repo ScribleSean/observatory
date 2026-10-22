@@ -21,7 +21,6 @@ test('only real readings with a real time are kept',()=>{
   assert.deepEqual(rows.map(row=>[row.window,row.remaining]),[['five_hour',64]]);
   assert.equal(rows[0].observedAt,now);
   assert.deepEqual(readingsFrom({status:'unavailable',windows:[{window:'a',remainingPercent:1}]},{provider:'claude',observer:'Mac',source:'live'}),[]);
-  // A window's own time can only make the reading older.
   const own=readingsFrom({status:'ok',checkedAt:iso(0),windows:[{window:'a',remainingPercent:5,checkedAt:iso(-60000)}]},{provider:'codex',observer:'Mac',source:'live'});
   assert.equal(own[0].observedAt,now-60000);
 });
@@ -43,7 +42,6 @@ test('the compact history keeps real readings only and thins older ones',()=>wit
   const db=await openHistory(folder);
   try {
     const rows=[];
-    // Every 5 minutes for 40 days.
     for(let t=now-40*86400000;t<=now;t+=300000)rows.push(...readingsFrom(claude(new Date(t).toISOString(),50),{provider:'claude',observer:'Mac',source:'live'}));
     recordReadings(db,rows);
     const points=compactHistory(db,{now,observer:'Mac'});
@@ -95,7 +93,6 @@ test('importing old app history keeps times and sources, and running it again ad
   const config=testConfig(folder);
   const first=await importHistory(config);
   const total=first.reduce((sum,row)=>sum+row.added,0);
-  // Codex: two archive observations, the snapshot reading (one is the same as an archive one), the shared PC reading. Claude: two.
   assert.equal(total,6);
   const again=await importHistory(config);
   assert.equal(again.reduce((sum,row)=>sum+row.added,0),0);

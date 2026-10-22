@@ -1,5 +1,3 @@
-// Observatory menu bar item. It runs the five-minute tick, shows the glance
-// block from combined.json, and opens the read-only dashboard in the browser.
 // Built locally by `npm run setup`. Settings come from glance.json beside the binary.
 import AppKit
 
@@ -22,7 +20,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     stopOnTerminate()
     let file = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/glance.json")
     if let data = try? Data(contentsOf: file) { settings = try? JSONDecoder().decode(Settings.self, from: data) }
-    // The telescope matches the brand mark. Older systems without it get binoculars.
+    // Older systems without it get binoculars.
     item.button?.image = NSImage(systemSymbolName: "telescope", accessibilityDescription: "Observatory")
       ?? NSImage(systemSymbolName: "binoculars", accessibilityDescription: "Observatory")
     item.button?.imagePosition = .imageLeading
@@ -33,8 +31,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     item.menu = menu
     show()
     runTick()
-    // Collect and combine every five minutes. Reread the file more often,
-    // because the hub may write a new combined.json at any time.
     Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.runTick() }
     Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.show() }
   }
@@ -44,7 +40,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   // launchd stops the app with SIGTERM, which skips applicationWillTerminate.
-  // Catch it, stop the dashboard server and any running tick, then exit.
   var termination: DispatchSourceSignal?
   func stopOnTerminate() {
     signal(SIGTERM, SIG_IGN)
@@ -85,14 +80,12 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
   var tickStarted = Date.distantPast
 
   @objc func runTick() {
-    // tick.mjs stops itself after 4 minutes. This is the backstop if it hangs anyway.
     if let running = tick, running.isRunning {
       if Date().timeIntervalSince(tickStarted) < 270 { return }
       running.terminate()
     }
     tickStarted = Date()
     guard let settings else { return }
-    // Clear only if this is still the current tick: a stopped one finishes after its replacement starts.
     tick = node([settings.repo + "/scripts/tick.mjs"]) { [weak self] finished in
       if self?.tick === finished { self?.tick = nil }
       self?.show()
@@ -107,7 +100,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.removeAllItems()
     var title = "?"
     var stale = true
-    // Section names in bold, rows in the normal colour, detail rows a step quieter.
     func line(_ text: String, quiet: Bool = false) {
       let row = NSMenuItem(title: text, action: nil, keyEquivalent: "")
       let trimmed = text.trimmingCharacters(in: .whitespaces)
@@ -142,7 +134,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
         line("Updated: Unknown time", quiet: true)
       }
       if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
-        // Say when reading from or writing back to the other computer failed.
         for spoke in spokes {
           let name = spoke["name"] as? String ?? "Other computer"
           if let pull = spoke["pull"] as? String, pull != "ok" { line("\(name): could not read (\(pull))", quiet: true) }
@@ -162,7 +153,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     refresh.isEnabled = tick?.isRunning != true
     menu.addItem(refresh)
     menu.addItem(NSMenuItem(title: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-    // Short title: one number, the lowest limit left. The menu has the rest.
     lastTitle = title
     let text = NSAttributedString(string: stale ? " \(title)?" : " \(title)", attributes: [.font: NSFont.menuBarFont(ofSize: 0)])
     item.button?.attributedTitle = text
@@ -186,7 +176,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
           if self?.server === finished { self?.server = nil }
         }
       }
-      // Give the server a moment to listen before the browser asks.
       DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSWorkspace.shared.open(url) }
     }
   }

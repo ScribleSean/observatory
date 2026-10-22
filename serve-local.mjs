@@ -1,5 +1,3 @@
-// Read-only dashboard server on 127.0.0.1. Static files from dist/dashboard and
-// one data file, combined.json, from this computer's data folder. No other routes.
 import http from 'node:http';
 import {readFile,realpath,lstat} from 'node:fs/promises';
 import path from 'node:path';

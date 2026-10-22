@@ -1,4 +1,3 @@
-/* Dashboard layout. Calm surfaces, one accent, numbers first. */
 .ob-dashboard {
   box-sizing: border-box;
   width: 100%;
@@ -20,7 +19,6 @@
 .ob-dashboard .ob-card { margin-top: var(--ob-space-3); padding: 18px 20px; border-radius: var(--ob-card-radius, 16px); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 .ob-dashboard .ob-card p { margin: 0; }
 
-/* Masthead: name, the computers and their ages, and when the file was combined. */
 .ob-masthead { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ob-space-3) var(--ob-space-4); }
 .ob-masthead > .ob-meta { margin-left: auto; }
 .ob-chips { display: flex; flex-wrap: wrap; gap: var(--ob-space-2); margin: 0; padding: 0; list-style: none; }
@@ -28,9 +26,7 @@
 .ob-chips li i { width: 6px; height: 6px; border-radius: 50%; background: var(--ob-accent); }
 .ob-chips li.warn i { background: var(--ob-warning); }
 
-/* Overview: three tiles that answer the three questions. */
 .ob-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); margin-top: var(--ob-space-5); }
-/* One tile a row on a phone, three side by side from a tablet up. */
 @media (min-width: 760px) { .ob-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .ob-tile { display: flex; flex-direction: column; min-width: 0; padding: 18px 20px 20px; background: var(--ob-surface); border-radius: var(--ob-card-radius, 16px); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 .ob-tile h2 { font-size: var(--ob-meta-size); font-weight: 500; color: var(--ob-muted); text-transform: uppercase; letter-spacing: 0.6px; }
@@ -45,24 +41,18 @@
 .ob-tile-devices li + li { padding-top: 10px; border-top: 1px solid var(--ob-track); }
 .ob-tile-foot { margin-top: auto !important; padding-top: var(--ob-space-4); }
 
-/* Tabs: one row under the overview. */
 .ob-tabs { display: flex; gap: 2px; margin: 28px 0 var(--ob-space-2); padding: 3px; width: fit-content; max-width: 100%; overflow-x: auto; background: var(--ob-surface); border-radius: 999px; }
 .ob-tabs button { flex: none; padding: 7px 16px; font: 500 13px/1.2 inherit; font-family: inherit; color: var(--ob-muted); background: transparent; border: 0; border-radius: 999px; cursor: pointer; transition: background-color 140ms ease-out, color 140ms ease-out; }
 .ob-tabs button:hover:not(.on) { color: var(--ob-text); }
 .ob-tabs button.on { background: var(--ob-background); color: var(--ob-text); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 
-/* Filters inside a page: compact segmented rows, the same shape as the tabs. */
 .ob-dashboard .ob-segments { display: inline-flex; flex-wrap: wrap; gap: 2px; width: auto; max-width: 100%; margin: 0 var(--ob-space-2) var(--ob-space-2) 0; padding: 3px; background: var(--ob-surface); border-radius: 999px; vertical-align: middle; }
 .ob-dashboard .ob-segments button { flex: none; padding: 5px 12px; font-size: 12.5px; font-weight: 500; background: transparent; color: var(--ob-muted); }
 .ob-dashboard .ob-segments button.on { background: var(--ob-background); color: var(--ob-text); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 .ob-dashboard .ob-segments button:hover:not(.on) { background: transparent; color: var(--ob-text); }
 
-/* Darkened toward the text colour so small text keeps 4.5:1 on the tint in both modes. */
-
-
 @media (max-width: 640px) {
   .ob-dashboard { padding: 20px 16px 40px; }
-  /* Tabs share the full width on a phone instead of running off the edge. */
   .ob-tabs { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
   .ob-tabs button { padding: 8px 4px; }
   .ob-dashboard h1 { font-size: 20px; }
@@ -72,7 +62,6 @@
   .ob-tabs button { transition: none; }
 }
 
-/* Loading and first run: one calm message instead of pages of Unknown. */
 .ob-first-run { display: grid; place-items: center; min-height: 50vh; }
 .ob-first-run .ob-card { max-width: 520px; padding: 28px 32px; text-align: center; }
 .ob-first-run h2 { font-size: var(--ob-section-size); margin-bottom: var(--ob-space-2); }

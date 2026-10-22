@@ -20,8 +20,6 @@ export function cleanQuota(result) {
   return {status:windows.length ? 'ok' : 'unavailable', checkedAt:new Date().toISOString(), provider:'Codex', windows};
 }
 
-// Account totals are a separate series from local transcript token counts.
-// Missing daily buckets stay missing. They are not evidence of zero usage.
 export function cleanAccountUsage(result) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) throw Error('Invalid usage response');
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -36,7 +34,6 @@ export function cleanAccountUsage(result) {
       const date = row?.startDate;
       if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
           !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0,10) !== date || count(row.tokens) === null) continue;
-      // Duplicate dates replace, never add. Both rows describe the same day.
       days.set(date,{startDate:date,tokens:row.tokens});
     }
   }
@@ -58,8 +55,6 @@ function accountScope(result,salt) {
   return createHmac('sha256',Buffer.from(salt,'hex')).update(`codex-account:${id}`).digest('hex');
 }
 
-// No raw account fields leave this function. The owner client performs auth.
-// Checking the account on both sides prevents mixing readings across a switch.
 export function readAccountSnapshot(executable,salt,options={}) {
   if(typeof salt!=='string' || !/^[a-f0-9]{64}$/.test(salt))throw Error('Private account salt required');
   const dailyUsageScope=options.dailyUsageScope ?? null;
@@ -70,16 +65,12 @@ export function readAccountSnapshot(executable,salt,options={}) {
     observedScope=scope;
     const [quota,accountUsage]=await Promise.all([
       request('account/rateLimits/read').then(cleanQuota),
-      // A recent daily observation only suppresses a read for the same verified
-      // account. An account switch must never reuse the previous daily series.
       scope===dailyUsageScope ? Promise.resolve(null) :
         request('account/usage/read').then(cleanAccountUsage).catch(error=>({status:error.status || 'unavailable',provider:'Codex',scope:'account',dailyUsageBuckets:[]})),
     ]);
     if(accountScope(await request('account/read',{refreshToken:false}),salt)!==scope)throw unavailable('needs-auth');
     return {scope,...quota,...(accountUsage?{accountUsage}:{})};
   },options).catch(error=>{
-    // A later request or process-close failure must not hide an account change
-    // already observed by the owner client. Only its opaque key leaves here.
     throw Object.assign(unavailable(error.status,error.stage),observedScope?{scope:observedScope}:{});
   });
 }

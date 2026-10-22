@@ -18,7 +18,6 @@ export function validateStrings(raw) {
     if (!keyPattern.test(group) || !object(entries)) throw new Error(`Invalid strings group: ${group}`);
     for (const [key, value] of Object.entries(entries)) {
       if (!keyPattern.test(key)) throw new Error(`Invalid strings key: ${group}.${key}`);
-      // Kept from the native string tables so names stay portable.
       if (key.toLowerCase() === group.toLowerCase()) throw new Error(`A key cannot repeat its group name: ${group}.${key}`);
       if (typeof value !== 'string' || value.length === 0) throw new Error(`Expected non-empty string: ${group}.${key}`);
       if (/[\p{Cc}\u2014;]/u.test(value)) throw new Error(`Forbidden character: ${group}.${key}`);

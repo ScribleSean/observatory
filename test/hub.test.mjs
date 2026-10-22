@@ -34,7 +34,6 @@ test('the hub pulls the spoke, writes combined.json, and writes it back',()=>wit
   assert.equal(transport.pushed.length,1);
   assert.equal(JSON.parse(transport.pushed[0].text).generatedAt,combined.generatedAt);
   assert.equal(saved.glance.today.length,2);
-  // The spoke's own device name wins over the hub's label for it.
   assert.equal(saved.glance.today[1].name,'Test PC');
   assert.equal(typeof saved.glance.both.tokens,'number');
 }));
@@ -144,7 +143,6 @@ test('write-back lands in an inbox that the spoke merges under its own lock',()=
   const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
   assert.match(decode(pushCommand(pc,10)),/'combined\.incoming\.json'/);
   assert.match(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10),/combined\.incoming\.json"$/);
-  // The hub's copy arrives in the inbox and is newer than the spoke's last result.
   const hubCopy=await withFolder(async hub=>{
     await seed(hub,'usage.json',ownSnapshot('Mac',now));
     const transport=fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000)));
@@ -157,7 +155,6 @@ test('write-back lands in an inbox that the spoke merges under its own lock',()=
   const merged=await recombine(config,{now:()=>now+60000});
   assert.ok(merged.devices.some(device=>device.host==='Mac'));
   assert.equal(merged.hub.hubWroteAt,hubCopy.generatedAt);
-  // An older inbox copy never replaces a newer combined.json the spoke made.
   const older={...hubCopy,generatedAt:new Date(now-3600000).toISOString(),snapshots:{}};
   await seed(folder,'combined.incoming.json',older);
   const again=await recombine(config,{now:()=>now+120000});

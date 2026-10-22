@@ -1,8 +1,6 @@
 import { STRINGS } from '../../../lib/strings.generated';
 import { compact, duration, format, limits, readingTime } from '../../../lib/panel-data.mjs';
 
-// Three answers at a glance: am I near my limits, where did my time go,
-// and what did it cost. Every number keeps Unknown as Unknown.
 export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
 export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string;
   categories?: { name: string; seconds: number }[]; costs?: { codex?: number | null; claude?: number | null } };
@@ -16,7 +14,6 @@ const unknown = STRINGS.status.unknown;
 const money = (value: number | null) => value === null ? unknown : format(STRINGS.formats.usd, { value: value < 100 ? value.toFixed(2) : Math.round(value).toLocaleString('en-US') });
 const percent = (value: number | null) => value === null ? unknown : `${Math.round(value)}%`;
 
-// Limits are judged against the time now, from the merged snapshot, as the Limits page does.
 function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string, unknown> | null; now: number }) {
   const rows: LimitRow[] = view ? limits(view, now) as LimitRow[] : glance.limits;
   const current = rows.filter(row => row.remaining !== null && !row.stale);
@@ -48,7 +45,6 @@ function PerDevice({ glance, value }: { glance: Glance; value: (device: DeviceTo
   );
 }
 
-// With one computer the tile shows a breakdown instead: categories for time, providers for cost.
 function Breakdown({ rows }: { rows: [string, string, string?][] }) {
   if (rows.length === 0) return null;
   return (

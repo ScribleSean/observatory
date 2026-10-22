@@ -9,7 +9,6 @@ import {readQuotaArchive,readQuotaState} from './quota-store.mjs';
 const runtimeBase=await testRuntimeBase('collect-quota');
 after(()=>rm(runtimeBase,{recursive:true,force:true}));
 const now=Date.parse('2026-09-09T12:00:00Z');
-// Exercise macOS discovery with fictional paths on any POSIX host.
 const posixOnly={skip:process.platform==='win32' && 'Requires POSIX executable permissions and symbolic links'};
 const emptyCandidates={platform:'darwin',appCandidates:[],toolCandidates:[]};
 async function executable(runtime,name='codex') {

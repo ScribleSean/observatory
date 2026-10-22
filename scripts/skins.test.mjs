@@ -6,7 +6,6 @@ import {contrast,skinContrastProblems,skinCss,validateSkin} from '../lib/skins.m
 const folder=new URL('../app/viewer/',import.meta.url);
 const read=name=>JSON.parse(readFileSync(new URL(name,folder),'utf8'));
 const files=readdirSync(folder).filter(name=>name.endsWith('.json')).sort((a,b)=>a.localeCompare(b));
-// The rebuild bundles one skin. Others can come back as data files.
 
 test('the bundled skin is Sage and it is valid', () => {
   assert.deepEqual(files,['sage.json']);

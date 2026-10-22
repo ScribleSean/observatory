@@ -1,5 +1,3 @@
-// Private, reconstructible cache of allowlisted Codex events, not log text.
-// This is a port of read-settings-cache.py and keeps the same SQLite schema.
 import fs from 'node:fs';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
@@ -72,7 +70,6 @@ export function cacheEvent(event,cached=false) {
   return result;
 }
 
-// One line through json.loads(bytes) and cache_event, with Python's caught errors.
 function safeLine(line) {
   try {return cacheEvent(pyLoadsBytes(line));}
   catch(error) {
@@ -91,10 +88,6 @@ function pathlibForm(directory) {
 }
 
 export class SettingsCache {
-  // Unchanged files reuse sanitized events. Changed files are reread in full.
-  // File-granularity invalidation avoids assuming logs are append only. A cold
-  // cache advances within the per-run scan budget and withholds the report
-  // until every selected file has complete coverage.
   constructor(directory,budget=DEFAULT_SCAN_BYTES,{limits=DEFAULT_LIMITS}={}) {
     this.limits=limits;
     if(typeof directory!=='string'||!path.isAbsolute(directory))throw new ValueError('Unsafe cache directory');
@@ -175,7 +168,6 @@ export class SettingsCache {
     const row=this.db.prepare('SELECT signature, data FROM events WHERE key=?').get(key);
     if(row&&row.signature===signature) {
       const data=row.data;
-      // Each retained event adds at most a comma and a space, plus two list brackets.
       if((typeof data==='string'?cpLen(data):data.length)>maxRetainedBytes+2*maxLines+2)
         throw new ValueError('Private event cache entry limit');
       let saved;
@@ -248,7 +240,6 @@ export class SettingsCache {
   }
 
   close({completed=false}={}) {
-    // Remove metadata for logs no longer in the selected session and archive set.
     try {
       if(!completed)return;
       this.db.exec('BEGIN');

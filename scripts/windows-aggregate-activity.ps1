@@ -1,12 +1,9 @@
-# Read-only host adapter: aggregate before crossing SSH. Never emit titles or raw app names.
 param([ValidateRange(1, 65535)][int]$Port = 5600)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $base = "http://127.0.0.1:$Port/api/0"
 $end = [DateTimeOffset]::UtcNow
 $start = $end.AddDays(-7)
-# The collector stops this script at 60 seconds. Every request shares one 50 second budget,
-# so a slow ActivityWatch reads Unavailable here instead of being killed.
 $clock = [System.Diagnostics.Stopwatch]::StartNew()
 function Get-RequestTimeout([int]$limit) {
   $left = 50 - [int]$clock.Elapsed.TotalSeconds

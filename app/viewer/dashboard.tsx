@@ -9,8 +9,6 @@ import { TokensView } from './tokens/tokens';
 import { SourcesView } from './sources/SourcesView';
 import { Overview, type Glance } from './overview/Overview';
 
-// The dashboard is read-only. It fetches combined.json, written every five
-// minutes by scripts/tick.mjs, and draws its merged snapshot.
 type Snapshot = Record<string, unknown>;
 type Device = { host: string; name: string; collectedAt: string | null; stale: boolean; error?: string };
 export type Combined = { generatedAt: string; generatedBy?: string; view: Snapshot; glance: Glance; devices?: Device[] };
@@ -87,7 +85,6 @@ type DashboardViewProps = {
 export function DashboardView({ combined, limitStyle, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
   const snapshot = combined?.view ?? null;
   const fresh = freshness(combined?.generatedAt ?? '', now);
-  // With two computers, "All" needs verified deduplication, so the pages open on this computer.
   const home = (combined?.devices?.length ?? 0) > 1 && combined?.generatedBy ? combined.generatedBy : 'All';
   return (
     <div className={`ob-dashboard ${className}`}>

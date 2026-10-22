@@ -44,7 +44,6 @@ export function retainActivityHistory(previous,current,collectedAt,maxDates=3650
         const prior=days.get(row.date);
         const lo=r=>r.windowStart?Date.parse(r.windowStart):-Infinity;
         const hi=r=>r.windowEnd?Date.parse(r.windowEnd):Infinity;
-        // Replacement, never addition. A shrinking boundary day cannot erase history.
         if(!prior || (lo(row)<=lo(prior)&&hi(row)>=hi(prior))) days.set(row.date,row);
       }
     }
@@ -58,8 +57,7 @@ export function retainActivityHistory(previous,current,collectedAt,maxDates=3650
 export async function previousActivityHistory(file) {
   let handle;
   try {
-    // O_NOFOLLOW is unavailable on Windows. Check the named entry explicitly
-    // on every platform, then ensure the opened file matches that entry.
+    // O_NOFOLLOW is unavailable on Windows.
     const entry=await lstat(file);
     if(!entry.isFile() || entry.isSymbolicLink())throw Error('Invalid previous snapshot');
     handle=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);

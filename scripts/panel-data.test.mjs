@@ -139,10 +139,8 @@ test('All Now on an unpaired one-device snapshot reads that device, hours includ
   assert.deepEqual(nowValues(result), [17, 34, 51]);
   assert.equal(result.claudeNote, '');
   assert.equal(result.note, strings.activity.nowCaveat);
-  // Unknown stays Unknown on the one device, never 0.
   for (const key of ['tokens', 'providerTokenSources', 'activity']) delete one[key][0].days[0].hours;
   assert.deepEqual(nowValues(totals(one, 'All', 'now', nowTime)), [null, null, null]);
-  // With a second device All still reads only the verified aggregates.
   assert.deepEqual(nowValues(totals(two, 'All', 'now', nowTime)), [102, null, 119]);
 });
 

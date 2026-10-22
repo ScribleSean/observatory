@@ -2,7 +2,6 @@ import {spawn} from 'node:child_process';
 import {findCodexExecutable} from './collect-quota.mjs';
 import {readAccountSnapshot} from './read-quota.mjs';
 
-// codexPath in the settings file wins over looking for the installed app.
 export async function findWindowsQuotaClient({findNative=findCodexExecutable,configured=null}={}) {
   return {executable:configured || await findNative(),prefix:[]};
 }

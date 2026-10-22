@@ -2,7 +2,6 @@ import {categories,appLabels,summarizeTracked} from './activity-timeline.mjs';
 
 const unavailable=()=>({host:'Combined',status:'unavailable'});
 
-// Inputs are normalized local-reader intervals, with epoch-millisecond bounds.
 // Never add per-device totals: simultaneous activity represents one elapsed span.
 export function combineActivity(sources) {
   if(!Array.isArray(sources) || sources.length!==2 ||
@@ -29,7 +28,6 @@ export function combineActivity(sources) {
       }).filter(row=>row.end>row.start);
     };
     const intervals=sources.flatMap(source=>rows(source,'intervals'));
-    // Partial tracking evidence cannot establish combined observed/idle time.
     const tracking=sources.every(source=>Array.isArray(source.trackingIntervals))
       ?sources.flatMap(source=>rows(source,'trackingIntervals',true)):undefined;
     const lo=new Date(start).toISOString(),hi=new Date(end).toISOString();

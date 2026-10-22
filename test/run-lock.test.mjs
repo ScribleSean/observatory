@@ -35,7 +35,6 @@ test('a young unreadable lock is left alone, an old one is taken over',()=>withF
 test('release leaves a lock that is no longer ours',()=>withFolder(async folder=>{
   const file=path.join(folder,'tick.lock');
   const result=await withRunLock(file,async()=>{
-    // Another process replaced the lock while this run held it.
     await writeFile(file,JSON.stringify({pid:process.pid,token:'someone-else'}));
     return 'ran';
   });

@@ -9,8 +9,6 @@ export async function withFolder(action) {
   finally {await rm(folder,{recursive:true,force:true});}
 }
 
-// One computer's own snapshot, cut from the fictional sample. Rows about the
-// other computer become not-connected, as a fresh collection writes them.
 export function ownSnapshot(host,now=Date.now(),change=snapshot=>snapshot) {
   const sample=sampleSnapshot(now);
   const other=host==='Mac'?'Windows':'Mac';

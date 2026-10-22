@@ -1,14 +1,9 @@
-// Read numeric Claude Code usage metadata without exporting conversation data.
-// This is a port of read-claude-usage.py and returns the same result.
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { TIME_ZONE } from '../lib/timezone.mjs';
 
-// These limits are a coarse guard on the reader's time and memory, and the line limit
-// also bounds requests held in memory. A history over any limit reads unavailable,
-// never partial.
 export const MAX_FILES = 10_000;
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAX_LINE_BYTES = 4 * 1024 * 1024;
@@ -18,7 +13,7 @@ const FIELDS = ['input_tokens', 'cache_read_input_tokens', 'cache_creation_input
 const OUTPUT_KEYS = ['inputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'outputTokens', 'totalTokens'];
 const MODEL = /^claude-[a-z0-9][a-z0-9.-]{0,98}$/;
 const WINDOWS = process.platform === 'win32';
-// The callback realpath walks links itself like Python's resolve, without case changes.
+// The callback realpath walks links itself without case changes.
 const realpath = promisify(fs.realpath);
 // Errors that Python's pathlib treats as "does not exist" rather than raising.
 const IGNORED = new Set(['ENOENT', 'ENOTDIR', 'EBADF', 'ELOOP']);
@@ -42,8 +37,7 @@ function reviver(_key, value, context) {
   return Number.isSafeInteger(value) ? value : BigInt(source);
 }
 
-// Python's json also accepts NaN, Infinity and -Infinity. This slower parser
-// runs only when JSON.parse rejects a line.
+// Python's json also accepts NaN, Infinity and -Infinity.
 function parsePythonJson(text) {
   let index = 0;
   const space = () => {
@@ -250,8 +244,6 @@ function parseTime(bytes, start, end) {
   return { code: 1, values: time.values, offset: sign * (hour * 3600 + minute * 60 + second), offsetMicro: sign * micro };
 }
 
-// Return UTC microseconds since 1970, null for an invalid value, or throw when
-// Python would raise outside its ValueError handling.
 function timestamp(value) {
   if (typeof value !== 'string' || codePointLength(value) > 80) return null;
   // Python indexes by code point, not UTF-16 unit.
@@ -275,7 +267,6 @@ function timestamp(value) {
   const [y, m, d] = [year[1], month[1], day[1]];
   const [hour, minute, second, micro] = time.values;
   if (y < 1 || m < 1 || m > 12 || d < 1 || d > daysInMonth(y, m) || hour > 23 || minute > 59 || second > 59) return null;
-  // A time without a zone is naive and refused.
   if (time.code !== 1) return null;
   let offset = 0n;
   if (time.offset !== 0) {
@@ -299,7 +290,7 @@ const newYork = new Intl.DateTimeFormat('en-US', {
 });
 const offsets = new Map();
 
-// The New York offset in seconds. Zone changes fall on whole UTC hours.
+// Zone changes fall on whole UTC hours.
 function newYorkOffset(seconds) {
   const hourKey = Math.floor(seconds / 3600);
   if (offsets.has(hourKey)) return offsets.get(hourKey);
@@ -379,7 +370,6 @@ const isFile = async (file) => (await statOrIgnored(file, true))?.isFile() ?? fa
 
 async function walk(directory, projects, found, limits) {
   if ((await isSymlink(directory)) || !beneath(await realpath(directory), projects)) throw new Unavailable();
-  // Read through fs.promises at call time so tests can simulate failures.
   const entries = await fs.promises.readdir(directory, { withFileTypes: true });
   const folders = [];
   for (const entry of entries) {
@@ -446,8 +436,6 @@ function addRecord(records, event) {
   if (before.every((value, index) => value === after[index])) {
     records.set(key, { ...prior, instant: earliest });
   } else if (after.every((value, index) => value >= before[index])) {
-    // A streamed request can finish after local midnight.
-    // Keep its earliest retained timestamp for its day and hour.
     records.set(key, { ...current, instant: earliest });
   } else if (!after.every((value, index) => value <= before[index])) {
     throw new Unavailable();
@@ -537,7 +525,6 @@ function summarize(records) {
     row.hours[hour] += amounts[4];
     for (const target of [row, modelRow]) {
       OUTPUT_KEYS.forEach((key, index) => {
-        // Inexact float sums still compare correctly against the safe limit.
         if (target[key] + amounts[index] > MAX_SAFE) throw new Unavailable();
         target[key] += amounts[index];
       });
@@ -552,9 +539,6 @@ function summarize(records) {
   });
 }
 
-/** Return complete, deduplicated daily numeric usage or a fail-closed status. */
-// `now` is accepted for a common reader signature. This reader does not use the clock.
-// `limits` lets tests lower the caps.
 export async function collectClaudeUsage(claudeFolder, { now = new Date(), limits = {} } = {}) {
   void now;
   const caps = { MAX_FILES, MAX_TOTAL_BYTES, MAX_LINE_BYTES, MAX_LINES, ...limits };

@@ -2,8 +2,6 @@ import {estimate} from './api-estimate.mjs';
 import {prices} from './price-table.mjs';
 
 const counters=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens','requestCount'];
-// Accept known Claude family/version shapes, including dated stable releases,
-// but never carry arbitrary local model text into the dashboard.
 const knownModel=/^claude-(?:(?:opus|sonnet|haiku|fable)-[1-9]\d?(?:-\d{1,2})?(?:-\d{8})?(?:-latest)?|[1-9]\d?(?:-\d{1,2})?-(?:opus|sonnet|haiku|fable)(?:-\d{8})?(?:-latest)?)$/;
 
 const valid=value=>Number.isSafeInteger(value) && value>=0;
@@ -27,9 +25,6 @@ function sum(rows,key) {
   return total;
 }
 
-// The reader may retain local implementation fields, but this public projection
-// copies only counters and known model names. Its result is intentionally kept
-// outside Codex token aggregation and peer payloads.
 export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString(),{hours=false}={}) {
   if(!['Mac','Windows'].includes(host) || !Number.isFinite(Date.parse(checkedAt)) ||
     !raw || typeof raw!=='object' || raw.provider!=='claude-code' || raw.status!=='ok' ||
@@ -44,12 +39,10 @@ export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString
       const model=row(rawModel,{model:true});
       if(names.has(rawModel.model)) throw Error('Duplicate Claude model');
       names.add(rawModel.model);
-      // Distinct private names share one public bucket without losing counters.
       const prior=models.get(model.model);
       if(prior)for(const key of counters)model[key]=sum([prior,model],key);
       models.set(model.model,model);
     }
-    // Preserve public row order because existing peer digests include it.
     day.models=[...models.values()];
     for(const key of counters)if(sum(day.models,key)!==day[key])throw Error('Inconsistent Claude day');
     if(hours && Array.isArray(rawDay.hours) && rawDay.hours.length===24 &&
@@ -64,8 +57,6 @@ export function unavailableClaudeTokenSource(host,checkedAt=new Date().toISOStri
   return {provider:'claude-code',host,status,checkedAt:new Date(checkedAt).toISOString(),scope:'Recorded Claude Code requests'};
 }
 
-// Must run after peer finalization and other attachments: those flows can
-// reconstruct dashboard JSON and intentionally never export provider records.
 export function attachProviderTokenSources(result,sources) {
   if(!result?.data || !result?.status || !Array.isArray(sources)) throw Error('Invalid provider attachment');
   result.data.providerTokenSources=sources;
@@ -82,7 +73,6 @@ export function attachProviderTokenEstimates(result) {
     result.data.providerTokenSources=result.data.providerTokenSources.map(row=>{
       if(row?.provider!=='claude-code' || row.status!=='ok' || !Array.isArray(row.days)) return row;
       const days=row.days.map(day=>{
-        // A day without a model list keeps no estimate rather than failing the collection.
         if(!Array.isArray(day?.models)) return day;
         const models=day.models.map(model=>({...model,apiEstimate:estimate([model])}));
         return {...day,models,apiEstimate:estimate(models)};

@@ -1,6 +1,3 @@
-// The menu bar and tray apps start the dashboard server with --with-parent.
-// When launchd stops the app (SIGTERM), or the app is killed outright, the
-// server must not keep running on its own.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -15,7 +12,6 @@ const alive=pid=>{try {process.kill(pid,0);return true;}catch {return false;}};
 const freePort=()=>new Promise(resolve=>{const server=createServer();server.listen(0,'127.0.0.1',()=>{const {port}=server.address();server.close(()=>resolve(port));});});
 const until=async(check,ms)=>{const end=Date.now()+ms;while(Date.now()<end){if(await check())return true;await new Promise(r=>setTimeout(r,100));}return false;};
 
-// The server refuses to start outside macOS and Windows (lib/config.mjs).
 const unsupported=!['darwin','win32'].includes(process.platform) && 'The dashboard server runs on macOS and Windows only';
 
 for(const signal of ['SIGTERM','SIGKILL']) {
@@ -26,7 +22,6 @@ for(const signal of ['SIGTERM','SIGKILL']) {
     await mkdir(path.join(folder,'data','public','local'),{recursive:true});
     await writeFile(config,JSON.stringify({dataFolder:path.join(folder,'data'),dashboard:{port}}));
     const pidFile=path.join(folder,'server.pid');
-    // Stands in for the glance app: starts the server the way the app does, then waits.
     const app=spawn(process.execPath,['-e',`
       const {spawn}=require('node:child_process');
       const child=spawn(process.execPath,[${JSON.stringify(path.join(repo,'serve-local.mjs'))},'--with-parent'],{stdio:'ignore',env:process.env});
@@ -36,7 +31,6 @@ for(const signal of ['SIGTERM','SIGKILL']) {
     try {
       assert.ok(await until(async()=>(await readFile(pidFile,'utf8').catch(()=>'')).length>0,5000),'server started');
       const server=Number(await readFile(pidFile,'utf8'));
-      // Wait until the server answers, as it would before the app opens the browser.
       assert.ok(await until(async()=>Boolean(await fetch(`http://127.0.0.1:${port}/`).catch(()=>null)),10000),'server listening');
       assert.equal(alive(server),true);
       app.kill(signal);
@@ -44,7 +38,6 @@ for(const signal of ['SIGTERM','SIGKILL']) {
       if(!gone)process.kill(server,'SIGKILL');
       assert.equal(gone,true,'server outlived its app');
     } finally {
-      // A failed check must not leave the stand-in app running, or the test run never ends.
       if(app.exitCode===null && app.signalCode===null)app.kill('SIGKILL');
     }
   }));

@@ -4,10 +4,6 @@ import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {readClaudeUsage} from './claude-usage-command.mjs';
 
-// Claude Code limits, read by running the installed CLI's usage command for Pro
-// and Max subscribers. This module keeps only the two percentages and reset
-// times, plus a session cost if an older reading stored one. It never reads a credential, a
-// transcript, a working directory or a session identifier.
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
 export const CLAUDE_LIMITS_CONSENT_FILE='consent.json';
@@ -20,7 +16,6 @@ function cleanWindow(raw,observedAt) {
   if(!isObject(raw))return null;
   const used=raw.used_percentage ?? raw.usedPercentage,resets=raw.resets_at ?? raw.resetsAt;
   if(typeof used!=='number' || !Number.isFinite(used) || used<0 || used>100)return null;
-  // A reset more than eight days ahead cannot belong to either window.
   if(typeof resets!=='number' || !Number.isSafeInteger(Math.round(resets)) || resets<=observedAt || resets>observedAt+8*86400)return null;
   return {usedPercentage:Math.round(used*10)/10,resetsAt:Math.round(resets)};
 }
@@ -30,7 +25,6 @@ function cleanCost(usd,observedAt) {
   return {usd:Math.round(usd*100)/100,observedAt};
 }
 
-// Returns a sanitized record, or null when the input has no usable window or cost.
 export function extractClaudeLimits(input,now=Date.now()) {
   const observedAt=Math.floor(now/1000);
   if(!isObject(input))return null;
@@ -63,8 +57,6 @@ function cleanStored(raw,now) {
   return Object.keys(record.windows).length || cost?record:null;
 }
 
-// Several sessions report the same account. Within one reset period usage
-// only rises, so keep the higher reading. A later reset time starts a new period.
 export function mergeClaudeLimits(previous,next,now=Date.now()) {
   const saved=cleanStored(previous,now);
   if(!next)return saved;
@@ -74,7 +66,6 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     const before=saved.windows[name],after=next.windows[name];
     if(!before || !after) {if(before || after)merged.windows[name]=before ?? after;continue;}
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
-    // The kept higher value keeps its own observation time, so it shows as of when it was read.
     merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage ? before : after;
   }
   const before=saved.sessionCost,after=next.sessionCost;
@@ -121,7 +112,6 @@ async function plainFile(file,limit) {
   return JSON.parse(await plainText(file,limit));
 }
 
-// Count member separators only after JSON.parse has validated the text.
 function topLevelMembers(text,allDepths=false) {
   let depth=0,string=false,escaped=false,count=0;
   for(const character of text) {
@@ -144,7 +134,7 @@ export function parseLimitsConsentMarker(text) {
     const keys=Object.keys(marker);
     if(keys.length!==2 || !keys.includes('consent') || !keys.includes('givenAt') || topLevelMembers(text)!==keys.length)return false;
     if(marker.consent!==true || typeof marker.givenAt!=='string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(marker.givenAt))return false;
-    // Years 0001 to 9999 only, the range a .NET DateTime holds, so both apps read the same marker.
+    // Years 0001 to 9999 only, the range a .NET DateTime holds.
     return !marker.givenAt.startsWith('0000') && new Date(marker.givenAt).toISOString()===marker.givenAt;
   } catch {return false;}
 }
@@ -190,7 +180,6 @@ export async function claudeLimitsConsent(runtime,options={}) {
 
 const base={provider:'Claude Code',scope:'account'};
 
-// The snapshot shape matches the Codex quota source so one view can draw both.
 export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   if(!enabled)return {...base,status:'not-connected',windows:[]};
   const record=cleanStored(stored,now);
@@ -199,7 +188,6 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   const cost=record.sessionCost;
   const sessionCost=cost && seconds-cost.observedAt<currentSeconds
     ? {sessionCost:{usd:cost.usd,observedAt:new Date(cost.observedAt*1000).toISOString()}} : {};
-  // A window whose reset time has passed has an unknown value until the next reading.
   const live=Object.entries(record.windows).filter(([,window])=>window.resetsAt>seconds);
   if(!live.length)return {...base,status:'unavailable',windows:[],...sessionCost};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
@@ -208,10 +196,6 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
-// With consent given, each collection also asks the installed CLI for the
-// current figures, so limits stay current when no terminal session is open.
-// A failed or unexpected command result preserves the older reading.
-// The settings file is the consent. A caller that passes enabled skips the old marker check.
 export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage,enabled:configured}={}) {
   const enabled=typeof configured==='boolean'?configured:(await claudeLimitsConsent(runtime)).given;
   if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
@@ -220,7 +204,6 @@ export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readCla
     const result=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
     if(isObject(result) && ['read','not-found','failed','timed-out','unrecognized'].includes(result.status)) {
       if(result.status==='read') {
-        // A reading the store cannot use is reported like an output that was not recognized.
         usageCommand='unrecognized';
         if(isObject(result.usage))usageCommand=await recordClaudeLimits(runtime,{rate_limits:result.usage.rate_limits},now)?'read':'unrecognized';
       } else if(result.usage===null)usageCommand=result.status;
@@ -236,7 +219,6 @@ export function attachClaudeLimits(result,source) {
   return result;
 }
 
-// Rejects when the work has not settled in time, so the caller's fallback runs.
 // Keep the timer referenced so pending work cannot let Node exit before the fallback.
 export function withinTime(work,milliseconds) {
   let timer;

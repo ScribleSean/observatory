@@ -104,7 +104,6 @@ test('reads cross-alias watchers and reports the latest window event', windowsOn
   const {stdout} = await exec(powershell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[System.Net.Dns]::GetHostName()']);
   const alias = stdout.trim();
   assert.notEqual(alias.toLowerCase(), computer.toLowerCase());
-  // The alias pair is read first and carries the later event, so keeping the last event read would fail.
   const result = await collect(t, [...pair(alias, 'alias'), ...pair(computer, 'current')], {crossOnly:true});
   const output = report(result);
   assert.equal(result.stdout.toLowerCase().includes(alias.toLowerCase()), false);

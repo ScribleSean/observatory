@@ -1,5 +1,3 @@
-// Tests for read-settings.mjs. These port read-settings.test.mjs and check
-// the saved Python results under fixtures/read-settings.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,7 +14,6 @@ import {FIXTURE_NAMES,buildFixture,fixtureOptions} from './fixtures/read-setting
 
 
 const goldens=fileURLToPath(new URL('./fixtures/read-settings/',import.meta.url));
-// Parsed JSON input, as the reader receives it from a log line.
 const parsed=value=>JSON.parse(JSON.stringify(value));
 const run=(events,cutoff=new Date('2026-01-01T00:00:00Z'))=>{
   const result=summarize(parsed(events),cutoff);
@@ -177,7 +174,6 @@ test('cache retries one transient log change without expanding its scan budget',
   });
 });
 
-// The limit tests use the same synthetic lines as the Python tests, in Python's JSON format.
 const meta=pyDumps({type:'session_meta',payload:{id:'synthetic'}})+'\n';
 const event={timestamp:'2026-10-01T12:00:00Z',type:'event_msg',payload:{type:'token_count',info:{total_token_usage:{input_tokens:100,cached_input_tokens:50,output_tokens:10,reasoning_output_tokens:5,total_tokens:110}}}};
 const content=meta+pyDumps(event)+'\n';
@@ -229,14 +225,11 @@ test('retained tokens include old archives, canonical copies and fork continuati
     assert.ok(expected.tokenProfiles.some(r=>r.date==='2024-01-01'));
     assert.ok(expected.profiles.every(r=>r.date!=='2024-01-01'));
     assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache}),expected);
-    // No raw scan budget is needed when all selected files are cached.
     assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache,cacheScanBudget:0}),expected);
     assert.ok(!fs.readFileSync(path.join(cache,'events.sqlite')).includes('PRIVATE'));
-    // A distinct turn with identical counters and timestamp is separate usage.
     save('sessions/distinct.jsonl','distinct',[old],'parent','PRIVATE_OTHER_TURN');
     assert.equal(sum((await collectSettings(logs,{cacheDirectory:cache,cacheScanBudget:100000})).tokenProfiles),550);
     fs.unlinkSync(path.join(logs,'sessions/distinct.jsonl'));
-    // A changed canonical archive must replace its previous contribution.
     save('archived_sessions/child.jsonl','child',[old],'parent');
     assert.equal(sum((await collectSettings(logs,{cacheDirectory:cache,cacheScanBudget:100000})).tokenProfiles),330);
   });
@@ -374,7 +367,6 @@ test('an interrupted byte limited pass keeps cached entries for unreached files'
     assert.equal((await collectSettings(logs,{cacheDirectory:cache})).status,'ok');
     const saved=cacheRows(cache);
     assert.equal(saved.length,2);
-    // Invalidate the first entry so its scan exceeds the inventory byte allowance.
     fs.writeFileSync(one,first+'\n');
     const amount=bytes(first.split('\n')[0]+'\n')+bytes(second.split('\n')[0]+'\n');
     const reached=[];
@@ -400,7 +392,6 @@ for(const [limit,amount] of [['maxFiles',2],['maxTotalBytes',2*bytes(meta+conten
           const logs=sessionsFolder(root);
           fs.writeFileSync(path.join(logs,'sessions/one.jsonl'),content);
           fs.writeFileSync(path.join(logs,'sessions/two.jsonl'),content.replaceAll('synthetic','second-id'));
-          // The inventory reads the first line before the full session scan.
           const options={limits:{[limit]:amount+offset},cacheDirectory:cached?privateFolder(path.join(root,'cache')):null};
           if(offset<0)await assert.rejects(collectSettings(logs,options),/Too many files|Session read limit/);
           else {
@@ -473,7 +464,6 @@ test('elapsed budget during cold and warm reads withholds already accumulated to
       let clock=0;
       const options={cacheDirectory:cache,limits:{maxReadSeconds:0.001},clock:()=>clock};
       if(warm)assert.equal((await collectSettings(logs,options)).status,'ok');
-      // Time passes after the session is summarized, before the cache is finished.
       class SlowCache extends SettingsCache {
         close(closing) {clock+=0.002;super.close(closing);}
       }
@@ -498,7 +488,6 @@ test('skipped oversized lines still consume the total read budget',async()=>{
   }
 });
 
-// Saved Python results for the synthetic fixtures. They stay valid after the Python reader is removed.
 for(const name of FIXTURE_NAMES) {
   test(`fixture ${name} matches the saved Python result without and with a cache`,async()=>{
     const expected=JSON.parse(fs.readFileSync(path.join(goldens,`expected-${name}.json`),'utf8'));

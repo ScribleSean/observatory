@@ -1,4 +1,3 @@
-/* Base design tokens. Colours match app/viewer/sage.json, which the skin applies on top. */
 :root {
   --ob-background: #edeae5;
   --ob-surface: #f4f1ec;

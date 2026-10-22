@@ -2,9 +2,6 @@ import {retainActivityHistory} from './activity-history.mjs';
 export const snapshotMaximumBytes=16_000_000;
 export const snapshotHistoryBudget=12_000_000;
 
-// Readers refuse usage.json above snapshotMaximumBytes. Retained activity
-// history is the part that grows with time, so above the budget the oldest
-// whole dates are dropped from every host together. Counts are never changed.
 export function serializeSnapshot(data) {
   let text=JSON.stringify(data),bytes=Buffer.byteLength(text);
   const history=Array.isArray(data?.activityHistory)?data.activityHistory:null;
@@ -23,7 +20,6 @@ export function serializeSnapshot(data) {
     const text=JSON.stringify({...data,activityHistory:retained});
     return {text,bytes:Buffer.byteLength(text),retained};
   };
-  // If removing all dates cannot reach the budget, retain history up to the hard limit.
   const smallest=candidate(dates.length);
   const target=smallest.bytes>snapshotHistoryBudget?snapshotMaximumBytes:snapshotHistoryBudget;
   if(bytes<=target)return {text,bytes};

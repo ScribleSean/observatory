@@ -1,8 +1,5 @@
-// Observatory tray item. It runs the five-minute tick hidden, shows the glance
-// block from combined.json, and opens the read-only dashboard in the browser.
 // Built locally by `npm run setup` with the C# compiler that ships with Windows
-// (.NET Framework 4), so it uses C# 5 syntax only. Settings come from glance.json
-// beside the executable.
+// (.NET Framework 4), so it uses C# 5 syntax only.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -58,7 +55,6 @@ namespace Observatory
             tickTimer.Interval = 5 * 60 * 1000;
             tickTimer.Tick += (sender, e) => RunTick();
             tickTimer.Start();
-            // The hub may write a new combined.json at any time.
             readTimer.Interval = 30 * 1000;
             readTimer.Tick += (sender, e) => Show();
             readTimer.Start();
@@ -86,7 +82,6 @@ namespace Observatory
 
         Process Node(string script, bool keep) { return Node(script, keep, ""); }
 
-        // The server is started with --with-parent, so it exits on its own if the tray app ends.
         Process Node(string script, bool keep, string extra)
         {
             if (settings == null) return null;
@@ -116,7 +111,6 @@ namespace Observatory
 
         void RunTick()
         {
-            // tick.mjs stops itself after 4 minutes. This is the backstop if it hangs anyway.
             if (tick != null && !tick.HasExited)
             {
                 if ((DateTime.UtcNow - tickStarted).TotalSeconds < 270) return;
@@ -139,8 +133,6 @@ namespace Observatory
             return (minutes / 60) + " h " + (minutes % 60) + " min";
         }
 
-        // Section names in bold, rows in the normal colour, detail rows a step quieter.
-        // Rows stay enabled so they read as text, not greyed-out items. Clicking one does nothing.
         void Line(string text) { Line(text, false); }
         void Line(string text, bool quiet)
         {
@@ -195,7 +187,6 @@ namespace Observatory
                         Line("Updated " + Span(age) + " ago" + (stale ? ", not recently" : ""), true);
                     }
                     else Line("Updated: Unknown time", true);
-                    // Say when reading from or writing back to the other computer failed.
                     object hubValue;
                     var hub = json.TryGetValue("hub", out hubValue) ? hubValue as Dictionary<string, object> : null;
                     object spokesValue = null;
@@ -272,7 +263,6 @@ namespace Observatory
             string url = "http://127.0.0.1:" + settings.port + "/";
             if (Reachable(url)) { Browse(url); return; }
             if (server == null || server.HasExited) server = Node("serve-local.mjs", true, " --with-parent");
-            // Wait for the server without freezing the menu: check every half second for up to 10 seconds.
             openTries = 0;
             openTimer.Stop();
             openTimer.Interval = 500;
@@ -291,7 +281,6 @@ namespace Observatory
             if (Reachable(url) || openTries >= 20) { openTimer.Stop(); Browse(url); }
         }
 
-        // The tray app reads while the hub or tick may be replacing the file, so allow both.
         static string ReadShared(string file)
         {
             using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))

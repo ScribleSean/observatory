@@ -1,5 +1,3 @@
-// Screen time with no tracking coverage is Unknown, never zero, everywhere it is
-// shown: the day and period totals, the charts, the overview tile and the menu.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recordedDays,totals,untrackedDay} from '../lib/panel-data.mjs';
@@ -11,7 +9,6 @@ const now=Date.parse('2026-10-21T17:00:00Z');
 const hours=()=>Array(24).fill(0);
 const day=(date,seconds,trackedSeconds)=>({date,seconds,hours:hours(),trackedSeconds,trackedHours:hours(),categories:{},apps:{}});
 
-// The Mac's own snapshot with the given screen time days, as the reader stores them.
 function withDays(days) {
   return ownSnapshot('Mac',now,snapshot=>{
     const at=new Date(now).toISOString();
@@ -26,7 +23,6 @@ test('a day with no tracking coverage has Unknown screen time',()=>{
   assert.equal(untrackedDay(day('2026-10-21',0,0)),true);
   assert.equal(untrackedDay(day('2026-10-21',0,3600)),false);
   assert.equal(untrackedDay(day('2026-10-21',120,120)),false);
-  // Older stored days without tracking fields keep their value.
   assert.equal(untrackedDay({date:'2026-10-21',seconds:0}),false);
 });
 

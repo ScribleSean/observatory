@@ -62,7 +62,6 @@ test('tick collects, then combines, and refuses to run twice at once',()=>withFo
   assert.equal(done.value.collect,'ok');
   const combined=JSON.parse(await readFile(path.join(folder,'public','local','combined.json'),'utf8'));
   assert.equal(combined.glance.today[0].host,'Mac');
-  // The fixed reading time is in the past, so it is shown with its age, not as current.
   assert.ok(combined.glance.limits.some(row=>row.provider==='codex' && row.remaining===80 && row.stale));
 }));
 

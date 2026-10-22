@@ -2,19 +2,15 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEve
 import { STRINGS } from '../../../lib/strings.generated';
 import { format } from '../../../lib/panel-data.mjs';
 
-// One limit window over time, one line per computer. The provider's colour is the
-// identity, and the computer is shown by line style plus a legend, never colour alone.
 type Point = { host: string; t: number; r: number; x: number; source: string };
 type Series = { host: string; name: string; points: Point[]; segments: Point[][] };
 export type HistoryData = { provider: string; window: string; range: string; from: number; to: number; series: Series[]; resets: number[]; firstAt: number | null; startsHere: boolean; empty: boolean };
 
 const PAD = { left: 40, right: 12, top: 10, bottom: 26 };
-// The Mac is a solid line and the PC a dotted one, which stays distinct from a solid line broken by gaps.
 const DASH: Record<string, string | undefined> = { Mac: undefined, Windows: '0.1 6' };
 
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
-  // Starts small, then takes the container's measured width.
   const [width, setWidth] = useState(320);
   useEffect(() => {
     const element = ref.current;
@@ -28,7 +24,6 @@ function useWidth() {
 
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const stamp = (t: number) => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-// The label format follows the time actually shown, so labels never repeat.
 function tickLabel(t: number, span: number) {
   const date = new Date(t);
   if (span <= 36 * 3600000) return date.toLocaleTimeString([], { hour: 'numeric' });
@@ -44,21 +39,17 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   const { ref, width } = useWidth();
   const id = useId();
   const [active, setActive] = useState<number | null>(null);
-  // Computers whose line the viewer has hidden from the legend.
   const [hidden, setHidden] = useState<string[]>([]);
-  // Taller on a wide card, so a wide screen gets a readable chart rather than a strip.
   const HEIGHT = Math.round(Math.min(300, Math.max(168, width * 0.36)));
   const visible = data.series.filter(series => !hidden.includes(series.host));
   const plotWidth = width - PAD.left - PAD.right, plotHeight = HEIGHT - PAD.top - PAD.bottom;
   const span = Math.max(1, data.to - data.from);
   const sx = (t: number) => PAD.left + (t - data.from) / span * plotWidth;
   const sy = (r: number) => PAD.top + (1 - r / 100) * plotHeight;
-  // Every point, in time order, for the hover and arrow-key readout.
   const points = visible.flatMap(series => series.points.map(point => ({ ...point, name: series.name }))).sort((a, b) => a.t - b.t);
   const tickCount = Math.max(3, Math.min(6, Math.floor(plotWidth / 80)));
   const ticks = Array.from({ length: tickCount }, (_: unknown, index: number) => data.from + span * index / (tickCount - 1));
   const shown = active !== null ? points[active] ?? null : null;
-  // Every other visible computer's reading closest to that moment, if it is close enough to compare.
   const others = shown ? visible.filter(series => series.host !== shown.host).flatMap(series => {
     const near = series.points.reduce<Point | null>((best, point) => !best || Math.abs(point.t - shown.t) < Math.abs(best.t - shown.t) ? point : best, null);
     return near && Math.abs(near.t - shown.t) <= Math.max(20 * 60000, span / 300) ? [{ ...near, name: series.name }] : [];
@@ -74,7 +65,6 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   };
   const keys = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!points.length) return;
-    // Arrows step one reading, Page Up and Page Down a tenth of them, Home and End go to the first and last.
     const last = points.length - 1, page = Math.max(1, Math.round(points.length / 10));
     const steps: Record<string, number> = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1, PageUp: page, PageDown: -page };
     if (event.key === 'Home' || event.key === 'End') {
@@ -91,13 +81,11 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
   return (
     <figure className="ob-history-chart" ref={ref}>
       <span id={id} className="ob-visually-hidden">{title}</span>
-      {/* The plot is a slider over the readings: arrow keys step through them and each one is read out. */}
       {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- a drawn chart cannot be a native range input, so it takes the slider role */}
       <div className="ob-history-plot" role="slider" tabIndex={points.length ? 0 : -1} aria-labelledby={id}
         aria-valuemin={0} aria-valuemax={Math.max(0, points.length - 1)} aria-valuenow={active ?? Math.max(0, points.length - 1)}
         aria-valuetext={readout(shown ?? points.at(-1)) ?? STRINGS.limitHistory.noReadings}
         onPointerMove={nearest} onPointerLeave={() => setActive(null)} onKeyDown={keys} onBlur={() => setActive(null)}>
-        {/* The viewBox lets the chart fill its card from the first frame. Once measured, one unit is one pixel. */}
         <svg viewBox={`0 0 ${width} ${HEIGHT}`} width="100%" aria-hidden="true">
           {([0, 50, 100] as number[]).map(value => <g key={value} className="ob-history-grid">
             <line x1={PAD.left} x2={width - PAD.right} y1={sy(value)} y2={sy(value)} />
@@ -105,7 +93,6 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
           </g>)}
           {ticks.map((t, index) => <text key={index} className="ob-history-tick" x={sx(t)} y={HEIGHT - 6}
             textAnchor={index === 0 ? 'start' : index === ticks.length - 1 ? 'end' : 'middle'}>{tickLabel(t, span)}</text>)}
-          {/* Before the first reading there is nothing to draw, so that span is shaded and labelled instead of left blank. */}
           {!data.empty && data.firstAt !== null && sx(data.firstAt) - PAD.left > 60 && <g className="ob-history-before">
             <rect x={PAD.left} y={PAD.top} width={sx(data.firstAt) - PAD.left} height={plotHeight} />
             <text x={PAD.left + (sx(data.firstAt) - PAD.left) / 2} y={PAD.top + plotHeight / 2} textAnchor="middle">
@@ -115,7 +102,6 @@ export function LimitHistoryChart({ data, color, title }: { data: HistoryData; c
           {visible.map(series => series.segments.map((segment, index) => segment.length === 1
             ? <circle key={`${series.host}${index}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.5} className={`ob-history-dot ${color}`} />
             : <g key={`${series.host}${index}`}>
-              {/* The PC's dots sit on a ring of the card colour, so they stay visible where both computers read the same value. */}
               {DASH[series.host] && <polyline className="ob-history-halo" strokeDasharray={DASH[series.host]}
                 points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />}
               <polyline className={`ob-history-line ${color}${DASH[series.host] ? ' dotted' : ''}`} strokeDasharray={DASH[series.host]}

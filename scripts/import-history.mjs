@@ -1,10 +1,3 @@
-// Import limit history kept by earlier versions into the limit history store.
-// - The Codex limits archive (private-quota/*.sqlite): every saved observation.
-// - Saved snapshots (usage.json, usage.before-hub.json, MigrationArchives):
-//   the Codex history samples, and the Claude Code and Codex readings they hold.
-// Each reading keeps its original observation time and is labelled with the file
-// it came from. Running the import again adds nothing new, because a reading that
-// is already stored is left alone.
 import {DatabaseSync} from 'node:sqlite';
 import {lstat,readdir,readFile} from 'node:fs/promises';
 import path from 'node:path';
@@ -34,7 +27,6 @@ async function files(folder,match,depth=2) {
   return found.sort((a,b)=>a.localeCompare(b));
 }
 
-// Codex readings saved by the limits store, observed on this computer.
 export function codexArchiveReadings(databaseFile,{observer,label}) {
   let db;
   try {db=new DatabaseSync(databaseFile,{readOnly:true});}catch {return [];}
@@ -57,7 +49,6 @@ export function codexArchiveReadings(databaseFile,{observer,label}) {
   } finally {db.close();}
 }
 
-// Readings held inside one saved snapshot.
 export function snapshotReadings(snapshot,{observer,label}) {
   if(!snapshot || typeof snapshot!=='object')return [];
   const readings=[];
@@ -66,7 +57,6 @@ export function snapshotReadings(snapshot,{observer,label}) {
   if(Array.isArray(quota?.history))for(const sample of quota.history)
     readings.push(...readingsFrom({...sample,status:'ok'},{provider:'codex',observer,source:label}));
   readings.push(...readingsFrom(snapshot.claudeLimits,{provider:'claude',observer,source:label}));
-  // A paired computer's shared Codex reading, from the full app. It was observed over there.
   const peer=snapshot.peerQuota;
   if(peer && typeof peer==='object') {
     const host=['Mac','Windows'].includes(peer.host)?peer.host:OTHER[observer];
