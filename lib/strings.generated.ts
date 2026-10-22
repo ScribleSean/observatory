@@ -191,7 +191,7 @@ export const STRINGS = {
   },
   "activity": {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",
-    "zoneCaveat": "Days and hours follow the {zone} clock until device time zones are supported.",
+    "zoneCaveat": "Days and hours follow the time zone of this computer, {zone}.",
     "hourlyTitle": "Screen time by hour, {zone} clock",
     "dailyTitle": "Screen time by day",
     "date": "Date",
