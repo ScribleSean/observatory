@@ -10,26 +10,12 @@ import {ownSnapshot} from '../test/helpers.mjs';
 const now=Date.now();
 const dataFolder=await mkdtemp(path.join(tmpdir(),'observatory-preview-'));
 await mkdir(path.join(dataFolder,'public','local'),{recursive:true});
-// Fictional agents, so the Agents tile and page have something to show.
 const ago=minutes=>new Date(now-minutes*60000).toISOString();
 // Fictional computer names for screenshots.
 const NAMES={Mac:'Studio Mac',Windows:'Desk PC'};
-const agents=(host,at,sessions,jobs=[])=>snapshot=>({...snapshot,device:{host,name:NAMES[host]},deviceNames:{[host]:NAMES[host]},
-  agentActivity:[{host,status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'ok',sessions,jobs}]});
-const mac=ownSnapshot('Mac',now,agents('Mac',ago(1),[
-  {tool:'claude-code',status:'waiting',project:'portfolio',name:'Case study layout',startedAt:ago(80),updatedAt:ago(3)},
-  {tool:'claude-code',status:'working',project:'observatory',name:'Agents panel',startedAt:ago(140),updatedAt:ago(1)},
-  {tool:'claude-code',status:'working',project:'field-notes',name:'Search index',startedAt:ago(35),updatedAt:ago(2)},
-  {tool:'claude-code',status:'idle',project:'dotfiles',name:'Shell prompt',startedAt:ago(300),updatedAt:ago(42)},
-  {tool:'claude-code',status:'done',project:'recipes',name:'Import cleanup',startedAt:ago(600),updatedAt:ago(240)},
-],[
-  {tool:'codex',status:'working',project:'observatory',startedAt:ago(6),finishedAt:null},
-  {tool:'codex',status:'done',project:'field-notes',startedAt:ago(95),finishedAt:ago(71)},
-]));
-const pc=ownSnapshot('Windows',now-4*60000,agents('Windows',ago(4),[
-  {tool:'claude-code',status:'working',project:'tray-app',name:'Icon rendering',startedAt:ago(25),updatedAt:ago(4)},
-  {tool:'claude-code',status:'idle',project:'observatory',name:'Windows check',startedAt:ago(200),updatedAt:ago(60)},
-]));
+const named=host=>snapshot=>({...snapshot,device:{host,name:NAMES[host]},deviceNames:{[host]:NAMES[host]}});
+const mac=ownSnapshot('Mac',now,named('Mac'));
+const pc=ownSnapshot('Windows',now-4*60000,named('Windows'));
 // Fictional limit history: 30 days of readings, every 15 minutes while a computer
 // is in use, nothing at night, and the PC only on weekdays. 5-hour windows drain and
 // reset, weekly ones fall slowly. Deterministic, so screenshots repeat.
@@ -52,7 +38,8 @@ function fictionalHistory(host) {
       const burn=working?(p==='claude'?1.6:0.9)*random():0;
       left5=Math.max(0,left5-burn*2.2);leftWeek=Math.max(0,leftWeek-burn*0.12);
       const uses=host==='Mac'?working:working && day>0 && day<6 && hour>=9 && hour<18;
-      if(!uses)continue;
+      // The PC last collected four minutes ago, so it has no reading after that.
+      if(!uses || (host!=='Mac' && t+4*60000>now-4*60000))continue;
       const at=new Date(t+(host==='Mac'?0:4*60000)).toISOString();
       points.push({p,w:w5,o:host,t:at,r:Math.round(left5*10)/10,x:new Date(reset5+5*3600000).toISOString(),d:300},
         {p,w:ww,o:host,t:at,r:Math.round(leftWeek*10)/10,x:new Date(resetWeek+7*86400000).toISOString(),d:10080});

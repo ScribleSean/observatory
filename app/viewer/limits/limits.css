@@ -5,7 +5,7 @@
 .ob-limits .ob-row { flex-wrap: wrap; }
 .ob-limits .ob-num { white-space: normal; }
 .ob-limits .ob-numerals { grid-template-columns: minmax(0, 1fr); }
-.ob-limits-pace, .ob-limits-cost, .ob-limits-caveat { margin-top: var(--ob-space-3); }
+.ob-limits-pace, .ob-limits-caveat { margin-top: var(--ob-space-3); }
 .ob-limits-pace.warn > .ob-num { color: var(--ob-warning); }
 .ob-limits .ob-chart + .ob-chart { margin-top: var(--ob-space-3); }
 .ob-limits-now .ob-limits-providers { margin-top: var(--ob-space-3); }

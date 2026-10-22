@@ -16,7 +16,6 @@ export const STRINGS = {
     "resetUnknown": "The reset time is unknown.",
     "resetPending": "Waiting for the reset to be observed.",
     "awaitingObservation": "Waiting for a new reading.",
-    "sessionCost": "Session cost (estimate)",
     "history": "History",
     "chartTitle": "{provider} {window} remaining",
     "historyCaveat": "History covers the readings this device keeps, about the latest 24 hours.",
@@ -34,8 +33,7 @@ export const STRINGS = {
     "sources": "Sources",
     "settings": "Settings",
     "navigation": "Sections",
-    "emptyState": "This section is not built yet.",
-    "agents": "Agents"
+    "emptyState": "This section is not built yet."
   },
   "periods": {
     "now": "Now",
@@ -76,7 +74,8 @@ export const STRINGS = {
     "loading": "Loading",
     "refreshing": "Refreshing",
     "noSnapshot": "No snapshot yet",
-    "noCombined": "No combined.json yet. Run npm run tick, or wait for the next five-minute cycle."
+    "noCombined": "No combined.json yet. Run npm run tick, or wait for the next five-minute cycle.",
+    "computers": "Computers"
   },
   "status": {
     "unknown": "Unknown",
@@ -186,7 +185,7 @@ export const STRINGS = {
     "noSettings": "No settings recorded",
     "caveat": "Dollar figures are estimates at list price. A subscription is not billed per token.",
     "caveatLabel": "About these figures",
-    "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free. Session cost is the figure Claude Code reported for its latest session on this device.",
+    "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free.",
     "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked."
   },
   "activity": {
@@ -249,8 +248,6 @@ export const STRINGS = {
     "off": "Off",
     "working": "Working",
     "disclosureCommand": "Each collection runs Claude Code's own usage command and keeps only the 5-hour and weekly limit percentages and their reset times. The command uses the installed Claude Code sign-in and a small fixed set of environment variables, and nothing else from it is kept. If Claude Code reports no limits for the account, they show as Unknown.",
-    "disclosureStorage": "The readings are kept in this device's data folder and are not sent to a paired device. Export data includes them. A session cost is recorded only when the optional status line bridge reports one.",
-    "disclosureOff": "Nothing is added to Claude Code's settings. Turn this switch off to stop the readings. If the status line bridge was installed separately, readings continue until it is removed.",
     "turnOn": "Turn on",
     "cancel": "Cancel",
     "deviceName": "Device name",
@@ -384,11 +381,6 @@ export const STRINGS = {
     "limitsTitle": "Limits",
     "limitsCaption": "lowest left: {name}",
     "limitsNone": "No current reading",
-    "agentsTitle": "Agents",
-    "agentsWaiting": "{count} waiting on you",
-    "agentsWorking": "{count} working",
-    "agentsQuiet": "Nothing running",
-    "agentsOff": "Agents are off",
     "timeTitle": "Screen time today",
     "costTitle": "Cost today",
     "costCaption": "API-equivalent estimate, not a bill",
@@ -396,32 +388,7 @@ export const STRINGS = {
     "bothNote": "both computers, not deduplicated",
     "asOf": "as of {time}",
     "topApps": "largest app categories",
-    "agentsUnknown": "Unknown",
     "lastDay": "Last update was {time}"
-  },
-  "agents": {
-    "waiting": "Waiting on you",
-    "working": "Working",
-    "idle": "Idle",
-    "done": "Done",
-    "stopped": "Stopped",
-    "unknown": "Unknown",
-    "claudeSessions": "Claude Code sessions",
-    "codexJobs": "Codex jobs",
-    "none": "No sessions in the last day",
-    "noJobs": "No Codex jobs in the last day",
-    "notFound": "Not found on this computer",
-    "off": "Turned off in settings",
-    "since": "since {time}",
-    "finished": "finished {time}",
-    "started": "started {time}",
-    "privacy": "Status, project names and session names only. Messages, prompts and job output are never read.",
-    "empty": "No agent status yet. It appears after the next five-minute collection.",
-    "unavailable": "Agent status could not be read on this computer. It is tried again every five minutes.",
-    "offHint": "Turned off. Set sources.agents to true in observatory.config.json to show it.",
-    "claudeNotFound": "Claude Code sessions were not found on this computer.",
-    "computers": "Computers",
-    "claudeUnavailable": "Claude Code sessions could not be read. Unknown until the next collection."
   },
   "limitHistory": {
     "title": "Limit history",

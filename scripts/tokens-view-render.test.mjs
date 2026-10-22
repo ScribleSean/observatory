@@ -43,7 +43,9 @@ void test('sample All week keeps providers and settings per device', () => {
   const html = renderToStaticMarkup(createElement(TokensView, { snapshot: source, now }));
   const claude = card(html, 'Claude Code');
   const codex = card(html, 'Codex');
-  for (const text of ['By device', 'Studio', 'Desk', 'Session cost (estimate)', '$3.42']) assert.ok(claude.includes(text), text);
+  for (const text of ['By device', 'Studio', 'Desk']) assert.ok(claude.includes(text), text);
+  // Session cost came only from the removed status line bridge, so it is no longer shown.
+  assert.ok(!claude.includes('Session cost'));
   for (const provider of [claude, codex]) {
     assert.ok(provider.includes('API-equivalent (estimate)'));
     assert.ok(provider.includes('Prices checked ' + source.prices.checkedOn));
@@ -93,14 +95,6 @@ void test('partial estimate discloses covered tokens', () => {
   assert.ok(html.includes('Covers 5 of 10 tokens. Models without a price are left out.'));
 });
 
-void test('session cost 10 minutes old or older is Unknown', () => {
-  const source = synthetic();
-  source.claudeLimits = { sessionCost: { usd: 3.42, observedAt: new Date(now - 15 * 60000).toISOString() } };
-  const claude = card(render(source, 'All'), 'Claude Code');
-  assert.match(claude, /Session cost \(estimate\)<\/span><span>Unknown<\/span>/);
-  assert.ok(!claude.includes('$3.42'));
-});
-
 void test('dashboard tokens section mounts the view', () => {
   const combined = combine([{ host: 'Mac', snapshot: ownSnapshot('Mac', now) }, { host: 'Windows', snapshot: ownSnapshot('Windows', now) }], { now });
   const html = renderToStaticMarkup(createElement(DashboardView, {
@@ -117,10 +111,10 @@ void test('caveat sentence appears in exactly one element', () => {
   assert.equal((html.match(/<p>Dollar figures are estimates at list price\. A subscription is not billed per token\.<\/p>/g) ?? []).length, 1);
 });
 
-void test('session cost appears only with initialHost All', () => {
+void test('session cost is not shown for any computer', () => {
   for (const initialHost of ['Windows', 'All']) {
     const html = renderToStaticMarkup(createElement(TokensView, { snapshot: sampleSnapshot(now), now, initialHost }));
-    assert.equal(html.includes('Session cost (estimate)'), initialHost === 'All');
+    assert.equal(html.includes('Session cost'), false);
   }
 });
 

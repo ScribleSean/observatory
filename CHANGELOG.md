@@ -6,8 +6,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 
 ### Added
 
-- **Agents.** See which Claude Code sessions are working, waiting on you, idle or done, and recent codex-job runs, per computer. Only status, project and session names and times are read. Transcripts, prompts, key files and job output are never opened.
-- **Four answers at a glance.** The dashboard opens on tiles for limits, agents, screen time and cost, then pages for Limits, Agents, Activity, Tokens and Sources.
+- **Three answers at a glance.** The dashboard opens on tiles for limits, screen time and cost, then pages for Limits, Activity, Tokens and Sources.
 - **Zero-config install.** `git clone`, then `npm run setup`. Setup writes a settings file with every source on, builds the dashboard and the menu bar or tray app on your own computer, and starts it at login. `npm run setup -- --remove` takes it out again.
 - **Optional second computer.** A Mac and a Windows PC can share one view over your own SSH connection. Limits are never added across computers, and sums of time, tokens and cost are labeled "not deduplicated".
 - **Your own time zone.** Days are counted in each computer's time zone instead of a fixed one.
@@ -21,6 +20,8 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 ### Removed
 
 - Device pairing with invitations and its TLS service, consent and sharing sync, the settings and setup screens, signed packages, installers and updates, dictation, three of the four skins, and the demo page. Everything removed is on the `archive/full-app` tag.
+- The Agents view, which showed Claude Code sessions and codex-job runs, and the amber "waiting on you" dot on the menu bar and tray icon. Observatory no longer reads `~/.claude/sessions` or the codex-job folder. An older settings file that lists `agents` still loads, and that key is ignored.
+- The Claude Code status-line bridge and its installer. Claude Code limits still come from the installed `claude` CLI's usage command, run at each collection.
 
 ### Before you update from build 43 or 42
 

@@ -12,7 +12,6 @@ import {fileURLToPath} from 'node:url';
 import {REPO,CONFIG_FILE,loadConfig,parseConfig,defaultDataFolder} from '../lib/config.mjs';
 import {sshTransport} from './hub-transport.mjs';
 import {importHistory} from './import-history.mjs';
-import {defaultSettingsPath} from './claude-statusline-install.mjs';
 
 const execute=promisify(execFile);
 export const LABEL='io.github.observatory.glance';
@@ -81,15 +80,20 @@ export async function stableNode(platform=process.platform) {
   return first && existsSync(first)?first:process.execPath;
 }
 
-// The old app may have pointed Claude Code's status line at a bridge inside its
-// own bundle. When that file is gone the status line breaks, so say how to fix it.
-export async function brokenStatusline(settingsPath) {
+// Claude Code's settings file. Setup only reads it, and never changes it.
+export function claudeSettingsPath(environment=process.env) {
+  const configured=environment.CLAUDE_CONFIG_DIR;
+  return path.join(configured && path.isAbsolute(configured)?configured:path.join(homedir(),'.claude'),'settings.json');
+}
+
+// Earlier versions could point Claude Code's status line at an Observatory bridge.
+// The bridge was removed, so a status line that still runs it is reported, with the file to edit.
+export async function leftoverStatusline(settingsPath) {
   let settings;
   try {settings=JSON.parse(await readFile(settingsPath,'utf8'));}catch {return null;}
   const command=settings?.statusLine?.command;
   if(typeof command!=='string')return null;
-  const bridge=[...command.matchAll(/"([^"]+)"/g)].map(match=>match[1]).find(value=>value.endsWith('claude-statusline-bridge.mjs'));
-  return bridge && !existsSync(bridge)?bridge:null;
+  return [...command.matchAll(/"([^"]+)"/g)].map(match=>match[1]).find(value=>value.endsWith('claude-statusline-bridge.mjs')) ?? null;
 }
 
 // The name people know the computer by, cleaned to fit the settings file.
@@ -153,8 +157,9 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     log(`  Note: ${message}`);
   }
   try {
-    if(await brokenStatusline(defaultSettingsPath()))
-      log(`  Note: Claude Code's status line points at a bridge file that no longer exists. To use this copy instead, run: node scripts/claude-statusline-install.mjs install --runtime "${config.dataFolder}" --consent`);
+    const settingsPath=claudeSettingsPath();
+    if(await leftoverStatusline(settingsPath))
+      log(`  Note: Claude Code's status line still runs Observatory's status line bridge, which was removed. Delete the "statusLine" entry in ${settingsPath} to turn it off. Observatory does not need it.`);
   } catch {}
   if(config.sources.screenTime && !await activityWatchUp())
     log('  Note: ActivityWatch is not answering on 127.0.0.1:5600. Screen time stays Unknown until it runs.');

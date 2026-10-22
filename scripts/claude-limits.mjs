@@ -4,14 +4,13 @@ import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {readClaudeUsage} from './claude-usage-command.mjs';
 
-// Claude Code passes rate_limits to a status line command for Pro and Max
-// subscribers after the first response of a session. This module keeps only
-// the two percentages, reset times and session cost. It never reads a credential, a
+// Claude Code limits, read by running the installed CLI's usage command for Pro
+// and Max subscribers. This module keeps only the two percentages and reset
+// times, plus a session cost if an older reading stored one. It never reads a credential, a
 // transcript, a working directory or a session identifier.
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
 export const CLAUDE_LIMITS_CONSENT_FILE='consent.json';
-export const CLAUDE_STATUSLINE_FILE='statusline.json';
 const windows={five_hour:300,seven_day:10080};
 const currentSeconds=10*60;
 
@@ -138,40 +137,6 @@ function topLevelMembers(text,allDepths=false) {
   return count;
 }
 
-export async function readClaudeStatuslineMarker(runtime,options={}) {
-  const unsafe=()=>Error('Unsafe saved status line file');
-  if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw unsafe();
-  let text;
-  try {
-    text=await readInPlainLimitsFolder(runtime,()=>plainText(path.join(folderOf(runtime),CLAUDE_STATUSLINE_FILE),16384),options);
-  } catch(error) {
-    if(error.code==='ENOENT')return null;
-    throw unsafe();
-  }
-  try {
-    if(text.startsWith('\uFEFF'))throw unsafe();
-    const marker=JSON.parse(text);
-    if(!isObject(marker))throw unsafe();
-    const keys=Object.keys(marker);
-    if(keys.length!==3 || !['installedAt','settingsPath','previous'].every(key=>keys.includes(key)))throw unsafe();
-    if(typeof marker.installedAt!=='string' || typeof marker.settingsPath!=='string')throw unsafe();
-    let members=0;
-    const pending=[marker];
-    while(pending.length) {
-      const value=pending.pop();
-      if(value===null || typeof value!=='object')continue;
-      if(!Array.isArray(value)) {
-        if(Object.hasOwn(value,'__proto__'))throw unsafe();
-        members+=Object.keys(value).length;
-      }
-      for(const child of Object.values(value))pending.push(child);
-    }
-    if(topLevelMembers(text,true)!==members)throw unsafe();
-    if(marker.previous?.type==='command' && typeof marker.previous.command!=='string')throw unsafe();
-    return marker;
-  } catch {throw unsafe();}
-}
-
 export function parseLimitsConsentMarker(text) {
   try {
     const marker=JSON.parse(text);
@@ -211,11 +176,6 @@ export async function recordClaudeLimits(runtime,input,now=Date.now()) {
   return merged;
 }
 
-export async function claudeStatuslineInstalled(runtime,options={}) {
-  try {return await readClaudeStatuslineMarker(runtime,options)!==null;}
-  catch {return false;}
-}
-
 export async function claudeLimitsConsent(runtime,options={}) {
   try {
     return await readInPlainLimitsFolder(runtime,async()=>{
@@ -223,10 +183,9 @@ export async function claudeLimitsConsent(runtime,options={}) {
       try {
         consentMarker=parseLimitsConsentMarker(await plainText(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096));
       } catch {}
-      const statusLine=await claudeStatuslineInstalled(runtime);
-      return {given:consentMarker || statusLine,consentMarker,statusLine};
+      return {given:consentMarker,consentMarker};
     },options);
-  } catch {return {given:false,consentMarker:false,statusLine:false};}
+  } catch {return {given:false,consentMarker:false};}
 }
 
 const base={provider:'Claude Code',scope:'account'};

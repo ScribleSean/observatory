@@ -23,10 +23,12 @@ const both=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows'
 const noPc=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',name:'PC',snapshot:null,error:'unreachable'}],{now});
 const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,limitStyle:'bar',css:'',className:'',onSectionChange:()=>{},...props}));
 
-for(const section of ['limits','agents','activity','tokens','sources']) {
+for(const section of ['limits','activity','tokens','sources']) {
   test(`the ${section} page renders from combined.json`,()=>{
     const html=render({combined:both,section});
-    for(const title of ['Limits','Agents','Screen time today','Cost today'])assert.ok(html.includes(title),title);
+    for(const title of ['Limits','Screen time today','Cost today'])assert.ok(html.includes(title),title);
+    // The Agents view was removed. Neither the tab nor the tile comes back.
+    assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
     assert.ok(html.includes('both computers, not deduplicated'));
     assert.ok(!html.includes('NaN'));
     assert.ok(!html.includes('undefined'));
@@ -41,18 +43,6 @@ test('a missing computer shows Unknown and the reason, never zero',()=>{
   assert.ok(time.includes('class="ob-hero">Unknown<'));
   const cost=html.slice(html.indexOf('Cost today'));
   assert.ok(cost.includes('class="ob-hero">Unknown<'));
-});
-
-test('the Agents page lists status words with each session',()=>{
-  const at=new Date(now).toISOString();
-  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'not-found',
-    sessions:[{tool:'claude-code',status:'waiting',project:'portfolio',name:'Case study',updatedAt:at}],jobs:[]}]}));
-  const combined=combine([{host:'Mac',snapshot:mac}],{now});
-  const html=render({combined,section:'agents'});
-  assert.ok(html.includes('Waiting on you'));
-  assert.ok(html.includes('portfolio'));
-  assert.ok(html.includes('1 waiting on you'));
-  assert.ok(html.includes('Messages, prompts and job output are never read'));
 });
 
 test('without combined.json the page says how to get one',()=>{
@@ -85,41 +75,18 @@ test('the skin hook returns Sage',()=>{
   assert.match(seen[0].css,/--ob-background/);
 });
 
-test('the Agents page has clear empty, off and error states',()=>{
-  const empty=render({combined:{...both,glance:{...both.glance,agents:[]}},section:'agents'});
-  assert.ok(empty.includes('No agent status yet'));
-  const off=render({combined:{...both,glance:{...both.glance,agents:[{host:'Mac',name:'Mac',status:'off'}]}},section:'agents'});
-  assert.ok(off.includes('Set sources.agents to true'));
-  const failed=render({combined:{...both,glance:{...both.glance,agents:[{host:'Mac',name:'Mac',status:'unknown'}]}},section:'agents'});
-  assert.ok(failed.includes('could not be read'));
-  assert.ok(failed.includes('>Unknown<'));
-  const noCodexJob=render({combined:{...both,glance:{...both.glance,agents:[{host:'Mac',name:'Mac',status:'ok',counts:{},sessions:[],jobs:[],claudeFound:true,codexFound:false}]}},section:'agents'});
-  assert.ok(!noCodexJob.includes('Codex jobs'));
-  assert.ok(noCodexJob.includes('No sessions in the last day'));
-});
-
 test('staleness is judged when the page draws, not when the file was written',()=>{
   const at=new Date(now).toISOString();
-  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'ok',
-    sessions:[{tool:'claude-code',status:'waiting',project:'portfolio',updatedAt:at}],jobs:[]}]}));
+  const mac=ownSnapshot('Mac',now,s=>({...s,collectedAt:at}));
   const combined=combine([{host:'Mac',snapshot:mac}],{now});
-  // Drawn an hour later with no new file: the waiting agent is no longer claimed as current.
+  // Drawn an hour later with no new file: the numbers carry their time.
   const later=render({combined,section:'limits',now:now+3600000});
-  assert.ok(!later.includes('1 waiting on you'));
   assert.ok(later.includes('as of'));
   // Drawn the next day: today's numbers are Unknown, with the last update time.
   const nextDay=render({combined,section:'limits',now:now+26*3600000});
   assert.ok(nextDay.includes('Last update was'));
   const time=nextDay.slice(nextDay.indexOf('Screen time today'));
   assert.ok(time.includes('class="ob-hero">Unknown<'));
-});
-
-test('a failed agent read shows Unknown, not nothing running',()=>{
-  const at=new Date(now).toISOString();
-  const mac=ownSnapshot('Mac',now,s=>({...s,agentActivity:[{host:'Mac',status:'ok',checkedAt:at,claudeStatus:'unavailable',codexStatus:'not-found',sessions:[],jobs:[]}]}));
-  const html=render({combined:combine([{host:'Mac',snapshot:mac}],{now}),section:'agents'});
-  assert.ok(!html.includes('Nothing running'));
-  assert.ok(html.includes('could not be read'));
 });
 
 test('chart date labels are never cut, and the newest date is always shown',async()=>{

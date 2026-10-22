@@ -23,7 +23,6 @@ import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime}
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
 import {collectSettings} from './read-settings.mjs';
 import {collectClaudeUsage} from './read-claude-usage.mjs';
-import {readAgents,cleanAgentActivity} from './read-agents.mjs';
 import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -68,7 +67,6 @@ export function defaultReaders(config) {
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:()=>collectClaudeUsage(claudeFolder()),
-    agents:()=>readAgents(),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
       return withinTime(readClaudeLimits(config.dataFolder,{enabled:true}),20000);
@@ -119,7 +117,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     try {return await clean(await readers[key]());}
     catch(error) {return {failed:true,error};}
   };
-  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,agentsRead]=await Promise.all([
+  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead]=await Promise.all([
     read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
     read('codex',raw=>{
       const settings={...cleanSettings(raw,host),checkedAt:at};
@@ -129,9 +127,6 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('codexLimits',value=>value),
     read('claudeCode',raw=>cleanClaudeTokenSource(raw,host,at,{hours:true})),
     read('claudeLimits',value=>value),
-    // A read where neither tool could be read is unavailable, not "nothing running".
-    read('agents',value=>cleanAgentActivity({host,status:value.claudeStatus==='unavailable' && value.codexStatus!=='ok'?'unavailable':'ok',checkedAt:at,
-      claudeStatus:value.claudeStatus,codexStatus:value.codexStatus,sessions:value.sessions,jobs:value.jobs},host)),
   ]);
   const pick=(value,fallback,failed)=>value===null?fallback:value.failed?failed(value.error):value;
   const activity=pick(activityRead,disconnected(host),unavailable);
@@ -141,21 +136,20 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
   const claude=pick(claudeRead,unavailableClaudeTokenSource(host,at,'not-connected'),()=>unavailableClaudeTokenSource(host,at));
   const claudeLimits=pick(limitsRead,claudeLimitsSource(null,{enabled:false}),
     ()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'}));
-  const agents=pick(agentsRead,{host,status:'not-connected'},unavailable);
   const data={schema:2,timezone:TIMEZONE,collectedAt:at,
     device:{host,name:config.device.name},
     deviceNames:{[host]:config.device.name},
     activity:[activity,disconnected(other)],combined:{host:'Combined',status:'unavailable',checkedAt:at},
     tokens:[codex.tokens,disconnected(other)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
-    dictation:[],agents:[],agentSource:disconnected('Local'),
-    quota,claudeLimits,providerTokenSources:[claude],agentActivity:[agents]};
+    dictation:[],
+    quota,claudeLimits,providerTokenSources:[claude]};
   // Keep this computer's own retained screen time history only.
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};
   attachProviderTokenEstimates(result);
-  const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits,agents].filter(row=>row.status!=='not-connected');
+  const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits].filter(row=>row.status!=='not-connected');
   const sourcesRead=sources.filter(row=>row.status==='ok').length;
   return {data,status:{state:sources.length && sourcesRead===sources.length?'ok':'partial',sourcesRead,sourcesConfigured:sources.length}};
 }

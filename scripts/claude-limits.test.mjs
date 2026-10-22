@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {copyFile,link,lstat,mkdtemp,readFile,readlink,readdir,rm,symlink,writeFile,mkdir} from 'node:fs/promises';
+import {lstat,mkdtemp,readFile,readdir,rm,symlink,writeFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {realpathSync} from 'node:fs';
@@ -9,9 +9,7 @@ import {syncBuiltinESMExports} from 'node:module';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {readClaudeStatuslineMarker,writeJsonAtomic,parseLimitsConsentMarker,claudeLimitsConsent,claudeStatuslineInstalled,attachClaudeLimits,claudeLimitsSource,extractClaudeLimits,mergeClaudeLimits,readClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
-import {ownLine} from './claude-statusline-bridge.mjs';
-import {bridgeCommand,installStatusline,statuslineStatus,uninstallStatusline} from './claude-statusline-install.mjs';
+import {parseLimitsConsentMarker,claudeLimitsConsent,attachClaudeLimits,claudeLimitsSource,extractClaudeLimits,mergeClaudeLimits,readClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
 
 import {setLimitsConsent,clearLimitsConsent,limitsConsentStatus} from './claude-limits-consent.mjs';
 
@@ -27,8 +25,6 @@ async function folder(t) {
 }
 
 const consentText=JSON.stringify({consent:true,givenAt:'2026-10-14T00:00:00.000Z'});
-
-const realBridge=realpathSync(fileURLToPath(new URL('./claude-statusline-bridge.mjs',import.meta.url)));
 
 test('extraction keeps only percentages and reset times', () => {
   const record=extractClaudeLimits(input(),now);
@@ -86,7 +82,7 @@ test('recording writes one small private file and reading needs the install mark
   assert.deepEqual(await readdir(path.join(runtime,'claude-limits')),['limits.json']);
   assert.doesNotMatch(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'),/synthetic|project|transcript/i);
   assert.equal((await readClaudeLimits(runtime,{now})).status,'not-connected');
-  await writeFile(path.join(runtime,'claude-limits/statusline.json'),JSON.stringify(savedStatusline(null)));
+  await writeFile(path.join(runtime,'claude-limits/consent.json'),consentText);
   // Tests never start the real Claude Code command.
   const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({status:'unrecognized',usage:null})});
   assert.equal(source.status,'ok');
@@ -100,64 +96,9 @@ test('a linked folder or file is refused', {skip:process.platform==='win32' && '
   await assert.rejects(recordClaudeLimits(runtime,input(),now),/Unsafe/);
   const second=await folder(t);
   await mkdir(path.join(second,'claude-limits'));
-  await writeFile(path.join(elsewhere,'marker.json'),JSON.stringify(savedStatusline(null)));
-  await symlink(path.join(elsewhere,'marker.json'),path.join(second,'claude-limits/statusline.json'));
+  await writeFile(path.join(elsewhere,'marker.json'),consentText);
+  await symlink(path.join(elsewhere,'marker.json'),path.join(second,'claude-limits/consent.json'));
   assert.equal((await readClaudeLimits(second,{now})).status,'not-connected');
-});
-
-test('install needs consent, saves the earlier status line and uninstall restores it', async t => {
-  const runtime=await folder(t),home=await folder(t);
-  const settingsPath=path.join(home,'settings.json');
-  const earlier={type:'command',command:'echo earlier',padding:0};
-  await writeFile(settingsPath,JSON.stringify({model:'synthetic',statusLine:earlier}));
-  const options={runtime,settingsPath,node:'/synthetic/node',bridge:realBridge};
-  await assert.rejects(installStatusline(options),/consent/);
-  assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')).statusLine,earlier);
-  assert.deepEqual(await installStatusline({...options,consent:true}),{installed:true,replacedStatusLine:true,settingsPath});
-  const installed=JSON.parse(await readFile(settingsPath,'utf8'));
-  assert.equal(installed.model,'synthetic');
-  // The installer writes forward slashes on Windows, so the command also runs in Git Bash.
-  const quoted=process.platform==='win32'?runtime.replaceAll('\\','/'):runtime;
-  assert.equal(installed.statusLine.command,`"/synthetic/node" "${process.platform==='win32'?options.bridge.replaceAll('\\','/'):options.bridge}" --runtime "${quoted}"`);
-  assert.deepEqual(JSON.parse(await readFile(settingsPath+'.observatory-backup','utf8')).statusLine,earlier);
-  assert.equal((await statuslineStatus({runtime,settingsPath})).installed,true);
-  await installStatusline({...options,consent:true});
-  assert.deepEqual(JSON.parse(await readFile(path.join(runtime,'claude-limits/statusline.json'),'utf8')).previous,earlier);
-  assert.deepEqual(await uninstallStatusline({runtime,settingsPath}),{installed:false,restoredStatusLine:true,settingsPath});
-  assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')),{model:'synthetic',statusLine:earlier});
-  assert.equal((await readClaudeLimits(runtime,{now})).status,'not-connected');
-});
-
-test('install without an earlier status line or settings file, and refusal of bad input', async t => {
-  const runtime=await folder(t),home=await folder(t);
-  const settingsPath=path.join(home,'settings.json');
-  const options={runtime,settingsPath,node:'/synthetic/node',bridge:realBridge,consent:true};
-  assert.equal((await installStatusline(options)).replacedStatusLine,false);
-  await uninstallStatusline({runtime,settingsPath});
-  assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')),{});
-  await writeFile(settingsPath,'[1,2]');
-  await assert.rejects(installStatusline(options),/not a JSON object/);
-  assert.equal(await readFile(settingsPath,'utf8'),'[1,2]');
-  await writeFile(settingsPath,'{not json');
-  await assert.rejects(installStatusline(options));
-  assert.equal(await readFile(settingsPath,'utf8'),'{not json');
-  assert.throws(()=>bridgeCommand('/a/node','/a/b"c.mjs','/r'),/Paths/);
-  assert.throws(()=>bridgeCommand('node','/a/b.mjs','/r'),/Paths/);
-  assert.equal(bridgeCommand('C:\\a\\node.exe','C:\\a\\b.mjs','C:\\r','win32'),'"C:/a/node.exe" "C:/a/b.mjs" --runtime "C:/r"');
-});
-
-test('the bridge records limits and prints the earlier status line output', async t => {
-  const runtime=await folder(t);
-  const bridge=fileURLToPath(new URL('./claude-statusline-bridge.mjs',import.meta.url));
-  const fresh=()=>{const value=input();const at=Math.floor(Date.now()/1000);
-    value.rate_limits.five_hour.resets_at=at+7200;value.rate_limits.seven_day.resets_at=at+86400;return JSON.stringify(value);};
-  const invoke=text=>{const child=run(process.execPath,[bridge,'--runtime',runtime],{timeout:15000});child.child.stdin.end(text);return child;};
-  assert.equal((await invoke(fresh())).stdout,'5h 77% left · 7d 59% left\n');
-  assert.equal(JSON.parse(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8')).windows.five_hour.usedPercentage,23.5);
-  await writeFile(path.join(runtime,'claude-limits/statusline.json'),JSON.stringify({installedAt:new Date(now).toISOString(),settingsPath:path.join(runtime,'settings.json'),previous:{type:'command',command:`"${process.execPath}" -e "process.stdout.write('earlier line')"`}}));
-  assert.equal((await invoke(fresh())).stdout,'earlier line');
-  assert.equal((await invoke('not json')).stdout,'earlier line');
-  assert.equal(ownLine({},Date.now()),'');
 });
 
 test('cost extraction validates bounds and rounds to cents without inventing missing values', () => {
@@ -220,30 +161,7 @@ test('cost merges use newest observation with next winning ties and absence pres
   assert.equal(Object.hasOwn(mergeClaudeLimits(windows,windows,now+1000),'sessionCost'),false);
 });
 
-test('the bridge stores only windows and cost and prints nothing for cost alone', async t => {
-  const bridge=fileURLToPath(new URL('./claude-statusline-bridge.mjs',import.meta.url));
-  for(const kind of ['both','windows','cost']) {
-    const runtime=await folder(t),at=Math.floor(Date.now()/1000);
-    const value={...input(),cost:{total_cost_usd:1.236,private:'synthetic'},extra:'synthetic'};
-    value.rate_limits.five_hour.resets_at=at+7200;
-    value.rate_limits.seven_day.resets_at=at+86400;
-    if(kind==='windows')delete value.cost;
-    if(kind==='cost')delete value.rate_limits;
-    const child=run(process.execPath,[bridge,'--runtime',runtime],{timeout:15000});
-    child.child.stdin.end(JSON.stringify(value));
-    assert.equal((await child).stdout,kind==='cost'?'':'5h 77% left · 7d 59% left\n');
-    const stored=JSON.parse(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'));
-    assert.ok(stored.observedAt>=at && stored.observedAt<=Math.floor(Date.now()/1000));
-    assert.deepEqual(stored,extractClaudeLimits(value,stored.observedAt*1000));
-    assert.equal(Object.hasOwn(stored,'sessionCost'),kind!=='windows');
-    if(kind==='cost')assert.deepEqual(claudeLimitsSource(stored,{enabled:true,now:stored.observedAt*1000}),
-      {provider:'Claude Code',scope:'account',status:'unavailable',windows:[],
-        sessionCost:{usd:1.24,observedAt:new Date(stored.observedAt*1000).toISOString()}});
-  }
-  assert.equal(ownLine({cost:{total_cost_usd:1}},now),'');
-});
-
-test('usage readings after bridge storage preserve cost and cannot inject a replacement', async t => {
+test('usage readings after a stored cost preserve the cost and cannot inject a replacement', async t => {
   const {parseClaudeUsage}=await import('./claude-usage-command.mjs');
   const usage=parseClaudeUsage({is_error:false,num_turns:0,total_cost_usd:0,duration_api_ms:0,local_command:'usage',type:'result',
     result:'Current session: 30% used · resets Mar 10 at 5pm (UTC)'},now);
@@ -251,7 +169,7 @@ test('usage readings after bridge storage preserve cost and cannot inject a repl
   for(const extra of [{},{cost:{total_cost_usd:99}}]) {
     const runtime=await folder(t);
     const saved=await recordClaudeLimits(runtime,{...input(),cost:{total_cost_usd:1.23}},now);
-    await writeFile(path.join(runtime,'claude-limits/statusline.json'),JSON.stringify(savedStatusline(null)));
+    await writeFile(path.join(runtime,'claude-limits/consent.json'),consentText);
     const source=await readClaudeLimits(runtime,{now:now+1000,readUsage:async()=>({status:'read',usage:{...usage,...extra}})});
     const stored=JSON.parse(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'));
     assert.deepEqual(stored.sessionCost,saved.sessionCost);
@@ -260,19 +178,16 @@ test('usage readings after bridge storage preserve cost and cannot inject a repl
   }
 });
 
-test('explicit consent writes exactly its timestamp and leaves status line consent independent', async t => {
+test('explicit consent writes exactly its timestamp', async t => {
   const runtime=await folder(t),file=path.join(runtime,'claude-limits/consent.json');
-  const none={given:false,consentMarker:false,statusLine:false};
+  const none={given:false,consentMarker:false};
   assert.deepEqual(await clearLimitsConsent({runtime}),none);
   for(const consent of [undefined,false,1,'true'])await assert.rejects(setLimitsConsent({runtime,consent}),/consent/);
   assert.deepEqual(await readdir(runtime),[]);
   await assert.rejects(setLimitsConsent({runtime:'relative',consent:true}),/Absolute/);
-  assert.deepEqual(await setLimitsConsent({runtime,consent:true,now:new Date(now)}),{given:true,consentMarker:true,statusLine:false});
+  assert.deepEqual(await setLimitsConsent({runtime,consent:true,now:new Date(now)}),{given:true,consentMarker:true});
   assert.deepEqual(JSON.parse(await readFile(file,'utf8')),{consent:true,givenAt:new Date(now).toISOString()});
-  assert.equal(await claudeStatuslineInstalled(runtime),false);
-  await writeFile(path.join(runtime,'claude-limits/statusline.json'),JSON.stringify(savedStatusline(null)));
-  assert.deepEqual(await clearLimitsConsent({runtime}),{given:true,consentMarker:false,statusLine:true});
-  assert.equal(await claudeStatuslineInstalled(runtime),true);
+  assert.deepEqual(await clearLimitsConsent({runtime}),{given:false,consentMarker:false});
 });
 
 test('invalid consent markers do not grant consent', async t => {
@@ -292,14 +207,14 @@ test('invalid consent markers do not grant consent', async t => {
     ...[false,1,'true'].map(consent=>JSON.stringify({consent,givenAt:'2026-10-14T00:00:00.000Z'})),
     '﻿'+consentText,consentText.padEnd(4097,' ')]) {
     await writeFile(file,text);
-    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false},text);
+    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false},text);
     let runs=0;
     assert.equal((await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'failed',usage:null};}})).status,'not-connected');
     assert.equal(runs,0);
   }
   await writeFile(file,(' \t\r\n'+consentText+'\n').padEnd(4096,' '));
   assert.equal((await limitsConsentStatus({runtime})).given,true);
-  assert.deepEqual(await claudeLimitsConsent(null),{given:false,consentMarker:false,statusLine:false});
+  assert.deepEqual(await claudeLimitsConsent(null),{given:false,consentMarker:false});
 });
 
 test('linked consent is ignored and cannot be cleared', {skip:process.platform==='win32' && 'Requires POSIX file link semantics'}, async t => {
@@ -320,48 +235,6 @@ test('a directory consent marker is ignored and cannot be cleared', async t => {
   assert.equal((await limitsConsentStatus({runtime})).given,false);
   await assert.rejects(clearLimitsConsent({runtime}),/plain file/);
   assert.equal((await lstat(file)).isDirectory(),true);
-});
-
-test('uninstall preserves independent consent and status reports it', async t => {
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
-  await setLimitsConsent({runtime,consent:true,now:new Date(now)});
-  const file=path.join(runtime,'claude-limits/consent.json'),before=await readFile(file,'utf8');
-  await installStatusline({runtime,settingsPath,bridge:realBridge,consent:true});
-  assert.deepEqual((await statuslineStatus({runtime,settingsPath})).limitsConsent,{given:true,consentMarker:true,statusLine:true});
-  await uninstallStatusline({runtime,settingsPath});
-  assert.equal(await readFile(file,'utf8'),before);
-  assert.deepEqual((await statuslineStatus({runtime,settingsPath})).limitsConsent,{given:true,consentMarker:true,statusLine:false});
-  assert.equal(Object.hasOwn(await statuslineStatus({settingsPath}),'limitsConsent'),false);
-});
-
-for(const kind of ['relative','missing','directory','link','wrong name','copy','parent segments','linked parent'])test(`bridge rejects ${kind} without writes`,
-  {skip:(['link','linked parent'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'}, async t => {
-    const runtime=await folder(t),home=await folder(t),settingsPath=path.join(home,'settings.json');
-    const text='{"model":"synthetic"}\n';
-    await writeFile(settingsPath,text);
-    let bridge=path.join(await folder(t),'claude-statusline-bridge.mjs');
-    if(['copy','parent segments','linked parent'].includes(kind)) {
-      await copyFile(realBridge,bridge);
-      if(kind==='parent segments') {await mkdir(path.join(path.dirname(bridge),'nested'));bridge=path.dirname(bridge)+'/nested/../claude-statusline-bridge.mjs';}
-      if(kind==='linked parent') {const link=path.join(await folder(t),'linked');await symlink(path.dirname(bridge),link);bridge=path.join(link,'claude-statusline-bridge.mjs');}
-    }
-    if(kind==='relative')bridge='claude-statusline-bridge.mjs';
-    if(kind==='directory')await mkdir(bridge);
-    if(kind==='link')await symlink(realBridge,bridge);
-    if(kind==='wrong name') {bridge=path.join(path.dirname(bridge),'other.mjs');await writeFile(bridge,'');}
-    await assert.rejects(installStatusline({runtime,settingsPath,bridge,consent:true}),/Bridge/);
-    const script=fileURLToPath(new URL('./claude-statusline-install.mjs',import.meta.url));
-    await assert.rejects(run(process.execPath,[script,'install','--runtime',runtime,'--settings',settingsPath,'--bridge',bridge,'--consent']),error=>error.code===1);
-    assert.equal(await readFile(settingsPath,'utf8'),text);
-    assert.deepEqual(await readdir(home),['settings.json']);
-    assert.deepEqual(await readdir(runtime),[]);
-  });
-
-test('installer CLI accepts an absolute bridge file', async t => {
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json'),bridge=realBridge;
-  const script=fileURLToPath(new URL('./claude-statusline-install.mjs',import.meta.url));
-  await run(process.execPath,[script,'install','--runtime',runtime,'--settings',settingsPath,'--bridge',bridge,'--consent']);
-  assert.equal(JSON.parse(await readFile(settingsPath,'utf8')).statusLine.command,bridgeCommand(process.execPath,bridge,runtime));
 });
 
 test('consent CLI requires consent and supports set status and clear', async t => {
@@ -429,10 +302,8 @@ test('a recording error reports failed without exposing the error or command det
 test('a linked limits folder cannot grant consent or run usage', {skip:process.platform==='win32' && 'Requires POSIX file link semantics'}, async t => {
   const runtime=await folder(t),target=await folder(t);
   await writeFile(path.join(target,'consent.json'),JSON.stringify({consent:true,givenAt:new Date(now).toISOString()}));
-  await writeFile(path.join(target,'statusline.json'),JSON.stringify(savedStatusline(null)));
   await symlink(target,path.join(runtime,'claude-limits'));
-  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
-  assert.equal(await claudeStatuslineInstalled(runtime),false);
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false});
   let runs=0;
   const source=await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'read',usage:input()};}});
   assert.deepEqual(source,{provider:'Claude Code',scope:'account',status:'not-connected',windows:[]});
@@ -443,27 +314,11 @@ test('invalid runtimes and missing or plain file limits folders cannot grant con
   const missing=await folder(t),file=await folder(t);
   await writeFile(path.join(file,'claude-limits'),'{}');
   for(const runtime of [undefined,null,42,{},'',path.relative(process.cwd(),missing),missing,file]) {
-    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
-    assert.equal(await claudeStatuslineInstalled(runtime),false);
+    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false});
     let runs=0;
     const source=await readClaudeLimits(runtime,{now,readUsage:async()=>{runs++;return {status:'read',usage:input()};}});
     assert.equal(source.status,'not-connected');
     assert.equal(runs,0);
-  }
-});
-
-for(const explicit of [false,true])test(`installer accepts its own bridge with explicit path ${explicit}`,async t=>{
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
-  await installStatusline({runtime,settingsPath,consent:true,...(explicit?{bridge:realBridge}:{})});
-  assert.equal(JSON.parse(await readFile(settingsPath,'utf8')).statusLine.command,bridgeCommand(process.execPath,realBridge,runtime));
-});
-
-test('Windows rejects expansion characters in each command path and POSIX preserves them',()=>{
-  for(const character of ['%','!'])for(let index=0;index<3;index++) {
-    const values=['/synthetic/node','/synthetic/bridge','/synthetic/runtime'];
-    values[index]+=character;
-    assert.throws(()=>bridgeCommand(...values,'win32'),/Paths/);
-    assert.ok(bridgeCommand(...values,'darwin').includes(character));
   }
 });
 
@@ -504,8 +359,7 @@ test('plain marker size bounds include the exact limit',async t=>{
   const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
   await mkdir(directory);
   for(const [name,limit,content,read] of [
-    ['consent.json',4096,consentText,async()=>(await claudeLimitsConsent(runtime)).given],
-    ['statusline.json',16384,JSON.stringify(savedStatusline(null)),()=>claudeStatuslineInstalled(runtime)]]) {
+    ['consent.json',4096,consentText,async()=>(await claudeLimitsConsent(runtime)).given]]) {
     const file=path.join(directory,name);
     await writeFile(file,content.padEnd(limit,' '));
     assert.equal(await read(),true);
@@ -536,21 +390,16 @@ test('hard-linked consent is refused until its second name is removed',async t=>
   const runtime=await folder(t),file=path.join(runtime,'claude-limits/consent.json'),second=path.join(runtime,'second.json');
   await setLimitsConsent({runtime,consent:true,now:new Date(now)});
   if(!await hardLink(t,file,second))return;
-  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false});
   await fs.unlink(second);
-  assert.deepEqual(await claudeLimitsConsent(runtime),{given:true,consentMarker:true,statusLine:false});
+  assert.deepEqual(await claudeLimitsConsent(runtime),{given:true,consentMarker:true});
 });
 
-test('hard-linked statusline and stored limits are refused',async t=>{
+test('hard-linked stored limits are refused',async t=>{
   const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
   await recordClaudeLimits(runtime,input(),now);
-  const statusline=path.join(directory,'statusline.json'),second=path.join(runtime,'second.json');
-  await writeFile(statusline,JSON.stringify(savedStatusline(null)));
-  if(!await hardLink(t,statusline,second))return;
-  assert.equal(await claudeStatuslineInstalled(runtime),false);
-  assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
-  await fs.unlink(second);
-  assert.equal(await claudeStatuslineInstalled(runtime),true);
+  await writeFile(path.join(directory,'consent.json'),consentText);
+  const second=path.join(runtime,'second.json');
   if(!await hardLink(t,path.join(directory,'limits.json'),second))return;
   const options={now,readUsage:async()=>({status:'unrecognized',usage:null})};
   assert.deepEqual(await readClaudeLimits(runtime,options),
@@ -573,219 +422,28 @@ test('a hard link created after lstat is refused by the opened handle check',asy
   });
   syncBuiltinESMExports();
   try {
-    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false,statusLine:false});
+    assert.deepEqual(await claudeLimitsConsent(runtime),{given:false,consentMarker:false});
     assert.equal(linked,true);
   } finally {mocked.mock.restore();syncBuiltinESMExports();}
 });
 
-const savedStatusline=previous=>({installedAt:new Date(now).toISOString(),settingsPath:'/synthetic/settings.json',previous});
-const repeatedStatusline=()=>JSON.stringify(savedStatusline({type:'command',command:'echo earlier'})).replace('"command":"echo earlier"','"command":"echo earlier","command":"echo replacement"');
-
-const prototypeStatusline=command=>`{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"__proto__":{"type":"command","command":${JSON.stringify(command)}}}}`;
-
-test('saved status line reader accepts installer markers and missing files',async t=>{
-  const runtime=await folder(t),directory=path.join(runtime,'claude-limits'),file=path.join(directory,'statusline.json');
-  assert.equal(await readClaudeStatuslineMarker(runtime),null);
-  await mkdir(directory);
-  assert.equal(await readClaudeStatuslineMarker(runtime),null);
-  for(const previous of [null,[], 'echo earlier',42,true,false,{}, {type:'command',command:'echo earlier'},
-    {nested:[{text:'colon: quote" and backslash\\',other:{key:true}},null,1]}]) {
-    const marker=savedStatusline(previous);
-    await writeJsonAtomic(file,marker);
-    assert.deepEqual(await readClaudeStatuslineMarker(runtime),marker);
-  }
-  for(const invalid of [undefined,null,42,{},'','relative'])
-    await assert.rejects(readClaudeStatuslineMarker(invalid),/^Error: Unsafe saved status line file/);
-});
-
-const invalidStatuslines={
-  'byte order mark':'\uFEFF'+JSON.stringify(savedStatusline(null)),
-  'extra key':JSON.stringify({...savedStatusline(null),extra:true}),
-  'missing key':JSON.stringify({installedAt:new Date(now).toISOString(),previous:null}),
-  'non-string installedAt':JSON.stringify({...savedStatusline(null),installedAt:42}),
-  'non-string settingsPath':JSON.stringify({...savedStatusline(null),settingsPath:null}),
-  'repeated top-level key':JSON.stringify(savedStatusline(null)).replace('"previous":null','"previous":{},"previous":null'),
-  'repeated command':repeatedStatusline(),
-  'escaped repeated command':repeatedStatusline().replace('"command":"echo replacement"','"comm\\u0061nd":"echo replacement"'),
-  'escaped repeated top-level key':JSON.stringify(savedStatusline(null)).replace('"previous":null','"previous":{},"previ\\u006fus":null'),
-  'repeated key in array':JSON.stringify(savedStatusline({nested:[]})).replace('"nested":[]','"nested":[{"key":1,"key":2}]'),
-  'prototype member':'{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"__proto__":{"type":"command","command":"echo p"}}}',
-  'prototype member in array':'{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"nested":[{"__proto__":{}}]}}',
-  'escaped prototype member':'{"installedAt":"2026-03-10T15:00:00.000Z","settingsPath":"/synthetic/settings.json","previous":{"__pr\\u006fto__":{}}}',
-  'non-string command':JSON.stringify(savedStatusline({type:'command',command:42})),
-  'missing command':JSON.stringify(savedStatusline({type:'command'})),
-  'invalid JSON':'{',
-  'non-object marker':'null',
-  'oversized file':JSON.stringify(savedStatusline({text:'x'.repeat(16384)}))
-};
-for(const [kind,text] of Object.entries(invalidStatuslines))test(`saved status line reader refuses ${kind}`,async t=>{
-  const runtime=await folder(t);
-  await mkdir(path.join(runtime,'claude-limits'));
-  await writeFile(path.join(runtime,'claude-limits/statusline.json'),text);
-  await assert.rejects(readClaudeStatuslineMarker(runtime),{message:'Unsafe saved status line file'});
-});
-
-for(const kind of ['symbolic link','hard link','linked folder','file folder','directory marker'])test(`saved status line reader refuses ${kind}`,
-  {skip:(['symbolic link','hard link','linked folder'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
-    const runtime=await folder(t),target=await folder(t),directory=path.join(runtime,'claude-limits');
-    const source=path.join(target,'statusline.json');
-    await writeJsonAtomic(source,savedStatusline({type:'command',command:'echo earlier'}));
-    if(kind==='linked folder')await symlink(target,directory);
-    else if(kind==='file folder')await writeFile(directory,'{}');
-    else {
-      await mkdir(directory);
-      const file=path.join(directory,'statusline.json');
-      if(kind==='directory marker')await mkdir(file);
-      else await (kind==='hard link'?link:symlink)(source,file);
-    }
-    await assert.rejects(readClaudeStatuslineMarker(runtime),{message:'Unsafe saved status line file'});
-  });
-
-for(const kind of ['valid','hard link','symbolic link','linked folder','repeated command','prototype member'])test(`bridge handles ${kind} saved status line`,
-  {skip:(['hard link','symbolic link','linked folder'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
-    const runtime=await folder(t),file=path.join(runtime,'claude-limits/statusline.json');
-    if(kind!=='linked folder')await mkdir(path.dirname(file));
-    const command=`"${process.execPath}" -e "process.stdout.write('earlier line')"`;
-    const text=kind==='prototype member'?prototypeStatusline(command):JSON.stringify(savedStatusline({type:'command',command}));
-    if(['hard link','symbolic link'].includes(kind)) {
-      const target=path.join(await folder(t),'statusline.json');
-      await writeFile(target,text);
-      await (kind==='hard link'?link:symlink)(target,file);
-    } else if(kind==='linked folder') {
-      const target=await folder(t);
-      await writeFile(path.join(target,'statusline.json'),text);
-      await symlink(target,path.dirname(file));
-    } else await writeFile(file,kind==='repeated command'?text.replace('"command":','"command":"echo replacement",'+'"command":'):text);
-    const value=input(),at=Math.floor(Date.now()/1000);
-    value.rate_limits.five_hour.resets_at=at+7200;value.rate_limits.seven_day.resets_at=at+86400;
-    const child=run(process.execPath,[realBridge,'--runtime',runtime],{timeout:15000});
-    child.child.stdin.end(JSON.stringify(value));
-    assert.equal((await child).stdout,kind==='valid'?'earlier line':'5h 77% left · 7d 59% left\n');
-  });
-
-for(const action of ['reinstall','uninstall'])for(const kind of ['hard link','symbolic link','repeated command',...(action==='uninstall'?['prototype member']:[])])test(`${action} refuses ${kind} marker without writes`,
-  {skip:(['hard link','symbolic link'].includes(kind) && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
-    const runtime=await folder(t),home=await folder(t),settingsPath=path.join(home,'settings.json');
-    const directory=path.join(runtime,'claude-limits'),file=path.join(directory,'statusline.json');
+for(const kind of ['unchanged','symbolic link','different folder'])
+  test(`consent folder recheck with ${kind}`,{skip:(kind==='symbolic link' && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
+    const runtime=await folder(t),directory=path.join(runtime,'claude-limits'),replacement=path.join(runtime,'replacement');
     await mkdir(directory);
-    const settings=JSON.stringify({model:'synthetic',statusLine:{type:'command',command:bridgeCommand(process.execPath,realBridge,runtime)}})+'\n';
-    await writeFile(settingsPath,settings);
-    const marker=kind==='prototype member'?prototypeStatusline(`"${process.execPath}" -e "process.stdout.write('earlier line')"`):kind!=='repeated command'?JSON.stringify(savedStatusline({type:'command',command:'echo earlier'})):repeatedStatusline();
-    let target;
-    if(kind==='hard link' || kind==='symbolic link') {
-      target=path.join(await folder(t),'statusline.json');
-      await writeFile(target,marker);await (kind==='hard link'?link:symlink)(target,file);
-    } else await writeFile(file,marker);
-    const before=await lstat(file);
-    const options={runtime,settingsPath,consent:true};
-    await assert.rejects(action==='reinstall'?installStatusline(options):uninstallStatusline(options),{message:'Unsafe saved status line file'});
-    assert.equal(await readFile(settingsPath,'utf8'),settings);
-    assert.equal(await readFile(file,'utf8'),marker);
-    const after=await lstat(file);
-    assert.equal(after.ino,before.ino);assert.equal(after.nlink,before.nlink);
-    if(kind==='symbolic link') {assert.equal(after.isSymbolicLink(),true);assert.equal(await readlink(file),target);}
-    assert.deepEqual(await readdir(home),['settings.json']);
-    assert.deepEqual(await readdir(directory),['statusline.json']);
+    await writeFile(path.join(directory,'consent.json'),consentText);
+    if(kind!=='unchanged')await fs.cp(directory,replacement,{recursive:true});
+    let called=false;
+    const afterRead=async()=>{
+      called=true;
+      if(kind==='unchanged')return;
+      await fs.rename(directory,path.join(runtime,'original'));
+      if(kind==='symbolic link')await symlink(replacement,directory);
+      else await fs.rename(replacement,directory);
+    };
+    assert.deepEqual(await claudeLimitsConsent(runtime,{afterRead}),kind==='unchanged'?{given:true,consentMarker:true}:{given:false,consentMarker:false});
+    assert.equal(called,true);
   });
-
-test('uninstall ignores an invalid marker when settings do not point at the bridge',async t=>{
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
-  const file=path.join(runtime,'claude-limits/statusline.json'),settings=JSON.stringify({statusLine:{type:'command',command:'echo earlier'}});
-  await mkdir(path.dirname(file));await writeFile(file,repeatedStatusline());await writeFile(settingsPath,settings);
-  await uninstallStatusline({runtime,settingsPath});
-  assert.equal(await readFile(settingsPath,'utf8'),settings);
-  await assert.rejects(lstat(file),{code:'ENOENT'});
-});
-
-for(const [kind,earlier] of [['string','echo earlier'],['number',42],['array',['synthetic']]])test(`install over ${String(kind)} status line saves no previous object`,async t=>{
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
-  const settings={model:'synthetic',statusLine:earlier};
-  await writeFile(settingsPath,JSON.stringify(settings));
-  const options={runtime,settingsPath,bridge:realBridge,consent:true};
-  assert.deepEqual(await installStatusline(options),{installed:true,replacedStatusLine:true,settingsPath});
-  assert.equal((await readClaudeStatuslineMarker(runtime)).previous,null);
-  assert.deepEqual(JSON.parse(await readFile(settingsPath+'.observatory-backup','utf8')),settings);
-  assert.deepEqual(await installStatusline(options),{installed:true,replacedStatusLine:false,settingsPath});
-  assert.equal((await readClaudeStatuslineMarker(runtime)).previous,null);
-  assert.deepEqual(await uninstallStatusline(options),{installed:false,restoredStatusLine:false,settingsPath});
-  assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')),{model:'synthetic'});
-});
-
-for(const [kind,previous] of [['string','echo earlier'],['number',42]])test(`older ${kind} previous is accepted without running a command or restoring it`,async t=>{
-  const runtime=await folder(t),settingsPath=path.join(await folder(t),'settings.json');
-  const file=path.join(runtime,'claude-limits/statusline.json'),marker=savedStatusline(previous);
-  await mkdir(path.dirname(file));await writeJsonAtomic(file,marker);
-  assert.deepEqual(await readClaudeStatuslineMarker(runtime),marker);
-  const value=input(),at=Math.floor(Date.now()/1000);
-  value.rate_limits.five_hour.resets_at=at+7200;value.rate_limits.seven_day.resets_at=at+86400;
-  const child=run(process.execPath,[realBridge,'--runtime',runtime],{timeout:15000});
-  child.child.stdin.end(JSON.stringify(value));
-  assert.equal((await child).stdout,'5h 77% left · 7d 59% left\n');
-  await writeFile(settingsPath,JSON.stringify({model:'synthetic',statusLine:{type:'command',command:bridgeCommand(process.execPath,realBridge,runtime)}}));
-  assert.deepEqual(await installStatusline({runtime,settingsPath,bridge:realBridge,consent:true}),{installed:true,replacedStatusLine:false,settingsPath});
-  assert.equal((await readClaudeStatuslineMarker(runtime)).previous,null);
-  assert.deepEqual(await uninstallStatusline({runtime,settingsPath}),{installed:false,restoredStatusLine:false,settingsPath});
-  assert.deepEqual(JSON.parse(await readFile(settingsPath,'utf8')),{model:'synthetic'});
-  await assert.rejects(lstat(file),{code:'ENOENT'});
-});
-
-test('saved status line reader refuses a FIFO promptly',{skip:process.platform==='win32' && 'Requires POSIX FIFO support'},async t=>{
-  const runtime=await folder(t),file=path.join(runtime,'claude-limits/statusline.json');
-  await mkdir(path.dirname(file));await run('mkfifo',[file]);
-  const moduleUrl=new URL('./claude-limits.mjs',import.meta.url).href;
-  const code=`import assert from 'node:assert/strict'
-    import {readClaudeStatuslineMarker} from ${JSON.stringify(moduleUrl)}
-    await assert.rejects(readClaudeStatuslineMarker(${JSON.stringify(runtime)}),{message:'Unsafe saved status line file'})`;
-  await run(process.execPath,['--input-type=module','-e',code],{timeout:3000});
-});
-
-for(const [name,read] of [['saved status line',readClaudeStatuslineMarker],['installed status line',claudeStatuslineInstalled],['consent',claudeLimitsConsent]])
-  for(const kind of ['unchanged','symbolic link','different folder'])
-    for(const markers of (read===claudeLimitsConsent?['statusline','consent','both']:['statusline']))
-      test(`${String(name)} folder recheck with ${kind} and ${markers} marker`,{skip:(kind==='symbolic link' && process.platform==='win32') && 'Requires POSIX file link semantics'},async t=>{
-        const runtime=await folder(t),directory=path.join(runtime,'claude-limits'),replacement=path.join(runtime,'replacement');
-        await mkdir(directory);
-        const marker=savedStatusline(null);
-        if(markers!=='consent')await writeJsonAtomic(path.join(directory,'statusline.json'),marker);
-        if(markers!=='statusline')await writeFile(path.join(directory,'consent.json'),consentText);
-        if(kind!=='unchanged')await fs.cp(directory,replacement,{recursive:true});
-        let called=false;
-        const afterRead=async()=>{
-          called=true;
-          if(kind==='unchanged')return;
-          await fs.rename(directory,path.join(runtime,'original'));
-          if(kind==='symbolic link')await symlink(replacement,directory);
-          else await fs.rename(replacement,directory);
-        };
-        if(read===readClaudeStatuslineMarker && kind!=='unchanged')
-          await assert.rejects(read(runtime,{afterRead}),{message:'Unsafe saved status line file'});
-        else {
-          const result=await read(runtime,{afterRead});
-          if(read===readClaudeStatuslineMarker)assert.deepEqual(result,marker);
-          else if(read===claudeStatuslineInstalled)assert.equal(result,kind==='unchanged');
-          else assert.deepEqual(result,kind==='unchanged'
-            ? {given:true,consentMarker:markers!=='statusline',statusLine:markers!=='consent'}
-            : {given:false,consentMarker:false,statusLine:false});
-        }
-        assert.equal(called,true);
-      });
-
-for(const [kind,text] of Object.entries({
-  empty:'{}',
-  minimal:'{"previous":null}',
-  extra:JSON.stringify({...savedStatusline(null),extra:true}),
-  prototype:prototypeStatusline('echo synthetic'),
-  bom:'\uFEFF'+JSON.stringify(savedStatusline(null)),
-  valid:JSON.stringify(savedStatusline(null))
-}))test(`status line consent requires a strict marker: ${kind}`,async t=>{
-  const runtime=await folder(t),directory=path.join(runtime,'claude-limits');
-  await mkdir(directory);
-  await writeFile(path.join(directory,'statusline.json'),text);
-  assert.equal(await claudeStatuslineInstalled(runtime),kind==='valid');
-  assert.deepEqual(await claudeLimitsConsent(runtime),{given:kind==='valid',consentMarker:false,statusLine:kind==='valid'});
-  await writeFile(path.join(directory,'consent.json'),consentText);
-  assert.deepEqual(await claudeLimitsConsent(runtime),{given:true,consentMarker:true,statusLine:kind==='valid'});
-});
 
 test('merged windows publish their own observation times', () => {
   const first = extractClaudeLimits(input(), now - 30 * 60000);

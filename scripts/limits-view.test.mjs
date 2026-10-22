@@ -42,7 +42,7 @@ void test('ok shows pace and projections for both providers and current session 
       assert.match(line[1], /runs out in about/);
     }
   }
-  assert.match(html, /Session cost \(estimate\)<\/span><span class="ob-num">\$3\.42/);
+  assert.ok(!html.includes('Session cost'));
 });
 
 void test('stale readings show their age without a projection', () => {
@@ -68,11 +68,10 @@ for (const data of [{ quota: { status: 'unavailable' } }, null]) {
     const html = render(data).replace(/<section class="ob-history"[\s\S]*<\/section>/, '');
     assert.match(html, /Unknown/);
     assert.doesNotMatch(html, /(^|[^0-9.])0 ?%|>0</);
-    assert.match(html, /Session cost \(estimate\)<\/span><span class="ob-num">Unknown/);
     for (const name of ['Claude Code', 'Codex']) assert.ok(html.includes('<section class="ob-card" aria-label="' + name + '">'));
     assert.equal(count(nowCard(html), /data-window="unknown"/g), 2);
-    // One Unknown per provider row, plus the Claude session cost.
-    assert.equal(count(nowCard(html), />Unknown</g), 3);
+    // One Unknown per provider row.
+    assert.equal(count(nowCard(html), />Unknown</g), 2);
   });
 }
 

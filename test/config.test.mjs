@@ -7,7 +7,7 @@ const win={platform:'win32',environment:{LOCALAPPDATA:'C:\\Users\\a\\AppData\\Lo
 
 test('sources are off unless listed as true',()=>{
   const config=parseConfig({sources:{codex:true}},mac);
-  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false,agents:false});
+  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false});
   assert.equal(config.role,'spoke');
   assert.equal(config.host,'Mac');
   assert.match(config.dataFolder,/Library\/Application Support\/Observatory$/);
@@ -33,4 +33,10 @@ test('mistakes in the settings file are refused with a clear message',()=>{
   assert.throws(()=>parseConfig({hub:{spokes:[{ssh:'pc',platform:'windows',dataFolder:"C:\\x'; rm"}]}},mac),/dataFolder/);
   assert.throws(()=>parseConfig({dashboard:{port:80}},mac),/port/);
   assert.throws(()=>parseConfig({},{platform:'linux',environment:{}}),/macOS and Windows/);
+});
+
+test('an older settings file that still lists agents loads, and the key is ignored',()=>{
+  const config=parseConfig({sources:{codex:true,agents:true}},mac);
+  assert.equal('agents' in config.sources,false);
+  assert.throws(()=>parseConfig({sources:{agentz:true}},mac),/unknown setting agentz/);
 });

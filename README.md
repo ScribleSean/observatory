@@ -2,7 +2,7 @@
   <img src="public/favicon.svg" width="72" height="72" alt="Observatory telescope">
   <h1>Observatory</h1>
   <p><strong>A calm menu bar companion for working with AI coding agents.</strong></p>
-  <p>It watches your Claude Code and Codex limits, your agents, your screen time and your token costs, on your own computer, and never touches any of them.</p>
+  <p>It watches your Claude Code and Codex limits, your screen time and your token costs, on your own computer, and never touches any of them.</p>
   <p>
     <a href="#quick-start">Quick start</a>
     &nbsp;·&nbsp;
@@ -15,23 +15,22 @@
 </div>
 
 <p align="center">
-  <img src="docs/images/dashboard-one-computer-light.png" width="860" alt="The Observatory dashboard on one computer, light appearance, fictional data: tiles for limits, agents, screen time by category and cost by provider, then the Limits page">
+  <img src="docs/images/dashboard-one-computer-light.png" width="860" alt="The Observatory dashboard on one computer, light appearance, fictional data: tiles for limits, screen time by category and cost by provider, then the Limits page">
 </p>
 
-## Four questions at a glance
+## Three questions at a glance
 
 | Question | What Observatory shows |
 | --- | --- |
 | **Am I near my limits?** | Claude Code and Codex, each window (5-hour and weekly): percent left, reset time and the pace you are using it at. The menu bar title is the lowest one. |
-| **What are my agents doing?** | Each Claude Code session as working, waiting on you, idle or done, and recent Codex jobs, with project and session names. An amber dot in the menu bar means one is waiting on you. |
 | **Where did my time go?** | Screen time today and over time, by app and category, from [ActivityWatch](https://activitywatch.net/). |
 | **What did it cost?** | Tokens today and over time, and what they would cost at public API prices. |
 
 <p align="center">
-  <img src="docs/images/menu-bar-item.png" height="28" alt="The menu bar item: binoculars, 47 percent, and an amber dot">
+  <img src="docs/images/menu-bar-item.png" height="28" alt="The menu bar item: binoculars and 47 percent">
 </p>
 <p align="center">
-  <img src="docs/images/menu-bar-menu.png" width="520" alt="The menu bar menu with fictional data: Limits, Agents and Today sections, then Open dashboard, Refresh and Quit">
+  <img src="docs/images/menu-bar-menu.png" width="520" alt="The menu bar menu with fictional data: Limits and Today sections, then Open dashboard, Refresh and Quit">
 </p>
 
 Observatory is monitor-only. It never starts, stops or answers an agent, and it never changes the tools it reads.
@@ -66,10 +65,6 @@ Click the number in the menu bar, then **Open dashboard**. The dashboard runs at
 
 If you work on a Mac and a Windows PC, they can share one view. The Mac reads the PC's numbers over your own SSH connection every five minutes and writes the combined view back, so both menus and both dashboards show both computers. Limits are never added, and sums of time and tokens are labeled "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
 
-<p align="center">
-  <img src="docs/images/dashboard-agents-dark.png" width="860" alt="The Agents page in dark appearance with fictional data: sessions on two computers labeled Waiting on you, Working, Idle and Done">
-</p>
-
 ## Privacy
 
 Observatory reads records that your tools already keep on your computer. It sends nothing to any server of its own or anyone else's, and it has no telemetry.
@@ -79,14 +74,12 @@ Observatory reads records that your tools already keep on your computer. It send
 | ActivityWatch | App usage events from its local server on 127.0.0.1 | Seconds per app and category, by day and hour. No window titles. |
 | Claude Code logs (`~/.claude/projects`) | Token counts per request | Tokens per day, hour and model. No prompts or responses. |
 | Codex logs (`~/.codex`) | Token counts, settings and tool calls per session | Tokens per day and model, effort and speed settings, tool call counts by name. No prompts, responses or arguments. |
-| Claude Code sessions (`~/.claude/sessions`) | Each running session's small status file | Status, project folder name, session name, times. Transcripts and key files are never opened. |
-| codex-job (`~/.local/state/codex-jobs`, optional) | File names only | Project name, running or finished, times. Job output is never opened. |
 | Limits | Asked from the Claude Code and Codex clients you already have | Percent left and reset time per window. |
 
 - To read your limits, Observatory asks the installed Claude Code and Codex clients, which fetch your own account's limits from their provider with your existing sign-in. Observatory never sees or stores credentials.
 - The dashboard listens on 127.0.0.1 only, serves one data file and has no way to change anything.
 - With a second computer, the only other connection is SSH from your Mac to your own PC.
-- The tests plant prompts, messages, job output, paths and fake keys in sample files and check that none of them reach the saved data.
+- The tests plant prompts, messages, paths and fake keys in sample files and check that none of them reach the saved data.
 
 Turn any source off by setting it to `false` in `observatory.config.json` and running `npm run setup` again. See [security](SECURITY.md) for details.
 
@@ -102,13 +95,12 @@ Settings are in `observatory.config.json`, next to `package.json`. Setup writes 
     "codex": true,
     "codexLimits": true,
     "claudeCode": true,
-    "claudeLimits": true,
-    "agents": true
+    "claudeLimits": true
   }
 }
 ```
 
-A source is read only while it is `true`. Optional settings are `dashboard.port` (default 5601), `dataFolder`, and `codexPath` if Codex is installed somewhere unusual.
+A source is read only while it is `true`. An older settings file that still lists `agents` keeps working, and that key is ignored. Optional settings are `dashboard.port` (default 5601), `dataFolder`, and `codexPath` if Codex is installed somewhere unusual.
 
 ## How to read the numbers
 
@@ -123,14 +115,13 @@ The images in this README use fictional data from `npm run preview`. To retake t
 Shots already in the repository:
 
 1. `docs/images/dashboard-one-computer-light.png`: one computer, Limits page, light.
-2. `docs/images/dashboard-agents-dark.png`: two computers, Agents page, dark.
-3. `docs/images/dashboard-{limits,agents,activity,tokens}-{light,dark}.png`: every page in both appearances.
-4. `docs/images/menu-bar-item.png` and `docs/images/menu-bar-menu.png`: the real Mac menu bar app showing the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json` for the app to read.
+2. `docs/images/dashboard-{limits,activity,tokens}-{light,dark}.png`: every page in both appearances.
+3. `docs/images/menu-bar-item.png` and `docs/images/menu-bar-menu.png`: the real Mac menu bar app showing the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json` for the app to read.
 
 Shots still to take:
 
-5. Windows tray icon with its number, and the tray menu open.
-6. The dashboard beside a terminal running Claude Code, with one session waiting on you.
+4. Windows tray icon with its number, and the tray menu open.
+5. The dashboard beside a terminal running Claude Code.
 
 ## Development
 
@@ -147,7 +138,7 @@ npm run lint
 | Part | Files |
 | --- | --- |
 | Settings | `lib/config.mjs`, `lib/timezone.mjs` |
-| Readers | `scripts/read-settings.mjs`, `scripts/read-claude-usage.mjs`, `scripts/read-agents.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
+| Readers | `scripts/read-settings.mjs`, `scripts/read-claude-usage.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
 | Collect and combine | `scripts/collect.mjs`, `lib/combine.mjs`, `scripts/tick.mjs` |
 | Second computer | `scripts/hub.mjs`, `scripts/hub-transport.mjs` |
 | Dashboard | `serve-local.mjs`, `app/viewer`, `lib/panel-data.mjs` |

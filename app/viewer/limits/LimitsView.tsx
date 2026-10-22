@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { STRINGS, format } from '../../../lib/strings.generated';
-import { limitRows, peerLimits, sessionCost } from '../../../lib/view-limits.mjs';
+import { limitRows, peerLimits } from '../../../lib/view-limits.mjs';
 import { limitHistorySeries } from '../../../lib/view-limit-history.mjs';
 import { LimitHistoryChart, type HistoryData } from './LimitHistoryChart';
 import { span } from '../../../lib/panel-data.mjs';
@@ -65,7 +65,6 @@ export function LimitsView({ snapshot, now, limitStyle }: {
   limitStyle: string;
 }) {
   const rows = limitRows(snapshot, now);
-  const cost = sessionCost(snapshot, now);
   const peer = peerLimits(snapshot, now);
   // Where each provider's reading came from: the computer and the time it was observed.
   const names = (snapshot?.deviceNames ?? {}) as Record<string, string>;
@@ -98,8 +97,6 @@ export function LimitsView({ snapshot, now, limitStyle }: {
               row.pace?.status === 'projected' ? null : paceSentence(row.pace)].filter(Boolean).join(STRINGS.formats.separator)}
           </div>}
         </div>)}
-        {provider === 'claude' && <Row className="ob-limits-cost ob-meta"><span>{STRINGS.limits.sessionCost}</span>
-          <span className="ob-num">{cost ? format(STRINGS.formats.usd, { value: cost.usd.toFixed(2) }) : STRINGS.status.unknown}</span></Row>}
       </Card>)}
     </div>
     <LimitHistorySection snapshot={snapshot} now={now} />

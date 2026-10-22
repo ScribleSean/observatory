@@ -115,3 +115,14 @@ test('one computer gets its largest categories and cost by provider, and an unkn
   const unknown=combine([{host:'Mac',snapshot:noClaudePrice}],{now}).glance.today[0];
   if(unknown.claudeTokens>0)assert.equal(unknown.usd,null);
 });
+
+test('agent rows in an older snapshot are dropped and never reach the menu or the page',()=>{
+  const now=Date.parse('2026-10-21T17:00:00Z');
+  const at=new Date(now).toISOString();
+  const old=ownSnapshot('Windows',now,s=>({...s,agentActivity:[{host:'Windows',status:'ok',checkedAt:at,claudeStatus:'ok',codexStatus:'ok',
+    sessions:[{tool:'claude-code',status:'waiting',project:'secret-project',name:'Private session',updatedAt:at}],jobs:[]}]}));
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:old}],{now});
+  const text=JSON.stringify(combined);
+  for(const gone of ['agentActivity','secret-project','Private session','waiting on you','"waiting"','"agents"'])assert.ok(!text.includes(gone),gone);
+  assert.ok(!combined.glance.lines.includes('Agents'));
+});

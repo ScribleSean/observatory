@@ -39,7 +39,6 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
   const block: Block = result[provider];
   const label = provider === 'claude' ? STRINGS.providers.claudeCode : STRINGS.providers.codex;
   const note = statusNote(block.status);
-  const session = result.claude.sessionCost;
   const checked = block.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: block.checkedOn }) : STRINGS.tokens.pricesUnknown;
   return <Card label={label}>
     <h3><ProviderDot provider={provider} />{label}</h3>
@@ -58,12 +57,6 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
       })}</p>}
     </div>
     </>}
-    {provider === 'claude' && result.host === 'All' && session.status !== 'all-only' && <div className="ob-tokens-session">
-      <Row><span>{STRINGS.limits.sessionCost}</span><span>{dollars(session.usd)}</span></Row>
-      {session.status === 'ok' && session.observedAt && <p className="ob-tokens-note">{format(STRINGS.formats.asOf, {
-        time: new Date(session.observedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-      })}</p>}
-    </div>}
     {provider === 'claude' && result.host === 'All' && result.claude.byDevice.length > 0 && <div className="ob-tokens-table">
       <table>
         <thead><tr><th scope="col">{STRINGS.devices.device}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>

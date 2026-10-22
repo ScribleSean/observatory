@@ -9,9 +9,9 @@
 .ob-tokens-classes { margin: 0; }
 .ob-tokens-classes > div { display: flex; justify-content: space-between; gap: var(--ob-space-2); }
 .ob-tokens-classes dd { margin: 0; }
-.ob-tokens dd, .ob-tokens td, .ob-tokens-estimate, .ob-tokens-session { font-variant-numeric: tabular-nums; }
+.ob-tokens dd, .ob-tokens td, .ob-tokens-estimate { font-variant-numeric: tabular-nums; }
 .ob-tokens td, .ob-tokens dd { font-family: var(--ob-numeral-font); }
-.ob-tokens-estimate, .ob-tokens-session, .ob-tokens-table { margin: var(--ob-space-3) 0; }
+.ob-tokens-estimate, .ob-tokens-table { margin: var(--ob-space-3) 0; }
 .ob-tokens-table { max-width: 100%; overflow-x: auto; }
 .ob-tokens table { width: 100%; border-collapse: collapse; overflow-wrap: anywhere; }
 .ob-tokens th, .ob-tokens td { text-align: start; vertical-align: top; padding: var(--ob-space-1); }

@@ -22,11 +22,11 @@ How Observatory 2.0 works, and why it is built this way. The full app it replace
 | Part | What it does | Files |
 | --- | --- | --- |
 | Settings | One hand-edited `observatory.config.json` beside `package.json`. A source is read only while it is `true`. The hub lists the other computer. | `lib/config.mjs`, `lib/timezone.mjs` |
-| Readers | Screen time from ActivityWatch, tokens from Claude Code and Codex logs, limits from the installed clients, agent status from Claude Code session files and codex-job. The log readers were ported from Python and checked against saved Python results on 34 synthetic fixtures. | `scripts/read-*.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
+| Readers | Screen time from ActivityWatch, tokens from Claude Code and Codex logs, limits from the installed clients. The log readers were ported from Python and checked against saved Python results on 34 synthetic fixtures. | `scripts/read-*.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
 | Collect | One entry point for both platforms. A lock stops overlapping runs, and a deadline stops a stuck one. | `scripts/collect.mjs`, `scripts/tick.mjs`, `lib/run-lock.mjs` |
 | Combine | A pure function from snapshots to `combined.json`. | `lib/combine.mjs` |
 | Second computer | Fixed SSH commands, PowerShell for a Windows computer and `sh` for a Mac. | `scripts/hub.mjs`, `scripts/hub-transport.mjs` |
-| Dashboard | Read-only pages for Limits, Agents, Activity, Tokens and Sources, under four overview tiles. Served on 127.0.0.1 only. | `serve-local.mjs`, `app/viewer`, `lib/panel-data.mjs` |
+| Dashboard | Read-only pages for Limits, Activity, Tokens and Sources, under three overview tiles. Served on 127.0.0.1 only. | `serve-local.mjs`, `app/viewer`, `lib/panel-data.mjs` |
 | Menu bar and tray | One Swift file and one C# file, built on the user's computer. | `glance/mac/Glance.swift`, `glance/windows/Glance.cs` |
 | Setup | Writes settings, builds, and starts the app at login. `--dry-run`, `--no-login` and `--remove`. | `scripts/setup.mjs` |
 
@@ -35,15 +35,14 @@ How Observatory 2.0 works, and why it is built this way. The full app it replace
 - Unknown is never shown as zero. "No records" (the source was read, nothing happened today) is the only case that counts as zero.
 - Account limits are never added across computers. The freshest reading wins, and a reading dated in the future never wins.
 - Screen time, tokens and cost are shown per computer. With two computers, their sum is labeled "not deduplicated" and is Unknown if either part is.
-- Freshness is judged when the page or menu is drawn, not when the file was written. Agents older than 15 minutes are not counted as current, and today's numbers from an earlier day show Unknown with the last update time.
+- Freshness is judged when the page or menu is drawn, not when the file was written. Today's numbers from an earlier day show Unknown with the last update time.
 - Days follow each computer's own time zone. `OBSERVATORY_TIMEZONE` overrides it, and the tests pin New York so their saved results match on any machine.
 
 ## Privacy
 
-- Saved data holds totals, limit readings, agent status, project and session names and times. It never holds prompts, messages, window titles, commands, job output, paths or credentials.
-- Agent status is read from `~/.claude/sessions/<pid>.json` (status, session name, folder name and times only) and from the names of files in the codex-job folder. Transcripts, key files and job output are never opened.
-- Every agent field passes one allowlist (`cleanAgentActivity` in `scripts/read-agents.mjs`), including fields pulled from the other computer. Unknown fields are dropped, and a malformed file from the other computer fails only that computer's read.
-- The tests plant prompts, messages, job output, paths and fake keys in sample files and check that none of them reach saved data.
+- Saved data holds totals, limit readings and times. It never holds prompts, messages, session names, window titles, commands, paths or credentials.
+- A malformed file from the other computer fails only that computer's read.
+- The tests plant prompts, messages, paths and fake keys in sample files and check that none of them reach saved data.
 
 ## Decisions
 
@@ -52,19 +51,19 @@ How Observatory 2.0 works, and why it is built this way. The full app it replace
 - **The menu bar or tray app runs the five-minute cycle.** A Windows scheduled task that starts `node.exe` flashes a console window, so the glance app starts at login on both platforms and runs `tick.mjs` hidden. Quitting the app stops collection on that computer. The app stops its dashboard server when it ends, including when launchd stops it, and the server also exits if its app has gone.
 - **Built inside the clone.** `build/Observatory.app` on a Mac (ad hoc signed) and `build\windows\ObservatoryGlance.exe` on Windows, compiled with the C# compiler that comes with Windows. Nothing is installed in Applications or Program Files, and there is no download warning.
 - **No program needed on the other computer for the connection.** The hub sends fixed commands over the user's SSH alias. Files travel as base64 with a size check, and are written to a temporary file and renamed. The other computer merges the hub's copy itself, under its own lock, so a newer local result is never replaced.
-- **Settings are the consent.** `claudeLimits: true` replaces the full app's consent marker. The Claude Code status-line bridge is kept as an optional reader, and setup reports when a status line still points at a bridge that no longer exists.
+- **Settings are the consent.** `claudeLimits: true` replaces the full app's consent marker. Claude Code limits are read only by running the installed `claude` CLI's usage command at each collection. The status-line bridge was removed on 2026-10-22.
 - **Finding Codex.** The collector looks in the app bundles, Homebrew, `~/.local/bin` and `PATH`. `codexPath` in the settings overrides it on both platforms.
-- **codex-job is optional.** Without its folder, the Codex jobs section is hidden.
+- **Three questions only.** Observatory shows limits, screen time and cost. The Agents view was removed on 2026-10-22. An older settings file that lists `agents` still loads, and that key is ignored.
 - **Moving from the full app.** Before the first write over a snapshot from the full app, the collector keeps a copy as `usage.before-hub.json`. Setup stops if the full app is running and would share the data folder.
 
 ## Reviews
 
 Two independent code reviews, plus a critique of the original design, found these issues. All are fixed and tested:
 
-- Pulled snapshots now pass the same agent allowlist as local reads, and a malformed one affects only that computer.
+- A malformed pulled snapshot now affects only that computer.
 - The run lock carries a token, checks a takeover, and releases only its own lock.
 - The hub writes to an inbox file that the other computer merges, instead of replacing its `combined.json`.
-- Windows honours `codexPath`. A failed agent read shows Unknown, not "nothing running".
+- Windows honours `codexPath`.
 - Freshness is judged at draw time, and the results of write-backs are saved and shown in the menu.
 - SSH runs in batch mode with strict host key checking and no forwarding, pulled files are bounded and versioned, and future-dated readings are refused.
 

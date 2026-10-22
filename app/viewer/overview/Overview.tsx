@@ -1,16 +1,14 @@
 import { STRINGS } from '../../../lib/strings.generated';
 import { compact, duration, format, limits, readingTime } from '../../../lib/panel-data.mjs';
-import type { AgentDevice } from '../agents/AgentsView';
-import { StatusPill, agentsCurrent } from '../agents/AgentsView';
 
-// Four answers at a glance: am I near my limits, what are my agents doing,
-// where did my time go, and what did it cost. Every number keeps Unknown as Unknown.
+// Three answers at a glance: am I near my limits, where did my time go,
+// and what did it cost. Every number keeps Unknown as Unknown.
 export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
 export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string;
   categories?: { name: string; seconds: number }[]; costs?: { codex?: number | null; claude?: number | null } };
 export type Glance = {
-  lowest: number | null; waiting?: number; working?: number;
-  limits: LimitRow[]; agents?: AgentDevice[]; today: DeviceToday[];
+  lowest: number | null;
+  limits: LimitRow[]; today: DeviceToday[];
   both: { seconds: number | null; tokens: number | null; usd: number | null } | null;
 };
 
@@ -35,33 +33,6 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
             <span className={row.stale ? 'ob-num ob-meta' : row.low ? 'ob-num warn' : 'ob-num'}>{percent(row.remaining)}</span>
             <span className="ob-bar" aria-hidden="true">{row.remaining !== null && <i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining}%`, opacity: row.stale ? 0.45 : 1 }} />}</span>
           </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function AgentsCard({ glance, now }: { glance: Glance; now: number }) {
-  const devices = (glance.agents ?? []).filter(device => device.status !== 'off');
-  // Only computers whose agent status is current count. An old "working" is not shown as working now.
-  const current = devices.filter(device => agentsCurrent(device, now) && device.claudeStatus !== 'unavailable');
-  const sessions = current.flatMap(device => (device.sessions ?? []).filter(s => s.status === 'waiting' || s.status === 'working')
-    .map(session => ({ ...session, device: device.name })));
-  const waiting = sessions.filter(s => s.status === 'waiting').length;
-  const working = sessions.filter(s => s.status === 'working').length
-    + current.reduce((total, device) => total + (device.jobs ?? []).filter(job => job.status === 'working').length, 0);
-  const headline = devices.length === 0 ? STRINGS.overview.agentsOff
-    : current.length === 0 ? STRINGS.overview.agentsUnknown
-    : waiting ? format(STRINGS.overview.agentsWaiting, { count: waiting })
-    : working ? format(STRINGS.overview.agentsWorking, { count: working }) : STRINGS.overview.agentsQuiet;
-  return (
-    <section className="ob-tile" aria-labelledby="ob-tile-agents">
-      <h2 id="ob-tile-agents">{STRINGS.overview.agentsTitle}</h2>
-      <div className={waiting ? 'ob-hero ob-hero-text warn' : 'ob-hero ob-hero-text'}>{headline}</div>
-      {waiting && working ? <p className="ob-meta">{format(STRINGS.overview.agentsWorking, { count: working })}</p> : <p className="ob-meta">&nbsp;</p>}
-      <ul className="ob-tile-list">
-        {sessions.slice(0, 4).map((session, index) => (
-          <li key={index}><StatusPill status={session.status} /><span className="ob-tile-who"><span>{session.project ?? unknown}</span>{devices.length > 1 ? <span className="ob-meta">{session.device}</span> : null}</span></li>
         ))}
       </ul>
     </section>
@@ -137,7 +108,6 @@ export function Overview({ glance, view = null, generatedAt, now }: { glance: Gl
   return (
     <div className="ob-overview">
       <LimitsCard glance={glance} view={view} now={now} />
-      <AgentsCard glance={glance} now={now} />
       <TimeCard glance={glance} now={now} generatedAt={at} />
       <CostCard glance={glance} now={now} generatedAt={at} />
     </div>

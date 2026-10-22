@@ -4,10 +4,9 @@ Draft for the GitHub release. Nothing is published. Title: **Observatory 2.0, a 
 
 ---
 
-Observatory sits in your Mac menu bar or Windows tray and answers four questions at a glance:
+Observatory sits in your Mac menu bar or Windows tray and answers three questions at a glance:
 
 - **Am I near my limits?** Claude Code and Codex, each window, with percent left and reset time.
-- **What are my agents doing?** Which sessions are working, waiting on you, idle or done.
 - **Where did my time go?** Screen time by app and category, from ActivityWatch.
 - **What did it cost?** Tokens and their API-equivalent cost.
 
@@ -33,20 +32,18 @@ Setup builds everything on your computer and starts the app at login. There is n
 
 This is a rebuild, not an update. The full desktop app was replaced by a small menu bar app, a read-only local dashboard and one settings file. See the [changelog](CHANGELOG.md) for the full list. The highlights:
 
-- A new Agents view for Claude Code sessions and codex-job runs.
 - One-command setup with no configuration needed.
 - An optional second computer over your own SSH connection.
 - Days counted in your own time zone.
 
 ## Privacy
 
-Observatory reads records your tools already keep on your computer and stores only totals, limit readings, agent status and names. It never stores prompts, messages, window titles or credentials. The tests plant private text and fake keys in sample files and check that none of it reaches saved data. See [Privacy](README.md#privacy).
+Observatory reads records your tools already keep on your computer and stores only totals, limit readings and times. It never stores prompts, messages, session names, window titles or credentials. The tests plant private text and fake keys in sample files and check that none of it reaches saved data. See [Privacy](README.md#privacy).
 
 ## Known limits
 
 - One Mac and one Windows PC at most.
 - The Windows tray app is compiled on your PC by setup. It has had less use than the Mac app.
-- Agent status for Codex comes from codex-job, an optional helper. Without it, the Codex jobs list is hidden.
 
 ## Upgrading from build 43 or 42
 

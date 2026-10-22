@@ -573,6 +573,8 @@ The field is named `refusal`, not `reason`, because `agentSource` rows already c
 
 ### Claude Code limits bridge
 
+The status line bridge and its installer were removed on 2026-10-22. Claude Code limits now come only from the installed CLI's usage command, described in the next section.
+
 Added as source on 2026-10-13. The owner consented to installing it on the Mac that day, and it produced a real reading there. It is not installed on Windows.
 
 | Piece | File | What it does |

@@ -2,6 +2,8 @@
 
 > Historical. This records the full app up to build 44. The hub rebuild replaced the parity table and the workstream plan, see [the design notes](HUB-PLAN.md).
 
+> The Claude Code status line bridge described in some rows below was removed on 2026-10-22.
+
 First recorded on 2026-10-13 by reading source on `main` at `57518b7` (version 0.3.14 build 40). Rows changed since then describe `main` at build 41, where the shared web panel is merged behind launch flags on both platforms and is not what either installed app shows by default. This table describes source code. It was not checked against the installed apps, and no interaction was exercised to produce it.
 
 No single workstream owns this file. Each pull request updates the rows that describe its own change, as the shared records rule in [the build plan](BUILD-PLAN.md) says, and the orchestrator resolves conflicts at merge. Update it also when [the design direction](DESIGN.md) changes.

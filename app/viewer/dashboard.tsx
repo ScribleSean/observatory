@@ -7,7 +7,6 @@ import { LimitsView } from './limits/LimitsView';
 import { ActivityView } from './activity/ActivityView';
 import { TokensView } from './tokens/tokens';
 import { SourcesView } from './sources/SourcesView';
-import { AgentsView } from './agents/AgentsView';
 import { Overview, type Glance } from './overview/Overview';
 
 // The dashboard is read-only. It fetches combined.json, written every five
@@ -17,7 +16,7 @@ type Device = { host: string; name: string; collectedAt: string | null; stale: b
 export type Combined = { generatedAt: string; generatedBy?: string; view: Snapshot; glance: Glance; devices?: Device[] };
 
 const SECTIONS = [
-  ['limits', STRINGS.sections.limits], ['agents', STRINGS.sections.agents], ['activity', STRINGS.sections.activity],
+  ['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity],
   ['tokens', STRINGS.sections.tokens], ['sources', STRINGS.sections.sources],
 ] as const;
 type Section = typeof SECTIONS[number][0];
@@ -26,7 +25,7 @@ export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) =
 function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
   if (devices.length < 2) return null;
   return (
-    <ul className="ob-chips" aria-label={STRINGS.agents.computers}>
+    <ul className="ob-chips" aria-label={STRINGS.labels.computers}>
       {devices.map(device => {
         const age = freshness(device.collectedAt ?? '', now);
         return (
@@ -114,7 +113,6 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
       {combined && <main>
         <section aria-label={SECTIONS.find(([id]) => id === section)![1]}>
           {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={limitStyle} />
-            : section === 'agents' ? <AgentsView agents={combined?.glance.agents ?? []} now={now} />
             : section === 'activity' ? <ActivityView key={home} snapshot={snapshot} now={now} initialHost={home} />
             : section === 'tokens' ? <TokensView key={home} snapshot={snapshot} now={now} initialHost={home} />
             : <SourcesView snapshot={snapshot} now={now} />}

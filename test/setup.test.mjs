@@ -36,16 +36,19 @@ test('the computer name falls back to Mac or PC and drops control characters',as
   assert.equal(await computerName('win32',{}),'PC');
 });
 
-test('a status line that points at a missing bridge is noticed',()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
-  const {writeFile}=await import('node:fs/promises');
+test('a status line that still runs the removed bridge is reported, and the settings file is left alone',()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
+  const {writeFile,readFile}=await import('node:fs/promises');
   const path=(await import('node:path')).default;
-  const {brokenStatusline}=await import('../scripts/setup.mjs');
+  const {leftoverStatusline,claudeSettingsPath}=await import('../scripts/setup.mjs');
   const settings=path.join(folder,'settings.json');
-  await writeFile(settings,JSON.stringify({statusLine:{type:'command',command:'"/n/node" "/gone/Observatory.app/claude-statusline-bridge.mjs" --runtime "/d"'}}));
-  assert.equal(await brokenStatusline(settings),'/gone/Observatory.app/claude-statusline-bridge.mjs');
+  const text=JSON.stringify({statusLine:{type:'command',command:'"/n/node" "/repo/scripts/claude-statusline-bridge.mjs" --runtime "/d"'}});
+  await writeFile(settings,text);
+  assert.equal(await leftoverStatusline(settings),'/repo/scripts/claude-statusline-bridge.mjs');
+  assert.equal(await readFile(settings,'utf8'),text);
   await writeFile(settings,JSON.stringify({statusLine:{type:'command',command:'echo hi'}}));
-  assert.equal(await brokenStatusline(settings),null);
-  assert.equal(await brokenStatusline(path.join(folder,'missing.json')),null);
+  assert.equal(await leftoverStatusline(settings),null);
+  assert.equal(await leftoverStatusline(path.join(folder,'missing.json')),null);
+  assert.equal(claudeSettingsPath({CLAUDE_CONFIG_DIR:'/c'}),path.join('/c','settings.json'));
 })));
 
 test('a dry run on a fresh clone lists every step and writes nothing',{skip:!['darwin','win32'].includes(process.platform) && 'Setup runs on macOS and Windows only'},()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{

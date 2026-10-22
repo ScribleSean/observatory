@@ -5,8 +5,7 @@
     "codex": true,
     "codexLimits": true,
     "claudeCode": true,
-    "claudeLimits": true,
-    "agents": true
+    "claudeLimits": true
   },
   "hub": {
     "spokes": []

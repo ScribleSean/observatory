@@ -46,7 +46,7 @@ Within ten minutes both menus and both dashboards list both computers.
 
 ## What travels over SSH
 
-The Mac runs two fixed commands on the PC: one reads `usage.json`, one writes `combined.incoming.json` through a temporary file and a rename, after checking its size. The PC merges that file itself, so the Mac never replaces a newer result the PC made. SSH runs in batch mode with strict host key checking and without agent, X11 or port forwarding. The files hold totals, limit readings, agent status and names, never prompts, messages or credentials.
+The Mac runs two fixed commands on the PC: one reads `usage.json`, one writes `combined.incoming.json` through a temporary file and a rename, after checking its size. The PC merges that file itself, so the Mac never replaces a newer result the PC made. SSH runs in batch mode with strict host key checking and without agent, X11 or port forwarding. The files hold totals and limit readings, never prompts, messages, session names or credentials.
 
 ## If the PC is off
 

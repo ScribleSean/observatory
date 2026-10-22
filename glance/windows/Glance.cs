@@ -157,7 +157,6 @@ namespace Observatory
         {
             menu.Items.Clear();
             string title = "?";
-            int waiting = 0;
             bool stale = true;
             if (nodeMissing) { Line("Node was not found at the saved path. Run npm run setup again."); Line(""); }
             if (settings == null)
@@ -185,7 +184,6 @@ namespace Observatory
                 {
                     object value;
                     if (glance.TryGetValue("title", out value) && value is string) title = (string)value;
-                    if (glance.TryGetValue("waiting", out value) && value is int) waiting = (int)value;
                     var lines = glance.TryGetValue("lines", out value) ? value as IList : null;
                     if (lines != null) foreach (object line in lines) Line(line as string ?? "");
                     Line("");
@@ -220,13 +218,13 @@ namespace Observatory
             var refresh = menu.Items.Add("Refresh", null, (s, e) => RunTick());
             refresh.Enabled = tick == null || tick.HasExited;
             menu.Items.Add("Quit Observatory", null, (s, e) => Quit());
-            string tip = "Observatory " + title + (stale ? " (not updated recently)" : waiting > 0 ? " left, " + waiting + " waiting on you" : " lowest limit left");
+            string tip = "Observatory " + title + (stale ? " (not updated recently)" : " lowest limit left");
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
-            SetIcon(stale ? title + "?" : title, waiting > 0 && !stale);
+            SetIcon(stale ? title + "?" : title);
         }
 
         // The tray has no room for text, so the number is drawn into the icon.
-        void SetIcon(string text, bool attention)
+        void SetIcon(string text)
         {
             string shown = text.Replace("%", "");
             if (shown.Length > 3) shown = shown.Substring(0, 3);
@@ -243,11 +241,6 @@ namespace Observatory
                 format.Alignment = StringAlignment.Center;
                 format.LineAlignment = StringAlignment.Center;
                 graphics.DrawString(shown, font, foreground, new RectangleF(0, 0, 32, 32), format);
-                // An amber dot in the corner when an agent is waiting on you.
-                if (attention)
-                    using (var dot = new SolidBrush(Color.FromArgb(240, 160, 40)))
-                    using (var ring = new Pen(Color.FromArgb(9, 9, 11), 2f))
-                    { graphics.FillEllipse(dot, 21, 1, 10, 10); graphics.DrawEllipse(ring, 21, 1, 10, 10); }
                 var handle = bitmap.GetHicon();
                 var next = (Icon)Icon.FromHandle(handle).Clone();
                 DestroyIcon(handle);

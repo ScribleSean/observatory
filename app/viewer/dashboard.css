@@ -15,7 +15,6 @@
 .ob-dashboard h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
 .ob-dashboard h4 { margin: var(--ob-space-4) 0 var(--ob-space-2); font-size: var(--ob-meta-size); font-weight: 500; color: var(--ob-muted); text-transform: uppercase; letter-spacing: 0.6px; }
 .ob-dashboard button:focus-visible, .ob-dashboard select:focus-visible, .ob-dashboard summary:focus-visible, .ob-dashboard input:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
-.ob-agents-empty { padding: var(--ob-space-5) 0; }
 .ob-dashboard output.ob-block { display: block; }
 .ob-dashboard main { min-width: 0; overflow-wrap: anywhere; }
 .ob-dashboard .ob-card { margin-top: var(--ob-space-3); padding: 18px 20px; border-radius: var(--ob-card-radius, 16px); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
@@ -29,11 +28,10 @@
 .ob-chips li i { width: 6px; height: 6px; border-radius: 50%; background: var(--ob-accent); }
 .ob-chips li.warn i { background: var(--ob-warning); }
 
-/* Overview: four tiles that answer the four questions. */
+/* Overview: three tiles that answer the three questions. */
 .ob-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); margin-top: var(--ob-space-5); }
-/* One, two or four tiles a row, never three and a lone fourth. */
-@media (min-width: 600px) { .ob-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1040px) { .ob-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* One tile a row on a phone, three side by side from a tablet up. */
+@media (min-width: 760px) { .ob-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .ob-tile { display: flex; flex-direction: column; min-width: 0; padding: 18px 20px 20px; background: var(--ob-surface); border-radius: var(--ob-card-radius, 16px); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 .ob-tile h2 { font-size: var(--ob-meta-size); font-weight: 500; color: var(--ob-muted); text-transform: uppercase; letter-spacing: 0.6px; }
 .ob-hero { margin: 10px 0 4px; font: 500 clamp(30px, 4.6vw, var(--ob-metric-size))/1 var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; letter-spacing: -1px; color: var(--ob-strong); }
@@ -43,13 +41,6 @@
 .ob-tile-bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--ob-space-2); align-items: baseline; font-size: 13px; }
 .ob-tile-bars .ob-bar { grid-column: 1 / -1; margin: 0; height: 4px; }
 .ob-tile-label { display: flex; align-items: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ob-tile-list li { display: flex; align-items: center; gap: var(--ob-space-2); font-size: 13px; min-width: 0; }
-.ob-tile-list li > span:not(.ob-status) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-tile-list li { align-items: flex-start; }
-.ob-tile-list .ob-status { margin-top: 1px; }
-.ob-tile-who { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.ob-tile-who > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-tile-who .ob-meta { font-size: 11.5px; }
 .ob-tile-devices li { display: flex; justify-content: space-between; gap: var(--ob-space-2); font-size: 13px; }
 .ob-tile-devices li + li { padding-top: 10px; border-top: 1px solid var(--ob-track); }
 .ob-tile-foot { margin-top: auto !important; padding-top: var(--ob-space-4); }
@@ -66,29 +57,8 @@
 .ob-dashboard .ob-segments button.on { background: var(--ob-background); color: var(--ob-text); box-shadow: 0 1px 2px rgb(0 0 0 / var(--ob-card-shadow)); }
 .ob-dashboard .ob-segments button:hover:not(.on) { background: transparent; color: var(--ob-text); }
 
-/* Status: a dot and a word, never colour alone. */
-.ob-status { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 2px 9px 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: color-mix(in srgb, var(--ob-track) 70%, transparent); color: var(--ob-muted); }
-.ob-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.ob-status-working { color: var(--ob-strong); background: color-mix(in srgb, var(--ob-accent) 18%, transparent); }
-.ob-status-working i { background: var(--ob-accent); animation: ob-pulse 1.8s ease-in-out infinite; }
 /* Darkened toward the text colour so small text keeps 4.5:1 on the tint in both modes. */
-.ob-status-waiting { color: color-mix(in srgb, var(--ob-warning) 75%, var(--ob-text)); background: color-mix(in srgb, var(--ob-warning) 12%, transparent); }
-.ob-status-waiting i { background: var(--ob-warning); }
-.ob-status-stopped { color: var(--ob-error); background: color-mix(in srgb, var(--ob-error) 12%, transparent); }
-@keyframes ob-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-/* Agents page. */
-.ob-agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--ob-space-3); align-items: start; }
-.ob-agents .ob-card { margin-top: var(--ob-space-3); }
-.ob-agent-list { margin: 0; padding: 0; list-style: none; }
-.ob-agent-list li { display: grid; grid-template-columns: 116px minmax(0, 1fr) auto; gap: var(--ob-space-3); align-items: baseline; padding: 9px 0; border-top: 1px solid var(--ob-track); font-size: 13.5px; }
-.ob-agent-list li:first-child { border-top: 0; }
-.ob-agent-list .ob-status { justify-self: start; }
-.ob-agent-name { display: flex; flex-direction: column; min-width: 0; }
-.ob-agent-name strong { font-weight: 600; }
-.ob-agent-name span { color: var(--ob-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-agent-list li[data-status="done"], .ob-agent-list li[data-status="idle"] { color: var(--ob-muted); }
-.ob-dashboard .ob-agents-note { margin-top: var(--ob-space-4); }
 
 @media (max-width: 640px) {
   .ob-dashboard { padding: 20px 16px 40px; }
@@ -97,13 +67,9 @@
   .ob-tabs button { padding: 8px 4px; }
   .ob-dashboard h1 { font-size: 20px; }
   .ob-masthead > .ob-meta { margin-left: 0; width: 100%; }
-  .ob-agent-list li { grid-template-columns: minmax(0, 1fr) auto; }
-  .ob-agent-list li .ob-status { grid-column: 1 / -1; }
-  .ob-agents { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   .ob-tabs button { transition: none; }
-  .ob-status-working i { animation: none; }
 }
 
 /* Loading and first run: one calm message instead of pages of Unknown. */

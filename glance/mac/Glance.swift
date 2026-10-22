@@ -107,7 +107,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.removeAllItems()
     var title = "?"
     var stale = true
-    var waiting = 0
     // Section names in bold, rows in the normal colour, detail rows a step quieter.
     func line(_ text: String, quiet: Bool = false) {
       let row = NSMenuItem(title: text, action: nil, keyEquivalent: "")
@@ -131,7 +130,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let glance = json["glance"] as? [String: Any] {
       title = glance["title"] as? String ?? title
-      waiting = glance["waiting"] as? Int ?? 0
       for text in glance["lines"] as? [String] ?? [] {
         if text.isEmpty { menu.addItem(.separator()) } else { line(text) }
       }
@@ -166,11 +164,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.addItem(NSMenuItem(title: "Quit Observatory", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     // Short title: one number, the lowest limit left. The menu has the rest.
     lastTitle = title
-    // One number, the lowest limit left, and an amber dot when an agent is waiting on you.
-    let text = NSMutableAttributedString(string: stale ? " \(title)?" : " \(title)", attributes: [.font: NSFont.menuBarFont(ofSize: 0)])
-    if waiting > 0 && !stale {
-      text.append(NSAttributedString(string: " ●", attributes: [.font: NSFont.menuBarFont(ofSize: 9), .foregroundColor: NSColor.systemOrange, .baselineOffset: 1.5]))
-    }
+    let text = NSAttributedString(string: stale ? " \(title)?" : " \(title)", attributes: [.font: NSFont.menuBarFont(ofSize: 0)])
     item.button?.attributedTitle = text
     item.button?.toolTip = stale ? "Observatory: not updated recently" : "Observatory: lowest limit left"
   }
