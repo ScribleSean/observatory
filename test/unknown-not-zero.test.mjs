@@ -50,6 +50,7 @@ test('the Activity page shows Unknown, not 0m, for an untracked day and its char
   const view=activityView(snapshot,{host:'Mac',period:'day',now});
   assert.equal(view.total,null);
   assert.equal(view.noTracking,true);
+  assert.ok(view.hourly.every(point=>point.value===null),'hourly values are Unknown');
   const week=activityView(snapshot,{host:'Mac',period:'week',now});
   const bar=week.series.find(point=>point.label==='10-21');
   assert.equal(bar.value,null);
