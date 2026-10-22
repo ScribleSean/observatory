@@ -5,7 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 import path from 'node:path';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {retainQuotaHistory} from './quota-history.mjs';
-import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage,readQuotaArchiveChart} from './quota-archive.mjs';
+import {archiveSchema,archiveIndex,backfillQuotaArchive,archiveQuotaPoll,readQuotaArchivePage} from './quota-archive.mjs';
 
 const schema='CREATE TABLE quota_state (slot INTEGER PRIMARY KEY CHECK (slot = 1), record TEXT NOT NULL CHECK (length(record) <= 16000000))';
 const hex=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
@@ -140,4 +140,3 @@ export const updateQuotaState=(runtime,{revision,scope,observation,enabled=true,
 });
 
 export const readQuotaArchive=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchivePage(db,query));
-export const readQuotaChart=(runtime,query)=>withDatabase(runtime,db=>readQuotaArchiveChart(db,query));

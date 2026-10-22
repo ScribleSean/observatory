@@ -258,11 +258,10 @@ test('settings group by model effort and speed without changing collector values
   assert.equal(view({}).settings[0].status, 'unknown');
 });
 
-test('Now leaves provider blocks empty while preserving settings and session cost', () => {
+test('Now leaves provider blocks empty while preserving settings', () => {
   for (const host of ['Mac', 'All']) {
     const result = view(sampleSnapshot(now), { host, period: 'now' });
     for (const provider of ['codex', 'claude']) assertEmpty(result[provider], 'hourly-unavailable');
-    assert.equal(result.claude.sessionCost.status, host === 'All' ? 'ok' : 'all-only');
     assert.equal(result.settings[0].status, 'ok');
   }
 });
@@ -280,7 +279,6 @@ test('an empty snapshot never invents zero totals or dollars', () => {
     assertEmpty(result[provider], 'unknown');
     assert.equal(result[provider].estimate.usd, null);
   }
-  assert.equal(result.claude.sessionCost.usd, null);
   assert.equal(JSON.stringify(result).includes(':0'), false);
 });
 
@@ -289,7 +287,6 @@ test('a missing snapshot reads as empty', () => {
     const result = tokensView(input, { host: 'All', period: 'week', now: Date.parse('2026-10-14T12:00:00Z') });
     assert.equal(result.codex.status, 'unverified');
     assert.equal(result.claude.status, 'by-device');
-    assert.equal(result.claude.sessionCost.usd, null);
   }
 });
 

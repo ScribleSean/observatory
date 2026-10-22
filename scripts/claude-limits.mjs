@@ -6,7 +6,6 @@ import {readClaudeUsage} from './claude-usage-command.mjs';
 
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
-export const CLAUDE_LIMITS_CONSENT_FILE='consent.json';
 const windows={five_hour:300,seven_day:10080};
 const currentSeconds=10*60;
 
@@ -20,11 +19,6 @@ function cleanWindow(raw,observedAt) {
   return {usedPercentage:Math.round(used*10)/10,resetsAt:Math.round(resets)};
 }
 
-function cleanCost(usd,observedAt) {
-  if(typeof usd!=='number' || !Number.isFinite(usd) || usd<0 || usd>10000)return null;
-  return {usd:Math.round(usd*100)/100,observedAt};
-}
-
 export function extractClaudeLimits(input,now=Date.now()) {
   const observedAt=Math.floor(now/1000);
   if(!isObject(input))return null;
@@ -33,9 +27,7 @@ export function extractClaudeLimits(input,now=Date.now()) {
     const window=cleanWindow(isObject(input.rate_limits)?input.rate_limits[name]:null,observedAt);
     if(window)record.windows[name]={...window,observedAt};
   }
-  const cost=isObject(input.cost)?cleanCost(input.cost.total_cost_usd,observedAt):null;
-  if(cost)record.sessionCost=cost;
-  return Object.keys(record.windows).length || cost?record:null;
+  return Object.keys(record.windows).length?record:null;
 }
 
 function cleanStored(raw,now) {
@@ -50,11 +42,7 @@ function cleanStored(raw,now) {
     record.windows[name]={...window,observedAt:stored.observedAt};
     record.observedAt=Math.max(record.observedAt,stored.observedAt);
   }
-  const stored=raw.sessionCost;
-  const cost=isObject(stored) && Number.isSafeInteger(stored.observedAt) && stored.observedAt>0 && stored.observedAt<=seconds+60
-    ? cleanCost(stored.usd,stored.observedAt) : null;
-  if(cost) {record.sessionCost=cost;record.observedAt=Math.max(record.observedAt,cost.observedAt);}
-  return Object.keys(record.windows).length || cost?record:null;
+  return Object.keys(record.windows).length?record:null;
 }
 
 export function mergeClaudeLimits(previous,next,now=Date.now()) {
@@ -68,25 +56,10 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
     merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage ? before : after;
   }
-  const before=saved.sessionCost,after=next.sessionCost;
-  const cost=after && (!before || after.observedAt>=before.observedAt)?after:before;
-  if(cost)merged.sessionCost=cost;
   return merged;
 }
 
 const folderOf=runtime=>path.join(runtime,CLAUDE_LIMITS_FOLDER);
-
-async function readInPlainLimitsFolder(runtime,read,{afterRead}={}) {
-  if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw Error('Unsafe Claude limits folder');
-  const folder=folderOf(runtime),before=await lstat(folder);
-  if(!before.isDirectory() || before.isSymbolicLink())throw Error('Unsafe Claude limits folder');
-  const result=await read();
-  if(afterRead)await afterRead();
-  let after;
-  try {after=await lstat(folder);}catch {throw Error('Unsafe Claude limits folder');}
-  if(!after.isDirectory() || after.isSymbolicLink() || after.dev!==before.dev || after.ino!==before.ino)throw Error('Unsafe Claude limits folder');
-  return result;
-}
 
 async function plainText(file,limit) {
   let handle;
@@ -110,33 +83,6 @@ async function plainText(file,limit) {
 
 async function plainFile(file,limit) {
   return JSON.parse(await plainText(file,limit));
-}
-
-function topLevelMembers(text,allDepths=false) {
-  let depth=0,string=false,escaped=false,count=0;
-  for(const character of text) {
-    if(string) {
-      if(escaped)escaped=false;
-      else if(character==='\\')escaped=true;
-      else if(character==='"')string=false;
-    } else if(character==='"')string=true;
-    else if(character==='{' || character==='[')depth++;
-    else if(character==='}' || character===']')depth--;
-    else if(character===':' && (allDepths || depth===1))count++;
-  }
-  return count;
-}
-
-export function parseLimitsConsentMarker(text) {
-  try {
-    const marker=JSON.parse(text);
-    if(!isObject(marker))return false;
-    const keys=Object.keys(marker);
-    if(keys.length!==2 || !keys.includes('consent') || !keys.includes('givenAt') || topLevelMembers(text)!==keys.length)return false;
-    if(marker.consent!==true || typeof marker.givenAt!=='string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(marker.givenAt))return false;
-    // Years 0001 to 9999 only, the range a .NET DateTime holds.
-    return !marker.givenAt.startsWith('0000') && new Date(marker.givenAt).toISOString()===marker.givenAt;
-  } catch {return false;}
 }
 
 export async function ensureClaudeLimitsFolder(runtime) {
@@ -166,18 +112,6 @@ export async function recordClaudeLimits(runtime,input,now=Date.now()) {
   return merged;
 }
 
-export async function claudeLimitsConsent(runtime,options={}) {
-  try {
-    return await readInPlainLimitsFolder(runtime,async()=>{
-      let consentMarker=false;
-      try {
-        consentMarker=parseLimitsConsentMarker(await plainText(path.join(folderOf(runtime),CLAUDE_LIMITS_CONSENT_FILE),4096));
-      } catch {}
-      return {given:consentMarker,consentMarker};
-    },options);
-  } catch {return {given:false,consentMarker:false};}
-}
-
 const base={provider:'Claude Code',scope:'account'};
 
 export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
@@ -185,20 +119,16 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   const record=cleanStored(stored,now);
   const seconds=Math.floor(now/1000);
   if(!record)return {...base,status:'unavailable',windows:[]};
-  const cost=record.sessionCost;
-  const sessionCost=cost && seconds-cost.observedAt<currentSeconds
-    ? {sessionCost:{usd:cost.usd,observedAt:new Date(cost.observedAt*1000).toISOString()}} : {};
   const live=Object.entries(record.windows).filter(([,window])=>window.resetsAt>seconds);
-  if(!live.length)return {...base,status:'unavailable',windows:[],...sessionCost};
+  if(!live.length)return {...base,status:'unavailable',windows:[]};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
-  return {...base,...sessionCost,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
+  return {...base,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
     windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],checkedAt:new Date(window.observedAt*1000).toISOString(),
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
 
-export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage,enabled:configured}={}) {
-  const enabled=typeof configured==='boolean'?configured:(await claudeLimitsConsent(runtime)).given;
-  if(!enabled)return claudeLimitsSource(null,{enabled:false,now});
+export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readClaudeUsage,enabled=false}={}) {
+  if(enabled!==true)return claudeLimitsSource(null,{enabled:false,now});
   let usageCommand='failed';
   try {
     const result=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
@@ -212,11 +142,6 @@ export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readCla
   let stored=null;
   try {stored=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_FILE),4096);}catch{}
   return {...claudeLimitsSource(stored,{enabled:true,now}),usageCommand};
-}
-
-export function attachClaudeLimits(result,source) {
-  result.data.claudeLimits=source;
-  return result;
 }
 
 // Keep the timer referenced so pending work cannot let Node exit before the fallback.

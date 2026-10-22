@@ -1,5 +1,4 @@
 import {cleanQuotaObservation} from './quota-history.mjs';
-import {rasterQuotaTimeline} from './quota-chart-raster.mjs';
 
 const timelinePredicate=`(kind='observation' OR (kind='poll' AND
     (json_extract(record,'$.status')!='ok' OR NOT EXISTS
@@ -68,14 +67,4 @@ export function readQuotaArchivePage(db,{scope,kind,from=0,to=8640000000000000,a
     records.push(JSON.parse(row.record));last={at:row.observed_at,id:row.id};
   }
   return {records,next:found.length>records.length?last:null};
-}
-
-export function readQuotaArchiveChart(db,{scope,...options}) {
-  if(!scopeKey(scope))throw Error('Invalid archive scope');
-  function* records() {
-    const query=db.prepare(`SELECT record FROM quota_archive WHERE scope=? AND ${timelinePredicate}
-      AND observed_at>=? AND observed_at<=? ORDER BY observed_at,id`);
-    for(const row of query.iterate(scope,options.from,options.to))yield JSON.parse(row.record);
-  }
-  return {chart:rasterQuotaTimeline(records(),options)};
 }

@@ -147,7 +147,6 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.ok(Date.parse(snapshot.peerQuota.receivedAt) >= Date.parse(snapshot.peerQuota.checkedAt));
     assert.equal(snapshot.peerQuota.windows[0].durationMinutes, 300);
     assert.notEqual(snapshot.peerQuota.windows[0].remainingPercent, snapshot.quota.windows[0].remainingPercent);
-    assert.deepEqual(snapshot.claudeLimits.sessionCost, { usd: 3.42, observedAt: new Date(now - 360000).toISOString() });
     assert.deepEqual(snapshot.prices, { source: 'https://example.invalid/model-prices.json', checkedOn: new Date(now - 3 * 86400000).toISOString().slice(0, 10) });
     assert.equal(snapshot.dictation[0].host, 'Mac');
     assert.equal(snapshot.dictation[0].status, 'ok');
@@ -181,7 +180,6 @@ const requiredPaths = [
   'deviceNames.Mac', 'deviceNames.Windows', 'collectedAt', 'timezone',
   'claudeLimits.status', 'claudeLimits.checkedAt', 'claudeLimits.windows.*.remainingPercent',
   'claudeLimits.windows.*.resetsAt', 'claudeLimits.history.*.windows',
-  'claudeLimits.sessionCost.usd', 'claudeLimits.sessionCost.observedAt',
   'quota.windows.*.remainingPercent', 'quota.pace.*.estimatedExhaustionAt', 'quota.history.*.windows',
   'peerQuota.windows.*.remainingPercent', 'peerQuota.history',
   'tokens.*.days.*.totalTokens', 'tokens.*.days.*.hours', 'tokens.*.days.*.models', 'tokens.*.days.*.apiEstimate.usd',

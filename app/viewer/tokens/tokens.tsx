@@ -14,7 +14,6 @@ type Result = Omit<Computed, 'claude' | 'codex'> & {
   codex: Block;
   claude: Block & {
     byDevice: { host: string; label: string; status: string; total: number | null; usd: number | null }[];
-    sessionCost: { status: string; usd: number | null; observedAt: string | null };
   };
 };
 const periods: [string, string][] = [

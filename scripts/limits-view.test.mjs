@@ -22,7 +22,7 @@ const snapshot = () => {
       history: Array.from({ length: 13 }, (_, index) => ({ checkedAt: iso(-61 + index * 5),
         windows: windows.map(row => ({ ...row, remainingPercent: row.remainingPercent + (12 - index) * 2 })) })) };
   };
-  return { timezone: 'UTC', claudeLimits: { ...source('claude', ['five_hour', 'seven_day']), sessionCost: { usd: 3.42, observedAt: iso(-1) } },
+  return { timezone: 'UTC', claudeLimits: { ...source('claude', ['five_hour', 'seven_day']) },
     quota: source('codex', ['primary', 'secondary']) };
 };
 const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar', ...props }));

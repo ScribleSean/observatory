@@ -105,7 +105,7 @@ test('output that is not the free local command result is refused', () => {
   assert.deepEqual(Object.keys(parseClaudeUsage(envelope(text('23% used','75% used · resets Oct 16 at 6pm (America/New_York)')),now).rate_limits),['seven_day']);
 });
 
-test('a collection with consent stores the command reading and one without consent runs nothing', async t => {
+test('a collection with the source on stores the command reading, and with it off runs nothing', async t => {
   const runtime=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-usage-')));
   t.after(()=>rm(runtime,{recursive:true,force:true}));
   let runs=0;
@@ -115,15 +115,14 @@ test('a collection with consent stores the command reading and one without conse
   assert.equal(Object.hasOwn(disconnected,'usageCommand'),false);
   assert.equal(runs,0);
   await mkdir(path.join(runtime,'claude-limits'));
-  await writeFile(path.join(runtime,'claude-limits/consent.json'),JSON.stringify({consent:true,givenAt:new Date(now).toISOString()}));
-  const source=await readClaudeLimits(runtime,{now,readUsage});
+  const source=await readClaudeLimits(runtime,{now,enabled:true,readUsage});
   assert.equal(runs,1);
   assert.equal(source.status,'ok');
   assert.deepEqual(source.windows.map(window=>[window.window,window.remainingPercent]),[['five_hour',77],['seven_day',25]]);
   assert.doesNotMatch(await readFile(path.join(runtime,'claude-limits/limits.json'),'utf8'),/synthetic|subscription/);
-  const failing=await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>{throw Error('synthetic failure');}});
+  const failing=await readClaudeLimits(runtime,{now:now+60000,enabled:true,readUsage:async()=>{throw Error('synthetic failure');}});
   assert.equal(failing.status,'ok');
-  assert.equal((await readClaudeLimits(runtime,{now:now+60000,readUsage:async()=>({status:'unrecognized',usage:null})})).windows.length,2);
+  assert.equal((await readClaudeLimits(runtime,{now:now+60000,enabled:true,readUsage:async()=>({status:'unrecognized',usage:null})})).windows.length,2);
 });
 
 test('the command gets a fixed small environment and never a parent session\'s variables', () => {

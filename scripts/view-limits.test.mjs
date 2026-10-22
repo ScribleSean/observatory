@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanPeerQuotaForDisplay, limitRows, limitHistory, peerLimits, sessionCost } from '../lib/view-limits.mjs';
+import { cleanPeerQuotaForDisplay, limitRows, limitHistory, peerLimits } from '../lib/view-limits.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { span } from '../lib/panel-data.mjs';
 
@@ -164,14 +164,12 @@ test('history uses local calendar dates with UTC fallback and caps all at 400 da
   assert.equal(limitHistory(data, 'codex', 'day', now).windows[0].points[11].value, 40);
 });
 
-test('peer and session cost freshness ends exactly at ten minutes', () => {
+test('peer freshness ends exactly at ten minutes', () => {
   for (const [age, stale] of [[600000, true], [599000, false]]) {
     const observedAt = new Date(now - age).toISOString();
     const peer = peerLimits({ peerQuota: { host: 'Mac', status: 'ok', checkedAt: observedAt,
       windows: [reading('codex', 'primary')] } }, now);
     assert.equal(peer.stale, stale);
-    const cost = sessionCost({ claudeLimits: { sessionCost: { usd: 3, observedAt } } }, now);
-    assert.deepEqual(cost, stale ? null : { usd: 3, observedAt });
   }
 });
 
