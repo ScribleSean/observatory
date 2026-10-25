@@ -75,7 +75,7 @@ test('a failed collection still writes combined.json from what is there',()=>wit
 test('the old app snapshot is copied aside once before the first write',()=>withFolder(async folder=>{
   const {mkdir,writeFile}=await import('node:fs/promises');
   const local=path.join(folder,'public','local');
-  await mkdir(local,{recursive:true});
+  await mkdir(local,{recursive:true,mode:0o700});
   await writeFile(path.join(local,'usage.json'),JSON.stringify({schema:2,collectedAt:'2026-10-20T00:00:00Z',activityHistory:[]}));
   await collect(testConfig(folder),{readers,now:()=>at});
   const backup=JSON.parse(await readFile(path.join(local,'usage.before-hub.json'),'utf8'));

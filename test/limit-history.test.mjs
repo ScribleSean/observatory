@@ -78,7 +78,7 @@ async function oldAppData(folder) {
   db.prepare("INSERT INTO quota_archive(scope,kind,observed_at,record) VALUES ('s','poll',?,'{}')").run(now);
   db.close();
   const local=path.join(folder,'public','local');
-  await mkdir(local,{recursive:true});
+  await mkdir(local,{recursive:true,mode:0o700});
   await writeFile(path.join(local,'usage.before-hub.json'),JSON.stringify({claudeLimits:claude(iso(-7200000),70),
     quota:{status:'ok',checkedAt:iso(-1800000),windows:[{window:'primary',remainingPercent:35,durationMinutes:300}],history:[{checkedAt:iso(-3600000),windows:[{window:'primary',remainingPercent:40}]}]},
     peerQuota:{host:'Windows',quota:{status:'ok',checkedAt:iso(-600000),windows:[{window:'primary',remainingPercent:33}]}}}));

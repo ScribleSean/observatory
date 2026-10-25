@@ -11,7 +11,7 @@ const now=Date.parse('2026-10-21T17:00:00Z');
 
 async function seed(folder,file,value) {
   const local=path.join(folder,'public','local');
-  await mkdir(local,{recursive:true});
+  await mkdir(local,{recursive:true,mode:0o700});
   await writeFile(path.join(local,file),JSON.stringify(value));
 }
 const read=async(folder,file)=>JSON.parse(await readFile(path.join(folder,'public','local',file),'utf8'));
