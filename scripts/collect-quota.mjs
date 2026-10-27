@@ -9,6 +9,7 @@ import {readQuotaState,updateQuotaState} from './quota-store.mjs';
 import {readAccountSnapshot} from './read-quota.mjs';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {quotaPace} from './quota-pace.mjs';
+import {assertPrivateOwner} from '../lib/private-folder.mjs';
 
 const execute=promisify(execFile);
 const disconnected=()=>({status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]});
@@ -19,6 +20,7 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates,
     try {
       const file=path.join(runtime,'local.config.json'),info=await lstat(file);
       if(!info.isFile() || info.isSymbolicLink() || info.size>65536)throw Error('Invalid configuration');
+      assertPrivateOwner(info,file,platform);
       const config=JSON.parse(await readFile(file,'utf8'));
       if(!config || typeof config!=='object' || Array.isArray(config))throw Error('Invalid configuration');
       const executable=config.codexExecutable;

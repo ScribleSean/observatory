@@ -19,7 +19,7 @@ for(const signal of ['SIGTERM','SIGKILL']) {
     {skip:unsupported || (process.platform==='win32' && signal==='SIGTERM' && 'Windows cannot send SIGTERM to a process')},()=>withFolder(async folder=>{
     const port=await freePort();
     const config=path.join(folder,'observatory.config.json');
-    await mkdir(path.join(folder,'data','public','local'),{recursive:true});
+    await mkdir(path.join(folder,'data','public','local'),{recursive:true,mode:0o700});
     await writeFile(config,JSON.stringify({dataFolder:path.join(folder,'data'),dashboard:{port}}));
     const pidFile=path.join(folder,'server.pid');
     const app=spawn(process.execPath,['-e',`

@@ -114,7 +114,7 @@ test('a collection with the source on stores the command reading, and with it of
   assert.equal(disconnected.status,'not-connected');
   assert.equal(Object.hasOwn(disconnected,'usageCommand'),false);
   assert.equal(runs,0);
-  await mkdir(path.join(runtime,'claude-limits'));
+  await mkdir(path.join(runtime,'claude-limits'),{mode:0o700});
   const source=await readClaudeLimits(runtime,{now,enabled:true,readUsage});
   assert.equal(runs,1);
   assert.equal(source.status,'ok');
