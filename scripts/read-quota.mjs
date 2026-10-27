@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn } from '../lib/cycle-processes.mjs';
 import { createHmac } from 'node:crypto';
 import {visibleQuotaBucket} from './quota-buckets.mjs';
 

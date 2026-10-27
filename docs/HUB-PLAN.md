@@ -69,6 +69,4 @@ Two independent code reviews, plus a critique of the original design, found thes
 
 ## Known limits
 
-- When a cycle hits its deadline, programs it started (ssh, the screen-time PowerShell script, the Codex client) are not stopped with it. The next cycle takes over the lock correctly.
 - The Windows tray app and the connection between two computers have had less use than the Mac app on one computer.
-- Strict log reading is kept from the Python readers: a malformed Codex event fails that read. If real logs hit this, the fix is to skip the event and add a fixture.

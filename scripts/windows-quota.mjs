@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn} from '../lib/cycle-processes.mjs';
 import {findCodexExecutable} from './collect-quota.mjs';
 import {readAccountSnapshot} from './read-quota.mjs';
 

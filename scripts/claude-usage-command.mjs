@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn} from '../lib/cycle-processes.mjs';
 import {lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';

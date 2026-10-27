@@ -468,6 +468,40 @@ function turnIdentity(value) {
 const cutoffMicros=cutoff=>typeof cutoff==='bigint'?cutoff:BigInt(cutoff.getTime())*1000n;
 const TOKEN_ROW=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','reasoningOutputTokens','totalTokens'];
 
+// Validate before changing the running settings or cumulative token counters.
+export function validEvent(event) {
+  try {
+    if(!isDict(event))return false;
+    const p=pyOr(get(event,'payload'),{});
+    if(!isDict(p))return false;
+    if(has(event,'timestamp')) {
+      if(typeof event.timestamp!=='string')return false;
+      const stamp=parseIsoformat(event.timestamp.replaceAll('Z','+00:00'));
+      if(stamp.tz===null) {
+        if(get(p,'type')==='token_count'||get(event,'type')==='response_item')return false;
+      } else newYorkDay(utcMicros(stamp));
+    }
+    if(get(p,'type')==='thread_settings_applied') {
+      const settings=pyOr(get(p,'thread_settings'),{});
+      if(!isDict(settings))return false;
+      inEfforts(get(settings,'reasoning_effort'));
+      tierOf(get(settings,'service_tier'));
+    }
+    if(get(event,'type')==='turn_context') {
+      inEfforts(get(p,'effort'));
+      tierOf(get(p,'service_tier'));
+      const key=get(p,'usage_turn_key'),id=get(p,'turn_id');
+      if(pyTruthy(key)&&turnIdentity(key)===null)return false;
+      if(!pyTruthy(key)&&typeof id==='string')sha256Hex(id);
+    }
+    if(get(p,'type')==='token_count'&&!isDict(pyOr(get(p,'info'),{})))return false;
+    return true;
+  } catch(error) {
+    if(error instanceof ValueError||error instanceof PyTypeError||error instanceof OverflowError)return false;
+    throw error;
+  }
+}
+
 export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null,readBudget=null}={}) {
   cutoff=cutoffMicros(cutoff);
   let model='unknown',effort='unknown',speed='unknown';
@@ -480,7 +514,7 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
   const seenCalls=new Set();
   for(const event of events) {
     readBudget?.check();
-    if(!isDict(event))throw new AttributeError('event has no get');
+    if(!validEvent(event))continue;
     const p=pyOr(get(event,'payload'),{});
     if(!isDict(p))continue;
     if(get(p,'type')==='thread_settings_applied') {
@@ -642,9 +676,8 @@ function* fileEvents(file,readBudget,limits) {
         skipping=line.at(-1)!==10;
         continue;
       }
-      const text=decodeUtf8(line);
       let row;
-      try {row=pyLoads(text);}
+      try {row=pyLoads(decodeUtf8(line));}
       catch(error) {if(error instanceof ValueError)continue;throw error;}
       if(isDict(row))yield row;
     }

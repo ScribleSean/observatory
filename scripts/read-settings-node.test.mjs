@@ -486,8 +486,16 @@ test('skipped oversized lines still consume the total read budget',async()=>{
   }
 });
 
+// Keep the saved Python crash results as historical evidence.
+const skippedMalformedFixtures=new Map([
+  ['crash-null-timestamp',120],['crash-naive-token',0],['crash-naive-tool',120],
+  ['crash-overflow',120],['crash-overflow-utc',240],['crash-body-utf8',120],
+  ['crash-info-string',120],['crash-unhashable-tier',120],['crash-surrogate-turn',120],
+  ['crash-unhashable-turn-key',120],
+]);
+
 for(const name of FIXTURE_NAMES) {
-  test(`fixture ${name} matches the saved Python result without and with a cache`,async()=>{
+  test(`fixture ${name} ${skippedMalformedFixtures.has(name)?'skips malformed events':'matches the saved Python result'} without and with a cache`,async()=>{
     const expected=JSON.parse(fs.readFileSync(path.join(goldens,`expected-${name}.json`),'utf8'));
     await inTemporary(async root=>{
       const codex=buildFixture(path.join(root,'codex'),name);
@@ -496,9 +504,32 @@ for(const name of FIXTURE_NAMES) {
         let actual;
         try {actual={ok:JSON.parse(JSON.stringify(await collectSettings(codex,{...options,cacheDirectory:cache})))};}
         catch {actual={error:true};}
-        assert.deepEqual(actual,expected[mode],`${name} ${mode}`);
+        if(skippedMalformedFixtures.has(name)) {
+          assert.equal(actual.ok?.status,'ok',`${name} ${mode}`);
+          assert.equal(sum(actual.ok.tokenProfiles),skippedMalformedFixtures.get(name),`${name} ${mode}`);
+          assert.equal(actual.ok.tools.length,0);
+        } else assert.deepEqual(actual,expected[mode],`${name} ${mode}`);
         assert.ok(!JSON.stringify(actual).includes('PRIVATE'));
       }
     });
   });
 }
+
+
+test('a bad event between good events preserves settings and cumulative increments',async()=>{
+  await inTemporary(async root=>{
+    const logs=sessionsFolder(root);
+    fs.copyFileSync(new URL('./fixtures/read-settings/mixed-events.jsonl',import.meta.url),path.join(logs,'sessions/mixed.jsonl'));
+    let plain;
+    for(const cacheDirectory of [null,privateFolder(path.join(root,'cache')),path.join(root,'cache')]) {
+      const result=await collectSettings(logs,{now:new Date('2026-10-15T12:00:00Z'),cacheDirectory});
+      assert.equal(result.status,'ok');
+      assert.equal(sum(result.tokenProfiles),360);
+      assert.equal(result.tokenProfiles.length,1);
+      assert.equal(result.tokenProfiles[0].model,'gpt-6-astra');
+      assert.equal(result.tokenProfiles[0].effort,'high');
+      if(plain)assert.deepEqual(result,plain);
+      else plain=result;
+    }
+  });
+});
