@@ -260,7 +260,7 @@ test('stale device readings cannot supply retained activity or hourly charts', (
   assert.equal(view(data, { host: 'All' }).total, 3600);
 });
 
-test('activity retains old snapshot history while excluding late peers', () => {
+test('activity retains complete history while frozen readings age at draw time', () => {
   for (const lag of [0, 9, 11]) {
     const data = snapshot();
     data.collectedAt = new Date(now - 1800000).toISOString();
@@ -271,8 +271,7 @@ test('activity retains old snapshot history while excluding late peers', () => {
     assert.equal(result.note, '');
     assert.equal(result.hourly.some(row => row.value !== null), true);
     const empty = view(data, { now: now + 86400000 });
-    if (lag <= 10) assert.equal(empty.note, 'No records');
-    else assert.match(empty.note, /as of/);
+    assert.match(empty.note, /as of/);
   }
 });
 

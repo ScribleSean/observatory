@@ -114,3 +114,43 @@ for(const [method,tree] of [['spawn',false],['execFile',false],['spawn',true],['
     }
   });
 }
+
+for (const exitsDuringGrace of [false,true]) {
+  test(`Quit cancels and reaps a cycle tree when its direct child ${exitsDuringGrace?'exits during grace':'ignores SIGTERM'}`,
+    {timeout:10000},async()=>{
+    const nested="process.on('SIGTERM',()=>{});console.log('ready');setInterval(()=>{},1000)";
+    const childCode=(exitsDuringGrace?"":"process.on('SIGTERM',()=>{});")+
+      `const child=require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(nested)}],{stdio:['ignore','pipe','ignore']});`+
+      "console.log(child.pid);child.stdout.pipe(process.stdout);setInterval(()=>{},1000)";
+    const runner=spawn(process.execPath,['--input-type=module','-e',`
+      import {spawn,withCycleDeadline} from ${JSON.stringify(helper)};
+      process.on('message',()=>process.emit('SIGTERM'));
+      await withCycleDeadline(async()=>{
+        const child=spawn(process.execPath,['-e',${JSON.stringify(childCode)}],{stdio:['ignore','pipe','ignore']});
+        console.log(child.pid);
+        child.stdout.pipe(process.stdout);
+        await new Promise(resolve=>child.once('exit',resolve));
+      },{deadlineMs:60000,graceMs:100,shutdownSignals:['SIGTERM']});
+    `],{stdio:['ignore','pipe','pipe','ipc']});
+    let output='',errors='';
+    const pids=()=>output.trim().split('\n').map(Number).filter(pid=>Number.isInteger(pid)&&pid>0);
+    runner.stderr.on('data',data=>{errors+=data;});
+    const ready=new Promise(resolve=>runner.stdout.on('data',data=>{output+=data;if(output.includes('ready'))resolve();}));
+    try {
+      await ready;
+      const closed=once(runner,'close');
+      if(process.platform==='win32')runner.send('quit');
+      else runner.kill('SIGTERM');
+      const [code]=await closed;
+      assert.equal(code,0,errors);
+      assert.equal(pids().length,2,output);
+      for(const pid of pids()) {
+        for(let attempt=0;attempt<100&&alive(pid);attempt++)await delay(20);
+        assert.equal(alive(pid),false,`child ${pid} survived Quit`);
+      }
+    } finally {
+      runner.kill('SIGKILL');
+      for(const pid of pids())if(alive(pid))process.kill(pid,'SIGKILL');
+    }
+  });
+}

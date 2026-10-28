@@ -36,7 +36,29 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationWillTerminate(_ note: Notification) {
+    stopProcesses()
+  }
+
+  func stopProcesses() {
     server?.terminate()
+    // tick handles SIGTERM with the same grace period and tree cleanup as its deadline.
+    if let running = tick, running.isRunning {
+      running.terminate()
+      running.waitUntilExit()
+    }
+  }
+
+  // Keep this pure rule in sync with lib/glance-limits.mjs and the Windows app.
+  static func limitRemaining(_ row: [String: Any], now: Date) -> Double? {
+    guard row["stale"] as? Bool == false,
+          let remaining = row["remaining"] as? Double, remaining.isFinite, remaining >= 0, remaining <= 100,
+          let value = row["checkedAt"] as? String,
+          let checked = ISO8601DateFormatter.withFractions.date(from: value) ?? ISO8601DateFormatter().date(from: value),
+          now >= checked, now.timeIntervalSince(checked) < 600 else { return nil }
+    if let value = row["resetsAt"] as? String,
+       let reset = ISO8601DateFormatter.withFractions.date(from: value) ?? ISO8601DateFormatter().date(from: value),
+       reset <= now { return nil }
+    return remaining
   }
 
   // launchd stops the app with SIGTERM, which skips applicationWillTerminate.
@@ -45,8 +67,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     signal(SIGTERM, SIG_IGN)
     let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
     source.setEventHandler { [weak self] in
-      self?.server?.terminate()
-      self?.tick?.terminate()
+      self?.stopProcesses()
       exit(0)
     }
     source.resume()
@@ -83,6 +104,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     if let running = tick, running.isRunning {
       if Date().timeIntervalSince(tickStarted) < 270 { return }
       running.terminate()
+      running.waitUntilExit()
     }
     tickStarted = Date()
     guard let settings else { return }
@@ -121,15 +143,29 @@ final class Glance: NSObject, NSApplicationDelegate, NSMenuDelegate {
     } else if let file = combinedFile, let data = try? Data(contentsOf: file),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let glance = json["glance"] as? [String: Any] {
-      title = glance["title"] as? String ?? title
-      for text in glance["lines"] as? [String] ?? [] {
-        if text.isEmpty { menu.addItem(.separator()) } else { line(text) }
+      let now = Date()
+      let limits = glance["limits"] as? [[String: Any]] ?? []
+      let current = limits.compactMap { Glance.limitRemaining($0, now: now) }
+      if let lowest = current.min() { title = "\(Int(lowest.rounded()))%" }
+      stale = current.isEmpty
+      line("Limits")
+      for row in limits {
+        let name = row["name"] as? String ?? "Unknown"
+        let window = row["window"] as? String ?? ""
+        let value = Glance.limitRemaining(row, now: now).map { "\(Int($0.rounded()))% left" } ?? "Unknown"
+        line("  \(name)\(window.isEmpty ? "" : " " + window): \(value)")
+      }
+      // Only the Today section is retained from the saved display text.
+      let lines = glance["lines"] as? [String] ?? []
+      if let separator = lines.firstIndex(of: "") {
+        for text in lines.dropFirst(separator) {
+          if text.isEmpty { menu.addItem(.separator()) } else { line(text) }
+        }
       }
       menu.addItem(.separator())
       if let generated = json["generatedAt"] as? String, let at = ISO8601DateFormatter.withFractions.date(from: generated) {
         let age = Date().timeIntervalSince(at)
-        stale = age > 15 * 60
-        line(stale ? "Updated \(Glance.span(age)) ago, not recently" : "Updated \(Glance.span(age)) ago", quiet: true)
+        line(age > 15 * 60 ? "Updated \(Glance.span(age)) ago, not recently" : "Updated \(Glance.span(age)) ago", quiet: true)
       } else {
         line("Updated: Unknown time", quiet: true)
       }

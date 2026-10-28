@@ -14,7 +14,7 @@ How Observatory 2.0 works, and why it is built this way. The full app it replace
 ```
 
 - `<data>` is `~/Library/Application Support/Observatory` on a Mac and `%LOCALAPPDATA%\Observatory` on Windows. The full app used the same folder, so its history stays readable.
-- `combined.json` holds three things: each computer's own rows (so either computer can recombine), a merged snapshot that the dashboard draws (`view`), and a small `glance` block that the menu bar and tray apps print as is.
+- `combined.json` holds three things: each computer's own rows (so either computer can recombine), a merged snapshot that the dashboard draws (`view`), and a small `glance` block for the menu bar and tray apps. The apps check each limit reading and reset time again when drawing.
 - On one computer, steps 2 and 4 do not happen. With two, the computer without the hub role merges the hub's copy on its own cycle, so its own numbers stay current when the hub is away and the hub's numbers show their age.
 
 ## Parts

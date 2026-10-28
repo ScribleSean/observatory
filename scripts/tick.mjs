@@ -26,7 +26,7 @@ export const TICK_DEADLINE_MS=4*60000;
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
     const outcome=await withCycleDeadline(async()=>tick(await loadConfig()),{
-      deadlineMs:TICK_DEADLINE_MS,onDeadline:()=>{console.error('Tick stopped at its deadline');process.exit(2);},
+      deadlineMs:TICK_DEADLINE_MS,shutdownSignals:['SIGTERM','SIGINT'],onDeadline:()=>{console.error('Tick stopped at its deadline');process.exit(2);},
     });
     console.log(JSON.stringify(outcome.busy?{busy:true}:outcome.value));
   } catch(error) {

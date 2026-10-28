@@ -47,7 +47,8 @@ test('both apps start the server with --with-parent, and the Mac app stops it on
   const swift=await readFile(path.join(repo,'glance/mac/Glance.swift'),'utf8');
   assert.match(swift,/serve-local\.mjs", "--with-parent"/);
   assert.match(swift,/makeSignalSource\(signal: SIGTERM/);
-  assert.match(swift,/server\?\.terminate\(\)\n\s+self\?\.tick\?\.terminate\(\)/);
+  assert.match(swift,/self\?\.stopProcesses\(\)/);
+  assert.match(swift,/running\.terminate\(\)\n\s+running\.waitUntilExit\(\)/);
   const cs=await readFile(path.join(repo,'glance/windows/Glance.cs'),'utf8');
   assert.match(cs,/Node\("serve-local\.mjs", true, " --with-parent"\)/);
 });
