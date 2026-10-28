@@ -210,6 +210,13 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
 
   if(!existsSync(path.join(REPO,'node_modules','vite')))await act('install build tools with npm ci',()=>npm(['ci']));
   await act('build the dashboard into dist/dashboard',()=>npm(['run','build']));
+  // Before the app build: the Mac install stops the running app, so nothing that can fail
+  // should sit between that stop and the restart below.
+  await act('import limit history kept by earlier versions',async()=>{
+    const report=await importHistory(config);
+    const added=report.reduce((total,row)=>total+row.added,0);
+    if(added)log(`  Imported ${added} earlier limit readings.`);
+  });
 
   const target=paths(platform);
   if(platform==='darwin') {
@@ -217,7 +224,8 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       if(await quiet('/usr/bin/xcrun',['--find','swiftc'])===null)
         throw Error('The Swift compiler is missing. Install the Xcode Command Line Tools with: xcode-select --install');
       const settings=JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n';
-      await installMacApp(target,settings);
+      // Only stop the running app when this run starts it again (not with --no-login).
+      await installMacApp(target,settings,login?{}:{stop:async()=>{}});
     });
   } else {
     await act(`build the tray app at ${path.relative(REPO,target.app)}`,async()=>{
@@ -230,11 +238,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
         path.win32.join(REPO,'glance','windows','Glance.cs')],{windowsHide:true,timeout:300000});
     });
   }
-  await act('import limit history kept by earlier versions',async()=>{
-    const report=await importHistory(config);
-    const added=report.reduce((total,row)=>total+row.added,0);
-    if(added)log(`  Imported ${added} earlier limit readings.`);
-  });
   if(platform!=='darwin' || dryRun)await act('write the app settings (glance.json)',async()=>{
     await writeFile(target.settings,JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n');
   });
