@@ -114,7 +114,7 @@ namespace Observatory
             if (tick != null && !tick.HasExited)
             {
                 if ((DateTime.UtcNow - tickStarted).TotalSeconds < 270) return;
-                try { tick.Kill(); } catch { }
+                StopTree(tick);
             }
             tickStarted = DateTime.UtcNow;
             tick = Node(Path.Combine("scripts", "tick.mjs"), false);
@@ -123,6 +123,37 @@ namespace Observatory
             // Exited fires on a pool thread, so hand the update back to the UI thread.
             tick.Exited += (s, e) => ui.Post(_ => Show(), null);
             Show();
+        }
+
+        // Keep this pure rule in sync with lib/glance-limits.mjs and the Mac app.
+        static double? LimitRemaining(Dictionary<string, object> row, DateTime now)
+        {
+            object value;
+            DateTime checkedAt, reset;
+            if (!row.TryGetValue("stale", out value) || !(value is bool) || (bool)value) return null;
+            if (!row.TryGetValue("remaining", out value) || !(value is double || value is int || value is decimal)) return null;
+            double remaining = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            if (Double.IsNaN(remaining) || Double.IsInfinity(remaining) || remaining < 0 || remaining > 100) return null;
+            if (!row.TryGetValue("checkedAt", out value) || !(value is string) ||
+                !DateTime.TryParse((string)value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out checkedAt) ||
+                now < checkedAt || (now - checkedAt).TotalMinutes >= 10) return null;
+            if (row.TryGetValue("resetsAt", out value) && value is string &&
+                DateTime.TryParse((string)value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out reset) && reset <= now) return null;
+            return remaining;
+        }
+
+        static void StopTree(Process process)
+        {
+            try
+            {
+                if (process == null || process.HasExited) return;
+                var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "taskkill.exe"), "/PID " + process.Id + " /T /F");
+                start.UseShellExecute = false;
+                start.CreateNoWindow = true;
+                using (var killer = Process.Start(start)) killer.WaitForExit();
+                process.WaitForExit();
+            }
+            catch { }
         }
 
         static string Span(TimeSpan age)
@@ -175,16 +206,37 @@ namespace Observatory
                 else
                 {
                     object value;
-                    if (glance.TryGetValue("title", out value) && value is string) title = (string)value;
+                    DateTime now = DateTime.UtcNow;
+                    double? lowest = null;
+                    Line("Limits");
+                    var limits = glance.TryGetValue("limits", out value) ? value as IList : null;
+                    if (limits != null) foreach (object item in limits)
+                    {
+                        var row = item as Dictionary<string, object>;
+                        if (row == null) continue;
+                        double? remaining = LimitRemaining(row, now);
+                        if (remaining.HasValue && (!lowest.HasValue || remaining.Value < lowest.Value)) lowest = remaining;
+                        string name = row.TryGetValue("name", out value) ? value as string ?? "Unknown" : "Unknown";
+                        string window = row.TryGetValue("window", out value) ? value as string ?? "" : "";
+                        Line("  " + name + (window.Length == 0 ? "" : " " + window) + ": " +
+                            (remaining.HasValue ? Math.Round(remaining.Value, MidpointRounding.AwayFromZero) + "% left" : "Unknown"));
+                    }
+                    stale = !lowest.HasValue;
+                    if (lowest.HasValue) title = Math.Round(lowest.Value, MidpointRounding.AwayFromZero) + "%";
+                    // Only the Today section is retained from the saved display text.
                     var lines = glance.TryGetValue("lines", out value) ? value as IList : null;
-                    if (lines != null) foreach (object line in lines) Line(line as string ?? "");
+                    bool afterLimits = false;
+                    if (lines != null) foreach (object line in lines)
+                    {
+                        if ((line as string) == "") afterLimits = true;
+                        if (afterLimits) Line(line as string ?? "");
+                    }
                     Line("");
                     DateTime at;
                     if (json.TryGetValue("generatedAt", out value) && value is string && DateTime.TryParse((string)value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out at))
                     {
                         var age = DateTime.UtcNow - at;
-                        stale = age.TotalMinutes > 15;
-                        Line("Updated " + Span(age) + " ago" + (stale ? ", not recently" : ""), true);
+                        Line("Updated " + Span(age) + " ago" + (age.TotalMinutes > 15 ? ", not recently" : ""), true);
                     }
                     else Line("Updated: Unknown time", true);
                     object hubValue;
@@ -289,7 +341,11 @@ namespace Observatory
 
         void Quit()
         {
-            try { if (server != null && !server.HasExited) server.Kill(); } catch { }
+            tickTimer.Stop();
+            readTimer.Stop();
+            openTimer.Stop();
+            StopTree(tick);
+            StopTree(server);
             tray.Visible = false;
             ExitThread();
         }

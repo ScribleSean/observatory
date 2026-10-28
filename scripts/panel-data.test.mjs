@@ -303,7 +303,7 @@ test('fresh empty periods keep No records and the ten-minute boundary is inclusi
   }
 });
 
-test('snapshot time preserves local history and measures peer lag', () => {
+test('draw time marks frozen local and peer readings incomplete while preserving history', () => {
   for (const lag of [0, 9, 10, 11]) {
     const data = snapshot();
     data.collectedAt = new Date(now - 30 * 60000).toISOString();
@@ -312,12 +312,12 @@ test('snapshot time preserves local history and measures peer lag', () => {
     data.activityHistory = [{ ...data.activity[0], days: [{ date: '2026-03-09', seconds: 42 }] }];
     data.providerTokenSources = [{ ...data.tokens[0], provider: 'claude-code' }];
     const result = totals(data, 'Mac', 'all', new Date(now));
-    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds], lag <= 10 ? [150, 150, 42] : [null, null, null]);
-    for (const note of [result.codexNote, result.claudeNote, result.timeNote]) assert.equal(note.includes('as of'), lag > 10);
+    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds], [null, null, null]);
+    for (const note of [result.codexNote, result.claudeNote, result.timeNote]) assert.match(note, /as of/);
+    assert.deepEqual(recordedDays(data, 'tokens', 'Mac', now), [day('2026-03-09', 50)]);
     const empty = totals(data, 'Mac', 'day', new Date(now + 86400000));
     for (const note of [empty.codexNote, empty.claudeNote, empty.timeNote]) {
-      if (lag <= 10) assert.equal(note, 'No records');
-      else assert.match(note, /as of/);
+      assert.match(note, /as of/);
     }
   }
 });
@@ -363,7 +363,7 @@ test('snapshot reference falls back for missing invalid or far future times', ()
     assert.equal(totals(data, 'Mac', 'day', new Date(now)).codexTokens, 100);
   }
   const reference = deviceReadingReference({ collectedAt: new Date(now + 120000).toISOString() }, now);
-  assert.equal(reference, now + 120000);
+  assert.equal(reference, now);
   assert.equal(deviceReadingCurrent({ status: 'ok', checkedAt: new Date(reference + 600000).toISOString() }, reference), true);
   assert.equal(deviceReadingCurrent({ status: 'ok' }, reference), true);
   assert.equal(deviceReadingCurrent({ status: 'stale', checkedAt: new Date(reference).toISOString() }, reference), false);
@@ -430,4 +430,15 @@ test('a kept higher Claude Code reading shows as of its own earlier time', () =>
   assert.equal(kept.stale, true);
   assert.match(kept.note, /as of/);
   assert.equal(fresh.stale, false);
+});
+
+test('a frozen snapshot loses current-day completeness an hour later without recombining', () => {
+  const data = hourlySnapshot();
+  const frozen = JSON.stringify(data);
+  const at = Date.parse(readingAt);
+  assert.equal(totals(data, 'Mac', 'day', at).codexTokens, 300);
+  const later = totals(data, 'Mac', 'day', at + 3600000);
+  assert.equal(later.codexTokens, null);
+  assert.match(later.codexNote, /^Unknown · as of /);
+  assert.equal(JSON.stringify(data), frozen);
 });

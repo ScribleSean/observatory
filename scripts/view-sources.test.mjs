@@ -77,13 +77,13 @@ void test('old ok device sources count as saved readings', () => {
   }
 });
 
-void test('sources measure lag within an old snapshot', () => {
+void test('sources in a frozen snapshot become stale at draw time', () => {
   for (const lag of [0, 9, 11]) {
     const collectedAt = new Date(now - 1800000).toISOString();
     const checkedAt = new Date(Date.parse(collectedAt) - lag * 60000).toISOString();
     const data = { activity: [{ host: 'Mac', status: 'ok', checkedAt, days: [] }], collectedAt };
     const [row] = sourceGroups(data, now)[1].rows;
-    assert.equal(row.status, lag > 10 ? 'stale' : 'ok');
-    assert.equal(sourceTotals(sourceGroups(data, now)).read, lag <= 10 ? 1 : 0);
+    assert.equal(row.status, 'stale');
+    assert.equal(sourceTotals(sourceGroups(data, now)).read, 0);
   }
 });
