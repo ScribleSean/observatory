@@ -4,6 +4,7 @@
 // `--no-login` builds without starting the app. `--no-start` registers the login item without starting it now. `npm run setup -- --remove` removes the login item and stops the app.
 import {execFile,spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
+import * as filesystem from 'node:fs/promises';
 import {mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
@@ -125,6 +126,57 @@ function npm(args) {
   });
 }
 
+async function stopMacApp() {
+  const service=`gui/${process.getuid()}/${LABEL}`;
+  await quiet('/bin/launchctl',['bootout',service]);
+  // bootout returns before the old job has gone.
+  for(let attempt=0;attempt<20;attempt++) {
+    if(await quiet('/bin/launchctl',['print',service])===null)return;
+    await new Promise(resolve=>setTimeout(resolve,250));
+  }
+  throw Error('The menu bar app did not stop. Quit it and run setup again.');
+}
+
+export async function installMacApp(target,settings,{fs=filesystem,run=execute,stop=stopMacApp}={}) {
+  await fs.mkdir(path.dirname(target.app),{recursive:true});
+  const folder=await fs.mkdtemp(`${target.app}.staging-`);
+  const staged=path.join(folder,'Observatory.app');
+  const previous=path.join(folder,'previous.app');
+  const executable=path.join(staged,'Contents','MacOS',MAC_EXECUTABLE);
+  const plist=path.join(staged,'Contents','Info.plist');
+  let keepBackup=false;
+  try {
+    await fs.mkdir(path.dirname(executable),{recursive:true});
+    await fs.mkdir(path.join(staged,'Contents','Resources'),{recursive:true});
+    await fs.writeFile(plist,infoPlist());
+    await run('/usr/bin/xcrun',['swiftc','-O','-swift-version','5',path.join(REPO,'glance','mac','Glance.swift'),'-o',executable],{timeout:300000});
+    await fs.writeFile(path.join(staged,'Contents','Resources','glance.json'),settings);
+    await fs.access(executable,filesystem.constants.X_OK);
+    if(!(await fs.stat(executable)).isFile() || !(await fs.stat(plist)).isFile())
+      throw Error('The staged app is missing its executable or Info.plist.');
+    // Sign last so the signature covers glance.json too, and refuse a failed signature.
+    await run('/usr/bin/codesign',['--force','--sign','-',staged]);
+    await run('/usr/bin/codesign',['--verify','--strict',staged]);
+    await stop();
+    let hadPrevious=false;
+    try {await fs.rename(target.app,previous);hadPrevious=true;}
+    catch(error) {if(error.code!=='ENOENT')throw error;}
+    try {await fs.rename(staged,target.app);}
+    catch(error) {
+      if(hadPrevious) {
+        try {await fs.rename(previous,target.app);}
+        catch(restoreError) {
+          keepBackup=true;
+          throw new AggregateError([error,restoreError],`App replacement and rollback failed. The old app is preserved at ${previous}.`);
+        }
+      }
+      throw error;
+    }
+  } finally {
+    if(!keepBackup)await fs.rm(folder,{recursive:true,force:true});
+  }
+}
+
 export async function setup({dryRun=false,login=true,start=true,platform=process.platform,log=console.log}={}) {
   const step=(text)=>log(`- ${text}`);
   const act=async(text,action)=>{step(dryRun?`would ${text}`:text);if(!dryRun)return action();};
@@ -164,11 +216,8 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     await act(`build the menu bar app at ${path.relative(REPO,target.app)}`,async()=>{
       if(await quiet('/usr/bin/xcrun',['--find','swiftc'])===null)
         throw Error('The Swift compiler is missing. Install the Xcode Command Line Tools with: xcode-select --install');
-      await rm(target.app,{recursive:true,force:true});
-      await mkdir(path.dirname(target.executable),{recursive:true});
-      await mkdir(path.dirname(target.settings),{recursive:true});
-      await writeFile(path.join(target.app,'Contents','Info.plist'),infoPlist());
-      await execute('/usr/bin/xcrun',['swiftc','-O','-swift-version','5',path.join(REPO,'glance','mac','Glance.swift'),'-o',target.executable],{timeout:300000});
+      const settings=JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n';
+      await installMacApp(target,settings);
     });
   } else {
     await act(`build the tray app at ${path.relative(REPO,target.app)}`,async()=>{
@@ -186,10 +235,8 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     const added=report.reduce((total,row)=>total+row.added,0);
     if(added)log(`  Imported ${added} earlier limit readings.`);
   });
-  await act('write the app settings (glance.json)',async()=>{
+  if(platform!=='darwin' || dryRun)await act('write the app settings (glance.json)',async()=>{
     await writeFile(target.settings,JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n');
-    // Ad hoc signature last, so it covers glance.json too. macOS then runs the locally built app without a download warning.
-    if(platform==='darwin')await quiet('/usr/bin/codesign',['--force','--sign','-',target.app]);
   });
 
   if(config.role==='hub') for(const spoke of config.hub.spokes) {
@@ -204,10 +251,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       await mkdir(path.dirname(target.launchAgent),{recursive:true});
       await writeFile(target.launchAgent,launchAgent(target.executable));
       const domain=`gui/${process.getuid()}`;
-      await quiet('/bin/launchctl',['bootout',`${domain}/${LABEL}`]);
-      // bootout returns before the old job has gone, and bootstrap fails until it has.
-      for(let attempt=0;attempt<20 && await quiet('/bin/launchctl',['print',`${domain}/${LABEL}`])!==null;attempt++)
-        await new Promise(resolve=>setTimeout(resolve,250));
       let failure=null;
       for(let attempt=0;attempt<5;attempt++) {
         try {await execute('/bin/launchctl',['bootstrap',domain,target.launchAgent]);failure=null;break;}
