@@ -26,8 +26,17 @@ function parseSnapshot(text,host,now) {
   const own=key=>Array.isArray(value[key]) && value[key].some(row=>row?.host===host && row.status!=='not-connected');
   if(claimed!==undefined ? claimed!==host : !['activity','tokens','settings'].some(own))
     throw Error('snapshot is for another computer');
-  if(!ownRows(value,host))throw Error('invalid snapshot');
-  return value;
+  const cleaned=ownRows(value,host);
+  if(!cleaned)throw Error('invalid snapshot');
+  return {...cleaned,schema:2,device:{host,name:cleaned.name}};
+}
+
+function validatedDevice(combined,host,now) {
+  const carried=carriedDevice(combined,host);
+  if(!carried)return null;
+  try {
+    return {...carried,snapshot:parseSnapshot(JSON.stringify({...carried.snapshot,schema:2}),host,now)};
+  } catch {return null;}
 }
 
 export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()}={}) {
@@ -43,7 +52,7 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
       devices.push({host,name:spoke.name,snapshot});
       report.push({name:spoke.name,host,pull:'ok'});
     } catch(error) {
-      const carried=carriedDevice(previous,host);
+      const carried=validatedDevice(previous,host,now());
       devices.push({...(carried??{host,name:spoke.name,snapshot:null}),name:spoke.name,error:error.message});
       report.push({name:spoke.name,host,pull:error.message});
     }
@@ -61,22 +70,25 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
   return combined;
 }
 
-const newer=(a,b)=>!b?a:!a?b:(Date.parse(b.generatedAt)>Date.parse(a.generatedAt)?b:a);
+const newer=(a,b)=>!b?a:!a?b:(Date.parse(b.snapshot.collectedAt)>Date.parse(a.snapshot.collectedAt)?b:a);
 
 export async function recombine(config,{now=()=>Date.now()}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
   const mine=await readJson(path.join(folder,'combined.json'));
   const inbox=await readJson(path.join(folder,'combined.incoming.json'));
   // Only a copy the hub wrote counts as inbox data.
-  const previous=newer(mine,inbox?.hub?.role==='hub' && Date.parse(inbox.generatedAt)<=now()+CLOCK_SKEW_MS?inbox:null);
+  const incoming=inbox?.hub?.role==='hub' && Date.parse(inbox.generatedAt)<=now()+CLOCK_SKEW_MS?inbox:null;
   const own=await readJson(path.join(folder,'usage.json'));
   const devices=[{host:config.host,name:config.device.name,snapshot:own,...(own?{}:{error:'no local snapshot'})}];
   for(const host of HOSTS.filter(host=>host!==config.host)) {
-    const carried=carriedDevice(previous,host);
+    const carried=newer(validatedDevice(mine,host,now()),validatedDevice(incoming,host,now()));
     if(carried)devices.push(carried);
   }
   const combined=combine(devices,{now:now(),generatedBy:config.host});
-  combined.hub={role:'spoke',hubWroteAt:previous?.hub?.role==='hub'?previous.generatedAt:previous?.hub?.hubWroteAt ?? null};
+  const hubTime=copy=>copy?.hub?.role==='hub'?copy.generatedAt:copy?.hub?.hubWroteAt;
+  const hubWroteAt=[hubTime(mine),hubTime(incoming)].filter(at=>Number.isFinite(Date.parse(at)))
+    .sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;
+  combined.hub={role:'spoke',hubWroteAt};
   await writeAtomic(path.join(folder,'combined.json'),JSON.stringify(combined));
   return combined;
 }

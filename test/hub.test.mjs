@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {runHub,recombine} from '../scripts/hub.mjs';
+import {combine} from '../lib/combine.mjs';
 import {pullCommand,pushCommand,sshTransport} from '../scripts/hub-transport.mjs';
 import {withFolder,ownSnapshot,testConfig} from './helpers.mjs';
 
@@ -68,6 +69,52 @@ test('a snapshot about another computer is refused',()=>withFolder(async folder=
   assert.equal(combined.hub.spokes[0].pull,'snapshot is for another computer');
   const garbage=await runHub(config,{transport:fakeTransport('not json'),now:()=>now});
   assert.equal(garbage.hub.spokes[0].pull,'invalid snapshot');
+}));
+
+test('a null Claude day fails only the peer read, carries its previous data and saves fresh local data',()=>withFolder(async folder=>{
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
+  await seed(folder,'usage.json',ownSnapshot('Mac',now-600000));
+  await runHub(config,{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000))),now:()=>now-600000});
+  const local=ownSnapshot('Mac',now);
+  await seed(folder,'usage.json',local);
+  const peer=ownSnapshot('Windows',now);
+  peer.providerTokenSources[0].days.push(null);
+  const transport=fakeTransport(JSON.stringify(peer));
+  await runHub(config,{transport,now:()=>now});
+  const saved=await read(folder,'combined.json');
+  assert.deepEqual(saved.hub.spokes,[{name:'PC',host:'Windows',pull:'invalid snapshot',push:'skipped'}]);
+  assert.equal(saved.snapshots.Mac.collectedAt,local.collectedAt);
+  assert.equal(saved.snapshots.Windows.collectedAt,ownSnapshot('Windows',now-600000).collectedAt);
+  assert.equal(saved.devices[1].error,'invalid snapshot');
+  assert.equal(typeof saved.glance.today[0].tokens,'number');
+  assert.equal(transport.pushed.length,0);
+}));
+
+test('a delayed hub transfer keeps the newest observations per computer across spoke refreshes',()=>withFolder(async folder=>{
+  const config=testConfig(folder,{platform:'windows',host:'Windows',device:{name:'PC'}});
+  const copy=(observed,generated)=>({...combine([{host:'Mac',snapshot:ownSnapshot('Mac',observed)},
+    {host:'Windows',snapshot:ownSnapshot('Windows',now-600000)}],{now:generated,generatedBy:'Mac'}),hub:{role:'hub'}});
+  await seed(folder,'combined.json',copy(now-600000,now-600000));
+  const local=ownSnapshot('Windows',now+300000);
+  await seed(folder,'usage.json',local);
+  await recombine(config,{now:()=>now+300000});
+  const incoming=copy(now,now);
+  await seed(folder,'combined.incoming.json',incoming);
+  const merged=await recombine(config,{now:()=>now+360000});
+  assert.equal(merged.snapshots.Mac.collectedAt,incoming.snapshots.Mac.collectedAt);
+  assert.equal(merged.snapshots.Windows.collectedAt,local.collectedAt);
+  assert.equal(merged.hub.hubWroteAt,incoming.generatedAt);
+  // A later file with older observations must not replace the saved hub rows.
+  await seed(folder,'combined.incoming.json',copy(now-600000,now+400000));
+  const again=await recombine(config,{now:()=>now+420000});
+  assert.equal(again.snapshots.Mac.collectedAt,incoming.snapshots.Mac.collectedAt);
+  // A malformed, newer candidate also leaves the validated saved rows intact.
+  const bad=copy(now+450000,now+450000);
+  bad.snapshots.Mac.providerTokenSources[0].days.push(null);
+  await seed(folder,'combined.incoming.json',bad);
+  const safe=await recombine(config,{now:()=>now+480000});
+  assert.equal(safe.snapshots.Mac.collectedAt,incoming.snapshots.Mac.collectedAt);
+  assert.equal(safe.snapshots.Windows.collectedAt,local.collectedAt);
 }));
 
 test('a spoke recombines its fresh snapshot with the hub rows it was sent',()=>withFolder(async folder=>{
