@@ -27,14 +27,15 @@ const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
 export const TIMEZONE=TIME_ZONE;
 
-function runPowerShellFile(script) {
+export function runPowerShellFile(script,{spawnProcess=spawn,exec=execFile}={}) {
   return new Promise((resolve,reject)=>{
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');
-    const child=spawn(powershell,windowsPowerShellFileArguments(script),{windowsHide:true,stdio:['ignore','pipe','ignore'],env:windowsPowerShellEnvironment()});
+    const child=spawnProcess(powershell,windowsPowerShellFileArguments(script),{windowsHide:true,stdio:['ignore','pipe','ignore'],env:windowsPowerShellEnvironment()});
     let output='',done=false;
     const finish=error=>{if(done)return;done=true;clearTimeout(timer);if(error)reject(error);else resolve(output);};
     const timer=setTimeout(()=>{
-      execFile(path.join(process.env.SystemRoot || 'C:/Windows','System32/taskkill.exe'),['/PID',String(child.pid),'/T','/F'],{windowsHide:true},()=>{});
+      // The cycle may already have stopped the child and refused new processes.
+      try {exec(path.join(process.env.SystemRoot || 'C:/Windows','System32/taskkill.exe'),['/PID',String(child.pid),'/T','/F'],{windowsHide:true},()=>{});}catch {}
       finish(Error('Screen time reader timeout'));
     },60000);
     child.once('error',finish);
