@@ -9,6 +9,38 @@ import {setTimeout as delay} from 'node:timers/promises';
 const helper=new URL('../lib/cycle-processes.mjs',import.meta.url).href;
 const alive=pid=>{try {process.kill(pid,0);return true;}catch(error) {if(error.code==='ESRCH')return false;throw error;}};
 
+test('tick finishing during deadline grace exits successfully with a fake clock',async()=>{
+  const runner=spawn(process.execPath,['--input-type=module','-e',`
+    import assert from 'node:assert/strict';
+    import {mock} from 'node:test';
+    import {withCycleDeadline} from ${JSON.stringify(helper)};
+    import {tick} from ${JSON.stringify(new URL('../scripts/tick.mjs',import.meta.url).href)};
+    import {withFolder,testConfig} from ${JSON.stringify(new URL('./helpers.mjs',import.meta.url).href)};
+    await withFolder(async folder=>{
+      mock.timers.enable({apis:['setTimeout','Date']});
+      let release,started;
+      const waiting=new Promise(resolve=>{release=resolve;});
+      const ready=new Promise(resolve=>{started=resolve;});
+      const pending=withCycleDeadline(()=>tick(testConfig(folder),{
+        collectStep:async()=>{started();await waiting;return {status:{state:'ok'}};},
+        spokeStep:async()=>({generatedAt:new Date().toISOString(),glance:{title:'Test'}}),
+      }),{deadlineMs:1000,graceMs:250});
+      await ready;
+      mock.timers.tick(1000);
+      mock.timers.tick(100);
+      release();
+      assert.equal((await pending).value.collect,'ok');
+      mock.timers.tick(1000);
+      await Promise.resolve();
+      mock.timers.reset();
+    });
+  `],{stdio:['ignore','pipe','pipe']});
+  let errors='';
+  runner.stderr.on('data',data=>{errors+=data;});
+  const [code]=await once(runner,'close');
+  assert.equal(code,0,errors);
+});
+
 test('cycle execFile preserves native output and error fields',async()=>{
   const cases=[
     ['encoded output',process.execPath,['-e',"process.stdout.write('héllo');process.stderr.write('error')"],{encoding:'utf16le'}],

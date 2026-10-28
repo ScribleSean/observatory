@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
-import {collect,buildSnapshot} from '../scripts/collect.mjs';
+import {EventEmitter} from 'node:events';
+import {PassThrough} from 'node:stream';
+import {collect,buildSnapshot,runPowerShellFile} from '../scripts/collect.mjs';
 import {tick} from '../scripts/tick.mjs';
 import {withFolder,testConfig} from './helpers.mjs';
 
@@ -15,6 +17,30 @@ const readers={
   claudeCode:async()=>({status:'ok',days:[]}),
   claudeLimits:async()=>{throw Error('no CLI');},
 };
+
+for(const failure of ['process not found','expired cycle']) {
+  test(`Windows reader timeout tolerates taskkill failure: ${failure}`,async t=>{
+    t.mock.timers.enable({apis:['setTimeout']});
+    const child=new EventEmitter();
+    child.pid=1234;
+    child.stdout=new PassThrough();
+    const calls=[];
+    const pending=runPowerShellFile('/fictional/reader.ps1',{
+      spawnProcess:()=>child,
+      exec:(file,args,options,callback)=>{
+        calls.push({file,args});
+        if(failure==='expired cycle')throw Error('Cycle deadline exceeded');
+        queueMicrotask(()=>callback(Object.assign(Error('ERROR: The process "1234" not found.'),{code:128})));
+      },
+    });
+    const rejected=assert.rejects(pending,/Screen time reader timeout/);
+    t.mock.timers.tick(60000);
+    await rejected;
+    assert.equal(calls.length,1);
+    assert.equal(path.basename(calls[0].file),'taskkill.exe');
+    assert.deepEqual(calls[0].args,['/PID','1234','/T','/F']);
+  });
+}
 
 test('only sources set to true are read, and a failed read is Unknown',async()=>{
   const called=[];
