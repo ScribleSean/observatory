@@ -4,7 +4,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {
   DEFAULT_LIMITS,DEFAULT_SCAN_BYTES,EFFORTS,FIELDS,LineReader,PyTypeError,TIERS,ValueError,
   cpLen,get,has,inEfforts,isDict,isoformat,label,number,openForReading,parseIsoformat,pyDumps,pyEqual,
-  pyLoads,pyLoadsBytes,sha256Hex,toolIdentifier,
+  pyLoads,pyLoadsBytes,sha256Hex,toolIdentifier,validEvent,
 } from './read-settings.mjs';
 
 const HEX64=/^[a-f0-9]{64}$/;
@@ -13,7 +13,7 @@ const windows=process.platform==='win32';
 const realpath=windows?fs.realpathSync.native:fs.realpathSync;
 
 export function cacheEvent(event,cached=false) {
-  if(!isDict(event)||!isDict(get(event,'payload')))return null;
+  if(!validEvent(event)||!isDict(get(event,'payload')))return null;
   const payload=event.payload;
   let kind=get(event,'type');
   const subtype=get(payload,'type');

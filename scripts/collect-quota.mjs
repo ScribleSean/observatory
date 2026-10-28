@@ -1,6 +1,6 @@
 import {access,lstat,readFile,realpath} from 'node:fs/promises';
 import {constants} from 'node:fs';
-import {execFile} from 'node:child_process';
+import {execFile} from '../lib/cycle-processes.mjs';
 import {promisify} from 'node:util';
 import {homedir} from 'node:os';
 import {randomBytes} from 'node:crypto';

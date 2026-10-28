@@ -1,5 +1,5 @@
 // Files travel as base64 so console code pages cannot change the bytes.
-import {execFile} from 'node:child_process';
+import {execFile} from '../lib/cycle-processes.mjs';
 
 export const MAX_FILE_BYTES=16_000_000;
 const SSH_OPTIONS=['-o','BatchMode=yes','-o','ConnectTimeout=8','-o','StrictHostKeyChecking=yes',

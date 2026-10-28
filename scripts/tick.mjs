@@ -1,5 +1,6 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {withCycleDeadline} from '../lib/cycle-processes.mjs';
 import {loadConfig} from '../lib/config.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {withRunLock} from '../lib/run-lock.mjs';
@@ -23,9 +24,10 @@ export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=
 export const TICK_DEADLINE_MS=4*60000;
 
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
-  setTimeout(()=>{console.error('Tick stopped at its deadline');process.exit(2);},TICK_DEADLINE_MS).unref();
   try {
-    const outcome=await tick(await loadConfig());
+    const outcome=await withCycleDeadline(async()=>tick(await loadConfig()),{
+      deadlineMs:TICK_DEADLINE_MS,onDeadline:()=>{console.error('Tick stopped at its deadline');process.exit(2);},
+    });
     console.log(JSON.stringify(outcome.busy?{busy:true}:outcome.value));
   } catch(error) {
     console.error(`Tick failed: ${error.message}`);

@@ -1,4 +1,4 @@
-import {spawn,execFile} from 'node:child_process';
+import {spawn,execFile} from '../lib/cycle-processes.mjs';
 import {homedir} from 'node:os';
 import {copyFile,readFile,realpath} from 'node:fs/promises';
 import {constants as fsConstants} from 'node:fs';
