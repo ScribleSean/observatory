@@ -1,6 +1,75 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nodeSupported,paths,launchAgent,infoPlist,glanceSettings,LABEL} from '../scripts/setup.mjs';
+import * as fs from 'node:fs/promises';
+import path from 'node:path';
+import {withFolder} from './helpers.mjs';
+import {nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,LABEL} from '../scripts/setup.mjs';
+
+for(const failure of ['compiler','executable','plist','sign','verify','swap','rollback',null]) {
+  test(`staged Mac install: ${failure ?? 'success'}`,()=>withFolder(async folder=>{
+    const target=paths('darwin',folder,folder);
+    await fs.mkdir(path.dirname(target.executable),{recursive:true});
+    await fs.writeFile(target.executable,'old');
+    const events=[];
+    let running=true;
+    let backup;
+    const settings='{"test":true}\n';
+    const run=async(file,args)=>{
+      if(file==='/usr/bin/xcrun') {
+        events.push('compile');
+        if(failure==='compiler')throw Error('compiler failed');
+        const executable=args.at(-1);
+        const staged=path.dirname(path.dirname(path.dirname(executable)));
+        assert.equal(path.dirname(path.dirname(staged)),path.dirname(target.app));
+        if(failure!=='executable')await fs.writeFile(executable,'new',{mode:0o755});
+        if(failure==='plist')await fs.rm(path.join(path.dirname(path.dirname(executable)),'Info.plist'));
+      } else {
+        assert.equal(file,'/usr/bin/codesign');
+        const step=args[0]==='--verify'?'verify':'sign';
+        events.push(step);
+        assert.equal(await fs.readFile(path.join(args.at(-1),'Contents','Resources','glance.json'),'utf8'),settings);
+        if(failure===step)throw Error(`${step} failed`);
+      }
+    };
+    const injectedFs={...fs,rename:async(from,to)=>{
+      if(from===target.app) {backup=to;events.push('backup');}
+      else if(to===target.app) {
+        if(from===backup) {
+          events.push('restore');
+          if(failure==='rollback')throw Error('restore failed');
+        } else {
+          events.push('swap');
+          if(failure==='swap' || failure==='rollback')throw Error('swap failed');
+        }
+      }
+      return fs.rename(from,to);
+    }};
+    const stop=async()=>{
+      events.push('stop');
+      assert.equal(await fs.readFile(target.executable,'utf8'),'old');
+      assert.deepEqual(events,['compile','sign','verify','stop']);
+      running=false;
+    };
+    const install=()=>installMacApp(target,settings,{fs:injectedFs,run,stop});
+    if(failure)await assert.rejects(install,error=>{
+      if(failure==='executable' || failure==='plist')assert.equal(error.code,'ENOENT');
+      else assert.match(error.message,new RegExp(`${failure} failed`));
+      return true;
+    });
+    else await install();
+    if(failure==='rollback') {
+      assert.equal(await fs.readFile(path.join(backup,'Contents','MacOS','ObservatoryGlance'),'utf8'),'old');
+      return;
+    }
+    assert.equal(await fs.readFile(target.executable,'utf8'),failure?'old':'new');
+    assert.deepEqual(await fs.readdir(path.dirname(target.app)),['Observatory.app']);
+    if(!failure) {
+      assert.equal(await fs.readFile(target.settings,'utf8'),settings);
+      assert.deepEqual(events,['compile','sign','verify','stop','backup','swap']);
+    } else if(failure==='swap')assert.deepEqual(events,['compile','sign','verify','stop','backup','swap','restore']);
+    assert.equal(running,Boolean(failure && failure!=='swap'));
+  }));
+}
 
 test('Node 22.13 or later is required',()=>{
   assert.equal(nodeSupported('22.13.0'),true);
