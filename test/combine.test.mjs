@@ -13,6 +13,54 @@ test('rows a computer received from a paired device are not reused',()=>{
   assert.ok(rows.activity.every(row=>row.host==='Mac'));
 });
 
+test('combined rows retain only consumed fields, including nested rows and limit readings',()=>{
+  const peer=ownSnapshot('Windows',now);
+  const expected=combine([{host:'Windows',snapshot:peer}],{now});
+  const plant=value=>{
+    if(Array.isArray(value))value.forEach(plant);
+    else if(value && typeof value==='object') {
+      for(const [key,nested] of Object.entries(value))if(!['categories','apps'].includes(key))plant(nested);
+      value.prompt={token:'private-marker'};
+    }
+  };
+  for(const key of ['activity','tokens','settings','providerTokenSources','activityHistory','quota','claudeLimits'])plant(peer[key]);
+  const combined=combine([{host:'Windows',snapshot:peer}],{now});
+  assert.deepEqual(combined,expected);
+  assert.ok(!JSON.stringify(combined).includes('private-marker'));
+  assert.equal(combined.snapshots.Windows.tokens[0].days[0].totalTokens,peer.tokens[0].days[0].totalTokens);
+  assert.equal(combined.snapshots.Windows.tokens[0].days[0].models[0].model,peer.tokens[0].days[0].models[0].model);
+});
+
+test('an approved scalar field cannot carry a nested private object',()=>{
+  const peer=ownSnapshot('Windows',now);
+  peer.tokens[0].days[0].totalTokens={token:'private-marker'};
+  assert.throws(()=>ownRows(peer,'Windows'),/invalid snapshot/);
+});
+
+test('each computer uses its own date for today across midnight',()=>{
+  const at=Date.parse('2026-10-22T00:30:00Z');
+  const snapshot=(host,timezone,date,amount)=>({schema:2,collectedAt:new Date(at).toISOString(),timezone,device:{host,name:host},
+    activity:[{host,status:'ok',days:[{date,seconds:amount,trackedSeconds:amount,categories:{Editors:amount}}]}],
+    tokens:[{host,status:'ok',days:[{date,totalTokens:amount*10,apiEstimate:{usd:amount}}]}],
+    providerTokenSources:[{host,provider:'claude-code',status:'ok',days:[{date,totalTokens:amount*20,apiEstimate:{usd:amount*2}}]}]});
+  const mac=snapshot('Mac','America/Los_Angeles','2026-10-21',10);
+  const pc=snapshot('Windows','Asia/Tokyo','2026-10-22',20);
+  for(const devices of [[{host:'Mac',snapshot:mac},{host:'Windows',snapshot:pc}],[{host:'Windows',snapshot:pc},{host:'Mac',snapshot:mac}]]) {
+    const combined=combine(devices,{now:at});
+    for(const [index,amount] of [10,20].entries()) {
+      const row=combined.glance.today.find(row=>row.host===['Mac','Windows'][index]);
+      assert.equal(row.seconds,amount);
+      assert.equal(row.codexTokens,amount*10);
+      assert.equal(row.claudeTokens,amount*20);
+      assert.equal(row.usd,amount*3);
+      assert.deepEqual(row.categories,[{name:'Editors',seconds:amount}]);
+    }
+    assert.equal(combined.glance.both.seconds,30);
+    assert.equal(combined.glance.both.tokens,900);
+    assert.equal(combined.glance.both.usd,90);
+  }
+});
+
 test('two fresh computers combine into per-device numbers and a labeled sum',()=>{
   const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ownSnapshot('Windows',now)}],{now,generatedBy:'Mac'});
   assert.equal(combined.schema,'observatory-combined/1');
