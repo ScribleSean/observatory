@@ -128,3 +128,18 @@ test('loading and first run show one calm message, not pages of Unknown',()=>{
   assert.ok(first.includes('npm run tick'));
   assert.ok(!first.includes('>Unknown<'));
 });
+
+test('the tokens page shows today by project, with sessions and subagent share',()=>{
+  const model=tokens=>[{model:'claude-opus-5-5',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}];
+  const session=(id,start,end,tokens,subagentTokens)=>({id,provider:'claude',start,end,totalTokens:tokens,subagentTokens,usd:1,models:model(tokens)});
+  const row={host:'Mac',status:'ok',checkedAt:new Date(now).toISOString(),date:'2026-10-21',providers:['claude'],other:null,projects:[
+    {name:'demo-app',totalTokens:182e6,subagentTokens:null,usd:96,sessionCount:2,sessions:[
+      session('a1b2c3d4e5','2026-10-21T13:02:00.000Z','2026-10-21T14:40:00.000Z',121e6,77.44e6),
+      session('f6a7b8c9d0','2026-10-21T12:10:00.000Z','2026-10-21T12:55:00.000Z',61e6,null)]},
+    {name:'sample-site',totalTokens:74e6,subagentTokens:0,usd:38,sessionCount:1,sessions:[]}]};
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now,snapshot=>({...snapshot,projectTokens:[row]}))}],{now});
+  const html=render({combined,section:'tokens'});
+  for(const text of ['Today by project','demo-app','182M','$96','sample-site','subagents 64%','subagents Unknown'])assert.ok(html.includes(text),text);
+  assert.ok(html.indexOf('demo-app')<html.indexOf('sample-site'),'largest project first');
+  assert.ok(!html.includes('NaN') && !html.includes('undefined'));
+});
