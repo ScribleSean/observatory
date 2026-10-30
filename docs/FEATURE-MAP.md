@@ -43,7 +43,7 @@ What a person can do with Observatory, how they reach it, and what checks it tod
 | --- | --- | --- |
 | Telescope icon in the menu bar, dimmed when no current reading | Mac menu bar | None (live only) |
 | Panel with limits scarcest first, one line per computer, Open dashboard, Refresh, Quit | Click the menu bar item | `--render` draws it from a `combined.json` for screenshots. No automated test |
-| Windows tray telescope icon and a menu with limits scarcest first | Windows tray | None (compiled by setup only) |
+| Windows tray telescope icon. Left click opens the same panel as the Mac, right click a short menu | Windows tray | `--render` draws the panel from a `combined.json`. No automated test |
 | One app icon from the telescope: Mac bundle icon, Windows exe icon and Start menu entry | Finder, Windows search | `test/setup.test.mjs` (bundle icon, Info.plist, shortcut command). Icons are drawn by `glance/icons/make-icons.swift` |
 
 ## Dashboard

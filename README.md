@@ -120,7 +120,7 @@ Shots already in the repository:
 
 Shots still to take:
 
-4. Windows tray icon and the tray menu open.
+4. Windows tray icon and the tray panel open. `build\\windows\\ObservatoryGlance.exe --render <file> <out.png> light` draws the panel.
 5. The dashboard beside a terminal running Claude Code.
 
 ## Development
