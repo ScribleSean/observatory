@@ -90,7 +90,7 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   });
   // The guide answers one question: will this week last? So only each computer's current window gets one,
   // from its own reset. Computers that share a window draw it once.
-  const guide = window === 'week' ? series.flatMap(item => paceGuide(item.points, 'week', data.from, data.to).slice(-1))
+  const guide = window === 'week' ? series.flatMap(item => paceGuide(item.points, 'week', data.from, data.to).slice(-1).filter(segment => segment.used))
     .filter((segment, index, list) => list.findIndex(other => Math.abs(other.end - segment.end) <= 5 * 60000) === index) : [];
 
   // In column mode one item is one window (or day): the computers' columns that overlap it, together.

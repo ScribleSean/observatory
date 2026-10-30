@@ -43,8 +43,8 @@ test('a reset time that drifts on every reading is still one window, and one pac
     ...[0,1,2].map(step=>({t:reset+step*DAY,r:100,x:reset+7*DAY+step*DAY})),
     {t:reset+3*DAY,r:90,x:reset+10*DAY},{t:reset+4*DAY,r:70,x:reset+10*DAY},
   ];
-  const guides=paceGuide(weekly,'week',reset,reset+5*DAY);
-  assert.equal(guides.length,1,'the idle run draws no guide');
+  const guides=paceGuide(weekly,'week',reset,reset+5*DAY).filter(guide=>guide.used);
+  assert.equal(guides.length,1,'the idle run has nothing to pace');
   assert.equal(guides[0].end,reset+10*DAY);
 });
 
@@ -71,4 +71,16 @@ test('over long ranges windows group by day at the lowest reading',()=>{
   const [only]=dailyColumns(columns);
   assert.equal(only.low,15);
   assert.equal(only.readings,3);
+});
+
+test('use that starts minutes after an idle reading is a new window, even when the reset times nearly match',()=>{
+  // Idle every 10 minutes for 8 hours, Codex style: reset = reading + 5h.
+  const idle=Array.from({length:49},(_,step)=>({t:reset+step*10*60000,r:100,x:reset+step*10*60000+5*HOUR}));
+  const last=idle.at(-1);
+  const used=[{t:last.t+4*60000,r:80,x:last.x+4*60000},{t:last.t+14*60000,r:60,x:last.x+4*60000}];
+  const columns=windowColumns([...idle,...used],'5h');
+  assert.equal(columns.length,2);
+  assert.equal(columns[1].low,60);
+  assert.equal(columns[1].readings,2,'the used window holds only its own readings');
+  assert.ok(columns[1].end-columns[1].start===5*HOUR);
 });
