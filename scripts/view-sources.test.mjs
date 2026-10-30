@@ -87,3 +87,7 @@ void test('sources in a frozen snapshot become stale at draw time', () => {
     assert.equal(sourceTotals(sourceGroups(data, now)).read, 0);
   }
 });
+void test('a combined limit reading names the computer it was observed on', () => {
+  const groups = sourceGroups({ deviceNames: { Mac: 'Synthetic laptop' }, claudeLimits: { status: 'ok', observedOn: 'Mac' }, quota: { status: 'ok', observedOn: 'Elsewhere' } }, now);
+  assert.deepEqual(groups[0].rows.map(row => row.device), ['Synthetic laptop (Mac)', null]);
+});
