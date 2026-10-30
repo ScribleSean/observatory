@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
-import {collectProjectTokens,projectName,sessionHash} from '../scripts/read-projects.mjs';
+import {collectProjectTokens,projectName,repositoryRoot,sessionHash} from '../scripts/read-projects.mjs';
 import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS} from '../scripts/project-tokens.mjs';
 import {buildSnapshot,toolFolder} from '../scripts/collect.mjs';
 import {combine} from '../lib/combine.mjs';
@@ -324,4 +324,18 @@ test('a Codex turn in a folder with no safe name is not given the previous proje
     .reduce((sum,row)=>sum+row.models.reduce((inner,model)=>inner+model.totalTokens,0),0);
   assert.equal(total('demo-app'),100,'only the first turn is demo-app');
   assert.equal(total(null),120,'the turn in the unnamed folder has no project');
+}));
+
+test('a subfolder of a repository is that repository, not a project of its own',async()=>withFolder(async folder=>{
+  const own=path.join(folder,'home');
+  const root=path.join(own,'Developer','notes-repo');
+  await mkdir(path.join(root,'.git'),{recursive:true});
+  await mkdir(path.join(root,'decisions','old'),{recursive:true});
+  await mkdir(path.join(own,'Developer','loose','sub'),{recursive:true});
+  await writeFile(path.join(own,'.git'),'gitdir: elsewhere\n');
+  assert.equal(repositoryRoot(path.join(root,'decisions','old'),own),root);
+  assert.equal(repositoryRoot(root,own),root);
+  assert.equal(repositoryRoot(path.join(own,'Developer','loose','sub'),own),null,'a repository at home does not swallow every folder');
+  assert.equal(repositoryRoot(path.join(root,'gone','deeper'),own),root,'a removed subfolder still finds its repository');
+  assert.equal(repositoryRoot('relative/path',own),null);
 }));

@@ -78,6 +78,32 @@ export function projectName(cwd,home='',{repository=null,branch=null}={}) {
   return valid(name || null);
 }
 
+// The nearest folder at or above cwd that holds a .git entry, so a subfolder
+// counts as its repository. The home folder and anything above it are never
+// a repository here, so a dotfiles repository at home does not take every folder.
+export function repositoryRoot(cwd,home='') {
+  if(typeof cwd!=='string' || !path.isAbsolute(cwd))return null;
+  const stop=typeof home==='string' && home?path.resolve(home):null;
+  let folder=path.resolve(cwd);
+  if(stop && !folder.toLowerCase().startsWith(stop.toLowerCase()+path.sep))return null;
+  for(;;) {
+    const parent=path.dirname(folder);
+    if(parent===folder || folder===stop)return null;
+    if(fs.existsSync(path.join(folder,'.git')))return folder;
+    folder=parent;
+  }
+}
+
+// projectName after folding a subfolder into its repository, once per folder.
+function namer(home) {
+  const cache=new Map();
+  return (cwd,options)=>{
+    if(typeof cwd!=='string')return projectName(cwd,home,options);
+    if(!cache.has(cwd))cache.set(cwd,repositoryRoot(cwd,home) ?? cwd);
+    return projectName(cache.get(cwd),home,options);
+  };
+}
+
 async function files(root,since,limits,budget={files:0,bytes:0}) {
   const found=[];
   const walk=async folder=>{
@@ -151,7 +177,7 @@ function sessions() {
 // largest counts for each message id win. Subagent turns carry
 // isSidechain and their parent's sessionId.
 async function readClaude(folder,{today,timeZone,since,home,limits}) {
-  const requests=new Map();
+  const requests=new Map(),name=namer(home);
   for(const file of await files(path.join(folder,'projects'),since,limits)) {
     // A subagent file sits in <session id>/subagents/ and belongs to that session,
     // whatever session id its own events carry.
@@ -174,7 +200,7 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
       const prior=requests.get(key);
       if(prior && prior.total>=total)return;
       const id=owner ?? (typeof event.sessionId==='string' && event.sessionId?event.sessionId:fallback);
-      requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:projectName(event.cwd,home,{branch:event.gitBranch}),
+      requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:name(event.cwd,{branch:event.gitBranch}),
         at:prior?Math.min(prior.record.at,at):at,model:modelName(event.message.model),values,
         subagent:inSubagents || (typeof event.isSidechain==='boolean'?event.isSidechain:null)}});
     });
@@ -188,7 +214,7 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
 // A forked session can repeat its parent's events, so a repeated time and
 // running total is counted once. A thread with a parent is a subagent.
 async function readCodex(folder,{today,timeZone,since,home,limits}) {
-  const result=sessions(),seen=new Set();
+  const result=sessions(),seen=new Set(),name=namer(home);
   const roots=['sessions','archived_sessions'].map(name=>path.join(folder,name));
   const found=[],budget={files:0,bytes:0};
   for(const root of roots)found.push(...await files(root,since,limits,budget));
@@ -200,7 +226,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
         if(typeof payload.id==='string' && payload.id)id=payload.id;
         repository=object(payload.git) && typeof payload.git.repository_url==='string'?payload.git.repository_url:null;
         branch=object(payload.git) && typeof payload.git.branch==='string'?payload.git.branch:null;
-        project=projectName(payload.cwd,home,{repository,branch});
+        project=name(payload.cwd,{repository,branch});
         const parent=typeof payload.parent_thread_id==='string' && payload.parent_thread_id?payload.parent_thread_id:null;
         subagent=parent!==null || (object(payload.source) && Object.hasOwn(payload.source,'subagent')) || payload.thread_source==='subagent';
         if(parent)id=parent;
@@ -209,7 +235,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       if(event.type==='turn_context') {
         model=modelName(payload.model);
         // A new folder that has no safe name is Unknown, not the previous project.
-        if(typeof payload.cwd==='string')project=projectName(payload.cwd,home,{repository,branch});
+        if(typeof payload.cwd==='string')project=name(payload.cwd,{repository,branch});
         return;
       }
       if(event.type!=='event_msg' || payload.type!=='token_count' || !object(payload.info))return;
