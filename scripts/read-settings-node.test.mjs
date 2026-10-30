@@ -564,3 +564,24 @@ test('a legacy Codex fork does not count the parent turns it copied, cold or cac
     await assert.rejects(collectSettings(logs),/parent/);
   });
 });
+
+test('a legacy Codex fork does not count the parent tool calls it copied, cold or cached',async()=>{
+  await inTemporary(async root=>{
+    const logs=path.join(root,'logs'),day=path.join(logs,'sessions','2026','10','30');
+    fs.mkdirSync(day,{recursive:true});
+    const cache=privateFolder(path.join(root,'cache'));
+    const parentId='0199aaaa-0000-7000-8000-000000000003',forkId='0199aaaa-0000-7000-8000-000000000004';
+    const stamp=offset=>new Date(Date.now()-3600_000+offset*1000).toISOString();
+    const meta=(timestamp,id,extra={})=>({timestamp,type:'session_meta',payload:{id,cwd:'PRIVATE_CWD',history_mode:'legacy',...extra}});
+    const call=(timestamp,id)=>({timestamp,type:'response_item',payload:{type:'function_call',call_id:id,name:'exec_command',arguments:'{}'}});
+    const parentLines=[meta(stamp(0),parentId),call(stamp(1),'call-parent')];
+    const copied=parentLines.map(line=>({...line,timestamp:stamp(60)}));
+    fs.writeFileSync(path.join(day,`rollout-2026-10-30T10-00-00-${parentId}.jsonl`),jsonl(parentLines));
+    fs.writeFileSync(path.join(day,`rollout-2026-10-30T10-01-00-${forkId}.jsonl`),jsonl([meta(stamp(59),forkId,{forked_from_id:parentId}),...copied,call(stamp(61),'call-fork')]));
+    const count=result=>result.tools.reduce((n,row)=>n+row.count,0);
+    const cold=await collectSettings(logs);
+    assert.equal(count(cold),2,'each call once');
+    assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache}),cold);
+    assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache}),cold,'a warm cache agrees');
+  });
+});
