@@ -28,6 +28,7 @@ for(const failure of ['compiler','executable','plist','sign','verify','swap','ro
         const step=args[0]==='--verify'?'verify':'sign';
         events.push(step);
         assert.equal(await fs.readFile(path.join(args.at(-1),'Contents','Resources','glance.json'),'utf8'),settings);
+        assert.match(await fs.readFile(path.join(args.at(-1),'Contents','Resources','telescope.svg'),'utf8'),/<svg/);
         if(failure===step)throw Error(`${step} failed`);
       }
     };
