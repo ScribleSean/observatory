@@ -21,6 +21,8 @@ import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime}
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
 import {collectSettings} from './read-settings.mjs';
 import {collectClaudeUsage} from './read-claude-usage.mjs';
+import {collectProjectTokens} from './read-projects.mjs';
+import {buildProjectTokens,unavailableProjectTokens} from './project-tokens.mjs';
 import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +66,8 @@ export function defaultReaders(config) {
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:()=>collectClaudeUsage(claudeFolder()),
+    projects:({claude,codex},now)=>collectProjectTokens({claudeFolder:claude?claudeFolder():null,
+      codexFolder:codex?path.join(homedir(),'.codex'):null,home:homedir(),now}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
       return withinTime(readClaudeLimits(config.dataFolder,{enabled:true}),20000);
@@ -109,7 +113,14 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     try {return await clean(await readers[key]());}
     catch(error) {return {failed:true,error};}
   };
-  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead]=await Promise.all([
+  // Today by project comes from the same logs, so it follows the claudeCode and codex settings.
+  const projectSources={claude:config.sources.claudeCode,codex:config.sources.codex};
+  const readProjects=async()=>{
+    if(!projectSources.claude && !projectSources.codex)return unavailableProjectTokens(host,at,'not-connected');
+    try {return buildProjectTokens(await readers.projects(projectSources,now),host,at);}
+    catch {return unavailableProjectTokens(host,at);}
+  };
+  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens]=await Promise.all([
     read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
     read('codex',raw=>{
       const settings={...cleanSettings(raw,host),checkedAt:at};
@@ -119,6 +130,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('codexLimits',value=>value),
     read('claudeCode',raw=>cleanClaudeTokenSource(raw,host,at,{hours:true})),
     read('claudeLimits',value=>value),
+    readProjects(),
   ]);
   const pick=(value,fallback,failed)=>value===null?fallback:value.failed?failed(value.error):value;
   const activity=pick(activityRead,disconnected(host),unavailable);
@@ -134,7 +146,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     activity:[activity,disconnected(other)],combined:{host:'Combined',status:'unavailable',checkedAt:at},
     tokens:[codex.tokens,disconnected(other)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
-    quota,claudeLimits,providerTokenSources:[claude]};
+    quota,claudeLimits,providerTokenSources:[claude],projectTokens:[projectTokens]};
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};
