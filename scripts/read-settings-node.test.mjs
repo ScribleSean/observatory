@@ -324,7 +324,8 @@ test('private settings cache recovers an empty file and refuses other formats',a
 
 // A Windows disk: folders by real path, with an optional 8.3 alias and an optional link target.
 // realpath expands aliases and follows links as GetFinalPathNameByHandle does. A redirect is
-// followed too, but lstat does not report it, as libuv does for a volume mount point.
+// followed too, but lstat follows it without calling it a link, as libuv does for a junction
+// to a volume GUID path.
 function windowsDisk(folders) {
   const win=path.win32;
   const child=(parent,part)=>{
@@ -349,10 +350,13 @@ function windowsDisk(folders) {
     const key=child(realpath(win.dirname(normal)),win.basename(normal));
     return {isSymbolicLink:()=>Boolean(folders[key].link)};
   };
-  // Directory listings mark every reparse point as a link, as libuv's scandir does.
-  const readdir=typed=>Object.keys(folders).filter(key=>win.dirname(key).toLowerCase()===realpath(typed).toLowerCase())
-    .map(key=>({name:win.basename(key),isSymbolicLink:()=>Boolean(folders[key].link??folders[key].redirect)}));
-  return {realpath,lstat,readdir};
+  // Windows reports the short name of the entry itself, never of a junction that leads to it.
+  const shortName=typed=>{
+    const normal=win.normalize(typed);
+    const key=child(realpath(win.dirname(normal)),win.basename(normal));
+    return folders[key].alias??win.basename(key);
+  };
+  return {realpath,lstat,shortName};
 }
 
 test('a Windows cache folder may be named through an 8.3 short alias, but never through a link',()=>{
@@ -374,6 +378,9 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\sibling':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\CACHE~1':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long redirect':{alias:'ALONGR~1',redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long cache':{alias:'ALONGC~1'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long junction':{alias:'ALONGJ~1',link:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long mount':{alias:'ALONGM~1',redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long cache'},
   });
   // GitHub's Windows runner sets TEMP to this short form.
   for(const directory of [
@@ -381,6 +388,8 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'c:\\users\\runner~1\\appdata\\local\\temp\\cache\\',
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache',
     'C:/Users/runneradmin/AppData/Local/Temp/cache',
+    // A real alias opens even when junctions beside it lead to the same folder.
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGC~1',
   ])assert.equal(windowsCanonical(directory,disk),true,directory);
   for(const directory of [
     'C:\\Users\\Linked Folder\\cache',
@@ -393,24 +402,36 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     // A junction to a volume GUID path is not reported by lstat, so an alias-shaped name could hide one.
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\CACHE~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGR~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGJ~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGM~1',
   ])assert.equal(windowsCanonical(directory,disk),false,directory);
 });
 
 test('on Windows a cache folder opens through its real 8.3 short alias, and a junction never opens',{skip:process.platform!=='win32'},t=>{
   // Unresolved on purpose: GitHub's runner gives TEMP as C:\Users\RUNNER~1\...
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'observatory-read-settings-'));
+  const cmd=line=>execFileSync(process.env.ComSpec??'cmd.exe',['/d','/s','/c',`"${line}"`],
+    {encoding:'utf8',windowsVerbatimArguments:true}).trim();
+  const alias=folder=>cmd(`for %I in ("${folder}") do @echo %~sI`);
+  const mounted=path.join(root,'a long mounted junction');
   try {
     const long=privateFolder(path.join(root,'a long cache folder name'));
-    const alias=folder=>execFileSync(process.env.ComSpec??'cmd.exe',['/d','/s','/c',`"for %I in ("${folder}") do @echo %~sI"`],
-      {encoding:'utf8',windowsVerbatimArguments:true}).trim();
     const junction=path.join(root,'a long junction name');
     fs.symlinkSync(long,junction,'junction');
-    for(const directory of [junction,alias(junction)])
+    // lstat follows a junction to a volume GUID path and does not call it a link.
+    const volume=cmd(`mountvol ${path.parse(long).root} /L`);
+    cmd(`mklink /J "${mounted}" "${volume}${long.slice(path.parse(long).root.length)}"`);
+    assert.equal(fs.lstatSync(mounted).isSymbolicLink(),false);
+    for(const directory of [junction,alias(junction),mounted,alias(mounted)])
       assert.throws(()=>new SettingsCache(directory),/Unsafe cache directory/,directory);
     const short=alias(long);
     if(path.basename(short).toLowerCase()===path.basename(long).toLowerCase())return t.skip('8.3 names are off on this volume');
     for(const directory of [short,long,root])new SettingsCache(directory).close();
-  } finally {fs.rmSync(root,{recursive:true,force:true});}
+  } finally {
+    // Remove the mounted junction itself first: a recursive delete would walk through it.
+    try {fs.rmdirSync(mounted);} catch {}
+    fs.rmSync(root,{recursive:true,force:true});
+  }
 });
 
 test('Codex reader constants pin the requested scale and unchanged line skip',()=>{
