@@ -17,8 +17,7 @@
         "weekly": {"percentLeft": 68, "resetsAt": "2026-10-30T22:00:00.000Z", "minutesToReset": 526, "burnPerHour": 3, "pace": "spend"}
       }
     },
-    "codex": {"status": "out", "headroom": 0, "pace": "out", "windows": {"five_hour": {}, "weekly": {}}},
-    "grokbot": {"status": "unknown", "headroom": null, "pace": "unknown", "windows": null}
+    "codex": {"status": "out", "headroom": 0, "pace": "out", "windows": {"five_hour": {}, "weekly": {}}}
   },
   "nextReturn": {"codex": {"resetsAt": "2026-10-30T14:15:32.000Z", "minutesToReset": 61}},
   "route": {
@@ -56,7 +55,7 @@ An engine's `pace` is its most limiting window, in the order `out`, `slow`, `unk
 
 ## Route
 
-For each task, `route` names the engine with the highest `headroom` among engines with a current reading and allowance left, or `null` when there is none. All three tasks use the same rule today. GrokBot is never picked because Observatory cannot measure it. The hint is advice. Observatory never starts, stops or switches an agent.
+For each task, `route` names the engine with the highest `headroom` among engines with a current reading and allowance left, or `null` when there is none. All three tasks use the same rule today. The hint is advice. Observatory never starts, stops or switches an agent.
 
 ## Waiting for an engine
 
@@ -65,4 +64,4 @@ For each task, `route` names the engine with the highest `headroom` among engine
 - When the engine is out and its reset time is known, the command sleeps until that time and reads `combined.json` again. Once the reset time has passed, the 0% reading is no longer current, so the engine stops being `out` without waiting for the next collection. When the reset time is unknown, it reads again every 30 seconds.
 - A 0% reading that goes stale before its reset time still counts as out until that time has passed.
 - It uses only timers and file reads. It makes no network calls and writes nothing.
-- Exit codes: 0 when the engine is not out (at once if it was never out), 4 when the timeout passes first, 2 for an engine other than `claude`, `codex` or `grokbot`, or for a timeout that is not a number above 0. GrokBot is never out, so waiting for it returns at once.
+- Exit codes: 0 when the engine is not out (at once if it was never out), 4 when the timeout passes first, 2 for an engine other than `claude` or `codex`, or for a timeout that is not a number above 0.

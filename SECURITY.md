@@ -20,5 +20,3 @@ Local processes running as your user can read these files. That is the trust bou
 ## Reporting a problem
 
 For a security problem, use **Report a vulnerability** on the repository's Security tab, so it stays private until it is fixed. For anything else, open an issue. Never attach real usage records. Use synthetic examples.
-
-The security notes and dependency review for the full app up to build 43 are kept in [docs/history](docs/history/SECURITY-BUILD-43.md).

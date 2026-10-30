@@ -67,7 +67,7 @@ If you work on a Mac and a Windows PC, they can share one view. The Mac reads th
 
 ## Privacy
 
-Observatory reads records that your tools already keep on your computer. It sends nothing to any server of its own or anyone else's, and it has no telemetry.
+Observatory reads records that your tools already keep on your computer. Observatory has no server and no telemetry.
 
 | Source | What is read | What is kept |
 | --- | --- | --- |
@@ -112,10 +112,10 @@ A source is read only while it is `true`. An older settings file that still list
 
 `npm run status` prints each engine's limits, reset times and burn rate, and which engine has the most room left. `npm run status -- --json` prints the same as JSON for scripts and AI agents. It reads this computer's `combined.json` only. It makes no network calls and writes nothing.
 
-- Fields: per engine (`claude`, `codex`, `grokbot`) and window (`five_hour`, `weekly`): `percentLeft`, `resetsAt`, `minutesToReset`, `burnPerHour` and `pace` (`spend`, `hold`, `slow`, `out` or `unknown`). `route` suggests an engine for `code`, `review` and `research`.
+- Fields: per engine (`claude` and `codex`) and window (`five_hour`, `weekly`): `percentLeft`, `resetsAt`, `minutesToReset`, `burnPerHour` and `pace` (`spend`, `hold`, `slow`, `out` or `unknown`). `route` suggests an engine for `code`, `review` and `research`.
 - `nextReturn` gives the reset time of each engine that is out. `npm run status -- --wait codex --timeout 60` blocks until Codex is no longer out, then prints the JSON.
 - Exit codes: 0 with a current reading, 3 when the data is missing or stale. With `--wait`: 0 once the engine is not out, 4 on timeout, 2 on a bad engine name or timeout.
-- The hint is advice. Observatory never starts, stops or switches an agent. GrokBot is always `unknown` because Observatory cannot measure it. The full shape is in [docs/AGENT-STATUS.md](docs/AGENT-STATUS.md).
+- The hint is advice. Observatory never starts, stops or switches an agent. The full shape is in [docs/AGENT-STATUS.md](docs/AGENT-STATUS.md).
 
 ## Screenshots
 
@@ -142,7 +142,7 @@ npm test
 npm run lint
 ```
 
-`npm run tick` runs one collection by hand. [The design notes](docs/HUB-PLAN.md) maps the code to the design, and [the intro storyboard](docs/INTRO-STORYBOARD.md) describes a short product video.
+`npm run tick` runs one collection by hand. The table maps each part to its code.
 
 | Part | Files |
 | --- | --- |
@@ -154,6 +154,6 @@ npm run lint
 | Menu bar and tray | `glance/mac/Glance.swift`, `glance/windows/Glance.cs` |
 | Setup | `scripts/setup.mjs` |
 
-Bug reports and small fixes are welcome. Use synthetic examples and never attach real usage records. Read [AGENTS.md](AGENTS.md) first.
+Bug reports and small fixes are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT license](LICENSE) · [Third-party acknowledgments](THIRD-PARTY-NOTICES.md)
