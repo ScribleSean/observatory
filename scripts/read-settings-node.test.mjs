@@ -323,7 +323,8 @@ test('private settings cache recovers an empty file and refuses other formats',a
 });
 
 // A Windows disk: folders by real path, with an optional 8.3 alias and an optional link target.
-// realpath expands aliases and follows links as GetFinalPathNameByHandle does.
+// realpath expands aliases and follows links as GetFinalPathNameByHandle does. A redirect is
+// followed too, but lstat does not report it, as libuv does for a volume mount point.
 function windowsDisk(folders) {
   const win=path.win32;
   const child=(parent,part)=>{
@@ -338,7 +339,8 @@ function windowsDisk(folders) {
     let current=root.toUpperCase();
     for(const part of normal.slice(root.length).split('\\').filter(Boolean)) {
       const key=child(current,part);
-      current=folders[key].link?realpath(folders[key].link):key;
+      const target=folders[key].link??folders[key].redirect;
+      current=target?realpath(target):key;
     }
     return current;
   };
@@ -364,6 +366,8 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Users\\LINK~1':{link:'C:\\Users\\runneradmin'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\jump':{link:'C:\\Elsewhere\\cache'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\MOVED~1':{link:'C:\\Elsewhere\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\mounted':{redirect:'C:\\Elsewhere\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\sibling':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
   });
   // GitHub's Windows runner sets TEMP to this short form.
   for(const directory of [
@@ -378,16 +382,23 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Users\\LINK~1\\AppData\\Local\\Temp\\cache',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\jump',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\MOVED~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\mounted',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\sibling',
   ])assert.equal(windowsCanonical(directory,disk),false,directory);
 });
 
-test('on Windows a cache folder opens through its real 8.3 short alias',{skip:process.platform!=='win32'},t=>{
+test('on Windows a cache folder opens through its real 8.3 short alias, and a junction never opens',{skip:process.platform!=='win32'},t=>{
   // Unresolved on purpose: GitHub's runner gives TEMP as C:\Users\RUNNER~1\...
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'observatory-read-settings-'));
   try {
     const long=privateFolder(path.join(root,'a long cache folder name'));
-    const short=execFileSync('cmd.exe',['/d','/s','/c',`"for %I in ("${long}") do @echo %~sI"`],
+    const alias=folder=>execFileSync(process.env.ComSpec??'cmd.exe',['/d','/s','/c',`"for %I in ("${folder}") do @echo %~sI"`],
       {encoding:'utf8',windowsVerbatimArguments:true}).trim();
+    const junction=path.join(root,'a long junction name');
+    fs.symlinkSync(long,junction,'junction');
+    for(const directory of [junction,alias(junction)])
+      assert.throws(()=>new SettingsCache(directory),/Unsafe cache directory/,directory);
+    const short=alias(long);
     if(path.basename(short).toLowerCase()===path.basename(long).toLowerCase())return t.skip('8.3 names are off on this volume');
     for(const directory of [short,long,root])new SettingsCache(directory).close();
   } finally {fs.rmSync(root,{recursive:true,force:true});}
