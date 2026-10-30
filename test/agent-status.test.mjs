@@ -99,13 +99,12 @@ test('JSON shape is stable and carries no personal data', () => {
   assert.deepEqual(Object.keys(status.nextReturn.codex), ['resetsAt', 'minutesToReset']);
   assert.equal(status.schema, 1);
   assert.equal(status.generatedAt, iso(now));
-  assert.deepEqual(Object.keys(status.engines), ['claude', 'codex', 'grokbot']);
+  assert.deepEqual(Object.keys(status.engines), ['claude', 'codex']);
   for (const engine of ['claude', 'codex']) {
     assert.deepEqual(Object.keys(status.engines[engine]), ['status', 'headroom', 'pace', 'windows']);
     assert.deepEqual(Object.keys(status.engines[engine].windows), ['five_hour', 'weekly']);
     for (const item of Object.values(status.engines[engine].windows)) assert.deepEqual(Object.keys(item), window);
   }
-  assert.deepEqual(status.engines.grokbot, {status: 'unknown', headroom: null, pace: 'unknown', windows: null});
   assert.deepEqual(Object.keys(status.route), ['code', 'review', 'research']);
   for (const hint of Object.values(status.route)) assert.deepEqual(Object.keys(hint), ['engine', 'reason']);
   const text = JSON.stringify(status);

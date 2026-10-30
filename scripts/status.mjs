@@ -15,7 +15,7 @@ export const EXIT_TIMEOUT = 4;
 // How often --wait reads again when no reset time is known.
 export const POLL_MS = 30000;
 const MAX_TIMER_MS = 2 ** 31 - 1;
-const names = {claude: 'Claude', codex: 'Codex', grokbot: 'GrokBot'};
+const names = {claude: 'Claude', codex: 'Codex'};
 const windowNames = {five_hour: '5-hour', weekly: 'weekly'};
 
 async function dataFolder() {
@@ -46,7 +46,6 @@ export function describe(status) {
     });
     lines.push(`${names[id]}: ${parts.join(' | ')}`);
   }
-  lines.push(`${names.grokbot}: Unknown (Observatory cannot measure it)`);
   for (const [id, back] of Object.entries(status.nextReturn))
     lines.push(`${names[id]} back at ${back.resetsAt ? clockTime(back.resetsAt) : 'Unknown'}`);
   const pick = status.route.code;
