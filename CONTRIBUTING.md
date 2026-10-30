@@ -31,5 +31,6 @@ npm run lint
 ## Pull requests
 
 - Keep each pull request to one change, with tests for the readers, the combine step or the server when you touch them.
+- Pin every action in `.github/workflows/` to a full 40-character commit SHA, with the version it stands for in a comment, for example `uses: actions/checkout@<sha> # v4.4.0`. A tag can be moved to other code. `npm test` fails on an action pinned to a tag or branch.
 - Use synthetic data in tests and examples. Never attach real usage records, logs or screenshots with your own projects in them.
 - Write plainly in docs and interface text: full sentences, no em dashes or semicolons, no marketing language. Use "Unknown" for missing values.
