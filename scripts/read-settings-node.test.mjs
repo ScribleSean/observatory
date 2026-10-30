@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import {
   CACHE_PAGE_SIZE,DEFAULT_LIMITS,DEFAULT_SCAN_BYTES,FIRST_LINE_BYTES,MAX_CACHE_BYTES,MAX_FILES,MAX_LINES,MAX_LINE_BYTES,MAX_READ_SECONDS,
   MAX_RETAINED_BYTES,MAX_TOTAL_BYTES,collectSettings,pyDumps,summarize,
 } from './read-settings.mjs';
-import {SettingsCache,cacheEvent} from './read-settings-cache.mjs';
+import {SettingsCache,cacheEvent,windowsCanonical} from './read-settings-cache.mjs';
 import {FIXTURE_NAMES,buildFixture,fixtureOptions} from './fixtures/read-settings/build.mjs';
 
 
@@ -319,6 +320,77 @@ test('private settings cache recovers an empty file and refuses other formats',a
       }
     }
   });
+});
+
+// A Windows disk: folders by real path, with an optional 8.3 alias and an optional link target.
+// realpath expands aliases and follows links as GetFinalPathNameByHandle does.
+function windowsDisk(folders) {
+  const win=path.win32;
+  const child=(parent,part)=>{
+    const found=Object.keys(folders).find(key=>win.dirname(key).toLowerCase()===parent.toLowerCase()&&
+      [win.basename(key),folders[key].alias].some(name=>name?.toLowerCase()===part.toLowerCase()));
+    if(!found)throw Object.assign(new Error(`ENOENT: ${parent} ${part}`),{code:'ENOENT'});
+    return found;
+  };
+  const realpath=typed=>{
+    const normal=win.normalize(typed);
+    const {root}=win.parse(normal);
+    let current=root.toUpperCase();
+    for(const part of normal.slice(root.length).split('\\').filter(Boolean)) {
+      const key=child(current,part);
+      current=folders[key].link?realpath(folders[key].link):key;
+    }
+    return current;
+  };
+  const lstat=typed=>{
+    const normal=win.normalize(typed).replace(/\\+$/,'');
+    const key=child(realpath(win.dirname(normal)),win.basename(normal));
+    return {isSymbolicLink:()=>Boolean(folders[key].link)};
+  };
+  return {realpath,lstat};
+}
+
+test('a Windows cache folder may be named through an 8.3 short alias, but never through a link',()=>{
+  const disk=windowsDisk({
+    'C:\\Users':{},
+    'C:\\Users\\runneradmin':{alias:'RUNNER~1'},
+    'C:\\Users\\runneradmin\\AppData':{},
+    'C:\\Users\\runneradmin\\AppData\\Local':{},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp':{},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache':{},
+    'C:\\Elsewhere':{},
+    'C:\\Elsewhere\\cache':{},
+    'C:\\Users\\Linked Folder':{alias:'LINKED~1',link:'C:\\Elsewhere'},
+    'C:\\Users\\LINK~1':{link:'C:\\Users\\runneradmin'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\jump':{link:'C:\\Elsewhere\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\MOVED~1':{link:'C:\\Elsewhere\\cache'},
+  });
+  // GitHub's Windows runner sets TEMP to this short form.
+  for(const directory of [
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\cache',
+    'c:\\users\\runner~1\\appdata\\local\\temp\\cache\\',
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache',
+    'C:/Users/runneradmin/AppData/Local/Temp/cache',
+  ])assert.equal(windowsCanonical(directory,disk),true,directory);
+  for(const directory of [
+    'C:\\Users\\Linked Folder\\cache',
+    'C:\\Users\\LINKED~1\\cache',
+    'C:\\Users\\LINK~1\\AppData\\Local\\Temp\\cache',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\jump',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\MOVED~1',
+  ])assert.equal(windowsCanonical(directory,disk),false,directory);
+});
+
+test('on Windows a cache folder opens through its real 8.3 short alias',{skip:process.platform!=='win32'},t=>{
+  // Unresolved on purpose: GitHub's runner gives TEMP as C:\Users\RUNNER~1\...
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'observatory-read-settings-'));
+  try {
+    const long=privateFolder(path.join(root,'a long cache folder name'));
+    const short=execFileSync('cmd.exe',['/d','/s','/c',`"for %I in ("${long}") do @echo %~sI"`],
+      {encoding:'utf8',windowsVerbatimArguments:true}).trim();
+    if(path.basename(short).toLowerCase()===path.basename(long).toLowerCase())return t.skip('8.3 names are off on this volume');
+    for(const directory of [short,long,root])new SettingsCache(directory).close();
+  } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
 
 test('Codex reader constants pin the requested scale and unchanged line skip',()=>{

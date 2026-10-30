@@ -89,19 +89,22 @@ function safeLine(line) {
 const mode=info=>Number(info.mode)&0o777;
 const sameFile=(a,b)=>a.dev===b.dev&&a.ino===b.ino;
 // Path(directory) drops repeated separators, trailing separators and '.' parts.
+const windowsForm=directory=>path.win32.normalize(directory).replace(/[\\/]+$/,'').toLowerCase();
 function pathlibForm(directory) {
-  if(windows)return path.win32.normalize(directory).replace(/[\\/]+$/,'').toLowerCase();
   const lead=directory.startsWith('//')&&!directory.startsWith('///')?'//':'/';
   return lead+directory.split('/').filter(part=>part&&part!=='.').join('/');
+}
+
+export function windowsCanonical(directory,{realpath=fs.realpathSync.native,lstat=fs.lstatSync}={}) {
+  return realpath(directory).toLowerCase()===windowsForm(directory)&&!lstat(directory).isSymbolicLink();
 }
 
 export class SettingsCache {
   constructor(directory,budget=DEFAULT_SCAN_BYTES,{limits=DEFAULT_LIMITS}={}) {
     this.limits=limits;
     if(typeof directory!=='string'||!path.isAbsolute(directory))throw new ValueError('Unsafe cache directory');
-    const resolved=realpath(directory);
-    if((windows?resolved.toLowerCase():resolved)!==pathlibForm(directory)||fs.lstatSync(directory).isSymbolicLink())
-      throw new ValueError('Unsafe cache directory');
+    const canonical=windows?windowsCanonical(directory):realpath(directory)===pathlibForm(directory)&&!fs.lstatSync(directory).isSymbolicLink();
+    if(!canonical)throw new ValueError('Unsafe cache directory');
     if(!windows&&mode(fs.statSync(directory))&0o077)throw new ValueError('Unsafe cache permissions');
     this.readBudget=null;
     this.remaining=budget;
