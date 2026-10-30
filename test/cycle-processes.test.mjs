@@ -82,18 +82,29 @@ test('cycle execFile preserves stdin, environment and promisify results',async()
 
 for(const [method,tree] of [['spawn',false],['execFile',false],['spawn',true],['execFile',true]]) {
   test(`cycle deadline stops a long-running ${method} ${tree?'process group':'child'}, including SIGKILL escalation`,{timeout:10000,skip:tree&&process.platform==='win32'?'POSIX process groups only':false},async()=>{
+    // The deadline clock is mocked and moved only after the child says it is ready, so a slow
+    // process start on a busy machine cannot fire the deadline first. Processes and signals stay real.
     const runner=spawn(process.execPath,['--input-type=module','-e',`
+      import {mock} from 'node:test';
       import {${method},withCycleDeadline} from ${JSON.stringify(helper)};
-      await withCycleDeadline(async()=>{
+      mock.timers.enable({apis:['setTimeout']});
+      let ready;
+      const started=new Promise(resolve=>{ready=resolve;});
+      void withCycleDeadline(async()=>{
         const child=${method}(process.execPath,['-e',
           ${JSON.stringify("process.on('SIGTERM',()=>{});"+(tree?"const nested=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});console.log(nested.pid);":"")+"console.log('ready');setInterval(()=>{},1000)")}],
           {stdio:['ignore','pipe','ignore']}${method==='execFile'?`,error=>{
             if(error.code!==null || !error.killed || error.signal!=='SIGKILL')throw Error('Unexpected deadline error fields');
           }`:''});
         console.log(child.pid);
-        child.stdout.on('data',data=>process.stdout.write(data));
+        child.stdout.on('data',data=>{process.stdout.write(data);if(String(data).includes('ready'))ready();});
         await new Promise(()=>{});
       },{deadlineMs:1000,graceMs:100});
+      await started;
+      mock.timers.tick(1000);
+      mock.timers.tick(100);
+      // The reap wait races real child exits against a mocked 250 ms timer. Keep that timer moving.
+      setInterval(()=>mock.timers.tick(250),50);
     `],{stdio:['ignore','pipe','pipe']});
     let output='',errors='';
     const pids=()=>output.trim().split('\n').map(Number).filter(pid=>Number.isInteger(pid)&&pid>0);
