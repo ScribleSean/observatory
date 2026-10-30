@@ -48,6 +48,15 @@ test('a computer with an old reading shows when it was last seen, not its number
   pc.freshness={stale:true};pc.collectedAt=new Date(now-80*60000).toISOString();
   const html=render({combined:old,section:'limits'});
   assert.ok(html.includes('last seen'));
+  const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
+  assert.ok(!tiles.includes('class="ob-hero"'),'no total that includes a hidden, old number');
+});
+
+test('two computers on the next day show no numbers as today',()=>{
+  const html=render({combined:both,section:'limits',now:now+26*3600000});
+  const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
+  assert.ok(!/class="ob-num">[^<]*(\d+h|\d+m|\$)/.test(tiles),'no duration or cost from yesterday');
+  assert.ok(tiles.includes('last seen'));
 });
 
 test('limits are listed scarcest first and unknown ones share one line',()=>{

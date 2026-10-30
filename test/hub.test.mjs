@@ -4,7 +4,9 @@ import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {runHub,recombine} from '../scripts/hub.mjs';
 import {combine} from '../lib/combine.mjs';
-import {pullCommand,pushCommand,sshTransport} from '../scripts/hub-transport.mjs';
+import {pullCommand,pushCommand,sshTransport,stagedName} from '../scripts/hub-transport.mjs';
+
+const staged=stagedName('00000000-0000-0000-0000-000000000000');
 import {withFolder,ownSnapshot,testConfig} from './helpers.mjs';
 
 const pc={name:'PC',ssh:'my-pc',platform:'windows',dataFolder:null};
@@ -146,10 +148,11 @@ test('Windows commands run PowerShell with no Node and no inline paths from the 
   const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
   assert.match(decode(pullCommand(pc)),/\$env:LOCALAPPDATA 'Observatory'/);
   assert.match(decode(pullCommand(pc)),/ToBase64String/);
-  const push=decode(pushCommand(pc,1234));
+  const push=decode(pushCommand(pc,1234,staged));
   assert.match(push,/\.Length -ne 1234\)\{Remove-Item -LiteralPath \$s -Force; exit 4\}/);
-  assert.throws(()=>pushCommand(pc,0),/empty/);
-  assert.match(push,/Join-Path \$HOME '\.observatory-combined\.incoming'/);
+  assert.throws(()=>pushCommand(pc,0,staged),/empty/);
+  assert.match(push,/Join-Path \$HOME '\.observatory-combined\.0{8}-0{4}-0{4}-0{4}-0{12}\.incoming'/);
+  assert.throws(()=>pushCommand(pc,10,"x'; rm -rf ~"),/bad staging name/);
   assert.match(push,/\[IO\.File\]::Replace/);
   assert.match(decode(pullCommand({...pc,dataFolder:"D:\\it's"})),/'D:\\it''s'/);
 });
@@ -157,24 +160,32 @@ test('Windows commands run PowerShell with no Node and no inline paths from the 
 test('Mac spoke commands use sh and base64',()=>{
   const mac={name:'Mac',ssh:'mac',platform:'mac',dataFolder:null};
   assert.match(pullCommand(mac),/base64 < "\$f"/);
-  assert.match(pushCommand(mac,99),/test "\$\(wc -c < "\$s"\)" -eq 99 \|\| \{ rm -f "\$s"; exit 4; \}; mkdir -p "\$d" && mv -f/);
+  assert.match(pushCommand(mac,99,staged),/test "\$\(wc -c < "\$s"\)" -eq 99 \|\| \{ rm -f "\$s"; exit 4; \}; mkdir -p "\$d" && mv -f/);
   assert.match(pullCommand({...mac,dataFolder:"/Users/it's"}),/'\/Users\/it'\\''s'/);
 });
 
 test('the transport pulls base64 over SSH and pushes a copied file, then swaps it in',async()=>{
   const calls=[];
   const text=JSON.stringify({collectedAt:'2026-10-21T17:00:00Z',note:'é ✓'});
-  let copied=null,staged=null;
+  let copied=null,local=null;
   const transport=sshTransport(async(alias,command)=>{
     calls.push({alias,command});
     return Buffer.from(text).toString('base64')+'\r\n';
-  },async(alias,file)=>{copied=await readFile(file,'utf8');staged=file;calls.push({alias,copy:true});});
+  },async(alias,file,name)=>{copied=await readFile(file,'utf8');local=file;calls.push({alias,copy:true,name});});
   assert.equal(await transport.pull(pc),text);
   await transport.push(pc,text);
   assert.equal(calls[0].alias,'my-pc');
   assert.equal(copied,text);
   assert.deepEqual(calls.slice(1).map(call=>call.copy?'copy':'swap'),['copy','swap'],'the swap runs after the copy');
-  await assert.rejects(readFile(staged),{code:'ENOENT'},'the local copy is removed');
+  await assert.rejects(readFile(local),{code:'ENOENT'},'the local copy is removed');
+  assert.ok(Buffer.from(calls[2].command.split(' ').at(-1),'base64').toString('utf16le').includes(calls[1].name),'the swap uses the copied name');
+});
+
+test('a failed swap removes its staged copy and still fails',async()=>{
+  const commands=[];
+  const transport=sshTransport(async(alias,command)=>{commands.push(command);if(commands.length===1)throw Error('timed out');},async()=>{});
+  await assert.rejects(transport.push({...pc,platform:'mac'},'{}'),/timed out/);
+  assert.match(commands[1],/^rm -f "\$HOME\/\.observatory-combined\.[0-9a-f-]{36}\.incoming"$/);
 });
 
 test('a pulled snapshot from the future or of another schema is refused, and the last copy kept',()=>withFolder(async folder=>{
@@ -191,8 +202,8 @@ test('a pulled snapshot from the future or of another schema is refused, and the
 
 test('write-back lands in an inbox that the spoke merges under its own lock',()=>withFolder(async folder=>{
   const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
-  assert.match(decode(pushCommand(pc,10)),/'combined\.incoming\.json'/);
-  assert.match(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10),/combined\.incoming\.json"$/);
+  assert.match(decode(pushCommand(pc,10,staged)),/'combined\.incoming\.json'/);
+  assert.match(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10,staged),/combined\.incoming\.json"$/);
   const hubCopy=await withFolder(async hub=>{
     await seed(hub,'usage.json',ownSnapshot('Mac',now));
     const transport=fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000)));

@@ -1,5 +1,5 @@
 import { STRINGS } from '../../../lib/strings.generated';
-import { compact, duration, format, limits, readingTime } from '../../../lib/panel-data.mjs';
+import { compact, duration, format, freshness, limits, readingTime } from '../../../lib/panel-data.mjs';
 
 export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
 export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string; freshness?: { stale: boolean };
@@ -41,13 +41,18 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
   );
 }
 
-// A computer whose reading is old shows when it was last seen instead of its numbers.
+// A computer's today numbers count only while its own reading is from today and recent, judged when the page draws.
+// The Mac panel uses the same rule.
+export function deviceCurrent(device: DeviceToday, now: number) {
+  const seen = Date.parse(device.collectedAt ?? '');
+  return !device.missing && !device.freshness?.stale && Number.isFinite(seen) && !freshness(device.collectedAt ?? '', now).stale && sameDay(seen, now);
+}
+
 function deviceValue(device: DeviceToday, now: number, value: (device: DeviceToday) => string) {
   if (device.missing) return <span className="ob-meta" title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>{STRINGS.today.noSnapshot}</span>;
+  if (deviceCurrent(device, now)) return <span className="ob-num">{value(device)}</span>;
   const seen = Date.parse(device.collectedAt ?? '');
-  if (device.freshness?.stale && Number.isFinite(seen))
-    return <span className="ob-meta"><i className="ob-ring" aria-hidden="true" />{format(STRINGS.overview.lastSeen, { time: readingTime(seen, now) })}</span>;
-  return <span className="ob-num">{value(device)}</span>;
+  return <span className="ob-meta"><i className="ob-ring" aria-hidden="true" />{Number.isFinite(seen) ? format(STRINGS.overview.lastSeen, { time: readingTime(seen, now) }) : unknown}</span>;
 }
 
 function PerDevice({ glance, value, now }: { glance: Glance; value: (device: DeviceToday) => string; now: number }) {
@@ -68,12 +73,10 @@ function Breakdown({ rows }: { rows: [string, string, string?][] }) {
   );
 }
 
-function AsOf({ glance, now, generatedAt }: { glance: Glance; now: number; generatedAt: number }) {
+function AsOf({ now, generatedAt }: { now: number; generatedAt: number }) {
   if (!sameDay(generatedAt, now)) return <p className="ob-meta warn ob-tile-foot">{format(STRINGS.overview.lastDay, { time: readingTime(generatedAt, now) })}</p>;
-  const at = Date.parse(glance.today[0]?.collectedAt ?? '');
   const old = now - generatedAt > 15 * 60000;
-  return old && Number.isFinite(at)
-    ? <p className={old ? 'ob-meta warn ob-tile-foot' : 'ob-meta ob-tile-foot'}>{format(STRINGS.overview.asOf, { time: readingTime(old ? generatedAt : at, now) })}</p> : null;
+  return old ? <p className="ob-meta warn ob-tile-foot">{format(STRINGS.overview.asOf, { time: readingTime(generatedAt, now) })}</p> : null;
 }
 
 // "Today" numbers belong to the day they were made. From another day they are Unknown.
@@ -81,27 +84,32 @@ function sameDay(at: number, now: number) { return new Date(at).toDateString() =
 
 // The headline appears only when it is known. An Unknown total is left to the rows below it.
 function Hero({ value, note }: { value: string | null; note?: string }) {
-  return value === null ? null : <><div className="ob-hero">{value}</div>{note ? <p className="ob-meta">{note}</p> : null}</>;
+  return <>{value === null ? null : <div className="ob-hero">{value}</div>}{note ? <p className="ob-meta">{note}</p> : null}</>;
 }
+
+// A cross-computer total shows only when every computer it adds up is current and shown beside it.
+const allCurrent = (glance: Glance, now: number) => glance.today.every(device => deviceCurrent(device, now));
 
 function TimeCard({ glance, now, generatedAt }: { glance: Glance; now: number; generatedAt: number }) {
   const today = sameDay(generatedAt, now);
-  const total = !today ? null : glance.both ? glance.both.seconds : glance.today[0]?.seconds ?? null;
+  const total = !today ? null : glance.both ? (allCurrent(glance, now) ? glance.both.seconds : null) : glance.today[0]?.seconds ?? null;
   return (
     <section className="ob-tile" aria-labelledby="ob-tile-time">
       <h2 id="ob-tile-time">{STRINGS.overview.timeTitle}</h2>
-      <Hero value={total === null ? null : duration(total)} note={glance.both ? STRINGS.overview.bothNote : undefined} />
+      <Hero value={total === null ? null : duration(total)} note={glance.both && total !== null ? STRINGS.overview.bothNote : undefined} />
       {glance.both ? <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
         : today ? <Breakdown rows={(glance.today[0]?.categories ?? []).map(row => [row.name, duration(row.seconds)] as [string, string])} /> : null}
-      <AsOf glance={glance} now={now} generatedAt={generatedAt} />
+      <AsOf now={now} generatedAt={generatedAt} />
     </section>
   );
 }
 
 function CostCard({ glance, now, generatedAt }: { glance: Glance; now: number; generatedAt: number }) {
   const today = sameDay(generatedAt, now);
-  const source = !today ? { usd: null, tokens: null } : glance.both ?? glance.today[0] ?? { usd: null, tokens: null };
-  const notes = [source.tokens === null ? '' : format(STRINGS.overview.tokens, { value: compact(source.tokens) }), glance.both ? STRINGS.overview.bothNote : ''].filter(Boolean);
+  const none = { usd: null, tokens: null };
+  const source = !today ? none : glance.both ? (allCurrent(glance, now) ? glance.both : none) : glance.today[0] ?? none;
+  const notes = [source.tokens === null ? '' : format(STRINGS.overview.tokens, { value: compact(source.tokens) }),
+    glance.both && (source.usd !== null || source.tokens !== null) ? STRINGS.overview.bothNote : ''].filter(Boolean);
   return (
     <section className="ob-tile" aria-labelledby="ob-tile-cost">
       <h2 id="ob-tile-cost">{STRINGS.overview.costTitle}</h2>
@@ -110,7 +118,7 @@ function CostCard({ glance, now, generatedAt }: { glance: Glance; now: number; g
         : today ? <Breakdown rows={([['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const)
           .filter(([key]) => glance.today[0]?.costs?.[key] !== undefined)
           .map(([key, label]) => [label, money(glance.today[0]?.costs?.[key] ?? null), key] as [string, string, string])} /> : null}
-      <AsOf glance={glance} now={now} generatedAt={generatedAt} />
+      <AsOf now={now} generatedAt={generatedAt} />
     </section>
   );
 }

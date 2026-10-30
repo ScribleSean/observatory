@@ -103,7 +103,8 @@ struct PanelState: Equatable {
       let host = row["host"] as? String ?? String(index)
       let seen = date(row["collectedAt"])
       let stale = (row["freshness"] as? [String: Any])?["stale"] as? Bool ?? true
-      let current = !stale && seen.map { now.timeIntervalSince($0) <= deviceFresh } == true
+      // Same rule as the dashboard: today's numbers only while the reading is recent and from today.
+      let current = !stale && seen.map { now.timeIntervalSince($0) <= deviceFresh && Calendar.current.isDate($0, inSameDayAs: now) } == true
       // Short platform labels keep each line on one row. The full name is in the tooltip.
       return DeviceRow(id: host, name: host == "Windows" ? "PC" : host == "Mac" ? "Mac" : row["name"] as? String ?? host,
                        fullName: row["name"] as? String ?? host,
@@ -123,11 +124,15 @@ enum Format {
   }
 
   static func compact(_ value: Double) -> String {
-    for (divisor, suffix) in [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")] where value >= divisor {
+    let units: [(Double, String)] = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"), (1, "")]
+    for (index, (divisor, suffix)) in units.enumerated() where value >= divisor || divisor == 1 {
       let scaled = value / divisor
-      return (scaled >= 100 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)) + suffix
+      let text = scaled >= 100 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
+      // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
+      if text == "1000", index > 0 { return "1" + units[index - 1].1 }
+      return text + suffix
     }
-    return String(Int(value.rounded()))
+    return "0"
   }
 
   static func money(_ value: Double) -> String {
@@ -137,7 +142,9 @@ enum Format {
   static func clock(_ date: Date, now: Date) -> String {
     let formatter = DateFormatter()
     formatter.locale = .current
-    formatter.setLocalizedDateFormatFromTemplate(date.timeIntervalSince(now) < 20 * 3600 ? "jmm" : "EEE jmm")
+    let gap = abs(date.timeIntervalSince(now))
+    let template = Calendar.current.isDate(date, inSameDayAs: now) ? "jmm" : gap < 6 * 86400 ? "EEE jmm" : "MMMd jmm"
+    formatter.setLocalizedDateFormatFromTemplate(template)
     return formatter.string(from: date)
   }
 
@@ -387,7 +394,7 @@ final class FloatingPanel: NSPanel {
 
   override var canBecomeKey: Bool { true }
 
-  override func cancelOperation(_ sender: Any?) { close() }
+  override func cancelOperation(_ sender: Any?) { orderOut(nil) }
 }
 
 // MARK: App
@@ -506,8 +513,12 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     fitPanel()
   }
 
+  var closedAt = Date.distantPast
+
   @objc func toggle() {
     if panel?.isVisible == true { closePanel(); return }
+    // Clicking the icon while open first takes focus from the panel, which closes it. Don't reopen on that same click.
+    if Date().timeIntervalSince(closedAt) < 0.3 { return }
     show()
     if panel == nil {
       let view = NSHostingView(rootView: PanelView(model: model))
@@ -532,7 +543,10 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
   func closePanel() { panel?.orderOut(nil) }
 
-  func windowDidResignKey(_ notification: Notification) { closePanel() }
+  func windowDidResignKey(_ notification: Notification) {
+    closePanel()
+    closedAt = Date()
+  }
 
   func openDashboard() {
     guard let settings, let url = URL(string: "http://127.0.0.1:\(settings.port)/") else { return }
