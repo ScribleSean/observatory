@@ -147,9 +147,9 @@ test('Windows commands run PowerShell with no Node and no inline paths from the 
   assert.match(decode(pullCommand(pc)),/\$env:LOCALAPPDATA 'Observatory'/);
   assert.match(decode(pullCommand(pc)),/ToBase64String/);
   const push=decode(pushCommand(pc,1234));
-  assert.match(push,/if\(\$b\.Length -ne 1234\)\{exit 4\}/);
+  assert.match(push,/\.Length -ne 1234\)\{Remove-Item -LiteralPath \$s -Force; exit 4\}/);
   assert.throws(()=>pushCommand(pc,0),/empty/);
-  assert.match(push,/FromBase64String/);
+  assert.match(push,/Join-Path \$HOME '\.observatory-combined\.incoming'/);
   assert.match(push,/\[IO\.File\]::Replace/);
   assert.match(decode(pullCommand({...pc,dataFolder:"D:\\it's"})),/'D:\\it''s'/);
 });
@@ -157,21 +157,24 @@ test('Windows commands run PowerShell with no Node and no inline paths from the 
 test('Mac spoke commands use sh and base64',()=>{
   const mac={name:'Mac',ssh:'mac',platform:'mac',dataFolder:null};
   assert.match(pullCommand(mac),/base64 < "\$f"/);
-  assert.match(pushCommand(mac,99),/base64 -D > "\$t" && test "\$\(wc -c < "\$t"\)" -eq 99 && mv -f/);
+  assert.match(pushCommand(mac,99),/test "\$\(wc -c < "\$s"\)" -eq 99 \|\| \{ rm -f "\$s"; exit 4; \}; mkdir -p "\$d" && mv -f/);
   assert.match(pullCommand({...mac,dataFolder:"/Users/it's"}),/'\/Users\/it'\\''s'/);
 });
 
-test('the SSH transport moves bytes as base64 both ways',async()=>{
+test('the transport pulls base64 over SSH and pushes a copied file, then swaps it in',async()=>{
   const calls=[];
   const text=JSON.stringify({collectedAt:'2026-10-21T17:00:00Z',note:'é ✓'});
-  const transport=sshTransport(async(alias,command,input)=>{
-    calls.push({alias,command,input});
-    return input===undefined || input===''?Buffer.from(text).toString('base64')+'\r\n':'';
-  });
+  let copied=null,staged=null;
+  const transport=sshTransport(async(alias,command)=>{
+    calls.push({alias,command});
+    return Buffer.from(text).toString('base64')+'\r\n';
+  },async(alias,file)=>{copied=await readFile(file,'utf8');staged=file;calls.push({alias,copy:true});});
   assert.equal(await transport.pull(pc),text);
   await transport.push(pc,text);
   assert.equal(calls[0].alias,'my-pc');
-  assert.equal(Buffer.from(calls[1].input,'base64').toString('utf8'),text);
+  assert.equal(copied,text);
+  assert.deepEqual(calls.slice(1).map(call=>call.copy?'copy':'swap'),['copy','swap'],'the swap runs after the copy');
+  await assert.rejects(readFile(staged),{code:'ENOENT'},'the local copy is removed');
 });
 
 test('a pulled snapshot from the future or of another schema is refused, and the last copy kept',()=>withFolder(async folder=>{
