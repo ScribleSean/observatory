@@ -208,7 +208,8 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       }
       if(event.type==='turn_context') {
         model=modelName(payload.model);
-        if(typeof payload.cwd==='string')project=projectName(payload.cwd,home,{repository,branch}) ?? project;
+        // A new folder that has no safe name is Unknown, not the previous project.
+        if(typeof payload.cwd==='string')project=projectName(payload.cwd,home,{repository,branch});
         return;
       }
       if(event.type!=='event_msg' || payload.type!=='token_count' || !object(payload.info))return;
@@ -223,7 +224,8 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       const identity=JSON.stringify([event.timestamp,running]);
       if(seen.has(identity))return;
       seen.add(identity);
-      if(!object(last))return;
+      // The running total moved but the turn's own usage is missing: that usage is Unknown, not zero.
+      if(!object(last)) {if(Object.values(total).some(value=>typeof value==='number' && value>0))throw new Unavailable();return;}
       const input=count(last.input_tokens),cached=count(last.cached_input_tokens),written=count(last.cache_write_input_tokens ?? 0),output=count(last.output_tokens);
       if([input,cached,written,output].includes(null) || input<cached+written)throw new Unavailable();
       // Codex input includes cache reads and writes, and output includes reasoning.

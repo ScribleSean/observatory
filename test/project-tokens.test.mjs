@@ -293,3 +293,35 @@ test('the row date must be a real calendar date',async()=>withFolder(async folde
   const row=buildProjectTokens(await fixture(folder),'Mac',now);
   assert.throws(()=>cleanProjectTokens({...row,date:'2026-02-30'}),/Invalid project tokens/);
 }));
+
+test('a Codex turn whose running total moved without its own usage is Unknown, not zero',async()=>withFolder(async folder=>{
+  const root=path.join(folder,'.codex','sessions');
+  await mkdir(root,{recursive:true});
+  const events=[
+    {type:'session_meta',timestamp:'2026-10-21T16:00:00Z',payload:{id:'codex-missing-last',cwd:`${home}/Developer/demo-app`}},
+    {type:'event_msg',timestamp:'2026-10-21T16:01:00Z',payload:{type:'token_count',info:{total_token_usage:{input_tokens:100,cached_input_tokens:0,output_tokens:20,reasoning_output_tokens:0,total_tokens:120}}}},
+  ];
+  await writeFile(path.join(root,'a.jsonl'),events.map(event=>JSON.stringify(event)).join('\n')+'\n');
+  const result=await collectProjectTokens({codexFolder:path.join(folder,'.codex'),now,timeZone,home});
+  assert.equal(result.providers.codex.status,'unavailable');
+}));
+
+test('a Codex turn in a folder with no safe name is not given the previous project',async()=>withFolder(async folder=>{
+  const root=path.join(folder,'.codex','sessions');
+  await mkdir(root,{recursive:true});
+  const usageAt=(at,total,last)=>({type:'event_msg',timestamp:at,payload:{type:'token_count',info:{total_token_usage:total,last_token_usage:last}}});
+  const t=n=>({input_tokens:n,cached_input_tokens:0,output_tokens:0,reasoning_output_tokens:0,total_tokens:n});
+  const events=[
+    {type:'session_meta',timestamp:'2026-10-21T16:00:00Z',payload:{id:'codex-moves',cwd:`${home}/Developer/demo-app`}},
+    {type:'turn_context',timestamp:'2026-10-21T16:00:01Z',payload:{cwd:`${home}/Developer/demo-app`,model:'gpt-5.5'}},
+    usageAt('2026-10-21T16:01:00Z',t(100),t(100)),
+    {type:'turn_context',timestamp:'2026-10-21T16:02:00Z',payload:{cwd:'/',model:'gpt-5.5'}},
+    usageAt('2026-10-21T16:03:00Z',t(220),t(120)),
+  ];
+  await writeFile(path.join(root,'a.jsonl'),events.map(event=>JSON.stringify(event)).join('\n')+'\n');
+  const result=await collectProjectTokens({codexFolder:path.join(folder,'.codex'),now,timeZone,home});
+  const total=project=>result.providers.codex.sessions.filter(row=>row.project===project)
+    .reduce((sum,row)=>sum+row.models.reduce((inner,model)=>inner+model.totalTokens,0),0);
+  assert.equal(total('demo-app'),100,'only the first turn is demo-app');
+  assert.equal(total(null),120,'the turn in the unnamed folder has no project');
+}));
