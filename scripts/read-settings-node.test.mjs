@@ -349,7 +349,10 @@ function windowsDisk(folders) {
     const key=child(realpath(win.dirname(normal)),win.basename(normal));
     return {isSymbolicLink:()=>Boolean(folders[key].link)};
   };
-  return {realpath,lstat};
+  // Directory listings mark every reparse point as a link, as libuv's scandir does.
+  const readdir=typed=>Object.keys(folders).filter(key=>win.dirname(key).toLowerCase()===realpath(typed).toLowerCase())
+    .map(key=>({name:win.basename(key),isSymbolicLink:()=>Boolean(folders[key].link??folders[key].redirect)}));
+  return {realpath,lstat,readdir};
 }
 
 test('a Windows cache folder may be named through an 8.3 short alias, but never through a link',()=>{
@@ -364,11 +367,13 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Elsewhere\\cache':{},
     'C:\\Elsewhere\\mounted':{},
     'C:\\Users\\Linked Folder':{alias:'LINKED~1',link:'C:\\Elsewhere'},
-    'C:\\Users\\LINK~1':{link:'C:\\Users\\runneradmin'},
+    'C:\\Users\\LINK~1':{link:'C:\\Elsewhere'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\jump':{link:'C:\\Elsewhere\\cache'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\MOVED~1':{link:'C:\\Elsewhere\\cache'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\mounted':{redirect:'C:\\Elsewhere\\mounted'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\sibling':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\CACHE~1':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long redirect':{alias:'ALONGR~1',redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
   });
   // GitHub's Windows runner sets TEMP to this short form.
   for(const directory of [
@@ -380,11 +385,14 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
   for(const directory of [
     'C:\\Users\\Linked Folder\\cache',
     'C:\\Users\\LINKED~1\\cache',
-    'C:\\Users\\LINK~1\\AppData\\Local\\Temp\\cache',
+    'C:\\Users\\LINK~1\\cache',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\jump',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\MOVED~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\mounted',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\sibling',
+    // A junction to a volume GUID path is not reported by lstat, so an alias-shaped name could hide one.
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\CACHE~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGR~1',
   ])assert.equal(windowsCanonical(directory,disk),false,directory);
 });
 
