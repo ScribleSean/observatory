@@ -41,6 +41,20 @@ export function paths(platform=process.platform,repo=REPO,home=homedir(),environ
 
 const xml=value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+const START_MENU_LINK="(Join-Path ([Environment]::GetFolderPath('Programs')) 'Observatory.lnk')";
+const psQuote=value=>"'"+String(value).replace(/'/g,"''")+"'";
+
+export function startMenuShortcut(executable) {
+  return [
+    `$link=(New-Object -ComObject WScript.Shell).CreateShortcut(${START_MENU_LINK})`,
+    `$link.TargetPath=${psQuote(executable)}`,
+    `$link.WorkingDirectory=${psQuote(path.win32.dirname(executable))}`,
+    `$link.IconLocation=${psQuote(executable+',0')}`,
+    `$link.Description='Observatory'`,
+    '$link.Save()',
+  ].join('; ');
+}
+
 export function infoPlist() {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -49,6 +63,7 @@ export function infoPlist() {
 <key>CFBundleName</key><string>Observatory</string>
 <key>CFBundleExecutable</key><string>${MAC_EXECUTABLE}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIconFile</key><string>Observatory</string>
 <key>CFBundleShortVersionString</key><string>2.0</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
@@ -152,6 +167,7 @@ export async function installMacApp(target,settings,{fs=filesystem,run=execute,s
     await run('/usr/bin/xcrun',['swiftc','-O','-swift-version','5',path.join(REPO,'glance','mac','Glance.swift'),'-o',executable],{timeout:300000});
     await fs.writeFile(path.join(staged,'Contents','Resources','glance.json'),settings);
     await fs.copyFile(path.join(REPO,'public','brand','telescope.svg'),path.join(staged,'Contents','Resources','telescope.svg'));
+    await fs.copyFile(path.join(REPO,'glance','icons','Observatory.icns'),path.join(staged,'Contents','Resources','Observatory.icns'));
     await fs.access(executable,filesystem.constants.X_OK);
     if(!(await fs.stat(executable)).isFile() || !(await fs.stat(plist)).isFile())
       throw Error('The staged app is missing its executable or Info.plist.');
@@ -235,6 +251,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       // Windows locks a running program file, so stop the tray app before replacing it.
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute(target.compiler,['/nologo','/target:winexe','/optimize+',`/out:${target.executable}`,
+        `/win32icon:${path.win32.join(REPO,'glance','icons','Observatory.ico')}`,
         '/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Web.Extensions.dll',
         path.win32.join(REPO,'glance','windows','Glance.cs')],{windowsHide:true,timeout:300000});
     });
@@ -266,6 +283,8 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     await act(start?'start the tray app now and at login':'start the tray app at login (not now)',async()=>{
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute('reg.exe',['add','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/t','REG_SZ','/d',`"${target.executable}"`,'/f'],{windowsHide:true});
+      // A Start menu entry, so Windows search finds the app with its icon.
+      await execute('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)],{windowsHide:true});
       // Started from a remote or background session, the tray icon would not appear on the desktop
       if(start)spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
     });
@@ -282,6 +301,7 @@ export async function remove({platform=process.platform,log=console.log}={}) {
     await rm(target.launchAgent,{force:true});
   } else {
     await quiet('reg.exe',['delete','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/f']);
+    await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',`Remove-Item -LiteralPath ${START_MENU_LINK} -Force -ErrorAction SilentlyContinue`]);
     await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
   }
   log('Removed the login item and stopped the app. Your data folder and settings file are unchanged.');

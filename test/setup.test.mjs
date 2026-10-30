@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
-import {nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,LABEL} from '../scripts/setup.mjs';
+import {nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,startMenuShortcut,LABEL} from '../scripts/setup.mjs';
 
 for(const failure of ['compiler','executable','plist','sign','verify','swap','rollback',null]) {
   test(`staged Mac install: ${failure ?? 'success'}`,()=>withFolder(async folder=>{
@@ -29,6 +29,7 @@ for(const failure of ['compiler','executable','plist','sign','verify','swap','ro
         events.push(step);
         assert.equal(await fs.readFile(path.join(args.at(-1),'Contents','Resources','glance.json'),'utf8'),settings);
         assert.match(await fs.readFile(path.join(args.at(-1),'Contents','Resources','telescope.svg'),'utf8'),/<svg/);
+        assert.ok((await fs.stat(path.join(args.at(-1),'Contents','Resources','Observatory.icns'))).size>0);
         if(failure===step)throw Error(`${step} failed`);
       }
     };
@@ -131,3 +132,10 @@ test('a dry run on a fresh clone lists every step and writes nothing',{skip:!['d
     assert.ok(output.includes(step),step);
   assert.equal(existsSync(config),false);
 })),{skip:!['darwin','win32'].includes(process.platform) && 'setup runs on macOS and Windows only'});
+
+test('the app icon is named in Info.plist, and the Start menu entry uses the app\'s own icon',()=>{
+  assert.match(infoPlist(),/<key>CFBundleIconFile<\/key><string>Observatory<\/string>/);
+  const command=startMenuShortcut("C:\\Users\\o'brien\\observatory\\build\\windows\\ObservatoryGlance.exe");
+  assert.match(command,/IconLocation='C:\\Users\\o''brien\\observatory\\build\\windows\\ObservatoryGlance\.exe,0'/);
+  assert.match(command,/GetFolderPath\('Programs'\)\) 'Observatory\.lnk'/);
+});
