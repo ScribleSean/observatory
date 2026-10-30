@@ -153,7 +153,8 @@ export const STRINGS = {
     "caveat": "Dollar figures are estimates at list price. A subscription is not billed per token.",
     "caveatLabel": "About these figures",
     "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free.",
-    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked."
+    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked.",
+    "breakdown": "Breakdown"
   },
   "activity": {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",

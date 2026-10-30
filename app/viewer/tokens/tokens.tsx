@@ -23,7 +23,6 @@ const periods: [string, string][] = [
   ['month', STRINGS.periods.month], ['all', STRINGS.periods.all],
 ];
 // Move to lib/strings.json as tokens.breakdown.
-const BREAKDOWN = 'Breakdown';
 const classes = ['input', 'cached', 'cacheWrite', 'output'] as const;
 const count = (value: number | null) => value === null ? STRINGS.status.unknown : compact(value);
 const dollars = (usd: number | null) => {
@@ -71,7 +70,7 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
     <div>{block.days.length > 0 && <BarChart title={format(STRINGS.tokens.chartTitle, { provider: label })}
       data={domain.map(date => ({ label: date.slice(5), date, value: byDay.get(date) ?? null }))} series={provider} formatValue={compact} />}</div>
     {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-tokens-breakdown">
-      <summary>{BREAKDOWN}</summary>
+      <summary>{STRINGS.tokens.breakdown}</summary>
       {block.status !== 'by-device' && <>
         <h4>{STRINGS.tokens.classes}</h4>
         <dl className="ob-tokens-classes">{classes.map(key => <div key={key}>
