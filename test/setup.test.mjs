@@ -138,5 +138,5 @@ test('the app icon is named in Info.plist, and the Start menu entry uses the app
   const command=startMenuShortcut("C:\\Users\\o'brien\\observatory\\build\\windows\\ObservatoryGlance.exe");
   assert.match(command,/IconLocation='C:\\Users\\o''brien\\observatory\\build\\windows\\ObservatoryGlance\.exe,0'/);
   assert.match(command,/GetFolderPath\('Programs'\)\) 'Observatory\.lnk'/);
-  assert.match(startMenuShortcut('C:\\Users\\Sean\u2019s PC\\ObservatoryGlance.exe'),/TargetPath='C:\\Users\\Sean\u2019\u2019s PC\\ObservatoryGlance\.exe'/);
+  assert.match(startMenuShortcut('C:\\Users\\Alex\u2019s PC\\ObservatoryGlance.exe'),/TargetPath='C:\\Users\\Alex\u2019\u2019s PC\\ObservatoryGlance\.exe'/);
 });
