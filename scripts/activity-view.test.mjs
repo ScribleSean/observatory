@@ -44,3 +44,14 @@ test('tracking help names the snapshot time zone for both times', () => {
   assert.match(html, /Last tracking coverage: [^<]*?UTC/);
   assert.match(html, /Last successful collection: [^<]*?UTC/);
 });
+test('the time zone sentence lives in Details, not on its own line', () => {
+  const zone = strings.activity.zoneCaveat.replace('{zone}', 'UTC');
+  for (const initialPeriod of ['day', 'now']) {
+    const html = render(ActivityView, { snapshot: { ...sampleSnapshot(now), timezone: 'UTC' }, now, initialPeriod });
+    const id = html.match(new RegExp(`aria-controls="([^"]+)"[^>]*>${strings.activity.details}</button>`))?.[1];
+    assert.ok(id, initialPeriod);
+    const detail = html.match(new RegExp(`<span id="${id}" hidden="">([^<]*)</span>`))?.[1] ?? '';
+    assert.ok(detail.includes(zone), initialPeriod);
+    assert.equal(html.split(zone).length, 2, initialPeriod);
+  }
+});
