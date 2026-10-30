@@ -460,6 +460,11 @@ namespace Observatory
 
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
+        [DllImport("user32.dll")]
+        static extern IntPtr MonitorFromPoint(Point point, uint flags);
+        [DllImport("shcore.dll")]
+        static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
+        const int WM_DPICHANGED = 0x02E0;
 
         public PanelForm()
         {
@@ -496,7 +501,7 @@ namespace Observatory
             if (reanchor || screen == null) screen = Screen.FromPoint(Cursor.Position);
             using (var g = CreateGraphics())
             {
-                scale = g.DpiX / 96f;
+                scale = ScaleOf(screen, g);
                 int height = Painter.Paint(g, State, Palette.Of(Palette.SystemDark()), false, null);
                 Rectangle area = screen.WorkingArea, bounds = screen.Bounds;
                 int margin = (int)(12 * scale);
@@ -510,6 +515,28 @@ namespace Observatory
                 SetBounds(x, Math.Max(area.Top + margin, y), w, h);
             }
             Invalidate();
+        }
+
+        // Each screen has its own scale (Windows 8.1 and later). Older Windows has one for all screens.
+        static float ScaleOf(Screen screen, Graphics g)
+        {
+            try
+            {
+                uint dpiX, dpiY;
+                var middle = new Point(screen.Bounds.Left + screen.Bounds.Width / 2, screen.Bounds.Top + screen.Bounds.Height / 2);
+                // 2 is MONITOR_DEFAULTTONEAREST, 0 is MDT_EFFECTIVE_DPI (the scale set in Display settings).
+                if (GetDpiForMonitor(MonitorFromPoint(middle, 2), 0, out dpiX, out dpiY) == 0 && dpiX > 0) return dpiX / 96f;
+            }
+            catch { }
+            return g.DpiX / 96f;
+        }
+
+        // Sent when the panel lands on a screen with another scale, or the scale changes while it is open.
+        // Place sizes the panel for its screen, so Windows' suggested rectangle is not used.
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg == WM_DPICHANGED && screen != null) Place(false);
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
@@ -797,7 +824,21 @@ namespace Observatory
         }
 
         [DllImport("user32.dll")]
+        static extern bool SetProcessDpiAwarenessContext(IntPtr context);
+        [DllImport("shcore.dll")]
+        static extern int SetProcessDpiAwareness(int value);
+        [DllImport("user32.dll")]
         static extern bool SetProcessDPIAware();
+        static readonly IntPtr PerMonitorAwareV2 = new IntPtr(-4);
+
+        // Per-monitor awareness keeps the panel sharp on a second screen with a different scale, where
+        // system awareness has Windows stretch it. V2 needs Windows 10 1703, V1 (2) Windows 8.1.
+        static void UseMonitorDpi()
+        {
+            try { if (SetProcessDpiAwarenessContext(PerMonitorAwareV2)) return; } catch { }
+            try { if (SetProcessDpiAwareness(2) == 0) return; } catch { }
+            try { SetProcessDPIAware(); } catch { }
+        }
 
         // `ObservatoryGlance.exe --render combined.json out.png light|dark [now]` draws the panel to a PNG
         // without a tray, for checking the layout and for documentation screenshots.
@@ -816,7 +857,7 @@ namespace Observatory
         static int Main(string[] args)
         {
             if (Array.IndexOf(args, "--render") >= 0) return Render(args);
-            try { SetProcessDPIAware(); } catch { }
+            UseMonitorDpi();
             bool created;
             using (new Mutex(true, "Local\\ObservatoryGlance", out created))
             {
