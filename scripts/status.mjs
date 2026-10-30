@@ -14,7 +14,7 @@ const windowNames = {five_hour: '5-hour', weekly: 'weekly'};
 async function dataFolder() {
   try { return localFolder(await loadConfig()); }
   catch (error) {
-    if (!process.env.OBSERVATORY_CONFIG && /^No settings file/.test(error.message)) return path.join(defaultDataFolder(), 'public', 'local');
+    if (!process.env.OBSERVATORY_CONFIG && error.message.startsWith('No settings file')) return path.join(defaultDataFolder(), 'public', 'local');
     throw error;
   }
 }
