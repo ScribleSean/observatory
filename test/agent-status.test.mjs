@@ -7,6 +7,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
 import {agentStatus, classifyPace, SPEND_MARGIN} from '../lib/agent-status.mjs';
+import {main} from '../scripts/status.mjs';
 import {ownSnapshot, withFolder} from './helpers.mjs';
 
 const now = Date.parse('2026-10-21T17:00:00Z');
@@ -94,7 +95,8 @@ test('pace classification boundaries', () => {
 test('JSON shape is stable and carries no personal data', () => {
   const status = agentStatus(today, now);
   const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace'];
-  assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'route']);
+  assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route']);
+  assert.deepEqual(Object.keys(status.nextReturn.codex), ['resetsAt', 'minutesToReset']);
   assert.equal(status.schema, 1);
   assert.equal(status.generatedAt, iso(now));
   assert.deepEqual(Object.keys(status.engines), ['claude', 'codex', 'grokbot']);
@@ -108,6 +110,53 @@ test('JSON shape is stable and carries no personal data', () => {
   for (const hint of Object.values(status.route)) assert.deepEqual(Object.keys(hint), ['engine', 'reason']);
   const text = JSON.stringify(status);
   for (const secret of ['Test Mac', 'Mac', 'Windows', '/', '\\']) assert.equal(text.includes(secret), false, secret);
+});
+
+test('nextReturn gives the reset of the window at 0, the later one when both are at 0', () => {
+  assert.deepEqual(agentStatus(today, now).nextReturn, {codex: {resetsAt: iso(now + hour), minutesToReset: 60}});
+  const both = fixture({
+    claude: [['five_hour', 300, 91, 4 * hour], ['seven_day', 10080, 70, 48 * hour]],
+    codex: [['primary', 300, 0, hour], ['secondary', 10080, 0, 100 * hour]],
+  });
+  assert.deepEqual(agentStatus(both, now).nextReturn, {codex: {resetsAt: iso(now + 100 * hour), minutesToReset: 6000}});
+  const fine = fixture({
+    claude: [['five_hour', 300, 91, 4 * hour], ['seven_day', 10080, 70, 48 * hour]],
+    codex: [['primary', 300, 40, hour], ['secondary', 10080, 55, 100 * hour]],
+  });
+  assert.deepEqual(agentStatus(fine, now).nextReturn, {});
+});
+
+function fakeRun(args) {
+  let at = now;
+  const sleeps = [], output = [];
+  const result = main(args, {read: async () => today, clock: () => at,
+    sleep: async ms => { sleeps.push(ms); at += ms; }, write: text => output.push(text), fail: text => output.push(text)});
+  return result.then(code => ({code, at, sleeps, output: output.join('')}));
+}
+
+test('--wait sleeps until the reset, even after the 0% reading goes stale, then exits 0', async () => {
+  const result = await fakeRun(['--wait', 'codex']);
+  assert.equal(result.code, 0);
+  assert.equal(result.at, now + hour);
+  assert.deepEqual(result.sleeps, [hour]);
+  assert.notEqual(JSON.parse(result.output).engines.codex.status, 'out');
+});
+
+test('--wait returns at once when the engine is not out, and exits 4 on timeout', async () => {
+  const ready = await fakeRun(['--wait', 'claude']);
+  assert.deepEqual([ready.code, ready.sleeps], [0, []]);
+  const late = await fakeRun(['--wait', 'codex', '--timeout', '5']);
+  assert.equal(late.code, 4);
+  assert.equal(late.at, now + 5 * 60000);
+  assert.equal(JSON.parse(late.output).engines.codex.status, 'out');
+});
+
+test('--wait exits 2 on a bad engine or timeout', async () => {
+  for (const args of [['--wait', 'gemini'], ['--wait'], ['--wait', 'codex', '--timeout', '0'], ['--wait', 'codex', '--timeout', 'soon']]) {
+    const result = await fakeRun(args);
+    assert.equal(result.code, 2, args.join(' '));
+    assert.deepEqual(result.sleeps, []);
+  }
 });
 
 // Agents call this in idle repos whose node_modules a disk cleanup may have removed,
@@ -136,5 +185,9 @@ test('status runs with plain node and no node_modules, exits 0 with a current re
     const human = await run([]);
     assert.equal(human.code, 0);
     assert.match(human.stdout, /Route code, review, research: Claude/);
+    assert.match(human.stdout, /Codex back at \d\d:\d\d/);
+    const waited = await run(['--wait', 'claude', '--timeout', '1']);
+    assert.equal(waited.code, 0);
+    assert.equal(JSON.parse(waited.stdout).engines.claude.status, 'ok');
   });
 });
