@@ -1,6 +1,27 @@
-.ob-sources { min-width: 0; overflow-wrap: anywhere; }
-.ob-source-counts { display: flex; flex-wrap: wrap; gap: var(--ob-space-3); padding: 0; list-style: none; color: var(--ob-muted); }
-.ob-sources h3 { margin: 0 0 var(--ob-space-3); font-size: var(--ob-body-size); }
-.ob-source-record + .ob-source-record { margin-top: var(--ob-space-3); padding-top: var(--ob-space-3); border-top: 1px solid var(--ob-track); }
-.ob-sources .ob-row { flex-wrap: wrap; }
-.ob-source-record time { display: block; margin: var(--ob-space-1) 0; }
+.ob-sources { container-type: inline-size; min-width: 0; overflow-wrap: anywhere; }
+.ob-sources-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-4); }
+.ob-sources-summary p { margin: 0; }
+.ob-source-counts { display: flex; flex-wrap: wrap; gap: var(--ob-space-3); margin: 0; padding: 0; list-style: none; color: var(--ob-muted); }
+.ob-sources-list { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) max-content minmax(5rem, max-content); column-gap: var(--ob-space-5); }
+.ob-sources-group, .ob-source-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
+.ob-sources-group { padding: var(--ob-space-1) 0; }
+.ob-sources-group + .ob-sources-group { border-top: 1px solid var(--ob-track); }
+.ob-source-row { align-items: baseline; padding: 6px 0; }
+.ob-source-name { font-weight: 500; }
+.ob-source-repeat { opacity: 0; }
+.ob-source-time { white-space: nowrap; }
+.ob-source-status { text-align: end; white-space: nowrap; }
+.ob-source-row:not([data-status="ok"]) .ob-source-status { color: var(--ob-warning); }
+.ob-source-row:not([data-status]) .ob-source-status { color: var(--ob-muted); }
+.ob-source-refusal { grid-column: 2 / -1; margin: var(--ob-space-1) 0 0; }
+@container (max-width: 560px) {
+  .ob-sources-list, .ob-sources-group, .ob-source-row { display: block; }
+  .ob-source-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name name" "device status" "time status" "refusal refusal"; column-gap: var(--ob-space-3); padding: 4px 0; }
+  .ob-source-name { grid-area: name; padding-top: var(--ob-space-1); }
+  .ob-source-repeat { display: none; }
+  .ob-source-device { grid-area: device; }
+  .ob-source-device:empty { display: none; }
+  .ob-source-time { grid-area: time; }
+  .ob-source-status { grid-area: status; align-self: center; }
+  .ob-source-refusal { grid-area: refusal; }
+}

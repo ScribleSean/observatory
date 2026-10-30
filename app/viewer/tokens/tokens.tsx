@@ -4,7 +4,7 @@ import { compact } from '../../../lib/panel-data.mjs';
 import { tokensView, money } from '../../../lib/view-tokens.mjs';
 import { projectsView } from '../../../lib/view-projects.mjs';
 import { ProjectsCard } from './projects';
-import { BarChart, Card, FilterGroup, InfoControl, ProviderDot, Row } from '../components';
+import { BarChart, Card, FilterGroup, ProviderDot, Row } from '../components';
 import './tokens.css';
 
 type Computed = ReturnType<typeof tokensView>;
@@ -22,6 +22,7 @@ const periods: [string, string][] = [
   ['day', STRINGS.periods.day], ['week', STRINGS.periods.week],
   ['month', STRINGS.periods.month], ['all', STRINGS.periods.all],
 ];
+// Move to lib/strings.json as tokens.breakdown.
 const classes = ['input', 'cached', 'cacheWrite', 'output'] as const;
 const count = (value: number | null) => value === null ? STRINGS.status.unknown : compact(value);
 const dollars = (usd: number | null) => {
@@ -36,67 +37,82 @@ const statusNote = (status: string) => status === 'unverified' ? STRINGS.status.
   : status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
 
-function ProviderCard({ result, provider }: { result: Result; provider: 'claude' | 'codex' }) {
+/** The last 30 calendar days up to the data's own today, so both charts share one date axis. */
+function chartDomain(result: Result, now: number) {
+  const recorded = [...result.claude.days, ...result.codex.days].some(day => /^\d{4}-\d{2}-\d{2}$/.test(day.date));
+  if (!recorded) return [];
+  const local = new Date(now);
+  const end = typeof result.anchor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(result.anchor)
+    ? Date.parse(`${result.anchor}T00:00:00Z`) : Date.UTC(local.getFullYear(), local.getMonth(), local.getDate());
+  return Array.from({ length: 30 }, (_, index) => new Date(end - (29 - index) * 86400000).toISOString().slice(0, 10));
+}
+
+function ProviderCard({ result, provider, domain }: { result: Result; provider: 'claude' | 'codex'; domain: string[] }) {
   const block: Block = result[provider];
   const label = provider === 'claude' ? STRINGS.providers.claudeCode : STRINGS.providers.codex;
   const note = statusNote(block.status);
   const checked = block.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: block.checkedOn }) : STRINGS.tokens.pricesUnknown;
+  const byDay = new Map(block.days.map(day => [day.date, day.total]));
   return <Card label={label}>
     <h3><ProviderDot provider={provider} />{label}</h3>
-    <div className="ob-figure">{block.status === 'ok' ? count(block.totals.total) : statusWord(block.status)}</div>
-    {note && <p className="ob-tokens-note">{note}</p>}
-    {block.status !== 'by-device' && <>
-    <h4>{STRINGS.tokens.classes}</h4>
-    <dl className="ob-tokens-classes">{classes.map(key => <div key={key}>
-      <dt>{STRINGS.tokens[key]}</dt><dd>{count(block.totals[key])}</dd>
-    </div>)}</dl>
-    <div className="ob-tokens-estimate">
-      <Row><span>{STRINGS.tokens.apiEstimate}</span><span>{dollars(block.estimate.usd)}</span></Row>
-      <p className="ob-tokens-note">{checked}</p>
-      {block.estimate.partial && <p className="ob-tokens-note">{format(STRINGS.tokens.partial, {
-        covered: count(block.estimate.coveredTokens), total: count(block.estimate.totalTokens),
-      })}</p>}
+    <div className="ob-tokens-head">
+      <div className="ob-figure">{block.status === 'ok' ? count(block.totals.total) : statusWord(block.status)}</div>
+      {note && <p className="ob-tokens-note">{note}</p>}
+      {provider === 'claude' && result.host === 'All' && result.claude.byDevice.length > 0 && <div className="ob-tokens-table">
+        <table>
+          <thead><tr><th scope="col">{STRINGS.devices.device}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
+          <tbody>{result.claude.byDevice.map(device => <tr key={device.host}>
+            <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : statusWord(device.status)}</td><td>{dollars(device.usd)}</td>
+          </tr>)}</tbody>
+        </table>
+        <p className="ob-tokens-note">{checked}</p>
+      </div>}
     </div>
-    </>}
-    {provider === 'claude' && result.host === 'All' && result.claude.byDevice.length > 0 && <div className="ob-tokens-table">
-      <table>
-        <thead><tr><th scope="col">{STRINGS.devices.device}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
-        <tbody>{result.claude.byDevice.map(device => <tr key={device.host}>
-          <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : statusWord(device.status)}</td><td>{dollars(device.usd)}</td>
-        </tr>)}</tbody>
-      </table>
-      <p className="ob-tokens-note">{checked}</p>
-    </div>}
-    {block.models.length > 0 && <div className="ob-tokens-table">
-      <table>
-        <caption>{STRINGS.tokens.byModel}</caption>
-        <thead><tr><th scope="col">{STRINGS.tokens.model}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
-        <tbody>{block.models.map(model => <tr key={model.model}>
-          <th scope="row">{recorded(model.model)}</th><td>{count(model.total)}</td><td>{dollars(model.usd)}</td>
-        </tr>)}</tbody>
-      </table>
-    </div>}
-    {block.days.length > 0 && <BarChart title={format(STRINGS.tokens.chartTitle, { provider: label })}
-      data={block.days.map(day => ({ label: day.date.slice(5), value: day.total }))} series={provider} formatValue={compact} />}
+    <div>{block.days.length > 0 && <BarChart quietTitle title={format(STRINGS.tokens.chartTitle, { provider: label })}
+      data={domain.map(date => ({ label: date.slice(5), date, value: byDay.has(date) ? byDay.get(date) ?? null : undefined }))} series={provider} formatValue={compact} />}</div>
+    {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-tokens-breakdown">
+      <summary>{STRINGS.tokens.breakdown}</summary>
+      {block.status !== 'by-device' && <>
+        <h4>{STRINGS.tokens.classes}</h4>
+        <dl className="ob-tokens-classes">{classes.map(key => <div key={key}>
+          <dt>{STRINGS.tokens[key]}</dt><dd>{count(block.totals[key])}</dd>
+        </div>)}</dl>
+        <div className="ob-tokens-estimate">
+          <Row><span>{STRINGS.tokens.apiEstimate}</span><span>{dollars(block.estimate.usd)}</span></Row>
+          <p className="ob-tokens-note">{checked}</p>
+          {block.estimate.partial && <p className="ob-tokens-note">{format(STRINGS.tokens.partial, {
+            covered: count(block.estimate.coveredTokens), total: count(block.estimate.totalTokens),
+          })}</p>}
+        </div>
+      </>}
+      {block.models.length > 0 && <div className="ob-tokens-table">
+        <h4>{STRINGS.tokens.byModel}</h4>
+        <table>
+          <thead><tr><th scope="col">{STRINGS.tokens.model}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
+          <tbody>{block.models.map(model => <tr key={model.model}>
+            <th scope="row">{recorded(model.model)}</th><td>{count(model.total)}</td><td>{dollars(model.usd)}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>}
+    </details>}
   </Card>;
 }
 
-export function TokensSection({ result, projects = [], onHostChange, onPeriodChange }: {
+export function TokensSection({ result, projects = [], onHostChange, onPeriodChange, now }: {
   result: Result;
+  now: number;
   projects?: ReturnType<typeof projectsView>;
   onHostChange: (host: string) => void;
   onPeriodChange: (period: string) => void;
 }) {
+  const domain = chartDomain(result, now);
   return <div className="ob-tokens">
     <FilterGroup label={STRINGS.devices.device} value={result.host} onChange={onHostChange}
       options={[['All', STRINGS.devices.all], ...result.devices.map(device => [device.id, device.label] as [string, string])]} />
     <FilterGroup label={STRINGS.devices.period} value={result.period} onChange={onPeriodChange} options={periods} />
-    <div className="ob-tokens-caveat"><p>{STRINGS.tokens.caveat}</p>
-      <InfoControl label={STRINGS.tokens.caveatLabel} detail={STRINGS.tokens.caveatDetail} />
-    </div>
     <div className="ob-tokens-providers">
-      <ProviderCard result={result} provider="claude" />
-      <ProviderCard result={result} provider="codex" />
+      <ProviderCard result={result} provider="claude" domain={domain} />
+      <ProviderCard result={result} provider="codex" domain={domain} />
     </div>
     <ProjectsCard devices={projects} />
     <Card label={STRINGS.tokens.settingsTitle}>
@@ -123,5 +139,5 @@ export function TokensView({ snapshot, now, initialHost = 'All', initialPeriod =
 }) {
   const [host, setHost] = useState(initialHost);
   const [period, setPeriod] = useState(initialPeriod);
-  return <TokensSection result={tokensView(snapshot, { host, period, now }) as Result} projects={projectsView(snapshot, { host, now })} onHostChange={setHost} onPeriodChange={setPeriod} />;
+  return <TokensSection result={tokensView(snapshot, { host, period, now }) as Result} projects={projectsView(snapshot, { host, now })} onHostChange={setHost} onPeriodChange={setPeriod} now={now} />;
 }

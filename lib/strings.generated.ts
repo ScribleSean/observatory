@@ -5,20 +5,9 @@ export const STRINGS = {
   },
   "limits": {
     "deviceNamed": "{name} ({platform})",
-    "perHour": "{value}% per hour",
-    "belowTenth": "<0.1",
-    "resetsFirst": "Resets before running out at this pace.",
-    "exhausted": "No limit was left at the last reading.",
-    "stale": "The reading is too old to estimate pace.",
-    "insufficientHistory": "More readings are needed to estimate pace.",
-    "noRecentConsumption": "No use was observed in the last hour.",
-    "resetUnknown": "The reset time is unknown.",
     "resetPending": "Waiting for the reset to be observed.",
-    "awaitingObservation": "Waiting for a new reading.",
     "history": "History",
     "chartTitle": "{provider} {window} remaining",
-    "historyInfo": "About history",
-    "historyDetail": "Each point is the last reading in its interval and an interval without a reading is a gap, never zero percent.",
     "sharedFrom": "Shared from {device}",
     "observed": "Observed {span} ago",
     "observationUnknown": "Observation time unknown"
@@ -114,7 +103,8 @@ export const STRINGS = {
   "charts": {
     "item": "Item",
     "value": "Value",
-    "showValues": "Show values"
+    "showValues": "Show values",
+    "notRecorded": "No records"
   },
   "sources": {
     "statusOk": "Read",
@@ -161,10 +151,8 @@ export const STRINGS = {
     "effort": "Reasoning",
     "speed": "Speed",
     "noSettings": "No settings recorded",
-    "caveat": "Dollar figures are estimates at list price. A subscription is not billed per token.",
-    "caveatLabel": "About these figures",
-    "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free.",
-    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked."
+    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked.",
+    "breakdown": "Breakdown"
   },
   "activity": {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",
@@ -239,18 +227,12 @@ export const STRINGS = {
     "fiveHour": "5-hour",
     "weekly": "weekly",
     "chartTitle": "{provider} {window} limit left over time",
-    "from": "from {device} at {time}",
     "left": "{value}% left",
     "noReadings": "No readings in this range",
-    "reset": "Reset",
-    "resetAt": "Window reset at {time}",
-    "time": "Time",
-    "computer": "Computer",
-    "remaining": "Left",
-    "toggle": "Show or hide {device}",
-    "startsAt": "Readings start {time}",
-    "noneBefore": "No readings",
-    "caveat": "Each line is one computer's own readings of the account limit. Lines are never added together, and a gap means no reading was taken."
+    "lowest": "{value}% at lowest",
+    "windowSpan": "{start} to {end}",
+    "paceGuide": "Even-spend pace",
+    "time": "Time"
   },
   "firstRun": {
     "title": "Waiting for the first collection",

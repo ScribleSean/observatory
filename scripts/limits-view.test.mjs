@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 
 process.env.TZ = 'UTC';
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -26,49 +25,49 @@ const snapshot = () => {
     quota: source('codex', ['primary', 'secondary']) };
 };
 const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar', ...props }));
-const nowCard = html => html.match(/<div class="ob-limits-providers">([\s\S]*?)(?:<section class="ob-history"|$)/)?.[1] ?? assert.fail('Provider cards missing');
 const count = (html, pattern) => [...html.matchAll(pattern)].length;
+const card = (html, title) => html.split('aria-label="' + title + ' limit left over time"')[1]?.split('</section>')[0] ?? assert.fail(title + ' card missing');
 
-void test('ok shows pace and projections for both providers and current session cost', () => {
+void test('every limit window has a chart whose header shows what is left now and when it resets', () => {
   assert.equal(LimitsView, NamedLimitsView);
   const html = render();
-  const current = nowCard(html);
-  for (const provider of ['claude', 'codex']) {
-    const lines = [...current.matchAll(new RegExp('data-provider="' + provider + '" data-window="[^"]+">([\\s\\S]*?)(?=<div class="ob-limit-window(?: warn)?" data-provider|</section>|$)', 'g'))];
-    assert.equal(lines.length, 2);
-    for (const line of lines) {
-      assert.match(line[1], /24\.0% per hour/);
-      assert.match(line[1], /runs out in about/);
-    }
+  assert.equal(count(html, /<figure class="ob-history-chart"/g), 4);
+  for (const name of ['Claude Code', 'Codex']) for (const window of ['5-hour', 'weekly']) {
+    const head = card(html, name + ' ' + window);
+    assert.match(head, /class="ob-num">40%</, name + ' ' + window);
+    assert.match(head, /Resets in 10h 0m/);
+    assert.match(head, /runs out in about/, 'the projection is said once, in the header');
   }
   assert.ok(!html.includes('Session cost'));
 });
 
-void test('stale readings show their age without a projection', () => {
+void test('no footnotes or pace sentences: the layout carries it', () => {
+  const html = render();
+  for (const gone of ['Lines are never added together', 'per hour', 'Resets before running out', 'Show values', 'About history'])
+    assert.ok(!html.includes(gone), gone);
+});
+
+void test('a stale reading shows Unknown and its warning, never a projection', () => {
   const data = snapshot();
   data.claudeLimits.checkedAt = data.quota.checkedAt = iso(-30);
   const html = render(data);
-  assert.match(nowCard(html), /The reading is too old to estimate pace/);
   assert.doesNotMatch(html, /runs out in about/);
-  assert.match(html, /as of/);
+  assert.match(card(html, 'Codex 5-hour'), /class="ob-meta warn"/);
+  assert.match(card(html, 'Codex 5-hour'), /class="ob-num">Unknown</);
 });
 
-void test('low remaining value warns on the affected row', () => {
+void test('a low limit warns in its header', () => {
   const data = snapshot();
   data.quota.windows[0].remainingPercent = 12;
-  const html = render(data);
-  assert.match(nowCard(html), /class="ob-limit-window warn" data-provider="codex" data-window="5-hour"/);
-  assert.match(html, /class="ob-num big warn">12%/);
+  assert.match(card(render(data), 'Codex 5-hour'), /class="ob-num warn">12%/);
 });
 
 for (const data of [{ quota: { status: 'unavailable' } }, null]) {
   void test('unknown remains unknown for ' + (data ? 'unavailable quota' : 'null snapshot'), () => {
-    const html = render(data).replace(/<section class="ob-history"[\s\S]*<\/section>/, '');
-    assert.match(html, /Unknown/);
-    assert.doesNotMatch(html, /(^|[^0-9.])0 ?%|>0</);
-    for (const name of ['Claude Code', 'Codex']) assert.ok(html.includes('<section class="ob-card" aria-label="' + name + '">'));
-    assert.equal(count(nowCard(html), /data-window="unknown"/g), 2);
-    assert.equal(count(nowCard(html), />Unknown</g), 2);
+    const html = render(data);
+    assert.equal(count(html, /class="ob-num">Unknown</g), 4);
+    assert.doesNotMatch(html.replace(/>(0|100)%</g, ''), /(^|[^0-9.])0 ?%/, 'the only 0% is the axis label');
+    assert.ok(html.includes('No readings in this range'));
   });
 }
 
@@ -86,56 +85,43 @@ void test('peer absent has no pairing card', () => {
   assert.doesNotMatch(render(), /Shared from/);
 });
 
-void test('limit history has a card for every provider and window, with the freshest reading or Unknown', () => {
-  const html = render(snapshot());
-  assert.equal(count(html, /<figure class="ob-history-chart"/g), 4);
-  for (const name of ['Claude Code', 'Codex']) for (const window of ['5-hour', 'weekly'])
-    assert.ok(html.includes(name + ' ' + window + ' limit left over time'), name + ' ' + window);
-  assert.ok(html.includes('Lines are never added together'));
-  assert.ok(html.includes('No readings in this range'));
-});
-
-
-void test('each sample window shows its projection once, in its provider card', () => {
-  const html = render(sampleSnapshot(now));
-  for (const [provider, name] of [['claude', 'Claude Code'], ['codex', 'Codex']]) {
-    const card = html.split('<section class="ob-card" aria-label="' + name + '">')[1]?.split('</section>')[0];
-    assert.ok(card);
-    assert.equal(count(card, new RegExp('data-provider="' + provider + '"', 'g')), 2);
-  }
-  assert.equal(count(nowCard(html), /data-provider="codex" data-window="5-hour"/g), 1);
-});
-
-void test('small positive rates render below a tenth instead of zero', () => {
-  const data = snapshot();
-  for (const source of [data.quota, data.claudeLimits]) {
-    source.history.forEach((sample, index) => {
-      sample.windows = source.windows.map(row => ({ ...row, remainingPercent: row.remainingPercent + (12 - index) * 0.04 / 12 }));
-    });
-  }
-  const html = render(data);
-  assert.equal(count(nowCard(html), /&lt;0\.1% per hour/g), 4);
-  assert.doesNotMatch(html, /0\.0% per hour/);
-});
-
 void test('peer without windows shows its observation time and Unknown value', () => {
   const data = snapshot();
   data.peerQuota = { host: 'Windows', status: 'ok', checkedAt: iso(-5), windows: [] };
   const html = render(data);
-  const card = html.split('aria-label="Shared from Windows"')[1];
-  assert.ok(card);
-  assert.match(card, /Observed 5m ago/);
-  assert.doesNotMatch(card, /Observation time unknown/);
-  assert.match(card, /Unknown/);
-  assert.equal(count(card, /data-window="unknown"/g), 1);
+  const peer = html.split('aria-label="Shared from Windows"')[1];
+  assert.ok(peer);
+  assert.match(peer, /Observed 5m ago/);
+  assert.match(peer, /Unknown/);
 });
 
-void test('a PC history line is drawn on a ring, so it stays visible over a matching Mac line', () => {
+const history = points => {
   const data = snapshot();
-  const points = host => [0, 15, 30].map(minutes => ({ p: 'claude', w: 'five_hour', o: host, t: iso(-60 + minutes), r: 50, d: 300 }));
-  data.limitHistory = [{ host: 'Mac', status: 'ok', points: points('Mac') }, { host: 'Windows', status: 'ok', points: points('Windows') }];
-  const html = render(data);
-  assert.equal(count(html, /class="ob-history-halo"/g), 1);
-  assert.equal(count(html, /class="ob-history-line claude dotted"/g), 2);
-  assert.ok(html.indexOf('ob-history-line claude"') < html.indexOf('ob-history-halo'));
+  data.limitHistory = points;
+  return renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar' }));
+};
+const point = (host, w, minutes, r, resetMinutes, d) => ({ p: 'claude', w, o: host, t: iso(minutes), r, x: iso(resetMinutes), d });
+
+void test('two computers are two labeled lines of one hue, the second lighter, never summed', () => {
+  const line = host => [-300, -200, -100].map(minutes => point(host, 'seven_day', minutes, 60, 3000, 10080));
+  const html = card(history([{ host: 'Mac', status: 'ok', points: line('Mac') }, { host: 'Windows', status: 'ok', points: line('Windows') }]), 'Claude Code weekly');
+  assert.equal(count(html, /class="ob-history-line claude primary"/g), 1);
+  assert.equal(count(html, /class="ob-history-line claude secondary"/g), 1);
+  assert.match(html, />Mac<\/text>/);
+  assert.match(html, />PC<\/text>/);
+});
+
+void test('the weekly chart draws the even-spend pace guide', () => {
+  const html = card(history([{ host: 'Mac', status: 'ok', points: [-300, -100].map(minutes => point('Mac', 'seven_day', minutes, 60, 3000, 10080)) }]), 'Claude Code weekly');
+  assert.equal(count(html, /class="ob-history-guide"/g), 1);
+});
+
+void test('over days, each 5-hour window is one column at its lowest, an empty window is a stub, and a window with no reading has none', () => {
+  const html = card(history([{ host: 'Mac', status: 'ok', points: [
+    point('Mac', 'five_hour', -900, 80, -700, 300), point('Mac', 'five_hour', -800, 30, -700, 300),
+    point('Mac', 'five_hour', -400, 0, -200, 300),
+  ] }]), 'Claude Code 5-hour');
+  assert.equal(count(html, /<rect class="ob-history-column/g), 2);
+  assert.equal(count(html, /ob-history-column claude primary empty/g), 1);
+  assert.doesNotMatch(html, /<polyline/);
 });

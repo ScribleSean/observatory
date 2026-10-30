@@ -41,6 +41,8 @@ test('tick finishing during deadline grace exits successfully with a fake clock'
   assert.equal(code,0,errors);
 });
 
+// These two tests check what execFile passes through, not deadlines (those have their own tests),
+// so their deadline is long enough that a busy machine can never reach it.
 test('cycle execFile preserves native output and error fields',async()=>{
   const cases=[
     ['encoded output',process.execPath,['-e',"process.stdout.write('héllo');process.stderr.write('error')"],{encoding:'utf16le'}],
@@ -58,7 +60,7 @@ test('cycle execFile preserves native output and error fields',async()=>{
   });
   for(const [name,file,args,options] of cases) {
     const expected=await run(nativeExecFile,file,args,options);
-    const actual=await withCycleDeadline(()=>run(execFile,file,args,options),{deadlineMs:5000});
+    const actual=await withCycleDeadline(()=>run(execFile,file,args,options),{deadlineMs:120000});
     assert.deepEqual(actual,expected,name);
   }
 });
@@ -77,7 +79,7 @@ test('cycle execFile preserves stdin, environment and promisify results',async()
     const withoutArgs=execute(process.execPath,{});
     withoutArgs.child.stdin.end("console.log('optional args')");
     assert.equal((await withoutArgs).stdout,'optional args\n');
-  },{deadlineMs:5000});
+  },{deadlineMs:120000});
 });
 
 for(const [method,tree] of [['spawn',false],['execFile',false],['spawn',true],['execFile',true]]) {

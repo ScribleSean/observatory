@@ -85,7 +85,7 @@ test('dates include today and accept only a recorded anchor', () => {
 test('series retains missing calendar dates as null', () => {
   const result = view();
   assert.equal(result.series.length, 30);
-  assert.deepEqual(result.series.at(-1), { label: '10-14', value: 2400 });
+  assert.deepEqual(result.series.at(-1), { label: '10-14', date: '2026-10-14', value: 2400 });
   assert.ok(result.series.slice(0, -1).every(point => point.value === null));
   assert.equal(view(undefined, { period: 'week' }).series.length, 7);
   assert.equal(view(undefined, { period: 'month' }).series.length, 30);
