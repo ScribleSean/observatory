@@ -40,3 +40,12 @@ __pycache__/
 /observatory.config.json
 /build/
 /docs/screens/
+
+# agent and local files
+CLAUDE.md
+AGENTS.md
+.claude/
+.codex/
+HANDOFF*
+*.local.md
+/.worktrees/
