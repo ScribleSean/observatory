@@ -49,6 +49,9 @@ namespace Observatory
     sealed class PanelState
     {
         public const double Low = 15;
+        // Copies of lib/freshness.mjs. test/repo-rules.test.mjs checks they match.
+        public const double ReadingFreshMinutes = 10;
+        public const double DeviceFreshMinutes = 15;
         public List<LimitRow> Limits = new List<LimitRow>();
         public List<DeviceRow> Devices = new List<DeviceRow>();
         public DateTime? Updated;
@@ -56,7 +59,7 @@ namespace Observatory
         public bool Refreshing;
         public DateTime Now = DateTime.UtcNow;
 
-        public bool Old { get { return Updated.HasValue && (Now - Updated.Value).TotalMinutes > 15; } }
+        public bool Old { get { return Updated.HasValue && (Now - Updated.Value).TotalMinutes > DeviceFreshMinutes; } }
 
         public static DateTime? Date(object value)
         {
@@ -87,7 +90,7 @@ namespace Observatory
             double? remaining = Number(Get(row, "remaining"));
             if (!remaining.HasValue || remaining.Value > 100) return null;
             DateTime? checkedAt = Date(Get(row, "checkedAt"));
-            if (!checkedAt.HasValue || now < checkedAt.Value || (now - checkedAt.Value).TotalMinutes >= 10) return null;
+            if (!checkedAt.HasValue || now < checkedAt.Value || (now - checkedAt.Value).TotalMinutes >= ReadingFreshMinutes) return null;
             DateTime? reset = Date(Get(row, "resetsAt"));
             if (reset.HasValue && reset.Value <= now) return null;
             return remaining;
@@ -136,7 +139,7 @@ namespace Observatory
                     Tokens = Number(Get(row, "tokens")),
                     Usd = Number(Get(row, "usd")),
                     LastSeen = seen,
-                    Current = !stale && seen.HasValue && (now - seen.Value).TotalMinutes <= 15 && seen.Value.ToLocalTime().Date == now.ToLocalTime().Date,
+                    Current = !stale && seen.HasValue && (now - seen.Value).TotalMinutes <= PanelState.DeviceFreshMinutes && seen.Value.ToLocalTime().Date == now.ToLocalTime().Date,
                     Problem = problem,
                 });
             }

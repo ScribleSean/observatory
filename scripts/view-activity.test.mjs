@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NOW_MAX_AGE_MS, nowFromHours, activityNow, activityView } from '../lib/view-activity.mjs';
+import { nowFromHours, activityNow, activityView } from '../lib/view-activity.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
 
@@ -14,7 +14,6 @@ const snapshot = () => ({ timezone: 'UTC', collectedAt: readingAt, activity: [so
 const view = (data = snapshot(), options = {}) => activityView(data, { host: 'Mac', period: 'day', now, ...options });
 
 test('Now adds two buckets at a two minute old reading', () => {
-  assert.equal(NOW_MAX_AGE_MS, 600000);
   assert.deepEqual(run(), { value: 200, reason: 'ok', readingAt, current: { date: '2026-10-14', hour: 12 }, previous: { date: '2026-10-14', hour: 11 } });
   assert.equal(activityNow(snapshot(), 'Mac', now).windowSeconds, 5400);
 });

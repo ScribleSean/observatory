@@ -1,4 +1,3 @@
-// Today's tokens per working folder and session, from Claude Code and Codex logs.
 // Only these values leave the reader: a folder's last name, a short hash of the
 // session id, first and last request times, per-model counts and subagent counts.
 import {createHash} from 'node:crypto';
@@ -94,7 +93,6 @@ export function repositoryRoot(cwd,home='') {
   }
 }
 
-// projectName after folding a subfolder into its repository, once per folder.
 function namer(home) {
   const cache=new Map();
   return (cwd,options)=>{
@@ -107,8 +105,6 @@ function namer(home) {
 // A Codex log is named rollout-<time>-<thread id>.jsonl.
 const THREAD=/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
 
-// Every log written inside the window, and in byThread every Codex log by its
-// thread id whenever it was written.
 async function files(root,since,limits,budget={files:0,bytes:0},byThread=null) {
   const found=[];
   const walk=async folder=>{
@@ -159,7 +155,6 @@ function sessions() {
   const map=new Map();
   return {
     add({provider,id,project,at,model,values,subagent}) {
-      // A folder that changes case is the same project.
       const key=JSON.stringify([provider,id,project?.toLowerCase() ?? null]);
       let row=map.get(key);
       if(!row) {row={provider,id,project,start:at,end:at,subagentTokens:0,models:new Map()};map.set(key,row);}
@@ -234,7 +229,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
   const found=[],budget={files:0,bytes:0},byThread=new Map();
   for(const root of roots)found.push(...await files(root,since,limits,budget,byThread));
   const inWindow=new Set(found),inherited=new Map();
-  // The running totals in a thread's log, copies of its own parent included.
   const totalsOf=async thread=>{
     const file=byThread.get(thread);
     if(!file)throw new Unavailable();
@@ -308,8 +302,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
   return result.rows();
 }
 
-// Each provider is 'ok' with its sessions, or 'unavailable'. A provider that
-// is turned off is left out.
 export async function collectProjectTokens({claudeFolder=null,codexFolder=null,now=new Date(),timeZone=TIME_ZONE,home='',limits={}}={}) {
   const options={today:dayKey(now,timeZone),timeZone,since:now.getTime()-WINDOW_MS,home,limits:{...LIMITS,...limits}};
   const read=async(folder,reader)=>{

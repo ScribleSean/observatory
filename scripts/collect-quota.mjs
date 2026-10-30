@@ -10,6 +10,7 @@ import {readAccountSnapshot} from './read-quota.mjs';
 import {windowsPowerShellEnvironment} from './windows-powershell.mjs';
 import {quotaPace} from './quota-pace.mjs';
 import {assertPrivateOwner} from '../lib/private-folder.mjs';
+import {readingFresh} from '../lib/freshness.mjs';
 
 const execute=promisify(execFile);
 const disconnected=()=>({status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]});
@@ -62,9 +63,8 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates,
 function project(state,now) {
   const history=state.history;
   if(!history || history.status==='not-connected')return {...disconnected(),status:'unavailable',latestReadStatus:'waiting',nextAttemptAt:new Date(state.nextAttemptAt).toISOString()};
-  const age=now-Date.parse(history.asOf);
   const status=history.latestReadStatus==='ok' && ['ok','stale'].includes(history.status)?
-    (Number.isFinite(age) && age>=0 && age<600000?'ok':'stale'):history.status;
+    (readingFresh(Date.parse(history.asOf),now)?'ok':'stale'):history.status;
   // Do not expose the salt, account scope key, revision or private store path.
   const projected = {status,provider:'Codex',scope:'account',checkedAt:history.asOf,
     latestReadStatus:history.latestReadStatus,nextAttemptAt:new Date(state.nextAttemptAt).toISOString(),
@@ -99,6 +99,7 @@ export async function collectQuota(runtime,{enabled=false,isEnabled=async()=>ena
   }
   const now=clock();
   const failures=observation.status==='ok'?0:Math.min(32,before.failures+1);
+  // freshness-exempt: the longest retry wait after failed reads.
   const delay=failures?Math.min(900000,60000*2**Math.min(failures-1,4)):300000;
   const scope=observation.scope || before.history?.scope || randomBytes(32).toString('hex');
   const state=await updateQuotaState(runtime,{revision:before.revision,scope,observation,

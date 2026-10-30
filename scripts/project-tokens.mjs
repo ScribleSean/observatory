@@ -1,5 +1,3 @@
-// Today's tokens by project and session, checked at the boundary. The same
-// check runs on this computer's reading and on a snapshot from the other one.
 import {estimate} from './api-estimate.mjs';
 import {validTimeZone} from '../lib/timezone.mjs';
 
@@ -12,7 +10,6 @@ const NAME=/^[\p{L}\p{N}_.+ ~-]{1,64}$/u;
 const MODEL=/^[a-z0-9][a-z0-9.-]{0,63}$/;
 const HASH=/^[0-9a-f]{10}$/;
 const DATE=/^\d{4}-\d\d-\d\d$/;
-// A reading dated further ahead than this is refused.
 export const CLOCK_SKEW_MS=5*60000;
 
 const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
@@ -23,10 +20,8 @@ const instant=value=>typeof value==='string' && Number.isFinite(Date.parse(value
 const fail=()=>{throw Error('Invalid project tokens');};
 const add=(a,b)=>{const total=a+b;if(!Number.isSafeInteger(total))fail();return total;};
 const sumOf=(rows,key)=>rows.reduce((total,row)=>add(total,row[key]),0);
-// Unknown when any part is Unknown.
 const knownSum=(rows,key)=>rows.some(row=>row[key]===null)?null:rows.reduce((total,row)=>total+row[key],0);
 const close=(a,b)=>a===null || b===null?a===b:Math.abs(a-b)<=1e-6*Math.max(1,Math.abs(b));
-// An estimate is a number only when every token in it has a price.
 const priced=models=>{const value=estimate(models);return value.usd!==null && value.coveredTokens===sumOf(models,'totalTokens')?value.usd:null;};
 
 function cleanModel(raw) {
@@ -52,7 +47,6 @@ function cleanProject(raw,{other=false}={}) {
     !usd(raw.usd) || !Array.isArray(raw.sessions) || raw.sessions.length>(other?0:MAX_SESSIONS) || raw.sessions.length>raw.sessionCount)fail();
   const sessions=raw.sessions.map(cleanSession);
   if(new Set(sessions.map(row=>row.provider+row.id)).size!==sessions.length || sumOf(sessions,'totalTokens')>raw.totalTokens)fail();
-  // With every session present, the project is exactly the sum of its sessions.
   if(sessions.length===raw.sessionCount && (sumOf(sessions,'totalTokens')!==raw.totalTokens ||
     knownSum(sessions,'subagentTokens')!==raw.subagentTokens || !close(raw.usd,knownSum(sessions,'usd'))))fail();
   return {name:raw.name,totalTokens:raw.totalTokens,subagentTokens:raw.subagentTokens,usd:raw.usd,sessionCount:raw.sessionCount,sessions};
@@ -62,7 +56,6 @@ export function unavailableProjectTokens(host,checkedAt,status='unavailable') {
   return {host,status,checkedAt:new Date(checkedAt).toISOString()};
 }
 
-// Validates a stored row. Anything not listed here is dropped.
 export function cleanProjectTokens(raw,{now=Date.now()}={}) {
   if(!object(raw) || !HOSTS.includes(raw.host) || !instant(raw.checkedAt) || Date.parse(raw.checkedAt)>now+CLOCK_SKEW_MS)fail();
   if(raw.status!=='ok') {
@@ -77,8 +70,6 @@ export function cleanProjectTokens(raw,{now=Date.now()}={}) {
   return {host:raw.host,status:'ok',checkedAt:raw.checkedAt,date:raw.date,timeZone:raw.timeZone,providers:[...raw.providers],projects,other};
 }
 
-// Turns the reader's sessions into the stored row: projects by tokens, each
-// with its largest sessions, and the rest of the projects folded into one row.
 export function buildProjectTokens(raw,host,checkedAt) {
   const at=new Date(checkedAt).toISOString();
   if(!object(raw) || !object(raw.providers))fail();
@@ -91,7 +82,6 @@ export function buildProjectTokens(raw,host,checkedAt) {
     const models=session.models.map(cleanModel);
     const row={id:session.id,provider:name,start:session.start,end:session.end,totalTokens:sumOf(models,'totalTokens'),
       subagentTokens:session.subagentTokens,usd:priced(models),models};
-    // Folder names that differ only in case are one project.
     const folder=session.project ?? null,key=folder?.toLowerCase() ?? null;
     if(!groups.has(key))groups.set(key,{spellings:new Map(),sessions:[]});
     const group=groups.get(key);
@@ -99,7 +89,6 @@ export function buildProjectTokens(raw,host,checkedAt) {
     if(folder!==null)group.spellings.set(folder,add(group.spellings.get(folder) ?? 0,row.totalTokens));
   }
   const byTokens=(a,b)=>b.totalTokens-a.totalTokens || String(a.name ?? a.id).localeCompare(String(b.name ?? b.id));
-  // The spelling with the most tokens names the project.
   const spelling=spellings=>[...spellings].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
   const projects=[...groups.values()].map(({spellings,sessions})=>({name:spelling(spellings),totalTokens:sumOf(sessions,'totalTokens'),
     subagentTokens:knownSum(sessions,'subagentTokens'),usd:knownSum(sessions,'usd'),sessionCount:sessions.length,

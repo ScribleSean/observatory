@@ -14,7 +14,6 @@ const now = Date.parse('2026-10-21T17:00:00Z');
 const iso = at => new Date(at).toISOString();
 const hour = 3600000;
 
-// Readings every 10 minutes for the last 30 minutes, falling by `burn` points per hour.
 function source(bucket, rows, checkedAt = now) {
   const windows = rows.map(([window, durationMinutes, remainingPercent, resetIn]) =>
     ({bucket, window, durationMinutes, remainingPercent, resetsAt: iso(checkedAt + resetIn)}));
@@ -84,7 +83,6 @@ test('pace classification boundaries', () => {
   assert.equal(classifyPace(0, 5, 60), 'out');
   assert.equal(classifyPace(50, null, 60), 'unknown');
   assert.equal(classifyPace(50, 5, null), 'unknown');
-  // 50 left, 2 hours to reset: reaching 0 exactly at reset counts as slow.
   assert.equal(classifyPace(50, 25, 120), 'slow');
   assert.equal(classifyPace(50, 24.9, 120), 'hold');
   assert.equal(classifyPace(50, (50 - SPEND_MARGIN) / 2, 120), 'spend');

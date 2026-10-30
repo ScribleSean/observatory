@@ -1,5 +1,3 @@
-// Serve the dashboard with fictional data, for working on the pages.
-// Writes nothing outside a temporary folder.
 import {mkdtemp,mkdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';

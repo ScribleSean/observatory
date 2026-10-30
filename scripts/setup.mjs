@@ -242,7 +242,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       if(await quiet('/usr/bin/xcrun',['--find','swiftc'])===null)
         throw Error('The Swift compiler is missing. Install the Xcode Command Line Tools with: xcode-select --install');
       const settings=JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n';
-      // Only stop the running app when this run starts it again (not with --no-login).
       await installMacApp(target,settings,login?{}:{stop:async()=>{}});
     });
   } else {

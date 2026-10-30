@@ -1,5 +1,6 @@
 import { STRINGS } from '../../../lib/strings.generated';
 import { compact, duration, format, freshness, limits, readingTime } from '../../../lib/panel-data.mjs';
+import { snapshotFresh } from '../../../lib/freshness.mjs';
 
 export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
 export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string; freshness?: { stale: boolean };
@@ -16,8 +17,7 @@ const percent = (value: number | null) => value === null ? unknown : `${Math.rou
 
 function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string, unknown> | null; now: number }) {
   const rows: LimitRow[] = view ? limits(view, now) as LimitRow[] : glance.limits;
-  // Scarcest first. Limits without a current reading collapse into one quiet line.
-  const current = rows.filter(row => row.remaining !== null && !row.stale).sort((a, b) => (a.remaining ?? 0) - (b.remaining ?? 0));
+  const current = rows.filter((row): row is LimitRow & { remaining: number } => row.remaining !== null && !row.stale).sort((a, b) => a.remaining - b.remaining);
   const missing = rows.filter(row => row.remaining === null || row.stale);
   return (
     <section className="ob-tile" aria-labelledby="ob-tile-limits">
@@ -41,6 +41,8 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
   );
 }
 
+// A computer's today numbers count only while its own reading is from today and recent, judged when the page draws.
+// The Mac panel uses the same rule.
 // A computer's today numbers count only while its own reading is from today and recent, judged when the page draws.
 // The Mac panel uses the same rule.
 export function deviceCurrent(device: DeviceToday, now: number) {
@@ -75,7 +77,7 @@ function Breakdown({ rows }: { rows: [string, string, string?][] }) {
 
 function AsOf({ now, generatedAt }: { now: number; generatedAt: number }) {
   if (!sameDay(generatedAt, now)) return <p className="ob-meta warn ob-tile-foot">{format(STRINGS.overview.lastDay, { time: readingTime(generatedAt, now) })}</p>;
-  const old = now - generatedAt > 15 * 60000;
+  const old = !snapshotFresh(generatedAt, now);
   return old ? <p className="ob-meta warn ob-tile-foot">{format(STRINGS.overview.asOf, { time: readingTime(generatedAt, now) })}</p> : null;
 }
 

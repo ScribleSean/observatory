@@ -1,4 +1,3 @@
-// Deterministic synthetic ~/.codex trees for the settings reader tests.
 // Every value here is fictional. PRIVATE markers must never reach a report.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +14,6 @@ const tokens=(timestamp,total,last=null,extra={})=>({timestamp,type:'event_msg',
 const call=(timestamp,name,id,extra={})=>({timestamp,type:'response_item',payload:{type:'function_call',name,call_id:id,arguments:'PRIVATE_ARGUMENTS',...extra}});
 const message=timestamp=>({timestamp,type:'response_item',payload:{type:'message',role:'user',content:[{type:'input_text',text:'PRIVATE_PROMPT'}]}});
 
-// Lines are objects, raw strings or raw bytes. Files end with a newline unless asked not to.
 function save(root,relative,lines,{newline=true}={}) {
   const file=path.join(root,relative);
   fs.mkdirSync(path.dirname(file),{recursive:true});

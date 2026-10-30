@@ -55,7 +55,7 @@ An engine's `pace` is its most limiting window, in the order `out`, `slow`, `unk
 
 ## Route
 
-For each task, `route` names the engine with the highest `headroom` among engines with a current reading and allowance left, or `null` when there is none. All three tasks use the same rule today. The hint is advice. Observatory never starts, stops or switches an agent.
+For each task, `route` names the engine with the highest `headroom` among engines with a current reading and allowance left, or `null` when there is none. All three tasks use the same rule today. `route` is advice. Observatory does not start, stop or switch an agent.
 
 ## Waiting for an engine
 

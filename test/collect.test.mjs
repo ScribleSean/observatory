@@ -79,7 +79,6 @@ test('tick collects, then combines, and refuses to run twice at once',()=>withFo
   let release,started;
   const slow=new Promise(resolve=>{release=resolve;});
   const holding=new Promise(resolve=>{started=resolve;});
-  // Wait until the first tick holds the lock, not for a fixed time.
   const first=tick(config,{collectStep:async cfg=>{started();await slow;return collect(cfg,{readers,now:()=>at});}});
   await holding;
   const second=await tick(config,{collectStep:()=>{throw Error('should not run');}});

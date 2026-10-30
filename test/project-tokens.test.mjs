@@ -406,3 +406,12 @@ test('a forked Codex thread does not count the turns it copied from its parent',
   await rm(parentFile);
   assert.equal(await read(),'unavailable');
 }));
+
+test('the unlisted sessions row is Unknown when a listed session is Unknown',()=>{
+  const session=(id,totalTokens)=>({id,start:'2026-10-21T13:00:00Z',end:'2026-10-21T13:30:00Z',totalTokens,subagentTokens:0});
+  const row=total=>({host:'Mac',status:'ok',date:'2026-10-21',timeZone,checkedAt:now.toISOString(),
+    projects:[{name:'demo-app',totalTokens:1000,sessionCount:3,sessions:[session('a',400),session('b',total)]}]});
+  const more=total=>projectsView({timezone:timeZone,projectTokens:[row(total)]},{host:'Mac',now:now.getTime()})[0].projects[0].more;
+  assert.deepEqual(more(100),{count:1,total:500});
+  assert.deepEqual(more(null),{count:1,total:null},'an Unknown session is not counted as zero tokens');
+});

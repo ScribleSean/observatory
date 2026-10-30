@@ -4,13 +4,13 @@ Thanks for helping. Observatory is small on purpose, so the best contributions a
 
 ## Before you start
 
-- Observatory only reads. It never starts, stops or answers an agent, and it never writes to the tools it reads.
-- Unknown is never shown as zero. Activity, tokens, account limits, billed cost and estimates stay separate. Limits are never added across computers, and sums of time or tokens across computers are labeled "not deduplicated".
-- Nothing private is stored: no window titles, prompts, messages, session names, arguments, environment variables or credentials. Data from a second computer is checked the same way as local reads.
-- A source is read only while `observatory.config.json` lists it as `true`.
-- The dashboard listens on 127.0.0.1 only and stays read-only. The second computer is reached over the user's own SSH alias, so don't add a network listener, a pairing service or a hosted account.
+- Observatory only reads. It does not start, stop or answer an agent, and it does not write to the tools it reads.
+- Never show Unknown as zero. Keep activity, tokens, account limits, billed cost and estimates separate. Never add limits across computers, and label sums of time or tokens across computers "not deduplicated".
+- Store nothing private: no window titles, prompts, messages, session names, arguments, environment variables or credentials. Check data from a second computer the same way as local reads.
+- Read a source only while `observatory.config.json` lists it as `true`.
+- The dashboard listens on 127.0.0.1 only and stays read-only. Observatory reaches the second computer over the user's own SSH alias, so don't add a network listener, a pairing service or a hosted account.
 - One computer must work with no configuration beyond `npm run setup`. The apps target macOS and Windows. Tests also run on Linux, where tests that need the menu bar app, setup or the server skip with a reason.
-- For anything larger than a fix, open an issue first so we can agree on the shape.
+- For anything larger than a fix, open an issue first so we can agree on the approach.
 
 ## Working on it
 
@@ -26,7 +26,7 @@ npm test
 npm run lint
 ```
 
-`npm run preview` serves the dashboard with fictional data at http://127.0.0.1:5602, which is the easiest way to work on the pages.
+To work on the pages, run `npm run preview`. It serves the dashboard with fictional data at http://127.0.0.1:5602.
 
 ## Pull requests
 

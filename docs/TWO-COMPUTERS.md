@@ -1,6 +1,6 @@
 # Two computers
 
-Observatory works on one computer with no setup beyond `npm run setup`. This guide adds a second computer, so a Mac and a Windows PC share one view. One Mac and one Windows PC are supported in total.
+Observatory works on one computer with no setup beyond `npm run setup`. This guide adds a second computer, so a Mac and a Windows PC share one view. Observatory supports one Mac and one Windows PC in total.
 
 ## How it works
 
@@ -15,7 +15,7 @@ Observatory works on one computer with no setup beyond `npm run setup`. This gui
 
 - The Mac, called the hub, reads the PC's `usage.json` over SSH, combines it with its own and writes `combined.json`. It sends the result to the PC as `combined.incoming.json`, which the PC merges into its own `combined.json` on its next cycle. Neither computer opens a network port.
 - The PC recombines its own fresh numbers with the last copy it received on every cycle, so its own numbers stay current when the Mac is asleep. The Mac's numbers then show their age.
-- Limits come from the freshest reading on either computer and are never added. Screen time, tokens and cost are shown per computer and as a sum labeled "not deduplicated".
+- Limits come from the freshest reading on either computer and are not added together. Screen time, tokens and cost are shown per computer and as a sum labeled "not deduplicated".
 
 ## Steps
 
@@ -46,7 +46,7 @@ Within ten minutes both menus and both dashboards list both computers.
 
 ## What travels over SSH
 
-The Mac runs two fixed commands on the PC: one reads `usage.json`, one writes `combined.incoming.json` through a temporary file and a rename, after checking its size. The PC merges that file itself, so the Mac never replaces a newer result the PC made. SSH runs in batch mode with strict host key checking and without agent, X11 or port forwarding. The files hold totals and limit readings, never prompts, messages, session names or credentials.
+The Mac runs two fixed commands on the PC: one reads `usage.json`, one writes `combined.incoming.json` through a temporary file and a rename, after checking its size. The PC merges that file itself, so the Mac never replaces a newer result the PC made. SSH runs in batch mode with strict host key checking and without agent, X11 or port forwarding. The files hold totals and limit readings, and no prompts, messages, session names or credentials.
 
 ## If the PC is off
 

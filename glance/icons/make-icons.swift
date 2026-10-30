@@ -1,7 +1,4 @@
-// Draws the app icons from the one telescope mark in public/brand/telescope.svg.
-// Run on a Mac from the repository root: `xcrun swift glance/icons/make-icons.swift`
-// It writes glance/icons/Observatory.icns and glance/icons/Observatory.ico, which are committed
-// so that setup on Windows needs no image tools.
+// glance/icons/Observatory.icns and Observatory.ico are committed, so setup on Windows needs no image tools.
 import AppKit
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -29,7 +26,6 @@ func render(_ size: Int, inset: CGFloat) -> Data {
   return rep.representation(using: .png, properties: [:])!
 }
 
-// macOS: an iconset folder, packed by iconutil.
 let iconset = FileManager.default.temporaryDirectory.appendingPathComponent("Observatory-\(UUID().uuidString).iconset")
 try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
 for base in [16, 32, 128, 256, 512] {
@@ -47,7 +43,6 @@ guard pack.terminationStatus == 0 else {
   exit(1)
 }
 
-// Windows: an ICO with PNG entries at every size Explorer, Start and the taskbar ask for.
 let sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 let images = sizes.map { render($0, inset: 0.02) }
 var ico = Data()

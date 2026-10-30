@@ -1,4 +1,3 @@
-// Deterministic synthetic Claude Code logs for the usage reader tests.
 // Each fixture is a Claude folder. All content is fictional.
 import { mkdir, writeFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,8 +12,6 @@ const event = (id, requestId, values, { timestamp = '2026-09-25T04:30:00Z', mode
   JSON.stringify({ type, timestamp, requestId, ...extra, message: { role: 'assistant', id, model, usage: values, content: 'synthetic' } }) + '\n';
 const user = (text = 'synthetic') => JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n';
 
-// Fixture name to a map of relative file path to file body.
-// A body of {link: target} creates a symlink to a path inside the fixture.
 export const FIXTURES = {
   'several-projects': {
     'projects/alpha/one.jsonl':
@@ -114,7 +111,6 @@ export const FIXTURES = {
   },
 };
 
-// Build every fixture under `folder` and return the names that were built.
 // A symlink fixture is left out where the platform refuses links.
 export async function buildFixtures(folder) {
   const built = [];

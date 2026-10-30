@@ -117,7 +117,6 @@ function save(db,value) {
   db.prepare('INSERT INTO quota_state(slot,record) VALUES(1,?) ON CONFLICT(slot) DO UPDATE SET record=excluded.record').run(record);
 }
 
-// The salt is private state. Never include this result wholesale in a snapshot.
 export const readQuotaState=(runtime,now=Date.now())=>withDatabase(runtime,db=>{
   if(!timestamp(now))throw Error('Invalid observation time');
   const state=read(db,now);

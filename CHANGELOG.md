@@ -8,7 +8,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 
 - **Three answers at a glance.** The dashboard opens on tiles for limits, screen time and cost, then pages for Limits, Activity, Tokens and Sources.
 - **Zero-config install.** `git clone`, then `npm run setup`. Setup writes a settings file with every source on, builds the dashboard and the menu bar or tray app on your own computer, and starts it at login. `npm run setup -- --remove` takes it out again.
-- **Optional second computer.** A Mac and a Windows PC can share one view over your own SSH connection. Limits are never added across computers, and sums of time, tokens and cost are labeled "not deduplicated".
+- **Optional second computer.** A Mac and a Windows PC can share one view over your own SSH connection. Limits are not added across computers, and sums of time, tokens and cost are labeled "not deduplicated".
 - **Your own time zone.** Days are counted in each computer's time zone instead of a fixed one.
 
 ### Changed
@@ -24,6 +24,6 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - The Claude Code status-line bridge and its installer. Claude Code limits still come from the installed `claude` CLI's usage command, run at each collection.
 - The empty Dictation card on the Sources page, and code left over from the full app that nothing used any more: the old consent marker, session cost, the chart rasterizer and the old combine modules.
 
-### Before you update from build 43 or 42
+### Before you update from the full app
 
 Quit the old app and turn off its login item. The new collector uses the same data folder, and on its first run it keeps a copy of the old snapshot as `usage.before-hub.json`.

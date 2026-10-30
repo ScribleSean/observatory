@@ -1,4 +1,3 @@
-// Built locally by `npm run setup`. Settings come from glance.json beside the binary.
 import AppKit
 import SwiftUI
 
@@ -10,7 +9,6 @@ struct Settings: Decodable {
   let port: Int
 }
 
-// MARK: Panel state, parsed from combined.json
 
 struct LimitRow: Identifiable, Equatable {
   let id: String
@@ -43,10 +41,11 @@ struct PanelState: Equatable {
   var now = Date()
 
   static let low = 15.0
-  static let oldAfter: TimeInterval = 15 * 60
+  // Copies of lib/freshness.mjs. test/repo-rules.test.mjs checks they match.
+  static let readingFresh: TimeInterval = 10 * 60
   static let deviceFresh: TimeInterval = 15 * 60
 
-  var old: Bool { updated.map { now.timeIntervalSince($0) > Self.oldAfter } ?? false }
+  var old: Bool { updated.map { now.timeIntervalSince($0) > Self.deviceFresh } ?? false }
 
   static func date(_ value: Any?) -> Date? {
     guard let text = value as? String else { return nil }
@@ -63,7 +62,7 @@ struct PanelState: Equatable {
     guard row["stale"] as? Bool == false,
           let remaining = row["remaining"] as? Double, remaining.isFinite, remaining >= 0, remaining <= 100,
           let checked = date(row["checkedAt"]),
-          now >= checked, now.timeIntervalSince(checked) < 600 else { return nil }
+          now >= checked, now.timeIntervalSince(checked) < readingFresh else { return nil }
     if let reset = date(row["resetsAt"]), reset <= now { return nil }
     return remaining
   }
@@ -81,7 +80,6 @@ struct PanelState: Equatable {
                remaining: limitRemaining(row, now: now),
                resetsAt: date(row["resetsAt"]))
     }
-    // Scarcest first. Unknown readings go last, in their original order.
     .enumerated().sorted { a, b in
       switch (a.element.remaining, b.element.remaining) {
       case let (x?, y?): return x == y ? a.offset < b.offset : x < y
@@ -115,7 +113,6 @@ struct PanelState: Equatable {
   }
 }
 
-// MARK: Formatting
 
 enum Format {
   static func duration(_ seconds: Double) -> String {
@@ -203,7 +200,6 @@ enum Brand {
   }
 }
 
-// MARK: Panel view
 
 final class PanelModel: ObservableObject {
   @Published var state = PanelState()
@@ -264,7 +260,6 @@ struct PanelView: View {
   }
 
   @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
-    // Limits without a current reading collapse into one quiet line instead of a row each.
     let unknown = state.limits.filter { $0.remaining == nil }
     ForEach(state.limits.filter { $0.remaining != nil }) { row in
       let tint = row.remaining.map { $0 <= 0.5 ? palette.error : $0 <= PanelState.low ? palette.warning : nil } ?? nil
@@ -309,7 +304,6 @@ struct PanelView: View {
         Text(device.name).fontWeight(.medium).lineLimit(1)
         Spacer(minLength: 8)
         if device.current {
-          // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
           if let problem = device.problem {
             Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
               .accessibilityLabel(problem)
@@ -364,7 +358,6 @@ struct Pill: ButtonStyle {
   }
 }
 
-// MARK: Floating panel window
 
 final class FloatingPanel: NSPanel {
   init(content: NSView) {
@@ -397,7 +390,6 @@ final class FloatingPanel: NSPanel {
   override func cancelOperation(_ sender: Any?) { orderOut(nil) }
 }
 
-// MARK: App
 
 final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
   let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -506,7 +498,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if nodeMissing { state.notice = .nodeMissing }
     state.refreshing = tick?.isRunning == true
     model.state = state
-    // A quiet mark when nothing current is known: the icon dims.
     let current = state.notice == .none && !state.old && state.limits.contains { $0.remaining != nil }
     item.button?.appearsDisabled = !current
     item.button?.toolTip = current ? "Observatory" : "Observatory: not updated recently"

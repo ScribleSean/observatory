@@ -1,7 +1,3 @@
-// npm run status [-- --json] [-- --wait <engine> [--timeout <minutes>]].
-// Reads this computer's combined.json and prints usage status. No network, no server, no writes.
-// Exit 0 with a current reading, 3 without one. --wait exits 0 once the engine is not out,
-// 4 on timeout and 2 on bad arguments.
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -12,7 +8,6 @@ import {durationText} from './display-format.mjs';
 export const EXIT_BAD_ARGUMENTS = 2;
 export const EXIT_NO_READING = 3;
 export const EXIT_TIMEOUT = 4;
-// How often --wait reads again when no reset time is known.
 export const POLL_MS = 30000;
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const names = {claude: 'Claude', codex: 'Codex'};

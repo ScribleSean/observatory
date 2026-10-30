@@ -12,6 +12,7 @@ export function activityTrackingHealth(source, collectedAt) {
     return {trackingStatus:'unknown',trackingThrough:through,
       trackingMessage:'Tracking freshness is unknown. A successful historical read does not prove that watchers are running.'};
   }
+  // freshness-exempt: watcher coverage before collection, which the message below names as 10 minutes.
   const recent = Date.parse(at) - Date.parse(through) <= 10 * 60_000;
   return {trackingStatus:recent?'recent':'stale',trackingThrough:through,
     trackingMessage:recent

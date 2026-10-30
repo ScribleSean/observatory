@@ -106,11 +106,9 @@ test('a delayed hub transfer keeps the newest observations per computer across s
   assert.equal(merged.snapshots.Mac.collectedAt,incoming.snapshots.Mac.collectedAt);
   assert.equal(merged.snapshots.Windows.collectedAt,local.collectedAt);
   assert.equal(merged.hub.hubWroteAt,incoming.generatedAt);
-  // A later file with older observations must not replace the saved hub rows.
   await seed(folder,'combined.incoming.json',copy(now-600000,now+400000));
   const again=await recombine(config,{now:()=>now+420000});
   assert.equal(again.snapshots.Mac.collectedAt,incoming.snapshots.Mac.collectedAt);
-  // A malformed, newer candidate also leaves the validated saved rows intact.
   const bad=copy(now+450000,now+450000);
   bad.snapshots.Mac.providerTokenSources[0].days.push(null);
   await seed(folder,'combined.incoming.json',bad);
@@ -204,7 +202,6 @@ test('write-back lands in an inbox that the spoke merges under its own lock',()=
   const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
   assert.match(decode(pushCommand(pc,10,staged)),/'combined\.incoming\.json'/);
   assert.match(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10,staged),/combined\.incoming\.json"$/);
-  // Every step of a push uses its own staging name, so overlapping pushes never share a file.
   assert.doesNotMatch(decode(pushCommand(pc,10,staged)),/'\.combined\.incoming'/);
   assert.doesNotMatch(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10,staged),/\/\.combined\.incoming"/);
   const hubCopy=await withFolder(async hub=>{

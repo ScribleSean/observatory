@@ -15,7 +15,8 @@
     "test": "node --import ./test/pin-timezone.mjs --test \"test/*.test.mjs\" \"scripts/*.test.mjs\"",
     "lint": "oxlint",
     "format": "oxfmt",
-    "status": "node scripts/status.mjs"
+    "status": "node scripts/status.mjs",
+    "icons": "xcrun swift glance/icons/make-icons.swift"
   },
   "dependencies": {
     "lucide-react": "1.31.0",

@@ -6,8 +6,6 @@ export const STRINGS = {
   "limits": {
     "deviceNamed": "{name} ({platform})",
     "resetPending": "Waiting for the reset to be observed.",
-    "history": "History",
-    "chartTitle": "{provider} {window} remaining",
     "sharedFrom": "Shared from {device}",
     "observed": "Observed {span} ago",
     "observationUnknown": "Observation time unknown"
@@ -17,7 +15,6 @@ export const STRINGS = {
     "activity": "Activity",
     "tokens": "Tokens",
     "sources": "Sources",
-    "settings": "Settings",
     "navigation": "Sections"
   },
   "periods": {
@@ -46,16 +43,8 @@ export const STRINGS = {
     "navigation": "Actions"
   },
   "labels": {
-    "limits": "Limits",
-    "remaining": "remaining",
-    "totals": "Totals",
-    "tokens": "Tokens",
     "screenTime": "Screen time",
-    "apiEstimate": "Codex API-equivalent (estimate)",
-    "skin": "Skin",
-    "sourcesRead": "sources read",
     "loading": "Loading",
-    "noSnapshot": "No snapshot yet",
     "noCombined": "No combined.json yet. Run npm run tick, or wait for the next five-minute cycle.",
     "computers": "Computers"
   },
@@ -64,7 +53,7 @@ export const STRINGS = {
     "noRecords": "No records",
     "byDevice": "By device",
     "notCollected": "Not collected yet",
-    "enableLimits": "Turn on limits in Settings",
+    "enableLimits": "Turn on codexLimits in observatory.config.json",
     "signIn": "Sign in to {name}",
     "noReading": "No reading available",
     "resetUnknown": "Reset time unknown",
@@ -103,7 +92,6 @@ export const STRINGS = {
   "charts": {
     "item": "Item",
     "value": "Value",
-    "showValues": "Show values",
     "notRecorded": "No records"
   },
   "sources": {
@@ -151,7 +139,7 @@ export const STRINGS = {
     "effort": "Reasoning",
     "speed": "Speed",
     "noSettings": "No settings recorded",
-    "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked.",
+    "deviceNote": "Claude Code token totals are shown per device because Observatory does not check token overlap between devices.",
     "breakdown": "Breakdown"
   },
   "activity": {
@@ -164,8 +152,8 @@ export const STRINGS = {
     "recordedApps": "Recorded apps",
     "deviceOverlap": "Device overlap",
     "noCategories": "No category breakdown available",
-    "noTracking": "No tracking records for this date. Zero recorded activity does not establish inactivity.",
-    "foregroundNote": "Recorded foreground time, not attention. Combined activity counts device overlap once.",
+    "noTracking": "No tracking records for this date. That does not mean the computer went unused.",
+    "foregroundNote": "Screen time is recorded foreground time, not attention. Combined activity counts device overlap once.",
     "missingDates": "Missing dates are Unknown, not zero.",
     "windowOf": "of the last {span}",
     "details": "Details",
@@ -182,28 +170,21 @@ export const STRINGS = {
     "trackingStale": "Tracking is not current",
     "trackingUnknown": "Tracking freshness unknown",
     "trackingUnavailable": "Source unavailable",
-    "trackingRecentDetail": "Tracking coverage observed within 10 minutes of collection. This includes idle time, not just active use.",
+    "trackingRecentDetail": "Tracking coverage was observed within 10 minutes of collection. It includes idle time as well as active use.",
     "trackingRecentCombinedDetail": "At least one device had tracking coverage within 10 minutes of collection. This does not verify every device.",
-    "trackingStaleDetail": "No recent tracking coverage at collection. The device may be asleep, offline, or its watchers stopped. Saved history is retained.",
-    "trackingUnknownDetail": "Tracking freshness is unknown. A successful historical read does not prove that watchers are running.",
-    "trackingUnavailableDetail": "The source could not be read. Saved history is retained.",
+    "trackingStaleDetail": "No recent tracking coverage at collection. The device may be asleep or offline, or its watchers may have stopped. Saved history is kept.",
+    "trackingUnknownDetail": "Tracking freshness is unknown. Reading past records does not show that the watchers are running.",
+    "trackingUnavailableDetail": "Observatory could not read the source. Saved history is kept.",
     "lastCoverage": "Last tracking coverage: {time}",
     "lastCollection": "Last successful collection: {time}",
     "helpTitle": "ActivityWatch help",
-    "help": "ActivityWatch is a separate application. Install and run it on the device you want to track, enable ActivityWatch in Observatory Settings, then refresh sources. If it is already running, check its local server on port 5600. Missing readings remain Unknown. Tokens and Limits can be used independently.",
+    "help": "ActivityWatch is a separate app. Install and run it on the device you want to track. Set screenTime to true in observatory.config.json. If ActivityWatch is already running, check that its local server answers on port 5600. Missing readings stay Unknown. Tokens and Limits work without it.",
     "helpAddress": "activitywatch.net"
   },
   "today": {
-    "title": "Today",
-    "both": "Both computers",
-    "screenTime": "Screen time",
-    "tokens": "Tokens",
     "noSnapshot": "No snapshot",
     "screenTimeOff": "Off",
-    "stale": "Not updated recently",
-    "unreachable": "Last pull failed: {reason}",
-    "device": "Computer",
-    "status": "Updated"
+    "unreachable": "Last pull failed: {reason}"
   },
   "overview": {
     "limitsTitle": "Limits",

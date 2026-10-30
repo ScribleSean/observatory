@@ -46,7 +46,6 @@ export function runPowerShellFile(script,{spawnProcess=spawn,exec=execFile}={}) 
   });
 }
 
-// A tool's folder from its environment variable when that is absolute, else its default under home.
 export function toolFolder(variable,fallback,environment=process.env) {
   const configured=environment[variable];
   if(!configured)return path.join(homedir(),fallback);

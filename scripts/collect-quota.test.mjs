@@ -203,6 +203,8 @@ test('quota collection survives restart, respects cooldown, and excludes account
   assert.deepEqual(cached.history,first.history);
   assert.equal(cached.history.length,1);assert.equal(cached.scope,'account');
   assert.equal(JSON.stringify(cached).includes('aaaaaa'),false);assert.equal(JSON.stringify(cached).includes('PRIVATE'),false);
+  const {salt}=await readQuotaState(runtime,now);
+  assert.match(salt,/^[a-f0-9]{64}$/);assert.equal(JSON.stringify(cached).includes(salt),false);assert.equal('revision' in cached,false);
   await collectQuota(runtime,{enabled:false,clock:()=>now});
   const reenabled=await collectQuota(runtime,{...options,readSnapshot:async()=>{throw Error('Offline');}});
   assert.equal(reenabled.status,'unavailable');assert.deepEqual(reenabled.history,[]);

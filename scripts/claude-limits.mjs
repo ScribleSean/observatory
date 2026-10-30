@@ -4,11 +4,11 @@ import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {readClaudeUsage} from './claude-usage-command.mjs';
 import {assertPrivateOwner} from '../lib/private-folder.mjs';
+import {READING_FRESH_MS} from '../lib/freshness.mjs';
 
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
 const windows={five_hour:300,seven_day:10080};
-const currentSeconds=10*60;
 
 const isObject=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 
@@ -124,7 +124,7 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   const live=Object.entries(record.windows).filter(([,window])=>window.resetsAt>seconds);
   if(!live.length)return {...base,status:'unavailable',windows:[]};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
-  return {...base,status:seconds-checked<currentSeconds?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
+  return {...base,status:(seconds-checked)*1000<READING_FRESH_MS?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
     windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],checkedAt:new Date(window.observedAt*1000).toISOString(),
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }

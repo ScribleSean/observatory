@@ -85,15 +85,16 @@ type DashboardViewProps = {
 export function DashboardView({ combined, limitStyle, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
   const snapshot = combined?.view ?? null;
   const fresh = freshness(combined?.generatedAt ?? '', now);
+  // zero-ok: a count of computers, not a reading.
   const home = (combined?.devices?.length ?? 0) > 1 && combined?.generatedBy ? combined.generatedBy : 'All';
+  const showOverallAge = !loaded || !combined || fresh.stale;
   return (
     <div className={`ob-dashboard ${className}`}>
       <style>{css}</style>
       <header className="ob-masthead">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
         <DeviceChips devices={combined?.devices ?? []} now={now} />
-        {/* The overall age shows only while it matters: loading, missing or old. */}
-        {(!loaded || !combined || fresh.stale) && <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>}
+        {showOverallAge && <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>}
       </header>
       {combined && <Overview glance={combined.glance} view={combined.view} generatedAt={combined.generatedAt} now={now} />}
       {!combined && <div className="ob-first-run">
