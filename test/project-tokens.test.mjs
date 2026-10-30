@@ -339,3 +339,21 @@ test('a subfolder of a repository is that repository, not a project of its own',
   assert.equal(repositoryRoot(path.join(root,'gone','deeper'),own),root,'a removed subfolder still finds its repository');
   assert.equal(repositoryRoot('relative/path',own),null);
 }));
+
+test('project names that differ only in case are one project, named by its largest spelling',()=>{
+  const session=(index,tokens,project)=>({provider:'claude',id:sessionHash('claude',String(index)),start:now.toISOString(),end:now.toISOString(),subagentTokens:0,project,
+    models:[{model:'claude-opus-5-5',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}]});
+  const row=buildProjectTokens({date:'2026-10-21',timeZone,providers:{claude:{status:'ok',
+    sessions:[session(1,100,'Beeline'),session(2,300,'beeline'),session(3,50,'BEELINE'),session(4,10,'other')]}}},'Mac',now);
+  assert.deepEqual(row.projects.map(project=>[project.name,project.totalTokens,project.sessionCount]),[['beeline',450,3],['other',10,1]]);
+});
+
+test('a session whose folder changes case stays one session in one project',async()=>withFolder(async folder=>{
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(project,{recursive:true});
+  const line=(id,cwd,input)=>assistant({id,request:id,at:'2026-10-21T13:00:00Z',sessionId:'s',cwd,side:false,tokens:usage(input,0)});
+  await writeFile(path.join(project,'a.jsonl'),lines([line('m1',`${home}/Developer/Beeline`,10),line('m2',`${home}/Developer/beeline`,30)]));
+  const row=buildProjectTokens(await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home}),'Mac',now);
+  assert.equal(row.status,'ok');
+  assert.deepEqual(row.projects.map(item=>[item.name,item.totalTokens,item.sessionCount]),[['Beeline',40,1]]);
+}));

@@ -152,7 +152,8 @@ function sessions() {
   const map=new Map();
   return {
     add({provider,id,project,at,model,values,subagent}) {
-      const key=JSON.stringify([provider,id,project]);
+      // A folder that changes case is the same project.
+      const key=JSON.stringify([provider,id,project?.toLowerCase() ?? null]);
       let row=map.get(key);
       if(!row) {row={provider,id,project,start:at,end:at,subagentTokens:0,models:new Map()};map.set(key,row);}
       row.start=Math.min(row.start,at);
