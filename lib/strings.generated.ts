@@ -256,6 +256,14 @@ export const STRINGS = {
     "title": "Waiting for the first collection",
     "body": "Observatory collects every five minutes while the menu bar or tray app is running. The first numbers appear here after that.",
     "hint": "To collect now, choose Refresh in the menu, or run npm run tick in the Observatory folder."
+  },
+  "projects": {
+    "title": "Today by project",
+    "session": "session {start}–{end}",
+    "subagents": "subagents {share}",
+    "other": "Other",
+    "asOf": "as of {time}",
+    "more": "+{count} more"
   }
 } as const;
 

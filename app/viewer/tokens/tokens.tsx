@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { STRINGS, format } from '../../../lib/strings.generated';
 import { compact } from '../../../lib/panel-data.mjs';
 import { tokensView, money } from '../../../lib/view-tokens.mjs';
+import { projectsView } from '../../../lib/view-projects.mjs';
+import { ProjectsCard } from './projects';
 import { BarChart, Card, FilterGroup, InfoControl, ProviderDot, Row } from '../components';
 import './tokens.css';
 
@@ -79,8 +81,9 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
   </Card>;
 }
 
-export function TokensSection({ result, onHostChange, onPeriodChange }: {
+export function TokensSection({ result, projects = [], onHostChange, onPeriodChange }: {
   result: Result;
+  projects?: ReturnType<typeof projectsView>;
   onHostChange: (host: string) => void;
   onPeriodChange: (period: string) => void;
 }) {
@@ -95,6 +98,7 @@ export function TokensSection({ result, onHostChange, onPeriodChange }: {
       <ProviderCard result={result} provider="claude" />
       <ProviderCard result={result} provider="codex" />
     </div>
+    <ProjectsCard devices={projects} />
     <Card label={STRINGS.tokens.settingsTitle}>
       <h3>{STRINGS.tokens.settingsTitle}</h3>
       {result.settings.map(device => <div key={device.host} className="ob-tokens-settings">
@@ -119,5 +123,5 @@ export function TokensView({ snapshot, now, initialHost = 'All', initialPeriod =
 }) {
   const [host, setHost] = useState(initialHost);
   const [period, setPeriod] = useState(initialPeriod);
-  return <TokensSection result={tokensView(snapshot, { host, period, now }) as Result} onHostChange={setHost} onPeriodChange={setPeriod} />;
+  return <TokensSection result={tokensView(snapshot, { host, period, now }) as Result} projects={projectsView(snapshot, { host, now })} onHostChange={setHost} onPeriodChange={setPeriod} />;
 }
