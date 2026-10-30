@@ -99,9 +99,10 @@ const SHORT_NAME=/^(?=[^.]{3,8}(?:\.[^.]{1,3})?$)[^.~\s]{1,6}~[1-9][0-9]{0,5}(?:
 // The native realpath expands 8.3 aliases as well as links, and GitHub's runner puts TEMP
 // under C:\Users\RUNNER~1. So check one part at a time: each must be a real entry of the
 // folder resolved so far, not a link, and keep its name unless it is written as an alias.
-// For an alias-shaped part, lstat is the only guard against a link into the same folder,
-// and libuv reports a junction as a link only when it targets a drive letter.
-export function windowsCanonical(directory,{realpath=fs.realpathSync.native,lstat=fs.lstatSync}={}) {
+// lstat reports a junction as a link only when it targets a drive letter, so an alias-shaped
+// part could be a junction into the same folder. A directory listing marks every reparse point,
+// so refuse the alias when any reparse point beside it leads to the same folder.
+export function windowsCanonical(directory,{realpath=fs.realpathSync.native,lstat=fs.lstatSync,readdir=fs.readdirSync}={}) {
   const win=path.win32;
   const normal=win.normalize(directory);
   const {root}=win.parse(normal);
@@ -112,7 +113,11 @@ export function windowsCanonical(directory,{realpath=fs.realpathSync.native,lsta
     if(lstat(typed).isSymbolicLink())return false;
     const resolved=realpath(typed);
     if(windowsForm(win.dirname(resolved))!==windowsForm(current))return false;
-    if(win.basename(resolved).toLowerCase()!==part.toLowerCase()&&!SHORT_NAME.test(part))return false;
+    if(win.basename(resolved).toLowerCase()!==part.toLowerCase()) {
+      if(!SHORT_NAME.test(part))return false;
+      const leadsHere=entry=>{try {return windowsForm(realpath(win.join(current,entry.name)))===windowsForm(resolved);} catch {return false;}};
+      if(readdir(current,{withFileTypes:true}).some(entry=>entry.isSymbolicLink()&&leadsHere(entry)))return false;
+    }
     current=resolved;
   }
   return true;
