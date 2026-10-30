@@ -10,13 +10,13 @@ const workflows=path.join(import.meta.dirname,'..','.github','workflows');
 function unpinnedActions(text) {
   const problems=[];
   text.split(/\r?\n/).forEach((line,index)=>{
+    if (/^\s*#/.test(line)||!/(?:^|[\s{,-])uses\s*:/.test(line)) return;
     const match=line.match(/^\s*(?:-\s*)?uses:\s*(['"]?)([^\s'"#]+)\1\s*(#.*)?$/);
-    if (!match) return;
-    const [,,target,comment]=match;
+    const [,,target='',comment]=match??[];
     if (target.startsWith('./')) return;
-    const pinned=target.startsWith('docker://')
+    const pinned=Boolean(match)&&(target.startsWith('docker://')
       ? /@sha256:[0-9a-f]{64}$/.test(target)
-      : /^[^@\s]+@[0-9a-f]{40}$/.test(target)&&/^#\s*v\d+\.\d+\.\d+\b/.test(comment??'');
+      : /^[^@\s]+@[0-9a-f]{40}$/.test(target)&&/^#\s*v\d+\.\d+\.\d+\b/.test(comment??''));
     if (!pinned) problems.push(`line ${index+1}: ${line.trim()}`);
   });
   return problems;
@@ -42,4 +42,6 @@ test('the check refuses tags, branches, short SHAs and pins without a version co
   assert.equal(unpinnedActions(`      - uses: actions/checkout@${sha}`).length,1);
   assert.equal(unpinnedActions(`      - uses: actions/checkout@${sha} # v4`).length,1);
   assert.equal(unpinnedActions('      - uses: docker://alpine:3').length,1);
+  assert.equal(unpinnedActions('      - { uses: actions/checkout@v4 }').length,1);
+  assert.deepEqual(unpinnedActions('      # uses: actions/checkout@v4'),[]);
 });
