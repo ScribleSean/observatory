@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,7 +10,7 @@ import {
   CACHE_PAGE_SIZE,DEFAULT_LIMITS,DEFAULT_SCAN_BYTES,FIRST_LINE_BYTES,MAX_CACHE_BYTES,MAX_FILES,MAX_LINES,MAX_LINE_BYTES,MAX_READ_SECONDS,
   MAX_RETAINED_BYTES,MAX_TOTAL_BYTES,collectSettings,pyDumps,summarize,
 } from './read-settings.mjs';
-import {SettingsCache,cacheEvent} from './read-settings-cache.mjs';
+import {SettingsCache,cacheEvent,windowsCanonical} from './read-settings-cache.mjs';
 import {FIXTURE_NAMES,buildFixture,fixtureOptions} from './fixtures/read-settings/build.mjs';
 
 
@@ -319,6 +320,118 @@ test('private settings cache recovers an empty file and refuses other formats',a
       }
     }
   });
+});
+
+// A Windows disk: folders by real path, with an optional 8.3 alias and an optional link target.
+// realpath expands aliases and follows links as GetFinalPathNameByHandle does. A redirect is
+// followed too, but lstat follows it without calling it a link, as libuv does for a junction
+// to a volume GUID path.
+function windowsDisk(folders) {
+  const win=path.win32;
+  const child=(parent,part)=>{
+    const found=Object.keys(folders).find(key=>win.dirname(key).toLowerCase()===parent.toLowerCase()&&
+      [win.basename(key),folders[key].alias].some(name=>name?.toLowerCase()===part.toLowerCase()));
+    if(!found)throw Object.assign(new Error(`ENOENT: ${parent} ${part}`),{code:'ENOENT'});
+    return found;
+  };
+  const realpath=typed=>{
+    const normal=win.normalize(typed);
+    const {root}=win.parse(normal);
+    let current=root.toUpperCase();
+    for(const part of normal.slice(root.length).split('\\').filter(Boolean)) {
+      const key=child(current,part);
+      const target=folders[key].link??folders[key].redirect;
+      current=target?realpath(target):key;
+    }
+    return current;
+  };
+  const lstat=typed=>{
+    const normal=win.normalize(typed).replace(/\\+$/,'');
+    const key=child(realpath(win.dirname(normal)),win.basename(normal));
+    return {isSymbolicLink:()=>Boolean(folders[key].link)};
+  };
+  // Windows reports the short name of the entry itself, never of a junction that leads to it.
+  const shortName=typed=>{
+    const normal=win.normalize(typed);
+    const key=child(realpath(win.dirname(normal)),win.basename(normal));
+    return folders[key].alias??win.basename(key);
+  };
+  return {realpath,lstat,shortName};
+}
+
+test('a Windows cache folder may be named through an 8.3 short alias, but never through a link',()=>{
+  const disk=windowsDisk({
+    'C:\\Users':{},
+    'C:\\Users\\runneradmin':{alias:'RUNNER~1'},
+    'C:\\Users\\runneradmin\\AppData':{},
+    'C:\\Users\\runneradmin\\AppData\\Local':{},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp':{},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache':{},
+    'C:\\Elsewhere':{},
+    'C:\\Elsewhere\\cache':{},
+    'C:\\Elsewhere\\mounted':{},
+    'C:\\Users\\Linked Folder':{alias:'LINKED~1',link:'C:\\Elsewhere'},
+    'C:\\Users\\LINK~1':{link:'C:\\Elsewhere'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\jump':{link:'C:\\Elsewhere\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\MOVED~1':{link:'C:\\Elsewhere\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\mounted':{redirect:'C:\\Elsewhere\\mounted'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\sibling':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\CACHE~1':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long redirect':{alias:'ALONGR~1',redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long cache':{alias:'ALONGC~1'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long junction':{alias:'ALONGJ~1',link:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long mount':{alias:'ALONGM~1',redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\a long cache'},
+  });
+  // GitHub's Windows runner sets TEMP to this short form.
+  for(const directory of [
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\cache',
+    'c:\\users\\runner~1\\appdata\\local\\temp\\cache\\',
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache',
+    'C:/Users/runneradmin/AppData/Local/Temp/cache',
+    // A real alias opens even when junctions beside it lead to the same folder.
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGC~1',
+  ])assert.equal(windowsCanonical(directory,disk),true,directory);
+  for(const directory of [
+    'C:\\Users\\Linked Folder\\cache',
+    'C:\\Users\\LINKED~1\\cache',
+    'C:\\Users\\LINK~1\\cache',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\jump',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\MOVED~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\mounted',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\sibling',
+    // A junction to a volume GUID path is not reported by lstat, so an alias-shaped name could hide one.
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\CACHE~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGR~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGJ~1',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGM~1',
+  ])assert.equal(windowsCanonical(directory,disk),false,directory);
+});
+
+test('on Windows a cache folder opens through its real 8.3 short alias, and a junction never opens',{skip:process.platform!=='win32'},t=>{
+  // Unresolved on purpose: GitHub's runner gives TEMP as C:\Users\RUNNER~1\...
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'observatory-read-settings-'));
+  const cmd=line=>execFileSync(process.env.ComSpec??'cmd.exe',['/d','/s','/c',`"${line}"`],
+    {encoding:'utf8',windowsVerbatimArguments:true}).trim();
+  const alias=folder=>cmd(`for %I in ("${folder}") do @echo %~sI`);
+  const mounted=path.join(root,'a long mounted junction');
+  try {
+    const long=privateFolder(path.join(root,'a long cache folder name'));
+    const junction=path.join(root,'a long junction name');
+    fs.symlinkSync(long,junction,'junction');
+    // lstat follows a junction to a volume GUID path and does not call it a link.
+    const volume=cmd(`mountvol ${path.parse(long).root} /L`);
+    cmd(`mklink /J "${mounted}" "${volume}${long.slice(path.parse(long).root.length)}"`);
+    assert.equal(fs.lstatSync(mounted).isSymbolicLink(),false);
+    for(const directory of [junction,alias(junction),mounted,alias(mounted)])
+      assert.throws(()=>new SettingsCache(directory),/Unsafe cache directory/,directory);
+    const short=alias(long);
+    if(path.basename(short).toLowerCase()===path.basename(long).toLowerCase())return t.skip('8.3 names are off on this volume');
+    for(const directory of [short,long,root])new SettingsCache(directory).close();
+  } finally {
+    // Remove the mounted junction itself first: a recursive delete would walk through it.
+    try {fs.rmdirSync(mounted);} catch {}
+    fs.rmSync(root,{recursive:true,force:true});
+  }
 });
 
 test('Codex reader constants pin the requested scale and unchanged line skip',()=>{
