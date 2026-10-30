@@ -27,7 +27,7 @@ for (const skinId of ['sage']) for (const empty of [false, true]) for (const Com
     if (empty) { assert.ok(html.includes('Unknown')); assert.doesNotMatch(html, /0m/); }
   });
 }
-test('Now displays its caveat and a distinct meter', () => {
+test('Now puts its window note in the page and shows a distinct meter', () => {
   const html = render(ActivityView, { snapshot: sampleSnapshot(now), now, initialHost: 'Mac', initialPeriod: 'now' });
   assert.ok(html.includes(strings.activity.nowCaveat));
   assert.match(html, /class="ob-activity-now"/);
