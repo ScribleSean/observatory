@@ -10,7 +10,6 @@ import {
 const HEX64=/^[a-f0-9]{64}$/;
 const SCHEMA='CREATE TABLE events (key TEXT PRIMARY KEY, signature TEXT NOT NULL, data TEXT NOT NULL)';
 const windows=process.platform==='win32';
-const realpath=windows?fs.realpathSync.native:fs.realpathSync;
 
 export function cacheEvent(event,cached=false) {
   if(!validEvent(event)||!isDict(get(event,'payload')))return null;
@@ -95,15 +94,33 @@ function pathlibForm(directory) {
   return lead+directory.split('/').filter(part=>part&&part!=='.').join('/');
 }
 
+// An 8.3 alias such as RUNNER~1: at most 8 characters, a ~ and a number, and a short extension.
+const SHORT_NAME=/^(?=[^.]{3,8}(?:\.[^.]{1,3})?$)[^.~\s]{1,6}~[1-9][0-9]{0,5}(?:\.[^.\s]{1,3})?$/;
+// The native realpath expands 8.3 aliases as well as links, and GitHub's runner puts TEMP
+// under C:\Users\RUNNER~1. So check one part at a time: each must be a real entry of the
+// folder resolved so far, not a link, and keep its name unless it is written as an alias.
 export function windowsCanonical(directory,{realpath=fs.realpathSync.native,lstat=fs.lstatSync}={}) {
-  return realpath(directory).toLowerCase()===windowsForm(directory)&&!lstat(directory).isSymbolicLink();
+  const win=path.win32;
+  const normal=win.normalize(directory);
+  const {root}=win.parse(normal);
+  let current=realpath(root);
+  if(windowsForm(current)!==windowsForm(root))return false;
+  for(const part of normal.slice(root.length).split('\\').filter(Boolean)) {
+    const typed=win.join(current,part);
+    if(lstat(typed).isSymbolicLink())return false;
+    const resolved=realpath(typed);
+    if(windowsForm(win.dirname(resolved))!==windowsForm(current))return false;
+    if(win.basename(resolved).toLowerCase()!==part.toLowerCase()&&!SHORT_NAME.test(part))return false;
+    current=resolved;
+  }
+  return true;
 }
 
 export class SettingsCache {
   constructor(directory,budget=DEFAULT_SCAN_BYTES,{limits=DEFAULT_LIMITS}={}) {
     this.limits=limits;
     if(typeof directory!=='string'||!path.isAbsolute(directory))throw new ValueError('Unsafe cache directory');
-    const canonical=windows?windowsCanonical(directory):realpath(directory)===pathlibForm(directory)&&!fs.lstatSync(directory).isSymbolicLink();
+    const canonical=windows?windowsCanonical(directory):fs.realpathSync(directory)===pathlibForm(directory)&&!fs.lstatSync(directory).isSymbolicLink();
     if(!canonical)throw new ValueError('Unsafe cache directory');
     if(!windows&&mode(fs.statSync(directory))&0o077)throw new ValueError('Unsafe cache permissions');
     this.readBudget=null;
