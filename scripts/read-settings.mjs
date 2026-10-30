@@ -502,7 +502,24 @@ export function validEvent(event) {
   }
 }
 
-export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null,readBudget=null}={}) {
+const counters=source=>FIELDS.map(k=>number(has(source,k)?source[k]:k==='cache_write_input_tokens'?0:null));
+
+// The running total a token_count event reports, or null.
+function runningTotal(event) {
+  if(!validEvent(event))return null;
+  const p=pyOr(get(event,'payload'),{});
+  if(get(event,'type')!=='event_msg'||get(p,'type')!=='token_count')return null;
+  const raw=get(pyOr(get(p,'info'),{}),'total_token_usage');
+  if(!isDict(raw))return null;
+  const current=counters(raw);
+  return current.some(isNone)?null:current;
+}
+
+// A fork of a thread with legacy history starts with its own session_meta and
+// then copies its parent's session_meta and every parent line, stamped with the
+// time of the fork. copiedTotals(id) gives the running totals in the log of the
+// thread whose session_meta came later, and those turns are left out.
+export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null,readBudget=null,copiedTotals=null}={}) {
   cutoff=cutoffMicros(cutoff);
   let model='unknown',effort='unknown',speed='unknown';
   let contextModel=null;
@@ -512,11 +529,16 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
   let turnKey=null,turnKeyIdentity=null;
   const profiles=new Map(),tools=new Map();
   const seenCalls=new Set();
+  let started=false,copies=null;
   for(const event of events) {
     readBudget?.check();
     if(!validEvent(event))continue;
     const p=pyOr(get(event,'payload'),{});
     if(!isDict(p))continue;
+    if(get(event,'type')==='session_meta') {
+      if(started&&copies===null&&copiedTotals!==null)copies=copiedTotals(get(p,'id'));
+      started=true;
+    }
     if(get(p,'type')==='thread_settings_applied') {
       const s=pyOr(get(p,'thread_settings'),{});
       if(!isDict(s))continue;
@@ -581,13 +603,12 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
     };
     const raw=get(info(),'total_token_usage');
     if(!isDict(raw))continue;
-    const counters=source=>FIELDS.map(k=>number(has(source,k)?source[k]:k==='cache_write_input_tokens'?0:null));
     const current=counters(raw);
     if(current.some(isNone))continue;
     const repeated=prior!==null&&current.every((v,i)=>v===prior[i]);
     let delta=current.map((v,i)=>v-(prior?prior[i]:0));
     prior=current;
-    if(repeated)continue;
+    if(repeated||copies?.has(JSON.stringify(current)))continue;
     const last=get(info(),'last_token_usage');
     if(isDict(last)) {
       delta=counters(last);
@@ -686,12 +707,31 @@ function* fileEvents(file,readBudget,limits) {
 
 function summarizeSessions(sessions,cutoff,cache,lineages,readBudget,limits) {
   const profiles=new Map(),tools=new Map(),retained=new Map(),seen=new Map(),hourTotals=new Map();
-  for(const identity of [...sessions.keys()].sort(compareText)) {
+  const events=identity=>{
     const {file,info}=sessions.get(identity);
+    return cache?cache.events(file,info):fileEvents(file,readBudget,limits);
+  };
+  // The cache keeps a thread id only as its hash.
+  const byHash=cache?new Map([...sessions.keys()].map(identity=>[sha256Hex(identity),identity])):null;
+  const totals=new Map();
+  const copiedTotals=id=>{
+    const identity=typeof id!=='string'?null:byHash?byHash.get(id):sessions.has(id)?id:null;
+    if(identity===null||identity===undefined)throw new ValueError('Forked Codex log without its parent; complete report unavailable');
+    if(!totals.has(identity)) {
+      const found=new Set();
+      for(const event of events(identity)) {
+        readBudget?.check();
+        const current=runningTotal(event);
+        if(current!==null)found.add(JSON.stringify(current));
+      }
+      totals.set(identity,found);
+    }
+    return totals.get(identity);
+  };
+  for(const identity of [...sessions.keys()].sort(compareText)) {
     const root=lineages.get(identity);
     if(!seen.has(root))seen.set(root,new Set());
-    const [rows,calls]=summarize(cache?cache.events(file,info):fileEvents(file,readBudget,limits),cutoff,
-      {retained,seen:seen.get(root),hourTotals,readBudget});
+    const [rows,calls]=summarize(events(identity),cutoff,{retained,seen:seen.get(root),hourTotals,readBudget,copiedTotals});
     for(const row of rows) {
       const key=JSON.stringify([row.date,row.model,row.effort,row.speed]);
       if(!profiles.has(key))profiles.set(key,row);

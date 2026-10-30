@@ -404,7 +404,7 @@ for(const [limit,amount] of [['maxFiles',2],['maxTotalBytes',2*bytes(meta+conten
 }
 
 test('retained event limit accepts below and at the cap and refuses one past on cold and warm cache',async()=>{
-  const amount=pyDumps(cacheEvent(parsed(event))).length;
+  const amount=[JSON.parse(meta),event].reduce((n,line)=>n+pyDumps(cacheEvent(parsed(line))).length,0);
   for(const warm of [false,true]) {
     for(const offset of [1,0,-1]) {
       await inTemporary(async root=>{
@@ -531,5 +531,36 @@ test('a bad event between good events preserves settings and cumulative incremen
       if(plain)assert.deepEqual(result,plain);
       else plain=result;
     }
+  });
+});
+
+// The shape Codex 0.166 writes for a fork of a thread with legacy history: the
+// fork's own session_meta, then a copy of the parent's session_meta and every
+// parent line, all stamped with the time of the fork.
+test('a legacy Codex fork does not count the parent turns it copied, cold or cached',async()=>{
+  await inTemporary(async root=>{
+    const logs=path.join(root,'logs'),day=path.join(logs,'sessions','2026','10','30');
+    fs.mkdirSync(day,{recursive:true});
+    const cache=privateFolder(path.join(root,'cache'));
+    const parentId='0199aaaa-0000-7000-8000-000000000001',forkId='0199aaaa-0000-7000-8000-000000000002';
+    const stamp=offset=>new Date(Date.now()-3600_000+offset*1000).toISOString();
+    const meta=(timestamp,id,extra={})=>({timestamp,type:'session_meta',payload:{id,cwd:'PRIVATE_CWD',history_mode:'legacy',...extra}});
+    const turn=(timestamp,id)=>({timestamp,type:'turn_context',payload:{turn_id:id,model:'gpt-6-astra'}});
+    const tokens=(timestamp,n)=>({...usage(n),timestamp});
+    const parentLines=[meta(stamp(0),parentId),turn(stamp(1),'turn-1'),tokens(stamp(2),100)];
+    const copied=parentLines.map(line=>({...line,timestamp:stamp(60)}));
+    const parentFile=path.join(day,`rollout-2026-10-30T10-00-00-${parentId}.jsonl`);
+    fs.writeFileSync(parentFile,jsonl(parentLines));
+    fs.writeFileSync(path.join(day,`rollout-2026-10-30T10-01-00-${forkId}.jsonl`),jsonl([meta(stamp(59),forkId,{forked_from_id:parentId}),...copied]));
+    const cold=await collectSettings(logs);
+    assert.equal(sum(cold.tokenProfiles),110,'each turn once');
+    assert.equal(sum(cold.profiles),110);
+    assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache}),cold);
+    assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache}),cold,'a warm cache agrees');
+    const saved=fs.readFileSync(path.join(cache,'events.sqlite'));
+    assert.ok(!saved.includes('PRIVATE')&&!saved.includes(parentId),'the cache keeps no private text or thread id');
+    // Without the parent the copies cannot be told apart.
+    fs.unlinkSync(parentFile);
+    await assert.rejects(collectSettings(logs),/parent/);
   });
 });
