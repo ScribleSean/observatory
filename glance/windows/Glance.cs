@@ -524,6 +524,7 @@ namespace Observatory
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (e.Button != MouseButtons.Left) return;
             var point = new PointF(e.X / scale, e.Y / scale);
             foreach (var hit in hits) if (!hit.Item2.StartsWith("tip:") && hit.Item1.Contains(point)) { Act(hit.Item2); return; }
         }

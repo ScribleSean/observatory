@@ -267,6 +267,12 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     catch(error) {log(`  Note: ${spoke.name} (${spoke.ssh}): ${error.message}. Check that "ssh ${spoke.ssh}" works without a password prompt, and that setup has run there.`);}
   }
 
+  // A Start menu entry, so Windows search finds the app with its icon, with or without the login item.
+  // It is a convenience: if a locked-down PC refuses it, setup carries on.
+  if(platform!=='darwin') await act('add Observatory to the Start menu',async()=>{
+    if(await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)])===null)
+      log('  Note: could not add the Start menu entry.');
+  });
   if(!login)step('left the login item unchanged (--no-login)');
   else if(platform==='darwin') {
     await act('start the menu bar app now and at login',async()=>{
@@ -284,10 +290,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     await act(start?'start the tray app now and at login':'start the tray app at login (not now)',async()=>{
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute('reg.exe',['add','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/t','REG_SZ','/d',`"${target.executable}"`,'/f'],{windowsHide:true});
-      // A Start menu entry, so Windows search finds the app with its icon.
-      // The shortcut is a convenience: if a locked-down PC refuses it, the app still starts.
-      if(await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)])===null)
-        log('  Note: could not add the Start menu entry. The app still starts at login.');
       // Started from a remote or background session, the tray icon would not appear on the desktop
       if(start)spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
     });
