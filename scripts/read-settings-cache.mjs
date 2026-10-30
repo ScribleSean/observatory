@@ -40,6 +40,14 @@ export function cacheEvent(event,cached=false) {
       const tier=payload.service_tier;
       safe.service_tier=typeof tier==='string'&&TIERS.has(tier)?tier:'unknown';
     }
+  } else if(kind==='session_meta') {
+    // Kept so a fork's copy of its parent can be found, with the id as its hash.
+    safe={};
+    const identity=get(payload,'id');
+    if(typeof identity==='string') {
+      if(cached&&!HEX64.test(identity))return null;
+      safe.id=cached?identity:sha256Hex(identity);
+    }
   } else if(kind==='event_msg'&&subtype==='token_count') {
     const info=get(payload,'info');
     if(!isDict(info)||!isDict(get(info,'total_token_usage')))return null;
@@ -158,7 +166,8 @@ export class SettingsCache {
   events(file,expected) {
     this.readBudget?.check();
     const {maxLineBytes,maxLines,maxRetainedBytes}=this.limits;
-    const key=sha256Hex(String(file));
+    // Version 2 entries keep session_meta; older ones are read again and dropped.
+    const key=sha256Hex('2\0'+String(file));
     this.used.add(key);
     const signature=SettingsCache.signature(expected);
     if(SettingsCache.signature(fs.statSync(file,{bigint:true}))!==signature) {
