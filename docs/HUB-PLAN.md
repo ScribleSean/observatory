@@ -41,7 +41,7 @@ How Observatory 2.0 works, and why it is built this way. The full app it replace
 ## Privacy
 
 - Saved data holds totals, limit readings and times. It never holds prompts, messages, session names, window titles, commands, paths or credentials.
-- Today by project keeps, for each session, the last name of its working folder (a `.claude/worktrees` folder counts as its repository), a short hash of the session id, its first and last request times, token counts per model and the subagent share. It is read only while `claudeCode` or `codex` is on.
+- Today by project keeps, for each session, the name of its repository folder (a worktree counts as its repository, and the home folder is `~`), a short hash of the session id, its first and last request times, token counts per model and the subagent share. It is read only while `claudeCode` or `codex` is on.
 - A malformed file from the other computer fails only that computer's read.
 - The tests plant prompts, messages, paths and fake keys in sample files and check that none of them reach saved data.
 
@@ -71,3 +71,6 @@ Two independent code reviews, plus a critique of the original design, found thes
 ## Known limits
 
 - The Windows tray app and the connection between two computers have had less use than the Mac app on one computer.
+- Today by project counts a Codex event once by its time and running total. A resumed or forked Codex session that replays its parent's events with new times would be counted twice. This has not been seen in real logs and is not verified.
+- Session hashes are plain SHA-256 of the session id, cut to 10 characters. They are not salted, so someone holding a session id can recognise its hash. A per-computer HMAC key would prevent that.
+- Each today-by-project reading stores the time zone it was collected in, and its times are drawn in that zone. The other totals still follow the dashboard's time zone, so two computers in different zones can disagree about where a day starts.
