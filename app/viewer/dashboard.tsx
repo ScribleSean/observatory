@@ -1,6 +1,6 @@
 import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
-import { freshness, format } from '../../lib/panel-data.mjs';
+import { freshness, format, readingTime } from '../../lib/panel-data.mjs';
 import { useSkin } from './skin';
 
 import { LimitsView } from './limits/LimitsView';
@@ -28,7 +28,7 @@ function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
         const age = freshness(device.collectedAt ?? '', now);
         return (
           <li key={device.host} className={age.stale ? 'warn' : ''} title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>
-            <i aria-hidden="true" />{device.name}<span className="ob-meta">{device.collectedAt ? age.label : STRINGS.today.noSnapshot}</span>
+            <i aria-hidden="true" />{device.name}{!device.collectedAt ? <span className="ob-meta">{STRINGS.today.noSnapshot}</span> : age.stale ? <span className="ob-meta">{format(STRINGS.overview.lastSeen, { time: readingTime(Date.parse(device.collectedAt), now) })}</span> : null}
           </li>
         );
       })}
@@ -92,7 +92,8 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
       <header className="ob-masthead">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
         <DeviceChips devices={combined?.devices ?? []} now={now} />
-        <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>
+        {/* The overall age shows only while it matters: loading, missing or old. */}
+        {(!loaded || !combined || fresh.stale) && <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>}
       </header>
       {combined && <Overview glance={combined.glance} view={combined.view} generatedAt={combined.generatedAt} now={now} />}
       {!combined && <div className="ob-first-run">

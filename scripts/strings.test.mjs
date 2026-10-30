@@ -42,7 +42,7 @@ test('format fills repeated placeholders including zero and refuses missing valu
   assert.throws(() => format('{constructor}', {}), /Missing placeholder/);
 });
 
-const unchanged = ['Now', 'Day', 'Week', 'Month', 'All time', 'Unknown', 'Open Observatory', 'Check for updates', 'Refresh', 'Settings', 'Codex API-equivalent (estimate)', 'Screen time', 'Hourly totals are not collected yet', 'All needs verified records from every device', 'Turn on limits in Settings', 'Not collected yet', 'No records', 'By device', 'remaining', 'Sample data'];
+const unchanged = ['Now', 'Day', 'Week', 'Month', 'All time', 'Unknown', 'Open Observatory', 'Check for updates', 'Refresh', 'Settings', 'Codex API-equivalent (estimate)', 'Screen time', 'Hourly totals are not collected yet', 'All needs verified records from every device', 'Turn on limits in Settings', 'Not collected yet', 'No records', 'By device', 'remaining'];
 
 test('existing rendered wording remains unchanged', () => {
   const strings = validateStrings(JSON.parse(read('lib/strings.json')));

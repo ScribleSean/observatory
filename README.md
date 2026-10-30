@@ -22,12 +22,15 @@
 
 | Question | What Observatory shows |
 | --- | --- |
-| **Am I near my limits?** | Claude Code and Codex, each window (5-hour and weekly): percent left, reset time and the pace you are using it at. The menu bar title is the lowest one. |
+| **Am I near my limits?** | Claude Code and Codex, each window (5-hour and weekly): percent left, reset time and the pace you are using it at. The menu bar panel lists them scarcest first. |
 | **Where did my time go?** | Screen time today and over time, by app and category, from [ActivityWatch](https://activitywatch.net/). |
 | **What did it cost?** | Tokens today and over time, and what they would cost at public API prices. |
 
 <p align="center">
-  <img src="docs/images/menu-bar-menu.png" width="520" alt="The menu bar menu with fictional data: Limits and Today sections, then Open dashboard, Refresh and Quit">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/menu-bar-panel-dark.png">
+    <img src="docs/images/menu-bar-panel-light.png" width="340" alt="The menu bar panel with fictional data: four limit bars, one line per computer for today, then Open dashboard, Refresh and Quit">
+  </picture>
 </p>
 
 Observatory is monitor-only. It never starts, stops or answers an agent, and it never changes the tools it reads.
@@ -50,7 +53,7 @@ npm run setup
 
 That is the whole install. Setup writes a settings file with every source on, builds the dashboard and a small menu bar app (a tray app on Windows) inside the folder you cloned, and starts it now and at login. There is no account and no installer, and nothing goes into Applications or Program Files. Because the app is built on your own computer, there is no downloaded-app warning to click through.
 
-Click the number in the menu bar, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601 in your normal browser.
+Click the telescope in the menu bar, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601 in your normal browser.
 
 - **Preview first:** `npm run setup -- --dry-run` lists what setup would do and changes nothing.
 - **Update:** `git pull`, then `npm run setup` again.
@@ -113,11 +116,11 @@ Shots already in the repository:
 
 1. `docs/images/dashboard-one-computer-light.png`: one computer, Limits page, light.
 2. `docs/images/dashboard-{limits,activity,tokens}-{light,dark}.png`: every page in both appearances.
-3. `docs/images/menu-bar-menu.png`: the real Mac menu bar app showing the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json` for the app to read.
+3. `docs/images/menu-bar-panel-{light,dark}.png`: the Mac menu bar panel drawn from the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json`, and `build/Observatory.app/Contents/MacOS/ObservatoryGlance --render <file> <out.png> light` draws the panel from it.
 
 Shots still to take:
 
-4. Windows tray icon with its number, and the tray menu open.
+4. Windows tray icon and the tray panel open. `build\windows\ObservatoryGlance.exe --render <file> <out.png> light` draws the panel.
 5. The dashboard beside a terminal running Claude Code.
 
 ## Development

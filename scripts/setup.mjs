@@ -41,6 +41,21 @@ export function paths(platform=process.platform,repo=REPO,home=homedir(),environ
 
 const xml=value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+const START_MENU_LINK="(Join-Path ([Environment]::GetFolderPath('Programs')) 'Observatory.lnk')";
+// PowerShell also ends a quoted string at the curly single quotes, so double those too.
+const psQuote=value=>"'"+String(value).replace(/['\u2018-\u201B]/g,quote=>quote+quote)+"'";
+
+export function startMenuShortcut(executable) {
+  return [
+    `$link=(New-Object -ComObject WScript.Shell).CreateShortcut(${START_MENU_LINK})`,
+    `$link.TargetPath=${psQuote(executable)}`,
+    `$link.WorkingDirectory=${psQuote(path.win32.dirname(executable))}`,
+    `$link.IconLocation=${psQuote(executable+',0')}`,
+    `$link.Description='Observatory'`,
+    '$link.Save()',
+  ].join('; ');
+}
+
 export function infoPlist() {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -49,6 +64,7 @@ export function infoPlist() {
 <key>CFBundleName</key><string>Observatory</string>
 <key>CFBundleExecutable</key><string>${MAC_EXECUTABLE}</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleIconFile</key><string>Observatory</string>
 <key>CFBundleShortVersionString</key><string>2.0</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
@@ -151,6 +167,8 @@ export async function installMacApp(target,settings,{fs=filesystem,run=execute,s
     await fs.writeFile(plist,infoPlist());
     await run('/usr/bin/xcrun',['swiftc','-O','-swift-version','5',path.join(REPO,'glance','mac','Glance.swift'),'-o',executable],{timeout:300000});
     await fs.writeFile(path.join(staged,'Contents','Resources','glance.json'),settings);
+    await fs.copyFile(path.join(REPO,'public','brand','telescope.svg'),path.join(staged,'Contents','Resources','telescope.svg'));
+    await fs.copyFile(path.join(REPO,'glance','icons','Observatory.icns'),path.join(staged,'Contents','Resources','Observatory.icns'));
     await fs.access(executable,filesystem.constants.X_OK);
     if(!(await fs.stat(executable)).isFile() || !(await fs.stat(plist)).isFile())
       throw Error('The staged app is missing its executable or Info.plist.');
@@ -234,6 +252,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       // Windows locks a running program file, so stop the tray app before replacing it.
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute(target.compiler,['/nologo','/target:winexe','/optimize+',`/out:${target.executable}`,
+        `/win32icon:${path.win32.join(REPO,'glance','icons','Observatory.ico')}`,
         '/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Web.Extensions.dll',
         path.win32.join(REPO,'glance','windows','Glance.cs')],{windowsHide:true,timeout:300000});
     });
@@ -248,6 +267,12 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     catch(error) {log(`  Note: ${spoke.name} (${spoke.ssh}): ${error.message}. Check that "ssh ${spoke.ssh}" works without a password prompt, and that setup has run there.`);}
   }
 
+  // A Start menu entry, so Windows search finds the app with its icon, with or without the login item.
+  // It is a convenience: if a locked-down PC refuses it, setup carries on.
+  if(platform!=='darwin') await act('add Observatory to the Start menu',async()=>{
+    if(await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)])===null)
+      log('  Note: could not add the Start menu entry.');
+  });
   if(!login)step('left the login item unchanged (--no-login)');
   else if(platform==='darwin') {
     await act('start the menu bar app now and at login',async()=>{
@@ -281,6 +306,7 @@ export async function remove({platform=process.platform,log=console.log}={}) {
     await rm(target.launchAgent,{force:true});
   } else {
     await quiet('reg.exe',['delete','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/f']);
+    await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',`Remove-Item -LiteralPath ${START_MENU_LINK} -Force -ErrorAction SilentlyContinue`]);
     await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
   }
   log('Removed the login item and stopped the app. Your data folder and settings file are unchanged.');

@@ -76,10 +76,12 @@ test('collect writes usage.json and a status record',()=>withFolder(async folder
 
 test('tick collects, then combines, and refuses to run twice at once',()=>withFolder(async folder=>{
   const config=testConfig(folder);
-  let release;
+  let release,started;
   const slow=new Promise(resolve=>{release=resolve;});
-  const first=tick(config,{collectStep:async cfg=>{await slow;return collect(cfg,{readers,now:()=>at});}});
-  await new Promise(resolve=>setTimeout(resolve,50));
+  const holding=new Promise(resolve=>{started=resolve;});
+  // Wait until the first tick holds the lock, not for a fixed time.
+  const first=tick(config,{collectStep:async cfg=>{started();await slow;return collect(cfg,{readers,now:()=>at});}});
+  await holding;
   const second=await tick(config,{collectStep:()=>{throw Error('should not run');}});
   assert.equal(second.busy,true);
   release();

@@ -36,6 +36,9 @@
 .ob-tile ul { margin: var(--ob-space-4) 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .ob-tile-bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--ob-space-2); align-items: baseline; font-size: 13px; }
 .ob-tile-bars .ob-bar { grid-column: 1 / -1; margin: 0; height: 4px; }
+.ob-tile-value { display: flex; align-items: baseline; gap: var(--ob-space-2); white-space: nowrap; }
+.ob-tile-quiet, .ob-tile-devices .ob-meta { display: flex; align-items: center; gap: 6px; }
+.ob-ring { flex: none; width: 7px; height: 7px; border: 1.2px solid var(--ob-muted); border-radius: 50%; box-sizing: border-box; }
 .ob-tile-label { display: flex; align-items: center; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ob-tile-devices li { display: flex; justify-content: space-between; gap: var(--ob-space-2); font-size: 13px; }
 .ob-tile-devices li + li { padding-top: 10px; border-top: 1px solid var(--ob-track); }
