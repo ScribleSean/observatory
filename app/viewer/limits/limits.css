@@ -24,13 +24,13 @@
 /* Axes are quiet: two hairlines and small labels. */
 .ob-history-grid line { stroke: var(--ob-track); stroke-width: 1; opacity: 0.7; }
 .ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.ob-history-reset { stroke: var(--ob-track); stroke-width: 1; }
+.ob-history-reset { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.35; }
 .ob-history-guide { stroke: var(--ob-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.55; }
 .ob-history-cursor { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.6; }
 
 /* One hue per provider. The second computer is the same hue, lighter. */
 .ob-history-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.ob-history-line.secondary { stroke-width: 1.75; opacity: 0.5; }
+.ob-history-line.secondary { stroke-width: 1.75; opacity: 0.6; }
 .ob-history-line.claude { stroke: var(--ob-claude); }
 .ob-history-line.codex { stroke: var(--ob-codex); }
 .ob-history-dot { opacity: 0.75; }
@@ -45,8 +45,6 @@
 .ob-history-column.claude { fill: var(--ob-claude); }
 .ob-history-column.codex { fill: var(--ob-codex); }
 .ob-history-column.secondary { opacity: 0.5; }
-.ob-history-column.low { fill: var(--ob-warning); }
-.ob-history-column.empty { fill: var(--ob-error); }
 
 .ob-history-key { position: absolute; top: 0; right: 0; display: flex; gap: var(--ob-space-3); font-size: 10.5px; color: var(--ob-muted); }
 .ob-history-key span { display: inline-flex; align-items: center; gap: 5px; }

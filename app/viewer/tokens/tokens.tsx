@@ -4,7 +4,7 @@ import { compact } from '../../../lib/panel-data.mjs';
 import { tokensView, money } from '../../../lib/view-tokens.mjs';
 import { projectsView } from '../../../lib/view-projects.mjs';
 import { ProjectsCard } from './projects';
-import { BarChart, Card, FilterGroup, InfoControl, ProviderDot, Row } from '../components';
+import { BarChart, Card, FilterGroup, ProviderDot, Row } from '../components';
 import './tokens.css';
 
 type Computed = ReturnType<typeof tokensView>;
@@ -37,12 +37,12 @@ const statusNote = (status: string) => status === 'unverified' ? STRINGS.status.
   : status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
 
-/** The last 30 calendar days that either provider recorded, so both charts share one date axis. */
-function chartDomain(result: Result) {
-  const dates = [...result.claude.days, ...result.codex.days].map(day => day.date).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort((a, b) => a.localeCompare(b));
-  const last = dates.at(-1);
-  if (!last) return [];
-  const end = Date.parse(`${last}T00:00:00Z`);
+/** The last 30 calendar days up to today, so both charts share one date axis and a stalled reader shows as Unknown days. */
+function chartDomain(result: Result, now: number) {
+  const recorded = [...result.claude.days, ...result.codex.days].some(day => /^\d{4}-\d{2}-\d{2}$/.test(day.date));
+  if (!recorded) return [];
+  const local = new Date(now);
+  const end = Date.UTC(local.getFullYear(), local.getMonth(), local.getDate());
   return Array.from({ length: 30 }, (_, index) => new Date(end - (29 - index) * 86400000).toISOString().slice(0, 10));
 }
 
@@ -67,7 +67,7 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
         <p className="ob-tokens-note">{checked}</p>
       </div>}
     </div>
-    <div>{block.days.length > 0 && <BarChart title={format(STRINGS.tokens.chartTitle, { provider: label })}
+    <div>{block.days.length > 0 && <BarChart quietTitle title={format(STRINGS.tokens.chartTitle, { provider: label })}
       data={domain.map(date => ({ label: date.slice(5), date, value: byDay.get(date) ?? null }))} series={provider} formatValue={compact} />}</div>
     {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-tokens-breakdown">
       <summary>{STRINGS.tokens.breakdown}</summary>
@@ -97,20 +97,18 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
   </Card>;
 }
 
-export function TokensSection({ result, projects = [], onHostChange, onPeriodChange }: {
+export function TokensSection({ result, projects = [], onHostChange, onPeriodChange, now }: {
   result: Result;
+  now: number;
   projects?: ReturnType<typeof projectsView>;
   onHostChange: (host: string) => void;
   onPeriodChange: (period: string) => void;
 }) {
-  const domain = chartDomain(result);
+  const domain = chartDomain(result, now);
   return <div className="ob-tokens">
     <FilterGroup label={STRINGS.devices.device} value={result.host} onChange={onHostChange}
       options={[['All', STRINGS.devices.all], ...result.devices.map(device => [device.id, device.label] as [string, string])]} />
     <FilterGroup label={STRINGS.devices.period} value={result.period} onChange={onPeriodChange} options={periods} />
-    <div className="ob-tokens-caveat"><p>{STRINGS.tokens.caveat}</p>
-      <InfoControl label={STRINGS.tokens.caveatLabel} detail={STRINGS.tokens.caveatDetail} />
-    </div>
     <div className="ob-tokens-providers">
       <ProviderCard result={result} provider="claude" domain={domain} />
       <ProviderCard result={result} provider="codex" domain={domain} />
@@ -140,5 +138,5 @@ export function TokensView({ snapshot, now, initialHost = 'All', initialPeriod =
 }) {
   const [host, setHost] = useState(initialHost);
   const [period, setPeriod] = useState(initialPeriod);
-  return <TokensSection result={tokensView(snapshot, { host, period, now }) as Result} projects={projectsView(snapshot, { host, now })} onHostChange={setHost} onPeriodChange={setPeriod} />;
+  return <TokensSection result={tokensView(snapshot, { host, period, now }) as Result} projects={projectsView(snapshot, { host, now })} onHostChange={setHost} onPeriodChange={setPeriod} now={now} />;
 }

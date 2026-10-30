@@ -14,8 +14,6 @@
 .ob-tokens-breakdown h4:first-of-type { margin-top: var(--ob-space-3); }
 .ob-tokens h3 { margin: 0 0 var(--ob-space-3); font-size: var(--ob-section-size); }
 .ob-tokens h4 { margin: var(--ob-space-3) 0 var(--ob-space-2); }
-.ob-tokens-caveat { margin-top: var(--ob-space-3); color: var(--ob-muted); }
-.ob-tokens-caveat button { margin-top: var(--ob-space-2); }
 .ob-tokens-note { color: var(--ob-muted); font-size: var(--ob-meta-size); }
 .ob-tokens-classes { margin: 0; }
 .ob-tokens-classes > div { display: flex; justify-content: space-between; gap: var(--ob-space-2); padding: 6px 0; }

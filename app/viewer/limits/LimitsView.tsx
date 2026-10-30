@@ -22,7 +22,7 @@ function ChartHead({ provider, name, label, row }: { provider: string; name: str
     <h4><ProviderDot provider={provider} />{name}<span className="ob-meta">{label}</span></h4>
     <div className="ob-history-latest">
       {row?.note && <span className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</span>}
-      <span className={row?.low ? 'ob-num warn' : 'ob-num'}>{value === null ? STRINGS.status.unknown : percent(value)}</span>
+      <span className={row?.low && value !== null ? 'ob-num warn' : 'ob-num'}>{value === null ? STRINGS.status.unknown : percent(value)}</span>
     </div>
   </div>;
 }

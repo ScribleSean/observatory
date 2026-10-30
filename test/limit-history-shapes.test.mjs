@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {windowColumns,paceGuide} from '../lib/view-limit-history.mjs';
+import {windowColumns,paceGuide,dailyColumns} from '../lib/view-limit-history.mjs';
 
 const HOUR=3600000, DAY=24*HOUR;
 const reset=Date.parse('2026-10-30T15:00:00Z');
@@ -34,10 +34,36 @@ test('the pace guide runs from 100% at the window start to 0% at its reset, clip
 });
 
 test('a reset time that drifts on every reading is still one window, and one pace line',()=>{
-  const drifting=[0,1,2,3].map(step=>({t:reset+step*HOUR,r:100-step*5,x:reset+5*HOUR+step*HOUR}));
+  // Readings every 15 minutes, each reporting a reset 15 minutes later than the last, as Codex does while idle.
+  const drifting=[0,1,2,3].map(step=>({t:reset+step*15*60000,r:100-step*5,x:reset+5*HOUR+step*15*60000}));
   const columns=windowColumns(drifting,'5h');
   assert.equal(columns.length,1);
   assert.equal(columns[0].low,85);
-  const weekly=[0,1,2].map(step=>({t:reset+step*DAY,r:90,x:reset+6*DAY+step*HOUR}));
+  const weekly=[0,1,2].map(step=>({t:reset+step*HOUR,r:90,x:reset+6*DAY+step*10*60000}));
   assert.equal(paceGuide(weekly,'week',reset,reset+3*DAY).length,1);
+});
+
+test('an early reset starts a new window instead of inheriting the old low',()=>{
+  const columns=windowColumns([
+    {t:reset,r:10,x:reset+5*HOUR},
+    {t:reset+2*HOUR,r:100,x:reset+7*HOUR},
+    {t:reset+4*HOUR,r:60,x:reset+7*HOUR},
+  ],'5h');
+  assert.deepEqual(columns.map(column=>column.low),[10,60]);
+  const boundary=windowColumns([{t:reset-HOUR,r:5,x:reset+60000},{t:reset,r:100,x:reset+5*HOUR}],'5h');
+  assert.deepEqual(boundary.map(column=>column.low),[5,100],'a new reset time at the boundary is a new window');
+});
+
+test('two computers with different weekly resets get their own pace guides',()=>{
+  const mac=[{t:reset,r:80,x:reset+2*DAY}], pc=[{t:reset,r:80,x:reset+5*DAY}];
+  const ends=[...paceGuide(mac,'week',reset,reset+DAY),...paceGuide(pc,'week',reset,reset+DAY)].map(guide=>guide.end);
+  assert.deepEqual(ends,[reset+2*DAY,reset+5*DAY]);
+});
+
+test('over long ranges windows group by day at the lowest reading',()=>{
+  const day=new Date(reset); day.setHours(12,0,0,0);
+  const columns=[{start:0,end:day.getTime(),low:40,readings:1,lastAt:0,latest:40},{start:0,end:day.getTime()+HOUR,low:15,readings:2,lastAt:0,latest:15}];
+  const [only]=dailyColumns(columns);
+  assert.equal(only.low,15);
+  assert.equal(only.readings,3);
 });

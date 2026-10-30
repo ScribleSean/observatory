@@ -150,9 +150,6 @@ export const STRINGS = {
     "effort": "Reasoning",
     "speed": "Speed",
     "noSettings": "No settings recorded",
-    "caveat": "Dollar figures are estimates at list price. A subscription is not billed per token.",
-    "caveatLabel": "About these figures",
-    "caveatDetail": "The API-equivalent figure prices recorded tokens with the shared price table. A model with no price in the table is left out and is never counted as free.",
     "deviceNote": "Claude Code totals are shown per device until overlap between devices can be checked.",
     "breakdown": "Breakdown"
   },
@@ -232,7 +229,8 @@ export const STRINGS = {
     "left": "{value}% left",
     "noReadings": "No readings in this range",
     "lowest": "{value}% at lowest",
-    "windowSpan": "{start} to {end}"
+    "windowSpan": "{start} to {end}",
+    "paceGuide": "Even-spend pace"
   },
   "firstRun": {
     "title": "Waiting for the first collection",

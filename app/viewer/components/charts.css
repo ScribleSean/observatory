@@ -1,8 +1,6 @@
 .ob-bars { margin: 0; min-width: 0; color: var(--ob-text); }
 .ob-bars-head { display: flex; align-items: baseline; gap: var(--ob-space-2); margin-bottom: var(--ob-space-3); }
 .ob-bars-head h3 { min-width: 0; margin: 0; }
-.ob-bars-toggle { flex-shrink: 0; margin-left: auto; padding: 2px 8px; font: inherit; font-size: var(--ob-meta-size); color: var(--ob-muted); background: none; border: 0; border-radius: 999px; cursor: pointer; }
-.ob-bars-toggle:hover, .ob-bars-toggle[aria-pressed="true"] { color: var(--ob-text); background: var(--ob-track); }
 .ob-bars-plot { min-width: 0; overflow: hidden; }
 .ob-bars-plot[hidden] { display: none; }
 .ob-bars svg { display: block; overflow: visible; }
@@ -10,7 +8,3 @@
 .ob-bars-top { stroke: var(--ob-track); stroke-width: 1; opacity: 0.55; }
 .ob-bars-baseline { stroke: var(--ob-track); stroke-width: 1; }
 .ob-bars-unknown { fill: none; stroke: var(--ob-muted); stroke-width: 1; opacity: 0.7; }
-.ob-bars-table table { width: 100%; border-collapse: collapse; font-size: var(--ob-meta-size); }
-.ob-bars-table th, .ob-bars-table td { padding: 3px 0; text-align: start; font-weight: 400; border-top: 1px solid var(--ob-track); }
-.ob-bars-table thead th { color: var(--ob-muted); border-top: 0; }
-.ob-bars-table td { text-align: end; font-family: var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; }

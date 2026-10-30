@@ -55,10 +55,9 @@ function bar(x: number, y: number, width: number, height: number) {
   return `M${x} ${y + height}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + width - r}Q${x + width} ${y} ${x + width} ${y + r}V${y + height}Z`;
 }
 
-export function BarChart({ title, data, series, formatValue, max }: BarChartProps) {
+export function BarChart({ title, data, series, formatValue, max, quietTitle = false }: BarChartProps & { quietTitle?: boolean }) {
   const id = useId();
   const { ref, width } = useWidth();
-  const [showValues, setShowValues] = useState(false);
   const values = data.map(item => known(item.value) ? item.value : null);
   const available = values.filter(known);
   const maximum = Math.max(0, ...available, known(max) ? max : 0);
@@ -73,11 +72,11 @@ export function BarChart({ title, data, series, formatValue, max }: BarChartProp
   return (
     <figure className="ob-bars">
       <div className="ob-bars-head">
-        <h3 id={id}>{title}</h3>
+        {/* Where the card already names the chart, the title is for screen readers only. */}
+        <h3 id={id} className={quietTitle ? 'ob-visually-hidden' : undefined}>{title}</h3>
         {!available.length && <span className="ob-meta">{STRINGS.status.unknown}</span>}
-        <button type="button" className="ob-bars-toggle" aria-pressed={showValues} onClick={() => setShowValues(on => !on)}>{STRINGS.charts.showValues}</button>
       </div>
-      <div ref={ref} className="ob-bars-plot" hidden={showValues}>
+      <div ref={ref} className="ob-bars-plot">
         {/* Inline SVG needs an image role to expose its title as one graphic */}
         {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role */}
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby={id}>
@@ -101,7 +100,8 @@ export function BarChart({ title, data, series, formatValue, max }: BarChartProp
           })}
         </svg>
       </div>
-      <div className={showValues ? 'ob-bars-table' : 'ob-visually-hidden'}>
+      {/* Exact values: each bar's hover title, and this table for screen readers. */}
+      <div className="ob-visually-hidden">
         <table>
           <thead><tr><th scope="col">{STRINGS.charts.item}</th><th scope="col">{STRINGS.charts.value}</th></tr></thead>
           <tbody>{values.map((value, index) => <tr key={index}><th scope="row">{names[index]}</th><td>{shown(value)}</td></tr>)}</tbody>

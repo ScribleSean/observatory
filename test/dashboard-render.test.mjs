@@ -118,7 +118,8 @@ test('a 30-day chart labels Mondays only, a week labels weekdays, and Unknown is
   assert.deepEqual(labels(month),['Sep 28','Oct 5','Oct 12','Oct 19']);
   assert.equal((month.match(/data-unknown=/g) ?? []).length,1);
   assert.ok(!month.includes('data-bar="4"'),'a recorded zero draws no bar');
-  assert.ok(month.includes('>Show values<'));
+  assert.ok(!month.includes('>Show values<'),'exact values are in hover titles and a table for screen readers');
+  assert.ok(month.includes('class="ob-visually-hidden"><table>'));
   assert.deepEqual(labels(chart(days(7,index=>index))),['Tue','Wed','Thu','Fri','Sat','Sun','Mon']);
   const hours=Array.from({length:24},(_,hour)=>({label:String(hour),value:hour}));
   assert.ok(labels(chart(hours)).length<=6);

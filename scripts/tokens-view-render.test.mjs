@@ -22,7 +22,7 @@ const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const now = Date.parse('2026-10-14T12:00:00Z');
 const noop = () => {};
 const render = (snapshot, host = 'All', period = 'week') => renderToStaticMarkup(createElement(TokensSection, {
-  result: tokensView(snapshot, { host, period, now }), onHostChange: noop, onPeriodChange: noop,
+  result: tokensView(snapshot, { host, period, now }), onHostChange: noop, onPeriodChange: noop, now,
 }));
 function card(html, label) {
   const section = html.match(new RegExp('<section class="ob-card" aria-label="' + label.replace(/[.*+?^$()|[\]\\]/g, '\\$&') + '">([\\s\\S]*?)</section>'));
@@ -105,9 +105,11 @@ void test('dashboard tokens section mounts the view', () => {
   assert.ok(!html.includes('This section is not built yet.'));
 });
 
-void test('caveat sentence appears in exactly one element', () => {
+void test('every dollar figure is labeled as an API-equivalent estimate, so no footnote is needed', () => {
   const html = render(sampleSnapshot(now));
-  assert.equal((html.match(/<p>Dollar figures are estimates at list price\. A subscription is not billed per token\.<\/p>/g) ?? []).length, 1);
+  assert.ok(!html.includes('Dollar figures are estimates'));
+  assert.ok(!html.includes('About these figures'));
+  for (const name of ['Claude Code', 'Codex']) assert.ok(card(html, name).includes('API-equivalent (estimate)'), name);
 });
 
 void test('Codex price date is independent of missing Claude estimates', () => {
