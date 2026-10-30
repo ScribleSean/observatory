@@ -41,6 +41,7 @@ How Observatory 2.0 works, and why it is built this way. The full app it replace
 ## Privacy
 
 - Saved data holds totals, limit readings and times. It never holds prompts, messages, session names, window titles, commands, paths or credentials.
+- Today by project keeps, for each session, the last name of its working folder (a `.claude/worktrees` folder counts as its repository), a short hash of the session id, its first and last request times, token counts per model and the subagent share. It is read only while `claudeCode` or `codex` is on.
 - A malformed file from the other computer fails only that computer's read.
 - The tests plant prompts, messages, paths and fake keys in sample files and check that none of them reach saved data.
 
