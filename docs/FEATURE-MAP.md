@@ -41,9 +41,9 @@ What a person can do with Observatory, how they reach it, and what checks it tod
 
 | Feature | How a person reaches it | Checked by |
 | --- | --- | --- |
-| Lowest limit as the menu bar title | Mac menu bar | `test/combine.test.mjs` (glance title and lines) |
-| Menu with Limits and Today, Open dashboard, Refresh, Quit | Click the menu bar item | Glance lines only. The Swift app itself: none |
-| Windows tray icon with the number and the same menu | Windows tray | None (compiled by setup only) |
+| Telescope icon in the menu bar, dimmed when no current reading | Mac menu bar | None (live only) |
+| Panel with limits scarcest first, one line per computer, Open dashboard, Refresh, Quit | Click the menu bar item | `--render` draws it from a `combined.json` for screenshots. No automated test |
+| Windows tray telescope icon and a menu with limits scarcest first | Windows tray | None (compiled by setup only) |
 
 ## Dashboard
 
