@@ -51,6 +51,10 @@ function calendarTicks(from: number, to: number, range: string, plotWidth: numbe
     while (cursor.getDay() !== 1) cursor.setDate(cursor.getDate() + 1);
     for (; cursor.getTime() <= to; cursor.setDate(cursor.getDate() + 7))
       ticks.push({ t: cursor.getTime(), label: cursor.toLocaleDateString([], { month: 'short', day: 'numeric' }) });
+  } else if (to - from < 10 * DAY) {
+    return calendarTicks(from, to, 'week', plotWidth);
+  } else if (to - from < 90 * DAY) {
+    return calendarTicks(from, to, 'month', plotWidth);
   } else {
     cursor.setDate(1); cursor.setHours(0, 0, 0, 0); cursor.setMonth(cursor.getMonth() + 1);
     const months = Math.max(1, Math.ceil((to - from) / (30 * DAY) / (narrow ? 3 : 6)));
@@ -84,19 +88,24 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
     // Only columns whose middle is in view, so nothing piles up at the edges.
     return shown.filter(column => { const middle = (column.start + column.end) / 2; return middle >= data.from && middle <= data.to; });
   });
-  // Each computer has its own weekly windows and so its own guide. Matching windows draw once.
-  const guide = window === 'week' ? series.flatMap(item => paceGuide(item.points, 'week', data.from, data.to))
+  // The guide answers one question: will this week last? So only each computer's current window gets one,
+  // from its own reset. Computers that share a window draw it once.
+  const guide = window === 'week' ? series.flatMap(item => paceGuide(item.points, 'week', data.from, data.to).slice(-1))
     .filter((segment, index, list) => list.findIndex(other => Math.abs(other.end - segment.end) <= 5 * 60000) === index) : [];
 
+  // In column mode one item is one window (or day): the computers' columns that overlap it, together.
   const items: Item[] = columns
-    ? [...new Set(columnSets.flat().map(column => column.end))].sort((a, b) => a - b).map(end => {
-      const rows = series.flatMap((item, index) => {
-        const column = columnSets[index].find(entry => Math.abs(entry.end - end) <= 5 * 60000);
-        return column ? [{ host: item.host, label: shortName(item), value: column.low }] : [];
-      });
-      const length = daily ? DAY : 5 * HOUR;
-      return { t: end - length / 2, start: end - length, end, rows };
-    })
+    ? columnSets.flatMap((set, index) => set.map(column => ({ column, index })))
+      .sort((a, b) => (a.column.start + a.column.end) - (b.column.start + b.column.end))
+      .reduce<{ start: number; end: number; parts: { column: Column; index: number }[] }[]>((groups, part) => {
+        const last = groups.at(-1);
+        const middle = (part.column.start + part.column.end) / 2;
+        if (last && middle < last.end && !last.parts.some(other => other.index === part.index)) { last.parts.push(part); last.end = Math.max(last.end, part.column.end); }
+        else groups.push({ start: part.column.start, end: part.column.end, parts: [part] });
+        return groups;
+      }, [])
+      .map(group => ({ t: (group.start + group.end) / 2, start: group.start, end: group.end,
+        rows: group.parts.sort((a, b) => a.index - b.index).map(({ column, index }) => ({ host: series[index].host, label: shortName(series[index]), value: column.low })) }))
     : series.flatMap(item => item.points.map(point => ({ t: point.t, rows: [{ host: item.host, label: shortName(item), value: point.r }] })))
       .sort((a, b) => a.t - b.t);
   const shown = active !== null ? items[active] ?? null : null;
@@ -181,7 +190,11 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
       </div>
       <table className="ob-visually-hidden">
         <caption>{title}</caption>
-        <tbody>{items.slice(-200).reverse().map((item, index) => <tr key={index}><td>{describe(item)}</td></tr>)}</tbody>
+        <thead><tr><th scope="col">{STRINGS.limitHistory.time}</th>{series.map(item => <th key={item.host} scope="col">{shortName(item)}</th>)}</tr></thead>
+        <tbody>{items.slice(-200).reverse().map((item, index) => <tr key={index}>
+          <th scope="row">{item.start !== undefined ? format(STRINGS.limitHistory.windowSpan, { start: stamp(item.start), end: hour(item.end!) }) : stamp(item.t)}</th>
+          {series.map(entry => { const row = item.rows.find(part => part.host === entry.host); return <td key={entry.host}>{row ? format(columns ? STRINGS.limitHistory.lowest : STRINGS.limitHistory.left, { value: Math.round(row.value) }) : STRINGS.status.unknown}</td>; })}
+        </tr>)}</tbody>
       </table>
     </figure>
   );

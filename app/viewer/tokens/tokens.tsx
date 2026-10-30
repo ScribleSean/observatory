@@ -37,12 +37,13 @@ const statusNote = (status: string) => status === 'unverified' ? STRINGS.status.
   : status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
 
-/** The last 30 calendar days up to today, so both charts share one date axis and a stalled reader shows as Unknown days. */
+/** The last 30 calendar days up to the data's own today, so both charts share one date axis. */
 function chartDomain(result: Result, now: number) {
   const recorded = [...result.claude.days, ...result.codex.days].some(day => /^\d{4}-\d{2}-\d{2}$/.test(day.date));
   if (!recorded) return [];
   const local = new Date(now);
-  const end = Date.UTC(local.getFullYear(), local.getMonth(), local.getDate());
+  const end = typeof result.anchor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(result.anchor)
+    ? Date.parse(`${result.anchor}T00:00:00Z`) : Date.UTC(local.getFullYear(), local.getMonth(), local.getDate());
   return Array.from({ length: 30 }, (_, index) => new Date(end - (29 - index) * 86400000).toISOString().slice(0, 10));
 }
 
@@ -68,7 +69,7 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
       </div>}
     </div>
     <div>{block.days.length > 0 && <BarChart quietTitle title={format(STRINGS.tokens.chartTitle, { provider: label })}
-      data={domain.map(date => ({ label: date.slice(5), date, value: byDay.get(date) ?? null }))} series={provider} formatValue={compact} />}</div>
+      data={domain.map(date => ({ label: date.slice(5), date, value: byDay.has(date) ? byDay.get(date) ?? null : undefined }))} series={provider} formatValue={compact} />}</div>
     {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-tokens-breakdown">
       <summary>{STRINGS.tokens.breakdown}</summary>
       {block.status !== 'by-device' && <>

@@ -4,7 +4,8 @@ import './charts.css';
 
 export type ChartColor = 'claude' | 'codex' | 'accent';
 /** `date` is a calendar day (YYYY-MM-DD). When every point has one, the x labels follow the calendar. */
-export type ChartPoint = { label: string; value: number | null; date?: string };
+// value: a number, null when the day was recorded with an unknown total, undefined when there is no record of it.
+export type ChartPoint = { label: string; value?: number | null; date?: string };
 export type BarChartProps = {
   title: string;
   data: ChartPoint[];
@@ -58,7 +59,7 @@ function bar(x: number, y: number, width: number, height: number) {
 export function BarChart({ title, data, series, formatValue, max, quietTitle = false }: BarChartProps & { quietTitle?: boolean }) {
   const id = useId();
   const { ref, width } = useWidth();
-  const values = data.map(item => known(item.value) ? item.value : null);
+  const values = data.map(item => item.value === undefined ? undefined : known(item.value) ? item.value : null);
   const available = values.filter(known);
   const maximum = Math.max(0, ...available, known(max) ? max : 0);
   const height = width < 480 ? 150 : 180;
@@ -68,7 +69,7 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
   const barWidth = Math.max(1, Math.min(28, band * 0.6));
   const center = (index: number) => (index + 0.5) * band;
   const names = data.map(point => valid(point.date) ? monthDay(point.date) : point.label);
-  const shown = (value: number | null) => value === null ? STRINGS.status.unknown : formatValue(value);
+  const shown = (value: number | null | undefined) => value === undefined ? STRINGS.charts.notRecorded : value === null ? STRINGS.status.unknown : formatValue(value);
   return (
     <figure className="ob-bars">
       <div className="ob-bars-head">
@@ -86,6 +87,7 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
           </>}
           {values.map((value, index) => {
             const x = center(index) - barWidth / 2;
+            if (value === undefined) return null;
             if (value === null) return <rect key={index} data-unknown={index} className="ob-bars-unknown" x={x + 0.5} y={baseline - STUB + 0.5} width={Math.max(0, barWidth - 1)} height={STUB - 1} rx={1}><title>{`${names[index]}: ${STRINGS.status.unknown}`}</title></rect>;
             const barHeight = Math.max(0, value) / (maximum || 1) * plot;
             if (barHeight <= 0) return null;

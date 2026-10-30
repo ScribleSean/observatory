@@ -103,7 +103,8 @@ export const STRINGS = {
   "charts": {
     "item": "Item",
     "value": "Value",
-    "showValues": "Show values"
+    "showValues": "Show values",
+    "notRecorded": "No records"
   },
   "sources": {
     "statusOk": "Read",
@@ -230,7 +231,8 @@ export const STRINGS = {
     "noReadings": "No readings in this range",
     "lowest": "{value}% at lowest",
     "windowSpan": "{start} to {end}",
-    "paceGuide": "Even-spend pace"
+    "paceGuide": "Even-spend pace",
+    "time": "Time"
   },
   "firstRun": {
     "title": "Waiting for the first collection",

@@ -34,13 +34,18 @@ test('the pace guide runs from 100% at the window start to 0% at its reset, clip
 });
 
 test('a reset time that drifts on every reading is still one window, and one pace line',()=>{
-  // Readings every 15 minutes, each reporting a reset 15 minutes later than the last, as Codex does while idle.
-  const drifting=[0,1,2,3].map(step=>({t:reset+step*15*60000,r:100-step*5,x:reset+5*HOUR+step*15*60000}));
-  const columns=windowColumns(drifting,'5h');
-  assert.equal(columns.length,1);
-  assert.equal(columns[0].low,85);
-  const weekly=[0,1,2].map(step=>({t:reset+step*HOUR,r:90,x:reset+6*DAY+step*10*60000}));
-  assert.equal(paceGuide(weekly,'week',reset,reset+3*DAY).length,1);
+  // While idle at 100%, Codex reports a reset five hours from each reading, so it moves every time.
+  const idle=[0,1,2,3].map(step=>({t:reset+step*2*HOUR,r:100,x:reset+5*HOUR+step*2*HOUR}));
+  const used=[{t:reset+7*HOUR,r:80,x:reset+12*HOUR},{t:reset+8*HOUR,r:60,x:reset+12*HOUR}];
+  const columns=windowColumns([...idle,...used],'5h');
+  assert.deepEqual(columns.map(column=>column.low),[100,60],'one unused window, then the window that was used');
+  const weekly=[
+    ...[0,1,2].map(step=>({t:reset+step*DAY,r:100,x:reset+7*DAY+step*DAY})),
+    {t:reset+3*DAY,r:90,x:reset+10*DAY},{t:reset+4*DAY,r:70,x:reset+10*DAY},
+  ];
+  const guides=paceGuide(weekly,'week',reset,reset+5*DAY);
+  assert.equal(guides.length,1,'the idle run draws no guide');
+  assert.equal(guides[0].end,reset+10*DAY);
 });
 
 test('an early reset starts a new window instead of inheriting the old low',()=>{
