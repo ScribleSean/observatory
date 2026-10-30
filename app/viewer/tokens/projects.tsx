@@ -15,7 +15,9 @@ const dollars = (usd: number | null) => {
 };
 const clock = (value: unknown) => {
   const at = typeof value === 'string' ? Date.parse(value) : NaN;
-  return Number.isFinite(at) ? new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hourCycle: 'h23' }) : STRINGS.status.unknown;
+  if (!Number.isFinite(at)) return STRINGS.status.unknown;
+  const local = new Date(at);
+  return `${local.getHours()}:${String(local.getMinutes()).padStart(2, '0')}`;
 };
 const percent = (value: number | null) => value === null ? STRINGS.status.unknown : `${Math.round(value * 100)}%`;
 
