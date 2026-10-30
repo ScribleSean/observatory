@@ -218,16 +218,15 @@
   },
   "overview": {
     "limitsTitle": "Limits",
-    "limitsCaption": "lowest left: {name}",
     "limitsNone": "No current reading",
     "timeTitle": "Screen time today",
-    "costTitle": "Cost today",
-    "costCaption": "API-equivalent estimate, not a bill",
+    "costTitle": "API-equivalent cost today",
     "tokens": "{value} tokens",
     "bothNote": "both computers, not deduplicated",
     "asOf": "as of {time}",
-    "topApps": "largest app categories",
-    "lastDay": "Last update was {time}"
+    "lastDay": "Last update was {time}",
+    "limitsMissing": "No current reading: {names}",
+    "lastSeen": "last seen {time}"
   },
   "limitHistory": {
     "title": "Limit history",

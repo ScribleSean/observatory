@@ -25,7 +25,7 @@ const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:tru
 for(const section of ['limits','activity','tokens','sources']) {
   test(`the ${section} page renders from combined.json`,()=>{
     const html=render({combined:both,section});
-    for(const title of ['Limits','Screen time today','Cost today'])assert.ok(html.includes(title),title);
+    for(const title of ['Limits','Screen time today','API-equivalent cost today'])assert.ok(html.includes(title),title);
     assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
     assert.ok(html.includes('both computers, not deduplicated'));
     assert.ok(!html.includes('NaN'));
@@ -33,14 +33,29 @@ for(const section of ['limits','activity','tokens','sources']) {
   });
 }
 
-test('a missing computer shows Unknown and the reason, never zero',()=>{
+test('a missing computer shows no snapshot and the reason, and no total, never zero',()=>{
   const html=render({combined:noPc,section:'limits'});
   assert.ok(html.includes('No snapshot'));
   assert.ok(html.includes('Last pull failed: unreachable'));
-  const time=html.slice(html.indexOf('Screen time today'));
-  assert.ok(time.includes('class="ob-hero">Unknown<'));
-  const cost=html.slice(html.indexOf('Cost today'));
-  assert.ok(cost.includes('class="ob-hero">Unknown<'));
+  const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
+  assert.ok(!tiles.includes('class="ob-hero"'),'an Unknown total is not drawn as a headline');
+  assert.ok(!/>(0m|\$0\.00)</.test(tiles),'never zero');
+});
+
+test('a computer with an old reading shows when it was last seen, not its numbers',()=>{
+  const old=structuredClone(both);
+  const pc=old.glance.today.find(device=>device.host==='Windows');
+  pc.freshness={stale:true};pc.collectedAt=new Date(now-80*60000).toISOString();
+  const html=render({combined:old,section:'limits'});
+  assert.ok(html.includes('last seen'));
+});
+
+test('limits are listed scarcest first and unknown ones share one line',()=>{
+  const html=render({combined:both,section:'limits'});
+  const tile=html.slice(html.indexOf('ob-tile-limits'),html.indexOf('ob-tile-time'));
+  const values=[...tile.matchAll(/class="ob-num(?: warn)?">(\d+)%</g)].map(match=>Number(match[1]));
+  assert.ok(values.length>1);
+  assert.deepEqual(values,[...values].sort((a,b)=>a-b));
 });
 
 test('without combined.json the page says how to get one',()=>{
@@ -81,8 +96,8 @@ test('staleness is judged when the page draws, not when the file was written',()
   assert.ok(later.includes('as of'));
   const nextDay=render({combined,section:'limits',now:now+26*3600000});
   assert.ok(nextDay.includes('Last update was'));
-  const time=nextDay.slice(nextDay.indexOf('Screen time today'));
-  assert.ok(time.includes('class="ob-hero">Unknown<'));
+  const time=nextDay.slice(nextDay.indexOf('Screen time today'),nextDay.indexOf('ob-tabs'));
+  assert.ok(!time.includes('class="ob-hero"'),'yesterday is not shown as today');
 });
 
 test('chart date labels are never cut, and the newest date is always shown',async()=>{
