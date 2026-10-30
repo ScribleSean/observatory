@@ -261,7 +261,9 @@ export const STRINGS = {
     "title": "Today by project",
     "session": "session {start}–{end}",
     "subagents": "subagents {share}",
-    "other": "Other"
+    "other": "Other",
+    "asOf": "as of {time}",
+    "more": "+{count} more"
   }
 } as const;
 

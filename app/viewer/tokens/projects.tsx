@@ -13,12 +13,6 @@ const dollars = (usd: number | null) => {
   if (usd > 0 && usd < 0.005) return STRINGS.tokens.underCent;
   return usd < 10 ? format(STRINGS.formats.usd, { value: money(usd) ?? '' }) : format(STRINGS.formats.usd, { value: Math.round(usd).toLocaleString('en-US') });
 };
-const clock = (value: unknown) => {
-  const at = typeof value === 'string' ? Date.parse(value) : NaN;
-  if (!Number.isFinite(at)) return STRINGS.status.unknown;
-  const local = new Date(at);
-  return `${local.getHours()}:${String(local.getMinutes()).padStart(2, '0')}`;
-};
 const percent = (value: number | null) => value === null ? STRINGS.status.unknown : `${Math.round(value * 100)}%`;
 
 function ProjectRow({ project }: { project: Project }) {
@@ -31,10 +25,15 @@ function ProjectRow({ project }: { project: Project }) {
   return <li><details>
     <summary className="ob-projects-row">{head}</summary>
     <ul className="ob-projects-sessions">{project.sessions.map(session => <li key={session.id} className="ob-projects-row">
-      <span className="ob-projects-name">{format(STRINGS.projects.session, { start: clock(session.start), end: clock(session.end) })}</span>
+      <span className="ob-projects-name">{format(STRINGS.projects.session, session.range)}</span>
       <span className="ob-projects-num">{count(session.total)}</span>
       <span className="ob-projects-num">{format(STRINGS.projects.subagents, { share: percent(session.subagentShare) })}</span>
-    </li>)}</ul>
+    </li>)}
+    {project.more && <li className="ob-projects-row">
+      <span className="ob-projects-name">{format(STRINGS.projects.more, { count: project.more.count })}</span>
+      <span className="ob-projects-num">{count(project.more.total)}</span>
+      <span />
+    </li>}</ul>
   </details></li>;
 }
 
@@ -44,6 +43,7 @@ export function ProjectsCard({ devices }: { devices: Device[] }) {
     <h3>{STRINGS.projects.title}</h3>
     {devices.map(device => <div key={device.host} className="ob-projects">
       {devices.length > 1 && <h4>{device.label}</h4>}
+      {device.stale && device.asOf && <p className="ob-tokens-note">{format(STRINGS.projects.asOf, { time: device.asOf })}</p>}
       {device.status !== 'ok' ? <p>{device.status === 'no-records' ? STRINGS.status.noRecords : STRINGS.status.unknown}</p>
         : <ul className="ob-projects-list">{device.projects.map((project, index) => <ProjectRow key={`${index}-${project.name}`} project={project} />)}</ul>}
     </div>)}
