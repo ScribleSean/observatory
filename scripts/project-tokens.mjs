@@ -91,12 +91,17 @@ export function buildProjectTokens(raw,host,checkedAt) {
     const models=session.models.map(cleanModel);
     const row={id:session.id,provider:name,start:session.start,end:session.end,totalTokens:sumOf(models,'totalTokens'),
       subagentTokens:session.subagentTokens,usd:priced(models),models};
-    const key=session.project ?? null;
-    if(!groups.has(key))groups.set(key,[]);
-    groups.get(key).push(row);
+    // Folder names that differ only in case are one project.
+    const folder=session.project ?? null,key=folder?.toLowerCase() ?? null;
+    if(!groups.has(key))groups.set(key,{spellings:new Map(),sessions:[]});
+    const group=groups.get(key);
+    group.sessions.push(row);
+    if(folder!==null)group.spellings.set(folder,add(group.spellings.get(folder) ?? 0,row.totalTokens));
   }
   const byTokens=(a,b)=>b.totalTokens-a.totalTokens || String(a.name ?? a.id).localeCompare(String(b.name ?? b.id));
-  const projects=[...groups].map(([name,sessions])=>({name,totalTokens:sumOf(sessions,'totalTokens'),
+  // The spelling with the most tokens names the project.
+  const spelling=spellings=>[...spellings].sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+  const projects=[...groups.values()].map(({spellings,sessions})=>({name:spelling(spellings),totalTokens:sumOf(sessions,'totalTokens'),
     subagentTokens:knownSum(sessions,'subagentTokens'),usd:knownSum(sessions,'usd'),sessionCount:sessions.length,
     sessions:sessions.sort(byTokens).slice(0,MAX_SESSIONS)})).sort(byTokens);
   const rest=projects.slice(MAX_PROJECTS);

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,rm,utimes,writeFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import path from 'node:path';
-import {collectProjectTokens,projectName,sessionHash} from '../scripts/read-projects.mjs';
+import {collectProjectTokens,projectName,repositoryRoot,sessionHash} from '../scripts/read-projects.mjs';
 import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS} from '../scripts/project-tokens.mjs';
 import {buildSnapshot,toolFolder} from '../scripts/collect.mjs';
 import {combine} from '../lib/combine.mjs';
@@ -324,4 +324,85 @@ test('a Codex turn in a folder with no safe name is not given the previous proje
     .reduce((sum,row)=>sum+row.models.reduce((inner,model)=>inner+model.totalTokens,0),0);
   assert.equal(total('demo-app'),100,'only the first turn is demo-app');
   assert.equal(total(null),120,'the turn in the unnamed folder has no project');
+}));
+
+test('a subfolder of a repository is that repository, not a project of its own',async()=>withFolder(async folder=>{
+  const own=path.join(folder,'home');
+  const root=path.join(own,'Developer','notes-repo');
+  await mkdir(path.join(root,'.git'),{recursive:true});
+  await mkdir(path.join(root,'decisions','old'),{recursive:true});
+  await mkdir(path.join(own,'Developer','loose','sub'),{recursive:true});
+  await writeFile(path.join(own,'.git'),'gitdir: elsewhere\n');
+  assert.equal(repositoryRoot(path.join(root,'decisions','old'),own),root);
+  assert.equal(repositoryRoot(root,own),root);
+  assert.equal(repositoryRoot(path.join(own,'Developer','loose','sub'),own),null,'a repository at home does not swallow every folder');
+  assert.equal(repositoryRoot(path.join(root,'gone','deeper'),own),root,'a removed subfolder still finds its repository');
+  assert.equal(repositoryRoot('relative/path',own),null);
+}));
+
+test('project names that differ only in case are one project, named by its largest spelling',()=>{
+  const session=(index,tokens,project)=>({provider:'claude',id:sessionHash('claude',String(index)),start:now.toISOString(),end:now.toISOString(),subagentTokens:0,project,
+    models:[{model:'claude-opus-5-5',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}]});
+  const row=buildProjectTokens({date:'2026-10-21',timeZone,providers:{claude:{status:'ok',
+    sessions:[session(1,100,'Beeline'),session(2,300,'beeline'),session(3,50,'BEELINE'),session(4,10,'other')]}}},'Mac',now);
+  assert.deepEqual(row.projects.map(project=>[project.name,project.totalTokens,project.sessionCount]),[['beeline',450,3],['other',10,1]]);
+});
+
+test('a session whose folder changes case stays one session in one project',async()=>withFolder(async folder=>{
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(project,{recursive:true});
+  const line=(id,cwd,input)=>assistant({id,request:id,at:'2026-10-21T13:00:00Z',sessionId:'s',cwd,side:false,tokens:usage(input,0)});
+  await writeFile(path.join(project,'a.jsonl'),lines([line('m1',`${home}/Developer/Beeline`,10),line('m2',`${home}/Developer/beeline`,30)]));
+  const row=buildProjectTokens(await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home}),'Mac',now);
+  assert.equal(row.status,'ok');
+  assert.deepEqual(row.projects.map(item=>[item.name,item.totalTokens,item.sessionCount]),[['Beeline',40,1]]);
+}));
+
+// The shape Codex 0.166 writes for a fork of a thread with legacy history: the
+// fork's own session_meta, then a copy of the parent's session_meta and every
+// parent line, all stamped with the time of the fork. A paginated fork points
+// at its parent with history_base instead and copies nothing. Resuming a thread
+// appends to its own file.
+test('a forked Codex thread does not count the turns it copied from its parent',async()=>withFolder(async folder=>{
+  const parentId='0199aaaa-0000-7000-8000-000000000001',forkId='0199aaaa-0000-7000-8000-000000000002',pagedId='0199aaaa-0000-7000-8000-000000000003';
+  const cwd=`${home}/Developer/demo-app`;
+  const t=(input,output)=>({input_tokens:input,cached_input_tokens:0,cache_write_input_tokens:0,output_tokens:output,reasoning_output_tokens:0,total_tokens:input+output});
+  const at=(timestamp,type,payload)=>({timestamp,type,payload});
+  const meta=(timestamp,id,extra={})=>at(timestamp,'session_meta',{id,session_id:id,timestamp,cwd,originator:'fixture',source:'exec',history_mode:'legacy',...extra});
+  const turn=(timestamp,id)=>at(timestamp,'turn_context',{turn_id:id,cwd,model:'gpt-5.5'});
+  const tokens=(timestamp,total,last)=>at(timestamp,'event_msg',{type:'token_count',info:{total_token_usage:total,last_token_usage:last}});
+  // Yesterday evening in New York, then this morning.
+  const parentLines=[meta('2026-10-20T23:00:00.000Z',parentId),turn('2026-10-20T23:00:01.000Z','turn-1'),
+    tokens('2026-10-20T23:05:00.000Z',t(1000,100),t(1000,100)),turn('2026-10-21T13:00:00.000Z','turn-2'),
+    tokens('2026-10-21T13:05:00.000Z',t(3000,300),t(2000,200))];
+  const copied=parentLines.map(line=>({...line,timestamp:'2026-10-21T15:00:00.002Z'}));
+  const forkLines=[meta('2026-10-21T15:00:00.000Z',forkId,{forked_from_id:parentId}),...copied,
+    at('2026-10-21T15:00:00.003Z','event_msg',{type:'thread_settings_applied'}),turn('2026-10-21T15:01:00.000Z','turn-3'),
+    tokens('2026-10-21T15:02:00.000Z',t(3500,350),t(500,50))];
+  const pagedLines=[meta('2026-10-21T16:00:00.000Z',pagedId,{forked_from_id:parentId,history_mode:'paginated',
+    history_base:{thread_id:parentId,end_ordinal_exclusive:5,end_byte_offset:900}}),turn('2026-10-21T16:01:00.000Z','turn-4'),
+    tokens('2026-10-21T16:02:00.000Z',t(3070,7),t(70,7))];
+  const write=async(day,stamp,id,rows)=>{
+    const dir=path.join(folder,'.codex','sessions','2026','10',day);
+    await mkdir(dir,{recursive:true});
+    const file=path.join(dir,`rollout-2026-10-${day}T${stamp}-${id}.jsonl`);
+    await writeFile(file,lines(rows));
+    return file;
+  };
+  const parentFile=await write('20','19-00-00',parentId,parentLines);
+  await write('21','11-00-00',forkId,forkLines);
+  await write('21','12-00-00',pagedId,pagedLines);
+  const read=async()=>{
+    const result=await collectProjectTokens({codexFolder:path.join(folder,'.codex'),now,timeZone,home});
+    if(result.providers.codex.status!=='ok')return result.providers.codex.status;
+    return Object.fromEntries(result.providers.codex.sessions.map(row=>[row.id,row.models.reduce((sum,model)=>sum+model.totalTokens,0)]));
+  };
+  const expected={[sessionHash('codex',parentId)]:2200,[sessionHash('codex',forkId)]:550,[sessionHash('codex',pagedId)]:77};
+  assert.deepEqual(await read(),expected,'each turn once, in the thread that ran it');
+  // A parent last written long ago is still used to recognise the copies.
+  await utimes(parentFile,new Date('2026-10-15T00:00:00Z'),new Date('2026-10-15T00:00:00Z'));
+  assert.deepEqual(await read(),{[sessionHash('codex',forkId)]:550,[sessionHash('codex',pagedId)]:77});
+  // Without the parent the copies cannot be told apart, so the day is Unknown.
+  await rm(parentFile);
+  assert.equal(await read(),'unavailable');
 }));

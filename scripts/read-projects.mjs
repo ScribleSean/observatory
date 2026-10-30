@@ -78,7 +78,38 @@ export function projectName(cwd,home='',{repository=null,branch=null}={}) {
   return valid(name || null);
 }
 
-async function files(root,since,limits,budget={files:0,bytes:0}) {
+// The nearest folder at or above cwd that holds a .git entry, so a subfolder
+// counts as its repository. The home folder and anything above it are never
+// a repository here, so a dotfiles repository at home does not take every folder.
+export function repositoryRoot(cwd,home='') {
+  if(typeof cwd!=='string' || !path.isAbsolute(cwd))return null;
+  const stop=typeof home==='string' && home?path.resolve(home):null;
+  let folder=path.resolve(cwd);
+  if(stop && !folder.toLowerCase().startsWith(stop.toLowerCase()+path.sep))return null;
+  for(;;) {
+    const parent=path.dirname(folder);
+    if(parent===folder || folder===stop)return null;
+    if(fs.existsSync(path.join(folder,'.git')))return folder;
+    folder=parent;
+  }
+}
+
+// projectName after folding a subfolder into its repository, once per folder.
+function namer(home) {
+  const cache=new Map();
+  return (cwd,options)=>{
+    if(typeof cwd!=='string')return projectName(cwd,home,options);
+    if(!cache.has(cwd))cache.set(cwd,repositoryRoot(cwd,home) ?? cwd);
+    return projectName(cache.get(cwd),home,options);
+  };
+}
+
+// A Codex log is named rollout-<time>-<thread id>.jsonl.
+const THREAD=/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+
+// Every log written inside the window, and in byThread every Codex log by its
+// thread id whenever it was written.
+async function files(root,since,limits,budget={files:0,bytes:0},byThread=null) {
   const found=[];
   const walk=async folder=>{
     let entries;
@@ -89,6 +120,8 @@ async function files(root,since,limits,budget={files:0,bytes:0}) {
       if(entry.isSymbolicLink())continue;
       if(entry.isDirectory()) {await walk(full);continue;}
       if(!entry.isFile() || !entry.name.endsWith('.jsonl'))continue;
+      const thread=byThread && THREAD.exec(entry.name)?.[1].toLowerCase();
+      if(thread && !byThread.has(thread))byThread.set(thread,full);
       let info;
       // A file can be removed between listing and reading.
       try {info=await fs.promises.stat(full);}
@@ -126,7 +159,8 @@ function sessions() {
   const map=new Map();
   return {
     add({provider,id,project,at,model,values,subagent}) {
-      const key=JSON.stringify([provider,id,project]);
+      // A folder that changes case is the same project.
+      const key=JSON.stringify([provider,id,project?.toLowerCase() ?? null]);
       let row=map.get(key);
       if(!row) {row={provider,id,project,start:at,end:at,subagentTokens:0,models:new Map()};map.set(key,row);}
       row.start=Math.min(row.start,at);
@@ -151,7 +185,7 @@ function sessions() {
 // largest counts for each message id win. Subagent turns carry
 // isSidechain and their parent's sessionId.
 async function readClaude(folder,{today,timeZone,since,home,limits}) {
-  const requests=new Map();
+  const requests=new Map(),name=namer(home);
   for(const file of await files(path.join(folder,'projects'),since,limits)) {
     // A subagent file sits in <session id>/subagents/ and belongs to that session,
     // whatever session id its own events carry.
@@ -174,7 +208,7 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
       const prior=requests.get(key);
       if(prior && prior.total>=total)return;
       const id=owner ?? (typeof event.sessionId==='string' && event.sessionId?event.sessionId:fallback);
-      requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:projectName(event.cwd,home,{branch:event.gitBranch}),
+      requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:name(event.cwd,{branch:event.gitBranch}),
         at:prior?Math.min(prior.record.at,at):at,model:modelName(event.message.model),values,
         subagent:inSubagents || (typeof event.isSidechain==='boolean'?event.isSidechain:null)}});
     });
@@ -184,23 +218,57 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
   return result.rows();
 }
 
+const CODEX_KEEP=line=>line.includes('"session_meta"') || line.includes('"turn_context"') || line.includes('"token_count"');
+
 // Codex: each token_count event carries the running total and the last turn.
-// A forked session can repeat its parent's events, so a repeated time and
-// running total is counted once. A thread with a parent is a subagent.
+// A fork of a thread with legacy history starts with its own session_meta and
+// then copies its parent's session_meta and every parent line, stamped with
+// the time of the fork. Those copies are the parent's running totals, so they
+// are left out, and the parent's log is read for them even when it is old.
+// A paginated fork points at its parent and copies nothing, and a resumed
+// thread appends to its own log. A repeated time and running total across
+// logs is counted once. A thread with a parent is a subagent.
 async function readCodex(folder,{today,timeZone,since,home,limits}) {
-  const result=sessions(),seen=new Set();
+  const result=sessions(),seen=new Set(),name=namer(home);
   const roots=['sessions','archived_sessions'].map(name=>path.join(folder,name));
-  const found=[],budget={files:0,bytes:0};
-  for(const root of roots)found.push(...await files(root,since,limits,budget));
+  const found=[],budget={files:0,bytes:0},byThread=new Map();
+  for(const root of roots)found.push(...await files(root,since,limits,budget,byThread));
+  const inWindow=new Set(found),inherited=new Map();
+  // The running totals in a thread's log, copies of its own parent included.
+  const totalsOf=async thread=>{
+    const file=byThread.get(thread);
+    if(!file)throw new Unavailable();
+    if(!inherited.has(file)) {
+      if(!inWindow.has(file)) {
+        budget.bytes+=(await fs.promises.stat(file)).size;
+        if(budget.bytes>limits.maxTotalBytes)throw new Unavailable();
+      }
+      const totals=new Set();
+      await lines(file,limits,line=>line.includes('"token_count"'),event=>{
+        if(event.type==='event_msg' && object(event.payload) && event.payload.type==='token_count' && object(event.payload.info) &&
+          object(event.payload.info.total_token_usage))totals.add(JSON.stringify(event.payload.info.total_token_usage));
+      });
+      inherited.set(file,totals);
+    }
+    return inherited.get(file);
+  };
   for(const file of found) {
     let id=path.basename(file,'.jsonl'),project=null,repository=null,branch=null,model='unknown',subagent=null,prior=null;
-    await lines(file,limits,line=>line.includes('"session_meta"') || line.includes('"turn_context"') || line.includes('"token_count"'),event=>{
+    let started=false,copiedFrom=null;
+    const pending=[];
+    await lines(file,limits,CODEX_KEEP,event=>{
       const payload=object(event.payload)?event.payload:{};
       if(event.type==='session_meta') {
+        // A later session_meta is a parent's, copied in by a fork.
+        if(started) {
+          if(copiedFrom===null)copiedFrom=typeof payload.id==='string'?payload.id.toLowerCase():'';
+          return;
+        }
+        started=true;
         if(typeof payload.id==='string' && payload.id)id=payload.id;
         repository=object(payload.git) && typeof payload.git.repository_url==='string'?payload.git.repository_url:null;
         branch=object(payload.git) && typeof payload.git.branch==='string'?payload.git.branch:null;
-        project=projectName(payload.cwd,home,{repository,branch});
+        project=name(payload.cwd,{repository,branch});
         const parent=typeof payload.parent_thread_id==='string' && payload.parent_thread_id?payload.parent_thread_id:null;
         subagent=parent!==null || (object(payload.source) && Object.hasOwn(payload.source,'subagent')) || payload.thread_source==='subagent';
         if(parent)id=parent;
@@ -209,7 +277,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       if(event.type==='turn_context') {
         model=modelName(payload.model);
         // A new folder that has no safe name is Unknown, not the previous project.
-        if(typeof payload.cwd==='string')project=projectName(payload.cwd,home,{repository,branch});
+        if(typeof payload.cwd==='string')project=name(payload.cwd,{repository,branch});
         return;
       }
       if(event.type!=='event_msg' || payload.type!=='token_count' || !object(payload.info))return;
@@ -231,8 +299,11 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       // Codex input includes cache reads and writes, and output includes reasoning.
       const values=[input-cached-written,cached,written,output];
       if(values.every(value=>value===0))return;
-      result.add({provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent});
+      pending.push({running,record:{provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent}});
     });
+    // Copies whose parent log cannot be found cannot be told apart, so the day is Unknown.
+    const copies=copiedFrom===null || !pending.length?new Set():await totalsOf(copiedFrom);
+    for(const {running,record} of pending)if(!copies.has(running))result.add(record);
   }
   return result.rows();
 }
