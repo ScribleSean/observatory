@@ -42,7 +42,10 @@ pack.arguments = ["-c", "icns", iconset.path, "-o", out.appendingPathComponent("
 try pack.run()
 pack.waitUntilExit()
 try? FileManager.default.removeItem(at: iconset)
-guard pack.terminationStatus == 0 else { exit(1) }
+guard pack.terminationStatus == 0 else {
+  FileHandle.standardError.write("iconutil could not pack the icon set.\n".data(using: .utf8)!)
+  exit(1)
+}
 
 // Windows: an ICO with PNG entries at every size Explorer, Start and the taskbar ask for.
 let sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]

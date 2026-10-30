@@ -42,7 +42,8 @@ export function paths(platform=process.platform,repo=REPO,home=homedir(),environ
 const xml=value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 const START_MENU_LINK="(Join-Path ([Environment]::GetFolderPath('Programs')) 'Observatory.lnk')";
-const psQuote=value=>"'"+String(value).replace(/'/g,"''")+"'";
+// PowerShell also ends a quoted string at the curly single quotes, so double those too.
+const psQuote=value=>"'"+String(value).replace(/['\u2018-\u201B]/g,quote=>quote+quote)+"'";
 
 export function startMenuShortcut(executable) {
   return [
@@ -284,7 +285,9 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       await quiet('taskkill.exe',['/IM',WINDOWS_EXECUTABLE,'/F']);
       await execute('reg.exe',['add','HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run','/v',STARTUP_NAME,'/t','REG_SZ','/d',`"${target.executable}"`,'/f'],{windowsHide:true});
       // A Start menu entry, so Windows search finds the app with its icon.
-      await execute('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)],{windowsHide:true});
+      // The shortcut is a convenience: if a locked-down PC refuses it, the app still starts.
+      if(await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)])===null)
+        log('  Note: could not add the Start menu entry. The app still starts at login.');
       // Started from a remote or background session, the tray icon would not appear on the desktop
       if(start)spawn(target.executable,[],{detached:true,stdio:'ignore'}).unref();
     });

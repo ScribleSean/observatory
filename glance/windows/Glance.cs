@@ -97,7 +97,7 @@ namespace Observatory
         {
             var state = new PanelState { Now = now, Updated = Date(Get(json, "generatedAt")) };
             var glance = Get(json, "glance") as Dictionary<string, object>;
-            if (glance == null) { state.Notice = "Collecting the first reading…"; return state; }
+            if (glance == null) { state.Notice = "Collecting the first reading\u2026"; return state; }
             var limits = (Get(glance, "limits") as IList ?? new object[0]).OfType<Dictionary<string, object>>().Select(row => new LimitRow
             {
                 Provider = Get(row, "provider") as string ?? "",
@@ -154,12 +154,12 @@ namespace Observatory
 
         public static string Compact(double value)
         {
-            var units = new[] { Tuple.Create(1e12, "T"), Tuple.Create(1e9, "B"), Tuple.Create(1e6, "M"), Tuple.Create(1e3, "K") };
+            var units = new[] { Tuple.Create(1e12, "T"), Tuple.Create(1e9, "B"), Tuple.Create(1e6, "M"), Tuple.Create(1e3, "K"), Tuple.Create(1.0, "") };
             for (int index = 0; index < units.Length; index++)
             {
-                if (value < units[index].Item1) continue;
+                if (value < units[index].Item1 && index < units.Length - 1) continue;
                 double scaled = value / units[index].Item1;
-                string text = scaled >= 100 ? Math.Round(scaled).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.0", CultureInfo.InvariantCulture);
+                string text = scaled >= 100 || units[index].Item2 == "" ? Math.Round(scaled).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.0", CultureInfo.InvariantCulture);
                 // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
                 if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
                 return text + units[index].Item2;
@@ -195,7 +195,7 @@ namespace Observatory
             if (device.Seconds.HasValue) parts.Add(Duration(device.Seconds.Value));
             if (device.Tokens.HasValue) parts.Add(Compact(device.Tokens.Value) + " tokens");
             if (device.Usd.HasValue) parts.Add(Money(device.Usd.Value));
-            return parts.Count == 0 ? "Unknown" : string.Join("  ·  ", parts);
+            return parts.Count == 0 ? "Unknown" : string.Join("  \u00B7  ", parts);
         }
     }
 
@@ -314,6 +314,7 @@ namespace Observatory
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
                 if (draw) g.Clear(p.Background);
+                if (hits != null) hits.Clear();
                 float y = Pad;
                 float left = Pad, right = Width - Pad;
 
@@ -322,7 +323,7 @@ namespace Observatory
                 {
                     Telescope(g, new RectangleF(left + 2, y + 1, 18, 18), p.Text, 1.7f);
                     Text(g, "Observatory", title, p.Text, left + 28, y);
-                    string status = s.Refreshing ? "Refreshing…" : s.Old && s.Updated.HasValue ? "Updated " + Format.Age(s.Now - s.Updated.Value) : null;
+                    string status = s.Refreshing ? "Refreshing\u2026" : s.Old && s.Updated.HasValue ? "Updated " + Format.Age(s.Now - s.Updated.Value) : null;
                     if (status != null) Text(g, status, small, s.Refreshing ? p.Muted : p.Warning, right - 2 - Measure(g, status, small), y + 2);
                 }
                 y += 20 + Gap;
@@ -390,6 +391,7 @@ namespace Observatory
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
                             foreach (var device in s.Devices)
                             {
+                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "")));
                                 Text(g, device.Name, strong, p.Text, inner, row);
                                 string value = device.Current ? Format.Today(device)
                                     : device.LastSeen.HasValue ? "last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
@@ -397,7 +399,7 @@ namespace Observatory
                                 Text(g, value, body, device.Current ? p.Text : p.Muted, end - width, row);
                                 if (!device.Current) Ring(g, p.Muted, end - width - 12, row + 6);
                                 // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
-                                else if (device.Problem != null) Text(g, "", glyph, p.Warning, end - width - 18, row + 3);
+                                else if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, end - width - 18, row + 3);
                                 row += 18 + Gap;
                             }
                         }
@@ -411,7 +413,6 @@ namespace Observatory
                 var open = new RectangleF(left, y, refresh.X - 8 - left, ButtonHeight);
                 if (hits != null)
                 {
-                    hits.Clear();
                     hits.Add(Tuple.Create(open, "dashboard"));
                     hits.Add(Tuple.Create(refresh, "refresh"));
                     hits.Add(Tuple.Create(quit, "quit"));
@@ -423,8 +424,8 @@ namespace Observatory
                     Pill(g, p, quit);
                     string label = "Open dashboard";
                     Text(g, label, strong, p.Text, open.X + (open.Width - Measure(g, label, strong)) / 2, open.Y + 7);
-                    Text(g, "", glyph, s.Refreshing ? p.Muted : p.Text, refresh.X + 11, refresh.Y + 9);
-                    Text(g, "", glyph, p.Text, quit.X + 11, quit.Y + 9);
+                    Text(g, "\uE72C", glyph, s.Refreshing ? p.Muted : p.Text, refresh.X + 11, refresh.Y + 9);
+                    Text(g, "\uE7E8", glyph, p.Text, quit.X + 11, quit.Y + 9);
                 }
                 y += ButtonHeight + Pad;
                 return (int)Math.Ceiling(y);
@@ -451,9 +452,11 @@ namespace Observatory
     {
         public PanelState State = new PanelState();
         public Action<string> Act = name => { };
-        public DateTime HiddenAt = DateTime.MinValue;
         readonly List<Tuple<RectangleF, string>> hits = new List<Tuple<RectangleF, string>>();
+        readonly ToolTip tip = new ToolTip();
+        string tipText;
         float scale = 1;
+        Screen screen;
 
         [DllImport("dwmapi.dll")]
         static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
@@ -483,19 +486,34 @@ namespace Observatory
             try { DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int)); } catch { }
         }
 
-        public void Place()
+        // Opens on the screen and corner of the taskbar that was clicked. Later refreshes keep that screen.
+        public void Place(bool reanchor)
         {
+            if (reanchor || screen == null) screen = Screen.FromPoint(Cursor.Position);
             using (var g = CreateGraphics())
             {
                 scale = g.DpiX / 96f;
                 int height = Painter.Paint(g, State, Palette.Of(Palette.SystemDark()), false, null);
-                var area = Screen.FromPoint(Cursor.Position).WorkingArea;
-                var bounds = Screen.FromPoint(Cursor.Position).Bounds;
-                int w = (int)(Painter.Width * scale), h = (int)(height * scale), margin = (int)(12 * scale);
-                int y = area.Bottom < bounds.Bottom ? area.Bottom - h - margin : area.Top + margin;
-                SetBounds(area.Right - w - margin, y, w, h);
+                Rectangle area = screen.WorkingArea, bounds = screen.Bounds;
+                int margin = (int)(12 * scale);
+                int w = (int)(Painter.Width * scale), h = Math.Min((int)(height * scale), area.Height - 2 * margin);
+                // The taskbar is on the edge where the work area is smaller than the screen. Auto-hide leaves none, so use bottom right.
+                bool left = area.Left > bounds.Left, top = area.Top > bounds.Top && area.Bottom == bounds.Bottom;
+                int x = left ? area.Left + margin : area.Right - w - margin;
+                int y = top ? area.Top + margin : area.Bottom - h - margin;
+                SetBounds(x, Math.Max(area.Top + margin, y), w, h);
             }
             Invalidate();
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            var point = new PointF(e.X / scale, e.Y / scale);
+            string text = null;
+            foreach (var hit in hits) if (hit.Item2.StartsWith("tip:") && hit.Item1.Contains(point)) text = hit.Item2.Substring(4);
+            if (text == tipText) return;
+            tipText = text;
+            if (text == null) tip.Hide(this); else tip.Show(text, this, e.X + 12, e.Y + 16);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -507,14 +525,13 @@ namespace Observatory
         protected override void OnMouseUp(MouseEventArgs e)
         {
             var point = new PointF(e.X / scale, e.Y / scale);
-            foreach (var hit in hits) if (hit.Item1.Contains(point)) { Act(hit.Item2); return; }
+            foreach (var hit in hits) if (!hit.Item2.StartsWith("tip:") && hit.Item1.Contains(point)) { Act(hit.Item2); return; }
         }
 
         protected override void OnDeactivate(EventArgs e)
         {
             base.OnDeactivate(e);
             Hide();
-            HiddenAt = DateTime.UtcNow;
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
@@ -543,6 +560,7 @@ namespace Observatory
         readonly System.Windows.Forms.Timer openTimer = new System.Windows.Forms.Timer();
         int openTries;
         ToolStripItem refreshItem;
+        bool openAtPress;
 
         Glance()
         {
@@ -556,6 +574,8 @@ namespace Observatory
             menu.Opening += (sender, e) => refreshItem.Enabled = tick == null || tick.HasExited;
             tray.ContextMenuStrip = menu;
             tray.Visible = true;
+            // A click on the icon first takes focus from an open panel, which hides it. Remember whether it was open when the press began.
+            tray.MouseDown += (sender, e) => { if (e.Button == MouseButtons.Left) openAtPress = panel.Visible; };
             tray.MouseUp += (sender, e) => { if (e.Button == MouseButtons.Left) TogglePanel(); };
             panel.Act = name =>
             {
@@ -584,15 +604,18 @@ namespace Observatory
             catch { return null; }
         }
 
+        [DllImport("user32.dll")]
+        static extern bool SetForegroundWindow(IntPtr window);
+
         void TogglePanel()
         {
-            if (panel.Visible) { panel.Hide(); return; }
-            // Clicking the icon while open first takes focus from the panel, which hides it. Don't reopen on that same click.
-            if ((DateTime.UtcNow - panel.HiddenAt).TotalMilliseconds < 300) return;
+            if (panel.Visible || openAtPress) { panel.Hide(); openAtPress = false; return; }
             Show();
-            panel.Place();
+            panel.Place(true);
             panel.Show();
             panel.Activate();
+            // Windows can refuse focus to a tray app. Without focus the panel would never hide on an outside click.
+            if (Form.ActiveForm != panel) SetForegroundWindow(panel.Handle);
         }
 
         Process Node(string script, bool keep) { return Node(script, keep, ""); }
@@ -672,12 +695,12 @@ namespace Observatory
             else
             {
                 var json = ReadCombined(Path.Combine(settings.dataFolder, "public", "local", "combined.json"));
-                state = json == null ? new PanelState { Notice = "Collecting the first reading…" } : PanelState.Parse(json, DateTime.UtcNow);
+                state = json == null ? new PanelState { Notice = "Collecting the first reading\u2026" } : PanelState.Parse(json, DateTime.UtcNow);
             }
             if (nodeMissing) state.Notice = "Node was not found. Run npm run setup again.";
             state.Refreshing = tick != null && !tick.HasExited;
             panel.State = state;
-            if (panel.Visible) panel.Place();
+            if (panel.Visible) panel.Place(false);
             bool current = state.Notice == null && !state.Old && state.Limits.Any(row => row.Remaining.HasValue);
             tray.Text = current ? "Observatory" : "Observatory: not updated recently";
             SetIcon(!current);
