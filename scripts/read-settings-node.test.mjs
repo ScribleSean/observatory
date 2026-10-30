@@ -362,11 +362,12 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache':{},
     'C:\\Elsewhere':{},
     'C:\\Elsewhere\\cache':{},
+    'C:\\Elsewhere\\mounted':{},
     'C:\\Users\\Linked Folder':{alias:'LINKED~1',link:'C:\\Elsewhere'},
     'C:\\Users\\LINK~1':{link:'C:\\Users\\runneradmin'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\jump':{link:'C:\\Elsewhere\\cache'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\MOVED~1':{link:'C:\\Elsewhere\\cache'},
-    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\mounted':{redirect:'C:\\Elsewhere\\cache'},
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\mounted':{redirect:'C:\\Elsewhere\\mounted'},
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\sibling':{redirect:'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache'},
   });
   // GitHub's Windows runner sets TEMP to this short form.
