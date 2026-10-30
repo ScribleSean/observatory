@@ -110,7 +110,8 @@ A source is read only while it is `true`. An older settings file that still list
 `npm run status` prints each engine's limits, reset times and burn rate, and which engine has the most room left. `npm run status -- --json` prints the same as JSON for scripts and AI agents. It reads this computer's `combined.json` only. It makes no network calls and writes nothing.
 
 - Fields: per engine (`claude`, `codex`, `grokbot`) and window (`five_hour`, `weekly`): `percentLeft`, `resetsAt`, `minutesToReset`, `burnPerHour` and `pace` (`spend`, `hold`, `slow`, `out` or `unknown`). `route` suggests an engine for `code`, `review` and `research`.
-- Exit codes: 0 with a current reading, 3 when the data is missing or stale.
+- `nextReturn` gives the reset time of each engine that is out. `npm run status -- --wait codex --timeout 60` blocks until Codex is no longer out, then prints the JSON.
+- Exit codes: 0 with a current reading, 3 when the data is missing or stale. With `--wait`: 0 once the engine is not out, 4 on timeout, 2 on a bad engine name or timeout.
 - The hint is advice. Observatory never starts, stops or switches an agent. GrokBot is always `unknown` because Observatory cannot measure it. The full shape is in [docs/AGENT-STATUS.md](docs/AGENT-STATUS.md).
 
 ## Screenshots
