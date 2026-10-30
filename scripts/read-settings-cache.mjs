@@ -103,9 +103,14 @@ const SHORT_NAME=/^(?=[^.]{3,8}(?:\.[^.]{1,3})?$)[^.~\s]{1,6}~[1-9][0-9]{0,5}(?:
 // lstat follows a junction to a volume GUID path without calling it a link, and gives the
 // target's file id, so an alias is accepted only when Windows says it is the short name of
 // the resolved folder's own entry. Short names are unique in a folder, so no junction owns it.
-const windowsShortName=folder=>path.win32.basename(execFileSync(process.env.ComSpec??'cmd.exe',
-  ['/d','/s','/c','"for %I in ("%OBSERVATORY_SHORT_NAME%") do @echo %~sI"'],
-  {encoding:'utf8',windowsVerbatimArguments:true,env:{...process.env,OBSERVATORY_SHORT_NAME:folder}}).trim());
+// A failed lookup gives no name, so the alias is refused.
+const windowsShortName=folder=>{
+  try {
+    return path.win32.basename(execFileSync(process.env.ComSpec??'cmd.exe',
+      ['/d','/v:off','/s','/c','"for %I in ("%OBSERVATORY_SHORT_NAME%") do @echo %~sI"'],
+      {encoding:'utf8',timeout:5000,windowsVerbatimArguments:true,env:{...process.env,OBSERVATORY_SHORT_NAME:folder}}).trim());
+  } catch { return ''; }
+};
 export function windowsCanonical(directory,{realpath=fs.realpathSync.native,lstat=fs.lstatSync,shortName=windowsShortName}={}) {
   const win=path.win32;
   const normal=win.normalize(directory);
