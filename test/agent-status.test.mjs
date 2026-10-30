@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
-import {mkdir, writeFile} from 'node:fs/promises';
+import {cp, mkdir, writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
@@ -109,14 +110,19 @@ test('JSON shape is stable and carries no personal data', () => {
   for (const secret of ['Test Mac', 'Mac', 'Windows', '/', '\\']) assert.equal(text.includes(secret), false, secret);
 });
 
-test('npm run status exits 0 with a current reading and 3 without one', {skip: !['darwin', 'win32'].includes(process.platform) && 'settings load on macOS and Windows only'}, async () => {
+// Agents call this in idle repos whose node_modules a disk cleanup may have removed,
+// so it runs from a bare copy of the source with plain node.
+test('status runs with plain node and no node_modules, exits 0 with a current reading and 3 without one', {skip: !['darwin', 'win32'].includes(process.platform) && 'settings load on macOS and Windows only'}, async () => {
   await withFolder(async folder => {
     const local = path.join(folder, 'public', 'local');
     await mkdir(local, {recursive: true});
     const config = path.join(folder, 'observatory.config.json');
     await writeFile(config, JSON.stringify({dataFolder: folder}));
+    const repo = fileURLToPath(new URL('..', import.meta.url));
+    const bare = path.join(folder, 'bare');
+    for (const entry of ['lib', 'scripts', 'package.json']) await cp(path.join(repo, entry), path.join(bare, entry), {recursive: true});
     const run = args => promisify(execFile)(process.execPath, ['scripts/status.mjs', ...args],
-      {env: {...process.env, OBSERVATORY_CONFIG: config}}).then(result => ({code: 0, ...result}), error => error);
+      {cwd: bare, env: {...process.env, OBSERVATORY_CONFIG: config, NODE_PATH: ''}}).then(result => ({code: 0, ...result}), error => error);
     const missing = await run(['--json']);
     assert.equal(missing.code, 3);
     assert.equal(JSON.parse(missing.stdout).engines.claude.headroom, null);
