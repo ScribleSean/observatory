@@ -48,13 +48,14 @@ export function pushCommand(spoke,bytes,name) {
     `if((Get-Item -LiteralPath $s).Length -ne ${bytes}){Remove-Item -LiteralPath $s -Force; exit 4}`,
     `$d=Join-Path ${windowsFolder(spoke)} 'public\\local'`,
     'New-Item -ItemType Directory -Force -Path $d | Out-Null',
-    "$t=Join-Path $d '.combined.incoming'",
+    // The last step also uses this push's own name, so overlapping swaps never share a file.
+    `$t=Join-Path $d '${name}'`,
     "$f=Join-Path $d 'combined.incoming.json'",
     'Move-Item -LiteralPath $s -Destination $t -Force',
     // A reader can hold the file for a moment, so retry the replace briefly.
     'for($i=0;$i -lt 8;$i++){try{if(Test-Path -LiteralPath $f){[IO.File]::Replace($t,$f,[NullString]::Value)}else{[IO.File]::Move($t,$f)};break}catch{if($i -eq 7){throw};Start-Sleep -Milliseconds (100*($i+1))}}',
   ].join('; '));
-  return `s="$HOME/${name}"; d=${macFolder(spoke)}/public/local; test "$(wc -c < "$s")" -eq ${bytes} || { rm -f "$s"; exit 4; }; mkdir -p "$d" && mv -f "$s" "$d/.combined.incoming" && mv -f "$d/.combined.incoming" "$d/combined.incoming.json"`;
+  return `s="$HOME/${name}"; d=${macFolder(spoke)}/public/local; test "$(wc -c < "$s")" -eq ${bytes} || { rm -f "$s"; exit 4; }; mkdir -p "$d" && mv -f "$s" "$d/${name}" && mv -f "$d/${name}" "$d/combined.incoming.json"`;
 }
 
 function run(program,args) {

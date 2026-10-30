@@ -204,6 +204,9 @@ test('write-back lands in an inbox that the spoke merges under its own lock',()=
   const decode=command=>Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
   assert.match(decode(pushCommand(pc,10,staged)),/'combined\.incoming\.json'/);
   assert.match(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10,staged),/combined\.incoming\.json"$/);
+  // Every step of a push uses its own staging name, so overlapping pushes never share a file.
+  assert.doesNotMatch(decode(pushCommand(pc,10,staged)),/'\.combined\.incoming'/);
+  assert.doesNotMatch(pushCommand({name:'Mac',ssh:'m',platform:'mac',dataFolder:null},10,staged),/\/\.combined\.incoming"/);
   const hubCopy=await withFolder(async hub=>{
     await seed(hub,'usage.json',ownSnapshot('Mac',now));
     const transport=fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000)));

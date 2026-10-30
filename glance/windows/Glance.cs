@@ -391,7 +391,7 @@ namespace Observatory
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
                             foreach (var device in s.Devices)
                             {
-                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "")));
+                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "") + (device.Current && device.Usd.HasValue ? "\nCost is an API-equivalent estimate" : "")));
                                 Text(g, device.Name, strong, p.Text, inner, row);
                                 string value = device.Current ? Format.Today(device)
                                     : device.LastSeen.HasValue ? "last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
@@ -469,6 +469,10 @@ namespace Observatory
             StartPosition = FormStartPosition.Manual;
             DoubleBuffered = true;
             KeyPreview = true;
+            // On a short screen the panel scrolls rather than cutting off its buttons.
+            AutoScroll = true;
+            Scroll += (sender, e) => Invalidate();
+            MouseWheel += (sender, e) => Invalidate();
             Text = "Observatory";
         }
 
@@ -496,7 +500,9 @@ namespace Observatory
                 int height = Painter.Paint(g, State, Palette.Of(Palette.SystemDark()), false, null);
                 Rectangle area = screen.WorkingArea, bounds = screen.Bounds;
                 int margin = (int)(12 * scale);
-                int w = (int)(Painter.Width * scale), h = Math.Min((int)(height * scale), area.Height - 2 * margin);
+                int full = (int)(height * scale);
+                int w = (int)(Painter.Width * scale), h = Math.Min(full, area.Height - 2 * margin);
+                AutoScrollMinSize = h < full ? new Size(0, full) : Size.Empty;
                 // The taskbar is on the edge where the work area is smaller than the screen. Auto-hide leaves none, so use bottom right.
                 bool left = area.Left > bounds.Left, top = area.Top > bounds.Top && area.Bottom == bounds.Bottom;
                 int x = left ? area.Left + margin : area.Right - w - margin;
@@ -508,7 +514,7 @@ namespace Observatory
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
-            var point = new PointF(e.X / scale, e.Y / scale);
+            var point = new PointF((e.X - AutoScrollPosition.X) / scale, (e.Y - AutoScrollPosition.Y) / scale);
             string text = null;
             foreach (var hit in hits) if (hit.Item2.StartsWith("tip:") && hit.Item1.Contains(point)) text = hit.Item2.Substring(4);
             if (text == tipText) return;
@@ -518,6 +524,7 @@ namespace Observatory
 
         protected override void OnPaint(PaintEventArgs e)
         {
+            e.Graphics.TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y);
             e.Graphics.ScaleTransform(scale, scale);
             Painter.Paint(e.Graphics, State, Palette.Of(Palette.SystemDark()), true, hits);
         }
@@ -525,7 +532,7 @@ namespace Observatory
         protected override void OnMouseUp(MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
-            var point = new PointF(e.X / scale, e.Y / scale);
+            var point = new PointF((e.X - AutoScrollPosition.X) / scale, (e.Y - AutoScrollPosition.Y) / scale);
             foreach (var hit in hits) if (!hit.Item2.StartsWith("tip:") && hit.Item1.Contains(point)) { Act(hit.Item2); return; }
         }
 
