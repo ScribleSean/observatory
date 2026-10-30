@@ -108,6 +108,15 @@ A source is read only while it is `true`. An older settings file that still list
 - A limit percentage comes from the provider. A dollar figure is an estimate at public API prices, not a bill.
 - Days are counted in your computer's own time zone.
 
+## For agents
+
+`npm run status` prints each engine's limits, reset times and burn rate, and which engine has the most room left. `npm run status -- --json` prints the same as JSON for scripts and AI agents. It reads this computer's `combined.json` only. It makes no network calls and writes nothing.
+
+- Fields: per engine (`claude`, `codex`, `grokbot`) and window (`five_hour`, `weekly`): `percentLeft`, `resetsAt`, `minutesToReset`, `burnPerHour` and `pace` (`spend`, `hold`, `slow`, `out` or `unknown`). `route` suggests an engine for `code`, `review` and `research`.
+- `nextReturn` gives the reset time of each engine that is out. `npm run status -- --wait codex --timeout 60` blocks until Codex is no longer out, then prints the JSON.
+- Exit codes: 0 with a current reading, 3 when the data is missing or stale. With `--wait`: 0 once the engine is not out, 4 on timeout, 2 on a bad engine name or timeout.
+- The hint is advice. Observatory never starts, stops or switches an agent. GrokBot is always `unknown` because Observatory cannot measure it. The full shape is in [docs/AGENT-STATUS.md](docs/AGENT-STATUS.md).
+
 ## Screenshots
 
 The images in this README use fictional data from `npm run preview`. To retake them, run `npm run build`, then `npm run preview`, and open http://127.0.0.1:5602 for two computers (set `PREVIEW_ONE=1` for one). They are taken at 1280 pixels wide and 2x scale.

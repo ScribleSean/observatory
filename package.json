@@ -14,7 +14,8 @@
     "preview": "node scripts/preview.mjs",
     "test": "node --import ./test/pin-timezone.mjs --test \"test/*.test.mjs\" \"scripts/*.test.mjs\"",
     "lint": "oxlint",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "status": "node scripts/status.mjs"
   },
   "dependencies": {
     "lucide-react": "1.31.0",
