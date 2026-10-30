@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
@@ -179,7 +180,6 @@ namespace Observatory
         void Show()
         {
             menu.Items.Clear();
-            string title = "?";
             bool stale = true;
             if (nodeMissing) { Line("Node was not found at the saved path. Run npm run setup again."); Line(""); }
             if (settings == null)
@@ -210,6 +210,9 @@ namespace Observatory
                     double? lowest = null;
                     Line("Limits");
                     var limits = glance.TryGetValue("limits", out value) ? value as IList : null;
+                    // Scarcest first. Limits without a current reading collapse into one line.
+                    var known = new List<KeyValuePair<double, string>>();
+                    int unknown = 0;
                     if (limits != null) foreach (object item in limits)
                     {
                         var row = item as Dictionary<string, object>;
@@ -218,11 +221,14 @@ namespace Observatory
                         if (remaining.HasValue && (!lowest.HasValue || remaining.Value < lowest.Value)) lowest = remaining;
                         string name = row.TryGetValue("name", out value) ? value as string ?? "Unknown" : "Unknown";
                         string window = row.TryGetValue("window", out value) ? value as string ?? "" : "";
-                        Line("  " + name + (window.Length == 0 ? "" : " " + window) + ": " +
-                            (remaining.HasValue ? Math.Round(remaining.Value, MidpointRounding.AwayFromZero) + "% left" : "Unknown"));
+                        if (remaining.HasValue)
+                            known.Add(new KeyValuePair<double, string>(remaining.Value, "  " + name + (window.Length == 0 ? "" : " " + window) + ": " +
+                                Math.Round(remaining.Value, MidpointRounding.AwayFromZero) + "% left"));
+                        else unknown++;
                     }
+                    foreach (var pair in known.OrderBy(pair => pair.Key)) Line(pair.Value);
+                    if (unknown > 0) Line(known.Count == 0 ? "  No current limit reading" : "  " + unknown + " without a current reading", true);
                     stale = !lowest.HasValue;
-                    if (lowest.HasValue) title = Math.Round(lowest.Value, MidpointRounding.AwayFromZero) + "%";
                     // Only the Today section is retained from the saved display text.
                     var lines = glance.TryGetValue("lines", out value) ? value as IList : null;
                     bool afterLimits = false;
@@ -261,29 +267,33 @@ namespace Observatory
             var refresh = menu.Items.Add("Refresh", null, (s, e) => RunTick());
             refresh.Enabled = tick == null || tick.HasExited;
             menu.Items.Add("Quit Observatory", null, (s, e) => Quit());
-            string tip = "Observatory " + title + (stale ? " (not updated recently)" : " lowest limit left");
-            tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
-            SetIcon(stale ? title + "?" : title);
+            tray.Text = stale ? "Observatory: not updated recently" : "Observatory";
+            SetIcon(stale);
         }
 
-        // The tray has no room for text, so the number is drawn into the icon.
-        void SetIcon(string text)
+        // The telescope from public/brand/telescope.svg (24 unit box), drawn to match the taskbar theme.
+        void SetIcon(bool stale)
         {
-            string shown = text.Replace("%", "");
-            if (shown.Length > 3) shown = shown.Substring(0, 3);
+            bool light = false;
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    light = key != null && Convert.ToInt32(key.GetValue("SystemUsesLightTheme", 0)) == 1;
+            }
+            catch { }
             using (var bitmap = new Bitmap(32, 32))
             using (var graphics = Graphics.FromImage(bitmap))
-            using (var font = new Font("Segoe UI", shown.Length > 2 ? 13f : 16f, FontStyle.Bold, GraphicsUnit.Pixel))
-            using (var background = new SolidBrush(Color.FromArgb(9, 9, 11)))
-            using (var foreground = new SolidBrush(text.EndsWith("?") ? Color.FromArgb(240, 180, 60) : Color.White))
+            using (var pen = new Pen(Color.FromArgb(stale ? 120 : 255, light ? Color.FromArgb(28, 29, 27) : Color.White), 1.7f))
             {
                 graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                graphics.FillEllipse(background, 0, 0, 31, 31);
-                var format = new StringFormat();
-                format.Alignment = StringAlignment.Center;
-                format.LineAlignment = StringAlignment.Center;
-                graphics.DrawString(shown, font, foreground, new RectangleF(0, 0, 32, 32), format);
+                graphics.ScaleTransform(32f / 24f, 32f / 24f);
+                pen.StartCap = pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                pen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
+                graphics.DrawPolygon(pen, new[] { new PointF(5, 10), new PointF(16, 4), new PointF(19, 9), new PointF(8, 15) });
+                graphics.DrawLine(pen, 16, 3, 20, 10);
+                graphics.DrawLine(pen, 5.8f, 12, 3, 13.5f);
+                graphics.DrawLine(pen, 12, 13, 12, 22);
+                graphics.DrawLines(pen, new[] { new PointF(7, 21), new PointF(12, 16), new PointF(17, 21) });
                 var handle = bitmap.GetHicon();
                 var next = (Icon)Icon.FromHandle(handle).Clone();
                 DestroyIcon(handle);
