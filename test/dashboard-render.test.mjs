@@ -109,14 +109,19 @@ test('staleness is judged when the page draws, not when the file was written',()
   assert.ok(!time.includes('class="ob-hero"'),'yesterday is not shown as today');
 });
 
-test('chart date labels are never cut, and the newest date is always shown',async()=>{
+test('a 30-day chart labels Mondays only, a week labels weekdays, and Unknown is a stub, not a zero',async()=>{
   const {BarChart}=await server.ssrLoadModule('/app/viewer/components/charts.tsx');
-  const data=Array.from({length:30},(_,index)=>{const date=new Date(Date.UTC(2026,8,22+index));return {label:date.toISOString().slice(5,10),value:index*60};});
-  const html=renderToStaticMarkup(createElement(BarChart,{title:'Screen time by day',data,series:'accent',formatValue:String}));
-  const labels=[...html.matchAll(/<text[^>]*y="170"[^>]*>([^<]*)<\/text>/g)].map(match=>match[1]);
-  assert.ok(labels.length>2);
-  assert.equal(labels.at(-1),'10-21');
-  assert.ok(labels.every(label=>!label.includes('…')),labels.join(' '));
+  const days=(count,value)=>Array.from({length:count},(_,index)=>{const date=new Date(Date.UTC(2026,8,22+index)).toISOString().slice(0,10);return {label:date.slice(5),date,value:value(index)};});
+  const chart=data=>renderToStaticMarkup(createElement(BarChart,{title:'Screen time by day',data,series:'accent',formatValue:String}));
+  const labels=html=>[...html.matchAll(/<text class="ob-bars-label"[^>]*>([^<]*)<\/text>/g)].map(match=>match[1]);
+  const month=chart(days(30,index=>index===3?null:index===4?0:index*60));
+  assert.deepEqual(labels(month),['Sep 28','Oct 5','Oct 12','Oct 19']);
+  assert.equal((month.match(/data-unknown=/g) ?? []).length,1);
+  assert.ok(!month.includes('data-bar="4"'),'a recorded zero draws no bar');
+  assert.ok(month.includes('>Show values<'));
+  assert.deepEqual(labels(chart(days(7,index=>index))),['Tue','Wed','Thu','Fri','Sat','Sun','Mon']);
+  const hours=Array.from({length:24},(_,hour)=>({label:String(hour),value:hour}));
+  assert.ok(labels(chart(hours)).length<=6);
 });
 
 test('loading and first run show one calm message, not pages of Unknown',()=>{

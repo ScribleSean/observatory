@@ -1,9 +1,10 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { STRINGS } from '../../../lib/strings.generated';
+import './charts.css';
 
 export type ChartColor = 'claude' | 'codex' | 'accent';
-export type ChartPoint = { label: string; value: number | null };
-export type ChartSeries = { key: string; label: string; color: ChartColor };
+/** `date` is a calendar day (YYYY-MM-DD). When every point has one, the x labels follow the calendar. */
+export type ChartPoint = { label: string; value: number | null; date?: string };
 export type BarChartProps = {
   title: string;
   data: ChartPoint[];
@@ -11,121 +12,101 @@ export type BarChartProps = {
   formatValue: (value: number) => string;
   max?: number;
 };
-export type StackedBarChartProps = Omit<BarChartProps, 'data' | 'series'> & {
-  data: { label: string; values: Record<string, number | null> }[];
-  series: ChartSeries[];
-};
-export type LineChartProps = BarChartProps & { min?: number };
 
-const left = 8;
-const top = 24;
-const width = 304;
-const height = 128;
-const bottom = top + height;
+const TOP = 18;
+const AXIS = 22;
+const STUB = 6;
 const colors = { claude: 'var(--ob-claude)', codex: 'var(--ob-codex)', accent: 'var(--ob-accent)' };
 const known = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value);
-const x = (index: number, count: number) => left + (index + 0.5) * width / count;
+const day = (date: string) => new Date(`${date}T00:00:00Z`);
+const valid = (date: string | undefined): date is string => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(day(date).getTime());
+const monthDay = (date: string) => day(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+const weekday = (date: string) => day(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
-function ChartFrame({ title, labels, columns, rows, maximum, children, formatValue }: {
-  title: string;
-  labels: string[];
-  columns: string[];
-  rows: (number | null)[][];
-  maximum: string | null;
-  children: ReactNode;
-  formatValue: (value: number) => string;
-}) {
-  const id = useId();
-  const stride = Math.max(1, Math.ceil(labels.length / 12), Math.ceil(labels.length * Math.min(16, Math.max(1, ...labels.map(label => label.length))) * 7 / width));
-  return (
-    <figure className="ob-chart">
-      {/* Inline SVG needs an image role to expose its title as one graphic */}
-      {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role */}
-      <svg viewBox="0 0 320 180" width="100%" role="img" aria-labelledby={id}>
-        <title id={id}>{title}</title>
-        <path className="ob-chart-frame" d={`M${left} ${top}V${bottom}H${left + width}`} />
-        {maximum !== null && <>
-          <text x={left} y={14}>{maximum}</text>
-          {children}
-          {labels.map((label, index) => {
-            if ((labels.length - 1 - index) % stride !== 0) return null;
-            const center = x(index, labels.length);
-            const half = Math.min(label.length, 16) * 7 / 2;
-            const anchor = center - half < 0 ? 'start' : center + half > left + width + 8 ? 'end' : 'middle';
-            const labelX = anchor === 'start' ? Math.max(0, center - 4) : anchor === 'end' ? left + width + 8 : center;
-            const shown = label.length > 16 ? `${label.slice(0, 15)}…` : label;
-            return <text key={index} x={labelX} y={170} textAnchor={anchor}>{shown}</text>;
-          })}
-        </>}
-      </svg>
-      <figcaption>
-        <span>{title}</span>
-        {maximum === null && <span>{STRINGS.formats.separator}{STRINGS.status.unknown}</span>}
-        <label className="ob-chart-reveal"><input type="checkbox" />{STRINGS.charts.showValues}</label>
-        <div className="ob-visually-hidden"><table>
-          <thead><tr><th scope="col">{STRINGS.charts.item}</th>{columns.map((column, index) => <th scope="col" key={index}>{column}</th>)}</tr></thead>
-          <tbody>{rows.map((row, index) => <tr key={index}><th scope="row">{labels[index]}</th>{row.map((value, column) => <td key={column}>{value === null ? STRINGS.status.unknown : formatValue(value)}</td>)}</tr>)}</tbody>
-        </table></div>
-      </figcaption>
-    </figure>
-  );
+function useWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(320);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(entries => setWidth(Math.max(200, Math.round(entries[0].contentRect.width))));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, width };
 }
 
-function UnknownSlot({ index, count }: { index: number; count: number }) {
-  const slotWidth = width / count * 0.7;
-  return <rect data-unknown={index} className="ob-chart-unknown" x={x(index, count) - slotWidth / 2} y={top} width={slotWidth} height={height} />;
+/** At most six labels. Thirty days label Mondays, a week labels weekdays, anything else is spaced evenly. */
+export function axisLabels(data: ChartPoint[]): { index: number; text: string }[] {
+  const dates = data.map(point => point.date);
+  if (dates.length && dates.every(valid)) {
+    if (dates.length <= 7) return dates.map((date, index) => ({ index, text: weekday(date) }));
+    const mondays = dates.flatMap((date, index) => day(date).getUTCDay() === 1 ? [index] : []);
+    const stride = Math.ceil(mondays.length / 6);
+    return mondays.filter((_, order) => order % stride === 0).map(index => ({ index, text: monthDay(dates[index]) }));
+  }
+  const stride = Math.max(1, Math.ceil(data.length / 6));
+  return data.flatMap((point, index) => index % stride === 0 ? [{ index, text: point.label }] : []);
+}
+
+/** A bar with only its top corners rounded. */
+function bar(x: number, y: number, width: number, height: number) {
+  const r = Math.min(2, width / 2, height);
+  return `M${x} ${y + height}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + width - r}Q${x + width} ${y} ${x + width} ${y + r}V${y + height}Z`;
 }
 
 export function BarChart({ title, data, series, formatValue, max }: BarChartProps) {
+  const id = useId();
+  const { ref, width } = useWidth();
+  const [showValues, setShowValues] = useState(false);
   const values = data.map(item => known(item.value) ? item.value : null);
   const available = values.filter(known);
   const maximum = Math.max(0, ...available, known(max) ? max : 0);
-  const scale = height / (maximum || 1);
-  const barWidth = width / Math.max(1, data.length) * 0.7;
-  return <ChartFrame title={title} labels={data.map(item => item.label)} columns={[STRINGS.charts.value]} rows={values.map(value => [value])} maximum={available.length ? formatValue(maximum) : null} formatValue={formatValue}>
-    {values.map((value, index) => value === null ? <UnknownSlot key={index} index={index} count={data.length} /> : (
-      <rect key={index} data-bar={index} x={x(index, data.length) - barWidth / 2} y={bottom - Math.max(0, value) * scale} width={barWidth} height={Math.max(0, value) * scale} rx={Math.min(2, barWidth / 4)} style={{ fill: colors[series] }} />
-    ))}
-  </ChartFrame>;
-}
-
-export function StackedBarChart({ title, data, series, formatValue, max }: StackedBarChartProps) {
-  const rows = data.map(item => series.map(part => known(item.values[part.key]) ? item.values[part.key] : null));
-  const totals = rows.map(row => row.length && row.every(known) ? row.reduce((sum, value) => sum + Math.max(0, value), 0) : null);
-  const available = totals.filter(known);
-  const maximum = Math.max(0, ...available, known(max) ? max : 0);
-  const scale = height / (maximum || 1);
-  const barWidth = width / Math.max(1, data.length) * 0.7;
-  return <ChartFrame title={title} labels={data.map(item => item.label)} columns={series.map(part => part.label)} rows={rows} maximum={available.length ? formatValue(maximum) : null} formatValue={formatValue}>
-    {rows.map((row, index) => {
-      if (totals[index] === null) return <UnknownSlot key={index} index={index} count={data.length} />;
-      let offset = 0;
-      return <g key={index} data-stack={index}>{row.map((value, part) => {
-        const partHeight = Math.max(0, value ?? 0) * scale;
-        offset += partHeight;
-        return <rect key={part} data-bar={index} data-series={series[part].key} x={x(index, data.length) - barWidth / 2} y={bottom - offset} width={barWidth} height={partHeight} style={{ fill: colors[series[part].color] }} />;
-      })}</g>;
-    })}
-  </ChartFrame>;
-}
-
-export function LineChart({ title, data, series, formatValue, min, max }: LineChartProps) {
-  const values = data.map(item => known(item.value) ? item.value : null);
-  const available = values.filter(known);
-  const minimum = Math.min(...available, known(min) ? min : 0);
-  const maximum = Math.max(...available, known(max) ? max : minimum);
-  const y = (value: number) => bottom - (value - minimum) / (maximum - minimum || 1) * height;
-  const segments: string[] = [];
-  let segment = '';
-  values.forEach((value, index) => {
-    if (value === null) {
-      if (segment) segments.push(segment);
-      segment = '';
-    } else segment += `${segment ? 'L' : 'M'}${x(index, data.length)} ${y(value)}`;
-  });
-  if (segment) segments.push(segment);
-  return <ChartFrame title={title} labels={data.map(item => item.label)} columns={[STRINGS.charts.value]} rows={values.map(value => [value])} maximum={available.length ? formatValue(maximum) : null} formatValue={formatValue}>
-    {segments.map((path, index) => <path key={index} className="ob-chart-line" d={path} style={{ stroke: colors[series] }} />)}
-    {values.map((value, index) => value !== null && <circle key={index} data-point={index} cx={x(index, data.length)} cy={y(value)} r={2.5} style={{ fill: colors[series] }} />)}
-  </ChartFrame>;
+  const height = width < 480 ? 150 : 180;
+  const baseline = height - AXIS;
+  const plot = baseline - TOP;
+  const band = width / Math.max(1, data.length);
+  const barWidth = Math.max(1, Math.min(28, band * 0.6));
+  const center = (index: number) => (index + 0.5) * band;
+  const names = data.map(point => valid(point.date) ? monthDay(point.date) : point.label);
+  const shown = (value: number | null) => value === null ? STRINGS.status.unknown : formatValue(value);
+  return (
+    <figure className="ob-bars">
+      <div className="ob-bars-head">
+        <h3 id={id}>{title}</h3>
+        {!available.length && <span className="ob-meta">{STRINGS.status.unknown}</span>}
+        <button type="button" className="ob-bars-toggle" aria-pressed={showValues} onClick={() => setShowValues(on => !on)}>{STRINGS.charts.showValues}</button>
+      </div>
+      <div ref={ref} className="ob-bars-plot" hidden={showValues}>
+        {/* Inline SVG needs an image role to expose its title as one graphic */}
+        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role */}
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby={id}>
+          {available.length > 0 && <>
+            <line className="ob-bars-top" x1={0} x2={width} y1={TOP + 0.5} y2={TOP + 0.5} />
+            <text className="ob-bars-max" x={0} y={TOP - 6}>{formatValue(maximum)}</text>
+          </>}
+          {values.map((value, index) => {
+            const x = center(index) - barWidth / 2;
+            if (value === null) return <rect key={index} data-unknown={index} className="ob-bars-unknown" x={x + 0.5} y={baseline - STUB + 0.5} width={Math.max(0, barWidth - 1)} height={STUB - 1} rx={1}><title>{`${names[index]}: ${STRINGS.status.unknown}`}</title></rect>;
+            const barHeight = Math.max(0, value) / (maximum || 1) * plot;
+            if (barHeight <= 0) return null;
+            return <path key={index} data-bar={index} d={bar(x, baseline - barHeight, barWidth, barHeight)} style={{ fill: colors[series] }}><title>{`${names[index]}: ${formatValue(value)}`}</title></path>;
+          })}
+          <line className="ob-bars-baseline" x1={0} x2={width} y1={baseline + 0.5} y2={baseline + 0.5} />
+          {axisLabels(data).map(({ index, text }) => {
+            const x = center(index);
+            const half = text.length * 3.3;
+            const anchor = x - half < 0 ? 'start' : x + half > width ? 'end' : 'middle';
+            return <text key={index} className="ob-bars-label" x={anchor === 'start' ? 0 : anchor === 'end' ? width : x} y={height - 6} textAnchor={anchor}>{text}</text>;
+          })}
+        </svg>
+      </div>
+      <div className={showValues ? 'ob-bars-table' : 'ob-visually-hidden'}>
+        <table>
+          <thead><tr><th scope="col">{STRINGS.charts.item}</th><th scope="col">{STRINGS.charts.value}</th></tr></thead>
+          <tbody>{values.map((value, index) => <tr key={index}><th scope="row">{names[index]}</th><td>{shown(value)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </figure>
+  );
 }
