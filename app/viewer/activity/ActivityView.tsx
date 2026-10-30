@@ -41,7 +41,6 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
         <span className="ob-meta">{view.windowLabel}</span>
       </div>}
     </Card>
-    <p className="ob-meta">{view.caveat}</p>
     <InfoControl label={STRINGS.activity.details} detail={view.info} />
     <div className="ob-activity-grid">
       <Card label={STRINGS.activity.dailyTitle}><BarChart title={STRINGS.activity.dailyTitle} data={view.series} series="accent" formatValue={duration} /></Card>

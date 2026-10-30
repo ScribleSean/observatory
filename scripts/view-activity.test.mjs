@@ -154,12 +154,14 @@ test('Combined tracking has a distinct detail and invalid times stay null', () =
   assert.equal(result.tracking.asOf, null);
   assert.equal(result.tracking.through, null);
 });
-test('one caveat and additional information match the period', () => {
-  assert.equal(view().caveat, strings.activity.zoneCaveat.replace('{zone}', 'UTC'));
-  const result = view(undefined, { period: 'now' });
-  assert.equal(result.caveat, strings.activity.nowCaveat);
-  assert.ok(result.info.includes(view().caveat));
+test('details name the time zone and match the period', () => {
+  const zone = strings.activity.zoneCaveat.replace('{zone}', 'UTC');
+  assert.ok(view().info.includes(zone));
+  assert.ok(!view().info.includes(strings.activity.nowCaveat));
   assert.ok(view().info.includes(strings.activity.missingDates));
+  const now = view(undefined, { period: 'now' }).info;
+  assert.ok(now.includes(strings.activity.nowCaveat));
+  assert.ok(now.includes(zone));
 });
 test('zero activity without coverage carries the tracking warning', () => {
   const data = snapshot(); data.activity[0].days = [{ ...day(undefined, 0), trackedSeconds: 0 }];
