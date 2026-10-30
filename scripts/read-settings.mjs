@@ -515,10 +515,20 @@ function runningTotal(event) {
   return current.some(isNone)?null:current;
 }
 
+// The call id of a tool call event, or null.
+function toolCallId(event) {
+  if(!validEvent(event)||get(event,'type')!=='response_item')return null;
+  const p=pyOr(get(event,'payload'),{});
+  if(!isDict(p)||!['function_call','custom_tool_call'].includes(get(p,'type')))return null;
+  const callId=get(p,'call_id');
+  return typeof callId==='string'?callId:null;
+}
+
 // A fork of a thread with legacy history starts with its own session_meta and
 // then copies its parent's session_meta and every parent line, stamped with the
-// time of the fork. copiedTotals(id) gives the running totals in the log of the
-// thread whose session_meta came later, and those turns are left out.
+// time of the fork. copiedTotals(id) gives the running totals and tool call ids
+// in the log of the thread whose session_meta came later, and those turns and
+// calls are left out.
 export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null,readBudget=null,copiedTotals=null}={}) {
   cutoff=cutoffMicros(cutoff);
   let model='unknown',effort='unknown',speed='unknown';
@@ -580,7 +590,7 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
     };
     if(get(event,'type')==='response_item'&&['function_call','custom_tool_call'].includes(get(p,'type'))) {
       const callId=get(p,'call_id');
-      if(typeof callId!=='string'||seenCalls.has(callId))continue;
+      if(typeof callId!=='string'||seenCalls.has(callId)||copies?.calls.has(callId))continue;
       seenCalls.add(callId);
       const tool=toolIdentifier(get(p,'name'),'Unknown tool');
       const namespace=toolIdentifier(get(p,'namespace'),'');
@@ -608,7 +618,7 @@ export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null
     const repeated=prior!==null&&current.every((v,i)=>v===prior[i]);
     let delta=current.map((v,i)=>v-(prior?prior[i]:0));
     prior=current;
-    if(repeated||copies?.has(JSON.stringify(current)))continue;
+    if(repeated||copies?.totals.has(JSON.stringify(current)))continue;
     const last=get(info(),'last_token_usage');
     if(isDict(last)) {
       delta=counters(last);
@@ -718,11 +728,13 @@ function summarizeSessions(sessions,cutoff,cache,lineages,readBudget,limits) {
     const identity=typeof id!=='string'?null:byHash?byHash.get(id):sessions.has(id)?id:null;
     if(identity===null||identity===undefined)throw new ValueError('Forked Codex log without its parent; complete report unavailable');
     if(!totals.has(identity)) {
-      const found=new Set();
+      const found={totals:new Set(),calls:new Set()};
       for(const event of events(identity)) {
         readBudget?.check();
         const current=runningTotal(event);
-        if(current!==null)found.add(JSON.stringify(current));
+        if(current!==null)found.totals.add(JSON.stringify(current));
+        const callId=toolCallId(event);
+        if(callId!==null)found.calls.add(callId);
       }
       totals.set(identity,found);
     }
