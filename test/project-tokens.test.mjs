@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
+import {homedir} from 'node:os';
 import path from 'node:path';
 import {collectProjectTokens,projectName,sessionHash} from '../scripts/read-projects.mjs';
 import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS} from '../scripts/project-tokens.mjs';
-import {buildSnapshot} from '../scripts/collect.mjs';
+import {buildSnapshot,toolFolder} from '../scripts/collect.mjs';
 import {combine} from '../lib/combine.mjs';
-import {projectsView} from '../lib/view-projects.mjs';
+import {projectsView,clock} from '../lib/view-projects.mjs';
 import {withFolder,testConfig,ownSnapshot} from './helpers.mjs';
 
 const now=new Date('2026-10-21T17:00:00Z');
@@ -69,13 +70,32 @@ async function fixture(folder,{claude=true,codex=true}={}) {
 
 test('folder names map to their repository, worktrees included, and nothing else of the path is kept',()=>{
   assert.equal(projectName(`${repo}/.claude/worktrees/feature-branch-x`,home),'demo-app');
-  assert.equal(projectName(`${home}/Developer/.worktrees/demo-codex-task`,home,'https://github.com/fixture/demo-app.git'),'demo-app');
-  assert.equal(projectName(`${home}/Developer/.worktrees/demo-codex-task`,home),'demo-codex-task');
+  assert.equal(projectName(`${repo}/.claude/worktrees/a/.claude/worktrees/feature-branch-x`,home),'demo-app','the outermost worktree folder decides');
+  assert.equal(projectName(`${home}/Developer/.worktrees/demo-codex-task`,home,{repository:'https://github.com/fixture/demo-app.git'}),'demo-app');
   assert.equal(projectName('C:\\Users\\fixture\\Developer\\demo-app\\.claude\\worktrees\\x',''),'demo-app');
   assert.equal(projectName('/private/tmp/claude-501/scratchpad',home),'temp');
   assert.equal(projectName(home,home),'~');
   assert.equal(projectName('relative/demo',home),null);
   assert.equal(projectName(undefined,home),null);
+});
+
+test('a branch-named worktree folder never becomes a project name',()=>{
+  assert.equal(projectName(`${home}/Developer/.worktrees/demo-codex-task`,home),'Developer','the folder above worktrees, not the branch folder');
+  assert.equal(projectName(`${repo}/worktrees/feature-branch-x`,home),'demo-app');
+  assert.equal(projectName(`${home}/.codex/worktrees/ab12/demo-app`,home),'demo-app');
+  assert.equal(projectName(`${home}/.codex/worktrees/ab12`,home),null);
+  assert.equal(projectName(`${home}/conductor/workspaces/demo-app/feature-branch-x`,home),'demo-app');
+  assert.equal(projectName(`${home}/Developer/demo-app-fix-login`,home,{branch:'fixture/fix-login'}),'demo-app');
+  assert.equal(projectName(`${home}/Developer/fix-login`,home,{branch:'fix-login'}),null);
+  assert.equal(projectName(`${home}/Developer/observatory`,home,{branch:'obs'}),'observatory','only a whole trailing branch name is removed');
+});
+
+test('the user name never becomes a project name, on either platform',()=>{
+  assert.equal(projectName(`${home}/.claude/worktrees/x`,home),'~');
+  assert.equal(projectName('/Users',home),null,'a folder above home is left out');
+  assert.equal(projectName('\\\\?\\C:\\Users\\Fixture\\.claude\\worktrees\\x','C:/Users/fixture/'),'~');
+  assert.equal(projectName('C:/Users/Fixture','C:\\Users\\fixture'),'~');
+  assert.equal(projectName('C:\\Users','C:\\Users\\fixture'),null);
 });
 
 test('today by project: sessions, subagent share, worktrees, and no paths, prompts or titles',async()=>withFolder(async folder=>{
@@ -143,7 +163,7 @@ test('rows are capped, and the rest of the projects keep their tokens',()=>{
   const sessions=[];
   for(let index=0;index<MAX_PROJECTS+5;index++)sessions.push({...session(index,1000-index),project:`p${index}`});
   for(let index=0;index<MAX_SESSIONS+3;index++)sessions.push({...session(100+index,5000),project:'big'});
-  const row=buildProjectTokens({date:'2026-10-21',providers:{claude:{status:'ok',sessions}}},'Mac',now);
+  const row=buildProjectTokens({date:'2026-10-21',timeZone,providers:{claude:{status:'ok',sessions}}},'Mac',now);
   assert.equal(row.projects.length,MAX_PROJECTS);
   assert.equal(row.projects[0].name,'big');
   assert.equal(row.projects[0].sessions.length,MAX_SESSIONS);
@@ -179,4 +199,97 @@ test('combine checks a pulled row like a local read and keeps computers apart',a
   const devices=projectsView(combined.view,{host:'All',now:now.getTime()});
   assert.deepEqual(devices.map(device=>[device.host,device.status]),[['Mac','ok'],['Windows','unknown']]);
   assert.throws(()=>cleanProjectTokens({...row,projects:[{...row.projects[0],totalTokens:1}]}),/Invalid project tokens/);
+}));
+
+test('CODEX_HOME is used when it is absolute, like CLAUDE_CONFIG_DIR',()=>{
+  assert.equal(toolFolder('CODEX_HOME','.codex',{CODEX_HOME:'/fixture/codex-home'}),'/fixture/codex-home');
+  assert.equal(toolFolder('CODEX_HOME','.codex',{}),path.join(homedir(),'.codex'));
+  assert.throws(()=>toolFolder('CODEX_HOME','.codex',{CODEX_HOME:'relative/codex'}),/must be absolute/);
+});
+
+test('an old reading from today shows its time, and a reading from the future is refused',async()=>withFolder(async folder=>{
+  const row=buildProjectTokens(await fixture(folder),'Mac',now);
+  const view=at=>projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:at})[0];
+  assert.equal(view(now.getTime()+10*60000).stale,false);
+  const old=view(now.getTime()+20*60000);
+  assert.equal(old.stale,true);
+  assert.equal(old.asOf,'13:00','as of the reading, in the collecting computer\'s time zone');
+  assert.equal(old.status,'ok');
+  assert.equal(clock('2026-10-21T13:02:00.000Z',timeZone),'9:02');
+  assert.throws(()=>cleanProjectTokens({...row,checkedAt:new Date(Date.now()+6*60000).toISOString()}),/Invalid project tokens/);
+  assert.equal(cleanProjectTokens({...row,checkedAt:new Date(Date.now()+60000).toISOString()}).status,'ok');
+}));
+
+test('only a malformed usage line dated today makes the day Unknown',async()=>withFolder(async folder=>{
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(project,{recursive:true});
+  const good=assistant({id:'g1',request:'g',at:'2026-10-21T13:00:00Z',sessionId:'s',cwd:repo,side:false,tokens:usage(10,10)});
+  const huge={type:'user',timestamp:'2026-10-21T13:00:00Z',message:{content:'x'.repeat(4096)+' "assistant" "usage" '+'y'.repeat(200000)+'PLANTED-PROMPT'}};
+  const old={...assistant({id:'o1',request:'o',at:'2026-10-20T13:00:00Z',sessionId:'s',cwd:repo,side:false,tokens:usage(10,10)})};
+  old.message.usage.input_tokens=-5;
+  await writeFile(path.join(project,'a.jsonl'),lines([good,huge,old]));
+  const read=()=>collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home,limits:{maxLineBytes:100000}});
+  const first=await read();
+  assert.equal(first.providers.claude.status,'ok','a long line without usage markers at its ends and a bad line from yesterday are skipped');
+  assert.equal(first.providers.claude.sessions[0].models[0].totalTokens,20);
+  const bad={...assistant({id:'b1',request:'b',at:'2026-10-21T14:00:00Z',sessionId:'s',cwd:repo,side:false,tokens:usage(10,10)})};
+  bad.message.usage.output_tokens='many';
+  await writeFile(path.join(project,'b.jsonl'),lines([bad]));
+  assert.equal((await read()).providers.claude.status,'unavailable');
+}));
+
+test('Claude requests count once per message id, and lines without one are dropped',async()=>withFolder(async folder=>{
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(project,{recursive:true});
+  const line=(id,request,input)=>assistant({id,request,at:'2026-10-21T13:00:00Z',sessionId:'s',cwd:repo,side:false,tokens:usage(input,0)});
+  const anonymous=line('x','r9',1000);
+  delete anonymous.message.id;
+  await writeFile(path.join(project,'a.jsonl'),lines([line('m1','r1',10),line('m1','r2',30),anonymous]));
+  const raw=await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home});
+  assert.equal(raw.providers.claude.sessions[0].models[0].totalTokens,30);
+}));
+
+test('both Codex folders share one file budget',async()=>withFolder(async folder=>{
+  for(const root of ['sessions','archived_sessions']) {
+    await mkdir(path.join(folder,'.codex',root),{recursive:true});
+    for(const name of ['a','b','c'])await writeFile(path.join(folder,'.codex',root,`${name}.jsonl`),'\n');
+  }
+  const read=maxFiles=>collectProjectTokens({codexFolder:path.join(folder,'.codex'),now,timeZone,home,limits:{maxFiles}});
+  assert.equal((await read(6)).providers.codex.status,'ok');
+  assert.equal((await read(5)).providers.codex.status,'unavailable');
+}));
+
+test('a pulled row is priced locally and must add up when every session is listed',async()=>withFolder(async folder=>{
+  const row=buildProjectTokens(await fixture(folder),'Mac',now);
+  const demo=row.projects[0];
+  const cheap={...row,projects:[{...demo,usd:demo.usd,sessions:demo.sessions.map(session=>({...session,usd:0}))},...row.projects.slice(1)]};
+  assert.deepEqual(cleanProjectTokens(cheap).projects[0].sessions.map(session=>session.usd),demo.sessions.map(session=>session.usd));
+  assert.throws(()=>cleanProjectTokens({...row,projects:[{...demo,usd:demo.usd+1},...row.projects.slice(1)]}),/Invalid project tokens/);
+  assert.throws(()=>cleanProjectTokens({...row,projects:[{...demo,subagentTokens:0},...row.projects.slice(1)]}),/Invalid project tokens/);
+}));
+
+test('a subagent file belongs to the session folder it sits in, whatever id its events carry',async()=>withFolder(async folder=>{
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(path.join(project,'session-main-0001','subagents'),{recursive:true});
+  await writeFile(path.join(project,'session-main-0001.jsonl'),lines([assistant({id:'p1',request:'p',at:'2026-10-21T13:00:00Z',sessionId:'session-main-0001',cwd:repo,side:false,tokens:usage(60,40)})]));
+  await writeFile(path.join(project,'session-main-0001','subagents','agent-b.jsonl'),
+    lines([assistant({id:'c1',request:'c',at:'2026-10-21T13:05:00Z',sessionId:'session-other-0009',cwd:repo,tokens:usage(200,100)})]));
+  const sessions=(await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home})).providers.claude.sessions;
+  assert.equal(sessions.length,1);
+  assert.equal(sessions[0].id,sessionHash('claude','session-main-0001'));
+  assert.equal(sessions[0].subagentTokens,300);
+}));
+
+test('a usage line from today missing a counted field makes the day Unknown',async()=>withFolder(async folder=>{
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(project,{recursive:true});
+  const line=assistant({id:'m1',request:'r',at:'2026-10-21T13:00:00Z',sessionId:'s',cwd:repo,side:false,tokens:usage(10,10)});
+  delete line.message.usage.cache_creation_input_tokens;
+  await writeFile(path.join(project,'a.jsonl'),lines([line]));
+  assert.equal((await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home})).providers.claude.status,'unavailable');
+}));
+
+test('the row date must be a real calendar date',async()=>withFolder(async folder=>{
+  const row=buildProjectTokens(await fixture(folder),'Mac',now);
+  assert.throws(()=>cleanProjectTokens({...row,date:'2026-02-30'}),/Invalid project tokens/);
 }));

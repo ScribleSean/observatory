@@ -20,36 +20,66 @@ class Unavailable extends Error {}
 export const sessionHash=(provider,id)=>createHash('sha256').update(`${provider}:${id}`).digest('hex').slice(0,10);
 export const modelName=value=>typeof value==='string' && MODEL.test(value)?value:'unknown';
 
+const formatters=new Map();
 export function dayKey(at,timeZone=TIME_ZONE) {
-  return new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(at);
-}
-
-// The repository a folder belongs to: its last name, or the repository above
-// a .claude/worktrees/<name> folder. A Codex worktree under another worktrees
-// folder takes its repository's name when the log has one. Temporary folders
-// are one project. Nothing else about the path is kept.
-const TEMP=[['tmp'],['private','tmp'],['var','folders'],['private','var','folders']];
-export function projectName(cwd,home='',repository=null) {
-  if(typeof cwd!=='string' || !(path.posix.isAbsolute(cwd) || path.win32.isAbsolute(cwd)))return null;
-  const parts=cwd.split(/[\\/]+/).filter(Boolean);
-  const fold=text=>text.replace(/[\\/]+$/,'').toLowerCase();
-  if(home && fold(cwd)===fold(home))return '~';
-  const lower=parts.map(part=>part.toLowerCase());
-  if(TEMP.some(prefix=>prefix.every((part,index)=>lower[index]===part)) ||
-    lower.some((part,index)=>part==='appdata' && lower[index+1]==='local' && lower[index+2]==='temp'))return 'temp';
-  let name=parts.at(-1);
-  const claude=lower.findLastIndex((part,index)=>part==='.claude' && lower[index+1]==='worktrees' && index>0);
-  if(claude>0)name=parts[claude-1];
-  else if(lower.slice(0,-1).some(part=>part==='worktrees' || part==='.worktrees') && typeof repository==='string') {
-    const repo=repository.split(/[\\/:]+/).filter(Boolean).at(-1)?.replace(/\.git$/,'');
-    if(repo)name=repo;
+  let formatter=formatters.get(timeZone);
+  if(!formatter) {
+    formatter=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'});
+    formatters.set(timeZone,formatter);
   }
-  return typeof name==='string' && NAME.test(name) && name!=='.' && name!=='..'?name:null;
+  return formatter.format(at);
 }
 
-async function files(root,since,limits) {
+// The repository a folder belongs to, by its last name. Worktree folders are
+// often named after a branch, so a worktree takes its repository's name: the
+// folder above .claude/worktrees, the repository in a Codex log, the folder
+// after Conductor's workspaces, or the folder above another worktrees folder.
+// A folder named after the session's branch has the branch removed. The home
+// folder is "~" and anything above it is left out, so a user name is never a
+// project. Temporary folders are one project. Nothing else of the path is kept.
+const TEMP=[['tmp'],['private','tmp'],['var','folders'],['private','var','folders']];
+const segments=value=>value.replace(/^[\\/]{2}[?.][\\/]/,'').split(/[\\/]+/).filter(part=>part && part!=='.');
+const folded=parts=>parts.map(part=>part.toLowerCase());
+const startsWith=(parts,prefix)=>prefix.length<=parts.length && prefix.every((part,index)=>parts[index]===part);
+const valid=name=>typeof name==='string' && NAME.test(name) && name!=='..'?name:null;
+const repositoryName=value=>typeof value==='string'?valid(value.split(/[\\/:]+/).filter(Boolean).at(-1)?.replace(/\.git$/i,'')):null;
+
+export function projectName(cwd,home='',{repository=null,branch=null}={}) {
+  if(typeof cwd!=='string' || !(path.posix.isAbsolute(cwd) || path.win32.isAbsolute(cwd)))return null;
+  const parts=segments(cwd),lower=folded(parts);
+  const homeParts=typeof home==='string' && home?folded(segments(home)):null;
+  if(TEMP.some(prefix=>startsWith(lower,prefix)) ||
+    lower.some((part,index)=>part==='appdata' && lower[index+1]==='local' && lower[index+2]==='temp'))return 'temp';
+  let folder=parts;
+  const tree=lower.findIndex(part=>part==='worktrees' || part==='.worktrees');
+  const conductor=lower.findIndex((part,index)=>part==='workspaces' && lower[index-1]==='conductor');
+  if(tree>0 && lower[tree-1]==='.claude')folder=parts.slice(0,tree-1);
+  else if(tree>=0) {
+    const named=repositoryName(repository);
+    if(named)return named;
+    // Codex keeps worktrees as .codex/worktrees/<id>/<repository>.
+    if(lower[tree-1]==='.codex')folder=tree+2<parts.length?parts.slice(0,tree+3):[];
+    else folder=parts.slice(0,tree);
+  } else if(conductor>=0)folder=conductor+1<parts.length?parts.slice(0,conductor+2):[];
+  if(!folder.length)return null;
+  const lowerFolder=folded(folder);
+  if(homeParts) {
+    if(lowerFolder.length===homeParts.length && startsWith(homeParts,lowerFolder))return '~';
+    if(startsWith(homeParts,lowerFolder))return null;
+  }
+  let name=folder.at(-1);
+  const slug=typeof branch==='string'?branch.split('/').filter(Boolean).at(-1)?.toLowerCase():null;
+  if(folder===parts && slug && !['main','master','head','trunk','develop'].includes(slug)) {
+    const lowerName=name.toLowerCase();
+    if(lowerName===slug)return null;
+    const cut=lowerName.length-slug.length-1;
+    if(cut>0 && lowerName.endsWith(slug) && '-_. '.includes(lowerName[cut]))name=name.slice(0,cut);
+  }
+  return valid(name || null);
+}
+
+async function files(root,since,limits,budget={files:0,bytes:0}) {
   const found=[];
-  let bytes=0;
   const walk=async folder=>{
     let entries;
     try {entries=await fs.promises.readdir(folder,{withFileTypes:true});}
@@ -59,24 +89,31 @@ async function files(root,since,limits) {
       if(entry.isSymbolicLink())continue;
       if(entry.isDirectory()) {await walk(full);continue;}
       if(!entry.isFile() || !entry.name.endsWith('.jsonl'))continue;
-      const info=await fs.promises.stat(full);
+      let info;
+      // A file can be removed between listing and reading.
+      try {info=await fs.promises.stat(full);}
+      catch(error) {if(error.code==='ENOENT')continue;throw error;}
       if(info.mtimeMs<since)continue;
-      bytes+=info.size;
+      budget.files+=1;
+      budget.bytes+=info.size;
       found.push(full);
-      if(found.length>limits.maxFiles || bytes>limits.maxTotalBytes)throw new Unavailable();
+      if(budget.files>limits.maxFiles || budget.bytes>limits.maxTotalBytes)throw new Unavailable();
     }
   };
   await walk(root);
   return found.sort((a,b)=>a.localeCompare(b));
 }
 
+const EDGE=64*1024;
 async function lines(file,limits,keep,each) {
-  const input=fs.createReadStream(file);
+  let input;
+  try {input=fs.createReadStream(file);await new Promise((resolve,reject)=>input.once('open',resolve).once('error',reject));}
+  catch(error) {input?.destroy();if(error.code==='ENOENT')return;throw error;}
   const reader=readline.createInterface({input,crlfDelay:Infinity});
   try {
     for await (const line of reader) {
-      if(line.length>limits.maxLineBytes)throw new Unavailable();
-      if(!keep(line))continue;
+      // A long line is looked at only by its ends, and skipped unless they hold the markers.
+      if(line.length>limits.maxLineBytes ? !keep(line.slice(0,EDGE)+line.slice(-EDGE)) : !keep(line))continue;
       let event;
       // A line still being written is read on the next cycle.
       try {event=JSON.parse(line);} catch {continue;}
@@ -111,27 +148,35 @@ function sessions() {
 }
 
 // Claude Code: one request can be written several times as it streams, so the
-// largest counts for each message and request pair win. Subagent turns carry
+// largest counts for each message id win. Subagent turns carry
 // isSidechain and their parent's sessionId.
 async function readClaude(folder,{today,timeZone,since,home,limits}) {
   const requests=new Map();
   for(const file of await files(path.join(folder,'projects'),since,limits)) {
+    // A subagent file sits in <session id>/subagents/ and belongs to that session,
+    // whatever session id its own events carry.
+    const inSubagents=path.basename(path.dirname(file))==='subagents';
+    const owner=inSubagents?path.basename(path.dirname(path.dirname(file))):null;
     const fallback=path.basename(file,'.jsonl');
     await lines(file,limits,line=>line.includes('"assistant"') && line.includes('"usage"'),event=>{
       if(event.type!=='assistant' || !object(event.message) || !object(event.message.usage))return;
       const usage=event.message.usage;
-      const values=['input_tokens','cache_read_input_tokens','cache_creation_input_tokens','output_tokens'].map(key=>count(usage[key] ?? 0));
       const at=Date.parse(event.timestamp);
-      if(values.includes(null) || !Number.isFinite(at))throw new Unavailable();
-      if(dayKey(at,timeZone)!==today || values.every(value=>value===0))return;
-      const key=typeof event.message.id==='string'?JSON.stringify([event.message.id,event.requestId ?? null]):Symbol('request');
+      // A line that cannot be dated might be today's, so it makes the day Unknown.
+      if(!Number.isFinite(at))throw new Unavailable();
+      if(dayKey(at,timeZone)!==today)return;
+      const values=['input_tokens','cache_read_input_tokens','cache_creation_input_tokens','output_tokens'].map(key=>count(usage[key]));
+      if(values.includes(null))throw new Unavailable();
+      // Placeholder replies carry no message id and no usage.
+      if(typeof event.message.id!=='string' || !event.message.id || values.every(value=>value===0))return;
+      const key=event.message.id;
       const total=values.reduce((a,b)=>a+b,0);
       const prior=requests.get(key);
       if(prior && prior.total>=total)return;
-      const id=typeof event.sessionId==='string' && event.sessionId?event.sessionId:fallback;
-      requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:projectName(event.cwd,home),
+      const id=owner ?? (typeof event.sessionId==='string' && event.sessionId?event.sessionId:fallback);
+      requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:projectName(event.cwd,home,{branch:event.gitBranch}),
         at:prior?Math.min(prior.record.at,at):at,model:modelName(event.message.model),values,
-        subagent:typeof event.isSidechain==='boolean'?event.isSidechain:null}});
+        subagent:inSubagents || (typeof event.isSidechain==='boolean'?event.isSidechain:null)}});
     });
   }
   const result=sessions();
@@ -145,17 +190,17 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
 async function readCodex(folder,{today,timeZone,since,home,limits}) {
   const result=sessions(),seen=new Set();
   const roots=['sessions','archived_sessions'].map(name=>path.join(folder,name));
-  const found=[];
-  for(const root of roots)found.push(...await files(root,since,limits));
-  if(found.length>limits.maxFiles)throw new Unavailable();
+  const found=[],budget={files:0,bytes:0};
+  for(const root of roots)found.push(...await files(root,since,limits,budget));
   for(const file of found) {
-    let id=path.basename(file,'.jsonl'),project=null,repository=null,model='unknown',subagent=null,prior=null;
+    let id=path.basename(file,'.jsonl'),project=null,repository=null,branch=null,model='unknown',subagent=null,prior=null;
     await lines(file,limits,line=>line.includes('"session_meta"') || line.includes('"turn_context"') || line.includes('"token_count"'),event=>{
       const payload=object(event.payload)?event.payload:{};
       if(event.type==='session_meta') {
         if(typeof payload.id==='string' && payload.id)id=payload.id;
         repository=object(payload.git) && typeof payload.git.repository_url==='string'?payload.git.repository_url:null;
-        project=projectName(payload.cwd,home,repository);
+        branch=object(payload.git) && typeof payload.git.branch==='string'?payload.git.branch:null;
+        project=projectName(payload.cwd,home,{repository,branch});
         const parent=typeof payload.parent_thread_id==='string' && payload.parent_thread_id?payload.parent_thread_id:null;
         subagent=parent!==null || (object(payload.source) && Object.hasOwn(payload.source,'subagent')) || payload.thread_source==='subagent';
         if(parent)id=parent;
@@ -163,7 +208,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       }
       if(event.type==='turn_context') {
         model=modelName(payload.model);
-        if(typeof payload.cwd==='string')project=projectName(payload.cwd,home,repository) ?? project;
+        if(typeof payload.cwd==='string')project=projectName(payload.cwd,home,{repository,branch}) ?? project;
         return;
       }
       if(event.type!=='event_msg' || payload.type!=='token_count' || !object(payload.info))return;
@@ -173,7 +218,8 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       if(running===prior)return;
       prior=running;
       const at=Date.parse(event.timestamp);
-      if(!Number.isFinite(at) || dayKey(at,timeZone)!==today)return;
+      if(!Number.isFinite(at))throw new Unavailable();
+      if(dayKey(at,timeZone)!==today)return;
       const identity=JSON.stringify([event.timestamp,running]);
       if(seen.has(identity))return;
       seen.add(identity);
@@ -201,5 +247,5 @@ export async function collectProjectTokens({claudeFolder=null,codexFolder=null,n
     } catch {return {status:'unavailable'};}
   };
   const [claude,codex]=await Promise.all([read(claudeFolder,readClaude),read(codexFolder,readCodex)]);
-  return {date:options.today,providers:{...(claude?{claude}:{}),...(codex?{codex}:{})}};
+  return {date:options.today,timeZone,providers:{...(claude?{claude}:{}),...(codex?{codex}:{})}};
 }

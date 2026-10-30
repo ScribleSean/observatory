@@ -46,13 +46,17 @@ export function runPowerShellFile(script,{spawnProcess=spawn,exec=execFile}={}) 
   });
 }
 
+// A tool's folder from its environment variable when that is absolute, else its default under home.
+export function toolFolder(variable,fallback,environment=process.env) {
+  const configured=environment[variable];
+  if(!configured)return path.join(homedir(),fallback);
+  if(!path.isAbsolute(configured))throw Error(`${variable} must be absolute`);
+  return configured;
+}
+
 export function defaultReaders(config) {
-  const claudeFolder=()=>{
-    const configured=process.env.CLAUDE_CONFIG_DIR;
-    if(!configured)return path.join(homedir(),'.claude');
-    if(!path.isAbsolute(configured))throw Error('CLAUDE_CONFIG_DIR must be absolute');
-    return configured;
-  };
+  const claudeFolder=()=>toolFolder('CLAUDE_CONFIG_DIR','.claude');
+  const codexFolder=()=>toolFolder('CODEX_HOME','.codex');
   return {
     screenTime:async()=>{
       if(config.platform==='mac') {
@@ -61,13 +65,13 @@ export function defaultReaders(config) {
       }
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
-    codex:async()=>collectSettings(path.join(homedir(),'.codex'),{cacheDirectory:await realpath(await privateFolder(config.dataFolder,'private-codex'))}),
+    codex:async()=>collectSettings(codexFolder(),{cacheDirectory:await realpath(await privateFolder(config.dataFolder,'private-codex'))}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:()=>collectClaudeUsage(claudeFolder()),
     projects:({claude,codex},now)=>collectProjectTokens({claudeFolder:claude?claudeFolder():null,
-      codexFolder:codex?path.join(homedir(),'.codex'):null,home:homedir(),now}),
+      codexFolder:codex?codexFolder():null,home:homedir(),now}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
       return withinTime(readClaudeLimits(config.dataFolder,{enabled:true}),20000);
