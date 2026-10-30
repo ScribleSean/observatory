@@ -15,11 +15,6 @@
 /.test-runtime/
 /coverage
 
-# next.js
-/.next/
-/.vinext/
-/out/
-
 # misc
 .DS_Store
 *.pem
@@ -34,19 +29,12 @@ yarn-error.log*
 .env*
 
 # deployment and generated files
-.vercel
-next-env.d.ts
 /dist/
-/.wrangler/
 /outputs/
 /work/
 /.runtime/
 __pycache__/
 *.pyc
-/.native-build/
-/native/windows/bin/
-/native/windows/obj/
-/native/windows/release/
 
 # hub rebuild
 /observatory.config.json
