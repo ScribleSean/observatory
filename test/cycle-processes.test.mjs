@@ -82,6 +82,13 @@ test('cycle execFile preserves stdin, environment and promisify results',async()
   },{deadlineMs:120000});
 });
 
+test('execFile outside a cycle accepts the callback in place of options',async()=>{
+  const {stdout}=await promisify(execFile)(process.execPath,['-e',"process.stdout.write('out')"]);
+  assert.equal(stdout,'out');
+  const result=await new Promise(resolve=>execFile(process.execPath,['-e',"process.stdout.write('cb')"],(error,out)=>resolve(error??out)));
+  assert.equal(result,'cb');
+});
+
 for(const [method,tree] of [['spawn',false],['execFile',false],['spawn',true],['execFile',true]]) {
   test(`cycle deadline stops a long-running ${method} ${tree?'process group':'child'}, including SIGKILL escalation`,{timeout:10000,skip:tree&&process.platform==='win32'?'POSIX process groups only':false},async()=>{
     // The deadline clock is mocked and moved only after the child says it is ready, so a slow
