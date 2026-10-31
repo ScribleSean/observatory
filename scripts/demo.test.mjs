@@ -90,7 +90,7 @@ test('the demo hourly spread follows the viewer\'s hour, not the build hour',()=
     const snapshot=ownSnapshot('Mac',built);
     const data={demo:true,...combine([{host:'Mac',snapshot}],{now:built,generatedBy:'Mac'})};
     const shifted=shiftDemoClock(data,now);
-    const today=viewedAt.slice(0,10), hour=new Date(now-120000).getUTCHours();
+    const hour=new Date(now-120000).getUTCHours();
     const nowView=activityView(shifted.view,{host:'Mac',period:'now',now});
     assert.ok(nowView.total>0,`${builtAt} viewed ${viewedAt}: Now reads ${nowView.total}`);
     const day=activityView(shifted.view,{host:'Mac',period:'day',now});
