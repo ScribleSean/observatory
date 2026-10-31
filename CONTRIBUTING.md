@@ -26,7 +26,7 @@ npm test
 npm run lint
 ```
 
-To work on the pages, run `npm run preview`. It serves the dashboard with fictional data at http://127.0.0.1:5602.
+To work on the pages, run `npm run preview`. It serves the dashboard with fictional data at http://127.0.0.1:5602. `npm run demo` builds the same pages and data as static files in `dist/demo`.
 
 ## Pull requests
 

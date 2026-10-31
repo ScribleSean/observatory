@@ -4,6 +4,8 @@
   <p><strong>A menu bar app and local dashboard for people who use AI coding agents.</strong></p>
   <p>It shows your Claude Code and Codex limits, your screen time and your token costs. It runs on your own computer.</p>
   <p>
+    <a href="https://scriblesean.github.io/observatory/">Demo</a>
+    &nbsp;·&nbsp;
     <a href="#quick-start">Quick start</a>
     &nbsp;·&nbsp;
     <a href="#privacy">Privacy</a>
