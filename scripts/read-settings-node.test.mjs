@@ -25,8 +25,11 @@ const usage=n=>({timestamp:'2026-09-06T12:01:00Z',type:'event_msg',payload:{type
 const now=()=>new Date().toISOString();
 const sum=rows=>rows.reduce((n,row)=>n+row.totalTokens,0);
 
+// The reader names files from the native realpath, which on Windows also expands 8.3
+// aliases such as RUNNER~1 in TEMP. fs.realpathSync keeps them, so use the native form.
 function temporary() {
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'observatory-read-settings-')));
+  const realpath=process.platform==='win32'?fs.realpathSync.native:fs.realpathSync;
+  return realpath(fs.mkdtempSync(path.join(os.tmpdir(),'observatory-read-settings-')));
 }
 async function inTemporary(action) {
   const root=temporary();
