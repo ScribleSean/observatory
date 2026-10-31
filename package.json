@@ -12,6 +12,7 @@
     "dashboard": "node serve-local.mjs",
     "build": "vite build",
     "preview": "node scripts/preview.mjs",
+    "demo": "vite build && node scripts/demo.mjs",
     "test": "node --import ./test/pin-timezone.mjs --test \"test/*.test.mjs\" \"scripts/*.test.mjs\"",
     "lint": "oxlint",
     "format": "oxfmt",

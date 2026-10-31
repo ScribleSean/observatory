@@ -1,0 +1,60 @@
+name: Publish web demo
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: web-demo
+  cancel-in-progress: false
+jobs:
+  build:
+    # Runs only the demo checks. The full suite runs in tests.yml.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: node --test scripts/demo.test.mjs test/workflows-pinned.test.mjs
+      # Builds the dashboard, adds fictional data and refuses anything else.
+      - run: npm run demo
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist/demo
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Confirm current main revision
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ ! "$latest" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Could not verify the current main revision."
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" == "refs/heads/main" && "$GITHUB_SHA" == "$latest" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping a superseded or non-main demo revision."
+          fi
+      - name: Deploy
+        id: deployment
+        if: steps.current.outputs.current == 'true'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
