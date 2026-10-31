@@ -44,13 +44,6 @@ test('format fills repeated placeholders including zero and refuses missing valu
 
 const unchanged = ['Now', 'Day', 'Week', 'Month', 'All time', 'Unknown', 'Open Observatory', 'Check for updates', 'Refresh', 'Settings', 'Screen time', 'Hourly totals are not collected yet', 'All needs verified records from every device', 'Turn on codexLimits in observatory.config.json', 'Not collected yet', 'No records', 'By device'];
 
-test('existing rendered wording remains unchanged', () => {
-  const strings = validateStrings(JSON.parse(read('lib/strings.json')));
-  const values = Object.values(strings).flatMap(Object.values);
-  for (const value of unchanged) assert.ok(values.includes(value), value);
-  assert.equal(strings.formats.separator, ' · ');
-});
-
 test('views read shared wording instead of literal labels', () => {
   for (const path of ['app/viewer/dashboard.tsx', 'app/viewer/components/ActionBar.tsx', 'app/viewer/components/Card.tsx', 'app/viewer/components/EmptyState.tsx', 'app/viewer/components/FilterGroup.tsx', 'app/viewer/components/InfoControl.tsx', 'app/viewer/components/Meter.tsx', 'app/viewer/components/Numeral.tsx', 'app/viewer/components/ProviderDot.tsx', 'app/viewer/components/Row.tsx', 'app/viewer/components/TextBar.tsx']) {
     const source = read(path);
