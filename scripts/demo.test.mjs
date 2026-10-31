@@ -37,7 +37,7 @@ test('the demo check passes fictional output and refuses anything else',async()=
 });
 
 test('the demo stays recent a week after build, including across UTC midnight',()=>{
-  const built=Date.parse('2028-02-25T23:50:00Z');
+  const built=Date.parse('2026-02-25T23:50:00Z');
   const snapshot=ownSnapshot('Mac',built);
   snapshot.limitHistory=[{host:'Mac',status:'ok',checkedAt:snapshot.collectedAt,points:[{
     p:'codex',w:'primary',o:'Mac',t:snapshot.collectedAt,r:81,x:snapshot.quota.windows[0].resetsAt,d:300,
