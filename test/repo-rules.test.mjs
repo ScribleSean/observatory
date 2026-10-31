@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,readdirSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {READING_FRESH_MS,DEVICE_FRESH_MS} from '../lib/freshness.mjs';
@@ -25,6 +26,42 @@ function hits(files,pattern,marker) {
   }
   return found;
 }
+
+function checkStringUsage(catalog,corpus) {
+  const unused=[];
+  for (const [group,entries] of Object.entries(catalog)) {
+    // Aliasing, iterating or indexing a whole group can use any of its keys.
+    if (new RegExp(`\\b(strings|STRINGS)\\.${group}\\b(?!\\.)`).test(corpus)) continue;
+    for (const key of Object.keys(entries)) {
+      if (!new RegExp(`\\b(strings|STRINGS)\\.${group}\\.${key}\\b`).test(corpus)) unused.push(`${group}.${key}`);
+    }
+  }
+  assert.deepEqual(unused,[],`Unused keys in lib/strings.json:\n${unused.join('\n')}`);
+}
+
+const stringSources=execFileSync('git',['ls-files','-z'],{cwd:ROOT,encoding:'utf8'}).split('\0')
+  .filter(file=>file && !file.startsWith('docs/') && !/(^|\/)strings\.(json|generated\.ts)$/.test(file)
+    && !file.includes('fixtures/') && file!=='package-lock.json'
+    && /\.(js|mjs|ts|tsx|mts|cs|swift|ps1|html|json|css)$/.test(file));
+const stringCorpus=stringSources.map(read).join('\n');
+const catalog=JSON.parse(read('lib/strings.json'));
+
+test('every shared string has a qualified use or its whole group is used', () => {
+  checkStringUsage(catalog,stringCorpus);
+});
+
+test('the shared string rule rejects a planted unused key', () => {
+  const planted={...catalog,app:{...catalog.app,unusedForRepoRule:'Unused probe'}};
+  assert.throws(()=>checkStringUsage(planted,stringCorpus),/Unused keys in lib\/strings\.json:\napp\.unusedForRepoRule/);
+});
+
+test('the shared string rule accepts qualified and whole-group uses, not bare key names', () => {
+  const sample={lower:{used:''},upper:{used:''},aliased:{any:''},iterated:{any:''}};
+  const corpus='strings.lower.used; STRINGS.upper.used; const words = strings.aliased; Object.values(STRINGS.iterated);';
+  checkStringUsage(sample,corpus);
+  assert.throws(()=>checkStringUsage({lower:{used:'',unused:''}},`${corpus} unused; strings.lower.unusedSuffix;`),
+    /Unused keys in lib\/strings\.json:\nlower\.unused/);
+});
 
 test('freshness thresholds live only in lib/freshness.mjs', () => {
   const app=sources(['lib','app','scripts'],file=>!file.endsWith('.test.mjs') && file!=='lib/freshness.mjs');
