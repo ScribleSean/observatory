@@ -104,7 +104,7 @@ test('the shared string rule accepts qualified and whole-group uses, not bare ke
     " STRINGS['bracketed'][period]; const line = `${STRINGS.templated.used} and ${count}`;";
   checkStringUsage(sample,[corpus]);
   assert.throws(()=>checkStringUsage({lower:{used:'',unused:''}},[`${corpus} unused; strings.lower.unusedSuffix;`]),
-    /Unused keys in lib\/strings\.json:\nlower\.unused$/);
+    /Unused keys in lib\/strings\.json:\nlower\.unused\n/);
 });
 
 test('the shared string rule ignores comments and strings and reads destructuring key by key', () => {
@@ -117,7 +117,7 @@ test('the shared string rule ignores comments and strings and reads destructurin
     'const { now, renamed: other } = STRINGS.periods;',
   ].join('\n');
   assert.throws(()=>checkStringUsage(sample,[corpus]),
-    /Unused keys in lib\/strings\.json:\nnotes\.inLine\nnotes\.inBlock\nnotes\.quoted\nnotes\.templated\nperiods\.later$/);
+    /Unused keys in lib\/strings\.json:\nnotes\.inLine\nnotes\.inBlock\nnotes\.quoted\nnotes\.templated\nperiods\.later\n/);
   checkStringUsage({periods:{all:''}},['const { now, ...rest } = STRINGS.periods;']);
 });
 
