@@ -1,6 +1,7 @@
 import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
 import { freshness, format, readingTime } from '../../lib/panel-data.mjs';
+import { shiftDemoClock } from '../../lib/demo-clock.mjs';
 import { useSkin } from './skin';
 
 import { LimitsView } from './limits/LimitsView';
@@ -53,7 +54,7 @@ export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: stri
     try {
       const response = await fetch('./local/combined.json', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
       const body = response.ok ? await response.json() as Combined : null;
-      setCombined(body && typeof body === 'object' && body.view ? body : null);
+      setCombined(body && typeof body === 'object' && body.view ? shiftDemoClock(body) : null);
     } catch { setCombined(null); }
     setNow(Date.now());
     setLoaded(true);
