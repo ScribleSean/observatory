@@ -82,3 +82,30 @@ test('the demo stays recent a week after build, including across UTC midnight',(
   const invalid={...data,generatedAt:'unknown'};
   assert.strictEqual(shiftDemoClock(invalid,built),invalid);
 });
+
+test('the demo hourly spread follows the viewer\'s hour, not the build hour',()=>{
+  const sum=hours=>hours.reduce((total,value)=>total+value,0);
+  for (const [builtAt,viewedAt] of [['2026-02-25T01:41:00Z','2026-03-04T20:30:00Z'],['2026-02-25T22:50:00Z','2026-03-04T03:10:00Z']]) {
+    const built=Date.parse(builtAt), now=Date.parse(viewedAt);
+    const snapshot=ownSnapshot('Mac',built);
+    const data={demo:true,...combine([{host:'Mac',snapshot}],{now:built,generatedBy:'Mac'})};
+    const shifted=shiftDemoClock(data,now);
+    const today=viewedAt.slice(0,10), hour=new Date(now-120000).getUTCHours();
+    const nowView=activityView(shifted.view,{host:'Mac',period:'now',now});
+    assert.ok(nowView.total>0,`${builtAt} viewed ${viewedAt}: Now reads ${nowView.total}`);
+    const day=activityView(shifted.view,{host:'Mac',period:'day',now});
+    const shown=day.hourly.filter(row=>row.value!==null);
+    assert.equal(shown.length,hour+1);
+    assert.equal(sum(shown.map(row=>row.value)),day.total);
+    for (const source of [...shifted.view.activity,...shifted.view.tokens].filter(row=>Array.isArray(row.days))) {
+      const reading=new Date(source.checkedAt);
+      const original=data.view[shifted.view.activity.includes(source)?'activity':'tokens'].find(row=>row.host===source.host);
+      const index=source.days.findIndex(row=>row.date===reading.toISOString().slice(0,10));
+      assert.equal(index,0);
+      const hours=source.days[index].hours;
+      assert.equal(sum(hours),sum(original.days[index].hours));
+      assert.ok(hours[reading.getUTCHours()]>0);
+      assert.ok(hours.slice(reading.getUTCHours()+1).every(value=>value===0));
+    }
+  }
+});
