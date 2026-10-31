@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,rm,utimes,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,rm,utimes,writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import {homedir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {collectProjectTokens,projectName,repositoryRoot,sessionHash} from '../scripts/read-projects.mjs';
 import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS} from '../scripts/project-tokens.mjs';
 import {buildSnapshot,toolFolder} from '../scripts/collect.mjs';
@@ -414,4 +416,17 @@ test('the unlisted sessions row is Unknown when a listed session is Unknown',()=
   const more=total=>projectsView({timezone:timeZone,projectTokens:[row(total)]},{host:'Mac',now:now.getTime()})[0].projects[0].more;
   assert.deepEqual(more(100),{count:1,total:500});
   assert.deepEqual(more(null),{count:1,total:null},'an Unknown session is not counted as zero tokens');
+});
+
+test('the demo build shows sample project tokens as ok on both computers',async()=>withFolder(async folder=>{
+  const file=path.join(folder,'combined.json');
+  execFileSync(process.execPath,[fileURLToPath(new URL('../scripts/preview.mjs',import.meta.url))],{env:{...process.env,PREVIEW_OUT:file},stdio:'ignore'});
+  const combined=JSON.parse(await readFile(file,'utf8'));
+  assert.deepEqual(combined.view.projectTokens.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','ok']]);
+}));
+
+test('combine cleans sample project tokens against its own clock, not the wall clock',()=>{
+  const later=Date.parse('2031-03-04T12:00:00Z');
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',later)},{host:'Windows',snapshot:ownSnapshot('Windows',later)}],{now:later});
+  assert.deepEqual(combined.view.projectTokens.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','ok']]);
 });
