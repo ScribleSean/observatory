@@ -17,7 +17,10 @@
 </div>
 
 <p align="center">
-  <img src="docs/images/dashboard-one-computer-light.png" width="860" alt="The Observatory dashboard on one computer, light appearance, fictional data: tiles for limits, screen time by category and cost by provider, then the Limits page">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/intro-dark.gif">
+    <img src="docs/images/intro-light.gif" width="860" alt="A short loop with fictional data: the Observatory item in the Mac menu bar shows 47 percent left, its panel opens with four limit bars, then the dashboard's Limits tile">
+  </picture>
 </p>
 
 ## Three questions at a glance
@@ -27,6 +30,10 @@
 | **Am I near my limits?** | Claude Code and Codex, each window (5-hour and weekly): percent left, reset time and the pace you are using it at. The menu bar panel lists them scarcest first. |
 | **Where did my time go?** | Screen time today and over time, by app and category, from [ActivityWatch](https://activitywatch.net/). |
 | **What did it cost?** | Tokens today and over time, and what they would cost at public API prices. |
+
+<p align="center">
+  <img src="docs/images/dashboard-one-computer-light.png" width="860" alt="The Observatory dashboard on one computer, light appearance, fictional data: tiles for limits, screen time by category and cost by provider, then the Limits page">
+</p>
 
 <p align="center">
   <picture>
