@@ -27,40 +27,98 @@ function hits(files,pattern,marker) {
   return found;
 }
 
-function checkStringUsage(catalog,corpus) {
+// Blank comments, string text and regex literals so only code counts as a use.
+// A literal that is a bare name stays, so STRINGS['periods'] still names its group.
+function codeOnly(source) {
+  const keep=text=>/^[A-Za-z_$][\w$]*$/.test(text)?text:'';
+  const templates=[]; // open braces inside each enclosing template ${ }
+  let out='',prev='',i=0;
+  while (i<source.length) {
+    const c=source[i];
+    if (c==='/' && source[i+1]==='/') { i=source.indexOf('\n',i); if (i<0) break; continue; }
+    if (c==='/' && source[i+1]==='*') { const end=source.indexOf('*/',i+2); i=end<0?source.length:end+2; out+=' '; continue; }
+    if (c==='"' || c==="'") {
+      let j=i+1;
+      while (j<source.length && source[j]!==c && source[j]!=='\n') j+=source[j]==='\\'?2:1;
+      out+=c+keep(source.slice(i+1,j))+c; prev=c; i=j+1; continue;
+    }
+    if (c==='`' || (c==='}' && templates.at(-1)===0)) {
+      if (c==='}') templates.pop();
+      let j=i+1;
+      while (j<source.length && source[j]!=='`' && !(source[j]==='$' && source[j+1]==='{')) j+=source[j]==='\\'?2:1;
+      if (source[j]==='`') { out+=c==='`'?`\`${keep(source.slice(i+1,j))}\``:'}`'; i=j+1; }
+      else { out+=c==='`'?'`${':'}${'; templates.push(0); i=j+2; }
+      prev='`'; continue;
+    }
+    if (c==='/' && /^$|[(,=:[!&|?{};+\-*%~^]/.test(prev)) {
+      let j=i+1,inClass=false;
+      while (j<source.length && source[j]!=='\n' && (inClass || source[j]!=='/')) {
+        if (source[j]==='[') inClass=true; else if (source[j]===']') inClass=false;
+        j+=source[j]==='\\'?2:1;
+      }
+      out+=' '; prev='/'; i=j+1; continue;
+    }
+    if (templates.length && c==='{') templates[templates.length-1]++;
+    if (templates.length && c==='}') templates[templates.length-1]--;
+    out+=c; if (!/\s/.test(c)) prev=c; i++;
+  }
+  return out;
+}
+
+function checkStringUsage(catalog,sources) {
+  const code=sources.map(codeOnly).join('\n')
+    // STRINGS['periods'] reads the group dynamically, like STRINGS.periods[key].
+    .replace(/\b(strings|STRINGS)\s*\[\s*(['"`])(\w+)\2\s*\]/g,'$1.$3[]')
+    // const {a, b: c} = STRINGS.group uses a and b only; a rest element uses the whole group.
+    .replace(/\{([^{}]*)\}\s*=\s*(strings|STRINGS)\.(\w+)\b(?!\s*[.[])/g,(_,names,root,group)=>names.includes('...')?`${root}.${group}`:
+      names.split(',').map(name=>name.trim().match(/^[\w$]+/)?.[0]).filter(Boolean).map(key=>`${root}.${group}.${key};`).join(''));
   const unused=[];
   for (const [group,entries] of Object.entries(catalog)) {
     // Aliasing, iterating or indexing a whole group can use any of its keys.
-    if (new RegExp(`\\b(strings|STRINGS)\\.${group}\\b(?!\\.)`).test(corpus)) continue;
+    if (new RegExp(`\\b(strings|STRINGS)\\.${group}\\b(?!\\s*\\.)`).test(code)) continue;
     for (const key of Object.keys(entries)) {
-      if (!new RegExp(`\\b(strings|STRINGS)\\.${group}\\.${key}\\b`).test(corpus)) unused.push(`${group}.${key}`);
+      if (!new RegExp(`\\b(strings|STRINGS)\\.${group}\\.${key}\\b`).test(code)) unused.push(`${group}.${key}`);
     }
   }
   assert.deepEqual(unused,[],`Unused keys in lib/strings.json:\n${unused.join('\n')}`);
 }
 
 const stringSources=execFileSync('git',['ls-files','-z'],{cwd:ROOT,encoding:'utf8'}).split('\0')
-  .filter(file=>file && !file.startsWith('docs/') && !/(^|\/)strings\.(json|generated\.ts)$/.test(file)
-    && !file.includes('fixtures/') && file!=='package-lock.json'
-    && /\.(js|mjs|ts|tsx|mts|cs|swift|ps1|html|json|css)$/.test(file));
-const stringCorpus=stringSources.map(read).join('\n');
+  .filter(file=>file && !file.startsWith('docs/') && !file.endsWith('strings.generated.ts') && !file.includes('fixtures/')
+    && /\.(js|mjs|ts|tsx|mts|cs|swift)$/.test(file))
+  .map(read);
 const catalog=JSON.parse(read('lib/strings.json'));
 
 test('every shared string has a qualified use or its whole group is used', () => {
-  checkStringUsage(catalog,stringCorpus);
+  checkStringUsage(catalog,stringSources);
 });
 
 test('the shared string rule rejects a planted unused key', () => {
   const planted={...catalog,app:{...catalog.app,unusedForRepoRule:'Unused probe'}};
-  assert.throws(()=>checkStringUsage(planted,stringCorpus),/Unused keys in lib\/strings\.json:\napp\.unusedForRepoRule/);
+  assert.throws(()=>checkStringUsage(planted,stringSources),/Unused keys in lib\/strings\.json:\napp\.unusedForRepoRule/);
 });
 
 test('the shared string rule accepts qualified and whole-group uses, not bare key names', () => {
-  const sample={lower:{used:''},upper:{used:''},aliased:{any:''},iterated:{any:''}};
-  const corpus='strings.lower.used; STRINGS.upper.used; const words = strings.aliased; Object.values(STRINGS.iterated);';
-  checkStringUsage(sample,corpus);
-  assert.throws(()=>checkStringUsage({lower:{used:'',unused:''}},`${corpus} unused; strings.lower.unusedSuffix;`),
-    /Unused keys in lib\/strings\.json:\nlower\.unused/);
+  const sample={lower:{used:''},upper:{used:''},aliased:{any:''},iterated:{any:''},bracketed:{any:''},templated:{used:''}};
+  const corpus='strings.lower.used; STRINGS.upper.used; const words = strings.aliased; Object.values(STRINGS.iterated);'+
+    " STRINGS['bracketed'][period]; const line = `${STRINGS.templated.used} and ${count}`;";
+  checkStringUsage(sample,[corpus]);
+  assert.throws(()=>checkStringUsage({lower:{used:'',unused:''}},[`${corpus} unused; strings.lower.unusedSuffix;`]),
+    /Unused keys in lib\/strings\.json:\nlower\.unused$/);
+});
+
+test('the shared string rule ignores comments and strings and reads destructuring key by key', () => {
+  const sample={notes:{inLine:'',inBlock:'',quoted:'',templated:''},periods:{now:'',renamed:'',later:''}};
+  const corpus=[
+    '// STRINGS.notes.inLine',
+    '/* strings.notes.inBlock */',
+    "const label = 'STRINGS.notes.quoted';",
+    'const text = `see STRINGS.notes.templated`;',
+    'const { now, renamed: other } = STRINGS.periods;',
+  ].join('\n');
+  assert.throws(()=>checkStringUsage(sample,[corpus]),
+    /Unused keys in lib\/strings\.json:\nnotes\.inLine\nnotes\.inBlock\nnotes\.quoted\nnotes\.templated\nperiods\.later$/);
+  checkStringUsage({periods:{all:''}},['const { now, ...rest } = STRINGS.periods;']);
 });
 
 test('freshness thresholds live only in lib/freshness.mjs', () => {
