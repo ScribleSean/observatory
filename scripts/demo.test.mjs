@@ -109,3 +109,26 @@ test('the demo hourly spread follows the viewer\'s hour, not the build hour',()=
     }
   }
 });
+
+test('the demo keeps each reading on its newest day across UTC midnight',()=>{
+  const sum=hours=>hours.reduce((total,value)=>total+value,0);
+  const built=Date.parse('2026-02-25T12:00:00Z');
+  // The Windows reading lags a few minutes behind the build.
+  const sources=[{host:'Mac',snapshot:ownSnapshot('Mac',built)},{host:'Windows',snapshot:ownSnapshot('Windows',built-5*60000)}];
+  const data={demo:true,...combine(sources,{now:built,generatedBy:'Mac'})};
+  const rows=view=>[...view.activity,...view.tokens].filter(row=>Array.isArray(row.days) && typeof row.checkedAt==='string');
+  assert.ok(rows(data.view).some(row=>row.host==='Windows'));
+  for (const viewedAt of ['2026-03-04T00:00:00Z','2026-03-04T00:01:00Z','2026-03-04T00:06:00Z']) {
+    const shifted=shiftDemoClock(data,Date.parse(viewedAt));
+    for (const [index,source] of rows(shifted.view).entries()) {
+      const original=rows(data.view)[index];
+      const label=`${viewedAt} ${source.host}`;
+      const reading=new Date(source.checkedAt);
+      assert.equal(source.days[0].date,reading.toISOString().slice(0,10),label);
+      assert.deepEqual(source.days.map(day=>sum(day.hours)),original.days.map(day=>sum(day.hours)),label);
+      const hours=source.days[0].hours;
+      assert.ok(hours[reading.getUTCHours()]>0,label);
+      assert.ok(hours.slice(reading.getUTCHours()+1).every(value=>value===0),label);
+    }
+  }
+});
