@@ -52,7 +52,7 @@ jobs:
             echo "current=true" >> "$GITHUB_OUTPUT"
           else
             echo "current=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping a superseded or non-main demo revision."
+            echo "::warning::Not deployed: this run is not for the current main revision."
           fi
       - name: Deploy
         id: deployment

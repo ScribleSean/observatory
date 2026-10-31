@@ -1,5 +1,5 @@
 // Builds the public web demo: the normal dashboard build with fictional data beside it.
-// Run `npm run build` first. Output: dist/demo, served from any subpath.
+// The demo npm script builds first. Output: dist/demo, served from any subpath.
 import {cp,mkdir,readdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {hostname,userInfo} from 'node:os';
