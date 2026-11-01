@@ -63,6 +63,8 @@ No prompts, responses, window titles, paths or credentials are kept. A value tha
 
 A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, and `codexPath`.
 
+On a Windows PC, set `"wsl": true` under `sources` to also count the Claude Code and Codex logs inside WSL toward that PC. See [Two computers](docs/TWO-COMPUTERS.md#wsl-on-the-pc).
+
 ## Agent status
 
 `npm run status -- --json` prints each engine's limits for scripts and agents: percent left, reset time, burn rate and pace per window, the engine with the most room, and when an engine that is out comes back. It reads this computer's `combined.json` only, makes no network calls and writes nothing.
