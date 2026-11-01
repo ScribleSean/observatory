@@ -122,7 +122,6 @@ async function files(root,since,limits,budget={files:0,bytes:0},byThread=null) {
       const thread=byThread && THREAD.exec(entry.name)?.[1].toLowerCase();
       if(thread && !byThread.has(thread))byThread.set(thread,full);
       let info;
-      // A file can be removed between listing and reading.
       try {info=await fs.promises.stat(full);}
       catch(error) {if(error.code==='ENOENT')continue;throw error;}
       if(info.mtimeMs<since)continue;
@@ -144,10 +143,8 @@ async function lines(file,limits,keep,each) {
   const reader=readline.createInterface({input,crlfDelay:Infinity});
   try {
     for await (const line of reader) {
-      // A long line is looked at only by its ends, and skipped unless they hold the markers.
       if(line.length>limits.maxLineBytes ? !keep(line.slice(0,EDGE)+line.slice(-EDGE)) : !keep(line))continue;
       let event;
-      // A line still being written is read on the next cycle.
       try {event=JSON.parse(line);} catch {continue;}
       if(object(event))each(event);
     }
@@ -194,7 +191,6 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
       if(event.type!=='assistant' || !object(event.message) || !object(event.message.usage))return;
       const usage=event.message.usage;
       const at=Date.parse(event.timestamp);
-      // A line that cannot be dated might be today's, so it makes the day Unknown.
       if(!Number.isFinite(at))throw new Unavailable();
       if(dayKey(at,timeZone)!==today)return;
       const values=['input_tokens','cache_read_input_tokens','cache_creation_input_tokens','output_tokens'].map(key=>count(usage[key]));
@@ -273,7 +269,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       }
       if(event.type==='turn_context') {
         model=modelName(payload.model);
-        // A new folder that has no safe name is Unknown, not the previous project.
         if(typeof payload.cwd==='string')project=name(payload.cwd,{repository,branch});
         return;
       }
@@ -289,7 +284,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       const identity=JSON.stringify([event.timestamp,running]);
       if(seen.has(identity))return;
       seen.add(identity);
-      // The running total moved but the turn's own usage is missing: that usage is Unknown, not zero.
       if(!object(last)) {if(Object.values(total).some(value=>typeof value==='number' && value>0))throw new Unavailable();return;}
       const input=count(last.input_tokens),cached=count(last.cached_input_tokens),written=count(last.cache_write_input_tokens ?? 0),output=count(last.output_tokens);
       if([input,cached,written,output].includes(null) || input<cached+written)throw new Unavailable();

@@ -9,10 +9,6 @@ import strings from '../lib/strings.json' with {type:'json'};
 import {LIMIT_LOW_PERCENT,LIMIT_SPENT_PERCENT} from '../lib/glance-limits.mjs';
 import {compact} from '../lib/panel-data.mjs';
 
-// Mistakes that kept coming back, checked across the whole repository.
-// A line that must break a rule says so on that line or the line above,
-// with the marker the rule names and a reason.
-
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const read=file=>readFileSync(path.join(ROOT,file),'utf8');
 const sources=(folders,keep)=>folders.flatMap(folder=>readdirSync(path.join(ROOT,folder),{recursive:true})
@@ -30,11 +26,9 @@ function hits(files,pattern,marker) {
   return found;
 }
 
-// Blank comments, string text and regex literals so only code counts as a use.
-// A literal that is a bare name stays, so STRINGS['periods'] still names its group.
 function codeOnly(source) {
   const keep=text=>/^[A-Za-z_$][\w$]*$/.test(text)?text:'';
-  const templates=[]; // open braces inside each enclosing template ${ }
+  const templates=[];
   let out='',prev='',i=0;
   while (i<source.length) {
     const c=source[i];
@@ -70,14 +64,11 @@ function codeOnly(source) {
 
 function checkStringUsage(catalog,sources) {
   const code=sources.map(codeOnly).join('\n')
-    // STRINGS['periods'] reads the group dynamically, like STRINGS.periods[key].
     .replace(/\b(strings|STRINGS)\s*\[\s*(['"`])(\w+)\2\s*\]/g,'$1.$3[]')
-    // const {a, b: c} = STRINGS.group uses a and b only; a rest element uses the whole group.
     .replace(/\{([^{}]*)\}\s*=\s*(strings|STRINGS)\.(\w+)\b(?!\s*[.[])/g,(_,names,root,group)=>names.includes('...')?`${root}.${group}`:
       names.split(',').map(name=>name.trim().match(/^[\w$]+/)?.[0]).filter(Boolean).map(key=>`${root}.${group}.${key};`).join(''));
   const unused=[];
   for (const [group,entries] of Object.entries(catalog)) {
-    // Aliasing, iterating or indexing a whole group can use any of its keys.
     if (new RegExp(`\\b(strings|STRINGS)\\.${group}\\b(?!\\s*\\.)`).test(code)) continue;
     for (const key of Object.keys(entries)) {
       if (!new RegExp(`\\b(strings|STRINGS)\\.${group}\\.${key}\\b`).test(code)) unused.push(`${group}.${key}`);
@@ -159,7 +150,6 @@ test('the native apps copy the freshness thresholds from lib/freshness.mjs', () 
 
 test('views never turn an Unknown into zero with ?? 0 or || 0', () => {
   const views=sources(['lib','app'],file=>file!=='lib/strings.generated.ts');
-  // Adding to a running total kept in a Map or object, as in (totals.get(key) ?? 0) + value, is allowed.
   const accumulator=/(\.get\([^()]*\)|\[[^\]]*\])\s*(\?\?|\|\|)\s*0\)\s*\+/;
   const fallback=/(\?\?|\|\|)\s*0(?![.\dxXn_])/;
   const found=hits(views,{test:line=>fallback.test(line) && !accumulator.test(line)},'zero-ok:');
@@ -171,7 +161,6 @@ test('views never turn an Unknown into zero with ?? 0 or || 0', () => {
 test('tests wait for a signal, not for a fixed time', () => {
   const tests=[...sources(['test'],file=>file.endsWith('.test.mjs')),...sources(['scripts'],file=>/^scripts\/[^/]+\.test\.mjs$/.test(file))];
   const sleep=/await\s+(new Promise\(.*setTimeout|delay\(|sleep\(|setTimeout\()/;
-  // A short pause inside a polling loop that checks a condition each time is a wait for a signal.
   const polling=/\b(for|while)\s*\(/;
   const found=hits(tests,{test:line=>sleep.test(line) && !polling.test(line)},'sleep-ok:');
   assert.deepEqual(found,[],

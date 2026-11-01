@@ -8,7 +8,6 @@ import './activity.css';
 type Props = { snapshot: Record<string, unknown> | null; now: number; initialHost?: string; initialPeriod?: string; initialDate?: string };
 const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-// Steps through the recorded dates, newest on the right, in the same pill as the filters.
 function DateStepper({ dates, value, onChange }: { dates: string[]; value: string; onChange: (date: string) => void }) {
   const index = dates.indexOf(value);
   return <div className="ob-segments ob-stepper">
@@ -40,7 +39,6 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
         {view.note && <p className="ob-meta">{view.note}</p>}
         {tracking && <p className={tracking.status === 'unknown' ? 'ob-meta' : 'ob-meta warn'}>{tracking.label}
           {tracking.status === 'unavailable' && <>{STRINGS.formats.separator}<a href={`https://${STRINGS.activity.helpAddress}`} target="_blank" rel="noreferrer">{STRINGS.activity.helpAddress}</a></>}</p>}
-        {/* The categories and their recorded apps sit under the total they add up to. */}
         {view.categories === null ? <p className="ob-meta">{STRINGS.activity.noCategories}</p> : <ul className="ob-activity-list">{view.categories.map(category => <li key={category.name}>
           {category.apps.length > 0 ? <details className="ob-disclosure">
             <summary><span>{category.label}</span><span className="ob-num">{duration(category.seconds)}</span></summary>
@@ -51,7 +49,6 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
         </li>)}</ul>}
         {view.noTracking && <p className="ob-meta">{STRINGS.activity.noTracking}</p>}
       </Card>
-      {/* The chart follows the period: one day by hour, a range by day. */}
       {view.hourly === null && <Card label={STRINGS.activity.dailyTitle}><BarChart title={STRINGS.activity.dailyTitle} data={view.series} series="accent" formatValue={duration} /></Card>}
       {view.hourly !== null && <Card label={view.hourlyTitle}><BarChart title={view.hourlyTitle} data={view.hourly} series="accent" formatValue={duration} /></Card>}
     </div>

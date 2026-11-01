@@ -115,7 +115,6 @@ export function sshTransport(invoke=runSSH,copy=runSCP) {
         await copy(spoke.ssh,file,name);
         await invoke(spoke.ssh,pushCommand(spoke,bytes.length,name));
       } catch(error) {
-        // Best effort: a copy that was not swapped in should not stay in the remote home.
         await invoke(spoke.ssh,discardCommand(spoke,name)).catch(()=>{});
         throw error;
       } finally {await rm(folder,{recursive:true,force:true});}

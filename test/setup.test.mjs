@@ -88,7 +88,6 @@ test('Node 22.13 or later is required, and 22.17 or later on Windows',()=>{
 
 test('the glance app is built inside the clone, not in Applications',()=>{
   const mac=paths('darwin','/Users/a/Developer/observatory','/Users/a');
-  // The macOS branch joins with the host's separator, so compare with forward slashes on any host.
   const posix=value=>value.replaceAll(path.sep,'/');
   assert.equal(posix(mac.app),'/Users/a/Developer/observatory/build/Observatory.app');
   assert.equal(posix(mac.launchAgent),`/Users/a/Library/LaunchAgents/${LABEL}.plist`);

@@ -9,7 +9,6 @@ test('a held lock makes a second run busy, and the lock is never empty',()=>with
   const file=path.join(folder,'tick.lock');
   let release,started;
   const holding=new Promise(resolve=>{started=resolve;});
-  // Wait for the first run to hold the lock, not for a fixed time that a busy machine can overrun.
   const first=withRunLock(file,()=>new Promise(resolve=>{release=resolve;started();}));
   await holding;
   assert.equal(JSON.parse(await readFile(file,'utf8')).pid,process.pid);

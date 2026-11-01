@@ -9,7 +9,6 @@ import {collectClaudeUsage} from '../scripts/read-claude-usage.mjs';
 import {parseDistributions,wslRoots,readClaudeRoots,readCodexRoots,readProjectRoots,cacheName} from '../scripts/token-roots.mjs';
 import {withFolder,testConfig} from './helpers.mjs';
 
-// Synthetic logs only. Events sit a minute before now so they land on today.
 const now=new Date();
 const at=offset=>new Date(now.getTime()-60_000+offset*1000).toISOString();
 const lines=rows=>rows.map(row=>JSON.stringify(row)).join('\n')+'\n';
@@ -34,8 +33,6 @@ async function codexLogs(home,prefix,input) {
   ]));
 }
 
-// A PC home with Claude 100+200 input and Codex 1000 input, and one WSL distribution
-// whose home holds Claude 300 input and Codex 2000 input, all on today and the same models.
 async function pc(folder,{wsl=true}={}) {
   const windows=path.join(folder,'windows');
   await claudeLogs(windows,'win',[100,200]);
@@ -79,7 +76,6 @@ test('the wsl source is a Windows-only opt-in',async()=>{
   assert.equal(parseConfig({sources:{codex:true}},windows).sources.wsl,false);
   assert.equal(parseConfig({sources:{wsl:true}},windows).sources.wsl,true);
   assert.throws(()=>parseConfig({sources:{wsl:true}},{platform:'darwin'}),/Windows only/);
-  // A Mac never looks for distributions, whatever its settings say.
   let asked=false;
   const ask=async()=>{asked=true;return ['Fixture-1'];};
   const mac=await tokenRoots(testConfig('/unused',{sources:{wsl:true}}),{distributions:ask});
@@ -110,7 +106,6 @@ test('Windows plus one WSL distribution: the same day and model are summed once'
   assert.equal(claude.requestCount,3);
   assert.deepEqual(claude.models.map(row=>[row.model,row.totalTokens]),[[MODEL,630]],'one model row, not two');
   assert.equal(claude.hours.reduce((a,b)=>a+b,0),630);
-  // The merged total equals the two folders read on their own.
   const alone=await Promise.all([own.claudeFolder,path.join(linux,'.claude')].map(folder=>collectClaudeUsage(folder)));
   assert.equal(alone.reduce((total,result)=>total+result.days.at(-1).totalTokens,0),claude.totalTokens);
   const codex=today([codexOf(data)]);
@@ -121,7 +116,6 @@ test('Windows plus one WSL distribution: the same day and model are summed once'
   const projects=data.projectTokens[0];
   assert.equal(projects.status,'ok');
   assert.equal(projects.projects.reduce((total,row)=>total+row.totalTokens,0),630+3020);
-  // No path, user or distribution folder reaches stored data.
   const text=JSON.stringify(data);
   for(const secret of [folder,'fixture-user','\\\\wsl'])assert.ok(!text.includes(secret),secret);
 }));
@@ -129,7 +123,6 @@ test('Windows plus one WSL distribution: the same day and model are summed once'
 test('a WSL folder that exists but cannot be read makes that provider Unknown',async()=>withFolder(async folder=>{
   const {own,linux,find}=await pc(folder,{wsl:false});
   await codexLogs(linux,'wsl',2000);
-  // A file where the .claude folder should be cannot be read as one.
   await writeFile(path.join(linux,'.claude'),'');
   const {data}=await buildSnapshot(pcConfig(folder),readersFor([own,...await find(['Fixture-1'])]),{now});
   assert.equal(claudeOf(data).status,'unavailable');
@@ -156,7 +149,6 @@ test('a linked .claude or .codex in a WSL home is Unknown, and one folder is nev
   const {data}=await buildSnapshot(pcConfig(folder),readersFor(roots),{now});
   assert.equal(claudeOf(data).status,'unavailable');
   assert.equal(codexOf(data).status,'ok');
-  // The same folder listed as two roots, as a CODEX_HOME inside the share would do.
   const twice=await buildSnapshot(pcConfig(folder),readersFor([own,{...own,label:'WSL Fixture-1',optional:true,home:'/home/fixture-user'}]),{now});
   assert.equal(codexOf(twice.data).status,'unavailable');
 }));
@@ -188,7 +180,6 @@ test('two users in one distribution are both counted',async()=>withFolder(async 
   const {own,share,find}=await pc(folder);
   const second=path.join(share,'Fixture-1','home','second-user');
   await claudeLogs(second,'two',[400]);
-  // A session the second user started in the first user's home.
   const other=path.join(second,'.claude','projects','-home-fixture-user');
   await mkdir(other,{recursive:true});
   await writeFile(path.join(other,'cross.jsonl'),lines([{type:'assistant',timestamp:at(0),sessionId:'cross',cwd:'/home/fixture-user',requestId:'cross-r0',

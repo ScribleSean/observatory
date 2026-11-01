@@ -156,8 +156,6 @@ test('--wait exits 2 on a bad engine or timeout', async () => {
   }
 });
 
-// Agents call this in idle repos whose node_modules a disk cleanup may have removed,
-// so it runs from a bare copy of the source with plain node.
 test('status runs with plain node and no node_modules, exits 0 with a current reading and 3 without one', {skip: !['darwin', 'win32'].includes(process.platform) && 'settings load on macOS and Windows only'}, async () => {
   await withFolder(async folder => {
     const local = path.join(folder, 'public', 'local');

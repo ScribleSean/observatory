@@ -26,10 +26,8 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-bar { display: block; height: 5px; border-radius: 3px; background: var(--ob-track); margin-top: 6px; overflow: hidden; }
 .ob-bar i { display: block; height: 100%; border-radius: 3px; }
 
-/* An Unknown headline keeps the headline's size, in the muted colour. */
 .ob-unknown { color: var(--ob-muted) !important; }
 
-/* One disclosure style: a small chevron that turns down when open. */
 .ob-disclosure > summary { display: flex; align-items: baseline; gap: var(--ob-space-2); cursor: pointer; list-style: none; }
 .ob-disclosure > summary::-webkit-details-marker { display: none; }
 .ob-disclosure > summary::before { content: ''; flex: none; width: 0.4em; height: 0.4em; margin: 0 0.15em 0.15em 0.1em; border: solid var(--ob-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 120ms; }
@@ -38,7 +36,6 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 
 .ob-nowrap { white-space: nowrap; }
 .ob-note-dot { white-space: pre; }
-/* In a narrow card, a note's parts stack and lose their dots. Cards that hold notes are size containers. */
 @container (max-width: 440px) {
   .ob-note { display: inline-flex; flex-direction: column; align-items: flex-end; }
   .ob-note-dot { display: none; }

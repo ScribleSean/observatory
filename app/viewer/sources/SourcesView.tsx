@@ -6,9 +6,7 @@ import './sources.css';
 export function SourcesView({ snapshot, now }: { snapshot: Record<string, unknown> | null; now: number }) {
   const groups = sourceGroups(snapshot, now);
   const totals = sourceTotals(groups);
-  // "Read: N" repeats the sentence above it, so only the other statuses are counted.
   const others = totals.byStatus.filter(item => item.word !== STRINGS.sources.statusOk);
-  // With one computer every row would name it, so the computer column is left out.
   const single = new Set(groups.flatMap(group => group.rows.map(row => row.device)).filter(Boolean)).size <= 1;
   return <div className="ob-sources">
     <div className="ob-sources-summary">
@@ -29,7 +27,6 @@ export function SourcesView({ snapshot, now }: { snapshot: Record<string, unknow
               <span className={repeat ? 'ob-source-name ob-source-repeat' : 'ob-source-name'}>{row.name}</span>
               {!single && <span className="ob-source-device" title={row.deviceName && row.deviceName !== row.device ? row.deviceName : undefined}>{row.device}</span>}
               <time className="ob-meta ob-source-time" dateTime={row.check.iso ?? undefined} title={row.check.exact ?? undefined}>{row.check.label}</time>
-              {/* The header already says how many were read, so Read itself is left out. */}
               <span className="ob-source-status">{row.status === 'ok' ? <span className="ob-visually-hidden">{row.statusWord}</span> : row.statusWord}</span>
               {row.refusal && <p className="ob-meta ob-source-refusal">{row.refusal}</p>}
             </div>;

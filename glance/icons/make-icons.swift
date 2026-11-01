@@ -1,4 +1,3 @@
-// glance/icons/Observatory.icns and Observatory.ico are committed, so setup on Windows needs no image tools.
 import AppKit
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -8,7 +7,6 @@ guard let mark = NSImage(contentsOf: root.appendingPathComponent("public/brand/t
   exit(1)
 }
 
-// Mac icons sit inside the standard grid margin. Windows icons fill the square.
 func render(_ size: Int, inset: CGFloat) -> Data {
   let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8,
                              samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
@@ -17,7 +15,6 @@ func render(_ size: Int, inset: CGFloat) -> Data {
   NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
   let side = CGFloat(size)
   let body = NSRect(x: side * inset, y: side * inset, width: side * (1 - 2 * inset), height: side * (1 - 2 * inset))
-  // The background and mark colors match public/favicon.svg.
   NSColor(srgbRed: 9 / 255, green: 9 / 255, blue: 11 / 255, alpha: 1).setFill()
   NSBezierPath(roundedRect: body, xRadius: body.width * 0.225, yRadius: body.width * 0.225).fill()
   let glyph = body.insetBy(dx: body.width * 0.17, dy: body.width * 0.17)

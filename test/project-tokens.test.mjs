@@ -29,18 +29,14 @@ async function claudeFixture(folder) {
   await writeFile(path.join(project,'session-main-0001.jsonl'),lines([
     {type:'custom-title',customTitle:'PLANTED-TITLE',sessionId:'session-main-0001'},
     {type:'user',timestamp:'2026-10-21T13:00:00Z',sessionId:'session-main-0001',cwd:repo,message:{role:'user',content:'PLANTED-PROMPT'}},
-    // Yesterday in New York: left out.
     assistant({id:'m0',request:'r0',at:'2026-10-21T03:00:00Z',sessionId:'session-main-0001',cwd:repo,side:false,tokens:usage(999,999)}),
     assistant({id:'m1',request:'r1',at:'2026-10-21T13:02:00Z',sessionId:'session-main-0001',cwd:repo,side:false,tokens:usage(100,50,800,50)}),
-    // The same request written again while streaming counts once, at its largest.
     assistant({id:'m1',request:'r1',at:'2026-10-21T13:02:01Z',sessionId:'session-main-0001',cwd:repo,side:false,tokens:usage(100,60,800,50)}),
     assistant({id:'m2',request:'r2',at:'2026-10-21T14:40:00Z',sessionId:'session-main-0001',cwd:repo,side:false,tokens:usage(10,30)}),
-  // A last line still being written is skipped until the next cycle.
   ])+'{"type":"assistant","usage":');
   await writeFile(path.join(project,'session-main-0001','subagents','agent-a1.jsonl'),lines([
     assistant({id:'s1',request:'q1',at:'2026-10-21T14:00:00Z',sessionId:'session-main-0001',cwd:`${repo}/.claude/worktrees/feature-branch-x`,side:true,tokens:usage(500,500)}),
   ]));
-  // A worktree session with no subagent marker: its subagent share is Unknown.
   await writeFile(path.join(project,'session-tree-0002.jsonl'),lines([
     assistant({id:'t1',request:'u1',at:'2026-10-21T15:00:00Z',sessionId:'session-tree-0002',cwd:`${repo}/.claude/worktrees/feature-branch-x`,tokens:usage(200,100)}),
     assistant({id:'t2',request:'u2',at:'2026-10-21T15:30:00Z',sessionId:'session-tree-0002',cwd:`${home}/Developer/other-tool`,side:false,model:'claude-unpriced-9',tokens:usage(5,5)}),
@@ -111,7 +107,6 @@ test('today by project: sessions, subagent share, worktrees, and no paths, promp
   const demo=row.projects.find(project=>project.name==='demo-app');
   assert.equal(row.projects[0],demo,'largest project first');
   const main=demo.sessions.find(session=>session.id===sessionHash('claude','session-main-0001'));
-  // 100+60+800+50 and 10+30 from the main thread, 1000 from the subagent.
   assert.equal(main.totalTokens,2050);
   assert.equal(main.subagentTokens,1000);
   assert.equal(main.start,'2026-10-21T13:02:00.000Z');
@@ -121,7 +116,6 @@ test('today by project: sessions, subagent share, worktrees, and no paths, promp
   assert.equal(tree.subagentTokens,null,'no marker is Unknown, not zero');
   const codex=demo.sessions.find(session=>session.provider==='codex');
   assert.equal(codex.id,sessionHash('codex','codex-thread-0001'));
-  // 1100 and 2200 from the parent, 500 from its subagent, repeats counted once.
   assert.equal(codex.totalTokens,3800);
   assert.equal(codex.subagentTokens,500);
   assert.equal(demo.subagentTokens,null,'a project with one Unknown session has an Unknown subagent total');
@@ -373,7 +367,6 @@ test('a forked Codex thread does not count the turns it copied from its parent',
   const meta=(timestamp,id,extra={})=>at(timestamp,'session_meta',{id,session_id:id,timestamp,cwd,originator:'fixture',source:'exec',history_mode:'legacy',...extra});
   const turn=(timestamp,id)=>at(timestamp,'turn_context',{turn_id:id,cwd,model:'gpt-5.5'});
   const tokens=(timestamp,total,last)=>at(timestamp,'event_msg',{type:'token_count',info:{total_token_usage:total,last_token_usage:last}});
-  // Yesterday evening in New York, then this morning.
   const parentLines=[meta('2026-10-20T23:00:00.000Z',parentId),turn('2026-10-20T23:00:01.000Z','turn-1'),
     tokens('2026-10-20T23:05:00.000Z',t(1000,100),t(1000,100)),turn('2026-10-21T13:00:00.000Z','turn-2'),
     tokens('2026-10-21T13:05:00.000Z',t(3000,300),t(2000,200))];
@@ -401,10 +394,8 @@ test('a forked Codex thread does not count the turns it copied from its parent',
   };
   const expected={[sessionHash('codex',parentId)]:2200,[sessionHash('codex',forkId)]:550,[sessionHash('codex',pagedId)]:77};
   assert.deepEqual(await read(),expected,'each turn once, in the thread that ran it');
-  // A parent last written long ago is still used to recognise the copies.
   await utimes(parentFile,new Date('2026-10-15T00:00:00Z'),new Date('2026-10-15T00:00:00Z'));
   assert.deepEqual(await read(),{[sessionHash('codex',forkId)]:550,[sessionHash('codex',pagedId)]:77});
-  // Without the parent the copies cannot be told apart, so the day is Unknown.
   await rm(parentFile);
   assert.equal(await read(),'unavailable');
 }));

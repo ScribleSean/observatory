@@ -1,4 +1,4 @@
-// Static price table (first written by the retired price refresh script). Edit by hand to update.
+// Static price table. Edit by hand to update.
 const prices = {
   "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
   "checkedOn": "2026-10-14",

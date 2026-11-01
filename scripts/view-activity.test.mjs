@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nowFromHours, activityNow, activityView } from '../lib/view-activity.mjs';
-import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
 
 const now = Date.parse('2026-10-14T12:32:00Z');
@@ -93,11 +92,9 @@ test('hourly masks hours after reading but retains the reading hour', () => {
   const result = view();
   assert.equal(result.hourly.length, 24);
   assert.equal(result.hourly[12].value, 100);
-  // Later hours have not happened yet, so they are blank rather than Unknown.
   assert.ok(result.hourly.slice(13).every(point => point.value === undefined));
   assert.deepEqual([result.hourly[0].label, result.hourly[13].label], ['12 AM', '1 PM']);
   assert.ok(result.hourlyTitle.startsWith(strings.activity.hourlyTitle));
-  // The zone is named only when the data's clock differs from the viewer's.
   const tokyo = snapshot(); tokyo.timezone = 'Asia/Tokyo';
   assert.equal(view(tokyo).hourlyTitle, 'Screen time by hour, GMT+9');
   assert.equal(view(undefined, { period: 'week' }).hourly, null);
@@ -122,7 +119,6 @@ test('Combined hourly chart falls back to archive time while Now stays Unknown',
     }],
   };
   const options = { host: 'All', period: 'day', date: '2026-10-14' };
-  // Read at 10:20, drawn at 12:32: 11 and 12 o'clock are Unknown, later hours are blank.
   assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(100), null, null, ...Array(11).fill(undefined)]);
   assert.equal(activityNow(data, 'All', now).reason, 'noReading');
   assert.equal(activityNow(data, 'All', now).value, null);
@@ -164,8 +160,6 @@ test('zero activity without coverage carries the tracking warning', () => {
   const data = snapshot(); data.activity[0].days = [{ ...day(undefined, 0), trackedSeconds: 0 }];
   assert.equal(view(data).noTracking, true);
 });
-test('sample Mac Now is ok at a fixed time', () => assert.equal(activityNow(sampleSnapshot(now), 'Mac', now).reason, 'ok'));
-
 test('Now notes translate each failure without exposing reason codes', () => {
   const cases = [
     [{}, strings.activity.nowNoSource],

@@ -5,7 +5,6 @@
 .ob-history-grid-cards .ob-card-head { margin-bottom: var(--ob-space-3); }
 .ob-peer-rows { margin-top: var(--ob-space-3); }
 
-/* What is left now sits on the right of the heading. */
 .ob-history-latest { display: flex; align-items: baseline; gap: var(--ob-space-2); min-width: 0; margin-left: auto; }
 .ob-history-latest .ob-num { flex: none; font-size: var(--ob-section-size); color: var(--ob-strong); letter-spacing: -0.4px; }
 .ob-history-latest .ob-num.warn { color: var(--ob-warning); }
@@ -16,14 +15,12 @@
 .ob-history-plot svg { display: block; max-width: 100%; overflow: visible; touch-action: pan-y; }
 .ob-history-plot:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 4px; border-radius: 6px; }
 
-/* Axes are quiet: two hairlines and small labels. */
 .ob-history-grid line { stroke: var(--ob-track); stroke-width: 1; opacity: 0.7; }
 .ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: var(--ob-chart-label-size); font-variant-numeric: tabular-nums; }
 .ob-history-reset { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.35; }
 .ob-history-guide { stroke: var(--ob-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.55; }
 .ob-history-cursor { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.6; }
 
-/* One hue per provider. The second computer is the same hue, lighter. */
 .ob-history-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .ob-history-line.secondary { stroke-width: 1.75; opacity: 0.6; }
 .ob-history-line.claude { stroke: var(--ob-claude); }
@@ -49,7 +46,6 @@
 .ob-history-tip-row { display: flex; justify-content: space-between; gap: var(--ob-space-2); }
 .ob-history-tip-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* In dark, the second computer is a lighter tint of the product colour, not a dimmed one that sinks into the grid. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .ob-history-line.claude.secondary { stroke: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
   :root:not([data-theme="light"]) .ob-history-dot.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }

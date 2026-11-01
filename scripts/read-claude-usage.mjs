@@ -6,7 +6,6 @@ import { TIME_ZONE } from '../lib/timezone.mjs';
 import { writeAtomic } from '../lib/atomic-file.mjs';
 
 export const MAX_FILES = 50_000;
-// MAX_TOTAL_BYTES and MAX_LINES count what one run reads, so files kept in the cache do not count.
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAX_LINE_BYTES = 4 * 1024 * 1024;
 export const MAX_LINES = 3_000_000;
@@ -24,13 +23,11 @@ const realpath = promisify(fs.realpath);
 const IGNORED = new Set(['ENOENT', 'ENOTDIR', 'EBADF', 'ELOOP']);
 
 class Unavailable extends Error {}
-// This run has read as much as it may. The logs read so far are kept for the next run.
 class OverBudget extends Unavailable {}
 
 const unavailable = () => ({ provider: 'claude-code', status: 'unavailable' });
 const notFound = () => ({ provider: 'claude-code', status: 'not-found' });
 
-// A JSON float literal, kept apart from integers as Python does.
 class PyFloat {
   constructor(value) {
     this.value = value;
@@ -327,7 +324,6 @@ function modelName(value) {
   return typeof value === 'string' && MODEL.test(value) ? value : 'unknown';
 }
 
-// Path helpers that mirror pathlib: parts comparison, case-insensitive on Windows.
 const pathApi = WINDOWS ? path.win32 : path.posix;
 const pathParts = (value) => {
   const parsed = pathApi.parse(value);
@@ -407,8 +403,6 @@ async function walk(directory, projects, found, limits) {
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const BLANK = new Set([0x20, 0x09, 0x0a, 0x0d, 0x0b, 0x0c]);
 
-// One usage observation from one line: null when the line is not an assistant
-// reply, SKIP for a reply that carries no request usage, or the observation.
 const SKIP = Symbol('skip');
 function observe(event) {
   if (!isDict(event)) return null;
@@ -437,8 +431,6 @@ function observe(event) {
   return { key, instant, model: modelName(rawModel), raw, values };
 }
 
-// Adds one observation to the records, by message and request identity. A
-// request written again while streaming keeps its largest usage and earliest time.
 function addRecord(records, { key, instant, model, raw, values }) {
   const current = { instant, model, raw, values };
   const prior = records.get(key);
@@ -461,10 +453,6 @@ function addRecord(records, { key, instant, model, raw, values }) {
   }
 }
 
-// One file's observations in order. An observation that repeats the previous one
-// for the same identity changes nothing but the earliest time, so it is folded in.
-// Replaying every file's list in file order gives the same records as reading
-// every line in that order.
 function fileLog() {
   const last = new Map();
   return {
@@ -477,7 +465,6 @@ function fileLog() {
         if (observation.instant < prior.instant) prior.instant = observation.instant;
         return;
       }
-      // The cache stores a model name as text, so a file with any other kind of model value is always reread.
       if (typeof observation.raw !== 'string' && !isNone(observation.raw)) this.cacheable = false;
       const kept = { ...observation, raw: isNone(observation.raw) ? null : observation.raw };
       last.set(observation.key, kept);
@@ -583,8 +570,6 @@ function summarize(records) {
   });
 }
 
-// The private cache: for each log, by the hash of its path below projects, the
-// file identity it was read at and its observations. Nothing else is kept.
 const HEX = /^[0-9a-f]{32}$/;
 const DIGITS = /^-?\d{1,25}$/;
 const hashText = (text) => createHash('sha256').update(text).digest('hex').slice(0, 32);
@@ -605,7 +590,6 @@ async function loadCache(directory, rootKey) {
   }
 }
 
-// A cached entry is used only when it matches the file exactly and every record is well formed.
 function cachedLog(entry, info) {
   if (!isDict(entry) || !Array.isArray(entry.at) || entry.at.length !== 5 || typeof entry.saw !== 'boolean' || !Array.isArray(entry.records))
     return null;
@@ -624,7 +608,6 @@ function cachedLog(entry, info) {
   return { saw: entry.saw, cacheable: true, list };
 }
 
-// Entries in carry are kept as they were: logs this run did not reach.
 async function saveCache(directory, rootKey, logs, carry = new Map()) {
   if (typeof directory !== 'string' || !directory) return;
   const file = pathApi.join(directory, CACHE_FILE);
@@ -676,7 +659,6 @@ export async function collectClaudeUsage(claudeFolder, { now = new Date(), limit
         try {
           await readFile(file, state, log, caps);
         } catch (error) {
-          // A history larger than one run's limits is read over several runs, as the Codex cache warms.
           if (!(error instanceof OverBudget) || !cache || reread === 1) throw error;
           const done = new Set(logs.map(({ name }) => hashText(name)));
           await saveCache(cacheDirectory, rootKey, logs, new Map([...cache].filter(([key]) => !done.has(key))));
@@ -692,7 +674,6 @@ export async function collectClaudeUsage(claudeFolder, { now = new Date(), limit
     for (const { log } of logs) for (const observation of log.list) addRecord(records, observation);
     if (!logs.some(({ log }) => log.saw) || !records.size) return unavailable();
     const days = summarize(records);
-    // Rewrite the cache only when a log was read or one has gone.
     if (cache && (reread || cache.size !== logs.length)) await saveCache(cacheDirectory, rootKey, logs);
     return { provider: 'claude-code', status: 'ok', scope: 'Recorded Claude Code requests', days };
   } catch {

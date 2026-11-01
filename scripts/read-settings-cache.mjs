@@ -41,7 +41,6 @@ export function cacheEvent(event,cached=false) {
       safe.service_tier=typeof tier==='string'&&TIERS.has(tier)?tier:'unknown';
     }
   } else if(kind==='session_meta') {
-    // Kept so a fork's copy of its parent can be found, with the id as its hash.
     safe={};
     const identity=get(payload,'id');
     if(typeof identity==='string') {
@@ -199,7 +198,6 @@ export class SettingsCache {
   events(file,expected) {
     this.readBudget?.check();
     const {maxLineBytes,maxLines,maxRetainedBytes}=this.limits;
-    // Version 2 entries keep session_meta; older ones are read again and dropped.
     const key=sha256Hex('2\0'+String(file));
     this.used.add(key);
     const signature=SettingsCache.signature(expected);

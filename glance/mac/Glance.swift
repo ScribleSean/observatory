@@ -74,7 +74,6 @@ struct PanelState: Equatable {
     var state = PanelState(now: now)
     state.updated = date(json["generatedAt"])
     guard let glance = json["glance"] as? [String: Any] else { state.notice = .collecting; return state }
-    // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
     let rows = glance["limits"] as? [[String: Any]] ?? []
     state.limits = rows.enumerated().map { index, row in
       LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["window"] as? String ?? "")-\(index)",
@@ -98,9 +97,7 @@ struct PanelState: Equatable {
       let host = row["host"] as? String ?? String(index)
       let seen = date(row["collectedAt"])
       let stale = (row["freshness"] as? [String: Any])?["stale"] as? Bool ?? true
-      // Same rule as the dashboard: today's numbers only while the reading is recent and from today.
       let current = !stale && seen.map { now.timeIntervalSince($0) <= deviceFresh && Calendar.current.isDate($0, inSameDayAs: now) } == true
-      // Short platform labels keep each line on one row. The full name is in the tooltip.
       return DeviceRow(id: host, name: host == "Windows" ? "PC" : host == "Mac" ? "Mac" : row["name"] as? String ?? host,
                        fullName: row["name"] as? String ?? host,
                        seconds: number(row["seconds"]), tokens: number(row["tokens"]), usd: number(row["usd"]),
@@ -144,7 +141,6 @@ enum Format {
     return "$" + (formatter.string(from: NSNumber(value: value.rounded())) ?? String(Int(value.rounded())))
   }
 
-  // Same as span() in lib/panel-data.mjs.
   static func span(_ seconds: TimeInterval) -> String {
     let minutes = Int((max(0, seconds) / 60).rounded())
     if minutes < 60 { return "\(minutes)m" }
@@ -166,8 +162,6 @@ enum Format {
     span(seconds) + " ago"
   }
 }
-
-// MARK: Look (mirrors app/design-tokens.css)
 
 struct Palette {
   let background, surface, text, muted, track, claude, codex, warning, error, hairline: Color
@@ -268,9 +262,7 @@ struct PanelView: View {
       .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(palette.hairline))
   }
 
-  // Every window has a row in the dashboard's order. One without a current reading says Unknown over an empty track.
   @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
-    // The percents are what is left, named once over their column like the Today card's headers.
     HStack {
       Spacer(minLength: 0)
       Text("Left")
@@ -294,7 +286,6 @@ struct PanelView: View {
         GeometryReader { geometry in
           ZStack(alignment: .leading) {
             Capsule().fill(palette.track)
-            // The bar keeps the product colour. Only the percent turns amber or red.
             if let remaining = row.remaining {
               Capsule().fill(palette.provider(row.provider))
                 .frame(width: geometry.size.width * CGFloat(remaining / 100))
@@ -302,7 +293,6 @@ struct PanelView: View {
           }
         }
         .frame(height: 5)
-        // A low limit says when it comes back, on its own line under the bar, as on Windows.
         if let remaining = row.remaining, remaining <= PanelState.low, let reset = row.resetsAt {
           Text("Resets in \(Format.span(reset.timeIntervalSince(state.now)))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
         }
@@ -311,7 +301,6 @@ struct PanelView: View {
     }
   }
 
-  // Today per computer, in columns that each name what they hold. The cost header may wrap over its column.
   static let timeColumn: CGFloat = 72, tokenColumn: CGFloat = 60, costColumn: CGFloat = 92
 
   @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
@@ -454,7 +443,6 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
   func stopProcesses() {
     server?.terminate()
-    // tick handles SIGTERM with the same grace period and tree cleanup as its deadline.
     if let running = tick, running.isRunning {
       running.terminate()
       running.waitUntilExit()

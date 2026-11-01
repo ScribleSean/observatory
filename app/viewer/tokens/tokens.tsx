@@ -30,7 +30,6 @@ const statusWord = (status: string) => status === 'no-records' ? STRINGS.status.
   : status === 'by-device' ? STRINGS.status.byDevice : STRINGS.status.unknown;
 const statusNote = (status: string) => status === 'unverified' ? STRINGS.status.allUnverified
   : status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
-// Recorded words such as "medium" read as labels, so they start with a capital. Model ids stay as recorded.
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
 const word = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value.charAt(0).toUpperCase() + value.slice(1);
 const hourLabel = (hour: number) => new Date(Date.UTC(2000, 0, 1, hour)).toLocaleTimeString('en-US', { hour: 'numeric', timeZone: 'UTC' });
@@ -38,7 +37,6 @@ const shiftDate = (date: string, days: number) => new Date(Date.parse(`${date}T0
 
 type Day = { date: string; total: number | null; hours?: (number | null | undefined)[] | null };
 
-/** The chart follows the period: today by hour, then 7 or 30 days, or every recorded day. */
 function chartData(days: Day[], period: string, anchor: string | null): ChartPoint[] | null {
   if (!anchor || !/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return null;
   if (period === 'day') {
@@ -114,7 +112,6 @@ export function TokensSection({ result, projects = [], onHostChange, onPeriodCha
   onHostChange: (host: string) => void;
   onPeriodChange: (period: string) => void;
 }) {
-  // Projects are recorded for today only, so they show with the Day period.
   const showProjects = result.period === 'day' && projects.length > 0;
   return <div className="ob-tokens">
     <div className="ob-filters">

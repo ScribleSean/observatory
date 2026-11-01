@@ -3,7 +3,6 @@ import { ProviderDot } from './ProviderDot';
 
 const heading = (title: ReactNode, provider?: string) => <h3 className="ob-card-title">{provider && <ProviderDot provider={provider} />}{title}</h3>;
 
-// Every card names itself the same way: one sentence-case heading, with a provider dot when it is about one provider.
 export function Card({ as: Tag = 'section', label, title, provider, aside, className = '', children }: {
   as?: 'section' | 'div'; label?: string; title?: ReactNode; provider?: string; aside?: ReactNode; className?: string; children?: ReactNode;
 }) {

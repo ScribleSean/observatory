@@ -11,13 +11,11 @@ import { LimitRows } from '../components/LimitRows';
 import './limits.css';
 
 const providers = [['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const;
-// The same period words as Activity and Tokens.
 const ranges: [string, string][] = [['today', STRINGS.periods.day], ['week', STRINGS.periods.week], ['month', STRINGS.periods.month], ['all', STRINGS.periods.all]];
 const windows = [['5h', STRINGS.limitHistory.fiveHour, '5-hour'], ['week', STRINGS.limitHistory.weekly, 'weekly']] as const;
 
 type Row = ReturnType<typeof limitRows>[number];
 
-// The card heading carries what is left now and when it resets, on the right.
 function Latest({ row }: { row: Row | undefined }) {
   const value = row && row.remaining !== null && !row.stale ? row.remaining : null;
   const tone = value === null ? '' : limitTone(row!);

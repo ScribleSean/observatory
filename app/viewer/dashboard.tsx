@@ -19,7 +19,6 @@ const SECTIONS = [
   ['tokens', STRINGS.sections.tokens], ['sources', STRINGS.sections.sources],
 ] as const;
 type Section = typeof SECTIONS[number][0];
-// The id of the all-computers filter. Its label is STRINGS.devices.all.
 const ALL_HOSTS = 'All';
 export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
 

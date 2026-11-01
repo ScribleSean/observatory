@@ -7,7 +7,6 @@ type Point = { host: string; t: number; r: number; x: number; source: string };
 type Series = { host: string; name: string; points: Point[]; segments: Point[][] };
 export type HistoryData = { provider: string; window: string; range: string; from: number; to: number; series: Series[]; resets: number[]; firstAt: number | null; startsHere: boolean; empty: boolean };
 type Column = { start: number; end: number; low: number; readings: number; lastAt: number };
-// One thing the pointer or keyboard can land on: a reading in line mode, a window in column mode.
 type Item = { t: number; rows: { host: string; label: string; value: number }[]; start?: number; end?: number };
 
 const PAD = { left: 36, right: 12, top: 22, bottom: 22 };
@@ -26,13 +25,11 @@ function useWidth() {
   return { ref, width };
 }
 
-// Computers are named Mac and PC, as on every surface.
 export const shortName = (series: { host: string; name: string }) => ['Mac', 'Windows'].includes(series.host) ? deviceLabel(series.host) : series.name;
 const hostOrder = (host: string) => ['Mac', 'Windows'].indexOf(host) < 0 ? 2 : ['Mac', 'Windows'].indexOf(host);
 const stamp = (t: number) => new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const hour = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-// Ticks fall on calendar boundaries: hours today, midnights over a week, Mondays over a month, months beyond.
 function calendarTicks(from: number, to: number, range: string, plotWidth: number) {
   const ticks: { t: number; label: string }[] = [];
   const cursor = new Date(from);
@@ -69,7 +66,6 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   const { ref, width } = useWidth();
   const id = useId();
   const [active, setActive] = useState<number | null>(null);
-  // The 5-hour window over days reads best as one column per window. Today stays a line.
   const columns = window === '5h' && data.range !== 'today';
   const height = width < 480 ? 140 : 164;
   const plotWidth = width - PAD.left - PAD.right, plotHeight = height - PAD.top - PAD.bottom;
@@ -77,26 +73,19 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   const sx = (t: number) => PAD.left + (Math.min(Math.max(t, data.from), data.to) - data.from) / span * plotWidth;
   const sy = (r: number) => PAD.top + (1 - r / 100) * plotHeight;
   const base = sy(0);
-  // Mac first and in the full hue, PC second and lighter, in every chart and key.
   const series = [...data.series].sort((a, b) => hostOrder(a.host) - hostOrder(b.host));
   const many = series.length > 1;
   const tone = (index: number) => index === 0 ? 'primary' : 'secondary';
 
-  // A window column needs a few pixels. Over long ranges the windows are grouped by day instead.
-  // Seven days keep one column per window down to a 320px window. Thirty days and longer group by day.
   const daily = columns && 5 * HOUR / span * plotWidth < 4;
   const columnSets = series.map(item => {
     const windows = windowColumns(item.points, window) as Column[];
     const shown = daily ? dailyColumns(windows) as Column[] : windows;
-    // Only columns whose middle is in view, so nothing piles up at the edges.
     return shown.filter(column => { const middle = (column.start + column.end) / 2; return middle >= data.from && middle <= data.to; });
   });
-  // The guide answers one question: will this week last? So only each computer's current window gets one,
-  // from its own reset. Computers that share a window draw it once.
   const guide = window === 'week' ? series.flatMap(item => paceGuide(item.points, 'week', data.from, data.to).slice(-1).filter(segment => segment.used))
     .filter((segment, index, list) => list.findIndex(other => Math.abs(other.end - segment.end) <= 5 * 60000) === index) : [];
 
-  // In column mode one item is one window (or day): the computers' columns that overlap it, together.
   const items: Item[] = columns
     ? columnSets.flatMap((set, index) => set.map(column => ({ column, index })))
       .sort((a, b) => (a.column.start + a.column.end) - (b.column.start + b.column.end))
@@ -132,7 +121,6 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
     else if (event.key in steps) {
       event.preventDefault();
       const step = steps[event.key];
-      // Keyboard movement starts from the reading that is announced: the newest one.
       setActive(current => Math.max(0, Math.min(last, (current ?? last) + step)));
     }
     if (event.key === 'Escape') setActive(null);
@@ -155,11 +143,9 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
           {!columns && data.resets.map(t => <line key={t} className="ob-history-reset" x1={sx(t)} x2={sx(t)} y1={PAD.top} y2={base} />)}
           {guide.map(segment => <line key={segment.end} className="ob-history-guide" x1={sx(segment.t1)} y1={sy(segment.r1)} x2={sx(segment.t2)} y2={sy(segment.r2)}><title>{STRINGS.limitHistory.paceGuide}</title></line>)}
           {columns && columnSets.map((set, index) => set.map(column => {
-            // Slim columns at the middle of each window or day, one per computer side by side.
             const room = Math.max(1.5, (column.end - column.start) / span * plotWidth - 1);
             const w = Math.max(1.5, Math.min(5, room / series.length - 1));
             const x = sx((column.start + column.end) / 2) - (series.length * (w + 1)) / 2 + index * (w + 1);
-            // A window that ran out is a short stub on the baseline, so it reads as empty, not missing.
             const state = column.low <= 0.5 ? 'empty' : '';
             const top = state ? base - 3 : sy(column.low);
             return <rect key={`${index}-${column.end}`} className={`ob-history-column ${color} ${tone(index)} ${state}`}
@@ -172,7 +158,6 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
           {shown && <line className="ob-history-cursor" x1={sx(shown.t)} x2={sx(shown.t)} y1={PAD.top} y2={base} />}
           {data.empty && <text className="ob-history-empty" x={PAD.left + plotWidth / 2} y={PAD.top + plotHeight / 2} textAnchor="middle">{STRINGS.limitHistory.noReadings}</text>}
         </svg>
-        {/* One key for every chart with two computers, in the top right, clear of the lines. */}
         {many && <div className="ob-history-key" aria-hidden="true">
           {series.map((item, index) => <span key={item.host}><i className={`${color} ${tone(index)}`} />{shortName(item)}</span>)}
         </div>}

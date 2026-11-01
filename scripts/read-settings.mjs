@@ -298,7 +298,6 @@ export function pyDumps(value,{allowNan=true}={}) {
   if(Array.isArray(value))return '['+value.map(v=>pyDumps(v,{allowNan})).join(', ')+']';
   return '{'+Object.keys(value).map(k=>quote(k)+': '+pyDumps(value[k],{allowNan})).join(', ')+'}';
 }
-// Python == over parsed JSON values.
 export function pyEqual(a,b) {
   const numeric=x=>typeof x==='boolean'?Number(x):x;
   a=numeric(a);b=numeric(b);
@@ -468,7 +467,6 @@ function turnIdentity(value) {
 const cutoffMicros=cutoff=>typeof cutoff==='bigint'?cutoff:BigInt(cutoff.getTime())*1000n;
 const TOKEN_ROW=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','reasoningOutputTokens','totalTokens'];
 
-// Validate before changing the running settings or cumulative token counters.
 export function validEvent(event) {
   try {
     if(!isDict(event))return false;
@@ -504,7 +502,6 @@ export function validEvent(event) {
 
 const counters=source=>FIELDS.map(k=>number(has(source,k)?source[k]:k==='cache_write_input_tokens'?0:null));
 
-// The running total a token_count event reports, or null.
 function runningTotal(event) {
   if(!validEvent(event))return null;
   const p=pyOr(get(event,'payload'),{});
@@ -515,7 +512,6 @@ function runningTotal(event) {
   return current.some(isNone)?null:current;
 }
 
-// The call id of a tool call event, or null.
 function toolCallId(event) {
   if(!validEvent(event)||get(event,'type')!=='response_item')return null;
   const p=pyOr(get(event,'payload'),{});
@@ -721,7 +717,6 @@ function summarizeSessions(sessions,cutoff,cache,lineages,readBudget,limits) {
     const {file,info}=sessions.get(identity);
     return cache?cache.events(file,info):fileEvents(file,readBudget,limits);
   };
-  // The cache keeps a thread id only as its hash.
   const byHash=cache?new Map([...sessions.keys()].map(identity=>[sha256Hex(identity),identity])):null;
   const totals=new Map();
   const copiedTotals=id=>{

@@ -5,8 +5,6 @@ import path from 'node:path';
 
 const workflows=path.join(import.meta.dirname,'..','.github','workflows');
 
-// Every action is pinned to a full commit SHA, with the version it stands for in a comment.
-// A tag can be moved to other code. A commit SHA cannot.
 function unpinnedActions(text) {
   const problems=[];
   text.split(/\r?\n/).forEach((line,index)=>{

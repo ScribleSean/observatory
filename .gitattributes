@@ -1,4 +1,3 @@
-# Generated and source text use LF on every platform.
 *.mjs text eol=lf
 *.js text eol=lf
 *.mts text eol=lf

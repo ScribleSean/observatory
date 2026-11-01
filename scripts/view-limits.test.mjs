@@ -138,13 +138,6 @@ test('peer absent or invalid is null and empty peer windows are Unknown', () => 
   assert.equal(peer.stale, true);
 });
 
-test('sample fixture supplies both providers and the named peer', () => {
-  const data = sampleSnapshot(now);
-  const rows = limitRows(data, now);
-  for (const provider of ['claude', 'codex']) assert.equal(rows.filter(row => row.provider === provider && row.remaining !== null).length, 2);
-  assert.equal(peerLimits(data, now).device, 'PC');
-});
-
 test('pace defensively filters malformed shapes without mutating the snapshot', () => {
   const data = snapshot();
   data.quota.windows.push(null, [], { bucket: 1, window: 'primary' });

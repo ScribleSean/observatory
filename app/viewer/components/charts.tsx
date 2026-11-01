@@ -37,7 +37,6 @@ function useWidth() {
   return { ref, width };
 }
 
-/** At most six labels (four on a narrow chart). Thirty days label Mondays, a week labels weekdays, anything else is spaced evenly. */
 export function axisLabels(data: ChartPoint[], most = 6): { index: number; text: string }[] {
   const dates = data.map(point => point.date);
   if (dates.length && dates.every(valid)) {
@@ -50,7 +49,6 @@ export function axisLabels(data: ChartPoint[], most = 6): { index: number; text:
   return data.flatMap((point, index) => index % stride === 0 ? [{ index, text: point.label }] : []);
 }
 
-/** A bar with only its top corners rounded. */
 function bar(x: number, y: number, width: number, height: number) {
   const r = Math.min(2, width / 2, height);
   return `M${x} ${y + height}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + width - r}Q${x + width} ${y} ${x + width} ${y + r}V${y + height}Z`;
@@ -73,7 +71,6 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
   return (
     <figure className="ob-bars">
       <div className="ob-bars-head">
-        {/* Where the card already names the chart, the title is for screen readers only. */}
         <h3 id={id} className={quietTitle ? 'ob-visually-hidden' : 'ob-card-title'}>{title}</h3>
         {!available.length && !quietTitle && <span className="ob-meta">{STRINGS.status.unknown}</span>}
       </div>
@@ -88,7 +85,6 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
           {values.map((value, index) => {
             const x = center(index) - barWidth / 2;
             if (value === undefined) return null;
-            // Unknown is a short dashed mark of one height, so it reads as missing, never as a small value.
             if (value === null) return <line key={index} data-unknown={index} className="ob-bars-unknown" x1={center(index)} x2={center(index)} y1={baseline} y2={baseline - STUB}><title>{`${names[index]}: ${STRINGS.status.unknown}`}</title></line>;
             const barHeight = Math.max(0, value) / (maximum || 1) * plot;
             if (barHeight <= 0) return null;
@@ -103,7 +99,6 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
           })}
         </svg>
       </div>
-      {/* Exact values: each bar's hover title, and this table for screen readers. */}
       <div className="ob-visually-hidden">
         <table>
           <thead><tr><th scope="col">{STRINGS.charts.item}</th><th scope="col">{STRINGS.charts.value}</th></tr></thead>
