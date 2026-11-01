@@ -98,6 +98,18 @@ const prices = {
       "cachedInput": 0.1,
       "cacheWrite": 2.5,
       "output": 10
+    },
+    "gpt-daybreak-blue-latest": {
+      "input": 4,
+      "cachedInput": 0.4,
+      "cacheWrite": 5,
+      "output": 20
+    },
+    "gpt-daybreak-red-latest": {
+      "input": 12.5,
+      "cachedInput": 1.25,
+      "cacheWrite": 15.625,
+      "output": 75
     }
   }
 };

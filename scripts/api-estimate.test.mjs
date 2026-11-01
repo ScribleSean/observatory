@@ -68,3 +68,9 @@ test('prototype property names are excluded', () => {
     assert.equal(result.excluded, 1);
   }
 });
+
+test('Codex daybreak models have a public API price', () => {
+  const row = { model: 'gpt-daybreak-blue-latest', inferred: false, inputTokens: 1e6, cacheReadTokens: 1e6, cacheCreationTokens: 0, outputTokens: 1e6, totalTokens: 3e6 };
+  assert.equal(estimate([row]).usd, 4 + 0.4 + 20);
+  assert.equal(estimate([{ ...row, model: 'gpt-daybreak-red-latest' }]).usd, 12.5 + 1.25 + 75);
+});
