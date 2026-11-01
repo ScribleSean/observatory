@@ -1,52 +1,14 @@
-<div align="center">
-  <img src="public/favicon.svg" width="72" height="72" alt="Observatory telescope">
-  <h1>Observatory</h1>
-  <p><strong>A menu bar app and local dashboard for people who use AI coding agents.</strong></p>
-  <p>It shows your Claude Code and Codex limits, your screen time and your token costs. It runs on your own computer.</p>
-  <p>
-    <a href="https://scriblesean.github.io/observatory/">Demo</a>
-    &nbsp;·&nbsp;
-    <a href="#quick-start">Quick start</a>
-    &nbsp;·&nbsp;
-    <a href="#privacy">Privacy</a>
-    &nbsp;·&nbsp;
-    <a href="docs/TWO-COMPUTERS.md">Two computers</a>
-    &nbsp;·&nbsp;
-    <a href="#development">Development</a>
-  </p>
-</div>
+# Observatory
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/intro-dark.gif">
-    <img src="docs/images/intro-light.gif" width="860" alt="A short loop with fictional data: the Observatory item in the Mac menu bar shows 47 percent left, its panel opens with four limit bars, then the dashboard's Limits tile">
-  </picture>
-</p>
+A menu bar app and local dashboard for people who use Claude Code and Codex. It shows how much of each limit is left, where your screen time went, and how many tokens you used, on a Mac, a Windows PC or both.
 
-## Three questions at a glance
+Observatory reads records your tools already keep on your computer. It has no account, no hosted service and no telemetry. It only watches: it does not start, stop or answer an agent, and it does not change the tools it reads.
 
-| Question | What Observatory shows |
-| --- | --- |
-| **Am I near my limits?** | Claude Code and Codex, each window (5-hour and weekly): percent left, reset time and the pace you are using it at. The menu bar panel lists them scarcest first. |
-| **Where did my time go?** | Screen time today and over time, by app and category, from [ActivityWatch](https://activitywatch.net/). |
-| **What did it cost?** | Tokens today and over time, and what they would cost at public API prices. |
+[Demo with fictional data](https://scriblesean.github.io/observatory/)
 
-<p align="center">
-  <img src="docs/images/dashboard-one-computer-light.png" width="860" alt="The Observatory dashboard on one computer, light appearance, fictional data: tiles for limits, screen time by category and cost by provider, then the Limits page">
-</p>
+## Install
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/menu-bar-panel-dark.png">
-    <img src="docs/images/menu-bar-panel-light.png" width="340" alt="The menu bar panel with fictional data: four limit bars, one line per computer for today, then Open dashboard, Refresh and Quit">
-  </picture>
-</p>
-
-Observatory is monitor-only. It does not start, stop or answer an agent, and it does not change the tools it reads.
-
-## Quick start
-
-You need [Node.js](https://nodejs.org/) 22.13 or later on a Mac, or 22.17 or later on a Windows PC. On a Mac, also install the Xcode Command Line Tools with `xcode-select --install`. For screen time, install and run [ActivityWatch](https://activitywatch.net/). Everything else is optional. A missing source shows Unknown, and the rest keep working.
+You need [Node.js](https://nodejs.org/) 22.13 or later on a Mac, or 22.17 or later on Windows. On a Mac, also run `xcode-select --install`. For screen time, install and run [ActivityWatch](https://activitywatch.net/). Everything else is optional.
 
 ```bash
 git clone https://github.com/ScribleSean/observatory.git
@@ -60,41 +22,31 @@ cd observatory
 npm run setup
 ```
 
-That is the whole install. Setup writes a settings file with every source on. It builds the dashboard and a small menu bar app, or a tray app on Windows, inside the folder you cloned, and starts the app now and at login. There is no account and no installer, and nothing goes into Applications or Program Files. The app is built on your own computer, so there is no downloaded-app warning to click through.
+Setup writes a settings file, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the telescope, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601.
 
-Click the telescope in the menu bar, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601 in your normal browser.
+- Preview the changes first with `npm run setup -- --dry-run`.
+- Update with `git pull`, then `npm run setup`.
+- Remove with `npm run setup -- --remove`, then delete the folder. History lives in `~/Library/Application Support/Observatory` on a Mac and `%LOCALAPPDATA%\Observatory` on Windows.
+- If the notch hides the menu bar item on a MacBook, hold Command and drag it right.
 
-- To see what setup would do without changing anything, run `npm run setup -- --dry-run`.
-- To update, run `git pull`, then `npm run setup` again.
-- To remove Observatory, run `npm run setup -- --remove`. It stops the app and removes the login item. Then delete the cloned folder. To delete the history too, delete the data folder: `~/Library/Application Support/Observatory` on a Mac, `%LOCALAPPDATA%\Observatory` on Windows.
-- npm may warn that an install script for `fsevents` did not run. Only the development server uses that package, and setup does not need it.
-- On a MacBook with a notch and a busy menu bar, the notch can hide the menu bar item. Hold Command and drag it to the right.
+## How it works
 
-## A second computer (optional)
+Every five minutes the app collects one snapshot of this computer:
 
-If you work on a Mac and a Windows PC, they can share one view. The Mac reads the PC's numbers over your own SSH connection every five minutes and writes the combined view back, so both menus and both dashboards show both computers. Observatory does not add limits across computers, and it labels sums of time and tokens "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
-
-## Privacy
-
-Observatory reads records that your tools already keep on your computer. Observatory has no hosted service and no telemetry.
-
-| Source | What is read | What is kept |
+| Source | Read from | Kept |
 | --- | --- | --- |
-| ActivityWatch | App usage events from its local server on 127.0.0.1 | Seconds per app and category, by day and hour. No window titles. |
-| Claude Code logs (`~/.claude/projects`) | Token counts per request | Tokens per day, hour and model. No prompts or responses. |
-| Codex logs (`~/.codex`) | Token counts, settings and tool calls per session | Tokens per day and model, effort and speed settings, tool call counts by name. No prompts, responses or arguments. |
-| Limits | Asked from the Claude Code and Codex clients you already have | Percent left and reset time per window. |
+| Limits | The installed Claude Code and Codex clients, with your existing sign-in | Percent left and reset time per window |
+| Claude Code | `~/.claude/projects` | Tokens per day, hour and model |
+| Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts |
+| Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category |
 
-- To read your limits, Observatory asks the installed Claude Code and Codex clients, which fetch your own account's limits from their provider with your existing sign-in. Observatory does not see or store credentials.
-- The dashboard listens on 127.0.0.1 only, serves the built pages and one data file, and accepts only GET and HEAD requests.
-- With a second computer, the only other connection is SSH from your Mac to your own PC.
-- The tests plant prompts, messages, paths and fake keys in sample files and check that none of them reach the saved data.
+No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, never as zero. Dollar figures are estimates at public API prices, not a bill.
 
-Turn any source off by setting it to `false` in `observatory.config.json` and running `npm run setup` again. See [security](SECURITY.md) for details.
+**Two computers.** A Mac and a Windows PC can share one view. The Mac reads the PC's snapshot over your own SSH alias and sends the combined view back, so both show both computers. Limits are account-wide and never added across computers. Token and screen time sums are labeled "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
 
 ## Settings
 
-Settings are in `observatory.config.json`, next to `package.json`. Setup writes it the first time.
+`observatory.config.json`, next to `package.json`:
 
 ```json
 {
@@ -109,32 +61,17 @@ Settings are in `observatory.config.json`, next to `package.json`. Setup writes 
 }
 ```
 
-Observatory reads a source only while it is `true`. An older settings file that still lists `agents` keeps working, and Observatory ignores that key. Optional settings are `dashboard.port` (default 5601), `dataFolder`, and `codexPath` if Codex is installed somewhere unusual.
+A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, and `codexPath`.
 
-## How to read the numbers
+## Agent status
 
-- Unknown means a value was not read. It does not mean zero.
-- A limit percentage comes from the provider. A dollar figure is an estimate at public API prices, not a bill.
-- Days are counted in your computer's own time zone.
+`npm run status -- --json` prints each engine's limits for scripts and agents: percent left, reset time, burn rate and pace per window, the engine with the most room, and when an engine that is out comes back. It reads this computer's `combined.json` only, makes no network calls and writes nothing.
 
-## For agents
+```bash
+npm run status -- --wait codex --timeout 60
+```
 
-`npm run status` prints each engine's limits, reset times and burn rate, and which engine has the most room left. `npm run status -- --json` prints the same as JSON for scripts and AI agents. It reads this computer's `combined.json` only. It makes no network calls and writes nothing.
-
-- Each engine (`claude` and `codex`) has two windows, `five_hour` and `weekly`. Each window has `percentLeft`, `resetsAt`, `minutesToReset`, `burnPerHour` and `pace`, which is `spend`, `hold`, `slow`, `out` or `unknown`. `route` suggests an engine for `code`, `review` and `research`.
-- `nextReturn` gives the reset time of each engine that is out. `npm run status -- --wait codex --timeout 60` blocks until Codex is no longer out, then prints the JSON.
-- The command exits with 0 when it has a current reading and 3 when the data is missing or stale. With `--wait`, it exits with 0 once the engine is not out, 4 on timeout, and 2 for a bad engine name or timeout value.
-- `route` is advice. Observatory does not start, stop or switch an agent. [Agent status](docs/AGENT-STATUS.md) lists every field.
-
-## Screenshots
-
-The images in this README use fictional data from `npm run preview`. To retake them, run `npm run build`, then `npm run preview`, and open http://127.0.0.1:5602. The preview shows two computers, or one with `PREVIEW_ONE=1`. Take the shots at 1280 pixels wide and 2x scale. The repository already has these:
-
-- `docs/images/dashboard-one-computer-light.png`: one computer, Limits page, light.
-- `docs/images/dashboard-{limits,activity,tokens}-{light,dark}.png`: every page in both appearances.
-- `docs/images/menu-bar-panel-{light,dark}.png`: the Mac menu bar panel drawn from the same fictional data. `PREVIEW_OUT=<file> npm run preview` writes that data as a `combined.json`, and `build/Observatory.app/Contents/MacOS/ObservatoryGlance --render <file> <out.png> light` draws the panel from it.
-
-On Windows, `build\windows\ObservatoryGlance.exe --render <file> <out.png> light` draws the tray panel the same way.
+That waits until Codex has room again. Exit codes: 0 for a current reading, 3 for missing or stale data, 4 on a wait timeout. [Agent status](docs/AGENT-STATUS.md) lists every field.
 
 ## Development
 
@@ -142,22 +79,6 @@ On Windows, `build\windows\ObservatoryGlance.exe --render <file> <out.png> light
 npm test
 ```
 
-```bash
-npm run lint
-```
+`npm run tick` runs one collection. After `npm run build`, `npm run preview` serves the dashboard with fictional data at http://127.0.0.1:5602. Bug reports and small fixes are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-`npm run tick` runs one collection by hand. The table maps each part to its code.
-
-| Part | Files |
-| --- | --- |
-| Settings | `lib/config.mjs`, `lib/timezone.mjs` |
-| Readers | `scripts/read-settings.mjs`, `scripts/read-claude-usage.mjs`, `scripts/mac-activity.mjs`, `scripts/windows-aggregate-activity.ps1`, `scripts/collect-quota.mjs`, `scripts/claude-limits.mjs` |
-| Collect and combine | `scripts/collect.mjs`, `lib/combine.mjs`, `scripts/tick.mjs` |
-| Second computer | `scripts/hub.mjs`, `scripts/hub-transport.mjs` |
-| Dashboard | `serve-local.mjs`, `app/viewer`, `lib/panel-data.mjs` |
-| Menu bar and tray | `glance/mac/Glance.swift`, `glance/windows/Glance.cs` |
-| Setup | `scripts/setup.mjs` |
-
-Bug reports and small fixes are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-[MIT license](LICENSE) · [Third-party acknowledgments](THIRD-PARTY-NOTICES.md)
+[MIT license](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
