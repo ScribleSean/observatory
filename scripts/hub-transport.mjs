@@ -58,9 +58,22 @@ export function pushCommand(spoke,bytes,name) {
   return `s="$HOME/${name}"; d=${macFolder(spoke)}/public/local; test "$(wc -c < "$s")" -eq ${bytes} || { rm -f "$s"; exit 4; }; mkdir -p "$d" && mv -f "$s" "$d/${name}" && mv -f "$d/${name}" "$d/combined.incoming.json"`;
 }
 
+const keep={
+  posix:['HOME','USER','LOGNAME','PATH','TMPDIR','SSH_AUTH_SOCK'],
+  win32:['SystemRoot','SystemDrive','USERPROFILE','HOMEDRIVE','HOMEPATH','USERNAME','APPDATA','LOCALAPPDATA','ProgramData','TEMP','TMP','PATH','Path','PATHEXT','ComSpec','SSH_AUTH_SOCK'],
+};
+
+// ssh and scp get only what they need to find the user's keys, agent and known hosts.
+// A SendEnv line in the user's ssh config would otherwise send any variable it names.
+export function sshEnvironment(source=process.env,platform=process.platform) {
+  const result={};
+  for(const name of platform==='win32'?keep.win32:keep.posix)if(typeof source[name]==='string')result[name]=source[name];
+  return result;
+}
+
 function run(program,args) {
   return new Promise((resolve,reject)=>{
-    const child=execFile(program,args,{timeout:30000,killSignal:'SIGKILL',
+    const child=execFile(program,args,{timeout:30000,killSignal:'SIGKILL',env:sshEnvironment(),
       maxBuffer:Math.ceil(MAX_FILE_BYTES*4/3)+1024,windowsHide:true},(error,stdout)=>{
       if(error)reject(Object.assign(Error(error.killed?'timed out':'unreachable'),{code:error.code}));
       else resolve(stdout);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanQuota,cleanAccountUsage,readAccountSnapshot} from './read-quota.mjs';
+import {cleanQuota,cleanAccountUsage,errorStatus,readAccountSnapshot} from './read-quota.mjs';
 import {EventEmitter} from 'node:events';
 import {PassThrough,Writable} from 'node:stream';
 import {createHmac} from 'node:crypto';
@@ -153,4 +153,14 @@ test('a failed usage read preserves the observed opaque account scope for invali
     return true;
   });
   assert.equal(client.isClosed(),true);
+});
+
+test('a revoked or expired Codex sign-in reads as needs sign-in, other server errors stay unavailable', () => {
+  const revoked = 'failed to fetch codex rate limits: GET https://chatgpt.com/backend-api/wham/usage failed: 401 Unauthorized; content-type=text/plain; body={"error":{"code":"token_revoked"}}';
+  assert.equal(errorStatus({ code: -32603, message: revoked }), 'needs-auth');
+  assert.equal(errorStatus({ code: -32603, message: 'body={"error":{"code":"token_expired"}}' }), 'needs-auth');
+  assert.equal(errorStatus({ code: -32603, message: 'failed: 500 Internal Server Error' }), 'unavailable');
+  assert.equal(errorStatus({ code: -32603 }), 'unavailable');
+  assert.equal(errorStatus({ code: -32601, message: '401 Unauthorized' }), 'unsupported');
+  assert.equal(errorStatus({ code: 429 }), 'rate-limited');
 });

@@ -28,7 +28,16 @@ export function extractClaudeLimits(input,now=Date.now()) {
     const window=cleanWindow(isObject(input.rate_limits)?input.rate_limits[name]:null,observedAt);
     if(window)record.windows[name]={...window,observedAt};
   }
-  return Object.keys(record.windows).length?record:null;
+  if(!Object.keys(record.windows).length)return null;
+  const missing=cleanNames(input.notReported);
+  if(missing)record.notReported={names:missing.filter(name=>!record.windows[name]),observedAt};
+  return record;
+}
+
+// Window names the latest usage read left out because the account has no such limit right now.
+function cleanNames(raw) {
+  if(!Array.isArray(raw) || raw.length>Object.keys(windows).length || !raw.every(name=>Object.hasOwn(windows,name)))return null;
+  return [...new Set(raw)];
 }
 
 function cleanStored(raw,now) {
@@ -43,7 +52,10 @@ function cleanStored(raw,now) {
     record.windows[name]={...window,observedAt:stored.observedAt};
     record.observedAt=Math.max(record.observedAt,stored.observedAt);
   }
-  return Object.keys(record.windows).length?record:null;
+  if(!Object.keys(record.windows).length)return null;
+  const missing=isObject(raw.notReported)?cleanNames(raw.notReported.names):null,at=raw.notReported?.observedAt;
+  if(missing && Number.isSafeInteger(at) && at>0 && at<=seconds+60)record.notReported={names:missing,observedAt:at};
+  return record;
 }
 
 export function mergeClaudeLimits(previous,next,now=Date.now()) {
@@ -52,11 +64,15 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
   if(!saved)return next;
   const merged={observedAt:Math.max(saved.observedAt,next.observedAt),windows:{}};
   for(const name of Object.keys(windows)) {
+    // A read that leaves a window out ends the earlier reading of it.
+    if(next.notReported?.names.includes(name))continue;
     const before=saved.windows[name],after=next.windows[name];
     if(!before || !after) {if(before || after)merged.windows[name]=before ?? after;continue;}
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
     merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage ? before : after;
   }
+  const missing=next.notReported ?? (saved.notReported && {...saved.notReported,names:saved.notReported.names.filter(name=>!next.windows[name])});
+  if(missing)merged.notReported=missing;
   return merged;
 }
 
@@ -121,10 +137,14 @@ export function claudeLimitsSource(stored,{enabled,now=Date.now()}={}) {
   const record=cleanStored(stored,now);
   const seconds=Math.floor(now/1000);
   if(!record)return {...base,status:'unavailable',windows:[]};
-  const live=Object.entries(record.windows).filter(([,window])=>window.resetsAt>seconds);
+  const missing=record.notReported && (seconds-record.notReported.observedAt)*1000<READING_FRESH_MS?record.notReported:null;
+  // A later read that leaves a window out replaces an earlier reading of it.
+  const live=Object.entries(record.windows).filter(([name,window])=>window.resetsAt>seconds &&
+    !(missing?.names.includes(name) && missing.observedAt>=window.observedAt));
   if(!live.length)return {...base,status:'unavailable',windows:[]};
   const checked=Math.max(...live.map(([,window])=>window.observedAt));
   return {...base,status:(seconds-checked)*1000<READING_FRESH_MS?'ok':'stale',checkedAt:new Date(checked*1000).toISOString(),
+    ...(missing?.names.length?{notReported:missing.names}:{}),
     windows:live.map(([name,window])=>({bucket:'claude',window:name,durationMinutes:windows[name],checkedAt:new Date(window.observedAt*1000).toISOString(),
       remainingPercent:Math.round((100-window.usedPercentage)*10)/10,resetsAt:new Date(window.resetsAt*1000).toISOString()}))};
 }
@@ -134,16 +154,19 @@ export async function readClaudeLimits(runtime,{now=Date.now(),readUsage=readCla
   let usageCommand='failed';
   try {
     const result=await readUsage({cwd:path.join(runtime,CLAUDE_LIMITS_FOLDER),now});
-    if(isObject(result) && ['read','not-found','failed','timed-out','unrecognized'].includes(result.status)) {
+    if(isObject(result) && ['read','not-found','failed','timed-out','unrecognized','signed-out'].includes(result.status)) {
       if(result.status==='read') {
         usageCommand='unrecognized';
-        if(isObject(result.usage))usageCommand=await recordClaudeLimits(runtime,{rate_limits:result.usage.rate_limits},now)?'read':'unrecognized';
+        if(isObject(result.usage))usageCommand=await recordClaudeLimits(runtime,{rate_limits:result.usage.rate_limits,notReported:result.usage.notReported},now)?'read':'unrecognized';
       } else if(result.usage===null)usageCommand=result.status;
     }
   } catch {usageCommand='failed';}
   let stored=null;
   try {stored=await plainFile(path.join(folderOf(runtime),CLAUDE_LIMITS_FILE),4096);}catch{}
-  return {...claudeLimitsSource(stored,{enabled:true,now}),usageCommand};
+  const source=claudeLimitsSource(stored,{enabled:true,now});
+  // Signed out of Claude Code: say so instead of an old or missing reading.
+  if(usageCommand==='signed-out' && source.status!=='ok')return {...base,status:'needs-auth',windows:[],usageCommand};
+  return {...source,usageCommand};
 }
 
 // Keep the timer referenced so pending work cannot let Node exit before the fallback.

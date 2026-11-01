@@ -17,6 +17,8 @@ struct LimitRow: Identifiable, Equatable {
   let window: String
   let remaining: Double?
   let resetsAt: Date?
+  // Set when the provider reports no such limit, shown in place of Unknown.
+  var absent: String? = nil
 }
 
 struct DeviceRow: Identifiable, Equatable {
@@ -80,7 +82,8 @@ struct PanelState: Equatable {
                name: row["name"] as? String ?? "Unknown",
                window: row["window"] as? String ?? "",
                remaining: limitRemaining(row, now: now),
-               resetsAt: date(row["resetsAt"]))
+               resetsAt: date(row["resetsAt"]),
+               absent: row["absent"] as? String)
     }
     var problems: [String: String] = [:]
     if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
@@ -285,7 +288,7 @@ struct PanelView: View {
             Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
               .foregroundStyle(tint ?? palette.text)
           } else {
-            Text("Unknown").foregroundStyle(palette.muted)
+            Text(row.absent ?? "Unknown").foregroundStyle(palette.muted)
           }
         }
         GeometryReader { geometry in

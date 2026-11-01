@@ -33,7 +33,7 @@ namespace Observatory
     // Panel state, parsed from combined.json. Mirrors the Mac app's PanelState.
     sealed class LimitRow
     {
-        public string Provider, Name, Window;
+        public string Provider, Name, Window, Absent;
         public double? Remaining;
         public DateTime? ResetsAt;
     }
@@ -108,6 +108,7 @@ namespace Observatory
                 Window = Get(row, "window") as string ?? "",
                 Remaining = LimitRemaining(row, now),
                 ResetsAt = Date(Get(row, "resetsAt")),
+                Absent = Get(row, "absent") as string,
             });
             // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
             state.Limits = limits.ToList();
@@ -361,7 +362,7 @@ namespace Observatory
                                 using (var dot = new SolidBrush(p.Provider(limit.Provider))) g.FillEllipse(dot, inner, row + 6, 7, 7);
                                 Text(g, limit.Name, strong, p.Text, inner + 13, row);
                                 Text(g, limit.Window, body, p.Muted, inner + 13 + Measure(g, limit.Name, strong) + 5, row);
-                                string percent = value.HasValue ? Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%" : "Unknown";
+                                string percent = value.HasValue ? Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%" : limit.Absent ?? "Unknown";
                                 Font font = value.HasValue ? strong : body;
                                 Text(g, percent, font, value.HasValue ? tint ?? p.Text : p.Muted, end - Measure(g, percent, font), row);
                                 var track = new RectangleF(inner, row + 24, end - inner, 5);
