@@ -186,7 +186,7 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   assert.ok(swift.includes(`$0 <= ${LIMIT_SPENT_PERCENT} ? palette.error`),'Glance.swift spent tint differs from LIMIT_SPENT_PERCENT.');
   assert.ok(cs.includes(`value <= ${LIMIT_SPENT_PERCENT} ? p.Error`),'Glance.cs spent tint differs from LIMIT_SPENT_PERCENT.');
   // Each shared phrase, split at its placeholders, must appear in both panels.
-  const phrases=[strings.labels.screenTime,strings.sections.tokens,strings.tokens.apiEstimate,strings.overview.lastSeen,strings.formats.resetsIn,
+  const phrases=[strings.overview.left,strings.today.screenTimeOff,strings.labels.screenTime,strings.sections.tokens,strings.tokens.apiEstimate,strings.overview.lastSeen,strings.formats.resetsIn,
     strings.status.updatedAgo,strings.actions.openDashboard,strings.actions.refresh,strings.tokens.underCent,strings.status.unknown];
   for (const phrase of phrases) for (const part of phrase.split(/\{[A-Za-z]+\}/).map(text=>text.trim()).filter(Boolean)) {
     assert.ok(swift.includes(part),`glance/mac/Glance.swift does not say "${part}" like lib/strings.json.`);
@@ -195,5 +195,8 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   // The Mac app keeps a copy of the telescope for runs outside its bundle. It must be the same drawing.
   for (const d of [...read('public/brand/telescope.svg').matchAll(/ d="([^"]+)"/g)].map(match=>match[1]))
     assert.ok(swift.includes(` d="${d}"`),'Glance.swift Brand.svg differs from public/brand/telescope.svg.');
+  // JavaScript and Swift round halves up. C# Math.Round rounds halves to even unless told otherwise.
+  assert.deepEqual([...cs.matchAll(/Math\.Round\(([^;]*)/g)].map(match=>match[1]).filter(call=>!call.includes('MidpointRounding.AwayFromZero')),[],
+    'Glance.cs rounds with Math.Round without MidpointRounding.AwayFromZero, so 2.5 minutes would show as 2m.');
   for (const text of [swift,cs]) assert.ok(!text.includes('No current reading'),'Panels show each window as a row, not a missing-readings line.');
 });

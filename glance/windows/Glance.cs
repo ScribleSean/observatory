@@ -43,7 +43,7 @@ namespace Observatory
         public string Name, FullName, Problem;
         public double? Seconds, Tokens, Usd;
         public DateTime? LastSeen;
-        public bool Current;
+        public bool Current, ScreenTimeOn = true;
     }
 
     sealed class PanelState
@@ -138,6 +138,7 @@ namespace Observatory
                     Seconds = Number(Get(row, "seconds")),
                     Tokens = Number(Get(row, "tokens")),
                     Usd = Number(Get(row, "usd")),
+                    ScreenTimeOn = !(Get(row, "screenTimeOn") is bool) || (bool)Get(row, "screenTimeOn"),
                     LastSeen = seen,
                     Current = !stale && seen.HasValue && (now - seen.Value).TotalMinutes <= PanelState.DeviceFreshMinutes && seen.Value.ToLocalTime().Date == now.ToLocalTime().Date,
                     Problem = problem,
@@ -151,7 +152,7 @@ namespace Observatory
     {
         public static string Duration(double seconds)
         {
-            int minutes = (int)Math.Round(seconds / 60);
+            int minutes = (int)Math.Round(seconds / 60, MidpointRounding.AwayFromZero);
             return minutes < 60 ? minutes + "m" : (minutes / 60) + "h " + (minutes % 60) + "m";
         }
 
@@ -162,12 +163,12 @@ namespace Observatory
             {
                 if (value < units[index].Item1 && index < units.Length - 1) continue;
                 double scaled = value / units[index].Item1;
-                string text = scaled >= 100 || units[index].Item2 == "" ? Math.Round(scaled).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.0", CultureInfo.InvariantCulture);
+                string text = scaled >= 100 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.0", CultureInfo.InvariantCulture);
                 // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
                 if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
                 return text + units[index].Item2;
             }
-            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+            return Math.Round(value, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture);
         }
 
         // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
@@ -344,11 +345,14 @@ namespace Observatory
                         // Every window has a row in the dashboard's order. One without a current reading says Unknown
                         // over an empty track. A low limit says when it comes back on a line under its bar, as on the Mac.
                         Func<LimitRow, bool> resets = limit => limit.Remaining.HasValue && limit.Remaining.Value <= PanelState.Low && limit.ResetsAt.HasValue;
-                        float h = Pad * 2 + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
+                        // The percents are what is left, named once over their column like the Today card's headers.
+                        float h = Pad * 2 + 15 + Gap + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
+                            Text(g, "Left", small, p.Muted, end - Measure(g, "Left", small), row);
+                            row += 15 + Gap;
                             foreach (var limit in s.Limits)
                             {
                                 double? value = limit.Remaining;
@@ -356,14 +360,14 @@ namespace Observatory
                                 using (var dot = new SolidBrush(p.Provider(limit.Provider))) g.FillEllipse(dot, inner, row + 6, 7, 7);
                                 Text(g, limit.Name, strong, p.Text, inner + 13, row);
                                 Text(g, limit.Window, body, p.Muted, inner + 13 + Measure(g, limit.Name, strong) + 5, row);
-                                string percent = value.HasValue ? Math.Round(value.Value) + "%" : "Unknown";
+                                string percent = value.HasValue ? Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%" : "Unknown";
                                 Font font = value.HasValue ? strong : body;
                                 Text(g, percent, font, value.HasValue ? tint ?? p.Text : p.Muted, end - Measure(g, percent, font), row);
                                 var track = new RectangleF(inner, row + 24, end - inner, 5);
                                 using (var path = Rounded(track, 2.5f)) using (var brush = new SolidBrush(p.Track)) g.FillPath(brush, path);
                                 if (value > 0)
                                     using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(value.Value / 100)), 5), 2.5f))
-                                    using (var brush = new SolidBrush(tint ?? p.Provider(limit.Provider))) g.FillPath(brush, path);
+                                    using (var brush = new SolidBrush(p.Provider(limit.Provider))) g.FillPath(brush, path);
                                 row += 29;
                                 if (resets(limit))
                                 {
@@ -378,8 +382,8 @@ namespace Observatory
                     if (s.Devices.Count > 0)
                     {
                         // Today per computer, in columns that each name what they hold. The cost header wraps over its column.
-                        // Column widths match the Mac panel: screen time 72, tokens 52, cost 92. Screen time is right-aligned at timeRight.
-                        const float tokenColumn = 52, costColumn = 92, columnGap = 8;
+                        // Column widths match the Mac panel: screen time 72, tokens 60, cost 92, gap 6. Screen time is right-aligned at timeRight.
+                        const float tokenColumn = 60, costColumn = 92, columnGap = 6;
                         float costRight = right - Pad, tokenRight = costRight - costColumn - columnGap, timeRight = tokenRight - tokenColumn - columnGap;
                         string costHeader = "API-equivalent (estimate)";
                         var farFormat = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Far };
@@ -401,7 +405,7 @@ namespace Observatory
                                 Text(g, device.Name, strong, p.Text, inner, row);
                                 if (device.Current)
                                 {
-                                    string time = device.Seconds.HasValue ? Format.Duration(device.Seconds.Value) : "Unknown";
+                                    string time = !device.ScreenTimeOn ? "Off" : device.Seconds.HasValue ? Format.Duration(device.Seconds.Value) : "Unknown";
                                     string tokens = device.Tokens.HasValue ? Format.Compact(device.Tokens.Value) : "Unknown";
                                     string cost = device.Usd.HasValue ? Format.Money(device.Usd.Value) : "Unknown";
                                     Text(g, time, body, p.Text, timeRight - Measure(g, time, body), row);

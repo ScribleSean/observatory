@@ -26,6 +26,7 @@ struct DeviceRow: Identifiable, Equatable {
   let seconds: Double?
   let tokens: Double?
   let usd: Double?
+  let screenTimeOn: Bool
   let lastSeen: Date?
   let current: Bool
   let problem: String?
@@ -100,7 +101,7 @@ struct PanelState: Equatable {
       return DeviceRow(id: host, name: host == "Windows" ? "PC" : host == "Mac" ? "Mac" : row["name"] as? String ?? host,
                        fullName: row["name"] as? String ?? host,
                        seconds: number(row["seconds"]), tokens: number(row["tokens"]), usd: number(row["usd"]),
-                       lastSeen: seen, current: current, problem: problems[host])
+                       screenTimeOn: row["screenTimeOn"] as? Bool ?? true, lastSeen: seen, current: current, problem: problems[host])
     }
     return state
   }
@@ -264,6 +265,12 @@ struct PanelView: View {
 
   // Every window has a row in the dashboard's order. One without a current reading says Unknown over an empty track.
   @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
+    // The percents are what is left, named once over their column like the Today card's headers.
+    HStack {
+      Spacer(minLength: 0)
+      Text("Left")
+    }
+    .font(.system(size: 11.5)).foregroundStyle(palette.muted)
     ForEach(state.limits) { row in
       let tint = row.remaining.map { $0 <= 0.5 ? palette.error : $0 <= PanelState.low ? palette.warning : nil } ?? nil
       VStack(alignment: .leading, spacing: 6) {
@@ -282,8 +289,9 @@ struct PanelView: View {
         GeometryReader { geometry in
           ZStack(alignment: .leading) {
             Capsule().fill(palette.track)
+            // The bar keeps the product colour. Only the percent turns amber or red.
             if let remaining = row.remaining {
-              Capsule().fill(tint ?? palette.provider(row.provider))
+              Capsule().fill(palette.provider(row.provider))
                 .frame(width: geometry.size.width * CGFloat(remaining / 100))
             }
           }
@@ -299,10 +307,10 @@ struct PanelView: View {
   }
 
   // Today per computer, in columns that each name what they hold. The cost header may wrap over its column.
-  static let timeColumn: CGFloat = 72, tokenColumn: CGFloat = 52, costColumn: CGFloat = 92
+  static let timeColumn: CGFloat = 72, tokenColumn: CGFloat = 60, costColumn: CGFloat = 92
 
   @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack(alignment: .bottom, spacing: 8) {
+    HStack(alignment: .bottom, spacing: 6) {
       Spacer(minLength: 0)
       Text("Screen time").frame(width: Self.timeColumn, alignment: .trailing)
       Text("Tokens").frame(width: Self.tokenColumn, alignment: .trailing)
@@ -311,16 +319,17 @@ struct PanelView: View {
     }
     .font(.system(size: 11.5)).foregroundStyle(palette.muted)
     ForEach(state.devices) { device in
-      HStack(alignment: .firstTextBaseline, spacing: 8) {
-        Text(device.name).fontWeight(.medium).lineLimit(1)
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Text(device.name).fontWeight(.medium).lineLimit(1).fixedSize()
         if let problem = device.problem, device.current {
           Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
             .accessibilityLabel(problem)
         }
-        Spacer(minLength: 8)
+        Spacer(minLength: 2)
         if device.current {
           Group {
-            Text(device.seconds.map(Format.duration) ?? "Unknown").frame(width: Self.timeColumn, alignment: .trailing)
+            Text(!device.screenTimeOn ? "Off" : device.seconds.map(Format.duration) ?? "Unknown")
+              .frame(minWidth: Self.timeColumn, alignment: .trailing)
             Text(device.tokens.map(Format.compact) ?? "Unknown").frame(width: Self.tokenColumn, alignment: .trailing)
             Text(device.usd.map(Format.money) ?? "Unknown").frame(width: Self.costColumn, alignment: .trailing)
           }
