@@ -9,7 +9,7 @@ import {signingIdentity,SIGNING_NAME,installMacApp,paths} from '../scripts/setup
 
 const home='/Users/someone';
 
-test('Documents, Desktop, Downloads and the other guarded folders are protected',()=>{
+test('Documents, Desktop, Downloads and the other guarded folders are protected',{skip:process.platform==='win32' && 'macOS folders and POSIX paths'},()=>{
   for(const name of PROTECTED_IN_HOME) {
     assert.ok(isProtectedFolder(path.join(home,name),home),name);
     assert.ok(isProtectedFolder(path.join(home,name,'project','src'),home),name);
