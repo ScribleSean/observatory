@@ -45,7 +45,7 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.ok(Date.parse(primary.estimatedExhaustionAt) < Date.parse(snapshot.quota.windows[0].resetsAt));
     const weekly = computedPace.find(row => row.window === 'secondary');
     assert.ok(weekly.status !== 'projected' || Date.parse(weekly.estimatedExhaustionAt) > Date.parse(primary.estimatedExhaustionAt));
-    const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources, snapshot.combinedTokens];
+    const tokenSources = [...snapshot.tokens, ...snapshot.providerTokenSources];
     for (const source of [...snapshot.activity, snapshot.combined, ...snapshot.activityHistory]) {
       for (const day of source.days) assert.ok(day.hours.every(value => Number.isInteger(value) && value <= 3600));
       const today = source.days[0];
@@ -62,10 +62,6 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
       assert.equal(source.days[0].date, new Date(now).toISOString().slice(0, 10));
       assert.equal(source.days.length, 40);
       assert.equal(new Set(source.days.map(day => day.date)).size, 40);
-      if (source === snapshot.combinedTokens) {
-        assert.ok(source.days.every(day => day.hours === undefined));
-        continue;
-      }
       for (const day of source.days) {
         assert.equal(day.hours.length, 24);
         assert.ok(day.hours.every(value => Number.isFinite(value) && value >= 0));
@@ -91,7 +87,7 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
       close(day.apiEstimate.usd, sum(day.models.map(model => model.apiEstimate.usd)));
     }
     for (const [source, scale] of [[snapshot.tokens[0], 9.4e6], [snapshot.tokens[1], 5.1e6],
-      [snapshot.combinedTokens, 14.5e6], [snapshot.providerTokenSources[0], 21e6], [snapshot.providerTokenSources[1], 8e6]]) {
+      [snapshot.providerTokenSources[0], 21e6], [snapshot.providerTokenSources[1], 8e6]]) {
       source.days.forEach((day, index) => assert.equal(day.totalTokens, Math.round(scale * (1 + (index * 7 % 5) / 4))));
     }
     for (const source of snapshot.tokens) for (const day of source.days) {
@@ -104,12 +100,7 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
         assert.equal(day.requestCount, sum(day.models.map(model => model.requestCount)));
       }
     }
-    assert.deepEqual(snapshot.combinedTokens.verification, { status: 'verified' });
-    assert.equal(snapshot.combinedTokens.status, 'ok');
-    for (const day of snapshot.combinedTokens.days) {
-      const peers = snapshot.tokens.map(source => source.days.find(row => row.date === day.date));
-      for (const field of fields) assert.equal(day[field], sum(peers.map(row => row[field])));
-    }
+    assert.deepEqual(snapshot.combinedTokens, { host: 'All', status: 'unavailable' });
     for (const [source, scale] of [[snapshot.activity[0], 14000], [snapshot.activity[1], 9000], [snapshot.combined, 19000]]) {
       assert.deepEqual(snapshot.activityHistory.find(row => row.host === source.host).days, source.days);
       source.days.forEach((day, index) => {
@@ -147,15 +138,15 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.equal(snapshot.peerQuota.windows[0].durationMinutes, 300);
     assert.notEqual(snapshot.peerQuota.windows[0].remainingPercent, snapshot.quota.windows[0].remainingPercent);
     assert.deepEqual(snapshot.prices, { source: 'https://example.invalid/model-prices.json', checkedOn: new Date(now - 3 * 86400000).toISOString().slice(0, 10) });
-    for (const host of ['All', 'Mac', 'Windows']) for (const period of ['day', 'week', 'month', 'all']) {
+    for (const host of ['Mac', 'Windows']) for (const period of ['day', 'week', 'month', 'all']) {
       const values = totals(snapshot, host, period, new Date(now));
       const untrackedToday = recordedDays(snapshot, 'activity', host, now).some(day => day.untracked && day.date === new Date(now).toISOString().slice(0, 10));
-      for (const key of ['codexTokens', 'seconds', 'usd', ...(host === 'All' ? [] : ['claudeTokens'])]) {
+      for (const key of ['codexTokens', 'seconds', 'usd', 'claudeTokens']) {
         if (key === 'seconds' && untrackedToday) assert.equal(values.seconds, null, `${host} ${period} seconds`);
         else assert.ok(Number.isFinite(values[key]), `${host} ${period} ${key}`);
       }
     }
-    close(totals(snapshot, 'All', 'day', new Date(now)).usd, 26.10);
+    close(totals(snapshot, 'Mac', 'day', new Date(now)).usd + totals(snapshot, 'Windows', 'day', new Date(now)).usd, 26.10);
     assert.ok(Object.isFrozen(SAMPLE_UNKNOWN));
     assert.ok(SAMPLE_UNKNOWN.length > 0);
     for (const entry of SAMPLE_UNKNOWN) {
@@ -174,7 +165,7 @@ const requiredPaths = [
   'quota.windows.*.remainingPercent', 'quota.pace.*.estimatedExhaustionAt', 'quota.history.*.windows',
   'peerQuota.windows.*.remainingPercent', 'peerQuota.history',
   'tokens.*.days.*.totalTokens', 'tokens.*.days.*.hours', 'tokens.*.days.*.models', 'tokens.*.days.*.apiEstimate.usd',
-  'combinedTokens.days.*.totalTokens', 'combinedTokens.days.0.hours',
+  'combinedTokens',
   'providerTokenSources.*.days.*.totalTokens', 'providerTokenSources.*.days.*.hours', 'providerTokenSources.*.days.*.apiEstimate.usd',
   'prices.source', 'prices.checkedOn',
   'activity.*.days.*.seconds', 'activity.*.days.*.hours', 'activity.*.days.*.categories', 'activity.*.days.*.apps',

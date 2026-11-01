@@ -56,6 +56,36 @@ void test('sample All week keeps providers and settings per device', () => {
   for (const label of ['>Mac<', '>PC<']) assert.ok(settings.includes(label));
 });
 
+const bothRow = (snapshot, provider, label, at = now) => {
+  const html = renderToStaticMarkup(createElement(TokensSection, {
+    result: tokensView(snapshot, { host: 'All', period: 'week', now: at }), onHostChange: noop, onPeriodChange: noop, now: at }));
+  const row = card(html, provider).match(new RegExp('<th scope="row">' + label + '</th><td>([^<]*)</td>'));
+  assert.ok(row, provider + ' ' + label);
+  return row[1];
+};
+
+void test('in Both, an unread computer says why for Codex as it does for Claude Code', () => {
+  const source = sampleSnapshot(now);
+  source.tokens[1].status = 'unavailable';
+  source.providerTokenSources[1].status = 'unavailable';
+  for (const provider of ['Codex', 'Claude Code']) assert.equal(bothRow(source, provider, 'PC'), 'Unavailable', provider);
+});
+
+void test('in Both, a computer that stops reading turns to as of while the other keeps its total', () => {
+  const source = sampleSnapshot(now);
+  const lastPc = Date.parse(source.tokens[1].checkedAt);
+  const macRead = new Date(lastPc + 9 * 60000).toISOString();
+  source.tokens[0].checkedAt = macRead;
+  source.providerTokenSources[0].checkedAt = macRead;
+  const totals = Object.fromEntries(['Codex', 'Claude Code'].map(provider => [provider, bothRow(source, provider, 'Mac', lastPc + 10 * 60000)]));
+  for (const provider of ['Codex', 'Claude Code']) {
+    assert.match(totals[provider], /^\d/, provider);
+    assert.match(bothRow(source, provider, 'PC', lastPc + 10 * 60000), /^\d/, provider);
+    assert.equal(bothRow(source, provider, 'Mac', lastPc + 11 * 60000), totals[provider], provider);
+    assert.match(bothRow(source, provider, 'PC', lastPc + 11 * 60000), /^as of \S/, provider);
+  }
+});
+
 void test('sample Mac week has a recorded total and estimate', () => {
   const source = sampleSnapshot(now);
   const claude = card(render(source, 'Mac'), 'Claude Code');

@@ -4,7 +4,6 @@ import { deviceReadingReference, deviceReadingCurrent, compact, devices, duratio
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { readingTime } from '../lib/panel-data.mjs';
 import { spawnSync } from 'node:child_process';
-import { SAMPLE_UNKNOWN } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
 
 const now = Date.parse('2026-03-10T15:00:00Z');
@@ -14,7 +13,6 @@ const snapshot = () => ({
   tokens: [{ host: 'Mac', status: 'ok', days: [day('2026-03-10', 100), day('2026-03-09', 50)] },
     { host: 'Windows', status: 'ok', days: [day('2026-03-10', 40)] }],
   settings: [],
-  combinedTokens: { status: 'ok', verification: { status: 'verified' }, days: [day('2026-03-10', 120)] },
   activity: [{ host: 'Mac', status: 'ok', days: [{ date: '2026-03-10', seconds: 3600 }] }],
 });
 
@@ -29,16 +27,14 @@ const hourlySnapshot = (read = readingAt) => {
   return { timezone: 'America/New_York', collectedAt: read,
     tokens: [source('Mac', 1), source('Windows', 4)],
     providerTokenSources: ['Mac', 'Windows'].map(host => ({ ...source(host, 2), provider: 'claude-code' })),
-    activity: [source('Mac', 3), source('Windows', 5)],
-    combinedTokens: { ...source('Combined', 6), verification: { status: 'verified' } },
-    combined: source('Combined', 7) };
+    activity: [source('Mac', 3), source('Windows', 5)] };
 };
 const nowValues = result => [result.codexTokens, result.claudeTokens, result.seconds];
 
 test('panel-data imports first in a fresh process despite the activity cycle', () => {
   const panelModule = new URL('../lib/panel-data.mjs', import.meta.url).href;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e',
-    `const panel = await import(${JSON.stringify(panelModule)}); if (panel.totals({}, 'All', 'now', 0).seconds !== null) process.exit(1);`], { encoding: 'utf8' });
+    `const panel = await import(${JSON.stringify(panelModule)}); if (panel.totals({}, 'Mac', 'now', 0).seconds !== null) process.exit(1);`], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
 });
 
@@ -104,47 +100,6 @@ test('Now crosses midnight using hour 23 of the previous local day', () => {
   }
 });
 
-test('All Now uses only verified aggregate hours and their own reading times', () => {
-  const data = hourlySnapshot();
-  const result = totals(data, 'All', 'now', nowTime);
-  assert.deepEqual(nowValues(result), [102, null, 119]);
-  assert.equal(result.claudeNote, strings.status.byDevice);
-  assert.equal(result.note, strings.activity.nowCaveat);
-  for (const change of [
-    data => { delete data.combinedTokens.days[0].hours; },
-    data => { data.combinedTokens.verification.status = 'unverified'; },
-    data => { data.combinedTokens.status = 'stale'; },
-    data => { delete data.combinedTokens.checkedAt; },
-    data => { data.tokens[1].status = 'unavailable'; },
-    data => { data.tokens.push({ host: 'Ubuntu', status: 'ok', days: [] }); },
-  ]) {
-    const invalid = hourlySnapshot(); change(invalid);
-    assert.equal(totals(invalid, 'All', 'now', nowTime).codexTokens, null);
-  }
-  delete data.combined.checkedAt;
-  assert.equal(totals(data, 'All', 'now', nowTime).seconds, null);
-  data.combined.checkedAt = '2026-10-14T12:20:00Z';
-  assert.equal(totals(data, 'All', 'now', nowTime).seconds, null);
-});
-
-test('All Now on an unpaired one-device snapshot reads that device, hours included', () => {
-  const two = hourlySnapshot();
-  const keep = row => row.host === 'Mac';
-  const one = { timezone: two.timezone, collectedAt: two.collectedAt,
-    tokens: [...two.tokens.filter(keep), { host: 'Windows', status: 'not-connected' }],
-    providerTokenSources: two.providerTokenSources.filter(keep),
-    activity: [...two.activity.filter(keep), { host: 'Windows', status: 'not-connected' }],
-    combined: { host: 'Combined', status: 'unavailable' }, combinedTokens: { host: 'All', status: 'unavailable' } };
-  const result = totals(one, 'All', 'now', nowTime);
-  assert.deepEqual(nowValues(result), nowValues(totals(one, 'Mac', 'now', nowTime)));
-  assert.deepEqual(nowValues(result), [17, 34, 51]);
-  assert.equal(result.claudeNote, '');
-  assert.equal(result.note, strings.activity.nowCaveat);
-  for (const key of ['tokens', 'providerTokenSources', 'activity']) delete one[key][0].days[0].hours;
-  assert.deepEqual(nowValues(totals(one, 'All', 'now', nowTime)), [null, null, null]);
-  assert.deepEqual(nowValues(totals(two, 'All', 'now', nowTime)), [102, null, 119]);
-});
-
 test('Now caveat appears when only one value is known, including an observed zero', () => {
   for (const key of ['tokens', 'providerTokenSources', 'activity']) {
     const data = hourlySnapshot();
@@ -156,28 +111,6 @@ test('Now caveat appears when only one value is known, including an observed zer
     assert.equal(result.note, strings.activity.nowCaveat);
   }
   assert.equal(totals({}, 'Mac', 'now', nowTime).note, strings.status.hourlyUnavailable);
-});
-
-test('sample All Codex Now stays Unknown as declared by SAMPLE_UNKNOWN', () => {
-  assert.ok(SAMPLE_UNKNOWN.some(row => row.path === 'combinedTokens.days.0.hours'));
-  assert.equal(totals(sampleSnapshot(nowTime), 'All', 'now', nowTime).codexTokens, null);
-});
-
-test('All uses the verified aggregate and never adds device records', () => {
-  assert.equal(totals(snapshot(), 'All', 'day', new Date(now)).codexTokens, 120);
-});
-
-test('All is withheld without verification or with a missing device', () => {
-  const unverified = snapshot(); unverified.combinedTokens.verification.status = 'unverified';
-  assert.equal(totals(unverified, 'All', 'day', new Date(now)).codexTokens, null);
-  const missing = snapshot(); missing.tokens[1].status = 'unavailable';
-  assert.deepEqual(recordedDays(missing, 'tokens', 'All'), []);
-  assert.equal(totals(missing, 'All', 'day', new Date(now)).note, strings.status.allUnverified);
-});
-
-test('a retired host blocks the combined total', () => {
-  const retired = snapshot(); retired.tokens.push({ host: 'Ubuntu', status: 'ok', days: [day('2026-03-10', 5)] });
-  assert.deepEqual(recordedDays(retired, 'tokens', 'All'), []);
 });
 
 test('month covers 30 calendar days and week covers 7', () => {
@@ -201,12 +134,10 @@ test('missing values stay Unknown and are never zero', () => {
   assert.equal(totals(unread, 'Windows', 'day', new Date(now)).codexNote, '');
 });
 
-test('Claude Code tokens are per device and have no combined total', () => {
+test('Claude Code tokens are per device', () => {
   const data = snapshot();
   data.providerTokenSources = [{ provider: 'claude-code', host: 'Mac', status: 'ok', days: [day('2026-03-10', 70)] }];
   assert.equal(totals(data, 'Mac', 'day', new Date(now)).claudeTokens, 70);
-  assert.equal(totals(data, 'All', 'day', new Date(now)).claudeTokens, null);
-  assert.equal(totals(data, 'All', 'day', new Date(now)).claudeNote, 'By computer');
   assert.equal(totals(data, 'Windows', 'day', new Date(now)).claudeTokens, null);
 });
 
@@ -258,8 +189,10 @@ test('the Overview and panels always list both windows of a connected provider',
 test('the sample snapshot renders every row with a value', () => {
   const demo = sampleSnapshot(now);
   assert.equal(limits(demo, now).every(row => row.remaining !== null), true);
-  const sums = totals(demo, 'All', 'month', new Date(now));
-  assert.equal(sums.codexTokens > 0 && sums.seconds > 0 && sums.usd > 0, true);
+  for (const host of ['Mac', 'Windows']) {
+    const sums = totals(demo, host, 'month', new Date(now));
+    assert.equal(sums.codexTokens > 0 && sums.seconds > 0 && sums.usd > 0, true);
+  }
 });
 
 test('limits readings become stale exactly at ten minutes', () => {
@@ -286,10 +219,9 @@ test('stored pace remains the default and can be omitted without changing other 
   });
 });
 
-test('device freshness gates tokens, activity history and provider tokens without changing All', () => {
+test('device freshness gates tokens, activity history and provider tokens', () => {
   for (const host of ['Mac', 'Windows']) for (const status of ['ok', 'stale', 'unavailable']) {
     const data = snapshot();
-    const baseline = totals(data, 'All', 'day', new Date(now));
     const checkedAt = new Date(now - 11 * 60000).toISOString();
     for (const key of ['tokens', 'activity']) {
       let row = data[key].find(row => row.host === host);
@@ -305,7 +237,6 @@ test('device freshness gates tokens, activity history and provider tokens withou
       else assert.match(note, /as of/);
     }
     assert.deepEqual(recordedDays(data, 'activity', host, now), status === 'unavailable' ? data.activityHistory[0].days : []);
-    if (status === 'ok') assert.equal(totals(data, 'All', 'day', new Date(now)).codexTokens, baseline.codexTokens);
   }
 });
 

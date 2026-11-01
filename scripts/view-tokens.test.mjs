@@ -48,7 +48,6 @@ test('sample Mac week uses recorded classes, estimates, prices and settings', ()
 
 test('All shows each provider by computer', () => {
   const source = sampleSnapshot(now);
-  delete source.combinedTokens;
   const result = view(source, { host: 'All' });
   for (const provider of ['codex', 'claude']) {
     assertEmpty(result[provider], 'by-device');
@@ -247,9 +246,11 @@ test('Now leaves provider blocks empty while preserving settings', () => {
   }
 });
 
-test('an Unknown Claude Code total says why', () => {
+test('an Unknown Codex or Claude Code total says why', () => {
   const source = snapshot();
+  source.tokens[0].status = 'unavailable';
   source.providerTokenSources[0].status = 'unavailable';
+  assert.equal(view(source).codex.note, 'Unavailable');
   assert.equal(view(source).claude.note, 'Unavailable');
 });
 
