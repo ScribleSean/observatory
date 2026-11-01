@@ -246,9 +246,11 @@ test('Now leaves provider blocks empty while preserving settings', () => {
   }
 });
 
-test('an Unknown Claude Code total says why', () => {
+test('an Unknown Codex or Claude Code total says why', () => {
   const source = snapshot();
+  source.tokens[0].status = 'unavailable';
   source.providerTokenSources[0].status = 'unavailable';
+  assert.equal(view(source).codex.note, 'Unavailable');
   assert.equal(view(source).claude.note, 'Unavailable');
 });
 
