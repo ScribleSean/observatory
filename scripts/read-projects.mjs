@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 
 export const LIMITS=Object.freeze({maxFiles:5000,maxTotalBytes:2*1024*1024*1024,maxLineBytes:16*1024*1024});
@@ -85,6 +86,8 @@ export function repositoryRoot(cwd,home='') {
   const stop=typeof home==='string' && home?path.resolve(home):null;
   let folder=path.resolve(cwd);
   if(stop && !folder.toLowerCase().startsWith(stop.toLowerCase()+path.sep))return null;
+  // Looking for .git inside Documents, Desktop or Downloads makes macOS ask for access.
+  if(isProtectedFolder(folder,stop ?? undefined))return null;
   for(;;) {
     const parent=path.dirname(folder);
     if(parent===folder || folder===stop)return null;

@@ -1,6 +1,7 @@
 import {spawn} from '../lib/cycle-processes.mjs';
 import {lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
+import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import path from 'node:path';
 
 const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -50,7 +51,7 @@ export function parseClaudeUsage(envelope,now=Date.now()) {
 export async function findClaude(environment=process.env,platform=process.platform) {
   const names=platform==='win32'?['claude.exe']:['claude'];
   const folders=[...(environment.PATH ?? '').split(path.delimiter),path.join(homedir(),'.local/bin'),path.join(homedir(),'.claude/local'),
-    ...(platform==='win32'?[]:['/opt/homebrew/bin','/usr/local/bin'])].filter(folder=>path.isAbsolute(folder));
+    ...(platform==='win32'?[]:['/opt/homebrew/bin','/usr/local/bin'])].filter(folder=>path.isAbsolute(folder) && !isProtectedFolder(folder));
   for(const folder of folders)for(const name of names) {
     const file=path.join(folder,name);
     try {if((await lstat(file)).isDirectory())continue;return file;}catch{}
