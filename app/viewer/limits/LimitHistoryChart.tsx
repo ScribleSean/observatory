@@ -10,7 +10,7 @@ type Column = { start: number; end: number; low: number; readings: number; lastA
 // One thing the pointer or keyboard can land on: a reading in line mode, a window in column mode.
 type Item = { t: number; rows: { host: string; label: string; value: number }[]; start?: number; end?: number };
 
-const PAD = { left: 36, right: 34, top: 22, bottom: 22 };
+const PAD = { left: 36, right: 12, top: 22, bottom: 22 };
 const HOUR = 3600000, DAY = 24 * HOUR;
 
 function useWidth() {
@@ -137,14 +137,6 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
     if (event.key === 'Escape') setActive(null);
   };
 
-  // Direct labels at the end of each line, nudged apart when they would overlap.
-  // They sit in the right-hand gutter, clear of the lines.
-  const ends = !columns && many ? series.map((item, index) => {
-    const last = item.points.at(-1);
-    return last ? { label: shortName(item), x: PAD.left + plotWidth + 6, y: sy(last.r), index } : null;
-  }).filter(Boolean) as { label: string; x: number; y: number; index: number }[] : [];
-  ends.sort((a, b) => a.y - b.y).forEach((end, index, list) => { if (index > 0 && end.y - list[index - 1].y < 12) end.y = list[index - 1].y + 12; });
-
   return (
     <figure className="ob-history-chart" ref={ref}>
       <span id={id} className="ob-visually-hidden">{title}</span>
@@ -176,11 +168,11 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
             ? <circle key={`${item.host}${part}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.25} className={`ob-history-dot ${color} ${tone(index)}`} />
             : <polyline key={`${item.host}${part}`} className={`ob-history-line ${color} ${tone(index)}`}
               points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />))}
-          {ends.map(end => <text key={end.label} className={`ob-history-end ${color} ${tone(end.index)}`} x={end.x} y={end.y + 3.5}>{end.label}</text>)}
           {shown && <line className="ob-history-cursor" x1={sx(shown.t)} x2={sx(shown.t)} y1={PAD.top} y2={base} />}
           {data.empty && <text className="ob-history-empty" x={PAD.left + plotWidth / 2} y={PAD.top + plotHeight / 2} textAnchor="middle">{STRINGS.limitHistory.noReadings}</text>}
         </svg>
-        {columns && many && <div className="ob-history-key" aria-hidden="true">
+        {/* One key for every chart with two computers, in the top right, clear of the lines. */}
+        {many && <div className="ob-history-key" aria-hidden="true">
           {series.map((item, index) => <span key={item.host}><i className={`${color} ${tone(index)}`} />{shortName(item)}</span>)}
         </div>}
         {shown && <div className="ob-history-tip" style={{ left: Math.min(Math.max(sx(shown.t) - 80, 0), width - 160) }} aria-live="polite">

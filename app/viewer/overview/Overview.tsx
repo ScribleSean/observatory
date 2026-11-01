@@ -1,6 +1,7 @@
 import { STRINGS } from '../../../lib/strings.generated';
 import { compact, duration, format, freshness, limits, readingTime, usd, percent, deviceLabel, limitsWithGaps } from '../../../lib/panel-data.mjs';
 import { limitTone } from '../components/Meter';
+import { Note } from '../components/Note';
 import { snapshotFresh } from '../../../lib/freshness.mjs';
 
 export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; spent?: boolean; stale: boolean };
@@ -15,28 +16,24 @@ export type Glance = {
 const unknown = STRINGS.status.unknown;
 
 function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string, unknown> | null; now: number }) {
-  // Fixed order, the same as the Limits tab and both panels: Claude Code, then Codex, 5-hour before weekly.
+  // Fixed order, the same as the Limits tab and both panels. A window without a current reading is a row that says Unknown.
   const rows: LimitRow[] = view ? limitsWithGaps(limits(view, now)) as LimitRow[] : glance.limits;
-  const current = rows.filter((row): row is LimitRow & { remaining: number } => row.remaining !== null && !row.stale);
-  const missing = rows.filter(row => row.remaining === null || row.stale);
   return (
     <section className="ob-card ob-tile" aria-labelledby="ob-tile-limits">
       <h2 className="ob-card-title" id="ob-tile-limits">{STRINGS.overview.limitsTitle}</h2>
       <ul className="ob-tile-bars">
-        {current.map((row, index) => {
-          const tone = limitTone(row);
+        {rows.map((row, index) => {
+          const value = row.remaining !== null && !row.stale ? row.remaining : null;
+          const tone = value === null ? '' : limitTone(row);
           return <li key={index}>
             <span className="ob-tile-label"><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name}{row.window ? <span className="ob-meta">&nbsp;{row.window}</span> : null}</span>
             <span className="ob-tile-value">
-              {tone && row.note ? <span className={`ob-meta ${tone}`}>{row.note}</span> : null}
-              <span className={`ob-num ${tone}`.trim()}>{percent(row.remaining)}</span>
+              {tone && row.note ? <Note className={`ob-meta ${tone}`} text={row.note} /> : null}
+              <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{percent(value)}</span>
             </span>
-            <span className="ob-bar" aria-hidden="true"><i className={tone || row.provider} style={{ width: `${row.remaining}%` }} /></span>
+            <span className="ob-bar" aria-hidden="true">{value !== null && <i className={tone || row.provider} style={{ width: `${value}%` }} />}</span>
           </li>;
         })}
-        {missing.length > 0 && <li className="ob-tile-quiet ob-meta"><i className="ob-ring" aria-hidden="true" />
-          {current.length === 0 ? STRINGS.overview.limitsNone
-            : format(STRINGS.overview.limitsMissing, { names: missing.map(row => `${row.name} ${row.window}`.trim()).join(', ') })}</li>}
       </ul>
     </section>
   );

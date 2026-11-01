@@ -31,7 +31,7 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
       {['day', 'week', 'month'].includes(period) && <DateStepper dates={view.dates as string[]} value={view.anchor as string} onChange={setDate} />}
     </div>
     <div className="ob-activity-grid">
-      <Card label={STRINGS.labels.screenTime} title={STRINGS.labels.screenTime}>
+      <Card label={STRINGS.labels.screenTime} title={STRINGS.labels.screenTime} className="ob-activity-summary">
         <div className={view.total === null ? 'ob-hero ob-unknown' : 'ob-hero'}>{duration(view.total)}</div>
         {period === 'now' && view.total !== null && view.windowSeconds !== null && <div className="ob-activity-now">
           <div className="ob-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, view.total / view.windowSeconds * 100)}%`, background: 'var(--ob-accent)' }} /></div>
@@ -40,8 +40,7 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
         {view.note && <p className="ob-meta">{view.note}</p>}
         {tracking && <p className={tracking.status === 'unknown' ? 'ob-meta' : 'ob-meta warn'}>{tracking.label}
           {tracking.status === 'unavailable' && <>{STRINGS.formats.separator}<a href={`https://${STRINGS.activity.helpAddress}`} target="_blank" rel="noreferrer">{STRINGS.activity.helpAddress}</a></>}</p>}
-      </Card>
-      <Card label={STRINGS.activity.categoriesTitle} title={STRINGS.activity.categoriesTitle} className="ob-activity-categories">
+        {/* The categories and their recorded apps sit under the total they add up to. */}
         {view.categories === null ? <p className="ob-meta">{STRINGS.activity.noCategories}</p> : <ul className="ob-activity-list">{view.categories.map(category => <li key={category.name}>
           {category.apps.length > 0 ? <details className="ob-disclosure">
             <summary><span>{category.label}</span><span className="ob-num">{duration(category.seconds)}</span></summary>

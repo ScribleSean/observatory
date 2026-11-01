@@ -65,12 +65,13 @@ test('two computers on the next day show no numbers as today',()=>{
 test('limits keep a fixed order and a window without a reading is named, not dropped',()=>{
   const html=render({combined:both,section:'limits'});
   const tile=html.slice(html.indexOf('ob-tile-limits'),html.indexOf('ob-tile-time'));
-  const names=[...tile.matchAll(/<\/i>(Claude Code|Codex)<span class="ob-meta">&nbsp;([^<]+)</g)].map(match=>`${match[1]} ${match[2]}`);
-  assert.deepEqual(names,['Claude Code 5-hour','Claude Code weekly','Codex 5-hour','Codex weekly'].filter(name=>names.includes(name)));
+  const names=[...tile.matchAll(/<\/i>(Claude Code|Codex)<span class="ob-meta">\u00a0([^<]+)</g)].map(match=>`${match[1]} ${match[2]}`);
+  assert.deepEqual(names,['Claude Code 5-hour','Claude Code weekly','Codex 5-hour','Codex weekly']);
   const partial=structuredClone(both);
   partial.view.claudeLimits.windows=partial.view.claudeLimits.windows.filter(row=>row.durationMinutes!==300);
   const missing=render({combined:partial,section:'limits'});
-  assert.ok(missing.includes('No current reading: Claude Code 5-hour'));
+  const row=missing.slice(missing.indexOf('ob-tile-limits'),missing.indexOf('ob-tile-time'));
+  assert.match(row,/Claude Code<span class="ob-meta">\u00a05-hour<\/span><\/span><span class="ob-tile-value"><span class="ob-num ob-unknown">Unknown<\/span>/);
 });
 
 test('without combined.json the page says how to get one',()=>{

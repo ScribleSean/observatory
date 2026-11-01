@@ -5,11 +5,14 @@
 .ob-activity .ob-num { flex: none; }
 .ob-activity-now { display: grid; gap: var(--ob-space-1); margin-top: var(--ob-space-3); }
 .ob-activity-list, .ob-activity-apps { margin: var(--ob-space-3) 0 0; padding: 0; list-style: none; }
+.ob-activity-summary .ob-activity-list { margin-top: var(--ob-space-4); border-top: 1px solid var(--ob-track); }
 .ob-activity-list > li { padding: 6px 0; }
 .ob-activity-list > li + li { border-top: 1px solid var(--ob-track); }
 .ob-activity-list summary > span:first-of-type { flex: 1; min-width: 0; }
 .ob-activity-apps { margin: var(--ob-space-1) 0 var(--ob-space-1) calc(0.4em + var(--ob-space-2) + 0.25em); color: var(--ob-muted); font-size: var(--ob-label-size); }
 .ob-activity-apps li { padding: 2px 0; }
 @media (min-width: 720px) {
-  .ob-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The total and its categories on the left, the two charts stacked on the right. */
+  .ob-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .ob-activity-summary { grid-row: span 2; }
 }

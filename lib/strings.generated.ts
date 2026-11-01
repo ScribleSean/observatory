@@ -103,7 +103,6 @@ export const STRINGS = {
     "checkedNow": "Checked just now",
     "checkedAgo": "Checked {age} ago",
     "checkAhead": "Check time is ahead of this device",
-    "checkUnknown": "Checked: Unknown",
     "claudeLimits": "Claude Code limits",
     "codexLimits": "Codex limits",
     "codexTokens": "Codex tokens",
@@ -139,7 +138,6 @@ export const STRINGS = {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",
     "hourlyTitle": "Screen time by hour",
     "dailyTitle": "Screen time by day",
-    "categoriesTitle": "Categories and recorded apps",
     "recordedApps": "Recorded apps",
     "deviceOverlap": "Device overlap",
     "noCategories": "No category breakdown available",
@@ -168,15 +166,14 @@ export const STRINGS = {
   },
   "overview": {
     "limitsTitle": "Limits",
-    "limitsNone": "No current reading",
     "timeTitle": "Screen time today",
     "costTitle": "API-equivalent cost today (estimate)",
     "tokens": "{value} tokens",
     "bothNote": "Both computers, not deduplicated",
     "asOf": "as of {time}",
     "lastDay": "Last update was {time}",
-    "limitsMissing": "No current reading: {names}",
-    "lastSeen": "Last seen {time}"
+    "lastSeen": "Last seen {time}",
+    "today": "Today"
   },
   "limitHistory": {
     "title": "Limit history",

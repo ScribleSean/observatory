@@ -16,7 +16,7 @@ export type BarChartProps = {
 
 const TOP = 18;
 const AXIS = 22;
-const STUB = 6;
+const STUB = 12;
 const colors = { claude: 'var(--ob-claude)', codex: 'var(--ob-codex)', accent: 'var(--ob-accent)' };
 const known = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value);
 const day = (date: string) => new Date(`${date}T00:00:00Z`);
@@ -88,7 +88,8 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
           {values.map((value, index) => {
             const x = center(index) - barWidth / 2;
             if (value === undefined) return null;
-            if (value === null) return <rect key={index} data-unknown={index} className="ob-bars-unknown" x={x + 0.5} y={baseline - STUB + 0.5} width={Math.max(0, barWidth - 1)} height={STUB - 1} rx={1}><title>{`${names[index]}: ${STRINGS.status.unknown}`}</title></rect>;
+            // Unknown is a short dashed mark of one height, so it reads as missing, never as a small value.
+            if (value === null) return <line key={index} data-unknown={index} className="ob-bars-unknown" x1={center(index)} x2={center(index)} y1={baseline} y2={baseline - STUB}><title>{`${names[index]}: ${STRINGS.status.unknown}`}</title></line>;
             const barHeight = Math.max(0, value) / (maximum || 1) * plot;
             if (barHeight <= 0) return null;
             return <path key={index} data-bar={index} d={bar(x, baseline - barHeight, barWidth, barHeight)} style={{ fill: colors[series] }}><title>{`${names[index]}: ${formatValue(value)}`}</title></path>;

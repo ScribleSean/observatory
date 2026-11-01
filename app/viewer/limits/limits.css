@@ -32,10 +32,6 @@
 .ob-history-dot.claude { fill: var(--ob-claude); }
 .ob-history-dot.codex { fill: var(--ob-codex); }
 .ob-history-dot.secondary { opacity: 0.5; }
-.ob-history-end { font-size: var(--ob-chart-label-size); font-weight: 500; }
-.ob-history-end.claude { fill: var(--ob-claude); }
-.ob-history-end.codex { fill: var(--ob-codex); }
-.ob-history-end.secondary { opacity: 0.65; }
 
 .ob-history-column.claude { fill: var(--ob-claude); }
 .ob-history-column.codex { fill: var(--ob-codex); }

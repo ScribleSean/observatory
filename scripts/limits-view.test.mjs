@@ -102,13 +102,13 @@ const history = points => {
 };
 const point = (host, w, minutes, r, resetMinutes, d) => ({ p: 'claude', w, o: host, t: iso(minutes), r, x: iso(resetMinutes), d });
 
-void test('two computers are two labeled lines of one hue, the second lighter, never summed', () => {
+void test('two computers are two lines of one hue, the second lighter, named in one key, never summed', () => {
   const line = host => [-300, -200, -100].map(minutes => point(host, 'seven_day', minutes, 60, 3000, 10080));
   const html = card(history([{ host: 'Mac', status: 'ok', points: line('Mac') }, { host: 'Windows', status: 'ok', points: line('Windows') }]), 'Claude Code weekly');
   assert.equal(count(html, /class="ob-history-line claude primary"/g), 1);
   assert.equal(count(html, /class="ob-history-line claude secondary"/g), 1);
-  assert.match(html, />Mac<\/text>/);
-  assert.match(html, />PC<\/text>/);
+  assert.match(html, /class="ob-history-key"[^>]*><span><i class="claude primary"><\/i>Mac<\/span><span><i class="claude secondary"><\/i>PC<\/span>/);
+  assert.doesNotMatch(html, /ob-history-end/);
 });
 
 void test('the weekly chart draws the even-spend pace guide', () => {

@@ -6,6 +6,7 @@ import { LimitHistoryChart, type HistoryData } from './LimitHistoryChart';
 import { span } from '../../../lib/panel-data.mjs';
 import { Card, FilterGroup } from '../components';
 import { limitTone } from '../components/Meter';
+import { Note } from '../components/Note';
 import { LimitRows } from '../components/LimitRows';
 import './limits.css';
 
@@ -22,7 +23,7 @@ function Latest({ row }: { row: Row | undefined }) {
   const value = row && row.remaining !== null && !row.stale ? row.remaining : null;
   const tone = value === null ? '' : limitTone(row!);
   return <span className="ob-history-latest">
-    {row?.note && <span className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</span>}
+    {row?.note && <Note className={row.stale ? 'ob-meta warn' : 'ob-meta'} text={row.note} />}
     <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null ? STRINGS.status.unknown : percent(value)}</span>
   </span>;
 }

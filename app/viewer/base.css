@@ -38,4 +38,5 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-disclosure[open] > summary::before { transform: rotate(45deg); }
 @media (prefers-reduced-motion: reduce) { .ob-disclosure > summary::before { transition: none; } }
 
+.ob-nowrap { white-space: nowrap; }
 .ob-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
