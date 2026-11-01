@@ -175,7 +175,7 @@ export function mergeProjects(results) {
 }
 
 // Each folder keeps its own private cache, for Claude Code as for Codex.
-export async function readClaudeRoots(roots,{cacheFor=()=>null,read=collectClaudeUsage}={}) {
+export async function readClaudeRoots(roots,{cacheFor=async()=>null,read=collectClaudeUsage}={}) {
   let found;
   try {found=await folders(roots,'claudeFolder');}
   catch {return {provider:'claude-code',status:'unavailable'};}
