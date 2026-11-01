@@ -109,8 +109,8 @@ namespace Observatory
                 Remaining = LimitRemaining(row, now),
                 ResetsAt = Date(Get(row, "resetsAt")),
             });
-            // Scarcest first. Unknown readings go last, in their original order (OrderBy is stable).
-            state.Limits = limits.OrderBy(row => row.Remaining.HasValue ? 0 : 1).ThenBy(row => row.Remaining ?? 0).ToList();
+            // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
+            state.Limits = limits.ToList();
             var problems = new Dictionary<string, string>();
             var hub = Get(json, "hub") as Dictionary<string, object>;
             foreach (var spoke in (Get(hub, "spokes") as IList ?? new object[0]).OfType<Dictionary<string, object>>())
@@ -348,59 +348,54 @@ namespace Observatory
                 }
                 else
                 {
-                    var known = s.Limits.Where(row => row.Remaining.HasValue).ToList();
-                    var unknown = s.Limits.Where(row => !row.Remaining.HasValue).ToList();
                     if (s.Limits.Count > 0)
                     {
-                        // Limits without a current reading collapse into one quiet line that wraps instead of a row each.
-                        string missing = unknown.Count == 0 ? null : known.Count == 0 ? "No current reading"
-                            : "No current reading: " + string.Join(", ", unknown.Select(limit => (limit.Name + " " + limit.Window).Trim()));
-                        float missingWidth = right - left - Pad * 2 - 13;
-                        float missingHeight = missing == null ? 0 : (float)Math.Ceiling(g.MeasureString(missing, body, (int)missingWidth, StringFormat.GenericTypographic).Height);
-                        int lines = known.Count + (missing != null ? 1 : 0);
-                        float h = Pad * 2 + known.Count * 29 + missingHeight + Math.Max(0, lines - 1) * Gap;
+                        // Every window has a row in the dashboard's order. One without a current reading says Unknown
+                        // over an empty track. A low limit says when it comes back on a line under its bar, as on the Mac.
+                        Func<LimitRow, bool> resets = limit => limit.Remaining.HasValue && limit.Remaining.Value <= PanelState.Low && limit.ResetsAt.HasValue;
+                        float h = Pad * 2 + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
-                            foreach (var limit in known)
+                            foreach (var limit in s.Limits)
                             {
-                                double value = limit.Remaining.Value;
-                                Color? tint = value <= 0.5 ? p.Error : value <= PanelState.Low ? p.Warning : (Color?)null;
+                                double? value = limit.Remaining;
+                                Color? tint = !value.HasValue ? (Color?)null : value <= 0.5 ? p.Error : value <= PanelState.Low ? p.Warning : (Color?)null;
                                 using (var dot = new SolidBrush(p.Provider(limit.Provider))) g.FillEllipse(dot, inner, row + 6, 7, 7);
                                 Text(g, limit.Name, strong, p.Text, inner + 13, row);
                                 Text(g, limit.Window, body, p.Muted, inner + 13 + Measure(g, limit.Name, strong) + 5, row);
-                                string percent = Math.Round(value) + "%";
-                                float percentWidth = Measure(g, percent, strong);
-                                Text(g, percent, strong, tint ?? p.Text, end - percentWidth, row);
-                                if (value <= PanelState.Low && limit.ResetsAt.HasValue)
-                                {
-                                    string back = "Resets in " + Format.Span(limit.ResetsAt.Value - s.Now);
-                                    Text(g, back, small, tint ?? p.Muted, end - percentWidth - 6 - Measure(g, back, small), row + 1);
-                                }
+                                string percent = value.HasValue ? Math.Round(value.Value) + "%" : "Unknown";
+                                Font font = value.HasValue ? strong : body;
+                                Text(g, percent, font, value.HasValue ? tint ?? p.Text : p.Muted, end - Measure(g, percent, font), row);
                                 var track = new RectangleF(inner, row + 24, end - inner, 5);
                                 using (var path = Rounded(track, 2.5f)) using (var brush = new SolidBrush(p.Track)) g.FillPath(brush, path);
                                 if (value > 0)
-                                    using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(value / 100)), 5), 2.5f))
+                                    using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(value.Value / 100)), 5), 2.5f))
                                     using (var brush = new SolidBrush(tint ?? p.Provider(limit.Provider))) g.FillPath(brush, path);
-                                row += 29 + Gap;
-                            }
-                            if (missing != null)
-                            {
-                                Ring(g, p.Muted, inner, row + 6);
-                                using (var brush = new SolidBrush(p.Muted))
-                                    g.DrawString(missing, body, brush, new RectangleF(inner + 13, row, missingWidth, missingHeight + 2), StringFormat.GenericTypographic);
+                                row += 29;
+                                if (resets(limit))
+                                {
+                                    Text(g, "Resets in " + Format.Span(limit.ResetsAt.Value - s.Now), small, tint ?? p.Muted, inner, row + 2);
+                                    row += 17;
+                                }
+                                row += Gap;
                             }
                         }
                         y += h + Gap;
                     }
                     if (s.Devices.Count > 0)
                     {
-                        float h = Pad * 2 + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
+                        // Today per computer. The heading names the cost column, since every dollar figure is an estimate.
+                        float h = Pad * 2 + 16 + Gap + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
+                            Text(g, "Today", small, p.Muted, inner, row);
+                            string estimate = "API-equivalent (estimate)";
+                            Text(g, estimate, small, p.Muted, end - Measure(g, estimate, small), row);
+                            row += 16 + Gap;
                             foreach (var device in s.Devices)
                             {
                                 if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "") + (device.Current && device.Usd.HasValue ? "\nCost is an API-equivalent estimate" : "")));

@@ -71,23 +71,16 @@ struct PanelState: Equatable {
     var state = PanelState(now: now)
     state.updated = date(json["generatedAt"])
     guard let glance = json["glance"] as? [String: Any] else { state.notice = .collecting; return state }
+    // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
     let rows = glance["limits"] as? [[String: Any]] ?? []
     state.limits = rows.enumerated().map { index, row in
-      LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["windowId"] as? String ?? String(index))",
+      LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["window"] as? String ?? "")-\(index)",
                provider: row["provider"] as? String ?? "",
                name: row["name"] as? String ?? "Unknown",
                window: row["window"] as? String ?? "",
                remaining: limitRemaining(row, now: now),
                resetsAt: date(row["resetsAt"]))
     }
-    .enumerated().sorted { a, b in
-      switch (a.element.remaining, b.element.remaining) {
-      case let (x?, y?): return x == y ? a.offset < b.offset : x < y
-      case (.some, nil): return true
-      case (nil, .some): return false
-      case (nil, nil): return a.offset < b.offset
-      }
-    }.map(\.element)
     var problems: [String: String] = [:]
     if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
       for spoke in spokes {
@@ -197,10 +190,12 @@ struct Palette {
 }
 
 enum Brand {
-  // The one telescope mark, copied from public/brand/telescope.svg by setup.
+  // The one telescope mark, copied from public/brand/telescope.svg by setup. The same drawing is kept here
+  // for a binary run outside its bundle, such as --render. test/repo-rules.test.mjs checks the two match.
+  static let svg = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 10 11-6 3 5-11 6z"/><path d="m16 3 4 7M5.8 12 3 13.5M12 13v3m-5 5 5-5 5 5m-5-5v6"/></svg>"##
   static let telescope: NSImage = {
     let image = Bundle.main.url(forResource: "telescope", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
-      ?? NSImage(systemSymbolName: "binoculars", accessibilityDescription: nil)
+      ?? NSImage(data: Data(svg.utf8))
       ?? NSImage(size: NSSize(width: 18, height: 18))
     image.isTemplate = true
     image.accessibilityDescription = "Observatory"
@@ -274,9 +269,9 @@ struct PanelView: View {
       .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(palette.hairline))
   }
 
+  // Every window has a row in the dashboard's order. One without a current reading says Unknown over an empty track.
   @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
-    let unknown = state.limits.filter { $0.remaining == nil }
-    ForEach(state.limits.filter { $0.remaining != nil }) { row in
+    ForEach(state.limits) { row in
       let tint = row.remaining.map { $0 <= 0.5 ? palette.error : $0 <= PanelState.low ? palette.warning : nil } ?? nil
       VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -287,34 +282,37 @@ struct PanelView: View {
           if let remaining = row.remaining {
             Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
               .foregroundStyle(tint ?? palette.text)
+          } else {
+            Text("Unknown").foregroundStyle(palette.muted)
           }
         }
         GeometryReader { geometry in
           ZStack(alignment: .leading) {
             Capsule().fill(palette.track)
-            Capsule().fill(tint ?? palette.provider(row.provider))
-              .frame(width: geometry.size.width * CGFloat((row.remaining ?? 0) / 100))
+            if let remaining = row.remaining {
+              Capsule().fill(tint ?? palette.provider(row.provider))
+                .frame(width: geometry.size.width * CGFloat(remaining / 100))
+            }
           }
         }
         .frame(height: 5)
-        // A low limit says when it comes back, on its own line so the name never wraps.
+        // A low limit says when it comes back, on its own line under the bar, as on Windows.
         if let remaining = row.remaining, remaining <= PanelState.low, let reset = row.resetsAt {
           Text("Resets in \(Format.span(reset.timeIntervalSince(state.now)))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
         }
       }
       .accessibilityElement(children: .combine)
     }
-    if !unknown.isEmpty {
-      HStack(spacing: 6) {
-        Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
-        Text(unknown.count == state.limits.count ? "No current reading"
-             : "No current reading: " + unknown.map { "\($0.name) \($0.window)" }.joined(separator: ", "))
-          .foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
-      }
-    }
   }
 
-  func devices(_ state: PanelState, _ palette: Palette) -> some View {
+  // Today per computer. The heading names the cost column, since every dollar figure is an estimate.
+  @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
+    HStack(spacing: 6) {
+      Text("Today")
+      Spacer(minLength: 8)
+      Text("API-equivalent (estimate)")
+    }
+    .font(.system(size: 12)).foregroundStyle(palette.muted)
     ForEach(state.devices) { device in
       HStack(spacing: 6) {
         Text(device.name).fontWeight(.medium).lineLimit(1)
