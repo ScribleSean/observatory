@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,symlink,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {buildSnapshot,tokenRoots} from '../scripts/collect.mjs';
 import {parseConfig} from '../lib/config.mjs';
@@ -138,6 +138,63 @@ test('a WSL folder that exists but cannot be read makes that provider Unknown',a
   assert.equal(data.projectTokens[0].status,'unavailable');
 }));
 
+test('a distribution whose share cannot be reached, or whose home is a link, is Unknown, not skipped',async()=>withFolder(async folder=>{
+  const {own,share,find}=await pc(folder);
+  for(const roots of [await find(['Unreachable-1']),
+    await (async()=>{await mkdir(path.join(share,'Linked-1','home'),{recursive:true});await symlink(path.join(share,'Fixture-1','home','fixture-user'),path.join(share,'Linked-1','home','other'),'junction');return find(['Linked-1']);})()]) {
+    assert.equal(roots.at(-1).unreadable,true);
+    const {data}=await buildSnapshot(pcConfig(folder),readersFor([own,...roots]),{now});
+    assert.equal(claudeOf(data).status,'unavailable');
+    assert.equal(codexOf(data).status,'unavailable');
+  }
+}));
+
+test('a linked .claude or .codex in a WSL home is Unknown, and one folder is never read twice',async()=>withFolder(async folder=>{
+  const {own,linux,find}=await pc(folder,{wsl:false});
+  await symlink(own.claudeFolder,path.join(linux,'.claude'),'junction');
+  const roots=[own,...await find(['Fixture-1'])];
+  const {data}=await buildSnapshot(pcConfig(folder),readersFor(roots),{now});
+  assert.equal(claudeOf(data).status,'unavailable');
+  assert.equal(codexOf(data).status,'ok');
+  // The same folder listed as two roots, as a CODEX_HOME inside the share would do.
+  const twice=await buildSnapshot(pcConfig(folder),readersFor([own,{...own,label:'WSL Fixture-1',optional:true,home:'/home/fixture-user'}]),{now});
+  assert.equal(codexOf(twice.data).status,'unavailable');
+}));
+
+test('an invalid folder setting on the PC stays Unknown with WSL on',async()=>withFolder(async folder=>{
+  const {own,find}=await pc(folder);
+  const roots=[{...own,claudeFolder:null},...await find(['Fixture-1'])];
+  const {data}=await buildSnapshot(pcConfig(folder),readersFor(roots),{now});
+  assert.equal(claudeOf(data).status,'unavailable');
+  assert.equal(codexOf(data).status,'ok');
+  assert.equal(data.projectTokens[0].status,'unavailable');
+}));
+
+test('a WSL session in the Windows home is never named after the Windows user',async()=>withFolder(async folder=>{
+  const {own,linux,find}=await pc(folder,{wsl:false});
+  const user=path.basename(own.home);
+  const project=path.join(linux,'.claude','projects','-mnt-c-Users');
+  await mkdir(project,{recursive:true});
+  await writeFile(path.join(project,'mnt-session.jsonl'),lines([{type:'assistant',timestamp:at(0),sessionId:'mnt-session',cwd:`/mnt/c/Users/${user}`,requestId:'mnt-r0',
+    message:{id:'mnt-m0',role:'assistant',model:MODEL,usage:{input_tokens:40,output_tokens:2,cache_read_input_tokens:0,cache_creation_input_tokens:0}}}]));
+  const {data}=await buildSnapshot(pcConfig(folder),readersFor([own,...await find(['Fixture-1'])]),{now});
+  const projects=data.projectTokens[0];
+  assert.equal(projects.status,'ok');
+  assert.ok(!JSON.stringify(projects).includes(user),'no Windows user name');
+  assert.equal(projects.projects.reduce((total,row)=>total+row.totalTokens,0)+(projects.other?.totalTokens ?? 0),320+1010+42);
+}));
+
+test('two users in one distribution are both counted',async()=>withFolder(async folder=>{
+  const {own,share,find}=await pc(folder);
+  const second=path.join(share,'Fixture-1','home','second-user');
+  await claudeLogs(second,'two',[400]);
+  const roots=[own,...await find(['Fixture-1'])];
+  assert.equal(roots.length,3);
+  const {data}=await buildSnapshot(pcConfig(folder),readersFor(roots),{now});
+  assert.equal(today([claudeOf(data)]).totalTokens,320+310+410);
+  assert.deepEqual(claudeOf(data).roots,['Windows','WSL Fixture-1']);
+}));
+
 test('a distribution whose share cannot be listed makes both providers Unknown',async()=>withFolder(async folder=>{
   const {own,share}=await pc(folder);
   await mkdir(path.join(share,'Broken-1-dir'),{recursive:true});
@@ -150,7 +207,7 @@ test('a distribution whose share cannot be listed makes both providers Unknown',
 
 test('a distribution with no logs adds nothing and is not listed',async()=>withFolder(async folder=>{
   const {own,find}=await pc(folder,{wsl:false});
-  const {data}=await buildSnapshot(pcConfig(folder),readersFor([own,...await find(['Fixture-1','Missing-1'])]),{now});
+  const {data}=await buildSnapshot(pcConfig(folder),readersFor([own,...await find(['Fixture-1'])]),{now});
   assert.equal(today([claudeOf(data)]).totalTokens,320);
   assert.equal(today([codexOf(data)]).totalTokens,1010);
   assert.deepEqual(claudeOf(data).roots,['Windows']);

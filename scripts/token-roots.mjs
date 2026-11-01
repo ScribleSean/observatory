@@ -44,9 +44,13 @@ export function listDistributions({exec=execFile}={}) {
 
 // What a tool folder holds: 'absent' adds nothing, 'present' is read, and
 // 'unreadable' makes that provider's total Unknown.
+// A link counts as unreadable: Windows cannot follow a Linux link, and one that
+// does resolve could point at folders that are already counted.
 async function folderState(folder) {
-  try {return (await fs.stat(folder)).isDirectory()?'present':'unreadable';}
+  let info;
+  try {info=await fs.lstat(folder);}
   catch(error) {return error.code==='ENOENT'?'absent':'unreadable';}
+  return info.isDirectory() && !info.isSymbolicLink()?'present':'unreadable';
 }
 
 // The home folders under /home of each distribution, as seen from Windows.
@@ -55,14 +59,19 @@ export async function wslRoots({distributions,share=name=>`\\\\wsl.localhost\\${
   const roots=[];
   for(const name of distributions) {
     const homes=join(share(name),'home');
+    const unreadable=()=>roots.push({label:`WSL ${name}`,unreadable:true});
+    // A share that cannot be reached is Unknown. Only a reachable distribution without /home has no homes.
+    try {await fs.stat(share(name));}
+    catch {unreadable();continue;}
     let entries;
     try {entries=await fs.readdir(homes,{withFileTypes:true});}
     catch(error) {
-      if(error.code==='ENOENT')continue;
-      roots.push({label:`WSL ${name}`,unreadable:true});
+      if(error.code!=='ENOENT')unreadable();
       continue;
     }
-    for(const entry of entries.filter(entry=>entry.isDirectory() && USER.test(entry.name)).sort((a,b)=>a.name.localeCompare(b.name))) {
+    // A linked or oddly named home could hold logs that would be missed, so it is Unknown too.
+    if(entries.some(entry=>entry.isSymbolicLink() || (entry.isDirectory() && !USER.test(entry.name)))) {unreadable();continue;}
+    for(const entry of entries.filter(entry=>entry.isDirectory()).sort((a,b)=>a.name.localeCompare(b.name))) {
       const home=join(homes,entry.name);
       roots.push({label:`WSL ${name}`,key:`${name}\0${entry.name}`,home:`/home/${entry.name}`,
         claudeFolder:join(home,'.claude'),codexFolder:join(home,'.codex'),optional:true});
@@ -73,14 +82,24 @@ export async function wslRoots({distributions,share=name=>`\\\\wsl.localhost\\${
 
 // The folders one provider is read from. A root marked optional adds nothing
 // when its folder is missing. Any folder that exists but cannot be read throws.
+// This computer's own folder is always read, and an invalid setting for it is Unknown.
+// Two roots that resolve to the same folder are Unknown rather than counted twice.
 async function folders(roots,field) {
-  const found=[];
+  const found=[],seen=new Set();
   for(const root of roots) {
-    if(root.unreadable)throw new Unreadable();
-    if(!root.optional) {found.push(root);continue;}
-    const state=await folderState(root[field]);
-    if(state==='unreadable')throw new Unreadable();
-    if(state==='present')found.push(root);
+    if(root.unreadable || !root[field])throw new Unreadable();
+    if(root.optional) {
+      const state=await folderState(root[field]);
+      if(state==='unreadable')throw new Unreadable();
+      if(state==='absent')continue;
+    }
+    const real=await fs.realpath(root[field]).catch(()=>null);
+    if(real!==null) {
+      const key=process.platform==='win32'?real.toLowerCase():real;
+      if(seen.has(key))throw new Unreadable();
+      seen.add(key);
+    }
+    found.push(root);
   }
   return found;
 }
@@ -172,16 +191,26 @@ export async function readCodexRoots(roots,{cacheFor,read=collectSettings}) {
 }
 
 // The first root is this computer's own home, so its result carries the day.
+// A WSL session started in the Windows home would be named after the Windows
+// user, so that name and the folder holding homes are never project names there.
 export async function readProjectRoots(roots,{claude,codex,now,read=collectProjectTokens}) {
   const unknown={providers:{...(claude?{claude:{status:'unavailable'}}:{}),...(codex?{codex:{status:'unavailable'}}:{})}};
+  const own=roots.find(root=>!root.optional);
+  const hidden=new Set([path.win32.basename(own?.home ?? '').toLowerCase(),'users'].filter(Boolean));
+  const hide=result=>({...result,providers:Object.fromEntries(Object.entries(result.providers).map(([name,part])=>[name,
+    part.status!=='ok'?part:{...part,sessions:part.sessions.map(session=>hidden.has(String(session.project).toLowerCase())?{...session,project:null}:session)}]))});
   const parts=[];
   for(const root of roots) {
-    if(!root.optional) {parts.push(await read({claudeFolder:claude?root.claudeFolder:null,codexFolder:codex?root.codexFolder:null,home:root.home,now}));continue;}
+    if(!root.optional) {
+      if((claude && !root.claudeFolder) || (codex && !root.codexFolder)) {parts.push(unknown);continue;}
+      parts.push(await read({claudeFolder:claude?root.claudeFolder:null,codexFolder:codex?root.codexFolder:null,home:root.home,now}));
+      continue;
+    }
     if(root.unreadable) {parts.push(unknown);continue;}
     const [claudeState,codexState]=await Promise.all([claude?folderState(root.claudeFolder):'absent',codex?folderState(root.codexFolder):'absent']);
     if(claudeState==='unreadable' || codexState==='unreadable') {parts.push(unknown);continue;}
     if(claudeState==='absent' && codexState==='absent')continue;
-    parts.push(await read({claudeFolder:claudeState==='present'?root.claudeFolder:null,codexFolder:codexState==='present'?root.codexFolder:null,home:root.home,now}));
+    parts.push(hide(await read({claudeFolder:claudeState==='present'?root.claudeFolder:null,codexFolder:codexState==='present'?root.codexFolder:null,home:root.home,now})));
   }
   return mergeProjects(parts);
 }

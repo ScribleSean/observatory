@@ -66,7 +66,7 @@ With `wsl` on, each cycle on the PC:
 - reads `.claude` and `.codex` under each folder in `/home` of each distribution through `\\wsl.localhost\<distribution>`, read-only, with the same readers as the Windows folders and a separate private Codex cache for each,
 - adds the results to the Windows totals by day and model, and records which parts it covered, such as `Windows` and `WSL Ubuntu-24.04`, with no paths or user names.
 
-A distribution without those folders adds nothing. If a folder exists but cannot be read, or the distribution cannot be listed, that provider's PC total is Unknown rather than smaller. Opening a stopped distribution's files starts it, as browsing it in File Explorer does. The share is available in the signed-in desktop session where the tray app runs, but usually not in an SSH session, so a collection started over SSH with `wsl` on shows Unknown. Folders set with `CODEX_HOME` or `CLAUDE_CONFIG_DIR` inside WSL and the root user's home are not read. A Mac refuses the setting.
+A distribution without those folders adds nothing. If a folder exists but cannot be read, is a link, or the distribution cannot be reached, that provider's PC total is Unknown rather than smaller. Opening a stopped distribution's files starts it, as browsing it in File Explorer does, so with `wsl` on the distribution stays running. The share is available in the signed-in desktop session where the tray app runs, but usually not in an SSH session, so a collection started over SSH with `wsl` on shows Unknown. Folders set with `CODEX_HOME` or `CLAUDE_CONFIG_DIR` inside WSL and the root user's home are not read. A Mac refuses the setting.
 
 ## If the PC is off
 

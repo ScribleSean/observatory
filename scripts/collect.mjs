@@ -54,8 +54,8 @@ export function toolFolder(variable,fallback,environment=process.env) {
 // The home folders whose Claude Code and Codex logs count toward this computer:
 // its own, plus each WSL home on a Windows PC when the wsl source is on.
 export async function tokenRoots(config,{distributions=listDistributions,findRoots=wslRoots}={}) {
-  // A folder setting that is not absolute leaves an empty path, so only that provider is Unknown.
-  const folder=(variable,fallback)=>{try {return toolFolder(variable,fallback);} catch {return '';}};
+  // A folder setting that is not absolute leaves no folder, so only that provider is Unknown.
+  const folder=(variable,fallback)=>{try {return toolFolder(variable,fallback);} catch {return null;}};
   const own={label:config.host,claudeFolder:folder('CLAUDE_CONFIG_DIR','.claude'),codexFolder:folder('CODEX_HOME','.codex'),home:homedir()};
   if(config.platform!=='windows' || !config.sources.wsl)return [own];
   let names;
