@@ -46,34 +46,24 @@ test('sample Mac week uses recorded classes, estimates, prices and settings', ()
   assert.deepEqual(result.claude.byDevice, []);
 });
 
-test('All uses only the verified aggregate and separate Claude devices', () => {
+test('All shows each provider by computer', () => {
   const source = sampleSnapshot(now);
-  source.combinedTokens.days = [day({ totalTokens: 7 })];
+  delete source.combinedTokens;
   const result = view(source, { host: 'All' });
-  assert.equal(result.codex.status, 'ok');
-  assert.equal(result.codex.totals.total, 7);
-  assert.notEqual(result.codex.totals.total, sum(source.tokens.flatMap(row => row.days), 'totalTokens'));
-  assertEmpty(result.claude, 'by-device');
-  assert.deepEqual(result.claude.byDevice.map(row => row.label), ['Mac', 'PC']);
-  for (const row of result.claude.byDevice) {
-    const device = view(source, { host: row.host }).claude;
-    assert.equal(row.total, device.totals.total);
-    assert.equal(row.usd, device.estimate.usd);
-    assert.equal(row.status, device.status);
+  for (const provider of ['codex', 'claude']) {
+    assertEmpty(result[provider], 'by-device');
+    assert.deepEqual(result[provider].byDevice.map(row => row.label), ['Mac', 'PC']);
+    for (const row of result[provider].byDevice) {
+      const device = view(source, { host: row.host })[provider];
+      assert.equal(device.status, 'ok');
+      assert.equal(row.total, device.totals.total);
+      assert.equal(row.usd, device.estimate.usd);
+      assert.equal(row.status, device.status);
+    }
   }
   assert.equal(result.settings.length, 2);
-});
-
-test('All requires verification and aggregate scope', () => {
-  for (const change of [s => { delete s.combinedTokens; }, s => { s.combinedTokens.verification.status = 'pending'; },
-    s => { s.tokens.pop(); }, s => { s.settings.push({ host: 'Ubuntu', status: 'ok' }); }]) {
-    const source = sampleSnapshot(now);
-    change(source);
-    assertEmpty(view(source, { host: 'All' }).codex, 'unverified');
-  }
-  const source = sampleSnapshot(now);
-  source.combinedTokens.days = [];
-  assertEmpty(view(source, { host: 'All' }).codex, 'no-records');
+  source.tokens[1].status = 'unavailable';
+  assert.deepEqual(view(source, { host: 'All' }).codex.byDevice.map(row => [row.status, row.total]), [['ok', result.codex.byDevice[0].total], ['unknown', null]]);
 });
 
 test('missing and unavailable device sources are unknown', () => {
@@ -201,22 +191,11 @@ test('Claude All uses price dates from all device computations', () => {
   assert.equal(view(source, { host: 'All' }).claude.checkedOn, null);
 });
 
-test('verified aggregates that were not read remain unknown', () => {
-  for (const status of [undefined, 'unavailable', 'not-connected']) {
-    const source = sampleSnapshot(now);
-    source.combinedTokens.status = status;
-    assertEmpty(view(source, { host: 'All' }).codex, 'unknown');
-  }
-});
-
 test('invalid day dates make the whole source unknown', () => {
   for (const date of [undefined, null, 20261014, '', '2026-1-14', 'invalid']) {
     for (const days of [[day({ date })], [day(), day({ date })]]) {
       const source = snapshot(days);
       for (const provider of ['codex', 'claude']) assertEmpty(view(source)[provider], 'unknown');
-      const aggregate = sampleSnapshot(now);
-      aggregate.combinedTokens.days = days;
-      assertEmpty(view(aggregate, { host: 'All' }).codex, 'unknown');
     }
   }
 });
@@ -278,8 +257,7 @@ test('an Unknown Claude Code total says why', () => {
 test('a missing snapshot reads as empty', () => {
   for (const input of [null, undefined, []]) {
     const result = tokensView(input, { host: 'All', period: 'week', now: Date.parse('2026-10-14T12:00:00Z') });
-    assert.equal(result.codex.status, 'unverified');
-    assert.equal(result.claude.status, 'by-device');
+    for (const provider of ['codex', 'claude']) assertEmpty(result[provider], 'unknown');
   }
 });
 
@@ -295,8 +273,8 @@ test('old device readings with ok status do not supply tokens, estimates or sett
   assert.equal(result.settings[0].status, 'unknown');
   assert.deepEqual(result.settings[0].rows, []);
   const all = view(data, { host: 'All' });
-  assert.equal(all.codex.status, 'ok');
-  assert.ok(all.claude.byDevice.every(row => row.total === null && row.status === 'unknown'));
+  for (const provider of ['codex', 'claude'])
+    assert.ok(all[provider].byDevice.every(row => row.total === null && row.status === 'unknown'));
 });
 
 test('tokens and settings in a frozen snapshot expire at draw time', () => {

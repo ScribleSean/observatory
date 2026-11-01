@@ -1,4 +1,3 @@
-import strings from '../lib/strings.json' with { type: 'json' };
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +43,10 @@ void test('sample All week keeps providers and settings per device', () => {
   const html = renderToStaticMarkup(createElement(TokensView, { snapshot: source, now }));
   const claude = card(html, 'Claude Code');
   const codex = card(html, 'Codex');
-  for (const text of ['By computer', '>Mac<', '>PC<']) assert.ok(claude.includes(text), text);
+  for (const provider of [claude, codex])
+    for (const text of ['By computer', '>Mac<', '>PC<']) assert.ok(provider.includes(text), text);
+  for (const host of ['Mac', 'Windows'])
+    assert.ok(codex.includes('>' + compact(tokensView(source, { host, period: 'day', now }).codex.totals.total) + '<'), host);
   assert.ok(!claude.includes('Session cost'));
   for (const provider of [claude, codex]) {
     assert.ok(provider.includes('API-equivalent (estimate)'));
@@ -66,14 +68,6 @@ void test('empty snapshot never manufactures zero', () => {
   const html = render({});
   assert.ok(html.includes('Unknown'));
   assert.doesNotMatch(html, />0<|>0 |\$0\.00|>0K</);
-});
-
-void test('pending Codex aggregate is unknown', () => {
-  const source = sampleSnapshot(now);
-  source.combinedTokens.verification.status = 'pending';
-  const codex = card(render(source), 'Codex');
-  assert.match(codex, /class="ob-hero ob-unknown">Unknown</);
-  assert.ok(codex.includes(strings.status.allUnverified));
 });
 
 void test('Claude days without estimates show Unknown', () => {
