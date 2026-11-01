@@ -1,3 +1,5 @@
+// Only these values leave the reader: a folder's last name, a short hash of the
+// session id, first and last request times, per-model counts and subagent counts.
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,6 +8,7 @@ import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 
 export const LIMITS=Object.freeze({maxFiles:5000,maxTotalBytes:2*1024*1024*1024,maxLineBytes:16*1024*1024});
+// A file last written before this window cannot hold a request from today.
 const WINDOW_MS=26*3600000;
 const MODEL=/^[a-z0-9][a-z0-9.-]{0,63}$/;
 const NAME=/^[\p{L}\p{N}_.+ -]{1,64}$/u;
@@ -27,6 +30,13 @@ export function dayKey(at,timeZone=TIME_ZONE) {
   return formatter.format(at);
 }
 
+// The repository a folder belongs to, by its last name. Worktree folders are
+// often named after a branch, so a worktree takes its repository's name: the
+// folder above .claude/worktrees, the repository in a Codex log, the folder
+// after Conductor's workspaces, or the folder above another worktrees folder.
+// A folder named after the session's branch has the branch removed. The home
+// folder is "~" and anything above it is left out, so a user name is never a
+// project. Temporary folders are one project. Nothing else of the path is kept.
 const TEMP=[['tmp'],['private','tmp'],['var','folders'],['private','var','folders']];
 const segments=value=>value.replace(/^[\\/]{2}[?.][\\/]/,'').split(/[\\/]+/).filter(part=>part && part!=='.');
 const folded=parts=>parts.map(part=>part.toLowerCase());
@@ -207,9 +217,11 @@ const CODEX_KEEP=line=>line.includes('"session_meta"') || line.includes('"turn_c
 // Codex: each token_count event carries the running total and the last turn.
 // A fork of a thread with legacy history starts with its own session_meta and
 // then copies its parent's session_meta and every parent line, stamped with
-// the time of the fork.
+// the time of the fork. Those copies are the parent's running totals, so they
+// are left out, and the parent's log is read for them even when it is old.
 // A paginated fork points at its parent and copies nothing, and a resumed
-// thread appends to its own log.
+// thread appends to its own log. A repeated time and running total across
+// logs is counted once. A thread with a parent is a subagent.
 async function readCodex(folder,{today,timeZone,since,home,limits}) {
   const result=sessions(),seen=new Set(),name=namer(home);
   const roots=['sessions','archived_sessions'].map(name=>path.join(folder,name));
@@ -240,6 +252,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
     await lines(file,limits,CODEX_KEEP,event=>{
       const payload=object(event.payload)?event.payload:{};
       if(event.type==='session_meta') {
+        // A later session_meta is a parent's, copied in by a fork.
         if(started) {
           if(copiedFrom===null)copiedFrom=typeof payload.id==='string'?payload.id.toLowerCase():'';
           return;
@@ -279,6 +292,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       if(values.every(value=>value===0))return;
       pending.push({running,record:{provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent}});
     });
+    // Copies whose parent log cannot be found cannot be told apart, so the day is Unknown.
     const copies=copiedFrom===null || !pending.length?new Set():await totalsOf(copiedFrom);
     for(const {running,record} of pending)if(!copies.has(running))result.add(record);
   }

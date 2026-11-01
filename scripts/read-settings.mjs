@@ -522,7 +522,9 @@ function toolCallId(event) {
 
 // A fork of a thread with legacy history starts with its own session_meta and
 // then copies its parent's session_meta and every parent line, stamped with the
-// time of the fork.
+// time of the fork. copiedTotals(id) gives the running totals and tool call ids
+// in the log of the thread whose session_meta came later, and those turns and
+// calls are left out.
 export function summarize(events,cutoff,{retained=null,seen=null,hourTotals=null,readBudget=null,copiedTotals=null}={}) {
   cutoff=cutoffMicros(cutoff);
   let model='unknown',effort='unknown',speed='unknown';

@@ -3,6 +3,8 @@ import { STRINGS } from '../../../lib/strings.generated';
 import './charts.css';
 
 export type ChartColor = 'claude' | 'codex' | 'accent';
+/** `date` is a calendar day (YYYY-MM-DD). When every point has one, the x labels follow the calendar. */
+// value: a number, null when the day was recorded with an unknown total, undefined when there is no record of it.
 export type ChartPoint = { label: string; value?: number | null; date?: string };
 export type BarChartProps = {
   title: string;

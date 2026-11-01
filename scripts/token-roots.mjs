@@ -7,6 +7,7 @@ import {collectSettings} from './read-settings.mjs';
 import {collectProjectTokens} from './read-projects.mjs';
 
 const LXSS='HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss';
+// Distribution names WSL accepts. Anything else is skipped, so a name is safe in a path and in stored labels.
 const DISTRO=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 // Container engines keep their own distributions with no user logs. Opening them would start their VM.
 const ENGINE=/^(docker-desktop|rancher-desktop|podman-machine)/i;
@@ -176,9 +177,13 @@ export async function readCodexRoots(roots,{cacheFor,read=collectSettings}) {
   return {...mergeCodex(results),roots:labelsOf(found)};
 }
 
+// The first root is this computer's own home, so its result carries the day.
+// A WSL session started in the Windows home would be named after the Windows
+// user, so that name, the WSL user names and the folder holding homes are never project names there.
 export async function readProjectRoots(roots,{claude,codex,now,read=collectProjectTokens}) {
   const unknown={providers:{...(claude?{claude:{status:'unavailable'}}:{}),...(codex?{codex:{status:'unavailable'}}:{})}};
   const own=roots.find(root=>!root.optional);
+  // The other users' names under /home are hidden too, since a session can start in another user's home.
   const hidden=new Set([own?.home,...roots.filter(root=>root.optional && root.home).map(root=>root.home)]
     .map(home=>path.win32.basename(home ?? '').toLowerCase()).filter(Boolean).concat('users'));
   const hide=result=>({...result,providers:Object.fromEntries(Object.entries(result.providers).map(([name,part])=>[name,
@@ -199,4 +204,5 @@ export async function readProjectRoots(roots,{claude,codex,now,read=collectProje
   return mergeProjects(parts);
 }
 
+// A private cache folder name for one WSL home that holds no user or distribution name.
 export const cacheName=root=>`wsl-${createHash('sha256').update(root.key).digest('hex').slice(0,12)}`;

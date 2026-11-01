@@ -37,6 +37,7 @@ function cleanSession(raw) {
   if(new Set(models.map(row=>row.model)).size!==models.length)fail();
   const totalTokens=sumOf(models,'totalTokens');
   if(raw.totalTokens!==totalTokens || !(raw.subagentTokens===null || (count(raw.subagentTokens) && raw.subagentTokens<=totalTokens)))fail();
+  // The estimate is priced again here, so a pulled row cannot carry its own.
   return {id:raw.id,provider:raw.provider,start:raw.start,end:raw.end,totalTokens,subagentTokens:raw.subagentTokens,usd:priced(models),models};
 }
 

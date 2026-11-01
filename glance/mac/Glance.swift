@@ -44,6 +44,7 @@ struct PanelState: Equatable {
   var now = Date()
 
   static let low = 15.0
+  // Copies of lib/freshness.mjs. test/repo-rules.test.mjs checks they match.
   static let readingFresh: TimeInterval = 10 * 60
   static let deviceFresh: TimeInterval = 15 * 60
 
@@ -59,6 +60,7 @@ struct PanelState: Equatable {
     return value
   }
 
+  // Keep this pure rule in sync with lib/glance-limits.mjs and the Windows app.
   static func limitRemaining(_ row: [String: Any], now: Date) -> Double? {
     guard row["stale"] as? Bool == false,
           let remaining = row["remaining"] as? Double, remaining.isFinite, remaining >= 0, remaining <= 100,
@@ -115,15 +117,18 @@ enum Format {
   static func compact(_ value: Double) -> String {
     let units: [(Double, String)] = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"), (1, "")]
     for (index, (divisor, suffix)) in units.enumerated() where value >= divisor || divisor == 1 {
+      // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
       let scaled = value / divisor
       var text = scaled >= 10 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
       if text.hasSuffix(".0") { text.removeLast(2) }
+      // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
       if text == "1000", index > 0 { return "1" + units[index - 1].1 }
       return text + suffix
     }
     return "0"
   }
 
+  // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
   static func money(_ value: Double) -> String {
     if value > 0 && value < 0.005 { return "Under $0.01" }
     if value < 10 { return String(format: "$%.2f", value) }
@@ -178,6 +183,8 @@ struct Palette {
 }
 
 enum Brand {
+  // The one telescope mark, copied from public/brand/telescope.svg by setup. The same drawing is kept here
+  // for a binary run outside its bundle, such as --render. test/repo-rules.test.mjs checks the two match.
   static let svg = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 10 11-6 3 5-11 6z"/><path d="m16 3 4 7M5.8 12 3 13.5M12 13v3m-5 5 5-5 5 5m-5-5v6"/></svg>"##
   static let telescope: NSImage = {
     let image = Bundle.main.url(forResource: "telescope", withExtension: "svg").flatMap(NSImage.init(contentsOf:))

@@ -48,6 +48,7 @@ namespace Observatory
     sealed class PanelState
     {
         public const double Low = 15;
+        // Copies of lib/freshness.mjs. test/repo-rules.test.mjs checks they match.
         public const double ReadingFreshMinutes = 10;
         public const double DeviceFreshMinutes = 15;
         public List<LimitRow> Limits = new List<LimitRow>();
@@ -80,6 +81,7 @@ namespace Observatory
             return row != null && row.TryGetValue(key, out value) ? value : null;
         }
 
+        // Keep this pure rule in sync with lib/glance-limits.mjs and the Mac app.
         public static double? LimitRemaining(Dictionary<string, object> row, DateTime now)
         {
             object stale = Get(row, "stale");
@@ -159,19 +161,23 @@ namespace Observatory
             {
                 if (value < units[index].Item1 && index < units.Length - 1) continue;
                 double scaled = value / units[index].Item1;
+                // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
                 string text = scaled >= 10 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.#", CultureInfo.InvariantCulture);
+                // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
                 if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
                 return text + units[index].Item2;
             }
             return Math.Round(value, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture);
         }
 
+        // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
         public static string Money(double value)
         {
             if (value > 0 && value < 0.005) return "Under $0.01";
             return value >= 10 ? "$" + Math.Round(value, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
         }
 
+        // Same as span() in lib/panel-data.mjs.
         public static string Span(TimeSpan span)
         {
             int minutes = (int)Math.Round(Math.Max(0, span.TotalMinutes), MidpointRounding.AwayFromZero);
@@ -476,6 +482,7 @@ namespace Observatory
             StartPosition = FormStartPosition.Manual;
             DoubleBuffered = true;
             KeyPreview = true;
+            // On a short screen the panel scrolls rather than cutting off its buttons.
             AutoScroll = true;
             Scroll += (sender, e) => Invalidate();
             MouseWheel += (sender, e) => Invalidate();
@@ -532,6 +539,7 @@ namespace Observatory
         }
 
         // Sent when the panel lands on a screen with another scale, or the scale changes while it is open.
+        // Place sizes the panel for its screen, so Windows' suggested rectangle is not used.
         protected override void WndProc(ref Message m)
         {
             base.WndProc(ref m);
