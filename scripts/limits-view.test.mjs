@@ -36,7 +36,7 @@ void test('every limit window has a chart whose header shows what is left now an
     const head = card(html, name + ' ' + window);
     assert.match(head, /class="ob-num">40%</, name + ' ' + window);
     assert.match(head, /Resets in 10h 0m/);
-    assert.match(head, /runs out in about/, 'the projection is said once, in the header');
+    assert.match(head, /runs out in/, 'the projection is said once, in the header');
   }
   assert.ok(!html.includes('Session cost'));
 });
@@ -51,7 +51,7 @@ void test('a stale reading shows Unknown and its warning, never a projection', (
   const data = snapshot();
   data.claudeLimits.checkedAt = data.quota.checkedAt = iso(-30);
   const html = render(data);
-  assert.doesNotMatch(html, /runs out in about/);
+  assert.doesNotMatch(html, /runs out in/);
   assert.match(card(html, 'Codex 5-hour'), /class="ob-meta warn"/);
   assert.match(card(html, 'Codex 5-hour'), /class="ob-num ob-unknown">Unknown</);
 });

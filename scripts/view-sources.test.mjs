@@ -29,21 +29,21 @@ void test('check times preserve exact time and handle unknown and future reading
   }
   for (const at of [undefined, null, '', 'garbage', 0]) assert.deepEqual(checkTime(at, now), { label: 'Unknown', exact: null, iso: null });
 });
-void test('all five source groups retain supported rows and device names', () => {
+void test('all six source groups retain supported rows and device names', () => {
   const mac = { host: 'Mac', status: 'ok' }, win = { host: 'Windows', status: 'partial' }, other = { host: 'Other', status: 'ok' };
   const snapshot = { deviceNames: { Mac: '  Synthetic laptop  ', Windows: ' ' }, claudeLimits: mac, quota: win, peerQuota: win,
     activity: [mac, win, other], tokens: [mac, other], providerTokenSources: [{ ...win, provider: 'claude-code' }, { ...mac, provider: 'other' }],
     settings: [win] };
   const groups = sourceGroups(snapshot, now);
-  assert.deepEqual(groups.map(group => group.id), ['limits', 'activity', 'codexTokens', 'claudeTokens', 'settings']);
-  assert.deepEqual(groups.map(group => group.rows.length), [3, 2, 1, 1, 1]);
-  assert.deepEqual(groups[0].rows.map(row => row.device), [null, null, 'PC']);
-  assert.deepEqual([groups[1].rows[0].device, groups[1].rows[0].deviceName], ['Mac', 'Synthetic laptop']);
-  assert.equal(sourceGroups({ activity: [mac] }, now)[1].rows[0].device, 'Mac');
-  assert.equal(sourceGroups({ peerQuota: other }, now)[0].rows.length, 0);
+  assert.deepEqual(groups.map(group => group.id), ['claudeLimits', 'codexLimits', 'activity', 'codexTokens', 'claudeTokens', 'settings']);
+  assert.deepEqual(groups.map(group => group.rows.length), [1, 2, 2, 1, 1, 1]);
+  assert.deepEqual([...groups[0].rows, ...groups[1].rows].map(row => row.device), [null, null, 'PC']);
+  assert.deepEqual([groups[2].rows[0].device, groups[2].rows[0].deviceName], ['Mac', 'Synthetic laptop']);
+  assert.equal(sourceGroups({ activity: [mac] }, now)[2].rows[0].device, 'Mac');
+  assert.equal(sourceGroups({ peerQuota: other }, now)[1].rows.length, 0);
   for (const empty of [{}, null, undefined]) {
     const groups = sourceGroups(empty, now);
-    assert.equal(groups.length, 5);
+    assert.equal(groups.length, 6);
     assert.ok(groups.every(group => group.rows.length === 0));
   }
 });
@@ -59,7 +59,7 @@ void test('a read row shows no refusal sentence, a refused row does', () => {
     { host: 'Mac', status: 'ok', refusal: 'private-folder-refused' },
     { host: 'Windows', status: 'unavailable', refusal: 'ancestor-refused' },
   ] };
-  const [read, refused] = sourceGroups(snapshot, 0)[1].rows;
+  const [read, refused] = sourceGroups(snapshot, 0)[2].rows;
   assert.equal(read.refusal, null);
   assert.equal(refused.refusal, 'A private folder check failed at a parent folder, so this source was not read.');
 });
@@ -82,14 +82,14 @@ void test('sources in a frozen snapshot become stale at draw time', () => {
     const collectedAt = new Date(now - 1800000).toISOString();
     const checkedAt = new Date(Date.parse(collectedAt) - lag * 60000).toISOString();
     const data = { activity: [{ host: 'Mac', status: 'ok', checkedAt, days: [] }], collectedAt };
-    const [row] = sourceGroups(data, now)[1].rows;
+    const [row] = sourceGroups(data, now)[2].rows;
     assert.equal(row.status, 'stale');
     assert.equal(sourceTotals(sourceGroups(data, now)).read, 0);
   }
 });
 void test('a combined limit reading names the computer it was observed on', () => {
   const groups = sourceGroups({ deviceNames: { Mac: 'Synthetic laptop' }, claudeLimits: { status: 'ok', observedOn: 'Mac' }, quota: { status: 'ok', observedOn: 'Elsewhere' } }, now);
-  assert.deepEqual(groups[0].rows.map(row => [row.device, row.deviceName]), [['Mac', 'Synthetic laptop'], [null, null]]);
+  assert.deepEqual([...groups[0].rows, ...groups[1].rows].map(row => [row.device, row.deviceName]), [['Mac', 'Synthetic laptop'], [null, null]]);
 });
 
 void test('one computer lists only its own sources, and the count covers every row shown', () => {

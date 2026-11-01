@@ -24,7 +24,7 @@ export const STRINGS = {
     "all": "All"
   },
   "devices": {
-    "all": "All",
+    "all": "Both",
     "mac": "Mac",
     "pc": "PC",
     "device": "Computer",
@@ -78,7 +78,7 @@ export const STRINGS = {
     "percent": "{value}%",
     "usd": "${value}",
     "resetsIn": "Resets in {span}",
-    "runsOut": "runs out in about {span}",
+    "runsOut": "runs out in {span}",
     "asOf": "as of {time}",
     "sourcesRead": "{read} of {total} sources read",
     "separator": " · "
@@ -127,7 +127,7 @@ export const STRINGS = {
     "pricesChecked": "Prices checked {date}",
     "pricesUnknown": "Prices checked: Unknown",
     "partial": "Covers {covered} of {total} tokens. Models without a price are left out.",
-    "settingsTitle": "Recorded reasoning and speed",
+    "settingsTitle": "Codex models",
     "effort": "Reasoning",
     "speed": "Speed",
     "noSettings": "No settings recorded",
@@ -167,13 +167,12 @@ export const STRINGS = {
   "overview": {
     "limitsTitle": "Limits",
     "timeTitle": "Screen time today",
-    "costTitle": "API-equivalent cost today (estimate)",
+    "costTitle": "API-equivalent (estimate) today",
     "tokens": "{value} tokens",
     "bothNote": "Both computers, not deduplicated",
     "asOf": "as of {time}",
     "lastDay": "Last update was {time}",
-    "lastSeen": "Last seen {time}",
-    "today": "Today"
+    "lastSeen": "Last seen {time}"
   },
   "limitHistory": {
     "title": "Limit history",
@@ -194,7 +193,7 @@ export const STRINGS = {
     "hint": "To collect now, choose Refresh in the menu bar or tray app."
   },
   "projects": {
-    "title": "Today by project",
+    "title": "By project",
     "session": "{start} to {end}",
     "subagents": "Subagents {share}",
     "other": "Other",

@@ -83,7 +83,8 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   const tone = (index: number) => index === 0 ? 'primary' : 'secondary';
 
   // A window column needs a few pixels. Over long ranges the windows are grouped by day instead.
-  const daily = columns && 5 * HOUR / span * plotWidth < 6;
+  // Seven days keep one column per window down to a 320px window. Thirty days and longer group by day.
+  const daily = columns && 5 * HOUR / span * plotWidth < 4;
   const columnSets = series.map(item => {
     const windows = windowColumns(item.points, window) as Column[];
     const shown = daily ? dailyColumns(windows) as Column[] : windows;

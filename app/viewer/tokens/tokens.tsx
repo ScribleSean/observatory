@@ -46,7 +46,7 @@ function chartData(days: Day[], period: string, anchor: string | null): ChartPoi
     return hours ? hours.map((value, hour) => ({ label: hourLabel(hour), value })) : null;
   }
   const byDay = new Map(days.map(day => [day.date, day.total]));
-  const first = days.map(day => day.date).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort()[0];
+  const first = days.map(day => day.date).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort((a, b) => a.localeCompare(b))[0];
   if (!first) return null;
   const length = period === 'week' ? 7 : period === 'month' ? 30
     : Math.max(7, Math.round((Date.parse(`${anchor}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) / 86400000) + 1);

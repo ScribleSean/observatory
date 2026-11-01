@@ -192,10 +192,10 @@ test('computed pace alone supplies every projected window note', () => {
     asOf: data.quota.checkedAt, estimatedExhaustionAt: iso(170) }];
   for (const fixture of [data, sampleSnapshot(now)]) {
     for (const row of limitRows(fixture, now)) {
-      assert.doesNotMatch(row.note, /runs out in about 2h 50m/);
-      assert.equal(row.note.includes('runs out in about'), row.pace?.status === 'projected');
+      assert.doesNotMatch(row.note, /runs out in 2h 50m/);
+      assert.equal(row.note.includes('runs out in'), row.pace?.status === 'projected');
       if (row.pace?.status === 'projected') {
-        assert.equal(row.note.split(' · ')[1], 'runs out in about ' + span(row.pace.runsOutInMinutes * 60000));
+        assert.equal(row.note.split(' · ')[1], 'runs out in ' + span(row.pace.runsOutInMinutes * 60000));
       }
     }
   }
@@ -230,7 +230,7 @@ test('a carried window cannot project pace from the fresh source timestamp', () 
   assert.equal(rows[1].stale, true);
   assert.equal(rows[1].pace.status, 'stale');
   assert.equal(rows[1].pace.ratePerHour, null);
-  assert.doesNotMatch(rows[1].note, /runs out in about/);
+  assert.doesNotMatch(rows[1].note, /runs out in/);
 });
 
 test('limits view renders reset windows as Unknown', async t => {

@@ -50,7 +50,7 @@ void test('sample All week keeps providers and settings per device', () => {
     assert.ok(provider.includes('API-equivalent (estimate)'));
     assert.ok(provider.includes('Prices checked ' + source.prices.checkedOn));
   }
-  const settings = card(html, 'Recorded reasoning and speed');
+  const settings = card(html, 'Codex models');
   for (const label of ['>Mac<', '>PC<']) assert.ok(settings.includes(label));
 });
 

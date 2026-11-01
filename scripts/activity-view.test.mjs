@@ -47,3 +47,10 @@ test('the date stepper names the day and stops at the newest one', () => {
   assert.doesNotMatch(html, /aria-label="Previous day" disabled=""/);
   assert.doesNotMatch(render(ActivityView, { snapshot: sampleSnapshot(now), now, initialPeriod: 'all' }), /ob-stepper/);
 });
+test('the chart follows the period: a day by hour, a range by day', () => {
+  const day = render(ActivityView, { snapshot: sampleSnapshot(now), now, initialHost: 'Mac' });
+  assert.ok(day.includes(strings.activity.hourlyTitle) && !day.includes(strings.activity.dailyTitle));
+  const week = render(ActivityView, { snapshot: sampleSnapshot(now), now, initialHost: 'Mac', initialPeriod: 'week' });
+  assert.ok(week.includes(strings.activity.dailyTitle) && !week.includes(strings.activity.hourlyTitle));
+  assert.equal((week.match(/data-bar=|data-unknown=/g) ?? []).length, 7);
+});

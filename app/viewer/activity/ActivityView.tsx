@@ -51,7 +51,8 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
         </li>)}</ul>}
         {view.noTracking && <p className="ob-meta">{STRINGS.activity.noTracking}</p>}
       </Card>
-      <Card label={STRINGS.activity.dailyTitle}><BarChart title={STRINGS.activity.dailyTitle} data={view.series} series="accent" formatValue={duration} /></Card>
+      {/* The chart follows the period: one day by hour, a range by day. */}
+      {view.hourly === null && <Card label={STRINGS.activity.dailyTitle}><BarChart title={STRINGS.activity.dailyTitle} data={view.series} series="accent" formatValue={duration} /></Card>}
       {view.hourly !== null && <Card label={view.hourlyTitle}><BarChart title={view.hourlyTitle} data={view.hourly} series="accent" formatValue={duration} /></Card>}
     </div>
   </div>;

@@ -281,7 +281,7 @@ test('stored pace remains the default and can be omitted without changing other 
   assert.deepEqual(limits(data, now), limits(data, now, { storedPace: true }));
   const without = limits(data, now, { storedPace: false });
   limits(data, now).forEach((row, index) => {
-    assert.equal(row.note, 'Resets in 1h 0m · runs out in about 30m');
+    assert.equal(row.note, 'Resets in 1h 0m · runs out in 30m');
     assert.deepEqual(without[index], { ...row, note: 'Resets in 1h 0m' });
   });
 });

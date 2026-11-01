@@ -25,7 +25,7 @@ const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:tru
 for(const section of ['limits','activity','tokens','sources']) {
   test(`the ${section} page renders from combined.json`,()=>{
     const html=render({combined:both,section});
-    for(const title of ['Limits','Screen time today','API-equivalent cost today (estimate)'])assert.ok(html.includes(title),title);
+    for(const title of ['Limits','Screen time today','API-equivalent (estimate) today'])assert.ok(html.includes(title),title);
     assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
     assert.ok(html.includes('Both computers, not deduplicated'));
     // Computers are Mac and PC everywhere, never a machine name with a platform in parentheses.
@@ -155,7 +155,16 @@ test('the tokens page shows today by project, with sessions, subagent share and 
     {name:'sample-site',totalTokens:74e6,subagentTokens:0,usd:38,sessionCount:1,sessions:[]}]};
   const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now,snapshot=>({...snapshot,projectTokens:[row]}))}],{now});
   const html=render({combined,section:'tokens'});
-  for(const text of ['Today by project','demo-app','190M','$96','sample-site','Subagents 64%','Subagents Unknown','+1 more','>8M<'])assert.ok(html.includes(text),text);
+  for(const text of ['By project','demo-app','190M','$96','sample-site','Subagents 64%','Subagents Unknown','+1 more','>8M<'])assert.ok(html.includes(text),text);
   assert.ok(html.indexOf('demo-app')<html.indexOf('sample-site'),'largest project first');
   assert.ok(!html.includes('NaN') && !html.includes('undefined'));
+});
+
+test('with one computer, Sources leaves out the computer column and lists only that computer',()=>{
+  const one=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)}],{now});
+  const html=renderToStaticMarkup(createElement(SourcesView,{now,snapshot:one.view}));
+  assert.ok(html.includes('ob-sources-single'));
+  assert.ok(!html.includes('ob-source-device'));
+  const count=(html.match(/class="ob-source-row"/g) ?? []).length;
+  assert.match(html,new RegExp(`of ${count} sources read`));
 });

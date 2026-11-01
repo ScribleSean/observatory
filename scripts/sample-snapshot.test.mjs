@@ -221,8 +221,8 @@ test('sample panel shows the computed Codex exhaustion duration', () => {
   const now = Date.parse('2026-10-14T18:45:00Z'), snapshot = sampleSnapshot(now);
   const primary = quotaPace(snapshot.quota, now).find(row => row.window === 'primary');
   const row = limits(snapshot, now)[2];
-  assert.ok(row.note.includes('runs out in about'));
-  assert.ok(row.note.includes(`runs out in about ${span(Date.parse(primary.estimatedExhaustionAt) - now)}`));
+  assert.ok(row.note.includes('runs out in'));
+  assert.ok(row.note.includes(`runs out in ${span(Date.parse(primary.estimatedExhaustionAt) - now)}`));
 });
 
 test('activity archives have separate tracking metadata and capped hours', () => {
