@@ -1,12 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { TIME_ZONE } from '../lib/timezone.mjs';
+import { writeAtomic } from '../lib/atomic-file.mjs';
 
-export const MAX_FILES = 10_000;
+export const MAX_FILES = 50_000;
+// MAX_TOTAL_BYTES and MAX_LINES count what one run reads, so files kept in the cache do not count.
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAX_LINE_BYTES = 4 * 1024 * 1024;
 export const MAX_LINES = 3_000_000;
+export const MAX_CACHE_BYTES = 512 * 1024 * 1024;
+export const CACHE_VERSION = 1;
+const CACHE_FILE = 'claude-usage.json';
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 const FIELDS = ['input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens'];
 const OUTPUT_KEYS = ['inputTokens', 'cacheReadTokens', 'cacheCreationTokens', 'outputTokens', 'totalTokens'];
@@ -390,8 +396,6 @@ async function walk(directory, projects, found, limits) {
     }
     if (!entry.name.endsWith('.jsonl')) continue;
     if ((await isSymlink(full)) || !(await isFile(full))) throw new Unavailable();
-    found.totalBytes += (await fs.promises.stat(full)).size;
-    if (found.totalBytes > limits.MAX_TOTAL_BYTES) throw new Unavailable();
     found.files.push(full);
     if (found.files.length > limits.MAX_FILES) throw new Unavailable();
   }
@@ -401,9 +405,12 @@ async function walk(directory, projects, found, limits) {
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const BLANK = new Set([0x20, 0x09, 0x0a, 0x0d, 0x0b, 0x0c]);
 
-function addRecord(records, event) {
-  if (!isDict(event)) return false;
-  if (get(event, 'type') !== 'assistant') return false;
+// One usage observation from one line: null when the line is not an assistant
+// reply, SKIP for a reply that carries no request usage, or the observation.
+const SKIP = Symbol('skip');
+function observe(event) {
+  if (!isDict(event)) return null;
+  if (get(event, 'type') !== 'assistant') return null;
   const message = get(event, 'message');
   if (!isDict(message) || get(message, 'role') !== 'assistant') throw new Unavailable();
   const usage = get(message, 'usage');
@@ -419,14 +426,21 @@ function addRecord(records, event) {
   // The client also writes placeholder replies with no request identity.
   const clientFlag = get(event, 'isApiErrorMessage');
   if (rawModel === '<synthetic>' && values.every((value) => value === 0) && (clientFlag === true || (clientFlag === false && isNone(requestId))))
-    return true;
+    return SKIP;
   if (typeof requestId !== 'string' || !(codePointLength(requestId) > 0 && codePointLength(requestId) <= 256)) throw new Unavailable();
-  const key = JSON.stringify([id, requestId]);
-  const current = { instant, model: modelName(rawModel), raw: rawModel, values };
+  // Only the hash of the identity is kept, in memory and in the cache.
+  const key = createHash('sha256').update(JSON.stringify([id, requestId])).digest('hex').slice(0, 32);
+  return { key, instant, raw: rawModel, values };
+}
+
+// Adds one observation to the records, by message and request identity. A
+// request written again while streaming keeps its largest usage and earliest time.
+function addRecord(records, { key, instant, raw, values }) {
+  const current = { instant, model: modelName(raw), raw, values };
   const prior = records.get(key);
   if (!prior) {
     records.set(key, current);
-    return true;
+    return;
   }
   if (!pyEqual(prior.raw, current.raw)) throw new Unavailable();
   const earliest = prior.instant <= current.instant ? prior.instant : current.instant;
@@ -441,10 +455,34 @@ function addRecord(records, event) {
   } else {
     records.set(key, { ...prior, instant: earliest });
   }
-  return true;
 }
 
-async function readFile(file, state, records, limits) {
+// One file's observations in order. An observation that repeats the previous one
+// for the same identity changes nothing but the earliest time, so it is folded in.
+// Replaying every file's list in file order gives the same records as reading
+// every line in that order.
+function fileLog() {
+  const last = new Map();
+  return {
+    saw: false,
+    cacheable: true,
+    list: [],
+    add(observation) {
+      const prior = last.get(observation.key);
+      if (prior && pyEqual(prior.raw, observation.raw) && prior.values.every((value, index) => value === observation.values[index])) {
+        if (observation.instant < prior.instant) prior.instant = observation.instant;
+        return;
+      }
+      // The cache stores a model name as text, so a file with any other kind of model value is always reread.
+      if (typeof observation.raw !== 'string' && !isNone(observation.raw)) this.cacheable = false;
+      const kept = { ...observation, raw: isNone(observation.raw) ? null : observation.raw };
+      last.set(observation.key, kept);
+      this.list.push(kept);
+    },
+  };
+}
+
+async function readFile(file, state, log, limits) {
   const handle = await fs.promises.open(file, 'r');
   try {
     const chunk = Buffer.allocUnsafe(1024 * 1024);
@@ -462,7 +500,10 @@ async function readFile(file, state, records, limits) {
       } catch {
         throw new Unavailable();
       }
-      if (addRecord(records, event)) state.sawAssistant = true;
+      const observation = observe(event);
+      if (observation === null) return;
+      log.saw = true;
+      if (observation !== SKIP) log.add(observation);
     };
     for (;;) {
       const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
@@ -538,7 +579,62 @@ function summarize(records) {
   });
 }
 
-export async function collectClaudeUsage(claudeFolder, { now = new Date(), limits = {} } = {}) {
+// The private cache: for each log, by the hash of its path below projects, the
+// file identity it was read at and its observations. Nothing else is kept.
+const HEX = /^[0-9a-f]{32}$/;
+const DIGITS = /^-?\d{1,25}$/;
+const hashText = (text) => createHash('sha256').update(text).digest('hex').slice(0, 32);
+const identity = (info) => [info.dev, info.ino, info.size, info.mtimeNs].map(String);
+
+async function loadCache(directory, rootKey) {
+  if (typeof directory !== 'string' || !directory) return null;
+  try {
+    const file = pathApi.join(directory, CACHE_FILE);
+    const info = await fs.promises.lstat(file);
+    if (!info.isFile() || info.size > MAX_CACHE_BYTES) return new Map();
+    const data = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    if (!isDict(data) || data.version !== CACHE_VERSION || data.root !== rootKey || !isDict(data.files)) return new Map();
+    return new Map(Object.entries(data.files));
+  } catch {
+    return new Map();
+  }
+}
+
+// A cached entry is used only when it matches the file exactly and every record is well formed.
+function cachedLog(entry, info) {
+  if (!isDict(entry) || !Array.isArray(entry.at) || entry.at.length !== 4 || typeof entry.saw !== 'boolean' || !Array.isArray(entry.records))
+    return null;
+  const at = identity(info);
+  if (entry.at.some((value, index) => value !== at[index])) return null;
+  const list = [];
+  for (const row of entry.records) {
+    if (!Array.isArray(row) || row.length !== 7 || typeof row[0] !== 'string' || !HEX.test(row[0]) || typeof row[1] !== 'string' || !DIGITS.test(row[1]) ||
+      !(row[2] === null || typeof row[2] === 'string') || !row.slice(3).every((value) => number(value) !== null))
+      return null;
+    list.push({ key: row[0], instant: BigInt(row[1]), raw: row[2], values: row.slice(3) });
+  }
+  return { saw: entry.saw, cacheable: true, list };
+}
+
+async function saveCache(directory, rootKey, logs) {
+  if (typeof directory !== 'string' || !directory) return;
+  const file = pathApi.join(directory, CACHE_FILE);
+  const files = {};
+  for (const { name, info, log } of logs) {
+    if (!log.cacheable) continue;
+    files[hashText(name)] = { at: identity(info), saw: log.saw,
+      records: log.list.map(({ key, instant, raw, values }) => [key, String(instant), raw, ...values]) };
+  }
+  const text = JSON.stringify({ version: CACHE_VERSION, root: rootKey, files });
+  try {
+    if (Buffer.byteLength(text) > MAX_CACHE_BYTES) await fs.promises.unlink(file).catch(() => {});
+    else await writeAtomic(file, text);
+  } catch {
+    // The cache only saves time. The report stands without it.
+  }
+}
+
+export async function collectClaudeUsage(claudeFolder, { now = new Date(), limits = {}, cacheDirectory = null } = {}) {
   void now;
   const caps = { MAX_FILES, MAX_TOTAL_BYTES, MAX_LINE_BYTES, MAX_LINES, ...limits };
   try {
@@ -549,24 +645,39 @@ export async function collectClaudeUsage(claudeFolder, { now = new Date(), limit
     const projects = pathApi.join(root, 'projects');
     if (!(await statOrIgnored(projects, true))) return notFound();
     if ((await isSymlink(projects)) || !(await isDir(projects)) || !samePath(await realpath(projects), projects)) return unavailable();
-    const found = { files: [], totalBytes: 0 };
+    const found = { files: [] };
     await walk(projects, projects, found, caps);
     if (!found.files.length) return notFound();
-    const records = new Map();
-    const state = { sawAssistant: false, lines: 0, bytesRead: 0 };
+    const rootKey = hashText(projects);
+    const cache = await loadCache(cacheDirectory, rootKey);
+    const state = { lines: 0, bytesRead: 0 };
+    const logs = [];
+    let reread = 0;
     const sorted = found.files.map((file) => [pathParts(file), file]).sort((a, b) => compareParts(a[0], b[0]));
     for (const [, file] of sorted) {
       if ((await isSymlink(file)) || !(await isFile(file))) return unavailable();
       const resolved = await realpath(file);
       if (!beneath(resolved, projects) || !samePath(resolved, file)) return unavailable();
+      const name = pathApi.relative(projects, file);
       const before = await fs.promises.stat(file, { bigint: true });
-      await readFile(file, state, records, caps);
-      const after = await fs.promises.stat(file, { bigint: true });
-      if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs)
-        return unavailable();
+      let log = cache ? cachedLog(cache.get(hashText(name)), before) : null;
+      if (!log) {
+        log = fileLog();
+        reread++;
+        await readFile(file, state, log, caps);
+        const after = await fs.promises.stat(file, { bigint: true });
+        if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs)
+          return unavailable();
+      }
+      logs.push({ name, info: before, log });
     }
-    if (!state.sawAssistant || !records.size) return unavailable();
-    return { provider: 'claude-code', status: 'ok', scope: 'Recorded Claude Code requests', days: summarize(records) };
+    const records = new Map();
+    for (const { log } of logs) for (const observation of log.list) addRecord(records, observation);
+    if (!logs.some(({ log }) => log.saw) || !records.size) return unavailable();
+    const days = summarize(records);
+    // Rewrite the cache only when a log was read or one has gone.
+    if (cache && (reread || cache.size !== logs.length)) await saveCache(cacheDirectory, rootKey, logs);
+    return { provider: 'claude-code', status: 'ok', scope: 'Recorded Claude Code requests', days };
   } catch {
     return unavailable();
   }

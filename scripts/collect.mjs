@@ -68,7 +68,8 @@ export function defaultReaders(config) {
   let pending=null;
   // One lookup per cycle serves every reader.
   const roots=()=>pending??=tokenRoots(config);
-  const codexCache=async root=>realpath(await privateFolder(config.dataFolder,...(root.optional?['private-codex-roots',cacheName(root)]:['private-codex'])));
+  // Each folder read has its own private cache. This computer's own folders keep their original cache names.
+  const cacheFor=tool=>async root=>realpath(await privateFolder(config.dataFolder,...(root.optional?[`private-${tool}-roots`,cacheName(root)]:[`private-${tool}`])));
   return {
     screenTime:async()=>{
       if(config.platform==='mac') {
@@ -77,11 +78,11 @@ export function defaultReaders(config) {
       }
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
-    codex:async()=>readCodexRoots(await roots(),{cacheFor:codexCache}),
+    codex:async()=>readCodexRoots(await roots(),{cacheFor:cacheFor('codex')}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
-    claudeCode:async()=>readClaudeRoots(await roots()),
+    claudeCode:async()=>readClaudeRoots(await roots(),{cacheFor:cacheFor('claude')}),
     projects:async({claude,codex},now)=>readProjectRoots(await roots(),{claude,codex,now}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);

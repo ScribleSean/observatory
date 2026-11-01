@@ -174,11 +174,12 @@ export function mergeProjects(results) {
   return {date:first.date,timeZone:first.timeZone,providers};
 }
 
-export async function readClaudeRoots(roots,{read=collectClaudeUsage}={}) {
+// Each folder keeps its own private cache, for Claude Code as for Codex.
+export async function readClaudeRoots(roots,{cacheFor=()=>null,read=collectClaudeUsage}={}) {
   let found;
   try {found=await folders(roots,'claudeFolder');}
   catch {return {provider:'claude-code',status:'unavailable'};}
-  const result=mergeClaude(await Promise.all(found.map(root=>read(root.claudeFolder))));
+  const result=mergeClaude(await Promise.all(found.map(async root=>read(root.claudeFolder,{cacheDirectory:await cacheFor(root)}))));
   return {...result,roots:labelsOf(found)};
 }
 
