@@ -400,6 +400,7 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\MOVED~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\mounted',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\sibling',
+    // A junction to a volume GUID path is not reported by lstat, so an alias-shaped name could hide one.
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\CACHE~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGR~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGJ~1',

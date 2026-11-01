@@ -609,13 +609,14 @@ namespace Observatory
             settings = LoadSettings();
             // The menu strip is a control, so a UI context exists from here on.
             ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+            // Right click keeps a short native menu. Left click opens the panel.
             menu.Items.Add("Open dashboard", null, (sender, e) => OpenDashboard());
             refreshItem = menu.Items.Add("Refresh", null, (sender, e) => RunTick());
             menu.Items.Add("Quit Observatory", null, (sender, e) => Quit());
             menu.Opening += (sender, e) => refreshItem.Enabled = tick == null || tick.HasExited;
             tray.ContextMenuStrip = menu;
             tray.Visible = true;
-            // A click on the icon first takes focus from an open panel, which hides it.
+            // A click on the icon first takes focus from an open panel, which hides it. Remember whether it was open when the press began.
             tray.MouseDown += (sender, e) => { if (e.Button == MouseButtons.Left) openAtPress = panel.Visible; };
             tray.MouseUp += (sender, e) => { if (e.Button == MouseButtons.Left) TogglePanel(); };
             panel.Act = name =>

@@ -526,7 +526,7 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
   @objc func toggle() {
     if panel?.isVisible == true { closePanel(); return }
-    // Clicking the icon while open first takes focus from the panel, which closes it.
+    // Clicking the icon while open first takes focus from the panel, which closes it. Don't reopen on that same click.
     if Date().timeIntervalSince(closedAt) < 0.3 { return }
     show()
     if panel == nil {
