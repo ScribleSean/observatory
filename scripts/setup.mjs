@@ -21,10 +21,20 @@ export const WINDOWS_EXECUTABLE='ObservatoryGlance.exe';
 export const STARTUP_NAME='ObservatoryGlance';
 const OLD_EXECUTABLES={darwin:'WorkspaceObservatory',win32:'WorkspaceObservatory.exe'};
 const MIN_NODE=[22,13];
+// libuv 1.49 (Node 22.13 to 22.16 and Node 23) reports device 0 for a Windows path but the
+// real volume for an open file, so every file identity check fails and readers stay unavailable.
+const MIN_NODE_WINDOWS=[22,17];
+const MIN_LIBUV_WINDOWS=[1,51];
 
-export function nodeSupported(version=process.versions.node) {
-  const [major,minor]=version.split('.').map(Number);
-  return major>MIN_NODE[0] || (major===MIN_NODE[0] && minor>=MIN_NODE[1]);
+const atLeast=(version,[major,minor])=>{
+  const [a,b]=String(version).split('.').map(Number);
+  return a>major || (a===major && b>=minor);
+};
+export const minimumNode=(platform=process.platform)=>(platform==='win32'?MIN_NODE_WINDOWS:MIN_NODE).join('.');
+
+export function nodeSupported(version=process.versions.node,platform=process.platform,libuv=process.versions.uv) {
+  if(platform!=='win32')return atLeast(version,MIN_NODE);
+  return atLeast(version,MIN_NODE_WINDOWS) && atLeast(libuv,MIN_LIBUV_WINDOWS);
 }
 
 export function paths(platform=process.platform,repo=REPO,home=homedir(),environment=process.env) {
@@ -199,7 +209,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
   const step=(text)=>log(`- ${text}`);
   const act=async(text,action)=>{step(dryRun?`would ${text}`:text);if(!dryRun)return action();};
   if(!['darwin','win32'].includes(platform))throw Error('Observatory runs on macOS and Windows only.');
-  if(!nodeSupported())throw Error(`Node ${MIN_NODE.join('.')} or later is required. This is Node ${process.versions.node}.`);
+  if(!nodeSupported(process.versions.node,platform))throw Error(`Node ${minimumNode(platform)} or later is required. This is Node ${process.versions.node}.`);
   step(`Node ${process.versions.node}`);
 
   const configFile=process.env.OBSERVATORY_CONFIG || CONFIG_FILE;

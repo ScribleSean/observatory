@@ -46,7 +46,7 @@ Observatory is monitor-only. It does not start, stop or answer an agent, and it 
 
 ## Quick start
 
-You need [Node.js](https://nodejs.org/) 22.13 or later on a Mac or a Windows PC. On a Mac, also install the Xcode Command Line Tools with `xcode-select --install`. For screen time, install and run [ActivityWatch](https://activitywatch.net/). Everything else is optional. A missing source shows Unknown, and the rest keep working.
+You need [Node.js](https://nodejs.org/) 22.13 or later on a Mac, or 22.17 or later on a Windows PC. On a Mac, also install the Xcode Command Line Tools with `xcode-select --install`. For screen time, install and run [ActivityWatch](https://activitywatch.net/). Everything else is optional. A missing source shows Unknown, and the rest keep working.
 
 ```bash
 git clone https://github.com/ScribleSean/observatory.git
