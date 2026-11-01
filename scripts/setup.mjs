@@ -176,37 +176,50 @@ export async function signingIdentity(dataFolder,{fs=filesystem,run=execute}={})
   const secret=path.join(folder,'keychain-password');
   await fs.mkdir(folder,{recursive:true,mode:0o700});
   await fs.chmod(folder,0o700);
-  let password=null;
-  try {password=(await fs.readFile(secret,'utf8')).trim();await fs.access(keychain);}
-  catch {password=null;}
-  if(!password) {
-    await fs.rm(keychain,{force:true});
-    password=randomBytes(24).toString('hex');
-    await fs.writeFile(secret,password+'\n',{mode:0o600});
-    const work=await fs.mkdtemp(path.join(folder,'new-'));
+  const usable=async password=>{
     try {
-      const config=path.join(work,'cert.cnf'),key=path.join(work,'key.pem'),cert=path.join(work,'cert.pem'),bundle=path.join(work,'id.p12');
-      await fs.writeFile(config,['[req]','distinguished_name=dn','x509_extensions=ext','prompt=no','[dn]',`CN=${SIGNING_NAME}`,
-        '[ext]','basicConstraints=critical,CA:false','keyUsage=critical,digitalSignature','extendedKeyUsage=critical,codeSigning',''].join('\n'));
-      await run('/usr/bin/openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','3650','-config',config]);
-      await run('/usr/bin/openssl',['pkcs12','-export','-inkey',key,'-in',cert,'-out',bundle,'-passout',`pass:${password}`,'-name',SIGNING_NAME]);
-      const before=(await run('/usr/bin/security',['list-keychains','-d','user'])).stdout;
-      await run('/usr/bin/security',['create-keychain','-p',password,keychain]);
-      // Keep the new keychain out of the user's search list.
-      const listed=s=>String(s??'').split('\n').map(line=>line.trim().replace(/^"|"$/g,'')).filter(Boolean);
-      const after=(await run('/usr/bin/security',['list-keychains','-d','user'])).stdout;
-      if(listed(after).length!==listed(before).length)await run('/usr/bin/security',['list-keychains','-d','user','-s',...listed(before)]);
-      await run('/usr/bin/security',['set-keychain-settings',keychain]);
+      await fs.access(keychain);
       await run('/usr/bin/security',['unlock-keychain','-p',password,keychain]);
-      await run('/usr/bin/security',['import',bundle,'-k',keychain,'-P',password,'-T','/usr/bin/codesign']);
-      await run('/usr/bin/security',['set-key-partition-list','-S','apple-tool:,apple:','-s','-k',password,keychain]);
-    } finally {await fs.rm(work,{recursive:true,force:true});}
+      const {stdout}=await run('/usr/bin/security',['find-identity','-p','codesigning',keychain]);
+      return String(stdout).includes(SIGNING_NAME);
+    } catch {return false;}
+  };
+  let password=null;
+  try {password=(await fs.readFile(secret,'utf8')).trim();}catch {}
+  if(password && await usable(password))return {name:SIGNING_NAME,keychain};
+  // Start again from nothing. The password file is written last, so a half-made keychain
+  // is never mistaken for a finished one.
+  await fs.rm(secret,{force:true});
+  await fs.rm(keychain,{force:true});
+  password=randomBytes(24).toString('hex');
+  const listed=text=>String(text??'').split('\n').map(line=>line.trim().replace(/^"|"$/g,'')).filter(Boolean);
+  const before=listed((await run('/usr/bin/security',['list-keychains','-d','user'])).stdout);
+  const work=await fs.mkdtemp(path.join(folder,'new-'));
+  try {
+    const config=path.join(work,'cert.cnf'),key=path.join(work,'key.pem'),cert=path.join(work,'cert.pem'),bundle=path.join(work,'id.p12');
+    await fs.writeFile(config,['[req]','distinguished_name=dn','x509_extensions=ext','prompt=no','[dn]',`CN=${SIGNING_NAME}`,
+      '[ext]','basicConstraints=critical,CA:false','keyUsage=critical,digitalSignature','extendedKeyUsage=critical,codeSigning',''].join('\n'));
+    await run('/usr/bin/openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','3650','-config',config]);
+    await run('/usr/bin/openssl',['pkcs12','-export','-inkey',key,'-in',cert,'-out',bundle,'-passout',`pass:${password}`,'-name',SIGNING_NAME]);
+    await run('/usr/bin/security',['create-keychain','-p',password,keychain]);
+    await run('/usr/bin/security',['set-keychain-settings',keychain]);
+    await run('/usr/bin/security',['unlock-keychain','-p',password,keychain]);
+    await run('/usr/bin/security',['import',bundle,'-k',keychain,'-P',password,'-T','/usr/bin/codesign']);
+    await run('/usr/bin/security',['set-key-partition-list','-S','apple-tool:,apple:','-s','-k',password,keychain]);
+  } catch(error) {
+    await fs.rm(keychain,{force:true});
+    throw error;
+  } finally {
+    await fs.rm(work,{recursive:true,force:true});
+    // Keep the new keychain out of the user's search list, even after a failure.
+    const after=listed((await run('/usr/bin/security',['list-keychains','-d','user'])).stdout);
+    if(after.join('\n')!==before.join('\n') && before.length)await run('/usr/bin/security',['list-keychains','-d','user','-s',...before]);
   }
-  await run('/usr/bin/security',['unlock-keychain','-p',password,keychain]);
+  await fs.writeFile(secret,password+'\n',{mode:0o600});
   return {name:SIGNING_NAME,keychain};
 }
 
-export async function installMacApp(target,settings,{fs=filesystem,run=execute,stop=stopMacApp,signing=null}={}) {
+export async function installMacApp(target,settings,{fs=filesystem,run=execute,stop=stopMacApp,signing=null,log=console.log}={}) {
   await fs.mkdir(path.dirname(target.app),{recursive:true});
   const folder=await fs.mkdtemp(`${target.app}.staging-`);
   const staged=path.join(folder,'Observatory.app');
@@ -226,7 +239,12 @@ export async function installMacApp(target,settings,{fs=filesystem,run=execute,s
     if(!(await fs.stat(executable)).isFile() || !(await fs.stat(plist)).isFile())
       throw Error('The staged app is missing its executable or Info.plist.');
     // Sign last so the signature covers glance.json too, and refuse a failed signature.
-    await run('/usr/bin/codesign',signing?['--force','--sign',signing.name,'--keychain',signing.keychain,staged]:['--force','--sign','-',staged]);
+    let signed=false;
+    if(signing) {
+      try {await run('/usr/bin/codesign',['--force','--sign',signing.name,'--keychain',signing.keychain,staged]);signed=true;}
+      catch {log('  Signing with the local identity failed, so this build is signed ad hoc.');}
+    }
+    if(!signed)await run('/usr/bin/codesign',['--force','--sign','-',staged]);
     await run('/usr/bin/codesign',['--verify','--strict',staged]);
     await stop();
     let hadPrevious=false;
@@ -298,7 +316,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
       let signing=null;
       try {signing=await signingIdentity(config.dataFolder);}
       catch {log('  Could not make the local signing identity, so this build is signed ad hoc and macOS may ask for permissions again.');}
-      await installMacApp(target,settings,{...(login?{}:{stop:async()=>{}}),signing});
+      await installMacApp(target,settings,{...(login?{}:{stop:async()=>{}}),signing,log});
     });
   } else {
     await act(`build the tray app at ${path.relative(REPO,target.app)}`,async()=>{
