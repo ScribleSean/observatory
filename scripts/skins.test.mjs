@@ -50,7 +50,6 @@ test('a skin cannot carry code, markup, remote files or unknown fields', () => {
     bad(s=>{s.radius=400;}),
     bad(s=>{s.radius='4px';}),
     bad(s=>{s.rules='yes';}),
-    bad(s=>{s.limitStyle='dial';}),
     bad(s=>{delete s.rules;}),
     null,[],'sage'])
     assert.throws(()=>skinCss(skin));

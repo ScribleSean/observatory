@@ -24,7 +24,7 @@ const snapshot = () => {
   return { timezone: 'UTC', claudeLimits: { ...source('claude', ['five_hour', 'seven_day']) },
     quota: source('codex', ['primary', 'secondary']) };
 };
-const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar', ...props }));
+const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, ...props }));
 const count = (html, pattern) => [...html.matchAll(pattern)].length;
 const card = (html, title) => html.split('aria-label="' + title + ' limit left over time"')[1]?.split('</section>')[0] ?? assert.fail(title + ' card missing');
 
@@ -34,7 +34,7 @@ void test('every limit window has a chart whose header shows what is left now an
   assert.equal(count(html, /<figure class="ob-history-chart"/g), 4);
   for (const name of ['Claude Code', 'Codex']) for (const window of ['5-hour', 'weekly']) {
     const head = card(html, name + ' ' + window);
-    assert.match(head, /class="ob-num">40%</, name + ' ' + window);
+    assert.match(head, /class="ob-num">40% left</, name + " " + window);
     assert.match(head, /Resets in 10h 0m/);
     assert.match(head, /runs out in/, 'the projection is said once, in the header');
   }
@@ -98,7 +98,7 @@ void test('peer without windows shows its observation time and Unknown value', (
 const history = points => {
   const data = snapshot();
   data.limitHistory = points;
-  return renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: 'bar' }));
+  return renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now }));
 };
 const point = (host, w, minutes, r, resetMinutes, d) => ({ p: 'claude', w, o: host, t: iso(minutes), r, x: iso(resetMinutes), d });
 

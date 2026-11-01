@@ -98,7 +98,7 @@ void test('partial estimate discloses covered tokens', () => {
 void test('dashboard tokens section mounts the view', () => {
   const combined = combine([{ host: 'Mac', snapshot: ownSnapshot('Mac', now) }, { host: 'Windows', snapshot: ownSnapshot('Windows', now) }], { now });
   const html = renderToStaticMarkup(createElement(DashboardView, {
-    combined, limitStyle: 'bar', css: '', className: '', now, loaded: true, section: 'tokens',
+    combined, css: '', className: '', now, loaded: true, section: 'tokens',
     skinId: 'sage', skin: validateSkin(SKINS.sage), onSectionChange: noop, onSkinChange: noop,
   }));
   card(html, 'Claude Code');

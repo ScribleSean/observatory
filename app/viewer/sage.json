@@ -49,6 +49,5 @@
   "font": "sans",
   "numeralFont": "sans",
   "radius": 14,
-  "rules": false,
-  "limitStyle": "bar"
+  "rules": false
 }
