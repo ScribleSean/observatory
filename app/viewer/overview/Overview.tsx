@@ -16,7 +16,6 @@ export type Glance = {
 const unknown = STRINGS.status.unknown;
 
 function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string, unknown> | null; now: number }) {
-  // Fixed order, the same as the Limits tab and both panels. A window without a current reading is a row that says Unknown.
   const rows: LimitRow[] = view ? limitsWithGaps(limits(view, now)) as LimitRow[] : glance.limits;
   return (
     <section className="ob-card ob-tile" aria-labelledby="ob-tile-limits">
@@ -28,7 +27,6 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
           return <li key={index}>
             <span className="ob-tile-label"><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name}{row.window ? <span className="ob-meta">&nbsp;{row.window}</span> : null}</span>
             <span className="ob-tile-value">
-              {/* A low limit says when it resets, and an old reading says when it was taken. */}
               {(tone || row.stale) && row.note ? <Note className={row.stale ? 'ob-meta warn' : `ob-meta ${tone}`} text={row.note} /> : null}
               <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null && row.absent ? row.absent : percent(value)}</span>
             </span>
@@ -40,8 +38,6 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
   );
 }
 
-// A computer's today numbers count only while its own reading is from today and recent, judged when the page draws.
-// The Mac panel uses the same rule.
 export function deviceCurrent(device: DeviceToday, now: number) {
   const seen = Date.parse(device.collectedAt ?? '');
   return !device.missing && !device.freshness?.stale && Number.isFinite(seen) && !freshness(device.collectedAt ?? '', now).stale && sameDay(seen, now);
@@ -78,15 +74,12 @@ function AsOf({ now, generatedAt }: { now: number; generatedAt: number }) {
   return old ? <p className="ob-meta warn ob-tile-foot">{format(STRINGS.overview.asOf, { time: readingTime(generatedAt, now) })}</p> : null;
 }
 
-// "Today" numbers belong to the day they were made. From another day they are Unknown.
 function sameDay(at: number, now: number) { return new Date(at).toDateString() === new Date(now).toDateString(); }
 
-// Every tile has a headline. An Unknown one keeps its size, in the muted colour.
 function Hero({ value, note }: { value: string | null; note?: string }) {
   return <div className="ob-tile-head">{value === null ? <div className="ob-hero ob-unknown">{unknown}</div> : <div className="ob-hero">{value}</div>}{note ? <p className="ob-meta">{note}</p> : null}</div>;
 }
 
-// A cross-computer total shows only when every computer it adds up is current and shown beside it.
 const allCurrent = (glance: Glance, now: number) => glance.today.every(device => deviceCurrent(device, now));
 
 function TimeCard({ glance, now, generatedAt }: { glance: Glance; now: number; generatedAt: number }) {

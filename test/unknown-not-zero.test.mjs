@@ -46,7 +46,6 @@ test('the Activity page shows Unknown, not 0m, for an untracked day and its char
   const view=activityView(snapshot,{host:'Mac',period:'day',now});
   assert.equal(view.total,null);
   assert.equal(view.noTracking,true);
-  // Hours up to now are Unknown, later hours have not happened and stay blank.
   assert.ok(view.hourly.every(point=>point.value===null || point.value===undefined),'hourly values are Unknown');
   assert.ok(view.hourly.some(point=>point.value===null));
   const week=activityView(snapshot,{host:'Mac',period:'week',now});

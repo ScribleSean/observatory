@@ -28,7 +28,6 @@ for(const section of ['limits','activity','tokens','sources']) {
     for(const title of ['Limits','Screen time today','API-equivalent (estimate) today'])assert.ok(html.includes(title),title);
     assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
     assert.ok(html.includes('Both computers, not deduplicated'));
-    // Computers are Mac and PC everywhere, never a machine name with a platform in parentheses.
     assert.ok(!/\((Mac|Windows|macOS)\)/.test(html));
     assert.ok(!html.includes('NaN'));
     assert.ok(!html.includes('undefined'));

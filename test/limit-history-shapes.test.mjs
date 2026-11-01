@@ -26,7 +26,6 @@ test('the pace guide runs from 100% at the window start to 0% at its reset, clip
   const [guide]=paceGuide([{t:reset,r:70,x:end}],'week',reset,reset+DAY);
   assert.equal(guide.t1,reset);
   assert.equal(guide.t2,reset+DAY);
-  // The window started four days before the view, so four of its seven days are already spent.
   assert.ok(Math.abs(guide.r1-100*3/7)<1e-9);
   assert.ok(Math.abs(guide.r2-100*2/7)<1e-9);
   assert.ok(guide.r1>guide.r2,'it falls over time');
@@ -74,7 +73,6 @@ test('over long ranges windows group by day at the lowest reading',()=>{
 });
 
 test('use that starts minutes after an idle reading is a new window, even when the reset times nearly match',()=>{
-  // Idle every 10 minutes for 8 hours, Codex style: reset = reading + 5h.
   const idle=Array.from({length:49},(_,step)=>({t:reset+step*10*60000,r:100,x:reset+step*10*60000+5*HOUR}));
   const last=idle.at(-1);
   const used=[{t:last.t+4*60000,r:80,x:last.x+4*60000},{t:last.t+14*60000,r:60,x:last.x+4*60000}];

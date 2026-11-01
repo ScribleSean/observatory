@@ -58,8 +58,6 @@ function parse(args) {
   return {json: args.includes('--json') || wait !== null, wait, timeout};
 }
 
-// Blocks until the engine is not out. A 0% reading that goes stale before its reset
-// (for example, collection stopped) still counts as out until that reset time has passed.
 async function waitFor(engine, timeout, {read, clock, sleep}) {
   const deadline = timeout === null ? Infinity : clock() + timeout * 60000;
   let until = -Infinity;

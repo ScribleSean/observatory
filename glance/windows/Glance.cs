@@ -30,7 +30,6 @@ namespace Observatory
         public int port;
     }
 
-    // Panel state, parsed from combined.json. Mirrors the Mac app's PanelState.
     sealed class LimitRow
     {
         public string Provider, Name, Window, Absent;
@@ -49,7 +48,6 @@ namespace Observatory
     sealed class PanelState
     {
         public const double Low = 15;
-        // Copies of lib/freshness.mjs. test/repo-rules.test.mjs checks they match.
         public const double ReadingFreshMinutes = 10;
         public const double DeviceFreshMinutes = 15;
         public List<LimitRow> Limits = new List<LimitRow>();
@@ -82,7 +80,6 @@ namespace Observatory
             return row != null && row.TryGetValue(key, out value) ? value : null;
         }
 
-        // Keep this pure rule in sync with lib/glance-limits.mjs and the Mac app.
         public static double? LimitRemaining(Dictionary<string, object> row, DateTime now)
         {
             object stale = Get(row, "stale");
@@ -110,7 +107,6 @@ namespace Observatory
                 ResetsAt = Date(Get(row, "resetsAt")),
                 Absent = Get(row, "absent") as string,
             });
-            // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
             state.Limits = limits.ToList();
             var problems = new Dictionary<string, string>();
             var hub = Get(json, "hub") as Dictionary<string, object>;
@@ -131,7 +127,6 @@ namespace Observatory
                 bool stale = !(Get(freshness, "stale") is bool) || (bool)Get(freshness, "stale");
                 string problem;
                 problems.TryGetValue(host, out problem);
-                // Same rule as the dashboard and the Mac app: today's numbers only while the reading is recent and from today.
                 state.Devices.Add(new DeviceRow
                 {
                     Name = host == "Windows" ? "PC" : host == "Mac" ? "Mac" : Get(row, "name") as string ?? host,
@@ -164,23 +159,19 @@ namespace Observatory
             {
                 if (value < units[index].Item1 && index < units.Length - 1) continue;
                 double scaled = value / units[index].Item1;
-                // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
                 string text = scaled >= 10 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.#", CultureInfo.InvariantCulture);
-                // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
                 if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
                 return text + units[index].Item2;
             }
             return Math.Round(value, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture);
         }
 
-        // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
         public static string Money(double value)
         {
             if (value > 0 && value < 0.005) return "Under $0.01";
             return value >= 10 ? "$" + Math.Round(value, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
         }
 
-        // Same as span() in lib/panel-data.mjs.
         public static string Span(TimeSpan span)
         {
             int minutes = (int)Math.Round(Math.Max(0, span.TotalMinutes), MidpointRounding.AwayFromZero);
@@ -205,7 +196,6 @@ namespace Observatory
         }
     }
 
-    // Mirrors app/design-tokens.css, like the Mac panel.
     sealed class Palette
     {
         public Color Background, Surface, Text, Muted, Track, Claude, Codex, Warning, Error, Hairline;
@@ -233,7 +223,6 @@ namespace Observatory
         }
     }
 
-    // Draws the panel. One routine both measures (draw: false) and paints, so the layout cannot drift.
     static class Painter
     {
         public const int Width = 340;
@@ -241,7 +230,6 @@ namespace Observatory
 
         public static void Telescope(Graphics g, RectangleF box, Color color, float stroke)
         {
-            // The mark from public/brand/telescope.svg, in its 24 unit box.
             var state = g.Save();
             g.TranslateTransform(box.X, box.Y);
             g.ScaleTransform(box.Width / 24f, box.Height / 24f);
@@ -308,7 +296,6 @@ namespace Observatory
             return g.MeasureString(text, font, PointF.Empty, StringFormat.GenericTypographic).Width;
         }
 
-        // Returns the panel height. Fills hits with the three buttons: dashboard, refresh, quit.
         public static int Paint(Graphics g, PanelState s, Palette p, bool draw, List<Tuple<RectangleF, string>> hits)
         {
             using (var body = new Font("Segoe UI", 13, GraphicsUnit.Pixel))
@@ -324,7 +311,6 @@ namespace Observatory
                 float y = Pad;
                 float left = Pad, right = Width - Pad;
 
-                // Header
                 if (draw)
                 {
                     Telescope(g, new RectangleF(left + 2, y + 1, 18, 18), p.Text, 1.7f);
@@ -344,10 +330,7 @@ namespace Observatory
                 {
                     if (s.Limits.Count > 0)
                     {
-                        // Every window has a row in the dashboard's order. One without a current reading says Unknown
-                        // over an empty track. A low limit says when it comes back on a line under its bar, as on the Mac.
                         Func<LimitRow, bool> resets = limit => limit.Remaining.HasValue && limit.Remaining.Value <= PanelState.Low && limit.ResetsAt.HasValue;
-                        // The percents are what is left, named once over their column like the Today card's headers.
                         float h = Pad * 2 + 15 + Gap + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
                         if (draw)
                         {
@@ -383,8 +366,6 @@ namespace Observatory
                     }
                     if (s.Devices.Count > 0)
                     {
-                        // Today per computer, in columns that each name what they hold. The cost header wraps over its column.
-                        // Column widths match the Mac panel: screen time 72, tokens 60, cost 92, gap 6. Screen time is right-aligned at timeRight.
                         const float tokenColumn = 60, costColumn = 92, columnGap = 6;
                         float costRight = right - Pad, tokenRight = costRight - costColumn - columnGap, timeRight = tokenRight - tokenColumn - columnGap;
                         string costHeader = "API-equivalent (estimate)";
@@ -414,7 +395,6 @@ namespace Observatory
                                     Text(g, time, body, p.Text, timeRight - Measure(g, time, body), row);
                                     Text(g, tokens, body, p.Text, tokenRight - Measure(g, tokens, body), row);
                                     Text(g, cost, body, p.Text, costRight - Measure(g, cost, body), row);
-                                    // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
                                     if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, inner + Measure(g, device.Name, strong) + 6, row + 3);
                                 }
                                 else
@@ -431,7 +411,6 @@ namespace Observatory
                     }
                 }
 
-                // Footer: Open dashboard, Refresh, Quit
                 var quit = new RectangleF(right - IconButton, y, IconButton, ButtonHeight);
                 var refresh = new RectangleF(quit.X - 8 - IconButton, y, IconButton, ButtonHeight);
                 var open = new RectangleF(left, y, refresh.X - 8 - left, ButtonHeight);
@@ -471,7 +450,6 @@ namespace Observatory
         }
     }
 
-    // A borderless flyout above the tray, like Windows' own quick settings.
     sealed class PanelForm : Form
     {
         public PanelState State = new PanelState();
@@ -498,7 +476,6 @@ namespace Observatory
             StartPosition = FormStartPosition.Manual;
             DoubleBuffered = true;
             KeyPreview = true;
-            // On a short screen the panel scrolls rather than cutting off its buttons.
             AutoScroll = true;
             Scroll += (sender, e) => Invalidate();
             MouseWheel += (sender, e) => Invalidate();
@@ -519,7 +496,6 @@ namespace Observatory
             try { DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int)); } catch { }
         }
 
-        // Opens on the screen and corner of the taskbar that was clicked. Later refreshes keep that screen.
         public void Place(bool reanchor)
         {
             if (reanchor || screen == null) screen = Screen.FromPoint(Cursor.Position);
@@ -556,7 +532,6 @@ namespace Observatory
         }
 
         // Sent when the panel lands on a screen with another scale, or the scale changes while it is open.
-        // Place sizes the panel for its screen, so Windows' suggested rectangle is not used.
         protected override void WndProc(ref Message m)
         {
             base.WndProc(ref m);
@@ -626,14 +601,13 @@ namespace Observatory
             settings = LoadSettings();
             // The menu strip is a control, so a UI context exists from here on.
             ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
-            // Right click keeps a short native menu. Left click opens the panel.
             menu.Items.Add("Open dashboard", null, (sender, e) => OpenDashboard());
             refreshItem = menu.Items.Add("Refresh", null, (sender, e) => RunTick());
             menu.Items.Add("Quit Observatory", null, (sender, e) => Quit());
             menu.Opening += (sender, e) => refreshItem.Enabled = tick == null || tick.HasExited;
             tray.ContextMenuStrip = menu;
             tray.Visible = true;
-            // A click on the icon first takes focus from an open panel, which hides it. Remember whether it was open when the press began.
+            // A click on the icon first takes focus from an open panel, which hides it.
             tray.MouseDown += (sender, e) => { if (e.Button == MouseButtons.Left) openAtPress = panel.Visible; };
             tray.MouseUp += (sender, e) => { if (e.Button == MouseButtons.Left) TogglePanel(); };
             panel.Act = name =>
@@ -765,7 +739,6 @@ namespace Observatory
             SetIcon(!current);
         }
 
-        // The telescope, drawn to match the taskbar theme. A quiet, dimmed mark when nothing current is known.
         void SetIcon(bool stale)
         {
             bool light = false;

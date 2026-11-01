@@ -1,7 +1,3 @@
-// Reads Claude Code and Codex logs from more than one home folder on the same
-// computer and adds the results together. On a Windows PC with the wsl source
-// on, the home folders of its WSL distributions count toward that PC.
-// Each reader runs once per folder, unchanged. Only the results are merged.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -11,7 +7,6 @@ import {collectSettings} from './read-settings.mjs';
 import {collectProjectTokens} from './read-projects.mjs';
 
 const LXSS='HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss';
-// Distribution names WSL accepts. Anything else is skipped, so a name is safe in a path and in stored labels.
 const DISTRO=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 // Container engines keep their own distributions with no user logs. Opening them would start their VM.
 const ENGINE=/^(docker-desktop|rancher-desktop|podman-machine)/i;
@@ -42,8 +37,6 @@ export function listDistributions({exec=execFile}={}) {
   });
 }
 
-// What a tool folder holds: 'absent' adds nothing, 'present' is read, and
-// 'unreadable' makes that provider's total Unknown.
 // A link counts as unreadable: Windows cannot follow a Linux link, and one that
 // does resolve could point at folders that are already counted.
 async function folderState(folder) {
@@ -53,14 +46,12 @@ async function folderState(folder) {
   return info.isDirectory() && !info.isSymbolicLink()?'present':'unreadable';
 }
 
-// The home folders under /home of each distribution, as seen from Windows.
 // Opening a distribution's share starts it if it is stopped.
 export async function wslRoots({distributions,share=name=>`\\\\wsl.localhost\\${name}`,join=(...parts)=>path.win32.join(...parts)}={}) {
   const roots=[];
   for(const name of distributions) {
     const homes=join(share(name),'home');
     const unreadable=()=>roots.push({label:`WSL ${name}`,unreadable:true});
-    // A share that cannot be reached is Unknown. Only a reachable distribution without /home has no homes.
     try {await fs.stat(share(name));}
     catch {unreadable();continue;}
     let entries;
@@ -69,7 +60,6 @@ export async function wslRoots({distributions,share=name=>`\\\\wsl.localhost\\${
       if(error.code!=='ENOENT')unreadable();
       continue;
     }
-    // A linked or oddly named home could hold logs that would be missed, so it is Unknown too.
     if(entries.some(entry=>entry.isSymbolicLink() || (entry.isDirectory() && !USER.test(entry.name)))) {unreadable();continue;}
     for(const entry of entries.filter(entry=>entry.isDirectory()).sort((a,b)=>a.name.localeCompare(b.name))) {
       const home=join(homes,entry.name);
@@ -80,10 +70,6 @@ export async function wslRoots({distributions,share=name=>`\\\\wsl.localhost\\${
   return roots;
 }
 
-// The folders one provider is read from. A root marked optional adds nothing
-// when its folder is missing. Any folder that exists but cannot be read throws.
-// This computer's own folder is always read, and an invalid setting for it is Unknown.
-// Two roots that resolve to the same folder are Unknown rather than counted twice.
 async function folders(roots,field) {
   const found=[],seen=new Set();
   for(const root of roots) {
@@ -174,18 +160,15 @@ export function mergeProjects(results) {
   return {date:first.date,timeZone:first.timeZone,providers};
 }
 
-// Each folder keeps its own private cache, for Claude Code as for Codex.
 export async function readClaudeRoots(roots,{cacheFor=async()=>null,read=collectClaudeUsage}={}) {
   let found;
   try {found=await folders(roots,'claudeFolder');}
   catch {return {provider:'claude-code',status:'unavailable'};}
-  // A cache that cannot be set up only costs time, so that folder is read without one.
   const cacheOf=async root=>{try {return await cacheFor(root);} catch {return null;}};
   const result=mergeClaude(await Promise.all(found.map(async root=>read(root.claudeFolder,{cacheDirectory:await cacheOf(root)}))));
   return {...result,roots:labelsOf(found)};
 }
 
-// Each Codex folder keeps its own private cache.
 export async function readCodexRoots(roots,{cacheFor,read=collectSettings}) {
   const found=await folders(roots,'codexFolder');
   const results=[];
@@ -193,13 +176,9 @@ export async function readCodexRoots(roots,{cacheFor,read=collectSettings}) {
   return {...mergeCodex(results),roots:labelsOf(found)};
 }
 
-// The first root is this computer's own home, so its result carries the day.
-// A WSL session started in the Windows home would be named after the Windows
-// user, so that name, the WSL user names and the folder holding homes are never project names there.
 export async function readProjectRoots(roots,{claude,codex,now,read=collectProjectTokens}) {
   const unknown={providers:{...(claude?{claude:{status:'unavailable'}}:{}),...(codex?{codex:{status:'unavailable'}}:{})}};
   const own=roots.find(root=>!root.optional);
-  // The other users' names under /home are hidden too, since a session can start in another user's home.
   const hidden=new Set([own?.home,...roots.filter(root=>root.optional && root.home).map(root=>root.home)]
     .map(home=>path.win32.basename(home ?? '').toLowerCase()).filter(Boolean).concat('users'));
   const hide=result=>({...result,providers:Object.fromEntries(Object.entries(result.providers).map(([name,part])=>[name,
@@ -220,5 +199,4 @@ export async function readProjectRoots(roots,{claude,codex,now,read=collectProje
   return mergeProjects(parts);
 }
 
-// A private cache folder name for one WSL home that holds no user or distribution name.
 export const cacheName=root=>`wsl-${createHash('sha256').update(root.key).digest('hex').slice(0,12)}`;

@@ -22,9 +22,7 @@ for (const skinId of ['sage']) for (const empty of [false, true]) for (const Com
     const snapshot = empty ? { timezone: 'UTC' } : sampleSnapshot(now);
     const html = render(Component, { snapshot, now, skinId, skin: validateSkin(SKINS[skinId]), loaded: true, section: 'activity', onSectionChange: noop, onSkinChange: noop });
     for (const label of [strings.devices.period, strings.activity.previousDay, strings.activity.hourlyTitle]) assert.ok(html.includes(label), label);
-    // The computer filter appears only when there is more than one computer to choose.
     assert.equal(html.includes(`aria-label="${strings.devices.device}"`), !empty);
-    // Recent tracking needs no words. Anything else says so, and an unreachable source links to ActivityWatch.
     assert.equal(html.includes(strings.activity.trackingUnavailable), empty);
     assert.equal(/href="https:\/\/activitywatch\.net"/.test(html), empty);
     assert.doesNotMatch(html, /<select|ob-info|aria-expanded/);

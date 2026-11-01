@@ -10,7 +10,6 @@ const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const FICTIONAL_DEVICES=['Studio Mac','Desk PC'];
 const ALLOWED_FILE=/^(index\.html|local\/combined\.json|assets\/[\w-]+\.(js|css|ttf))$/;
 
-// Anything that would point at a real machine or person.
 function forbidden() {
   const words=[/\/Users\//,/\/home\//,/[A-Za-z]:\\\\/,/file:\/\//,/\blocalhost\b/,/127\.0\.0\.1/,/[\w.+-]+@[\w-]+\.[\w.]+/];
   const escape=text=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');

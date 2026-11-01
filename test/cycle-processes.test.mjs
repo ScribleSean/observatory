@@ -41,8 +41,6 @@ test('tick finishing during deadline grace exits successfully with a fake clock'
   assert.equal(code,0,errors);
 });
 
-// These two tests check what execFile passes through, not deadlines (those have their own tests),
-// so their deadline is long enough that a busy machine can never reach it.
 test('cycle execFile preserves native output and error fields',async()=>{
   const cases=[
     ['encoded output',process.execPath,['-e',"process.stdout.write('héllo');process.stderr.write('error')"],{encoding:'utf16le'}],
@@ -91,8 +89,6 @@ test('execFile outside a cycle accepts the callback in place of options',async()
 
 for(const [method,tree] of [['spawn',false],['execFile',false],['spawn',true],['execFile',true]]) {
   test(`cycle deadline stops a long-running ${method} ${tree?'process group':'child'}, including SIGKILL escalation`,{timeout:10000,skip:tree&&process.platform==='win32'?'POSIX process groups only':false},async()=>{
-    // The deadline clock is mocked and moved only after the child says it is ready, so a slow
-    // process start on a busy machine cannot fire the deadline first. Processes and signals stay real.
     const runner=spawn(process.execPath,['--input-type=module','-e',`
       import {mock} from 'node:test';
       import {${method},withCycleDeadline} from ${JSON.stringify(helper)};

@@ -41,7 +41,6 @@ export function cacheEvent(event,cached=false) {
       safe.service_tier=typeof tier==='string'&&TIERS.has(tier)?tier:'unknown';
     }
   } else if(kind==='session_meta') {
-    // Kept so a fork's copy of its parent can be found, with the id as its hash.
     safe={};
     const identity=get(payload,'id');
     if(typeof identity==='string') {
@@ -98,12 +97,10 @@ function pathlibForm(directory) {
 // An 8.3 alias such as RUNNER~1: at most 8 characters, a ~ and a number, and a short extension.
 const SHORT_NAME=/^(?=[^.]{3,8}(?:\.[^.]{1,3})?$)[^.~\s]{1,6}~[1-9][0-9]{0,5}(?:\.[^.\s]{1,3})?$/;
 // The native realpath expands 8.3 aliases as well as links, and GitHub's runner puts TEMP
-// under C:\Users\RUNNER~1. So check one part at a time: each must be a real entry of the
-// folder resolved so far, not a link, and keep its name unless it is written as an alias.
+// under C:\Users\RUNNER~1.
 // lstat follows a junction to a volume GUID path without calling it a link, and gives the
 // target's file id, so an alias is accepted only when Windows says it is the short name of
 // the resolved folder's own entry. Short names are unique in a folder, so no junction owns it.
-// A failed lookup gives no name, so the alias is refused.
 const windowsShortName=folder=>{
   try {
     return path.win32.basename(execFileSync(process.env.ComSpec??'cmd.exe',
@@ -190,7 +187,7 @@ export class SettingsCache {
 
   static signature(info) {
     // Windows path stat may report creation time as ctime while fstat reports
-    // change time. Do not compare these different fields across APIs.
+    // change time.
     const values=[2,String(info.dev),String(info.ino),Number(info.size),String(info.mtimeNs)];
     if(!windows)values.push(String(info.ctimeNs));
     return pyDumps(values);
@@ -199,7 +196,6 @@ export class SettingsCache {
   events(file,expected) {
     this.readBudget?.check();
     const {maxLineBytes,maxLines,maxRetainedBytes}=this.limits;
-    // Version 2 entries keep session_meta; older ones are read again and dropped.
     const key=sha256Hex('2\0'+String(file));
     this.used.add(key);
     const signature=SettingsCache.signature(expected);

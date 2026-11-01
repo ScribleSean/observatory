@@ -34,7 +34,6 @@ export function runPowerShellFile(script,{spawnProcess=spawn,exec=execFile}={}) 
     let output='',done=false;
     const finish=error=>{if(done)return;done=true;clearTimeout(timer);if(error)reject(error);else resolve(output);};
     const timer=setTimeout(()=>{
-      // The cycle may already have stopped the child and refused new processes.
       try {exec(path.join(process.env.SystemRoot || 'C:/Windows','System32/taskkill.exe'),['/PID',String(child.pid),'/T','/F'],{windowsHide:true},()=>{});}catch {}
       finish(Error('Screen time reader timeout'));
     },60000);
@@ -51,10 +50,7 @@ export function toolFolder(variable,fallback,environment=process.env) {
   return configured;
 }
 
-// The home folders whose Claude Code and Codex logs count toward this computer:
-// its own, plus each WSL home on a Windows PC when the wsl source is on.
 export async function tokenRoots(config,{distributions=listDistributions,findRoots=wslRoots}={}) {
-  // A folder setting that is not absolute leaves no folder, so only that provider is Unknown.
   const folder=(variable,fallback)=>{try {return toolFolder(variable,fallback);} catch {return null;}};
   const own={label:config.host,claudeFolder:folder('CLAUDE_CONFIG_DIR','.claude'),codexFolder:folder('CODEX_HOME','.codex'),home:homedir()};
   if(config.platform!=='windows' || !config.sources.wsl)return [own];
@@ -66,9 +62,7 @@ export async function tokenRoots(config,{distributions=listDistributions,findRoo
 
 export function defaultReaders(config) {
   let pending=null;
-  // One lookup per cycle serves every reader.
   const roots=()=>pending??=tokenRoots(config);
-  // Each folder read has its own private cache. This computer's own folders keep their original cache names.
   const cacheFor=tool=>async root=>realpath(await privateFolder(config.dataFolder,...(root.optional?[`private-${tool}-roots`,cacheName(root)]:[`private-${tool}`])));
   return {
     screenTime:async()=>{
@@ -124,14 +118,12 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
   const at=now.toISOString(),host=config.host,other=OTHER[host];
   const disconnected=h=>({host:h,status:'not-connected'});
   const unavailable=(error)=>({host,status:'unavailable',checkedAt:at,...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})});
-  // The folders a token total covers, kept only when the WSL source can add any.
   const withRoots=(row,raw)=>config.sources.wsl && config.platform==='windows' && Array.isArray(raw?.roots) && row.status==='ok'?{...row,roots:raw.roots}:row;
   const read=async(key,clean)=>{
     if(!config.sources[key])return null;
     try {return await clean(await readers[key]());}
     catch(error) {return {failed:true,error};}
   };
-  // Today by project comes from the same logs, so it follows the claudeCode and codex settings.
   const projectSources={claude:config.sources.claudeCode,codex:config.sources.codex};
   const readProjects=async()=>{
     if(!projectSources.claude && !projectSources.codex)return unavailableProjectTokens(host,at,'not-connected');

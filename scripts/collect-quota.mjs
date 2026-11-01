@@ -66,7 +66,6 @@ function project(state,now) {
   if(!history || history.status==='not-connected')return {...disconnected(),status:'unavailable',latestReadStatus:'waiting',nextAttemptAt:new Date(state.nextAttemptAt).toISOString()};
   const status=history.latestReadStatus==='ok' && ['ok','stale'].includes(history.status)?
     (readingFresh(Date.parse(history.asOf),now)?'ok':'stale'):history.status;
-  // Do not expose the salt, account scope key, revision or private store path.
   const projected = {status,provider:'Codex',scope:'account',checkedAt:history.asOf,
     latestReadStatus:history.latestReadStatus,nextAttemptAt:new Date(state.nextAttemptAt).toISOString(),
     windows:history.samples.at(-1)?.windows || [],

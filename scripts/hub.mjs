@@ -76,7 +76,6 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
   const mine=await readJson(path.join(folder,'combined.json'));
   const inbox=await readJson(path.join(folder,'combined.incoming.json'));
-  // Only a copy the hub wrote counts as inbox data.
   const incoming=inbox?.hub?.role==='hub' && Date.parse(inbox.generatedAt)<=now()+CLOCK_SKEW_MS?inbox:null;
   const own=await readJson(path.join(folder,'usage.json'));
   const devices=[{host:config.host,name:config.device.name,snapshot:own,...(own?{}:{error:'no local snapshot'})}];

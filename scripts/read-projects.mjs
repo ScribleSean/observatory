@@ -1,5 +1,3 @@
-// Only these values leave the reader: a folder's last name, a short hash of the
-// session id, first and last request times, per-model counts and subagent counts.
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +6,6 @@ import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 
 export const LIMITS=Object.freeze({maxFiles:5000,maxTotalBytes:2*1024*1024*1024,maxLineBytes:16*1024*1024});
-// A file last written before this window cannot hold a request from today.
 const WINDOW_MS=26*3600000;
 const MODEL=/^[a-z0-9][a-z0-9.-]{0,63}$/;
 const NAME=/^[\p{L}\p{N}_.+ -]{1,64}$/u;
@@ -30,13 +27,6 @@ export function dayKey(at,timeZone=TIME_ZONE) {
   return formatter.format(at);
 }
 
-// The repository a folder belongs to, by its last name. Worktree folders are
-// often named after a branch, so a worktree takes its repository's name: the
-// folder above .claude/worktrees, the repository in a Codex log, the folder
-// after Conductor's workspaces, or the folder above another worktrees folder.
-// A folder named after the session's branch has the branch removed. The home
-// folder is "~" and anything above it is left out, so a user name is never a
-// project. Temporary folders are one project. Nothing else of the path is kept.
 const TEMP=[['tmp'],['private','tmp'],['var','folders'],['private','var','folders']];
 const segments=value=>value.replace(/^[\\/]{2}[?.][\\/]/,'').split(/[\\/]+/).filter(part=>part && part!=='.');
 const folded=parts=>parts.map(part=>part.toLowerCase());
@@ -122,7 +112,6 @@ async function files(root,since,limits,budget={files:0,bytes:0},byThread=null) {
       const thread=byThread && THREAD.exec(entry.name)?.[1].toLowerCase();
       if(thread && !byThread.has(thread))byThread.set(thread,full);
       let info;
-      // A file can be removed between listing and reading.
       try {info=await fs.promises.stat(full);}
       catch(error) {if(error.code==='ENOENT')continue;throw error;}
       if(info.mtimeMs<since)continue;
@@ -144,10 +133,8 @@ async function lines(file,limits,keep,each) {
   const reader=readline.createInterface({input,crlfDelay:Infinity});
   try {
     for await (const line of reader) {
-      // A long line is looked at only by its ends, and skipped unless they hold the markers.
       if(line.length>limits.maxLineBytes ? !keep(line.slice(0,EDGE)+line.slice(-EDGE)) : !keep(line))continue;
       let event;
-      // A line still being written is read on the next cycle.
       try {event=JSON.parse(line);} catch {continue;}
       if(object(event))each(event);
     }
@@ -194,7 +181,6 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
       if(event.type!=='assistant' || !object(event.message) || !object(event.message.usage))return;
       const usage=event.message.usage;
       const at=Date.parse(event.timestamp);
-      // A line that cannot be dated might be today's, so it makes the day Unknown.
       if(!Number.isFinite(at))throw new Unavailable();
       if(dayKey(at,timeZone)!==today)return;
       const values=['input_tokens','cache_read_input_tokens','cache_creation_input_tokens','output_tokens'].map(key=>count(usage[key]));
@@ -221,11 +207,9 @@ const CODEX_KEEP=line=>line.includes('"session_meta"') || line.includes('"turn_c
 // Codex: each token_count event carries the running total and the last turn.
 // A fork of a thread with legacy history starts with its own session_meta and
 // then copies its parent's session_meta and every parent line, stamped with
-// the time of the fork. Those copies are the parent's running totals, so they
-// are left out, and the parent's log is read for them even when it is old.
+// the time of the fork.
 // A paginated fork points at its parent and copies nothing, and a resumed
-// thread appends to its own log. A repeated time and running total across
-// logs is counted once. A thread with a parent is a subagent.
+// thread appends to its own log.
 async function readCodex(folder,{today,timeZone,since,home,limits}) {
   const result=sessions(),seen=new Set(),name=namer(home);
   const roots=['sessions','archived_sessions'].map(name=>path.join(folder,name));
@@ -256,7 +240,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
     await lines(file,limits,CODEX_KEEP,event=>{
       const payload=object(event.payload)?event.payload:{};
       if(event.type==='session_meta') {
-        // A later session_meta is a parent's, copied in by a fork.
         if(started) {
           if(copiedFrom===null)copiedFrom=typeof payload.id==='string'?payload.id.toLowerCase():'';
           return;
@@ -273,7 +256,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       }
       if(event.type==='turn_context') {
         model=modelName(payload.model);
-        // A new folder that has no safe name is Unknown, not the previous project.
         if(typeof payload.cwd==='string')project=name(payload.cwd,{repository,branch});
         return;
       }
@@ -289,7 +271,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       const identity=JSON.stringify([event.timestamp,running]);
       if(seen.has(identity))return;
       seen.add(identity);
-      // The running total moved but the turn's own usage is missing: that usage is Unknown, not zero.
       if(!object(last)) {if(Object.values(total).some(value=>typeof value==='number' && value>0))throw new Unavailable();return;}
       const input=count(last.input_tokens),cached=count(last.cached_input_tokens),written=count(last.cache_write_input_tokens ?? 0),output=count(last.output_tokens);
       if([input,cached,written,output].includes(null) || input<cached+written)throw new Unavailable();
@@ -298,7 +279,6 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       if(values.every(value=>value===0))return;
       pending.push({running,record:{provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent}});
     });
-    // Copies whose parent log cannot be found cannot be told apart, so the day is Unknown.
     const copies=copiedFrom===null || !pending.length?new Set():await totalsOf(copiedFrom);
     for(const {running,record} of pending)if(!copies.has(running))result.add(record);
   }

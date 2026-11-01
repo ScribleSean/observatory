@@ -151,8 +151,7 @@ test('readClaudeUsage reports timed-out and force-stops a command that ignores a
   const folder=realpathSync(await mkdtemp(path.join(tmpdir(),'observatory-claude-hang-')));
   t.after(()=>rm(folder,{recursive:true,force:true}));
   const fake=path.join(folder,'claude'),pidFile=path.join(folder,'pid');
-  // A shell script starts in milliseconds even on a busy machine, so it always records its pid before the
-  // reader's limit. Ignored signals stay ignored across exec, so sleep keeps the same pid and ignores stop requests.
+  // Ignored signals stay ignored across exec, so sleep keeps the same pid and ignores stop requests.
   await writeFile(fake,`#!/bin/sh\necho $$ > ${JSON.stringify(pidFile)}\ntrap '' TERM INT\nexec sleep 3600\n`);
   await chmod(fake,0o700);
   const started=Date.now();

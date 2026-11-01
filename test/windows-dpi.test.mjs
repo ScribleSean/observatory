@@ -4,7 +4,6 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-// The tray app is compiled on Windows only, so these checks read its source.
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = () => readFile(path.join(repo, 'glance/windows/Glance.cs'), 'utf8');
 

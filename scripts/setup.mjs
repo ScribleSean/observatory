@@ -299,8 +299,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
 
   if(!existsSync(path.join(REPO,'node_modules','vite')))await act('install build tools with npm ci',()=>npm(['ci']));
   await act('build the dashboard into dist/dashboard',()=>npm(['run','build']));
-  // Before the app build: the Mac install stops the running app, so nothing that can fail
-  // should sit between that stop and the restart below.
   await act('import limit history kept by earlier versions',async()=>{
     const report=await importHistory(config);
     const added=report.reduce((total,row)=>total+row.added,0);
@@ -340,8 +338,6 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     catch(error) {log(`  Note: ${spoke.name} (${spoke.ssh}): ${error.message}. Check that "ssh ${spoke.ssh}" works without a password prompt, and that setup has run there.`);}
   }
 
-  // A Start menu entry, so Windows search finds the app with its icon, with or without the login item.
-  // It is a convenience: if a locked-down PC refuses it, setup carries on.
   if(platform!=='darwin') await act('add Observatory to the Start menu',async()=>{
     if(await quiet('powershell.exe',['-NoProfile','-NonInteractive','-Command',startMenuShortcut(target.executable)])===null)
       log('  Note: could not add the Start menu entry.');

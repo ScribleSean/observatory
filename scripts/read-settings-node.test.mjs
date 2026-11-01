@@ -325,7 +325,6 @@ test('private settings cache recovers an empty file and refuses other formats',a
   });
 });
 
-// A Windows disk: folders by real path, with an optional 8.3 alias and an optional link target.
 // realpath expands aliases and follows links as GetFinalPathNameByHandle does. A redirect is
 // followed too, but lstat follows it without calling it a link, as libuv does for a junction
 // to a volume GUID path.
@@ -391,7 +390,6 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'c:\\users\\runner~1\\appdata\\local\\temp\\cache\\',
     'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cache',
     'C:/Users/runneradmin/AppData/Local/Temp/cache',
-    // A real alias opens even when junctions beside it lead to the same folder.
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGC~1',
   ])assert.equal(windowsCanonical(directory,disk),true,directory);
   for(const directory of [
@@ -402,7 +400,6 @@ test('a Windows cache folder may be named through an 8.3 short alias, but never 
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\MOVED~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\mounted',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\sibling',
-    // A junction to a volume GUID path is not reported by lstat, so an alias-shaped name could hide one.
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\CACHE~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGR~1',
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\ALONGJ~1',
@@ -602,7 +599,6 @@ test('skipped oversized lines still consume the total read budget',async()=>{
   }
 });
 
-// Keep the saved Python crash results as historical evidence.
 const skippedMalformedFixtures=new Map([
   ['crash-null-timestamp',120],['crash-naive-token',0],['crash-naive-tool',120],
   ['crash-overflow',120],['crash-overflow-utc',240],['crash-body-utf8',120],
@@ -675,7 +671,6 @@ test('a legacy Codex fork does not count the parent turns it copied, cold or cac
     assert.deepEqual(await collectSettings(logs,{cacheDirectory:cache}),cold,'a warm cache agrees');
     const saved=fs.readFileSync(path.join(cache,'events.sqlite'));
     assert.ok(!saved.includes('PRIVATE')&&!saved.includes(parentId),'the cache keeps no private text or thread id');
-    // Without the parent the copies cannot be told apart.
     fs.unlinkSync(parentFile);
     await assert.rejects(collectSettings(logs),/parent/);
   });

@@ -346,7 +346,6 @@ test('matches the recorded Python output for every synthetic fixture', async () 
     await rm(folder, { recursive: true, force: true });
   }
 });
-// The private cache: same answers as a full read, rereads only what changed.
 async function withCache(action) {
   const cache = await mkdtemp(path.join(tmpdir(), 'observatory-claude-cache-'));
   try {
@@ -375,7 +374,6 @@ test('gives the recorded output for every fixture with a cold and a warm cache',
 test('the cache holds no prompts, message identities or folder names, and is reused when nothing changed', async () =>
   fixture(async (root) =>
     withCache(async (cache) => {
-      // A model field that is not a model name is kept only as a hash.
       await log(root, 'secret-project-name.jsonl', event('msg-PLANTED', 'req-PLANTED', usage(1, 2, 3, 4), { model: 'PLANTED model text' }));
       await read(root, { cacheDirectory: cache });
       const text = await cacheText(cache);
@@ -396,10 +394,8 @@ test('a changed log is reread and a deleted log drops out', async () =>
       const first = await log(root, 'one.jsonl', event('m1', 'r1', usage(1, 0, 0, 1)));
       const second = await log(root, 'two.jsonl', event('m2', 'r2', usage(10, 0, 0, 10)));
       assert.equal((await read(root, { cacheDirectory: cache })).days[0].totalTokens, 22);
-      // The same request streamed again with more usage, in the same file.
       await appendFile(first, event('m1', 'r1', usage(5, 0, 0, 5)));
       assert.equal((await read(root, { cacheDirectory: cache })).days[0].totalTokens, 30);
-      // Same size and a new time still counts as a change.
       await writeFile(second, event('m2', 'r2', usage(20, 0, 0, 20)));
       await utimes(second, new Date(), new Date(Date.now() + 5000));
       assert.equal((await read(root, { cacheDirectory: cache })).days[0].totalTokens, 50);
@@ -439,15 +435,12 @@ test('read limits count what one run reads, so a large history with small change
       for (let index = 0; index < 20; index++) await log(root, `old-${index}.jsonl`, pad.repeat(5) + event(`m${index}`, `r${index}`, usage(1, 0, 0, 1)));
       const total = 20 * (5 * pad.length + event('m0', 'r0', usage(1, 0, 0, 1)).length);
       const limits = { MAX_TOTAL_BYTES: Math.floor(total / 4), MAX_LINES: 40 };
-      // Without a cache the whole history is read, which is over both lowered limits.
       assert.equal((await read(root, { limits })).status, 'unavailable');
-      // The first cached run reads everything once, under the default limits.
       assert.equal((await read(root, { cacheDirectory: cache })).status, 'ok');
       const live = await log(root, 'live.jsonl', event('live', 'r-live', usage(7, 0, 0, 7)));
       const data = await read(root, { cacheDirectory: cache, limits });
       assert.equal(data.status, 'ok');
       assert.equal(data.days.reduce((sum, day) => sum + day.totalTokens, 0), 20 * 2 + 14);
-      // A change that alone is over the limit still fails closed.
       await appendFile(live, pad.repeat(60));
       assert.equal((await read(root, { cacheDirectory: cache, limits })).status, 'unavailable');
     })));
@@ -490,7 +483,6 @@ test('a history over one run\'s limits warms the cache over several runs, then m
         if (data.status === 'ok') assert.deepEqual(data, expected);
       }
       assert.deepEqual(statuses, ['unavailable', 'unavailable', 'unavailable', 'ok']);
-      // One log larger than a whole run's limit can never be read and stays Unknown.
       await log(root, 'huge.jsonl', pad.repeat(20));
       for (let run = 0; run < 3; run++) assert.equal((await read(root, { cacheDirectory: cache, limits })).status, 'unavailable');
     })));

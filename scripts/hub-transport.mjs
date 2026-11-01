@@ -8,7 +8,6 @@ import {execFile} from '../lib/cycle-processes.mjs';
 
 export const MAX_FILE_BYTES=16_000_000;
 // The copy lands in the remote home folder first, where scp needs no path for either platform.
-// Each push has its own name, so an overrunning earlier swap cannot move or delete a newer copy.
 export const stagedName=(id=randomUUID())=>`.observatory-combined.${id}.incoming`;
 const checkStaged=name=>{if(!/^\.observatory-combined\.[0-9a-f-]{36}\.incoming$/.test(name))throw Error('bad staging name');return name;};
 const SSH_OPTIONS=['-o','BatchMode=yes','-o','ConnectTimeout=8','-o','StrictHostKeyChecking=yes',
@@ -37,8 +36,6 @@ export function pullCommand(spoke) {
   return `f=${macFolder(spoke)}/public/local/usage.json; test "$(wc -c < "$f")" -le ${MAX_FILE_BYTES} && base64 < "$f"`;
 }
 
-// The expected size is checked before
-// replacing, so a cut-off or empty copy changes nothing.
 export function pushCommand(spoke,bytes,name) {
   if(!Number.isSafeInteger(bytes) || bytes<1)throw Error('combined file is empty');
   checkStaged(name);
@@ -48,7 +45,6 @@ export function pushCommand(spoke,bytes,name) {
     `if((Get-Item -LiteralPath $s).Length -ne ${bytes}){Remove-Item -LiteralPath $s -Force; exit 4}`,
     `$d=Join-Path ${windowsFolder(spoke)} 'public\\local'`,
     'New-Item -ItemType Directory -Force -Path $d | Out-Null',
-    // The last step also uses this push's own name, so overlapping swaps never share a file.
     `$t=Join-Path $d '${name}'`,
     "$f=Join-Path $d 'combined.incoming.json'",
     'Move-Item -LiteralPath $s -Destination $t -Force',
@@ -115,7 +111,6 @@ export function sshTransport(invoke=runSSH,copy=runSCP) {
         await copy(spoke.ssh,file,name);
         await invoke(spoke.ssh,pushCommand(spoke,bytes.length,name));
       } catch(error) {
-        // Best effort: a copy that was not swapped in should not stay in the remote home.
         await invoke(spoke.ssh,discardCommand(spoke,name)).catch(()=>{});
         throw error;
       } finally {await rm(folder,{recursive:true,force:true});}

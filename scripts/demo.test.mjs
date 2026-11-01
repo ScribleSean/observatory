@@ -68,7 +68,6 @@ test('the demo stays recent a week after build, including across UTC midnight',(
       assert.equal(Date.parse(row.limitHistory[0].points[0].t),Date.parse(snapshot.collectedAt)+elapsed);
       assert.equal(Date.parse(row.limitHistory[0].points[0].x)-now,225*60000);
     }
-    // The shared sample's project rows fail cleaning, so check their shift on the raw rows.
     const raw=shiftDemoClock({demo:true,generatedAt:data.generatedAt,projectTokens:snapshot.projectTokens},now).projectTokens[0];
     assert.equal(raw.date,today);
     assert.equal(Date.parse(raw.projects[0].sessions[0].start),Date.parse(snapshot.projectTokens[0].projects[0].sessions[0].start)+elapsed);
@@ -113,7 +112,6 @@ test('the demo hourly spread follows the viewer\'s hour, not the build hour',()=
 test('the demo keeps each reading on its newest day across UTC midnight',()=>{
   const sum=hours=>hours.reduce((total,value)=>total+value,0);
   const built=Date.parse('2026-02-25T12:00:00Z');
-  // The Windows reading lags a few minutes behind the build.
   const sources=[{host:'Mac',snapshot:ownSnapshot('Mac',built)},{host:'Windows',snapshot:ownSnapshot('Windows',built-5*60000)}];
   const data={demo:true,...combine(sources,{now:built,generatedBy:'Mac'})};
   const rows=view=>[...view.activity,...view.tokens].filter(row=>Array.isArray(row.days) && typeof row.checkedAt==='string');

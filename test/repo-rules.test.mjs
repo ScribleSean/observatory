@@ -9,10 +9,6 @@ import strings from '../lib/strings.json' with {type:'json'};
 import {LIMIT_LOW_PERCENT,LIMIT_SPENT_PERCENT} from '../lib/glance-limits.mjs';
 import {compact} from '../lib/panel-data.mjs';
 
-// Mistakes that kept coming back, checked across the whole repository.
-// A line that must break a rule says so on that line or the line above,
-// with the marker the rule names and a reason.
-
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const read=file=>readFileSync(path.join(ROOT,file),'utf8');
 const sources=(folders,keep)=>folders.flatMap(folder=>readdirSync(path.join(ROOT,folder),{recursive:true})
@@ -30,11 +26,9 @@ function hits(files,pattern,marker) {
   return found;
 }
 
-// Blank comments, string text and regex literals so only code counts as a use.
-// A literal that is a bare name stays, so STRINGS['periods'] still names its group.
 function codeOnly(source) {
   const keep=text=>/^[A-Za-z_$][\w$]*$/.test(text)?text:'';
-  const templates=[]; // open braces inside each enclosing template ${ }
+  const templates=[];
   let out='',prev='',i=0;
   while (i<source.length) {
     const c=source[i];
@@ -70,14 +64,11 @@ function codeOnly(source) {
 
 function checkStringUsage(catalog,sources) {
   const code=sources.map(codeOnly).join('\n')
-    // STRINGS['periods'] reads the group dynamically, like STRINGS.periods[key].
     .replace(/\b(strings|STRINGS)\s*\[\s*(['"`])(\w+)\2\s*\]/g,'$1.$3[]')
-    // const {a, b: c} = STRINGS.group uses a and b only; a rest element uses the whole group.
     .replace(/\{([^{}]*)\}\s*=\s*(strings|STRINGS)\.(\w+)\b(?!\s*[.[])/g,(_,names,root,group)=>names.includes('...')?`${root}.${group}`:
       names.split(',').map(name=>name.trim().match(/^[\w$]+/)?.[0]).filter(Boolean).map(key=>`${root}.${group}.${key};`).join(''));
   const unused=[];
   for (const [group,entries] of Object.entries(catalog)) {
-    // Aliasing, iterating or indexing a whole group can use any of its keys.
     if (new RegExp(`\\b(strings|STRINGS)\\.${group}\\b(?!\\s*\\.)`).test(code)) continue;
     for (const key of Object.keys(entries)) {
       if (!new RegExp(`\\b(strings|STRINGS)\\.${group}\\.${key}\\b`).test(code)) unused.push(`${group}.${key}`);
@@ -159,7 +150,6 @@ test('the native apps copy the freshness thresholds from lib/freshness.mjs', () 
 
 test('views never turn an Unknown into zero with ?? 0 or || 0', () => {
   const views=sources(['lib','app'],file=>file!=='lib/strings.generated.ts');
-  // Adding to a running total kept in a Map or object, as in (totals.get(key) ?? 0) + value, is allowed.
   const accumulator=/(\.get\([^()]*\)|\[[^\]]*\])\s*(\?\?|\|\|)\s*0\)\s*\+/;
   const fallback=/(\?\?|\|\|)\s*0(?![.\dxXn_])/;
   const found=hits(views,{test:line=>fallback.test(line) && !accumulator.test(line)},'zero-ok:');
@@ -171,7 +161,6 @@ test('views never turn an Unknown into zero with ?? 0 or || 0', () => {
 test('tests wait for a signal, not for a fixed time', () => {
   const tests=[...sources(['test'],file=>file.endsWith('.test.mjs')),...sources(['scripts'],file=>/^scripts\/[^/]+\.test\.mjs$/.test(file))];
   const sleep=/await\s+(new Promise\(.*setTimeout|delay\(|sleep\(|setTimeout\()/;
-  // A short pause inside a polling loop that checks a condition each time is a wait for a signal.
   const polling=/\b(for|while)\s*\(/;
   const found=hits(tests,{test:line=>sleep.test(line) && !polling.test(line)},'sleep-ok:');
   assert.deepEqual(found,[],
@@ -186,14 +175,12 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   assert.equal(Number(cs.match(/public const double Low = ([\d.]+);/)?.[1]),LIMIT_LOW_PERCENT,'Glance.cs PanelState.Low differs from LIMIT_LOW_PERCENT in lib/glance-limits.mjs.');
   assert.ok(swift.includes(`$0 <= ${LIMIT_SPENT_PERCENT} ? palette.error`),'Glance.swift spent tint differs from LIMIT_SPENT_PERCENT.');
   assert.ok(cs.includes(`value <= ${LIMIT_SPENT_PERCENT} ? p.Error`),'Glance.cs spent tint differs from LIMIT_SPENT_PERCENT.');
-  // Each shared phrase, split at its placeholders, must appear in both panels.
   const phrases=[strings.overview.today,strings.overview.left,strings.today.screenTimeOff,strings.labels.screenTime,strings.sections.tokens,strings.tokens.apiEstimate,strings.overview.lastSeen,strings.formats.resetsIn,
     strings.status.updatedAgo,strings.actions.openDashboard,strings.actions.refresh,strings.tokens.underCent,strings.status.unknown];
   for (const phrase of phrases) for (const part of phrase.split(/\{[A-Za-z]+\}/).map(text=>text.trim()).filter(Boolean)) {
     assert.ok(swift.includes(part),`glance/mac/Glance.swift does not say "${part}" like lib/strings.json.`);
     assert.ok(cs.includes(part),`glance/windows/Glance.cs does not say "${part}" like lib/strings.json.`);
   }
-  // The Mac app keeps a copy of the telescope for runs outside its bundle. It must be the same drawing.
   for (const d of [...read('public/brand/telescope.svg').matchAll(/ d="([^"]+)"/g)].map(match=>match[1]))
     assert.ok(swift.includes(` d="${d}"`),'Glance.swift Brand.svg differs from public/brand/telescope.svg.');
   // JavaScript and Swift round halves up. C# Math.Round rounds halves to even unless told otherwise.
@@ -206,7 +193,6 @@ test('one token format: under 10 of a unit one decimal, from 10 whole, on the da
   const table=[[0,'0'],[999,'999'],[999.6,'1K'],[1000,'1K'],[1500,'1.5K'],[9400,'9.4K'],[9960,'10K'],[12345,'12K'],
     [671400,'671K'],[999600,'1M'],[2e6,'2M'],[9.4e6,'9.4M'],[21e6,'21M'],[43.5e6,'44M'],[14.3e6,'14M'],[1.7e6,'1.7M'],[3.21e9,'3.2B']];
   assert.deepEqual(table.map(([value])=>compact(value)),table.map(([,text])=>text));
-  // The panels cannot be run here, so their copies must carry the same rule: whole from 10, one decimal below with ".0" dropped.
   const swift=read('glance/mac/Glance.swift'),cs=read('glance/windows/Glance.cs');
   assert.match(swift,/scaled >= 10 \|\| divisor == 1 \? String\(Int\(scaled\.rounded\(\)\)\) : String\(format: "%\.1f", scaled\)/);
   assert.match(swift,/if text\.hasSuffix\("\.0"\) \{ text\.removeLast\(2\) \}/);
