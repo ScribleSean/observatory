@@ -159,6 +159,7 @@ test('a revoked or expired Codex sign-in reads as needs sign-in, other server er
   const revoked = 'failed to fetch codex rate limits: GET https://chatgpt.com/backend-api/wham/usage failed: 401 Unauthorized; content-type=text/plain; body={"error":{"code":"token_revoked"}}';
   assert.equal(errorStatus({ code: -32603, message: revoked }), 'needs-auth');
   assert.equal(errorStatus({ code: -32603, message: 'body={"error":{"code":"token_expired"}}' }), 'needs-auth');
+  assert.equal(errorStatus({ code: -32603, message: 'Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.' }), 'needs-auth');
   assert.equal(errorStatus({ code: -32603, message: 'failed: 500 Internal Server Error' }), 'unavailable');
   assert.equal(errorStatus({ code: -32603 }), 'unavailable');
   assert.equal(errorStatus({ code: -32601, message: '401 Unauthorized' }), 'unsupported');
