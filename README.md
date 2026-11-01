@@ -4,6 +4,8 @@ A menu bar app and local dashboard for people who use Claude Code and Codex. It 
 
 Observatory reads records your tools already keep on your computer. It has no account, no hosted service and no telemetry. It only watches: it does not start, stop or answer an agent, and it does not change the tools it reads.
 
+<p align="center"><img src="docs/images/demo.gif" width="720" alt="The Observatory menu bar panel with four limits left; Open dashboard is clicked and the dashboard shows the limits over 30 days"></p>
+
 [Demo with fictional data](https://scriblesean.github.io/observatory/)
 
 ## Install
