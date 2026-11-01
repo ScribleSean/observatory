@@ -22,7 +22,7 @@ cd observatory
 npm run setup
 ```
 
-Setup writes a settings file, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the telescope, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601.
+Setup writes a settings file if there is none, builds the dashboard and a small menu bar app (a tray app on Windows) inside the cloned folder, and starts it now and at login. Click the telescope, then **Open dashboard**. The dashboard runs at http://127.0.0.1:5601. It listens on 127.0.0.1 only and accepts only GET and HEAD requests.
 
 - Preview the changes first with `npm run setup -- --dry-run`.
 - Update with `git pull`, then `npm run setup`.
@@ -36,13 +36,13 @@ Every five minutes the app collects one snapshot of this computer:
 | Source | Read from | Kept |
 | --- | --- | --- |
 | Limits | The installed Claude Code and Codex clients, with your existing sign-in | Percent left and reset time per window |
-| Claude Code | `~/.claude/projects` | Tokens per day, hour and model |
-| Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts |
+| Claude Code | `~/.claude/projects` | Tokens per day, hour and model, and today's tokens per project folder name |
+| Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts, and today's tokens per project folder name |
 | Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category |
 
-No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, never as zero. Dollar figures are estimates at public API prices, not a bill.
+No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. Dollar figures are estimates at public API prices, not a bill.
 
-**Two computers.** A Mac and a Windows PC can share one view. The Mac reads the PC's snapshot over your own SSH alias and sends the combined view back, so both show both computers. Limits are account-wide and never added across computers. Token and screen time sums are labeled "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
+**Two computers.** A Mac and a Windows PC can share one view. The Mac reads the PC's snapshot over your own SSH alias and sends the combined view back, so both show both computers. Limits are account-wide and are not added across computers. Token and screen time sums are labeled "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
 
 ## Settings
 
@@ -50,7 +50,7 @@ No prompts, responses, window titles, paths or credentials are kept. A value tha
 
 ```json
 {
-  "device": { "name": "Studio Mac" },
+  "device": { "name": "Mac" },
   "sources": {
     "screenTime": true,
     "codex": true,
@@ -73,14 +73,18 @@ On a Windows PC, set `"wsl": true` under `sources` to also count the Claude Code
 npm run status -- --wait codex --timeout 60
 ```
 
-That waits until Codex has room again. Exit codes: 0 for a current reading, 3 for missing or stale data, 4 on a wait timeout. [Agent status](docs/AGENT-STATUS.md) lists every field.
+That waits up to 60 minutes for Codex to have room again. Exit codes: 0 for a current reading, 3 for missing or stale data, 4 on a wait timeout, and 2 for a bad engine name or timeout. [Agent status](docs/AGENT-STATUS.md) lists every field.
 
 ## Development
+
+```bash
+npm ci
+```
 
 ```bash
 npm test
 ```
 
-`npm run tick` runs one collection. After `npm run build`, `npm run preview` serves the dashboard with fictional data at http://127.0.0.1:5602. Bug reports and small fixes are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+`npm run tick` runs one collection. After `npm run build`, `npm run preview` serves the dashboard with fictional data at http://127.0.0.1:5602. Bug reports and small fixes are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 [MIT license](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
