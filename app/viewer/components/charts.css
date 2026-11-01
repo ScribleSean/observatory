@@ -1,6 +1,7 @@
 .ob-bars { margin: 0; min-width: 0; color: var(--ob-text); }
 .ob-bars-head { display: flex; align-items: baseline; gap: var(--ob-space-2); margin-bottom: var(--ob-space-3); }
-.ob-bars-head h3 { min-width: 0; margin: 0; }
+.ob-bars-head h3 { min-width: 0; }
+.ob-bars-head:has(.ob-visually-hidden:only-child) { display: none; }
 .ob-bars-plot { min-width: 0; overflow: hidden; }
 .ob-bars-plot[hidden] { display: none; }
 .ob-bars svg { display: block; overflow: visible; }

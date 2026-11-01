@@ -11,10 +11,11 @@
   --ob-warning: #94620f;
   --ob-error: #a23b32;
   --ob-card-shadow: 0.07;
-  --ob-card-radius: 16px;
-  --ob-card-padding: 16px;
+  --ob-card-padding: 20px;
   --ob-title-size: 22px;
   --ob-section-size: 19px;
+  --ob-heading-size: 15px;
+  --ob-label-size: 13px;
   --ob-body-size: 14.5px;
   --ob-meta-size: 12px;
   --ob-chart-label-size: 11px;

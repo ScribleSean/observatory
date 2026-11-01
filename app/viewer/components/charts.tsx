@@ -37,16 +37,16 @@ function useWidth() {
   return { ref, width };
 }
 
-/** At most six labels. Thirty days label Mondays, a week labels weekdays, anything else is spaced evenly. */
-export function axisLabels(data: ChartPoint[]): { index: number; text: string }[] {
+/** At most six labels (four on a narrow chart). Thirty days label Mondays, a week labels weekdays, anything else is spaced evenly. */
+export function axisLabels(data: ChartPoint[], most = 6): { index: number; text: string }[] {
   const dates = data.map(point => point.date);
   if (dates.length && dates.every(valid)) {
     if (dates.length <= 7) return dates.map((date, index) => ({ index, text: weekday(date) }));
     const mondays = dates.flatMap((date, index) => day(date).getUTCDay() === 1 ? [index] : []);
-    const stride = Math.ceil(mondays.length / 6);
+    const stride = Math.ceil(mondays.length / most);
     return mondays.filter((_, order) => order % stride === 0).map(index => ({ index, text: monthDay(dates[index]) }));
   }
-  const stride = Math.max(1, Math.ceil(data.length / 6));
+  const stride = Math.max(1, Math.ceil(data.length / most));
   return data.flatMap((point, index) => index % stride === 0 ? [{ index, text: point.label }] : []);
 }
 
@@ -74,8 +74,8 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
     <figure className="ob-bars">
       <div className="ob-bars-head">
         {/* Where the card already names the chart, the title is for screen readers only. */}
-        <h3 id={id} className={quietTitle ? 'ob-visually-hidden' : undefined}>{title}</h3>
-        {!available.length && <span className="ob-meta">{STRINGS.status.unknown}</span>}
+        <h3 id={id} className={quietTitle ? 'ob-visually-hidden' : 'ob-card-title'}>{title}</h3>
+        {!available.length && !quietTitle && <span className="ob-meta">{STRINGS.status.unknown}</span>}
       </div>
       <div ref={ref} className="ob-bars-plot">
         {/* Inline SVG needs an image role to expose its title as one graphic */}
@@ -94,7 +94,7 @@ export function BarChart({ title, data, series, formatValue, max, quietTitle = f
             return <path key={index} data-bar={index} d={bar(x, baseline - barHeight, barWidth, barHeight)} style={{ fill: colors[series] }}><title>{`${names[index]}: ${formatValue(value)}`}</title></path>;
           })}
           <line className="ob-bars-baseline" x1={0} x2={width} y1={baseline + 0.5} y2={baseline + 0.5} />
-          {axisLabels(data).map(({ index, text }) => {
+          {axisLabels(data, width < 360 ? 4 : 6).map(({ index, text }) => {
             const x = center(index);
             const half = text.length * 3.3;
             const anchor = x - half < 0 ? 'start' : x + half > width ? 'end' : 'middle';

@@ -1,8 +1,8 @@
-.ob-sources { container-type: inline-size; min-width: 0; overflow-wrap: anywhere; }
+.ob-sources { container-type: inline-size; min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--ob-space-3); }
 .ob-sources-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-4); }
 .ob-sources-summary p { margin: 0; }
 .ob-source-counts { display: flex; flex-wrap: wrap; gap: var(--ob-space-3); margin: 0; padding: 0; list-style: none; color: var(--ob-muted); }
-.ob-sources-list { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) max-content minmax(5rem, max-content); column-gap: var(--ob-space-5); }
+.ob-sources-list { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 8rem) minmax(0, 1fr) minmax(5rem, max-content); column-gap: var(--ob-space-5); }
 .ob-sources-group, .ob-source-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
 .ob-sources-group { padding: var(--ob-space-1) 0; }
 .ob-sources-group + .ob-sources-group { border-top: 1px solid var(--ob-track); }

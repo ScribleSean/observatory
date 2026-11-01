@@ -1,8 +1,9 @@
 import { STRINGS } from '../../../lib/strings.generated';
-import { compact, duration, format, freshness, limits, readingTime } from '../../../lib/panel-data.mjs';
+import { compact, duration, format, freshness, limits, readingTime, usd, percent, deviceLabel, limitsWithGaps } from '../../../lib/panel-data.mjs';
+import { limitTone } from '../components/Meter';
 import { snapshotFresh } from '../../../lib/freshness.mjs';
 
-export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; stale: boolean };
+export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; spent?: boolean; stale: boolean };
 export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string; freshness?: { stale: boolean };
   categories?: { name: string; seconds: number }[]; costs?: { codex?: number | null; claude?: number | null } };
 export type Glance = {
@@ -12,27 +13,27 @@ export type Glance = {
 };
 
 const unknown = STRINGS.status.unknown;
-const money = (value: number | null) => value === null ? unknown : format(STRINGS.formats.usd, { value: value < 100 ? value.toFixed(2) : Math.round(value).toLocaleString('en-US') });
-const percent = (value: number | null) => value === null ? unknown : `${Math.round(value)}%`;
 
 function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string, unknown> | null; now: number }) {
-  const rows: LimitRow[] = view ? limits(view, now) as LimitRow[] : glance.limits;
-  const current = rows.filter((row): row is LimitRow & { remaining: number } => row.remaining !== null && !row.stale).sort((a, b) => a.remaining - b.remaining);
+  // Fixed order, the same as the Limits tab and both panels: Claude Code, then Codex, 5-hour before weekly.
+  const rows: LimitRow[] = view ? limitsWithGaps(limits(view, now)) as LimitRow[] : glance.limits;
+  const current = rows.filter((row): row is LimitRow & { remaining: number } => row.remaining !== null && !row.stale);
   const missing = rows.filter(row => row.remaining === null || row.stale);
   return (
-    <section className="ob-tile" aria-labelledby="ob-tile-limits">
-      <h2 id="ob-tile-limits">{STRINGS.overview.limitsTitle}</h2>
+    <section className="ob-card ob-tile" aria-labelledby="ob-tile-limits">
+      <h2 className="ob-card-title" id="ob-tile-limits">{STRINGS.overview.limitsTitle}</h2>
       <ul className="ob-tile-bars">
-        {current.map((row, index) => (
-          <li key={index}>
+        {current.map((row, index) => {
+          const tone = limitTone(row);
+          return <li key={index}>
             <span className="ob-tile-label"><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name}{row.window ? <span className="ob-meta">&nbsp;{row.window}</span> : null}</span>
             <span className="ob-tile-value">
-              {row.low && row.note ? <span className="ob-meta warn">{row.note}</span> : null}
-              <span className={row.low ? 'ob-num warn' : 'ob-num'}>{percent(row.remaining)}</span>
+              {tone && row.note ? <span className={`ob-meta ${tone}`}>{row.note}</span> : null}
+              <span className={`ob-num ${tone}`.trim()}>{percent(row.remaining)}</span>
             </span>
-            <span className="ob-bar" aria-hidden="true"><i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining}%` }} /></span>
-          </li>
-        ))}
+            <span className="ob-bar" aria-hidden="true"><i className={tone || row.provider} style={{ width: `${row.remaining}%` }} /></span>
+          </li>;
+        })}
         {missing.length > 0 && <li className="ob-tile-quiet ob-meta"><i className="ob-ring" aria-hidden="true" />
           {current.length === 0 ? STRINGS.overview.limitsNone
             : format(STRINGS.overview.limitsMissing, { names: missing.map(row => `${row.name} ${row.window}`.trim()).join(', ') })}</li>}
@@ -41,8 +42,6 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
   );
 }
 
-// A computer's today numbers count only while its own reading is from today and recent, judged when the page draws.
-// The Mac panel uses the same rule.
 // A computer's today numbers count only while its own reading is from today and recent, judged when the page draws.
 // The Mac panel uses the same rule.
 export function deviceCurrent(device: DeviceToday, now: number) {
@@ -61,7 +60,7 @@ function PerDevice({ glance, value, now }: { glance: Glance; value: (device: Dev
   if (glance.today.length < 2) return null;
   return (
     <ul className="ob-tile-devices">
-      {glance.today.map(device => <li key={device.host}><span>{device.name}</span>{deviceValue(device, now, value)}</li>)}
+      {glance.today.map(device => <li key={device.host}><span title={device.name}>{deviceLabel(device.host)}</span>{deviceValue(device, now, value)}</li>)}
     </ul>
   );
 }
@@ -84,9 +83,9 @@ function AsOf({ now, generatedAt }: { now: number; generatedAt: number }) {
 // "Today" numbers belong to the day they were made. From another day they are Unknown.
 function sameDay(at: number, now: number) { return new Date(at).toDateString() === new Date(now).toDateString(); }
 
-// The headline appears only when it is known. An Unknown total is left to the rows below it.
+// Every tile has a headline. An Unknown one keeps its size, in the muted colour.
 function Hero({ value, note }: { value: string | null; note?: string }) {
-  return <>{value === null ? null : <div className="ob-hero">{value}</div>}{note ? <p className="ob-meta">{note}</p> : null}</>;
+  return <>{value === null ? <div className="ob-hero ob-unknown">{unknown}</div> : <div className="ob-hero">{value}</div>}{note ? <p className="ob-meta">{note}</p> : null}</>;
 }
 
 // A cross-computer total shows only when every computer it adds up is current and shown beside it.
@@ -96,8 +95,8 @@ function TimeCard({ glance, now, generatedAt }: { glance: Glance; now: number; g
   const today = sameDay(generatedAt, now);
   const total = !today ? null : glance.both ? (allCurrent(glance, now) ? glance.both.seconds : null) : glance.today[0]?.seconds ?? null;
   return (
-    <section className="ob-tile" aria-labelledby="ob-tile-time">
-      <h2 id="ob-tile-time">{STRINGS.overview.timeTitle}</h2>
+    <section className="ob-card ob-tile" aria-labelledby="ob-tile-time">
+      <h2 className="ob-card-title" id="ob-tile-time">{STRINGS.overview.timeTitle}</h2>
       <Hero value={total === null ? null : duration(total)} note={glance.both && total !== null ? STRINGS.overview.bothNote : undefined} />
       {glance.both ? <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
         : today ? <Breakdown rows={(glance.today[0]?.categories ?? []).map(row => [row.name, duration(row.seconds)] as [string, string])} /> : null}
@@ -113,13 +112,13 @@ function CostCard({ glance, now, generatedAt }: { glance: Glance; now: number; g
   const notes = [source.tokens === null ? '' : format(STRINGS.overview.tokens, { value: compact(source.tokens) }),
     glance.both && (source.usd !== null || source.tokens !== null) ? STRINGS.overview.bothNote : ''].filter(Boolean);
   return (
-    <section className="ob-tile" aria-labelledby="ob-tile-cost">
-      <h2 id="ob-tile-cost">{STRINGS.overview.costTitle}</h2>
-      <Hero value={source.usd === null ? null : money(source.usd)} note={notes.join(' · ')} />
-      {glance.both ? <PerDevice glance={glance} now={now} value={device => money(device.usd)} />
+    <section className="ob-card ob-tile" aria-labelledby="ob-tile-cost">
+      <h2 className="ob-card-title" id="ob-tile-cost">{STRINGS.overview.costTitle}</h2>
+      <Hero value={source.usd === null ? null : usd(source.usd)} note={notes.join(STRINGS.formats.separator)} />
+      {glance.both ? <PerDevice glance={glance} now={now} value={device => usd(device.usd)} />
         : today ? <Breakdown rows={([['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const)
           .filter(([key]) => glance.today[0]?.costs?.[key] !== undefined)
-          .map(([key, label]) => [label, money(glance.today[0]?.costs?.[key] ?? null), key] as [string, string, string])} /> : null}
+          .map(([key, label]) => [label, usd(glance.today[0]?.costs?.[key] ?? null), key] as [string, string, string])} /> : null}
       <AsOf now={now} generatedAt={generatedAt} />
     </section>
   );

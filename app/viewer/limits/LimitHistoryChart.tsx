@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { STRINGS } from '../../../lib/strings.generated';
-import { format } from '../../../lib/panel-data.mjs';
+import { format, deviceLabel } from '../../../lib/panel-data.mjs';
 import { windowColumns, dailyColumns, paceGuide } from '../../../lib/view-limit-history.mjs';
 
 type Point = { host: string; t: number; r: number; x: number; source: string };
@@ -26,8 +26,9 @@ function useWidth() {
   return { ref, width };
 }
 
-// Short computer names match the menu bar panel.
-export const shortName = (series: { host: string; name: string }) => series.host === 'Windows' ? 'PC' : series.host === 'Mac' ? 'Mac' : series.name;
+// Computers are named Mac and PC, as on every surface.
+export const shortName = (series: { host: string; name: string }) => ['Mac', 'Windows'].includes(series.host) ? deviceLabel(series.host) : series.name;
+const hostOrder = (host: string) => ['Mac', 'Windows'].indexOf(host) < 0 ? 2 : ['Mac', 'Windows'].indexOf(host);
 const stamp = (t: number) => new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const hour = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -76,7 +77,8 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   const sx = (t: number) => PAD.left + (Math.min(Math.max(t, data.from), data.to) - data.from) / span * plotWidth;
   const sy = (r: number) => PAD.top + (1 - r / 100) * plotHeight;
   const base = sy(0);
-  const series = data.series;
+  // Mac first and in the full hue, PC second and lighter, in every chart and key.
+  const series = [...data.series].sort((a, b) => hostOrder(a.host) - hostOrder(b.host));
   const many = series.length > 1;
   const tone = (index: number) => index === 0 ? 'primary' : 'secondary';
 

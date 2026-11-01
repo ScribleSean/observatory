@@ -1,21 +1,16 @@
-.ob-limits { min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--ob-space-4); }
-.ob-limits h3, .ob-limits h4 { margin: 0; font-size: var(--ob-body-size); font-weight: 600; }
-.ob-limits .ob-row { flex-wrap: wrap; }
-
-.ob-history > .ob-row { align-items: center; flex-wrap: wrap; gap: var(--ob-space-2) var(--ob-space-4); margin-bottom: var(--ob-space-3); }
+.ob-limits { min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--ob-space-3); }
 .ob-history-grid-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
-.ob-history-grid-cards > * { min-width: 0; margin-top: 0; }
+.ob-history-grid-cards > * { min-width: 0; }
 @media (min-width: 860px) { .ob-history-grid-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ob-history-grid-cards .ob-card-head { margin-bottom: var(--ob-space-3); }
+.ob-peer-rows { margin-top: var(--ob-space-3); }
 
-/* Header: name on the left, what is left now on the right, on one line when it fits. */
-.ob-history-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-3); }
-.ob-dashboard .ob-history-head h4 { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; color: var(--ob-text); text-transform: none; letter-spacing: -0.2px; }
-.ob-history-head h4 .ob-meta { font-weight: 400; }
+/* What is left now sits on the right of the heading. */
 .ob-history-latest { display: flex; align-items: baseline; gap: var(--ob-space-2); min-width: 0; margin-left: auto; }
-.ob-history-latest .ob-num { flex: none; font-size: 20px; font-weight: 500; color: var(--ob-strong); white-space: nowrap; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+.ob-history-latest .ob-num { flex: none; font-size: var(--ob-section-size); color: var(--ob-strong); letter-spacing: -0.4px; }
 .ob-history-latest .ob-num.warn { color: var(--ob-warning); }
+.ob-history-latest .ob-num.spent { color: var(--ob-error); }
 .ob-history-latest .ob-meta { min-width: 0; text-align: right; }
-
 .ob-history-chart { margin: 0; min-width: 0; }
 .ob-history-plot { position: relative; overflow: hidden; }
 .ob-history-plot svg { display: block; max-width: 100%; overflow: visible; touch-action: pan-y; }
@@ -23,7 +18,7 @@
 
 /* Axes are quiet: two hairlines and small labels. */
 .ob-history-grid line { stroke: var(--ob-track); stroke-width: 1; opacity: 0.7; }
-.ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: var(--ob-chart-label-size); font-variant-numeric: tabular-nums; }
 .ob-history-reset { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.35; }
 .ob-history-guide { stroke: var(--ob-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.55; }
 .ob-history-cursor { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.6; }
@@ -37,7 +32,7 @@
 .ob-history-dot.claude { fill: var(--ob-claude); }
 .ob-history-dot.codex { fill: var(--ob-codex); }
 .ob-history-dot.secondary { opacity: 0.5; }
-.ob-history-end { font-size: 10.5px; font-weight: 500; }
+.ob-history-end { font-size: var(--ob-chart-label-size); font-weight: 500; }
 .ob-history-end.claude { fill: var(--ob-claude); }
 .ob-history-end.codex { fill: var(--ob-codex); }
 .ob-history-end.secondary { opacity: 0.65; }
@@ -46,14 +41,14 @@
 .ob-history-column.codex { fill: var(--ob-codex); }
 .ob-history-column.secondary { opacity: 0.5; }
 
-.ob-history-key { position: absolute; top: 0; right: 0; display: flex; gap: var(--ob-space-3); font-size: 10.5px; color: var(--ob-muted); }
+.ob-history-key { position: absolute; top: 0; right: 0; display: flex; gap: var(--ob-space-3); font-size: var(--ob-chart-label-size); color: var(--ob-muted); }
 .ob-history-key span { display: inline-flex; align-items: center; gap: 5px; }
 .ob-history-key i { width: 8px; height: 8px; border-radius: 2px; }
 .ob-history-key i.claude { background: var(--ob-claude); }
 .ob-history-key i.codex { background: var(--ob-codex); }
 .ob-history-key i.secondary { opacity: 0.5; }
 
-.ob-history-tip { position: absolute; top: 0; width: 160px; padding: 6px 10px; border-radius: 8px; background: var(--ob-background); box-shadow: 0 2px 8px rgb(0 0 0 / calc(var(--ob-card-shadow) * 2)); font-size: 12px; pointer-events: none; display: flex; flex-direction: column; gap: 1px; }
+.ob-history-tip { position: absolute; top: 0; width: 160px; padding: 6px 10px; border-radius: calc(var(--ob-radius) / 2); background: var(--ob-background); box-shadow: 0 2px 8px rgb(0 0 0 / calc(var(--ob-card-shadow) * 2)); font-size: var(--ob-meta-size); pointer-events: none; display: flex; flex-direction: column; gap: 1px; }
 .ob-history-tip > span { color: var(--ob-muted); }
 .ob-history-tip-row { display: flex; justify-content: space-between; gap: var(--ob-space-2); }
 .ob-history-tip-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }

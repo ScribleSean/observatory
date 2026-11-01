@@ -20,14 +20,16 @@ const {useSkin}=await server.ssrLoadModule('/app/viewer/skin.ts');
 const now=Date.parse('2026-10-21T17:00:00Z');
 const both=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ownSnapshot('Windows',now)}],{now});
 const noPc=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',name:'PC',snapshot:null,error:'unreachable'}],{now});
-const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,limitStyle:'bar',css:'',className:'',onSectionChange:()=>{},...props}));
+const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,css:'',className:'',onSectionChange:()=>{},...props}));
 
 for(const section of ['limits','activity','tokens','sources']) {
   test(`the ${section} page renders from combined.json`,()=>{
     const html=render({combined:both,section});
-    for(const title of ['Limits','Screen time today','API-equivalent cost today'])assert.ok(html.includes(title),title);
+    for(const title of ['Limits','Screen time today','API-equivalent cost today (estimate)'])assert.ok(html.includes(title),title);
     assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
-    assert.ok(html.includes('both computers, not deduplicated'));
+    assert.ok(html.includes('Both computers, not deduplicated'));
+    // Computers are Mac and PC everywhere, never a machine name with a platform in parentheses.
+    assert.ok(!/\((Mac|Windows|macOS)\)/.test(html));
     assert.ok(!html.includes('NaN'));
     assert.ok(!html.includes('undefined'));
   });
@@ -47,29 +49,33 @@ test('a computer with an old reading shows when it was last seen, not its number
   const pc=old.glance.today.find(device=>device.host==='Windows');
   pc.freshness={stale:true};pc.collectedAt=new Date(now-80*60000).toISOString();
   const html=render({combined:old,section:'limits'});
-  assert.ok(html.includes('last seen'));
+  assert.ok(html.includes('Last seen'));
   const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
   assert.ok(!tiles.includes('class="ob-hero"'),'no total that includes a hidden, old number');
+  assert.ok(tiles.includes('class="ob-hero ob-unknown">Unknown<'),'the headline says Unknown at headline size');
 });
 
 test('two computers on the next day show no numbers as today',()=>{
   const html=render({combined:both,section:'limits',now:now+26*3600000});
   const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
   assert.ok(!/class="ob-num">[^<]*(\d+h|\d+m|\$)/.test(tiles),'no duration or cost from yesterday');
-  assert.ok(tiles.includes('last seen'));
+  assert.ok(tiles.includes('Last seen'));
 });
 
-test('limits are listed scarcest first and unknown ones share one line',()=>{
+test('limits keep a fixed order and a window without a reading is named, not dropped',()=>{
   const html=render({combined:both,section:'limits'});
   const tile=html.slice(html.indexOf('ob-tile-limits'),html.indexOf('ob-tile-time'));
-  const values=[...tile.matchAll(/class="ob-num(?: warn)?">(\d+)%</g)].map(match=>Number(match[1]));
-  assert.ok(values.length>1);
-  assert.deepEqual(values,[...values].sort((a,b)=>a-b));
+  const names=[...tile.matchAll(/<\/i>(Claude Code|Codex)<span class="ob-meta">&nbsp;([^<]+)</g)].map(match=>`${match[1]} ${match[2]}`);
+  assert.deepEqual(names,['Claude Code 5-hour','Claude Code weekly','Codex 5-hour','Codex weekly'].filter(name=>names.includes(name)));
+  const partial=structuredClone(both);
+  partial.view.claudeLimits.windows=partial.view.claudeLimits.windows.filter(row=>row.durationMinutes!==300);
+  const missing=render({combined:partial,section:'limits'});
+  assert.ok(missing.includes('No current reading: Claude Code 5-hour'));
 });
 
 test('without combined.json the page says how to get one',()=>{
   const html=render({combined:null,section:'limits'});
-  assert.ok(html.includes('No combined.json yet'));
+  assert.ok(html.includes('Waiting for the first reading'));
   assert.ok(!html.includes('Cost today'));
 });
 
@@ -134,7 +140,7 @@ test('loading and first run show one calm message, not pages of Unknown',()=>{
   assert.ok(!loading.includes('ob-tabs'));
   const first=render({combined:null,loaded:true,section:'limits'});
   assert.ok(first.includes('Waiting for the first collection'));
-  assert.ok(first.includes('npm run tick'));
+  assert.ok(first.includes('choose Refresh'));
   assert.ok(!first.includes('>Unknown<'));
 });
 
@@ -148,7 +154,7 @@ test('the tokens page shows today by project, with sessions, subagent share and 
     {name:'sample-site',totalTokens:74e6,subagentTokens:0,usd:38,sessionCount:1,sessions:[]}]};
   const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now,snapshot=>({...snapshot,projectTokens:[row]}))}],{now});
   const html=render({combined,section:'tokens'});
-  for(const text of ['Today by project','demo-app','190M','$96','sample-site','subagents 64%','subagents Unknown','+1 more','>8M<'])assert.ok(html.includes(text),text);
+  for(const text of ['Today by project','demo-app','190M','$96','sample-site','Subagents 64%','Subagents Unknown','+1 more','>8M<'])assert.ok(html.includes(text),text);
   assert.ok(html.indexOf('demo-app')<html.indexOf('sample-site'),'largest project first');
   assert.ok(!html.includes('NaN') && !html.includes('undefined'));
 });

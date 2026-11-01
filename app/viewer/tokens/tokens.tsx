@@ -1,76 +1,85 @@
 import { useState } from 'react';
 import { STRINGS, format } from '../../../lib/strings.generated';
-import { compact } from '../../../lib/panel-data.mjs';
-import { tokensView, money } from '../../../lib/view-tokens.mjs';
+import { compact, usd } from '../../../lib/panel-data.mjs';
+import { tokensView } from '../../../lib/view-tokens.mjs';
 import { projectsView } from '../../../lib/view-projects.mjs';
 import { ProjectsCard } from './projects';
-import { BarChart, Card, FilterGroup, ProviderDot, Row } from '../components';
+import { BarChart, Card, FilterGroup, Row, type ChartPoint } from '../components';
 import './tokens.css';
 
 type Computed = ReturnType<typeof tokensView>;
-type Block = Omit<Computed['codex'], 'models'> & {
+type Block = Omit<Computed['codex'], 'models' | 'days'> & {
   checkedOn: string | null;
+  note?: string;
+  days: Day[];
   models: { model: string; total: number | null; usd: number | null }[];
 };
 type Result = Omit<Computed, 'claude' | 'codex'> & {
   codex: Block;
   claude: Block & {
-    byDevice: { host: string; label: string; status: string; total: number | null; usd: number | null }[];
+    byDevice: { host: string; label: string; status: string; note?: string; total: number | null; usd: number | null }[];
   };
 };
 const periods: [string, string][] = [
   ['day', STRINGS.periods.day], ['week', STRINGS.periods.week],
   ['month', STRINGS.periods.month], ['all', STRINGS.periods.all],
 ];
-// Move to lib/strings.json as tokens.breakdown.
 const classes = ['input', 'cached', 'cacheWrite', 'output'] as const;
 const count = (value: number | null) => value === null ? STRINGS.status.unknown : compact(value);
-const dollars = (usd: number | null) => {
-  if (typeof usd === 'number' && Number.isFinite(usd) && usd > 0 && usd < 0.005) return STRINGS.tokens.underCent;
-  const value = money(usd);
-  return value === null ? STRINGS.status.unknown : format(STRINGS.formats.usd, { value });
-};
 const statusWord = (status: string) => status === 'no-records' ? STRINGS.status.noRecords
   : status === 'by-device' ? STRINGS.status.byDevice : STRINGS.status.unknown;
 const statusNote = (status: string) => status === 'unverified' ? STRINGS.status.allUnverified
-  : status === 'by-device' ? STRINGS.tokens.deviceNote
   : status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
+// Recorded words such as "medium" read as labels, so they start with a capital. Model ids stay as recorded.
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
+const word = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value.charAt(0).toUpperCase() + value.slice(1);
+const hourLabel = (hour: number) => new Date(Date.UTC(2000, 0, 1, hour)).toLocaleTimeString('en-US', { hour: 'numeric', timeZone: 'UTC' });
+const shiftDate = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
-/** The last 30 calendar days up to the data's own today, so both charts share one date axis. */
-function chartDomain(result: Result, now: number) {
-  const recorded = [...result.claude.days, ...result.codex.days].some(day => /^\d{4}-\d{2}-\d{2}$/.test(day.date));
-  if (!recorded) return [];
-  const local = new Date(now);
-  const end = typeof result.anchor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(result.anchor)
-    ? Date.parse(`${result.anchor}T00:00:00Z`) : Date.UTC(local.getFullYear(), local.getMonth(), local.getDate());
-  return Array.from({ length: 30 }, (_, index) => new Date(end - (29 - index) * 86400000).toISOString().slice(0, 10));
+type Day = { date: string; total: number | null; hours?: number[] | null };
+
+/** The chart follows the period: today by hour, then 7 or 30 days, or every recorded day. */
+function chartData(days: Day[], period: string, anchor: string | null): ChartPoint[] | null {
+  if (!anchor || !/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return null;
+  if (period === 'day') {
+    const hours = days.find(day => day.date === anchor)?.hours;
+    return hours ? hours.map((value, hour) => ({ label: hourLabel(hour), value })) : null;
+  }
+  const byDay = new Map(days.map(day => [day.date, day.total]));
+  const first = days.map(day => day.date).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort()[0];
+  if (!first) return null;
+  const length = period === 'week' ? 7 : period === 'month' ? 30
+    : Math.max(7, Math.round((Date.parse(`${anchor}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) / 86400000) + 1);
+  return Array.from({ length }, (_, index) => {
+    const date = shiftDate(anchor, index - length + 1);
+    return { label: date.slice(5), date, value: byDay.has(date) ? byDay.get(date) ?? null : undefined };
+  });
 }
 
-function ProviderCard({ result, provider, domain }: { result: Result; provider: 'claude' | 'codex'; domain: string[] }) {
+function ProviderCard({ result, provider }: { result: Result; provider: 'claude' | 'codex' }) {
   const block: Block = result[provider];
   const label = provider === 'claude' ? STRINGS.providers.claudeCode : STRINGS.providers.codex;
-  const note = statusNote(block.status);
+  const notes = [statusNote(block.status), block.note].filter(Boolean);
   const checked = block.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: block.checkedOn }) : STRINGS.tokens.pricesUnknown;
-  const byDay = new Map(block.days.map(day => [day.date, day.total]));
-  return <Card label={label}>
-    <h3><ProviderDot provider={provider} />{label}</h3>
+  const data = chartData(block.days, result.period, result.anchor);
+  const chartTitle = format(result.period === 'day' ? STRINGS.tokens.hourlyTitle : STRINGS.tokens.chartTitle, { provider: label });
+  const known = block.status === 'ok';
+  return <Card label={label} title={label} provider={provider}>
     <div className="ob-tokens-head">
-      <div className="ob-figure">{block.status === 'ok' ? count(block.totals.total) : statusWord(block.status)}</div>
-      {note && <p className="ob-tokens-note">{note}</p>}
+      <div className={known ? 'ob-hero' : 'ob-hero ob-unknown'}>{known ? count(block.totals.total) : statusWord(block.status)}</div>
+      {notes.map(note => <p key={note} className="ob-meta">{note}</p>)}
       {provider === 'claude' && result.host === 'All' && result.claude.byDevice.length > 0 && <div className="ob-tokens-table">
         <table>
           <thead><tr><th scope="col">{STRINGS.devices.device}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
           <tbody>{result.claude.byDevice.map(device => <tr key={device.host}>
-            <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : statusWord(device.status)}</td><td>{dollars(device.usd)}</td>
+            <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : device.note || statusWord(device.status)}</td><td>{usd(device.usd)}</td>
           </tr>)}</tbody>
         </table>
-        <p className="ob-tokens-note">{checked}</p>
+        <p className="ob-meta">{checked}</p>
       </div>}
     </div>
-    <div>{block.days.length > 0 && <BarChart quietTitle title={format(STRINGS.tokens.chartTitle, { provider: label })}
-      data={domain.map(date => ({ label: date.slice(5), date, value: byDay.has(date) ? byDay.get(date) ?? null : undefined }))} series={provider} formatValue={compact} />}</div>
-    {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-tokens-breakdown">
+    <div>{data && <BarChart quietTitle title={chartTitle} data={data} series={provider} formatValue={compact} />}</div>
+    {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-disclosure ob-tokens-breakdown">
       <summary>{STRINGS.tokens.breakdown}</summary>
       {block.status !== 'by-device' && <>
         <h4>{STRINGS.tokens.classes}</h4>
@@ -78,9 +87,9 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
           <dt>{STRINGS.tokens[key]}</dt><dd>{count(block.totals[key])}</dd>
         </div>)}</dl>
         <div className="ob-tokens-estimate">
-          <Row><span>{STRINGS.tokens.apiEstimate}</span><span>{dollars(block.estimate.usd)}</span></Row>
-          <p className="ob-tokens-note">{checked}</p>
-          {block.estimate.partial && <p className="ob-tokens-note">{format(STRINGS.tokens.partial, {
+          <Row><span>{STRINGS.tokens.apiEstimate}</span><span className="ob-num">{usd(block.estimate.usd)}</span></Row>
+          <p className="ob-meta">{checked}</p>
+          {block.estimate.partial && <p className="ob-meta">{format(STRINGS.tokens.partial, {
             covered: count(block.estimate.coveredTokens), total: count(block.estimate.totalTokens),
           })}</p>}
         </div>
@@ -90,7 +99,7 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
         <table>
           <thead><tr><th scope="col">{STRINGS.tokens.model}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
           <tbody>{block.models.map(model => <tr key={model.model}>
-            <th scope="row">{recorded(model.model)}</th><td>{count(model.total)}</td><td>{dollars(model.usd)}</td>
+            <th scope="row">{recorded(model.model)}</th><td>{count(model.total)}</td><td>{usd(model.usd)}</td>
           </tr>)}</tbody>
         </table>
       </div>}
@@ -98,40 +107,44 @@ function ProviderCard({ result, provider, domain }: { result: Result; provider: 
   </Card>;
 }
 
-export function TokensSection({ result, projects = [], onHostChange, onPeriodChange, now }: {
+export function TokensSection({ result, projects = [], onHostChange, onPeriodChange }: {
   result: Result;
-  now: number;
+  now?: number;
   projects?: ReturnType<typeof projectsView>;
   onHostChange: (host: string) => void;
   onPeriodChange: (period: string) => void;
 }) {
-  const domain = chartDomain(result, now);
+  // Projects are recorded for today only, so they show with the Day period.
+  const showProjects = result.period === 'day' && projects.length > 0;
   return <div className="ob-tokens">
-    <FilterGroup label={STRINGS.devices.device} value={result.host} onChange={onHostChange}
-      options={[['All', STRINGS.devices.all], ...result.devices.map(device => [device.id, device.label] as [string, string])]} />
-    <FilterGroup label={STRINGS.devices.period} value={result.period} onChange={onPeriodChange} options={periods} />
-    <div className="ob-tokens-providers">
-      <ProviderCard result={result} provider="claude" domain={domain} />
-      <ProviderCard result={result} provider="codex" domain={domain} />
+    <div className="ob-filters">
+      {result.devices.length > 1 && <FilterGroup label={STRINGS.devices.device} value={result.host} onChange={onHostChange}
+        options={[['All', STRINGS.devices.all], ...result.devices.map(device => [device.id, device.label] as [string, string])]} />}
+      <FilterGroup label={STRINGS.devices.period} value={result.period} onChange={onPeriodChange} options={periods} />
     </div>
-    <ProjectsCard devices={projects} />
-    <Card label={STRINGS.tokens.settingsTitle}>
-      <h3>{STRINGS.tokens.settingsTitle}</h3>
-      {result.settings.map(device => <div key={device.host} className="ob-tokens-settings">
-        {result.settings.length > 1 && <h4>{device.label}</h4>}
-        {device.status !== 'ok' ? <p>{device.status === 'no-records' ? STRINGS.tokens.noSettings : STRINGS.status.unknown}</p>
-          : <div className="ob-tokens-table"><table>
-            <thead><tr><th scope="col">{STRINGS.tokens.model}</th><th scope="col">{STRINGS.tokens.effort}</th><th scope="col">{STRINGS.tokens.speed}</th><th scope="col">{STRINGS.tokens.total}</th></tr></thead>
-            <tbody>{device.rows.map((row, index) => <tr key={index}>
-              <th scope="row">{recorded(row.model)}</th><td>{recorded(row.effort)}</td><td>{recorded(row.speed)}</td><td>{count(row.totalTokens)}</td>
-            </tr>)}</tbody>
-          </table></div>}
-      </div>)}
-    </Card>
+    <div className="ob-tokens-providers">
+      <ProviderCard result={result} provider="claude" />
+      <ProviderCard result={result} provider="codex" />
+    </div>
+    <div className="ob-tokens-lower">
+      {showProjects && <ProjectsCard devices={projects} />}
+      <Card label={STRINGS.tokens.settingsTitle} title={STRINGS.tokens.settingsTitle}>
+        {result.settings.map(device => <div key={device.host} className="ob-tokens-settings">
+          {result.settings.length > 1 && <h4>{device.label}</h4>}
+          {device.status !== 'ok' ? <p className="ob-meta">{device.status === 'no-records' ? STRINGS.tokens.noSettings : STRINGS.status.unknown}</p>
+            : <div className="ob-tokens-table"><table>
+              <thead><tr><th scope="col">{STRINGS.tokens.model}</th><th scope="col">{STRINGS.tokens.effort}</th><th scope="col">{STRINGS.tokens.speed}</th><th scope="col">{STRINGS.tokens.total}</th></tr></thead>
+              <tbody>{device.rows.map((row, index) => <tr key={index}>
+                <th scope="row">{recorded(row.model)}</th><td>{word(row.effort)}</td><td>{word(row.speed)}</td><td>{count(row.totalTokens)}</td>
+              </tr>)}</tbody>
+            </table></div>}
+        </div>)}
+      </Card>
+    </div>
   </div>;
 }
 
-export function TokensView({ snapshot, now, initialHost = 'All', initialPeriod = 'week' }: {
+export function TokensView({ snapshot, now, initialHost = 'All', initialPeriod = 'day' }: {
   snapshot: Record<string, unknown> | null;
   now: number;
   initialHost?: string;

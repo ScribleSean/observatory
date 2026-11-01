@@ -53,7 +53,7 @@ void test('a stale reading shows Unknown and its warning, never a projection', (
   const html = render(data);
   assert.doesNotMatch(html, /runs out in about/);
   assert.match(card(html, 'Codex 5-hour'), /class="ob-meta warn"/);
-  assert.match(card(html, 'Codex 5-hour'), /class="ob-num">Unknown</);
+  assert.match(card(html, 'Codex 5-hour'), /class="ob-num ob-unknown">Unknown</);
 });
 
 void test('a low limit warns in its header', () => {
@@ -65,7 +65,7 @@ void test('a low limit warns in its header', () => {
 for (const data of [{ quota: { status: 'unavailable' } }, null]) {
   void test('unknown remains unknown for ' + (data ? 'unavailable quota' : 'null snapshot'), () => {
     const html = render(data);
-    assert.equal(count(html, /class="ob-num">Unknown</g), 4);
+    assert.equal(count(html, /class="ob-num ob-unknown">Unknown</g), 4);
     assert.doesNotMatch(html.replace(/>(0|100)%</g, ''), /(^|[^0-9.])0 ?%/, 'the only 0% is the axis label');
     assert.ok(html.includes('No readings in this range'));
   });
@@ -76,7 +76,7 @@ void test('peer present shows the named platform and observation time', () => {
   data.peerQuota = { host: 'Windows', status: 'ok', checkedAt: iso(-5), receivedAt: iso(-2), windows: data.quota.windows };
   data.deviceNames = { Windows: 'Desk' };
   const html = render(data);
-  assert.match(html, /Shared from Desk \(Windows\)/);
+  assert.match(html, /Shared from PC/);
   assert.match(html, /Observed 5m ago/);
   assert.ok(html.includes('title="' + new Date(iso(-5)).toLocaleString() + '"'));
 });
@@ -89,7 +89,7 @@ void test('peer without windows shows its observation time and Unknown value', (
   const data = snapshot();
   data.peerQuota = { host: 'Windows', status: 'ok', checkedAt: iso(-5), windows: [] };
   const html = render(data);
-  const peer = html.split('aria-label="Shared from Windows"')[1];
+  const peer = html.split('aria-label="Shared from PC"')[1];
   assert.ok(peer);
   assert.match(peer, /Observed 5m ago/);
   assert.match(peer, /Unknown/);
