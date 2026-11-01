@@ -48,6 +48,26 @@ Within ten minutes both menus and both dashboards list both computers.
 
 The Mac runs two fixed commands on the PC: one reads `usage.json`, one writes `combined.incoming.json` through a temporary file and a rename, after checking its size. The PC merges that file itself, so the Mac never replaces a newer result the PC made. SSH runs in batch mode with strict host key checking and without agent, X11 or port forwarding. The files hold totals and limit readings, and no prompts, messages, session names or credentials.
 
+## WSL on the PC
+
+A computer's token totals cover the Claude Code and Codex logs saved on that computer. Logs live where the tool runs, so work started from the Mac that runs inside WSL on the PC (for example a Codex job over SSH) is saved in WSL and counts toward the PC. The Mac counts only the logs in its own home folder, so nothing is counted twice when the two are combined.
+
+WSL keeps its files apart from Windows, so the PC reads them only when its settings file lists `wsl` as `true`:
+
+```json
+{
+  "sources": { "claudeCode": true, "codex": true, "wsl": true }
+}
+```
+
+With `wsl` on, each cycle on the PC:
+
+- finds the installed WSL distributions in the Windows registry, leaving out the ones Docker Desktop, Rancher Desktop and Podman use,
+- reads `.claude` and `.codex` under each folder in `/home` of each distribution through `\\wsl.localhost\<distribution>`, read-only, with the same readers as the Windows folders and a separate private Codex cache for each,
+- adds the results to the Windows totals by day and model, and records which parts it covered, such as `Windows` and `WSL Ubuntu-24.04`, with no paths or user names.
+
+A distribution without those folders adds nothing. If a folder exists but cannot be read, or the distribution cannot be listed, that provider's PC total is Unknown rather than smaller. Opening a stopped distribution's files starts it, as browsing it in File Explorer does. The share is available in the signed-in desktop session where the tray app runs, but usually not in an SSH session, so a collection started over SSH with `wsl` on shows Unknown. Folders set with `CODEX_HOME` or `CLAUDE_CONFIG_DIR` inside WSL and the root user's home are not read. A Mac refuses the setting.
+
 ## If the PC is off
 
 The Mac keeps the last copy it read and shows its age. The PC's numbers for today show Unknown, not zero, and so does any sum that includes them.

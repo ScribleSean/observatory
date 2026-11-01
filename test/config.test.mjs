@@ -7,7 +7,7 @@ const win={platform:'win32',environment:{LOCALAPPDATA:'C:\\Users\\a\\AppData\\Lo
 
 test('sources are off unless listed as true',()=>{
   const config=parseConfig({sources:{codex:true}},mac);
-  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false});
+  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false,wsl:false});
   assert.equal(config.role,'spoke');
   assert.equal(config.host,'Mac');
   // The macOS branch joins with the host's separator, so a run on Windows sees backslashes.
