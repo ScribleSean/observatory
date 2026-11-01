@@ -130,3 +130,20 @@ test('the demo keeps each reading on its newest day across UTC midnight',()=>{
     }
   }
 });
+
+test('the two-computer demo shows Codex tokens for each computer in Both',()=>{
+  const built=Date.parse('2026-02-25T12:00:00Z');
+  const sources=[{host:'Mac',snapshot:ownSnapshot('Mac',built)},{host:'Windows',snapshot:ownSnapshot('Windows',built-4*60000)}];
+  const data={demo:true,...combine(sources,{now:built,generatedBy:'Mac'})};
+  const both=tokensView(data.view,{host:'All',period:'week',now:built});
+  assert.equal(both.codex.status,'by-device');
+  assert.deepEqual(both.codex.byDevice.map(row=>row.label),['Mac','PC']);
+  for (const row of both.codex.byDevice) {
+    const own=tokensView(data.view,{host:row.host,period:'week',now:built}).codex;
+    assert.equal(own.status,'ok');
+    assert.ok(own.totals.total>0);
+    assert.equal(row.status,'ok');
+    assert.equal(row.total,own.totals.total);
+    assert.equal(row.usd,own.estimate.usd);
+  }
+});
