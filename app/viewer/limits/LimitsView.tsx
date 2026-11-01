@@ -4,58 +4,53 @@ import { limitRows, peerLimits } from '../../../lib/view-limits.mjs';
 import { limitHistorySeries } from '../../../lib/view-limit-history.mjs';
 import { LimitHistoryChart, type HistoryData } from './LimitHistoryChart';
 import { span } from '../../../lib/panel-data.mjs';
-import { Card, Row, ProviderDot, FilterGroup } from '../components';
+import { Card, FilterGroup } from '../components';
+import { limitTone } from '../components/Meter';
+import { Note } from '../components/Note';
 import { LimitRows } from '../components/LimitRows';
 import './limits.css';
 
 const providers = [['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const;
-const ranges: [string, string][] = [['today', STRINGS.limitHistory.today], ['week', STRINGS.limitHistory.week], ['month', STRINGS.limitHistory.month], ['all', STRINGS.limitHistory.all]];
+// The same period words as Activity and Tokens.
+const ranges: [string, string][] = [['today', STRINGS.periods.day], ['week', STRINGS.periods.week], ['month', STRINGS.periods.month], ['all', STRINGS.periods.all]];
 const windows = [['5h', STRINGS.limitHistory.fiveHour, '5-hour'], ['week', STRINGS.limitHistory.weekly, 'weekly']] as const;
-const percent = (value: number) => format(STRINGS.formats.percent, { value: Math.round(value) });
 
 type Row = ReturnType<typeof limitRows>[number];
 
-// The chart header carries what the old side cards said: how much is left now and when it resets.
-function ChartHead({ provider, name, label, row }: { provider: string; name: string; label: string; row: Row | undefined }) {
+// The card heading carries what is left now and when it resets, on the right.
+function Latest({ row }: { row: Row | undefined }) {
   const value = row && row.remaining !== null && !row.stale ? row.remaining : null;
-  return <div className="ob-history-head">
-    <h4><ProviderDot provider={provider} />{name}<span className="ob-meta">{label}</span></h4>
-    <div className="ob-history-latest">
-      {row?.note && <span className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</span>}
-      <span className={row?.low && value !== null ? 'ob-num warn' : 'ob-num'}>{value === null ? STRINGS.status.unknown : percent(value)}</span>
-    </div>
-  </div>;
+  const tone = value === null ? '' : limitTone(row!);
+  return <span className="ob-history-latest">
+    {row?.note && <Note className={row.stale ? 'ob-meta warn' : 'ob-meta'} text={row.note} />}
+    <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null ? STRINGS.status.unknown : format(STRINGS.limitHistory.left, { value: Math.round(value) })}</span>
+  </span>;
 }
 
-export function LimitsView({ snapshot, now, limitStyle }: {
-  snapshot: Record<string, unknown> | null;
-  now: number;
-  limitStyle: string;
-}) {
+export function LimitsView({ snapshot, now }: { snapshot: Record<string, unknown> | null; now: number }) {
   const [range, setRange] = useState('week');
   const rows = limitRows(snapshot, now);
   const peer = peerLimits(snapshot, now);
   return <div className="ob-limits">
-    <section className="ob-history" aria-labelledby="ob-history-title">
-      <Row><h3 id="ob-history-title">{STRINGS.limitHistory.title}</h3>
-        <FilterGroup label={STRINGS.limitHistory.range} options={ranges} value={range} onChange={setRange} /></Row>
+    <section className="ob-history" aria-label={STRINGS.limitHistory.title}>
+      <div className="ob-filters"><FilterGroup label={STRINGS.limitHistory.range} options={ranges} value={range} onChange={setRange} /></div>
       <div className="ob-history-grid-cards">
         {providers.flatMap(([provider, name]) => windows.map(([window, label, rowWindow]) => {
           const data = limitHistorySeries(snapshot, { provider, window, range, now });
           const title = format(STRINGS.limitHistory.chartTitle, { provider: name, window: label });
-          return <Card key={provider + window} label={title}>
-            <ChartHead provider={provider} name={name} label={label} row={rows.find(row => row.provider === provider && row.window === rowWindow)} />
+          return <Card key={provider + window} label={title} provider={provider}
+            title={<>{name}<span className="ob-meta">{label}</span></>}
+            aside={<Latest row={rows.find(row => row.provider === provider && row.window === rowWindow)} />}>
             <LimitHistoryChart data={data as unknown as HistoryData} color={provider} title={title} window={window} />
           </Card>;
         }))}
       </div>
     </section>
-    {peer && <Card label={format(STRINGS.limits.sharedFrom, { device: peer.device })}>
-      <h3>{format(STRINGS.limits.sharedFrom, { device: peer.device })}</h3>
+    {peer && <Card label={format(STRINGS.limits.sharedFrom, { device: peer.device })} title={format(STRINGS.limits.sharedFrom, { device: peer.device })}>
       <div className={peer.stale ? 'ob-meta warn' : 'ob-meta'} title={peer.observedAt ? new Date(peer.observedAt).toLocaleString() : undefined}>
         {peer.observedAt ? format(STRINGS.limits.observed, { span: span(now - Date.parse(peer.observedAt)) }) : STRINGS.limits.observationUnknown}
       </div>
-      <LimitRows rows={peer.rows.map(row => ({ ...row, bucket: 'codex', stale: peer.stale, note: '' }))} style={limitStyle} />
+      <div className="ob-peer-rows"><LimitRows rows={peer.rows.map(row => ({ ...row, bucket: 'codex', stale: peer.stale, note: '' }))} /></div>
     </Card>}
   </div>;
 }

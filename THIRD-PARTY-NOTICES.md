@@ -10,8 +10,6 @@ Observatory's own code is under the [MIT license](LICENSE). The pieces below com
 | --- | --- |
 | [React](https://github.com/facebook/react) and React DOM, with their scheduler | MIT |
 | [Inter Tight](https://github.com/googlefonts/inter-tight) | SIL Open Font License 1.1, in `public/fonts/OFL.txt` |
-| [Fraunces](https://github.com/undercasetype/Fraunces) | SIL Open Font License 1.1, in `public/fonts/Fraunces-OFL.txt` |
-| [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) | SIL Open Font License 1.1, in `public/fonts/JetBrainsMono-OFL.txt` |
 
 ## Used only to build and test
 

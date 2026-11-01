@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { STRINGS } from '../../../lib/strings.generated';
-import { format } from '../../../lib/panel-data.mjs';
+import { format, deviceLabel } from '../../../lib/panel-data.mjs';
 import { windowColumns, dailyColumns, paceGuide } from '../../../lib/view-limit-history.mjs';
 
 type Point = { host: string; t: number; r: number; x: number; source: string };
@@ -10,7 +10,7 @@ type Column = { start: number; end: number; low: number; readings: number; lastA
 // One thing the pointer or keyboard can land on: a reading in line mode, a window in column mode.
 type Item = { t: number; rows: { host: string; label: string; value: number }[]; start?: number; end?: number };
 
-const PAD = { left: 36, right: 34, top: 22, bottom: 22 };
+const PAD = { left: 36, right: 12, top: 22, bottom: 22 };
 const HOUR = 3600000, DAY = 24 * HOUR;
 
 function useWidth() {
@@ -26,8 +26,9 @@ function useWidth() {
   return { ref, width };
 }
 
-// Short computer names match the menu bar panel.
-export const shortName = (series: { host: string; name: string }) => series.host === 'Windows' ? 'PC' : series.host === 'Mac' ? 'Mac' : series.name;
+// Computers are named Mac and PC, as on every surface.
+export const shortName = (series: { host: string; name: string }) => ['Mac', 'Windows'].includes(series.host) ? deviceLabel(series.host) : series.name;
+const hostOrder = (host: string) => ['Mac', 'Windows'].indexOf(host) < 0 ? 2 : ['Mac', 'Windows'].indexOf(host);
 const stamp = (t: number) => new Date(t).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const hour = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -76,12 +77,14 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   const sx = (t: number) => PAD.left + (Math.min(Math.max(t, data.from), data.to) - data.from) / span * plotWidth;
   const sy = (r: number) => PAD.top + (1 - r / 100) * plotHeight;
   const base = sy(0);
-  const series = data.series;
+  // Mac first and in the full hue, PC second and lighter, in every chart and key.
+  const series = [...data.series].sort((a, b) => hostOrder(a.host) - hostOrder(b.host));
   const many = series.length > 1;
   const tone = (index: number) => index === 0 ? 'primary' : 'secondary';
 
   // A window column needs a few pixels. Over long ranges the windows are grouped by day instead.
-  const daily = columns && 5 * HOUR / span * plotWidth < 6;
+  // Seven days keep one column per window down to a 320px window. Thirty days and longer group by day.
+  const daily = columns && 5 * HOUR / span * plotWidth < 4;
   const columnSets = series.map(item => {
     const windows = windowColumns(item.points, window) as Column[];
     const shown = daily ? dailyColumns(windows) as Column[] : windows;
@@ -135,14 +138,6 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
     if (event.key === 'Escape') setActive(null);
   };
 
-  // Direct labels at the end of each line, nudged apart when they would overlap.
-  // They sit in the right-hand gutter, clear of the lines.
-  const ends = !columns && many ? series.map((item, index) => {
-    const last = item.points.at(-1);
-    return last ? { label: shortName(item), x: PAD.left + plotWidth + 6, y: sy(last.r), index } : null;
-  }).filter(Boolean) as { label: string; x: number; y: number; index: number }[] : [];
-  ends.sort((a, b) => a.y - b.y).forEach((end, index, list) => { if (index > 0 && end.y - list[index - 1].y < 12) end.y = list[index - 1].y + 12; });
-
   return (
     <figure className="ob-history-chart" ref={ref}>
       <span id={id} className="ob-visually-hidden">{title}</span>
@@ -174,11 +169,11 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
             ? <circle key={`${item.host}${part}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.25} className={`ob-history-dot ${color} ${tone(index)}`} />
             : <polyline key={`${item.host}${part}`} className={`ob-history-line ${color} ${tone(index)}`}
               points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />))}
-          {ends.map(end => <text key={end.label} className={`ob-history-end ${color} ${tone(end.index)}`} x={end.x} y={end.y + 3.5}>{end.label}</text>)}
           {shown && <line className="ob-history-cursor" x1={sx(shown.t)} x2={sx(shown.t)} y1={PAD.top} y2={base} />}
           {data.empty && <text className="ob-history-empty" x={PAD.left + plotWidth / 2} y={PAD.top + plotHeight / 2} textAnchor="middle">{STRINGS.limitHistory.noReadings}</text>}
         </svg>
-        {columns && many && <div className="ob-history-key" aria-hidden="true">
+        {/* One key for every chart with two computers, in the top right, clear of the lines. */}
+        {many && <div className="ob-history-key" aria-hidden="true">
           {series.map((item, index) => <span key={item.host}><i className={`${color} ${tone(index)}`} />{shortName(item)}</span>)}
         </div>}
         {shown && <div className="ob-history-tip" style={{ left: Math.min(Math.max(sx(shown.t) - 80, 0), width - 160) }} aria-live="polite">
@@ -188,14 +183,14 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
           </div>)}
         </div>}
       </div>
-      <table className="ob-visually-hidden">
+      <div className="ob-visually-hidden"><table>
         <caption>{title}</caption>
         <thead><tr><th scope="col">{STRINGS.limitHistory.time}</th>{series.map(item => <th key={item.host} scope="col">{shortName(item)}</th>)}</tr></thead>
         <tbody>{items.slice(-200).reverse().map((item, index) => <tr key={index}>
           <th scope="row">{item.start !== undefined ? format(STRINGS.limitHistory.windowSpan, { start: stamp(item.start), end: hour(item.end!) }) : stamp(item.t)}</th>
           {series.map(entry => { const row = item.rows.find(part => part.host === entry.host); return <td key={entry.host}>{row ? format(columns ? STRINGS.limitHistory.lowest : STRINGS.limitHistory.left, { value: Math.round(row.value) }) : STRINGS.status.unknown}</td>; })}
         </tr>)}</tbody>
-      </table>
+      </table></div>
     </figure>
   );
 }

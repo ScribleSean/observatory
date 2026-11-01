@@ -26,6 +26,7 @@ struct DeviceRow: Identifiable, Equatable {
   let seconds: Double?
   let tokens: Double?
   let usd: Double?
+  let screenTimeOn: Bool
   let lastSeen: Date?
   let current: Bool
   let problem: String?
@@ -71,23 +72,16 @@ struct PanelState: Equatable {
     var state = PanelState(now: now)
     state.updated = date(json["generatedAt"])
     guard let glance = json["glance"] as? [String: Any] else { state.notice = .collecting; return state }
+    // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
     let rows = glance["limits"] as? [[String: Any]] ?? []
     state.limits = rows.enumerated().map { index, row in
-      LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["windowId"] as? String ?? String(index))",
+      LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["window"] as? String ?? "")-\(index)",
                provider: row["provider"] as? String ?? "",
                name: row["name"] as? String ?? "Unknown",
                window: row["window"] as? String ?? "",
                remaining: limitRemaining(row, now: now),
                resetsAt: date(row["resetsAt"]))
     }
-    .enumerated().sorted { a, b in
-      switch (a.element.remaining, b.element.remaining) {
-      case let (x?, y?): return x == y ? a.offset < b.offset : x < y
-      case (.some, nil): return true
-      case (nil, .some): return false
-      case (nil, nil): return a.offset < b.offset
-      }
-    }.map(\.element)
     var problems: [String: String] = [:]
     if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
       for spoke in spokes {
@@ -107,7 +101,7 @@ struct PanelState: Equatable {
       return DeviceRow(id: host, name: host == "Windows" ? "PC" : host == "Mac" ? "Mac" : row["name"] as? String ?? host,
                        fullName: row["name"] as? String ?? host,
                        seconds: number(row["seconds"]), tokens: number(row["tokens"]), usd: number(row["usd"]),
-                       lastSeen: seen, current: current, problem: problems[host])
+                       screenTimeOn: row["screenTimeOn"] as? Bool ?? true, lastSeen: seen, current: current, problem: problems[host])
     }
     return state
   }
@@ -123,8 +117,10 @@ enum Format {
   static func compact(_ value: Double) -> String {
     let units: [(Double, String)] = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"), (1, "")]
     for (index, (divisor, suffix)) in units.enumerated() where value >= divisor || divisor == 1 {
+      // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
       let scaled = value / divisor
-      let text = scaled >= 100 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
+      var text = scaled >= 10 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
+      if text.hasSuffix(".0") { text.removeLast(2) }
       // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
       if text == "1000", index > 0 { return "1" + units[index - 1].1 }
       return text + suffix
@@ -132,8 +128,26 @@ enum Format {
     return "0"
   }
 
+  // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
   static func money(_ value: Double) -> String {
-    value >= 10 ? "$\(Int(value.rounded()))" : String(format: "$%.2f", value)
+    if value > 0 && value < 0.005 { return "Under $0.01" }
+    if value < 10 { return String(format: "$%.2f", value) }
+    let formatter = NumberFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.numberStyle = .decimal
+    formatter.groupingSeparator = ","
+    formatter.usesGroupingSeparator = true
+    formatter.maximumFractionDigits = 0
+    return "$" + (formatter.string(from: NSNumber(value: value.rounded())) ?? String(Int(value.rounded())))
+  }
+
+  // Same as span() in lib/panel-data.mjs.
+  static func span(_ seconds: TimeInterval) -> String {
+    let minutes = Int((max(0, seconds) / 60).rounded())
+    if minutes < 60 { return "\(minutes)m" }
+    let hours = minutes / 60
+    if hours < 48 { return "\(hours)h \(minutes % 60)m" }
+    return "\(hours / 24)d \(hours % 24)h"
   }
 
   static func clock(_ date: Date, now: Date) -> String {
@@ -146,17 +160,7 @@ enum Format {
   }
 
   static func age(_ seconds: TimeInterval) -> String {
-    let minutes = Int(seconds / 60)
-    if minutes < 60 { return "\(minutes) min ago" }
-    if minutes < 48 * 60 { return "\(minutes / 60)h \(minutes % 60)m ago" }
-    return "\(minutes / 1440)d ago"
-  }
-
-  static func today(_ device: DeviceRow) -> String {
-    let parts = [device.seconds.map(duration),
-                 device.tokens.map { compact($0) + " tokens" },
-                 device.usd.map(money)].compactMap { $0 }
-    return parts.isEmpty ? "Unknown" : parts.joined(separator: "  ·  ")
+    span(seconds) + " ago"
   }
 }
 
@@ -182,10 +186,12 @@ struct Palette {
 }
 
 enum Brand {
-  // The one telescope mark, copied from public/brand/telescope.svg by setup.
+  // The one telescope mark, copied from public/brand/telescope.svg by setup. The same drawing is kept here
+  // for a binary run outside its bundle, such as --render. test/repo-rules.test.mjs checks the two match.
+  static let svg = ##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f5f5f5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 10 11-6 3 5-11 6z"/><path d="m16 3 4 7M5.8 12 3 13.5M12 13v3m-5 5 5-5 5 5m-5-5v6"/></svg>"##
   static let telescope: NSImage = {
     let image = Bundle.main.url(forResource: "telescope", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
-      ?? NSImage(systemSymbolName: "binoculars", accessibilityDescription: nil)
+      ?? NSImage(data: Data(svg.utf8))
       ?? NSImage(size: NSSize(width: 18, height: 18))
     image.isTemplate = true
     image.accessibilityDescription = "Observatory"
@@ -259,9 +265,15 @@ struct PanelView: View {
       .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(palette.hairline))
   }
 
+  // Every window has a row in the dashboard's order. One without a current reading says Unknown over an empty track.
   @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
-    let unknown = state.limits.filter { $0.remaining == nil }
-    ForEach(state.limits.filter { $0.remaining != nil }) { row in
+    // The percents are what is left, named once over their column like the Today card's headers.
+    HStack {
+      Spacer(minLength: 0)
+      Text("Left")
+    }
+    .font(.system(size: 11.5)).foregroundStyle(palette.muted)
+    ForEach(state.limits) { row in
       let tint = row.remaining.map { $0 <= 0.5 ? palette.error : $0 <= PanelState.low ? palette.warning : nil } ?? nil
       VStack(alignment: .leading, spacing: 6) {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -270,53 +282,68 @@ struct PanelView: View {
           Text(row.window).foregroundStyle(palette.muted)
           Spacer(minLength: 6)
           if let remaining = row.remaining {
-            if remaining <= PanelState.low, let reset = row.resetsAt {
-              Text("back \(Format.clock(reset, now: state.now))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
-            }
             Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
               .foregroundStyle(tint ?? palette.text)
+          } else {
+            Text("Unknown").foregroundStyle(palette.muted)
           }
         }
         GeometryReader { geometry in
           ZStack(alignment: .leading) {
             Capsule().fill(palette.track)
-            Capsule().fill(tint ?? palette.provider(row.provider))
-              .frame(width: geometry.size.width * CGFloat((row.remaining ?? 0) / 100))
+            // The bar keeps the product colour. Only the percent turns amber or red.
+            if let remaining = row.remaining {
+              Capsule().fill(palette.provider(row.provider))
+                .frame(width: geometry.size.width * CGFloat(remaining / 100))
+            }
           }
         }
         .frame(height: 5)
+        // A low limit says when it comes back, on its own line under the bar, as on Windows.
+        if let remaining = row.remaining, remaining <= PanelState.low, let reset = row.resetsAt {
+          Text("Resets in \(Format.span(reset.timeIntervalSince(state.now)))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
+        }
       }
       .accessibilityElement(children: .combine)
     }
-    if !unknown.isEmpty {
-      HStack(spacing: 6) {
-        Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
-        Text(unknown.count == state.limits.count ? "No current limit reading"
-             : "No current reading: " + unknown.map { "\($0.name) \($0.window)" }.joined(separator: ", "))
-          .foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
-      }
-    }
   }
 
-  func devices(_ state: PanelState, _ palette: Palette) -> some View {
+  // Today per computer, in columns that each name what they hold. The cost header may wrap over its column.
+  static let timeColumn: CGFloat = 72, tokenColumn: CGFloat = 60, costColumn: CGFloat = 92
+
+  @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
+    HStack(alignment: .bottom, spacing: 6) {
+      Text("Today")
+      Spacer(minLength: 0)
+      Text("Screen time").frame(width: Self.timeColumn, alignment: .trailing)
+      Text("Tokens").frame(width: Self.tokenColumn, alignment: .trailing)
+      Text("API-equivalent (estimate)").multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
+        .frame(width: Self.costColumn, alignment: .trailing)
+    }
+    .font(.system(size: 11.5)).foregroundStyle(palette.muted)
     ForEach(state.devices) { device in
-      HStack(spacing: 6) {
-        Text(device.name).fontWeight(.medium).lineLimit(1)
-        Spacer(minLength: 8)
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        Text(device.name).fontWeight(.medium).lineLimit(1).fixedSize()
+        if let problem = device.problem, device.current {
+          Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
+            .accessibilityLabel(problem)
+        }
+        Spacer(minLength: 2)
         if device.current {
-          if let problem = device.problem {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
-              .accessibilityLabel(problem)
+          Group {
+            Text(!device.screenTimeOn ? "Off" : device.seconds.map(Format.duration) ?? "Unknown")
+              .frame(width: Self.timeColumn, alignment: .trailing)
+            Text(device.tokens.map(Format.compact) ?? "Unknown").frame(width: Self.tokenColumn, alignment: .trailing)
+            Text(device.usd.map(Format.money) ?? "Unknown").frame(width: Self.costColumn, alignment: .trailing)
           }
-          Text(Format.today(device)).monospacedDigit().lineLimit(1)
+          .monospacedDigit().lineLimit(1)
         } else {
           Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
-          Text(device.lastSeen.map { "last seen \(Format.clock($0, now: state.now))" } ?? "Unknown")
+          Text(device.lastSeen.map { "Last seen \(Format.clock($0, now: state.now))" } ?? "Unknown")
             .foregroundStyle(palette.muted).lineLimit(1)
         }
       }
-      .help([device.fullName, device.problem, device.current && device.usd != nil ? "Cost is an API-equivalent estimate" : nil]
-        .compactMap { $0 }.joined(separator: "\n"))
+      .help([device.fullName, device.problem].compactMap { $0 }.joined(separator: "\n"))
     }
   }
 

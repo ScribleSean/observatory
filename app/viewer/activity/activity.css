@@ -1,17 +1,18 @@
 .ob-activity { min-width: 0; overflow-wrap: anywhere; }
-.ob-activity * { box-sizing: border-box; }
-.ob-activity .ob-activity-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ob-space-2); }
-.ob-activity .ob-segments { flex-wrap: wrap; max-width: 100%; }
-.ob-activity .ob-segments button { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; }
-.ob-activity select { max-width: 100%; font: inherit; color: var(--ob-text); background: var(--ob-surface); }
-.ob-activity .ob-activity-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
-.ob-activity .ob-card { min-width: 0; }
-.ob-activity h3 { margin: 0 0 var(--ob-space-2); font-size: var(--ob-body-size); }
-.ob-activity .ob-row { gap: var(--ob-space-2); }
-.ob-activity .ob-num { flex-shrink: 0; }
-.ob-activity details { margin: var(--ob-space-2) 0; }
-.ob-activity summary { cursor: pointer; }
-.ob-activity .ob-activity-now { margin-top: var(--ob-space-2); }
+.ob-activity-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
+.ob-activity-grid > .ob-card { min-width: 0; }
+.ob-activity .ob-card > .ob-meta { margin-top: var(--ob-space-2); }
+.ob-activity .ob-num { flex: none; }
+.ob-activity-now { display: grid; gap: var(--ob-space-1); margin-top: var(--ob-space-3); }
+.ob-activity-list, .ob-activity-apps { margin: var(--ob-space-3) 0 0; padding: 0; list-style: none; }
+.ob-activity-summary .ob-activity-list { margin-top: var(--ob-space-4); border-top: 1px solid var(--ob-track); }
+.ob-activity-list > li { padding: 6px 0; }
+.ob-activity-list > li + li { border-top: 1px solid var(--ob-track); }
+.ob-activity-list summary > span:first-of-type { flex: 1; min-width: 0; }
+.ob-activity-apps { margin: var(--ob-space-1) 0 var(--ob-space-1) calc(0.4em + var(--ob-space-2) + 0.25em); color: var(--ob-muted); font-size: var(--ob-label-size); }
+.ob-activity-apps li { padding: 2px 0; }
 @media (min-width: 720px) {
-  .ob-activity .ob-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* The total and its categories on the left, the period's chart on the right. */
+  .ob-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ob-activity-summary { align-self: start; }
 }

@@ -7,6 +7,6 @@ export const SKINS: Record<string, unknown> = { sage };
 export function useSkin(_initialSkin = 'sage') {
   const skin = useMemo(() => validateSkin(SKINS.sage), []);
   const css = useMemo(() => skinCss(skin), [skin]);
-  const className = `ob-font-${skin.font}${skin.rules ? ' ob-rules' : ''}`;
+  const className = `ob-font-${skin.font}`;
   return { skinId: 'sage', skin, css, className };
 }

@@ -6,22 +6,28 @@ export type LimitProps = {
   name: string;
   window: string;
   value: string;
-  note: string;
+  note?: string;
   low: boolean;
-  stale: boolean;
+  spent?: boolean;
+  stale?: boolean;
   remaining: number | null;
 };
 
+export const limitTone = (row: { low: boolean; spent?: boolean; remaining: number | null }) =>
+  row.remaining === null ? '' : row.spent ? 'spent' : row.low ? 'warn' : '';
+
 export function Meter(row: LimitProps) {
+  const tone = limitTone(row);
   return (
     <div className="ob-limit" data-provider={row.provider} data-window={row.window || 'unknown'}>
       <Row>
         <span><ProviderDot provider={row.provider} />{row.name} <span className="ob-meta">{row.window}</span></span>
-        <span className={row.low ? 'ob-num warn' : 'ob-num'}>{row.value}</span>
+        <span className={row.remaining === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{row.value}</span>
       </Row>
-      <div className={row.stale ? 'ob-meta ob-indent warn' : 'ob-meta ob-indent'}>{row.note}</div>
+      {row.note && <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>}
       <div className="ob-bar" aria-hidden="true">
-        {row.remaining !== null && <i className={row.low ? 'warn' : row.provider} style={{ width: `${row.remaining}%` }} />}
+        {/* The bar keeps the product colour. Only the number turns amber or red. */}
+        {row.remaining !== null && <i className={row.provider} style={{ width: `${row.remaining}%` }} />}
       </div>
     </div>
   );

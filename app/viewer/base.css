@@ -1,0 +1,46 @@
+@import '../design-tokens.css';
+
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('../../public/fonts/InterTight.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+html, body { margin: 0; background: var(--ob-background); color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+.ob-mark { width: 22px; height: 22px; background: currentColor; -webkit-mask: url('../../public/brand/telescope.svg') center / contain no-repeat; mask: url('../../public/brand/telescope.svg') center / contain no-repeat; }
+.ob-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ob-space-2); }
+.ob-meta { color: var(--ob-muted); font-size: var(--ob-meta-size); }
+.ob-meta.warn, .ob-num.warn { color: var(--ob-warning); }
+.ob-num.spent, .ob-meta.spent { color: var(--ob-error); }
+.ob-card { background: var(--ob-surface); border-radius: var(--ob-radius, 14px); padding: var(--ob-card-padding); }
+.ob-limit + .ob-limit { margin-top: var(--ob-space-3); }
+.ob-limit > .ob-meta { margin-top: 2px; }
+.ob-num { font-family: var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap; }
+.ob-dot { flex: none; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.ob-dot.claude, .ob-bar i.claude { background: var(--ob-claude); }
+.ob-dot.codex, .ob-bar i.codex { background: var(--ob-codex); }
+.ob-bar { display: block; height: 5px; border-radius: 3px; background: var(--ob-track); margin-top: 6px; overflow: hidden; }
+.ob-bar i { display: block; height: 100%; border-radius: 3px; }
+
+/* An Unknown headline keeps the headline's size, in the muted colour. */
+.ob-unknown { color: var(--ob-muted) !important; }
+
+/* One disclosure style: a small chevron that turns down when open. */
+.ob-disclosure > summary { display: flex; align-items: baseline; gap: var(--ob-space-2); cursor: pointer; list-style: none; }
+.ob-disclosure > summary::-webkit-details-marker { display: none; }
+.ob-disclosure > summary::before { content: ''; flex: none; width: 0.4em; height: 0.4em; margin: 0 0.15em 0.15em 0.1em; border: solid var(--ob-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 120ms; }
+.ob-disclosure[open] > summary::before { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .ob-disclosure > summary::before { transition: none; } }
+
+.ob-nowrap { white-space: nowrap; }
+.ob-note-dot { white-space: pre; }
+/* In a narrow card, a note's parts stack and lose their dots. Cards that hold notes are size containers. */
+@container (max-width: 440px) {
+  .ob-note { display: inline-flex; flex-direction: column; align-items: flex-end; }
+  .ob-note-dot { display: none; }
+}
+.ob-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }

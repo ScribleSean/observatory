@@ -50,7 +50,6 @@ test('a skin cannot carry code, markup, remote files or unknown fields', () => {
     bad(s=>{s.radius=400;}),
     bad(s=>{s.radius='4px';}),
     bad(s=>{s.rules='yes';}),
-    bad(s=>{s.limitStyle='dial';}),
     bad(s=>{delete s.rules;}),
     null,[],'sage'])
     assert.throws(()=>skinCss(skin));
@@ -59,7 +58,7 @@ test('a skin cannot carry code, markup, remote files or unknown fields', () => {
 test('skin CSS holds only colour variables, a bundled font stack and a radius', () => {
   const css=skinCss(read('sage.json'));
   assert.match(css,/^:root\{--ob-background:#edeae5;/);
-  assert.match(css,/--ob-radius:12px;/);
+  assert.match(css,/--ob-radius:14px;/);
   assert.match(css,/prefers-color-scheme: dark/);
   assert.doesNotMatch(css,/url\(|@import|<|expression|javascript/i);
 });

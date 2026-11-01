@@ -24,7 +24,7 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
       assert.equal(typeof name, 'string');
       assert.ok(name.length >= 1 && name.length <= 32);
     }
-    assert.deepEqual(devices(snapshot).map(row => row.label), ['Studio', 'Desk']);
+    assert.deepEqual(devices(snapshot).map(row => [row.label, row.name]), [['Mac', 'Studio'], ['PC', 'Desk']]);
     assert.deepEqual(limits(snapshot, now).map(row => row.remaining), [64, 12, 81, 47]);
     assert.equal(snapshot.claudeLimits.status, 'stale');
     assert.deepEqual(snapshot.claudeLimits.windows.map(row => Date.parse(row.resetsAt) - now), [130 * 60000, 3 * 86400000]);
@@ -221,8 +221,8 @@ test('sample panel shows the computed Codex exhaustion duration', () => {
   const now = Date.parse('2026-10-14T18:45:00Z'), snapshot = sampleSnapshot(now);
   const primary = quotaPace(snapshot.quota, now).find(row => row.window === 'primary');
   const row = limits(snapshot, now)[2];
-  assert.ok(row.note.includes('runs out in about'));
-  assert.ok(row.note.includes(`runs out in about ${span(Date.parse(primary.estimatedExhaustionAt) - now)}`));
+  assert.ok(row.note.includes('runs out in'));
+  assert.ok(row.note.includes(`runs out in ${span(Date.parse(primary.estimatedExhaustionAt) - now)}`));
 });
 
 test('activity archives have separate tracking metadata and capped hours', () => {

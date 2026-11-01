@@ -43,7 +43,7 @@ namespace Observatory
         public string Name, FullName, Problem;
         public double? Seconds, Tokens, Usd;
         public DateTime? LastSeen;
-        public bool Current;
+        public bool Current, ScreenTimeOn = true;
     }
 
     sealed class PanelState
@@ -109,8 +109,8 @@ namespace Observatory
                 Remaining = LimitRemaining(row, now),
                 ResetsAt = Date(Get(row, "resetsAt")),
             });
-            // Scarcest first. Unknown readings go last, in their original order (OrderBy is stable).
-            state.Limits = limits.OrderBy(row => row.Remaining.HasValue ? 0 : 1).ThenBy(row => row.Remaining ?? 0).ToList();
+            // The order of glance.limits is the dashboard's: Claude Code then Codex, 5-hour before weekly.
+            state.Limits = limits.ToList();
             var problems = new Dictionary<string, string>();
             var hub = Get(json, "hub") as Dictionary<string, object>;
             foreach (var spoke in (Get(hub, "spokes") as IList ?? new object[0]).OfType<Dictionary<string, object>>())
@@ -138,6 +138,7 @@ namespace Observatory
                     Seconds = Number(Get(row, "seconds")),
                     Tokens = Number(Get(row, "tokens")),
                     Usd = Number(Get(row, "usd")),
+                    ScreenTimeOn = !(Get(row, "screenTimeOn") is bool) || (bool)Get(row, "screenTimeOn"),
                     LastSeen = seen,
                     Current = !stale && seen.HasValue && (now - seen.Value).TotalMinutes <= PanelState.DeviceFreshMinutes && seen.Value.ToLocalTime().Date == now.ToLocalTime().Date,
                     Problem = problem,
@@ -151,7 +152,7 @@ namespace Observatory
     {
         public static string Duration(double seconds)
         {
-            int minutes = (int)Math.Round(seconds / 60);
+            int minutes = (int)Math.Round(seconds / 60, MidpointRounding.AwayFromZero);
             return minutes < 60 ? minutes + "m" : (minutes / 60) + "h " + (minutes % 60) + "m";
         }
 
@@ -162,17 +163,30 @@ namespace Observatory
             {
                 if (value < units[index].Item1 && index < units.Length - 1) continue;
                 double scaled = value / units[index].Item1;
-                string text = scaled >= 100 || units[index].Item2 == "" ? Math.Round(scaled).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.0", CultureInfo.InvariantCulture);
+                // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
+                string text = scaled >= 10 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.#", CultureInfo.InvariantCulture);
                 // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
                 if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
                 return text + units[index].Item2;
             }
-            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+            return Math.Round(value, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture);
         }
 
+        // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
         public static string Money(double value)
         {
-            return value >= 10 ? "$" + Math.Round(value).ToString(CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
+            if (value > 0 && value < 0.005) return "Under $0.01";
+            return value >= 10 ? "$" + Math.Round(value, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
+        }
+
+        // Same as span() in lib/panel-data.mjs.
+        public static string Span(TimeSpan span)
+        {
+            int minutes = (int)Math.Round(Math.Max(0, span.TotalMinutes), MidpointRounding.AwayFromZero);
+            if (minutes < 60) return minutes + "m";
+            int hours = minutes / 60;
+            if (hours < 48) return hours + "h " + (minutes % 60) + "m";
+            return (hours / 24) + "d " + (hours % 24) + "h";
         }
 
         public static string Clock(DateTime utc, DateTime now)
@@ -186,19 +200,7 @@ namespace Observatory
 
         public static string Age(TimeSpan age)
         {
-            int minutes = (int)age.TotalMinutes;
-            if (minutes < 60) return minutes + " min ago";
-            if (minutes < 48 * 60) return (minutes / 60) + "h " + (minutes % 60) + "m ago";
-            return (minutes / 1440) + "d ago";
-        }
-
-        public static string Today(DeviceRow device)
-        {
-            var parts = new List<string>();
-            if (device.Seconds.HasValue) parts.Add(Duration(device.Seconds.Value));
-            if (device.Tokens.HasValue) parts.Add(Compact(device.Tokens.Value) + " tokens");
-            if (device.Usd.HasValue) parts.Add(Money(device.Usd.Value));
-            return parts.Count == 0 ? "Unknown" : string.Join("  \u00B7  ", parts);
+            return Span(age) + " ago";
         }
     }
 
@@ -339,70 +341,88 @@ namespace Observatory
                 }
                 else
                 {
-                    var known = s.Limits.Where(row => row.Remaining.HasValue).ToList();
-                    var unknown = s.Limits.Where(row => !row.Remaining.HasValue).ToList();
                     if (s.Limits.Count > 0)
                     {
-                        // Limits without a current reading collapse into one quiet line that wraps instead of a row each.
-                        string missing = unknown.Count == 0 ? null : known.Count == 0 ? "No current limit reading"
-                            : "No current reading: " + string.Join(", ", unknown.Select(limit => (limit.Name + " " + limit.Window).Trim()));
-                        float missingWidth = right - left - Pad * 2 - 13;
-                        float missingHeight = missing == null ? 0 : (float)Math.Ceiling(g.MeasureString(missing, body, (int)missingWidth, StringFormat.GenericTypographic).Height);
-                        int lines = known.Count + (missing != null ? 1 : 0);
-                        float h = Pad * 2 + known.Count * 29 + missingHeight + Math.Max(0, lines - 1) * Gap;
+                        // Every window has a row in the dashboard's order. One without a current reading says Unknown
+                        // over an empty track. A low limit says when it comes back on a line under its bar, as on the Mac.
+                        Func<LimitRow, bool> resets = limit => limit.Remaining.HasValue && limit.Remaining.Value <= PanelState.Low && limit.ResetsAt.HasValue;
+                        // The percents are what is left, named once over their column like the Today card's headers.
+                        float h = Pad * 2 + 15 + Gap + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
-                            foreach (var limit in known)
+                            Text(g, "Left", small, p.Muted, end - Measure(g, "Left", small), row);
+                            row += 15 + Gap;
+                            foreach (var limit in s.Limits)
                             {
-                                double value = limit.Remaining.Value;
-                                Color? tint = value <= 0.5 ? p.Error : value <= PanelState.Low ? p.Warning : (Color?)null;
+                                double? value = limit.Remaining;
+                                Color? tint = !value.HasValue ? (Color?)null : value <= 0.5 ? p.Error : value <= PanelState.Low ? p.Warning : (Color?)null;
                                 using (var dot = new SolidBrush(p.Provider(limit.Provider))) g.FillEllipse(dot, inner, row + 6, 7, 7);
                                 Text(g, limit.Name, strong, p.Text, inner + 13, row);
                                 Text(g, limit.Window, body, p.Muted, inner + 13 + Measure(g, limit.Name, strong) + 5, row);
-                                string percent = Math.Round(value) + "%";
-                                float percentWidth = Measure(g, percent, strong);
-                                Text(g, percent, strong, tint ?? p.Text, end - percentWidth, row);
-                                if (value <= PanelState.Low && limit.ResetsAt.HasValue)
-                                {
-                                    string back = "back " + Format.Clock(limit.ResetsAt.Value, s.Now);
-                                    Text(g, back, small, tint ?? p.Muted, end - percentWidth - 6 - Measure(g, back, small), row + 1);
-                                }
+                                string percent = value.HasValue ? Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%" : "Unknown";
+                                Font font = value.HasValue ? strong : body;
+                                Text(g, percent, font, value.HasValue ? tint ?? p.Text : p.Muted, end - Measure(g, percent, font), row);
                                 var track = new RectangleF(inner, row + 24, end - inner, 5);
                                 using (var path = Rounded(track, 2.5f)) using (var brush = new SolidBrush(p.Track)) g.FillPath(brush, path);
                                 if (value > 0)
-                                    using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(value / 100)), 5), 2.5f))
-                                    using (var brush = new SolidBrush(tint ?? p.Provider(limit.Provider))) g.FillPath(brush, path);
-                                row += 29 + Gap;
-                            }
-                            if (missing != null)
-                            {
-                                Ring(g, p.Muted, inner, row + 6);
-                                using (var brush = new SolidBrush(p.Muted))
-                                    g.DrawString(missing, body, brush, new RectangleF(inner + 13, row, missingWidth, missingHeight + 2), StringFormat.GenericTypographic);
+                                    using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(value.Value / 100)), 5), 2.5f))
+                                    using (var brush = new SolidBrush(p.Provider(limit.Provider))) g.FillPath(brush, path);
+                                row += 29;
+                                if (resets(limit))
+                                {
+                                    Text(g, "Resets in " + Format.Span(limit.ResetsAt.Value - s.Now), small, tint ?? p.Muted, inner, row + 2);
+                                    row += 17;
+                                }
+                                row += Gap;
                             }
                         }
                         y += h + Gap;
                     }
                     if (s.Devices.Count > 0)
                     {
-                        float h = Pad * 2 + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
+                        // Today per computer, in columns that each name what they hold. The cost header wraps over its column.
+                        // Column widths match the Mac panel: screen time 72, tokens 60, cost 92, gap 6. Screen time is right-aligned at timeRight.
+                        const float tokenColumn = 60, costColumn = 92, columnGap = 6;
+                        float costRight = right - Pad, tokenRight = costRight - costColumn - columnGap, timeRight = tokenRight - tokenColumn - columnGap;
+                        string costHeader = "API-equivalent (estimate)";
+                        var farFormat = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Far };
+                        float headerHeight = (float)Math.Ceiling(g.MeasureString(costHeader, small, (int)costColumn, farFormat).Height);
+                        float h = Pad * 2 + headerHeight + Gap + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
+                            float headerBase = row + headerHeight - 15;
+                            Text(g, "Today", small, p.Muted, inner, headerBase);
+                            Text(g, "Screen time", small, p.Muted, timeRight - Measure(g, "Screen time", small), headerBase);
+                            Text(g, "Tokens", small, p.Muted, tokenRight - Measure(g, "Tokens", small), headerBase);
+                            using (var brush = new SolidBrush(p.Muted))
+                                g.DrawString(costHeader, small, brush, new RectangleF(costRight - costColumn, row, costColumn, headerHeight + 2), farFormat);
+                            row += headerHeight + Gap;
                             foreach (var device in s.Devices)
                             {
-                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "") + (device.Current && device.Usd.HasValue ? "\nCost is an API-equivalent estimate" : "")));
+                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "")));
                                 Text(g, device.Name, strong, p.Text, inner, row);
-                                string value = device.Current ? Format.Today(device)
-                                    : device.LastSeen.HasValue ? "last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
-                                float width = Measure(g, value, body);
-                                Text(g, value, body, device.Current ? p.Text : p.Muted, end - width, row);
-                                if (!device.Current) Ring(g, p.Muted, end - width - 12, row + 6);
-                                // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
-                                else if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, end - width - 18, row + 3);
+                                if (device.Current)
+                                {
+                                    string time = !device.ScreenTimeOn ? "Off" : device.Seconds.HasValue ? Format.Duration(device.Seconds.Value) : "Unknown";
+                                    string tokens = device.Tokens.HasValue ? Format.Compact(device.Tokens.Value) : "Unknown";
+                                    string cost = device.Usd.HasValue ? Format.Money(device.Usd.Value) : "Unknown";
+                                    Text(g, time, body, p.Text, timeRight - Measure(g, time, body), row);
+                                    Text(g, tokens, body, p.Text, tokenRight - Measure(g, tokens, body), row);
+                                    Text(g, cost, body, p.Text, costRight - Measure(g, cost, body), row);
+                                    // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
+                                    if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, inner + Measure(g, device.Name, strong) + 6, row + 3);
+                                }
+                                else
+                                {
+                                    string value = device.LastSeen.HasValue ? "Last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
+                                    float width = Measure(g, value, body);
+                                    Text(g, value, body, p.Muted, end - width, row);
+                                    Ring(g, p.Muted, end - width - 12, row + 6);
+                                }
                                 row += 18 + Gap;
                             }
                         }

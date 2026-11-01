@@ -118,13 +118,13 @@ test('history slots use the latest valid reading and ignore hidden or invalid re
 test('peer present uses named devices and preserves observation freshness', () => {
   const data = { peerQuota: { host: 'Windows', status: 'ok', checkedAt: iso(-5), receivedAt: iso(-2), windows: [reading('codex', 'primary', 300, 43)] }, deviceNames: { Windows: 'Desk' } };
   const peer = peerLimits(data, now);
-  assert.equal(peer.device, 'Desk (Windows)');
+  assert.equal(peer.device, 'PC');
   assert.equal(peer.rows[0].remaining, 43);
   assert.equal(peer.stale, false);
   assert.equal(peer.observedAt, iso(-5));
   assert.equal(peer.receivedAt, iso(-2));
   delete data.deviceNames;
-  assert.equal(peerLimits(data, now).device, 'Windows');
+  assert.equal(peerLimits(data, now).device, 'PC');
   data.peerQuota.checkedAt = iso(-30);
   assert.equal(peerLimits(data, now).stale, true);
 });
@@ -142,7 +142,7 @@ test('sample fixture supplies both providers and the named peer', () => {
   const data = sampleSnapshot(now);
   const rows = limitRows(data, now);
   for (const provider of ['claude', 'codex']) assert.equal(rows.filter(row => row.provider === provider && row.remaining !== null).length, 2);
-  assert.equal(peerLimits(data, now).device, 'Desk (Windows)');
+  assert.equal(peerLimits(data, now).device, 'PC');
 });
 
 test('pace defensively filters malformed shapes without mutating the snapshot', () => {
@@ -192,10 +192,10 @@ test('computed pace alone supplies every projected window note', () => {
     asOf: data.quota.checkedAt, estimatedExhaustionAt: iso(170) }];
   for (const fixture of [data, sampleSnapshot(now)]) {
     for (const row of limitRows(fixture, now)) {
-      assert.doesNotMatch(row.note, /runs out in about 2h 50m/);
-      assert.equal(row.note.includes('runs out in about'), row.pace?.status === 'projected');
+      assert.doesNotMatch(row.note, /runs out in 2h 50m/);
+      assert.equal(row.note.includes('runs out in'), row.pace?.status === 'projected');
       if (row.pace?.status === 'projected') {
-        assert.equal(row.note.split(' · ')[1], 'runs out in about ' + span(row.pace.runsOutInMinutes * 60000));
+        assert.equal(row.note.split(' · ')[1], 'runs out in ' + span(row.pace.runsOutInMinutes * 60000));
       }
     }
   }
@@ -230,10 +230,10 @@ test('a carried window cannot project pace from the fresh source timestamp', () 
   assert.equal(rows[1].stale, true);
   assert.equal(rows[1].pace.status, 'stale');
   assert.equal(rows[1].pace.ratePerHour, null);
-  assert.doesNotMatch(rows[1].note, /runs out in about/);
+  assert.doesNotMatch(rows[1].note, /runs out in/);
 });
 
-test('limits view renders reset windows as Unknown in every limit style', async t => {
+test('limits view renders reset windows as Unknown', async t => {
   const { createServer } = await import('vite');
   const { default: react } = await import('@vitejs/plugin-react');
   const { fileURLToPath } = await import('node:url');
@@ -246,16 +246,13 @@ test('limits view renders reset windows as Unknown in every limit style', async 
   const { LimitRows } = await server.ssrLoadModule('/app/viewer/components/LimitRows.tsx');
   const data = { claudeLimits: { status: 'ok', checkedAt: iso(-2),
     windows: [{ ...reading('claude', 'five_hour', 300, 12), resetsAt: iso(-1) }] } };
-  for (const style of ['meter', 'numeral', 'text']) {
-    const html = renderToStaticMarkup(createElement(LimitRows, { rows: limitRows(data, now), style }));
-    assert.match(html, />Unknown</);
-    assert.match(html, /Waiting for the reset to be observed\./);
-    assert.doesNotMatch(html, />0%<|>12%<|width:0%|width:12%/);
-    if (style === 'meter') assert.match(html, /class="ob-bar" aria-hidden="true"><\/div>/);
-    if (style === 'text') assert.match(html, /class="ob-blocks" aria-hidden="true"/);
-    const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now, limitStyle: style }));
-    assert.match(view, /Waiting for the reset to be observed\.[\s\S]*?class="ob-num">Unknown<\/span>/);
-  }
+  const html = renderToStaticMarkup(createElement(LimitRows, { rows: limitRows(data, now) }));
+  assert.match(html, />Unknown</);
+  assert.match(html, /Waiting for the reset to be observed\./);
+  assert.doesNotMatch(html, />0%<|>12%<|width:0%|width:12%/);
+  assert.match(html, /class="ob-bar" aria-hidden="true"><\/div>/);
+  const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now }));
+  assert.match(view, /Waiting for the reset to be observed\.[\s\S]*?class="ob-num ob-unknown">Unknown<\/span>/);
 });
 
 test('Claude Code pace comes from the limit history when the reading keeps no samples, across a minute-rounded reset', () => {

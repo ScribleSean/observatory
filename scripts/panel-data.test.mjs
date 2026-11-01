@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deviceReadingReference, deviceReadingCurrent, compact, devices, duration, limits, periodDays, recordedDays, totals } from '../lib/panel-data.mjs';
+import { deviceReadingReference, deviceReadingCurrent, compact, devices, duration, limits, periodDays, recordedDays, totals, usd, limitsWithGaps } from '../lib/panel-data.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { readingTime } from '../lib/panel-data.mjs';
 import { spawnSync } from 'node:child_process';
@@ -172,7 +172,7 @@ test('All is withheld without verification or with a missing device', () => {
   assert.equal(totals(unverified, 'All', 'day', new Date(now)).codexTokens, null);
   const missing = snapshot(); missing.tokens[1].status = 'unavailable';
   assert.deepEqual(recordedDays(missing, 'tokens', 'All'), []);
-  assert.match(totals(missing, 'All', 'day', new Date(now)).note, /verified records/);
+  assert.equal(totals(missing, 'All', 'day', new Date(now)).note, strings.status.allUnverified);
 });
 
 test('a retired host blocks the combined total', () => {
@@ -206,7 +206,7 @@ test('Claude Code tokens are per device and have no combined total', () => {
   data.providerTokenSources = [{ provider: 'claude-code', host: 'Mac', status: 'ok', days: [day('2026-03-10', 70)] }];
   assert.equal(totals(data, 'Mac', 'day', new Date(now)).claudeTokens, 70);
   assert.equal(totals(data, 'All', 'day', new Date(now)).claudeTokens, null);
-  assert.equal(totals(data, 'All', 'day', new Date(now)).claudeNote, 'By device');
+  assert.equal(totals(data, 'All', 'day', new Date(now)).claudeNote, 'By computer');
   assert.equal(totals(data, 'Windows', 'day', new Date(now)).claudeTokens, null);
 });
 
@@ -227,15 +227,32 @@ test('limit rows mark old readings and low limits, and reject impossible values'
   assert.deepEqual([rows[0].window, rows[0].low, rows[0].stale, rows[0].remaining], ['5-hour', false, false, 81]);
   assert.deepEqual([rows[1].window, rows[1].low], ['weekly', true]);
   assert.equal(rows[2].remaining, null);
-  assert.match(rows[2].note, /Reset time unknown/);
+  assert.match(rows[2].note, /Reset: Unknown/);
   const old = limits({ quota: { ...quota, checkedAt: new Date(now - 3600000).toISOString() } }, now).filter(row => row.provider === 'codex');
   assert.deepEqual([old[0].low, old[0].stale], [false, true]);
   assert.match(old[0].note, /as of/);
 });
 
-test('device labels use a custom name or the platform name', () => {
-  assert.deepEqual(devices(snapshot()).map(device => device.label), ['macOS', 'Windows']);
-  assert.deepEqual(devices({ ...snapshot(), deviceNames: { Mac: ' Studio ' } }).map(device => device.label), ['Studio', 'Windows']);
+test('computers are labelled Mac and PC, and keep their own name for tooltips', () => {
+  assert.deepEqual(devices(snapshot()).map(device => [device.label, device.name]), [['Mac', 'Mac'], ['PC', 'PC']]);
+  assert.deepEqual(devices({ ...snapshot(), deviceNames: { Mac: ' Studio ' } }).map(device => [device.label, device.name]), [['Mac', 'Studio'], ['PC', 'PC']]);
+});
+
+test('one dollar format, rounded durations and the shared low threshold', () => {
+  assert.deepEqual([usd(null), usd(0), usd(0.004), usd(3.456), usd(9.994), usd(15.5), usd(86.56), usd(1234.4)],
+    ['Unknown', '$0.00', 'Under $0.01', '$3.46', '$9.99', '$16', '$87', '$1,234']);
+  assert.deepEqual([duration(89), duration(90), duration(3599), duration(3 * 3600 + 20 * 60 + 40)], ['1m', '2m', '1h 0m', '3h 21m']);
+  const quota = pct => ({ quota: { status: 'ok', checkedAt: new Date(now - 60000).toISOString(), windows: [
+    { bucket: 'codex', window: 'primary', durationMinutes: 300, remainingPercent: pct, resetsAt: new Date(now + 3600000).toISOString() }] } });
+  const row = pct => limits(quota(pct), now).find(item => item.provider === 'codex');
+  assert.deepEqual([16, 15, 0.5].map(pct => [row(pct).low, row(pct).spent]), [[false, false], [true, false], [true, true]]);
+});
+
+test('the Overview and panels always list both windows of a connected provider', () => {
+  const quota = { status: 'ok', checkedAt: new Date(now - 60000).toISOString(), windows: [
+    { bucket: 'codex', window: 'secondary', durationMinutes: 10080, remainingPercent: 50, resetsAt: new Date(now + 86400000).toISOString() }] };
+  const rows = limitsWithGaps(limits({ quota }, now));
+  assert.deepEqual(rows.map(row => [row.provider, row.window, row.remaining]), [['claude', '', null], ['codex', '5-hour', null], ['codex', 'weekly', 50]]);
 });
 
 test('the sample snapshot renders every row with a value', () => {
@@ -264,7 +281,7 @@ test('stored pace remains the default and can be omitted without changing other 
   assert.deepEqual(limits(data, now), limits(data, now, { storedPace: true }));
   const without = limits(data, now, { storedPace: false });
   limits(data, now).forEach((row, index) => {
-    assert.equal(row.note, 'Resets in 1h 0m · runs out in about 30m');
+    assert.equal(row.note, 'Resets in 1h 0m · runs out in 30m');
     assert.deepEqual(without[index], { ...row, note: 'Resets in 1h 0m' });
   });
 });

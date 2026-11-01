@@ -48,7 +48,6 @@
   },
   "font": "sans",
   "numeralFont": "sans",
-  "radius": 12,
-  "rules": false,
-  "limitStyle": "bar"
+  "radius": 14,
+  "rules": false
 }

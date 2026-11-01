@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokensView, money } from '../lib/view-tokens.mjs';
+import { tokensView, maskHours } from '../lib/view-tokens.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { devices, periodDays, today } from '../lib/panel-data.mjs';
 
@@ -37,7 +37,8 @@ test('sample Mac week uses recorded classes, estimates, prices and settings', ()
     assert.equal(block.estimate.usd, sum(selected.map(row => row.apiEstimate), 'usd'));
     assert.equal(block.estimate.coveredTokens, block.totals.total);
     assert.equal(block.estimate.partial, false);
-    assert.equal(block.days.length, 30);
+    assert.equal(block.days.length, days.filter(row => row.date <= today(source.timezone, now)).length);
+    assert.ok(block.days.every(row => row.hours === null || row.hours.length === 24));
   }
   assert.deepEqual(result.devices, devices(source));
   assert.deepEqual(result.prices, source.prices);
@@ -53,7 +54,7 @@ test('All uses only the verified aggregate and separate Claude devices', () => {
   assert.equal(result.codex.totals.total, 7);
   assert.notEqual(result.codex.totals.total, sum(source.tokens.flatMap(row => row.days), 'totalTokens'));
   assertEmpty(result.claude, 'by-device');
-  assert.deepEqual(result.claude.byDevice.map(row => row.label), ['Studio', 'Desk']);
+  assert.deepEqual(result.claude.byDevice.map(row => row.label), ['Mac', 'PC']);
   for (const row of result.claude.byDevice) {
     const device = view(source, { host: row.host }).claude;
     assert.equal(row.total, device.totals.total);
@@ -151,13 +152,13 @@ test('model grouping sorts by total then name and skips missing model arrays', (
     assert.equal(view(snapshot([day({ models: [model({ apiEstimate: value })] })])).codex.models[0].usd, null);
 });
 
-test('charts cover the anchored month independently of the selected period', () => {
+test('charts get every recorded day up to the anchor, whatever the period', () => {
   const source = snapshot([day(), day({ date: '2026-09-15', totalTokens: null }), day({ date: '2026-09-14' }),
     day({ date: '2026-10-15' }), day({ date: '2026-10-13' })]);
   for (const period of ['day', 'week', 'month', 'all']) {
     const result = view(source, { period });
     for (const provider of ['codex', 'claude']) assert.deepEqual(result[provider].days,
-      [{ date: '2026-09-15', total: null }, { date: '2026-10-13', total: 10 }, { date: '2026-10-14', total: 10 }]);
+      [{ date: '2026-09-14', total: 10, hours: null }, { date: '2026-09-15', total: null, hours: null }, { date: '2026-10-13', total: 10, hours: null }, { date: '2026-10-14', total: 10, hours: null }]);
   }
   source.timezone = 'America/Los_Angeles';
   assert.equal(view(source, { period: 'day', now: new Date('2026-10-14T01:00:00Z') }).codex.days.at(-1).date, '2026-10-13');
@@ -222,18 +223,18 @@ test('invalid day dates make the whole source unknown', () => {
 test('Claude-only hosts populate devices, sole-host totals and settings', () => {
   const source = { providerTokenSources: snapshot().providerTokenSources };
   const result = view(source, { host: 'All' });
-  assert.deepEqual(result.devices, [{ id: 'Mac', label: 'macOS' }]);
+  assert.deepEqual(result.devices, [{ id: 'Mac', label: 'Mac', name: 'Mac' }]);
   assert.deepEqual(result.claude.byDevice, []);
   assert.equal(result.claude.status, 'ok');
   assert.equal(result.claude.totals.total, 10);
   assert.equal(result.claude.estimate.usd, 1);
-  assert.deepEqual(result.settings, [{ host: 'Mac', label: 'macOS', status: 'unknown', rows: [] }]);
+  assert.deepEqual(result.settings, [{ host: 'Mac', label: 'Mac', status: 'unknown', rows: [] }]);
   source.providerTokenSources.unshift({ provider: 'claude-code', host: 'Windows', status: 'unavailable' });
   source.providerTokenSources.push({ provider: 'claude-code', host: 'Ubuntu', status: 'ok' });
   source.deviceNames = { Mac: '  Studio  ', Windows: ' ' };
-  assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Studio' }, { id: 'Windows', label: 'Windows' }]);
+  assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Mac', name: 'Studio' }, { id: 'Windows', label: 'PC', name: 'PC' }]);
   source.providerTokenSources[0].status = 'not-connected';
-  assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Studio' }]);
+  assert.deepEqual(view(source).devices, [{ id: 'Mac', label: 'Mac', name: 'Studio' }]);
 });
 
 test('settings group by model effort and speed without changing collector values', () => {
@@ -266,11 +267,10 @@ test('Now leaves provider blocks empty while preserving settings', () => {
   }
 });
 
-test('money accepts only finite nonnegative numbers', () => {
-  assert.equal(money(3.4), '3.40');
-  assert.equal(money(0), '0.00');
-  assert.equal(money(3.456), '3.46');
-  for (const invalid of [null, NaN, -1, undefined, Infinity, '3.4']) assert.equal(money(invalid), null);
+test('an Unknown Claude Code total says why', () => {
+  const source = snapshot();
+  source.providerTokenSources[0].status = 'unavailable';
+  assert.equal(view(source).claude.note, 'Unavailable');
 });
 
 test('an empty snapshot never invents zero totals or dollars', () => {
@@ -332,7 +332,7 @@ test('late token periods hide partial totals but retain complete daily values', 
     const result = view(data, { period });
     for (const provider of ['codex', 'claude']) {
       assertEmpty({ ...result[provider], days: [] }, 'unknown');
-      assert.deepEqual(result[provider].days, [{ date: '2026-10-13', total: 10 }]);
+      assert.deepEqual(result[provider].days, [{ date: '2026-10-13', total: 10, hours: null }]);
       assert.match(result[provider].note, /as of/);
     }
     assert.equal(result.settings[0].status, 'unknown');
@@ -344,4 +344,14 @@ test('late token periods hide partial totals but retain complete daily values', 
     assert.equal(earlier[provider].note, '');
   }
   assert.equal(earlier.settings[0].rows[0].totalTokens, 10);
+});
+
+test('token hours after the last reading are Unknown and hours after now are blank', () => {
+  const day = { date: '2026-10-14', total: 24, hours: Array(24).fill(1) };
+  const [masked] = maskHours([day], '2026-10-14T10:20:00Z', 'UTC', Date.parse('2026-10-14T12:32:00Z'));
+  assert.deepEqual(masked.hours, [...Array(11).fill(1), null, null, ...Array(11).fill(undefined)]);
+  const [unread] = maskHours([day], undefined, 'UTC', Date.parse('2026-10-14T12:32:00Z'));
+  assert.deepEqual(unread.hours.slice(0, 13), Array(13).fill(null));
+  const [past] = maskHours([{ ...day, date: '2026-10-13' }], '2026-10-14T10:20:00Z', 'UTC', Date.parse('2026-10-14T12:32:00Z'));
+  assert.deepEqual(past.hours, Array(24).fill(1));
 });

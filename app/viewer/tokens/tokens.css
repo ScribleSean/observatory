@@ -1,49 +1,55 @@
 .ob-tokens { container-type: inline-size; min-width: 0; }
-.ob-tokens-providers { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); margin-top: var(--ob-space-3); }
-.ob-tokens-providers > .ob-card { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: var(--ob-space-4); align-content: start; min-width: 0; margin-top: 0; }
+.ob-tokens-providers, .ob-tokens-lower { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
+.ob-tokens-lower { margin-top: var(--ob-space-3); align-items: start; }
+.ob-tokens-lower:empty { display: none; }
+.ob-tokens-providers > .ob-card { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: var(--ob-space-4); align-content: start; min-width: 0; }
 .ob-tokens-providers > .ob-card > * { min-width: 0; }
-.ob-tokens-providers > .ob-card > h3 { margin: 0; display: flex; align-items: center; gap: var(--ob-space-2); font-size: 15px; }
+.ob-tokens-head .ob-hero { margin-top: 0; }
 .ob-tokens-head > * + * { margin-top: var(--ob-space-2); }
 .ob-tokens-head .ob-tokens-table { margin: var(--ob-space-3) 0 0; }
-.ob-tokens .ob-bars-head h3 { margin: 0; font-size: var(--ob-meta-size); font-weight: 500; color: var(--ob-muted); letter-spacing: 0; }
 .ob-tokens-breakdown { border-top: 1px solid var(--ob-track); padding-top: var(--ob-space-2); }
-.ob-tokens-breakdown > summary { cursor: pointer; list-style: none; color: var(--ob-muted); font-size: var(--ob-meta-size); padding: var(--ob-space-1) 0; }
-.ob-tokens-breakdown > summary::-webkit-details-marker { display: none; }
-.ob-tokens-breakdown > summary::before { content: ''; display: inline-block; width: 0.4em; height: 0.4em; margin: 0 0.6em 0.15em 0.1em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 120ms; }
-.ob-tokens-breakdown[open] > summary::before { transform: rotate(45deg); }
+.ob-tokens-breakdown > summary { color: var(--ob-muted); font-size: var(--ob-meta-size); padding: var(--ob-space-1) 0; }
 .ob-tokens-breakdown h4:first-of-type { margin-top: var(--ob-space-3); }
-.ob-tokens h3 { margin: 0 0 var(--ob-space-3); font-size: var(--ob-section-size); }
-.ob-tokens h4 { margin: var(--ob-space-3) 0 var(--ob-space-2); }
-.ob-tokens-note { color: var(--ob-muted); font-size: var(--ob-meta-size); }
 .ob-tokens-classes { margin: 0; }
 .ob-tokens-classes > div { display: flex; justify-content: space-between; gap: var(--ob-space-2); padding: 6px 0; }
 .ob-tokens-classes > div + div { border-top: 1px solid var(--ob-track); }
 .ob-tokens-classes dd { margin: 0; }
-.ob-tokens dd, .ob-tokens td, .ob-tokens-estimate { font-variant-numeric: tabular-nums; }
-.ob-tokens td, .ob-tokens dd { font-family: var(--ob-numeral-font); }
+.ob-tokens dd, .ob-tokens td { font-family: var(--ob-numeral-font); font-variant-numeric: tabular-nums; }
 .ob-tokens-estimate, .ob-tokens-table { margin: var(--ob-space-3) 0; }
+.ob-tokens-estimate .ob-meta { margin-top: var(--ob-space-1); }
 .ob-tokens-table { max-width: 100%; overflow-x: auto; }
-.ob-tokens table { width: 100%; border-collapse: collapse; overflow-wrap: anywhere; }
-.ob-tokens th, .ob-tokens td { text-align: start; vertical-align: top; padding: 6px var(--ob-space-2) 6px 0; }
-.ob-tokens tbody tr { border-top: 1px solid var(--ob-track); }
-.ob-tokens thead th { color: var(--ob-muted); font-size: var(--ob-meta-size); font-weight: 500; }
-.ob-tokens th:last-child, .ob-tokens td:last-child { padding-right: 0; text-align: end; }
-.ob-tokens tbody th { font-weight: 400; }
-.ob-tokens caption { text-align: start; font-weight: 600; margin-bottom: var(--ob-space-2); }
-@container (min-width: 720px) {
-  .ob-tokens-providers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.ob-tokens table { width: 100%; border-collapse: collapse; }
+.ob-tokens th, .ob-tokens td { text-align: start; vertical-align: top; padding: 6px var(--ob-space-3) 6px 0; }
+.ob-tokens tbody th { font-weight: 400; overflow-wrap: anywhere; }
 .ob-tokens td { white-space: nowrap; }
+.ob-tokens tbody tr { border-top: 1px solid var(--ob-track); }
+.ob-tokens thead th { color: var(--ob-muted); font-size: var(--ob-meta-size); font-weight: 500; overflow-wrap: normal; }
+.ob-tokens th:last-child, .ob-tokens td:last-child { padding-right: 0; text-align: end; }
+.ob-tokens-settings + .ob-tokens-settings h4 { margin-top: var(--ob-space-4); }
+@container (min-width: 720px) {
+  .ob-tokens-providers, .ob-tokens-lower { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.ob-projects { margin-top: var(--ob-space-3); }
 .ob-projects + .ob-projects { margin-top: var(--ob-space-4); }
 .ob-projects-list, .ob-projects-sessions { list-style: none; margin: 0; padding: 0; }
 .ob-projects-list > li + li { border-top: 1px solid var(--ob-track); }
-.ob-projects-row { display: grid; grid-template-columns: minmax(0, 1fr) 3.5rem 6.75rem; align-items: baseline; gap: var(--ob-space-2); padding: 6px 0; }
-.ob-projects summary { cursor: pointer; list-style: none; }
-.ob-projects summary::-webkit-details-marker { display: none; }
-.ob-projects-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ob-projects summary .ob-projects-name::before { content: ''; display: inline-block; width: 0.4em; height: 0.4em; margin: 0 0.6em 0.15em 0.1em; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 120ms; color: var(--ob-muted); }
-.ob-projects details[open] > summary .ob-projects-name::before { transform: rotate(45deg); }
-.ob-projects-num { font-family: var(--ob-numeral-font); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: end; }
+.ob-projects-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 4rem 8.5rem; align-items: baseline; gap: var(--ob-space-2); padding: 6px 0; }
+.ob-projects-header { color: var(--ob-muted); font-size: var(--ob-meta-size); font-weight: 500; }
+.ob-projects .ob-disclosure > summary.ob-projects-row { display: grid; }
+/* The chevron hangs in the card padding, so project names line up with the Codex models column. */
+.ob-projects .ob-disclosure > summary.ob-projects-row::before { position: absolute; left: -1em; top: 0.95em; margin: 0; }
+.ob-projects-name { min-width: 0; overflow-wrap: anywhere; }
+.ob-projects-num { font-family: var(--ob-numeral-font); font-variant-numeric: tabular-nums; text-align: end; }
 .ob-projects-sessions { padding-bottom: var(--ob-space-2); }
-.ob-projects-sessions .ob-projects-row { padding: var(--ob-space-1) 0 var(--ob-space-1) calc(var(--ob-body-size) * 1.1); color: var(--ob-muted); font-size: var(--ob-meta-size); }
-@media (prefers-reduced-motion: reduce) { .ob-projects summary .ob-projects-name::before, .ob-tokens-breakdown > summary::before { transition: none; } }
+.ob-projects-sessions .ob-projects-row { padding-top: var(--ob-space-1); padding-bottom: var(--ob-space-1); color: var(--ob-muted); font-size: var(--ob-meta-size); }
+.ob-projects-sessions .ob-projects-row { padding-left: 1.1em; }
+@container (max-width: 480px) {
+  .ob-projects-row { grid-template-columns: minmax(0, 1fr) 3.5rem 5rem; }
+}
+/* Narrow: model ids stay whole, and the table steps down to the label size so Reasoning and Speed fit beside them. */
+.ob-tokens-settings tbody th { white-space: nowrap; overflow-wrap: normal; }
+@container (max-width: 480px) {
+  .ob-tokens-settings table { font-size: var(--ob-meta-size); }
+  .ob-tokens-settings th, .ob-tokens-settings td { padding-right: var(--ob-space-2); }
+}

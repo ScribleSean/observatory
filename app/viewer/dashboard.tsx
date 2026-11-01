@@ -1,6 +1,6 @@
 import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
-import { freshness, format, readingTime } from '../../lib/panel-data.mjs';
+import { freshness, format, readingTime, deviceLabel } from '../../lib/panel-data.mjs';
 import { shiftDemoClock } from '../../lib/demo-clock.mjs';
 import { useSkin } from './skin';
 
@@ -19,6 +19,8 @@ const SECTIONS = [
   ['tokens', STRINGS.sections.tokens], ['sources', STRINGS.sections.sources],
 ] as const;
 type Section = typeof SECTIONS[number][0];
+// The id of the all-computers filter. Its label is STRINGS.devices.all.
+const ALL_HOSTS = 'All';
 export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
 
 function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
@@ -28,8 +30,8 @@ function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
       {devices.map(device => {
         const age = freshness(device.collectedAt ?? '', now);
         return (
-          <li key={device.host} className={age.stale ? 'warn' : ''} title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>
-            <i aria-hidden="true" />{device.name}{!device.collectedAt ? <span className="ob-meta">{STRINGS.today.noSnapshot}</span> : age.stale ? <span className="ob-meta">{format(STRINGS.overview.lastSeen, { time: readingTime(Date.parse(device.collectedAt), now) })}</span> : null}
+          <li key={device.host} className={age.stale ? 'warn' : ''} title={[device.name, device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : ''].filter(Boolean).join('\n')}>
+            <i aria-hidden="true" />{deviceLabel(device.host)}{!device.collectedAt ? <span className="ob-meta">{STRINGS.today.noSnapshot}</span> : age.stale ? <span className="ob-meta">{format(STRINGS.overview.lastSeen, { time: readingTime(Date.parse(device.collectedAt), now) })}</span> : null}
           </li>
         );
       })}
@@ -38,7 +40,7 @@ function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
 }
 
 export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: string }) {
-  const { css, className, skin } = useSkin(initialSkin);
+  const { css, className } = useSkin(initialSkin);
   const [combined, setCombined] = useState<Combined | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [section, setSection] = useState<Section>(() => sectionFromHash(window.location.hash));
@@ -68,13 +70,12 @@ export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: stri
     return () => { clearTimeout(first); clearInterval(tick); document.removeEventListener('visibilitychange', visible); };
   }, [load]);
 
-  return <DashboardView combined={combined} loaded={loaded} now={now} limitStyle={skin.limitStyle} css={css} className={className} section={section}
+  return <DashboardView combined={combined} loaded={loaded} now={now} css={css} className={className} section={section}
     onSectionChange={id => { setSection(id); history.replaceState(history.state, '', `#${id}`); }} />;
 }
 
 type DashboardViewProps = {
   combined: Combined | null;
-  limitStyle: string;
   loaded: boolean;
   now: number;
   css: string;
@@ -83,11 +84,11 @@ type DashboardViewProps = {
   onSectionChange: (section: Section) => void;
 };
 
-export function DashboardView({ combined, limitStyle, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
+export function DashboardView({ combined, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
   const snapshot = combined?.view ?? null;
   const fresh = freshness(combined?.generatedAt ?? '', now);
   // zero-ok: a count of computers, not a reading.
-  const home = (combined?.devices?.length ?? 0) > 1 && combined?.generatedBy ? combined.generatedBy : 'All';
+  const home = (combined?.devices?.length ?? 0) > 1 && combined?.generatedBy ? combined.generatedBy : ALL_HOSTS;
   const showOverallAge = !loaded || !combined || fresh.stale;
   return (
     <div className={`ob-dashboard ${className}`}>
@@ -112,7 +113,7 @@ export function DashboardView({ combined, limitStyle, loaded, now, css, classNam
       </nav>}
       {combined && <main>
         <section aria-label={SECTIONS.find(([id]) => id === section)![1]}>
-          {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} limitStyle={limitStyle} />
+          {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} />
             : section === 'activity' ? <ActivityView key={home} snapshot={snapshot} now={now} initialHost={home} />
             : section === 'tokens' ? <TokensView key={home} snapshot={snapshot} now={now} initialHost={home} />
             : <SourcesView snapshot={snapshot} now={now} />}
