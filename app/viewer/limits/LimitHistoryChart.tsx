@@ -188,14 +188,14 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
           </div>)}
         </div>}
       </div>
-      <table className="ob-visually-hidden">
+      <div className="ob-visually-hidden"><table>
         <caption>{title}</caption>
         <thead><tr><th scope="col">{STRINGS.limitHistory.time}</th>{series.map(item => <th key={item.host} scope="col">{shortName(item)}</th>)}</tr></thead>
         <tbody>{items.slice(-200).reverse().map((item, index) => <tr key={index}>
           <th scope="row">{item.start !== undefined ? format(STRINGS.limitHistory.windowSpan, { start: stamp(item.start), end: hour(item.end!) }) : stamp(item.t)}</th>
           {series.map(entry => { const row = item.rows.find(part => part.host === entry.host); return <td key={entry.host}>{row ? format(columns ? STRINGS.limitHistory.lowest : STRINGS.limitHistory.left, { value: Math.round(row.value) }) : STRINGS.status.unknown}</td>; })}
         </tr>)}</tbody>
-      </table>
+      </table></div>
     </figure>
   );
 }
