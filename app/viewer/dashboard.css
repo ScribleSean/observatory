@@ -37,7 +37,7 @@
 .ob-chips li.warn i { background: var(--ob-warning); }
 
 .ob-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); margin-top: var(--ob-space-5); }
-.ob-tile { display: flex; flex-direction: column; min-width: 0; }
+.ob-tile { display: flex; flex-direction: column; min-width: 0; container-type: inline-size; }
 .ob-tile-body { display: flex; flex-direction: column; flex: 1; }
 /* Side by side, the tiles share three rows (title, headline, body), so the big numbers line up even when a title wraps. */
 @media (min-width: 760px) {

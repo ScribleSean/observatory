@@ -1,6 +1,6 @@
 .ob-limits { min-width: 0; overflow-wrap: anywhere; display: grid; gap: var(--ob-space-3); }
 .ob-history-grid-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); }
-.ob-history-grid-cards > * { min-width: 0; }
+.ob-history-grid-cards > * { min-width: 0; container-type: inline-size; }
 @media (min-width: 860px) { .ob-history-grid-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .ob-history-grid-cards .ob-card-head { margin-bottom: var(--ob-space-3); }
 .ob-peer-rows { margin-top: var(--ob-space-3); }

@@ -52,7 +52,7 @@ void test('a stale reading shows Unknown and its warning, never a projection', (
   data.claudeLimits.checkedAt = data.quota.checkedAt = iso(-30);
   const html = render(data);
   assert.doesNotMatch(html, /runs out in/);
-  assert.match(card(html, 'Codex 5-hour'), /class="ob-meta warn"/);
+  assert.match(card(html, 'Codex 5-hour'), /class="ob-note ob-meta warn"/);
   assert.match(card(html, 'Codex 5-hour'), /class="ob-num ob-unknown">Unknown</);
 });
 

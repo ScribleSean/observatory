@@ -34,15 +34,16 @@
 .ob-projects + .ob-projects { margin-top: var(--ob-space-4); }
 .ob-projects-list, .ob-projects-sessions { list-style: none; margin: 0; padding: 0; }
 .ob-projects-list > li + li { border-top: 1px solid var(--ob-track); }
-.ob-projects-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 4rem 8.5rem; align-items: baseline; gap: var(--ob-space-2); padding: 6px 0 6px 1.1em; }
+.ob-projects-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 4rem 8.5rem; align-items: baseline; gap: var(--ob-space-2); padding: 6px 0; }
 .ob-projects-header { color: var(--ob-muted); font-size: var(--ob-meta-size); font-weight: 500; }
 .ob-projects .ob-disclosure > summary.ob-projects-row { display: grid; }
-.ob-projects .ob-disclosure > summary.ob-projects-row::before { position: absolute; left: 0.1em; top: 0.95em; margin: 0; }
+/* The chevron hangs in the card padding, so project names line up with the Codex models column. */
+.ob-projects .ob-disclosure > summary.ob-projects-row::before { position: absolute; left: -1em; top: 0.95em; margin: 0; }
 .ob-projects-name { min-width: 0; overflow-wrap: anywhere; }
 .ob-projects-num { font-family: var(--ob-numeral-font); font-variant-numeric: tabular-nums; text-align: end; }
 .ob-projects-sessions { padding-bottom: var(--ob-space-2); }
 .ob-projects-sessions .ob-projects-row { padding-top: var(--ob-space-1); padding-bottom: var(--ob-space-1); color: var(--ob-muted); font-size: var(--ob-meta-size); }
-.ob-projects-sessions .ob-projects-row { padding-left: 2.2em; }
+.ob-projects-sessions .ob-projects-row { padding-left: 1.1em; }
 @container (max-width: 480px) {
   .ob-projects-row { grid-template-columns: minmax(0, 1fr) 3.5rem 5rem; }
 }

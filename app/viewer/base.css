@@ -37,4 +37,10 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 @media (prefers-reduced-motion: reduce) { .ob-disclosure > summary::before { transition: none; } }
 
 .ob-nowrap { white-space: nowrap; }
+.ob-note-dot { white-space: pre; }
+/* In a narrow card, a note's parts stack and lose their dots. Cards that hold notes are size containers. */
+@container (max-width: 440px) {
+  .ob-note { display: inline-flex; flex-direction: column; align-items: flex-end; }
+  .ob-note-dot { display: none; }
+}
 .ob-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }

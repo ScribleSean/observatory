@@ -30,7 +30,7 @@ export function SourcesView({ snapshot, now }: { snapshot: Record<string, unknow
               {!single && <span className="ob-source-device" title={row.deviceName && row.deviceName !== row.device ? row.deviceName : undefined}>{row.device}</span>}
               <time className="ob-meta ob-source-time" dateTime={row.check.iso ?? undefined} title={row.check.exact ?? undefined}>{row.check.label}</time>
               {/* The header already says how many were read, so Read itself is left out. */}
-              <span className="ob-source-status">{row.status === 'ok' ? '' : row.statusWord}</span>
+              <span className="ob-source-status">{row.status === 'ok' ? <span className="ob-visually-hidden">{row.statusWord}</span> : row.statusWord}</span>
               {row.refusal && <p className="ob-meta ob-source-refusal">{row.refusal}</p>}
             </div>;
           })}
