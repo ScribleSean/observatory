@@ -168,3 +168,10 @@ test('with one computer, Sources leaves out the computer column and lists only t
   const count=(html.match(/class="ob-source-row"/g) ?? []).length;
   assert.match(html,new RegExp(`of ${count} sources read`));
 });
+
+test('with nothing connected, Sources says so instead of counting 0 of N',()=>{
+  const html=renderToStaticMarkup(createElement(SourcesView,{now,snapshot:{claudeLimits:{status:'not-connected'},quota:{status:'not-connected'}}}));
+  assert.ok(html.includes('No sources are connected'));
+  assert.ok(!html.includes('sources read'));
+  assert.ok(!html.includes('ob-card'));
+});

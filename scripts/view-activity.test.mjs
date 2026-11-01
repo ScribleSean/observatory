@@ -96,7 +96,10 @@ test('hourly masks hours after reading but retains the reading hour', () => {
   // Later hours have not happened yet, so they are blank rather than Unknown.
   assert.ok(result.hourly.slice(13).every(point => point.value === undefined));
   assert.deepEqual([result.hourly[0].label, result.hourly[13].label], ['12 AM', '1 PM']);
-  assert.equal(result.hourlyTitle, strings.activity.hourlyTitle);
+  assert.ok(result.hourlyTitle.startsWith(strings.activity.hourlyTitle));
+  // The zone is named only when the data's clock differs from the viewer's.
+  const tokyo = snapshot(); tokyo.timezone = 'Asia/Tokyo';
+  assert.equal(view(tokyo).hourlyTitle, 'Screen time by hour, GMT+9');
   assert.equal(view(undefined, { period: 'week' }).hourly, null);
 });
 test('missing hours and dates after the reading are Unknown', () => {

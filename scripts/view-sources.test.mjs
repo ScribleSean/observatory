@@ -35,7 +35,7 @@ void test('all six source groups retain supported rows and device names', () => 
     activity: [mac, win, other], tokens: [mac, other], providerTokenSources: [{ ...win, provider: 'claude-code' }, { ...mac, provider: 'other' }],
     settings: [win] };
   const groups = sourceGroups(snapshot, now);
-  assert.deepEqual(groups.map(group => group.id), ['claudeLimits', 'codexLimits', 'activity', 'codexTokens', 'claudeTokens', 'settings']);
+  assert.deepEqual(groups.map(group => group.id), ['claudeLimits', 'codexLimits', 'activity', 'claudeTokens', 'codexTokens', 'settings']);
   assert.deepEqual(groups.map(group => group.rows.length), [1, 2, 2, 1, 1, 1]);
   assert.deepEqual([...groups[0].rows, ...groups[1].rows].map(row => row.device), [null, null, 'PC']);
   assert.deepEqual([groups[2].rows[0].device, groups[2].rows[0].deviceName], ['Mac', 'Synthetic laptop']);
@@ -49,10 +49,10 @@ void test('all six source groups retain supported rows and device names', () => 
 });
 void test('totals count every row shown and order status words', () => {
   const groups = sourceGroups({ activity: [...codes, 'future-status', 'ok'].map(status => ({ host: 'Mac', status })) });
-  assert.deepEqual(sourceTotals(groups), { read: 2, total: 11,
+  assert.deepEqual(sourceTotals(groups), { read: 2, total: 11, connected: 10,
     byStatus: [...words, 'Unknown'].map(word => ({ word, count: word === 'Read' ? 2 : 1 })) });
-  assert.deepEqual(sourceTotals(sourceGroups({})), { read: 0, total: 0, byStatus: [] });
-  assert.deepEqual(sourceTotals(sourceGroups({ quota: { status: 'not-connected' } })), { read: 0, total: 1, byStatus: [{ word: 'Not connected', count: 1 }] });
+  assert.deepEqual(sourceTotals(sourceGroups({})), { read: 0, total: 0, connected: 0, byStatus: [] });
+  assert.deepEqual(sourceTotals(sourceGroups({ quota: { status: 'not-connected' } })), { read: 0, total: 1, connected: 0, byStatus: [{ word: 'Not connected', count: 1 }] });
 });
 void test('a read row shows no refusal sentence, a refused row does', () => {
   const snapshot = { activity: [

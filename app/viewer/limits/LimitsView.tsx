@@ -14,7 +14,6 @@ const providers = [['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.p
 // The same period words as Activity and Tokens.
 const ranges: [string, string][] = [['today', STRINGS.periods.day], ['week', STRINGS.periods.week], ['month', STRINGS.periods.month], ['all', STRINGS.periods.all]];
 const windows = [['5h', STRINGS.limitHistory.fiveHour, '5-hour'], ['week', STRINGS.limitHistory.weekly, 'weekly']] as const;
-const percent = (value: number) => format(STRINGS.formats.percent, { value: Math.round(value) });
 
 type Row = ReturnType<typeof limitRows>[number];
 
@@ -24,7 +23,7 @@ function Latest({ row }: { row: Row | undefined }) {
   const tone = value === null ? '' : limitTone(row!);
   return <span className="ob-history-latest">
     {row?.note && <Note className={row.stale ? 'ob-meta warn' : 'ob-meta'} text={row.note} />}
-    <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null ? STRINGS.status.unknown : percent(value)}</span>
+    <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null ? STRINGS.status.unknown : format(STRINGS.limitHistory.left, { value: Math.round(value) })}</span>
   </span>;
 }
 

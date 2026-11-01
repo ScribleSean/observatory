@@ -12,10 +12,10 @@ export function SourcesView({ snapshot, now }: { snapshot: Record<string, unknow
   const single = new Set(groups.flatMap(group => group.rows.map(row => row.device)).filter(Boolean)).size <= 1;
   return <div className="ob-sources">
     <div className="ob-sources-summary">
-      <p>{totals.total ? format(STRINGS.formats.sourcesRead, { read: totals.read, total: totals.total }) : STRINGS.sources.noConnected}</p>
-      {others.length > 0 && <ul className="ob-source-counts">{others.map(item => <li key={item.word}>{format(STRINGS.sources.statusCount, item)}</li>)}</ul>}
+      <p>{totals.connected ? format(STRINGS.formats.sourcesRead, { read: totals.read, total: totals.total }) : STRINGS.sources.noConnected}</p>
+      {totals.connected > 0 && others.length > 0 && <ul className="ob-source-counts">{others.map(item => <li key={item.word}>{format(STRINGS.sources.statusCount, item)}</li>)}</ul>}
     </div>
-    {totals.total > 0 && <Card label={STRINGS.sections.sources}>
+    {totals.connected > 0 && <Card label={STRINGS.sections.sources}>
       <div className={single ? 'ob-sources-list ob-sources-single' : 'ob-sources-list'}>
         {groups.map(group => <section key={group.id} className="ob-sources-group" aria-label={group.label}>
           {group.rows.length === 0 ? <div className="ob-source-row">
@@ -29,7 +29,8 @@ export function SourcesView({ snapshot, now }: { snapshot: Record<string, unknow
               <span className={repeat ? 'ob-source-name ob-source-repeat' : 'ob-source-name'}>{row.name}</span>
               {!single && <span className="ob-source-device" title={row.deviceName && row.deviceName !== row.device ? row.deviceName : undefined}>{row.device}</span>}
               <time className="ob-meta ob-source-time" dateTime={row.check.iso ?? undefined} title={row.check.exact ?? undefined}>{row.check.label}</time>
-              <span className="ob-source-status">{row.statusWord}</span>
+              {/* The header already says how many were read, so Read itself is left out. */}
+              <span className="ob-source-status">{row.status === 'ok' ? '' : row.statusWord}</span>
               {row.refusal && <p className="ob-meta ob-source-refusal">{row.refusal}</p>}
             </div>;
           })}

@@ -26,7 +26,8 @@ export function Meter(row: LimitProps) {
       </Row>
       {row.note && <div className={row.stale ? 'ob-meta warn' : 'ob-meta'}>{row.note}</div>}
       <div className="ob-bar" aria-hidden="true">
-        {row.remaining !== null && <i className={tone || row.provider} style={{ width: `${row.remaining}%` }} />}
+        {/* The bar keeps the product colour. Only the number turns amber or red. */}
+        {row.remaining !== null && <i className={row.provider} style={{ width: `${row.remaining}%` }} />}
       </div>
     </div>
   );

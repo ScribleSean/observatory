@@ -157,7 +157,8 @@ export const STRINGS = {
     "trackingUnavailable": "ActivityWatch not reachable",
     "helpAddress": "activitywatch.net",
     "previousDay": "Previous day",
-    "nextDay": "Next day"
+    "nextDay": "Next day",
+    "hourlyZoneTitle": "Screen time by hour, {zone}"
   },
   "today": {
     "noSnapshot": "No snapshot",
@@ -165,14 +166,15 @@ export const STRINGS = {
     "unreachable": "Last pull failed: {reason}"
   },
   "overview": {
-    "limitsTitle": "Limits",
+    "limitsTitle": "Limits left",
     "timeTitle": "Screen time today",
     "costTitle": "API-equivalent (estimate) today",
     "tokens": "{value} tokens",
     "bothNote": "Both computers, not deduplicated",
     "asOf": "as of {time}",
     "lastDay": "Last update was {time}",
-    "lastSeen": "Last seen {time}"
+    "lastSeen": "Last seen {time}",
+    "left": "Left"
   },
   "limitHistory": {
     "title": "Limit history",

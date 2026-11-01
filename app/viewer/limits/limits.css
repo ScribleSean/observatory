@@ -48,3 +48,23 @@
 .ob-history-tip > span { color: var(--ob-muted); }
 .ob-history-tip-row { display: flex; justify-content: space-between; gap: var(--ob-space-2); }
 .ob-history-tip-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* In dark, the second computer is a lighter tint of the product colour, not a dimmed one that sinks into the grid. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ob-history-line.claude.secondary { stroke: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-dot.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-column.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-key i.claude.secondary { background: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-line.codex.secondary { stroke: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-dot.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-column.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+  :root:not([data-theme="light"]) .ob-history-key i.codex.secondary { background: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+}
+:root[data-theme="dark"] .ob-history-line.claude.secondary { stroke: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-dot.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-column.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-key i.claude.secondary { background: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-line.codex.secondary { stroke: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-dot.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-column.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+:root[data-theme="dark"] .ob-history-key i.codex.secondary { background: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }

@@ -21,17 +21,18 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
   return (
     <section className="ob-card ob-tile" aria-labelledby="ob-tile-limits">
       <h2 className="ob-card-title" id="ob-tile-limits">{STRINGS.overview.limitsTitle}</h2>
-      <ul className="ob-tile-bars">
+      <ul className="ob-tile-bars ob-tile-span">
         {rows.map((row, index) => {
           const value = row.remaining !== null && !row.stale ? row.remaining : null;
           const tone = value === null ? '' : limitTone(row);
           return <li key={index}>
             <span className="ob-tile-label"><i className={`ob-dot ${row.provider}`} aria-hidden="true" />{row.name}{row.window ? <span className="ob-meta">&nbsp;{row.window}</span> : null}</span>
             <span className="ob-tile-value">
-              {tone && row.note ? <Note className={`ob-meta ${tone}`} text={row.note} /> : null}
+              {/* A low limit says when it resets, and an old reading says when it was taken. */}
+              {(tone || row.stale) && row.note ? <Note className={row.stale ? 'ob-meta warn' : `ob-meta ${tone}`} text={row.note} /> : null}
               <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{percent(value)}</span>
             </span>
-            <span className="ob-bar" aria-hidden="true">{value !== null && <i className={tone || row.provider} style={{ width: `${value}%` }} />}</span>
+            <span className="ob-bar" aria-hidden="true">{value !== null && <i className={row.provider} style={{ width: `${value}%` }} />}</span>
           </li>;
         })}
       </ul>
@@ -82,7 +83,7 @@ function sameDay(at: number, now: number) { return new Date(at).toDateString() =
 
 // Every tile has a headline. An Unknown one keeps its size, in the muted colour.
 function Hero({ value, note }: { value: string | null; note?: string }) {
-  return <>{value === null ? <div className="ob-hero ob-unknown">{unknown}</div> : <div className="ob-hero">{value}</div>}{note ? <p className="ob-meta">{note}</p> : null}</>;
+  return <div className="ob-tile-head">{value === null ? <div className="ob-hero ob-unknown">{unknown}</div> : <div className="ob-hero">{value}</div>}{note ? <p className="ob-meta">{note}</p> : null}</div>;
 }
 
 // A cross-computer total shows only when every computer it adds up is current and shown beside it.
@@ -95,9 +96,11 @@ function TimeCard({ glance, now, generatedAt }: { glance: Glance; now: number; g
     <section className="ob-card ob-tile" aria-labelledby="ob-tile-time">
       <h2 className="ob-card-title" id="ob-tile-time">{STRINGS.overview.timeTitle}</h2>
       <Hero value={total === null ? null : duration(total)} note={glance.both && total !== null ? STRINGS.overview.bothNote : undefined} />
-      {glance.both ? <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
-        : today ? <Breakdown rows={(glance.today[0]?.categories ?? []).map(row => [row.name, duration(row.seconds)] as [string, string])} /> : null}
-      <AsOf now={now} generatedAt={generatedAt} />
+      <div className="ob-tile-body">
+        {glance.both ? <PerDevice glance={glance} now={now} value={device => device.screenTimeOn === false ? STRINGS.today.screenTimeOff : device.seconds === null ? unknown : duration(device.seconds)} />
+          : today ? <Breakdown rows={(glance.today[0]?.categories ?? []).map(row => [row.name, duration(row.seconds)] as [string, string])} /> : null}
+        <AsOf now={now} generatedAt={generatedAt} />
+      </div>
     </section>
   );
 }
@@ -112,11 +115,13 @@ function CostCard({ glance, now, generatedAt }: { glance: Glance; now: number; g
     <section className="ob-card ob-tile" aria-labelledby="ob-tile-cost">
       <h2 className="ob-card-title" id="ob-tile-cost">{STRINGS.overview.costTitle}</h2>
       <Hero value={source.usd === null ? null : usd(source.usd)} note={notes.join(STRINGS.formats.separator)} />
-      {glance.both ? <PerDevice glance={glance} now={now} value={device => usd(device.usd)} />
-        : today ? <Breakdown rows={([['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const)
-          .filter(([key]) => glance.today[0]?.costs?.[key] !== undefined)
-          .map(([key, label]) => [label, usd(glance.today[0]?.costs?.[key] ?? null), key] as [string, string, string])} /> : null}
-      <AsOf now={now} generatedAt={generatedAt} />
+      <div className="ob-tile-body">
+        {glance.both ? <PerDevice glance={glance} now={now} value={device => usd(device.usd)} />
+          : today ? <Breakdown rows={([['claude', STRINGS.providers.claudeCode], ['codex', STRINGS.providers.codex]] as const)
+            .filter(([key]) => glance.today[0]?.costs?.[key] !== undefined)
+            .map(([key, label]) => [label, usd(glance.today[0]?.costs?.[key] ?? null), key] as [string, string, string])} /> : null}
+        <AsOf now={now} generatedAt={generatedAt} />
+      </div>
     </section>
   );
 }
