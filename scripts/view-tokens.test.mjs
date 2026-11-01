@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokensView } from '../lib/view-tokens.mjs';
+import { tokensView, maskHours } from '../lib/view-tokens.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { devices, periodDays, today } from '../lib/panel-data.mjs';
 
@@ -344,4 +344,14 @@ test('late token periods hide partial totals but retain complete daily values', 
     assert.equal(earlier[provider].note, '');
   }
   assert.equal(earlier.settings[0].rows[0].totalTokens, 10);
+});
+
+test('token hours after the last reading are Unknown and hours after now are blank', () => {
+  const day = { date: '2026-10-14', total: 24, hours: Array(24).fill(1) };
+  const [masked] = maskHours([day], '2026-10-14T10:20:00Z', 'UTC', Date.parse('2026-10-14T12:32:00Z'));
+  assert.deepEqual(masked.hours, [...Array(11).fill(1), null, null, ...Array(11).fill(undefined)]);
+  const [unread] = maskHours([day], undefined, 'UTC', Date.parse('2026-10-14T12:32:00Z'));
+  assert.deepEqual(unread.hours.slice(0, 13), Array(13).fill(null));
+  const [past] = maskHours([{ ...day, date: '2026-10-13' }], '2026-10-14T10:20:00Z', 'UTC', Date.parse('2026-10-14T12:32:00Z'));
+  assert.deepEqual(past.hours, Array(24).fill(1));
 });

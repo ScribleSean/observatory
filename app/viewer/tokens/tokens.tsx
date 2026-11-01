@@ -36,7 +36,7 @@ const word = (value: string) => value === 'unknown' ? STRINGS.status.unknown : v
 const hourLabel = (hour: number) => new Date(Date.UTC(2000, 0, 1, hour)).toLocaleTimeString('en-US', { hour: 'numeric', timeZone: 'UTC' });
 const shiftDate = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 
-type Day = { date: string; total: number | null; hours?: number[] | null };
+type Day = { date: string; total: number | null; hours?: (number | null | undefined)[] | null };
 
 /** The chart follows the period: today by hour, then 7 or 30 days, or every recorded day. */
 function chartData(days: Day[], period: string, anchor: string | null): ChartPoint[] | null {
