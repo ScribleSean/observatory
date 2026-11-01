@@ -3,6 +3,7 @@ import {constants} from 'node:fs';
 import {execFile} from '../lib/cycle-processes.mjs';
 import {promisify} from 'node:util';
 import {homedir} from 'node:os';
+import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {readQuotaState,updateQuotaState} from './quota-store.mjs';
@@ -40,7 +41,7 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates,
     const apps=appCandidates??['/Applications',path.join(homedir(),'Applications')].flatMap(root=>
       ['ChatGPT.app','Codex.app'].map(app=>path.join(root,app,'Contents/Resources/codex')));
     // Login items start with a short PATH, so the usual install folders are listed too.
-    const onPath=(process.env.PATH??'').split(path.delimiter).filter(folder=>path.isAbsolute(folder)).map(folder=>path.join(folder,'codex'));
+    const onPath=(process.env.PATH??'').split(path.delimiter).filter(folder=>path.isAbsolute(folder) && !isProtectedFolder(folder)).map(folder=>path.join(folder,'codex'));
     candidates=[...apps,...(toolCandidates??['/opt/homebrew/bin/codex','/usr/local/bin/codex',path.join(homedir(),'.local/bin/codex'),...onPath])];
   } else if(platform==='win32') {
     const powershell=path.join(process.env.SystemRoot || 'C:/Windows','System32/WindowsPowerShell/v1.0/powershell.exe');

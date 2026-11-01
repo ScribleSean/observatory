@@ -1,6 +1,7 @@
 import {spawn} from '../lib/cycle-processes.mjs';
 import {lstat} from 'node:fs/promises';
 import {homedir} from 'node:os';
+import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import path from 'node:path';
 
 const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -50,7 +51,7 @@ export function parseClaudeUsage(envelope,now=Date.now()) {
 export async function findClaude(environment=process.env,platform=process.platform) {
   const names=platform==='win32'?['claude.exe']:['claude'];
   const folders=[...(environment.PATH ?? '').split(path.delimiter),path.join(homedir(),'.local/bin'),path.join(homedir(),'.claude/local'),
-    ...(platform==='win32'?[]:['/opt/homebrew/bin','/usr/local/bin'])].filter(folder=>path.isAbsolute(folder));
+    ...(platform==='win32'?[]:['/opt/homebrew/bin','/usr/local/bin'])].filter(folder=>path.isAbsolute(folder) && !isProtectedFolder(folder));
   for(const folder of folders)for(const name of names) {
     const file=path.join(folder,name);
     try {if((await lstat(file)).isDirectory())continue;return file;}catch{}
@@ -97,12 +98,16 @@ function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
   });
 }
 
+// Only the project settings of the empty limits folder load, so the user's own hooks,
+// plugins and MCP servers do not run under Observatory's name every five minutes.
+export const USAGE_ARGUMENTS=Object.freeze(['-p','/usage','--output-format','json','--no-session-persistence','--setting-sources','project','--strict-mcp-config']);
+
 export async function readClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000,environment=usageEnvironment(),platform=process.platform}={}) {
   if(typeof cwd!=='string' || !path.isAbsolute(cwd))return {status:'failed',usage:null};
   try {
     const executable=await find();
     if(!executable)return {status:'not-found',usage:null};
-    const {output,ending}=await runBounded(executable,['-p','/usage','--output-format','json','--no-session-persistence'],{cwd,timeoutMs,environment,platform});
+    const {output,ending}=await runBounded(executable,USAGE_ARGUMENTS,{cwd,timeoutMs,environment,platform});
     if(ending!=='read')return {status:ending,usage:null};
     let usage=null;
     try {usage=parseClaudeUsage(JSON.parse(output),now);}catch {}

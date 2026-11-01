@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
 
 export const LIMITS=Object.freeze({maxFiles:5000,maxTotalBytes:2*1024*1024*1024,maxLineBytes:16*1024*1024});
@@ -80,11 +81,13 @@ export function projectName(cwd,home='',{repository=null,branch=null}={}) {
 // The nearest folder at or above cwd that holds a .git entry, so a subfolder
 // counts as its repository. The home folder and anything above it are never
 // a repository here, so a dotfiles repository at home does not take every folder.
-export function repositoryRoot(cwd,home='') {
+export function repositoryRoot(cwd,home='',platform=process.platform) {
   if(typeof cwd!=='string' || !path.isAbsolute(cwd))return null;
   const stop=typeof home==='string' && home?path.resolve(home):null;
   let folder=path.resolve(cwd);
   if(stop && !folder.toLowerCase().startsWith(stop.toLowerCase()+path.sep))return null;
+  // Looking for .git inside Documents, Desktop or Downloads makes macOS ask for access.
+  if(isProtectedFolder(folder,stop ?? undefined,platform))return null;
   for(;;) {
     const parent=path.dirname(folder);
     if(parent===folder || folder===stop)return null;
