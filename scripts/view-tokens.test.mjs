@@ -84,6 +84,7 @@ test('missing and unavailable device sources are unknown', () => {
     assertEmpty(view(source)[provider], 'unknown');
     assertEmpty(view({})[provider], 'unknown');
   }
+  assert.equal(JSON.stringify(view({})).includes(':0'), false);
 });
 
 test('read sources outside the period have no records', () => {
@@ -273,14 +274,6 @@ test('an Unknown Claude Code total says why', () => {
   assert.equal(view(source).claude.note, 'Unavailable');
 });
 
-test('an empty snapshot never invents zero totals or dollars', () => {
-  const result = view({});
-  for (const provider of ['codex', 'claude']) {
-    assertEmpty(result[provider], 'unknown');
-    assert.equal(result[provider].estimate.usd, null);
-  }
-  assert.equal(JSON.stringify(result).includes(':0'), false);
-});
 
 test('a missing snapshot reads as empty', () => {
   for (const input of [null, undefined, []]) {

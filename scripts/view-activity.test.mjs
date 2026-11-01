@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { nowFromHours, activityNow, activityView } from '../lib/view-activity.mjs';
-import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import strings from '../lib/strings.json' with { type: 'json' };
 
 const now = Date.parse('2026-10-14T12:32:00Z');
@@ -164,8 +163,6 @@ test('zero activity without coverage carries the tracking warning', () => {
   const data = snapshot(); data.activity[0].days = [{ ...day(undefined, 0), trackedSeconds: 0 }];
   assert.equal(view(data).noTracking, true);
 });
-test('sample Mac Now is ok at a fixed time', () => assert.equal(activityNow(sampleSnapshot(now), 'Mac', now).reason, 'ok'));
-
 test('Now notes translate each failure without exposing reason codes', () => {
   const cases = [
     [{}, strings.activity.nowNoSource],

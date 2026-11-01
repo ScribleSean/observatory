@@ -26,7 +26,7 @@ test('Fable version shapes retain their names while arbitrary text stays unknown
   }
 });
 
-for(const model of ['claude-fable-5','claude-fable-5-1']) {
+for(const model of ['claude-fable-5','claude-fable-5-1','claude-opus-5-5']) {
   test(`${model} reader records retain their model and use the price table`,async t=>{
     const root=await mkdtemp(path.join(tmpdir(),'observatory-fable-integration-'));
     t.after(()=>rm(root,{recursive:true,force:true}));
@@ -34,8 +34,10 @@ for(const model of ['claude-fable-5','claude-fable-5-1']) {
     await mkdir(path.dirname(file),{recursive:true});
     await writeFile(file,JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r1',
       message:{role:'assistant',id:'m1',model,usage:{input_tokens:1,cache_read_input_tokens:2,
-        cache_creation_input_tokens:3,output_tokens:4}}})+'\n');
+        cache_creation_input_tokens:3,output_tokens:4},content:'PRIVATE'}})+'\n');
     const source=cleanClaudeTokenSource(await collectClaudeUsage(root),'Mac','2026-09-25T12:00:00Z');
+    assert.equal(source.days[0].totalTokens,10);
+    assert.ok(!JSON.stringify(source).includes('PRIVATE'));
     const result=attachProviderTokenEstimates({data:{providerTokenSources:[source]}});
     const day=result.data.providerTokenSources[0].days[0];
     assert.equal(day.models[0].model,model);
@@ -206,16 +208,4 @@ test('unknown bucket merging rejects token and request count overflow',()=>{
     const raw={provider:'claude-code',status:'ok',days:[{date:'2026-09-24',...large,models:[{model:'claude-private-alpha',...large},{model:'claude-private-beta',...small}]}]};
     assert.throws(()=>cleanClaudeTokenSource(raw,'Windows'),/Claude counter overflow/);
   }
-});
-
-test('the Node reader output passes through the Claude source cleaner',async t=>{
-  const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-integration-'));
-  t.after(()=>rm(root,{recursive:true,force:true}));
-  const file=path.join(root,'projects','fixture','usage.jsonl');
-  await mkdir(path.dirname(file),{recursive:true});
-  await writeFile(file,JSON.stringify({type:'assistant',timestamp:'2026-09-25T04:30:00Z',requestId:'r1',message:{role:'assistant',id:'m1',model:'claude-opus-5-5',usage:{input_tokens:1,cache_read_input_tokens:2,cache_creation_input_tokens:3,output_tokens:4},content:'PRIVATE'}})+'\n');
-  const source=cleanClaudeTokenSource(await collectClaudeUsage(root),'Mac');
-  assert.equal(source.days[0].totalTokens,10);
-  assert.equal(source.days[0].models[0].model,'claude-opus-5-5');
-  assert.ok(!JSON.stringify(source).includes('PRIVATE'));
 });

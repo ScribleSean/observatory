@@ -74,12 +74,6 @@ test('limits keep a fixed order and a window without a reading is named, not dro
   assert.match(row,/Claude Code<span class="ob-meta">\u00a05-hour<\/span><\/span><span class="ob-tile-value"><span class="ob-num ob-unknown">Unknown<\/span>/);
 });
 
-test('without combined.json the page says how to get one',()=>{
-  const html=render({combined:null,section:'limits'});
-  assert.ok(html.includes('Waiting for the first reading'));
-  assert.ok(!html.includes('Cost today'));
-});
-
 test('unknown hashes open Limits and only the read-only pages exist',()=>{
   assert.equal(sectionFromHash('#tokens'),'tokens');
   assert.equal(sectionFromHash('#settings'),'limits');
@@ -142,6 +136,8 @@ test('loading and first run show one calm message, not pages of Unknown',()=>{
   const first=render({combined:null,loaded:true,section:'limits'});
   assert.ok(first.includes('Waiting for the first collection'));
   assert.ok(first.includes('choose Refresh'));
+  assert.ok(first.includes('Waiting for the first reading'));
+  assert.ok(!first.includes('Cost today'));
   assert.ok(!first.includes('>Unknown<'));
 });
 

@@ -12,16 +12,6 @@ test('the bundled skin is Sage and it is valid', () => {
   for(const file of files) assert.equal(validateSkin(read(file)).name.length>0,true,file);
 });
 
-test('every bundled skin muted text meets 4.5:1 contrast on filter hover, surface and background in light and dark', () => {
-  for(const file of files) {
-    const {colors}=read(file);
-    for(const [index,mode] of ['light','dark'].entries()) {
-      for(const background of ['track','surface','background'])
-        assert.ok(contrast(colors.muted[index],colors[background][index])>=4.5,`${file} ${mode} muted on ${background}`);
-    }
-  }
-});
-
 test('the contrast check reports muted text on a low-contrast light track', () => {
   const sage=read('sage.json');
   const faint=structuredClone(sage);
