@@ -375,7 +375,8 @@ test('gives the recorded output for every fixture with a cold and a warm cache',
 test('the cache holds no prompts, message identities or folder names, and is reused when nothing changed', async () =>
   fixture(async (root) =>
     withCache(async (cache) => {
-      await log(root, 'secret-project-name.jsonl', event('msg-PLANTED', 'req-PLANTED', usage(1, 2, 3, 4)));
+      // A model field that is not a model name is kept only as a hash.
+      await log(root, 'secret-project-name.jsonl', event('msg-PLANTED', 'req-PLANTED', usage(1, 2, 3, 4), { model: 'PLANTED model text' }));
       await read(root, { cacheDirectory: cache });
       const text = await cacheText(cache);
       for (const secret of ['PRIVATE', 'PLANTED', 'secret-project-name', root]) assert.ok(!text.includes(secret), secret);
@@ -419,6 +420,8 @@ test('a corrupt, foreign or outdated cache falls back to a full read', async () 
         JSON.stringify({ ...good, version: CACHE_VERSION + 1 }),
         JSON.stringify({ ...good, root: 'f'.repeat(32) }),
         JSON.stringify({ ...good, files: { [entry]: { ...good.files[entry], records: [['x', '1', null, 1, 2, 3, 4]] } } }),
+        JSON.stringify({ ...good, files: { [entry]: { ...good.files[entry], records: good.files[entry].records.map((row) => [row[0], '9'.repeat(25), ...row.slice(2)]) } } }),
+        JSON.stringify({ ...good, files: { [entry]: { ...good.files[entry], records: good.files[entry].records.map((row) => [row[0], row[1], 'Not a model', ...row.slice(3)]) } } }),
         JSON.stringify({ ...good, files: { [entry]: { ...good.files[entry], records: [] } } }).replace('"saw":true', '"saw":"yes"'),
       ];
       for (const text of broken) {

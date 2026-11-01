@@ -10,8 +10,8 @@ export const MAX_FILES = 50_000;
 export const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAX_LINE_BYTES = 4 * 1024 * 1024;
 export const MAX_LINES = 3_000_000;
-export const MAX_CACHE_BYTES = 512 * 1024 * 1024;
-export const CACHE_VERSION = 1;
+export const MAX_CACHE_BYTES = 128 * 1024 * 1024;
+export const CACHE_VERSION = 2;
 const CACHE_FILE = 'claude-usage.json';
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 const FIELDS = ['input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens', 'output_tokens'];
@@ -430,15 +430,17 @@ function observe(event) {
   if (rawModel === '<synthetic>' && values.every((value) => value === 0) && (clientFlag === true || (clientFlag === false && isNone(requestId))))
     return SKIP;
   if (typeof requestId !== 'string' || !(codePointLength(requestId) > 0 && codePointLength(requestId) <= 256)) throw new Unavailable();
-  // Only the hash of the identity is kept, in memory and in the cache.
+  // Only hashes of the identity and of a model's text are kept, in memory and in the cache.
+  // Two hashes are equal exactly when the texts are, which is all the merge compares.
   const key = createHash('sha256').update(JSON.stringify([id, requestId])).digest('hex').slice(0, 32);
-  return { key, instant, raw: rawModel, values };
+  const raw = typeof rawModel === 'string' ? createHash('sha256').update(`model:${rawModel}`).digest('hex').slice(0, 32) : rawModel;
+  return { key, instant, model: modelName(rawModel), raw, values };
 }
 
 // Adds one observation to the records, by message and request identity. A
 // request written again while streaming keeps its largest usage and earliest time.
-function addRecord(records, { key, instant, raw, values }) {
-  const current = { instant, model: modelName(raw), raw, values };
+function addRecord(records, { key, instant, model, raw, values }) {
+  const current = { instant, model, raw, values };
   const prior = records.get(key);
   if (!prior) {
     records.set(key, current);
@@ -586,7 +588,8 @@ function summarize(records) {
 const HEX = /^[0-9a-f]{32}$/;
 const DIGITS = /^-?\d{1,25}$/;
 const hashText = (text) => createHash('sha256').update(text).digest('hex').slice(0, 32);
-const identity = (info) => [info.dev, info.ino, info.size, info.mtimeNs].map(String);
+// The change time is set by the system on every write, so a copy that restores the old size and time still differs.
+const identity = (info) => [info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs].map(String);
 
 async function loadCache(directory, rootKey) {
   if (typeof directory !== 'string' || !directory) return null;
@@ -604,16 +607,19 @@ async function loadCache(directory, rootKey) {
 
 // A cached entry is used only when it matches the file exactly and every record is well formed.
 function cachedLog(entry, info) {
-  if (!isDict(entry) || !Array.isArray(entry.at) || entry.at.length !== 4 || typeof entry.saw !== 'boolean' || !Array.isArray(entry.records))
+  if (!isDict(entry) || !Array.isArray(entry.at) || entry.at.length !== 5 || typeof entry.saw !== 'boolean' || !Array.isArray(entry.records))
     return null;
   const at = identity(info);
   if (entry.at.some((value, index) => value !== at[index])) return null;
   const list = [];
   for (const row of entry.records) {
-    if (!Array.isArray(row) || row.length !== 7 || typeof row[0] !== 'string' || !HEX.test(row[0]) || typeof row[1] !== 'string' || !DIGITS.test(row[1]) ||
-      !(row[2] === null || typeof row[2] === 'string') || !row.slice(3).every((value) => number(value) !== null))
+    if (!Array.isArray(row) || row.length !== 8 || typeof row[0] !== 'string' || !HEX.test(row[0]) || typeof row[1] !== 'string' || !DIGITS.test(row[1]) ||
+      !(row[2] === 'unknown' || (typeof row[2] === 'string' && MODEL.test(row[2]))) || !(row[3] === null || (typeof row[3] === 'string' && HEX.test(row[3]))) ||
+      !row.slice(4).every((value) => number(value) !== null))
       return null;
-    list.push({ key: row[0], instant: BigInt(row[1]), raw: row[2], values: row.slice(3) });
+    const instant = BigInt(row[1]);
+    if (instant < MIN_INSTANT || instant > MAX_INSTANT) return null;
+    list.push({ key: row[0], instant, model: row[2], raw: row[3], values: row.slice(4) });
   }
   return { saw: entry.saw, cacheable: true, list };
 }
@@ -626,10 +632,10 @@ async function saveCache(directory, rootKey, logs, carry = new Map()) {
   for (const { name, info, log } of logs) {
     if (!log.cacheable) continue;
     files[hashText(name)] = { at: identity(info), saw: log.saw,
-      records: log.list.map(({ key, instant, raw, values }) => [key, String(instant), raw, ...values]) };
+      records: log.list.map(({ key, instant, model, raw, values }) => [key, String(instant), model, raw, ...values]) };
   }
-  const text = JSON.stringify({ version: CACHE_VERSION, root: rootKey, files });
   try {
+    const text = JSON.stringify({ version: CACHE_VERSION, root: rootKey, files });
     if (Buffer.byteLength(text) > MAX_CACHE_BYTES) await fs.promises.unlink(file).catch(() => {});
     else await writeAtomic(file, text);
   } catch {

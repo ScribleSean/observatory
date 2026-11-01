@@ -179,7 +179,9 @@ export async function readClaudeRoots(roots,{cacheFor=async()=>null,read=collect
   let found;
   try {found=await folders(roots,'claudeFolder');}
   catch {return {provider:'claude-code',status:'unavailable'};}
-  const result=mergeClaude(await Promise.all(found.map(async root=>read(root.claudeFolder,{cacheDirectory:await cacheFor(root)}))));
+  // A cache that cannot be set up only costs time, so that folder is read without one.
+  const cacheOf=async root=>{try {return await cacheFor(root);} catch {return null;}};
+  const result=mergeClaude(await Promise.all(found.map(async root=>read(root.claudeFolder,{cacheDirectory:await cacheOf(root)}))));
   return {...result,roots:labelsOf(found)};
 }
 
