@@ -170,9 +170,21 @@ namespace Observatory
             return Math.Round(value).ToString(CultureInfo.InvariantCulture);
         }
 
+        // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
         public static string Money(double value)
         {
-            return value >= 10 ? "$" + Math.Round(value).ToString(CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
+            if (value > 0 && value < 0.005) return "Under $0.01";
+            return value >= 10 ? "$" + Math.Round(value, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
+        }
+
+        // Same as span() in lib/panel-data.mjs.
+        public static string Span(TimeSpan span)
+        {
+            int minutes = (int)Math.Round(Math.Max(0, span.TotalMinutes), MidpointRounding.AwayFromZero);
+            if (minutes < 60) return minutes + "m";
+            int hours = minutes / 60;
+            if (hours < 48) return hours + "h " + (minutes % 60) + "m";
+            return (hours / 24) + "d " + (hours % 24) + "h";
         }
 
         public static string Clock(DateTime utc, DateTime now)
@@ -186,10 +198,7 @@ namespace Observatory
 
         public static string Age(TimeSpan age)
         {
-            int minutes = (int)age.TotalMinutes;
-            if (minutes < 60) return minutes + " min ago";
-            if (minutes < 48 * 60) return (minutes / 60) + "h " + (minutes % 60) + "m ago";
-            return (minutes / 1440) + "d ago";
+            return Span(age) + " ago";
         }
 
         public static string Today(DeviceRow device)
@@ -198,7 +207,7 @@ namespace Observatory
             if (device.Seconds.HasValue) parts.Add(Duration(device.Seconds.Value));
             if (device.Tokens.HasValue) parts.Add(Compact(device.Tokens.Value) + " tokens");
             if (device.Usd.HasValue) parts.Add(Money(device.Usd.Value));
-            return parts.Count == 0 ? "Unknown" : string.Join("  \u00B7  ", parts);
+            return parts.Count == 0 ? "Unknown" : string.Join(" \u00B7 ", parts);
         }
     }
 
@@ -344,7 +353,7 @@ namespace Observatory
                     if (s.Limits.Count > 0)
                     {
                         // Limits without a current reading collapse into one quiet line that wraps instead of a row each.
-                        string missing = unknown.Count == 0 ? null : known.Count == 0 ? "No current limit reading"
+                        string missing = unknown.Count == 0 ? null : known.Count == 0 ? "No current reading"
                             : "No current reading: " + string.Join(", ", unknown.Select(limit => (limit.Name + " " + limit.Window).Trim()));
                         float missingWidth = right - left - Pad * 2 - 13;
                         float missingHeight = missing == null ? 0 : (float)Math.Ceiling(g.MeasureString(missing, body, (int)missingWidth, StringFormat.GenericTypographic).Height);
@@ -366,7 +375,7 @@ namespace Observatory
                                 Text(g, percent, strong, tint ?? p.Text, end - percentWidth, row);
                                 if (value <= PanelState.Low && limit.ResetsAt.HasValue)
                                 {
-                                    string back = "back " + Format.Clock(limit.ResetsAt.Value, s.Now);
+                                    string back = "Resets in " + Format.Span(limit.ResetsAt.Value - s.Now);
                                     Text(g, back, small, tint ?? p.Muted, end - percentWidth - 6 - Measure(g, back, small), row + 1);
                                 }
                                 var track = new RectangleF(inner, row + 24, end - inner, 5);
@@ -397,7 +406,7 @@ namespace Observatory
                                 if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "") + (device.Current && device.Usd.HasValue ? "\nCost is an API-equivalent estimate" : "")));
                                 Text(g, device.Name, strong, p.Text, inner, row);
                                 string value = device.Current ? Format.Today(device)
-                                    : device.LastSeen.HasValue ? "last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
+                                    : device.LastSeen.HasValue ? "Last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
                                 float width = Measure(g, value, body);
                                 Text(g, value, body, device.Current ? p.Text : p.Muted, end - width, row);
                                 if (!device.Current) Ring(g, p.Muted, end - width - 12, row + 6);

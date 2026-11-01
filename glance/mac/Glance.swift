@@ -132,8 +132,26 @@ enum Format {
     return "0"
   }
 
+  // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
   static func money(_ value: Double) -> String {
-    value >= 10 ? "$\(Int(value.rounded()))" : String(format: "$%.2f", value)
+    if value > 0 && value < 0.005 { return "Under $0.01" }
+    if value < 10 { return String(format: "$%.2f", value) }
+    let formatter = NumberFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.numberStyle = .decimal
+    formatter.groupingSeparator = ","
+    formatter.usesGroupingSeparator = true
+    formatter.maximumFractionDigits = 0
+    return "$" + (formatter.string(from: NSNumber(value: value.rounded())) ?? String(Int(value.rounded())))
+  }
+
+  // Same as span() in lib/panel-data.mjs.
+  static func span(_ seconds: TimeInterval) -> String {
+    let minutes = Int((max(0, seconds) / 60).rounded())
+    if minutes < 60 { return "\(minutes)m" }
+    let hours = minutes / 60
+    if hours < 48 { return "\(hours)h \(minutes % 60)m" }
+    return "\(hours / 24)d \(hours % 24)h"
   }
 
   static func clock(_ date: Date, now: Date) -> String {
@@ -146,17 +164,14 @@ enum Format {
   }
 
   static func age(_ seconds: TimeInterval) -> String {
-    let minutes = Int(seconds / 60)
-    if minutes < 60 { return "\(minutes) min ago" }
-    if minutes < 48 * 60 { return "\(minutes / 60)h \(minutes % 60)m ago" }
-    return "\(minutes / 1440)d ago"
+    span(seconds) + " ago"
   }
 
   static func today(_ device: DeviceRow) -> String {
     let parts = [device.seconds.map(duration),
                  device.tokens.map { compact($0) + " tokens" },
                  device.usd.map(money)].compactMap { $0 }
-    return parts.isEmpty ? "Unknown" : parts.joined(separator: "  ·  ")
+    return parts.isEmpty ? "Unknown" : parts.joined(separator: " · ")
   }
 }
 
@@ -270,9 +285,6 @@ struct PanelView: View {
           Text(row.window).foregroundStyle(palette.muted)
           Spacer(minLength: 6)
           if let remaining = row.remaining {
-            if remaining <= PanelState.low, let reset = row.resetsAt {
-              Text("back \(Format.clock(reset, now: state.now))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
-            }
             Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
               .foregroundStyle(tint ?? palette.text)
           }
@@ -285,13 +297,17 @@ struct PanelView: View {
           }
         }
         .frame(height: 5)
+        // A low limit says when it comes back, on its own line so the name never wraps.
+        if let remaining = row.remaining, remaining <= PanelState.low, let reset = row.resetsAt {
+          Text("Resets in \(Format.span(reset.timeIntervalSince(state.now)))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
+        }
       }
       .accessibilityElement(children: .combine)
     }
     if !unknown.isEmpty {
       HStack(spacing: 6) {
         Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
-        Text(unknown.count == state.limits.count ? "No current limit reading"
+        Text(unknown.count == state.limits.count ? "No current reading"
              : "No current reading: " + unknown.map { "\($0.name) \($0.window)" }.joined(separator: ", "))
           .foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
       }
@@ -311,7 +327,7 @@ struct PanelView: View {
           Text(Format.today(device)).monospacedDigit().lineLimit(1)
         } else {
           Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
-          Text(device.lastSeen.map { "last seen \(Format.clock($0, now: state.now))" } ?? "Unknown")
+          Text(device.lastSeen.map { "Last seen \(Format.clock($0, now: state.now))" } ?? "Unknown")
             .foregroundStyle(palette.muted).lineLimit(1)
         }
       }

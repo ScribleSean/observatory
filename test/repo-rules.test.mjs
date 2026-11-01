@@ -5,6 +5,8 @@ import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {READING_FRESH_MS,DEVICE_FRESH_MS} from '../lib/freshness.mjs';
+import strings from '../lib/strings.json' with {type:'json'};
+import {LIMIT_LOW_PERCENT,LIMIT_SPENT_PERCENT} from '../lib/glance-limits.mjs';
 
 // Mistakes that kept coming back, checked across the whole repository.
 // A line that must break a rule says so on that line or the line above,
@@ -175,4 +177,21 @@ test('tests wait for a signal, not for a fixed time', () => {
     'A fixed sleep fails on a busy machine. Await a promise the code under test resolves (see "holding" in test/run-lock.test.mjs), '+
     'poll a condition in a loop with a deadline (see "until" in test/server-lifetime.test.mjs), or use mock.timers. '+
     'If a real pause is the behaviour under test, add "// sleep-ok: <reason>" on the line or the line above.');
+});
+
+test('the native panels use the dashboard limit thresholds and wording', () => {
+  const swift=read('glance/mac/Glance.swift'),cs=read('glance/windows/Glance.cs');
+  assert.equal(Number(swift.match(/static let low = ([\d.]+)/)?.[1]),LIMIT_LOW_PERCENT,'Glance.swift PanelState.low differs from LIMIT_LOW_PERCENT in lib/glance-limits.mjs.');
+  assert.equal(Number(cs.match(/public const double Low = ([\d.]+);/)?.[1]),LIMIT_LOW_PERCENT,'Glance.cs PanelState.Low differs from LIMIT_LOW_PERCENT in lib/glance-limits.mjs.');
+  assert.ok(swift.includes(`$0 <= ${LIMIT_SPENT_PERCENT} ? palette.error`),'Glance.swift spent tint differs from LIMIT_SPENT_PERCENT.');
+  assert.ok(cs.includes(`value <= ${LIMIT_SPENT_PERCENT} ? p.Error`),'Glance.cs spent tint differs from LIMIT_SPENT_PERCENT.');
+  // Each shared phrase, split at its placeholders, must appear in both panels.
+  const phrases=[strings.overview.limitsNone,strings.overview.limitsMissing,strings.overview.lastSeen,strings.formats.resetsIn,
+    strings.status.updatedAgo,strings.actions.openDashboard,strings.actions.refresh,strings.tokens.underCent,strings.status.unknown];
+  for (const phrase of phrases) for (const part of phrase.split(/\{[A-Za-z]+\}/).map(text=>text.trim()).filter(Boolean)) {
+    assert.ok(swift.includes(part),`glance/mac/Glance.swift does not say "${part}" like lib/strings.json.`);
+    assert.ok(cs.includes(part),`glance/windows/Glance.cs does not say "${part}" like lib/strings.json.`);
+  }
+  assert.ok(swift.includes(`separator: "${strings.formats.separator}"`),'Glance.swift separator differs from formats.separator.');
+  assert.ok(cs.includes(`"${strings.formats.separator.replace('\u00B7','\\u00B7')}"`),'Glance.cs separator differs from formats.separator.');
 });
