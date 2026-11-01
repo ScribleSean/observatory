@@ -98,12 +98,16 @@ function runBounded(executable,args,{cwd,timeoutMs,environment,platform}) {
   });
 }
 
+// Only the project settings of the empty limits folder load, so the user's own hooks,
+// plugins and MCP servers do not run under Observatory's name every five minutes.
+export const USAGE_ARGUMENTS=Object.freeze(['-p','/usage','--output-format','json','--no-session-persistence','--setting-sources','project','--strict-mcp-config']);
+
 export async function readClaudeUsage({cwd,now=Date.now(),find=findClaude,timeoutMs=15000,environment=usageEnvironment(),platform=process.platform}={}) {
   if(typeof cwd!=='string' || !path.isAbsolute(cwd))return {status:'failed',usage:null};
   try {
     const executable=await find();
     if(!executable)return {status:'not-found',usage:null};
-    const {output,ending}=await runBounded(executable,['-p','/usage','--output-format','json','--no-session-persistence'],{cwd,timeoutMs,environment,platform});
+    const {output,ending}=await runBounded(executable,USAGE_ARGUMENTS,{cwd,timeoutMs,environment,platform});
     if(ending!=='read')return {status:ending,usage:null};
     let usage=null;
     try {usage=parseClaudeUsage(JSON.parse(output),now);}catch {}

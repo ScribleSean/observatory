@@ -67,3 +67,11 @@ test('the Mac app is signed with the local identity when there is one',()=>withF
   await installMacApp(target,'{}\n',{run,stop:async()=>{},signing:{name:SIGNING_NAME,keychain:'/k/observatory-signing.keychain-db'}});
   assert.deepEqual(signs,[['--force','--sign',SIGNING_NAME,'--keychain','/k/observatory-signing.keychain-db']]);
 }));
+
+test('the Claude limits call loads no user hooks, plugins or MCP servers',async()=>{
+  const {USAGE_ARGUMENTS}=await import('../scripts/claude-usage-command.mjs');
+  const at=USAGE_ARGUMENTS.indexOf('--setting-sources');
+  assert.ok(at>0 && USAGE_ARGUMENTS[at+1]==='project');
+  assert.ok(USAGE_ARGUMENTS.includes('--strict-mcp-config'));
+  assert.ok(!USAGE_ARGUMENTS.includes('--bare'),'bare mode drops the subscription sign-in /usage needs');
+});
