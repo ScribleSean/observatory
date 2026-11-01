@@ -13,13 +13,9 @@ type Block = Omit<Computed['codex'], 'models' | 'days'> & {
   note?: string;
   days: Day[];
   models: { model: string; total: number | null; usd: number | null }[];
+  byDevice: { host: string; label: string; status: string; note?: string; total: number | null; usd: number | null }[];
 };
-type Result = Omit<Computed, 'claude' | 'codex'> & {
-  codex: Block;
-  claude: Block & {
-    byDevice: { host: string; label: string; status: string; note?: string; total: number | null; usd: number | null }[];
-  };
-};
+type Result = Omit<Computed, 'claude' | 'codex'> & { codex: Block; claude: Block };
 const periods: [string, string][] = [
   ['day', STRINGS.periods.day], ['week', STRINGS.periods.week],
   ['month', STRINGS.periods.month], ['all', STRINGS.periods.all],
@@ -28,8 +24,7 @@ const classes = ['input', 'cached', 'cacheWrite', 'output'] as const;
 const count = (value: number | null) => value === null ? STRINGS.status.unknown : compact(value);
 const statusWord = (status: string) => status === 'no-records' ? STRINGS.status.noRecords
   : status === 'by-device' ? STRINGS.status.byDevice : STRINGS.status.unknown;
-const statusNote = (status: string) => status === 'unverified' ? STRINGS.status.allUnverified
-  : status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
+const statusNote = (status: string) => status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
 const word = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value.charAt(0).toUpperCase() + value.slice(1);
 const hourLabel = (hour: number) => new Date(Date.UTC(2000, 0, 1, hour)).toLocaleTimeString('en-US', { hour: 'numeric', timeZone: 'UTC' });
@@ -66,10 +61,10 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
     <div className="ob-tokens-head">
       <div className={known ? 'ob-hero' : 'ob-hero ob-unknown'}>{known ? count(block.totals.total) : statusWord(block.status)}</div>
       {notes.map(note => <p key={note} className="ob-meta">{note}</p>)}
-      {provider === 'claude' && result.host === 'All' && result.claude.byDevice.length > 0 && <div className="ob-tokens-table">
+      {result.host === 'All' && block.byDevice.length > 0 && <div className="ob-tokens-table">
         <table>
           <thead><tr><th scope="col">{STRINGS.devices.device}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
-          <tbody>{result.claude.byDevice.map(device => <tr key={device.host}>
+          <tbody>{block.byDevice.map(device => <tr key={device.host}>
             <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : device.note || statusWord(device.status)}</td><td>{usd(device.usd)}</td>
           </tr>)}</tbody>
         </table>
