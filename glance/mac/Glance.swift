@@ -159,13 +159,6 @@ enum Format {
   static func age(_ seconds: TimeInterval) -> String {
     span(seconds) + " ago"
   }
-
-  static func today(_ device: DeviceRow) -> String {
-    let parts = [device.seconds.map(duration),
-                 device.tokens.map { compact($0) + " tokens" },
-                 device.usd.map(money)].compactMap { $0 }
-    return parts.isEmpty ? "Unknown" : parts.joined(separator: " · ")
-  }
 }
 
 // MARK: Look (mirrors app/design-tokens.css)
@@ -305,32 +298,40 @@ struct PanelView: View {
     }
   }
 
-  // Today per computer. The heading names the cost column, since every dollar figure is an estimate.
+  // Today per computer, in columns that each name what they hold. The cost header may wrap over its column.
+  static let timeColumn: CGFloat = 72, tokenColumn: CGFloat = 52, costColumn: CGFloat = 92
+
   @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack(spacing: 6) {
-      Text("Today")
-      Spacer(minLength: 8)
-      Text("API-equivalent (estimate)")
+    HStack(alignment: .bottom, spacing: 8) {
+      Spacer(minLength: 0)
+      Text("Screen time").frame(width: Self.timeColumn, alignment: .trailing)
+      Text("Tokens").frame(width: Self.tokenColumn, alignment: .trailing)
+      Text("API-equivalent (estimate)").multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
+        .frame(width: Self.costColumn, alignment: .trailing)
     }
-    .font(.system(size: 12)).foregroundStyle(palette.muted)
+    .font(.system(size: 11.5)).foregroundStyle(palette.muted)
     ForEach(state.devices) { device in
-      HStack(spacing: 6) {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
         Text(device.name).fontWeight(.medium).lineLimit(1)
+        if let problem = device.problem, device.current {
+          Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
+            .accessibilityLabel(problem)
+        }
         Spacer(minLength: 8)
         if device.current {
-          if let problem = device.problem {
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
-              .accessibilityLabel(problem)
+          Group {
+            Text(device.seconds.map(Format.duration) ?? "Unknown").frame(width: Self.timeColumn, alignment: .trailing)
+            Text(device.tokens.map(Format.compact) ?? "Unknown").frame(width: Self.tokenColumn, alignment: .trailing)
+            Text(device.usd.map(Format.money) ?? "Unknown").frame(width: Self.costColumn, alignment: .trailing)
           }
-          Text(Format.today(device)).monospacedDigit().lineLimit(1)
+          .monospacedDigit().lineLimit(1)
         } else {
           Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
           Text(device.lastSeen.map { "Last seen \(Format.clock($0, now: state.now))" } ?? "Unknown")
             .foregroundStyle(palette.muted).lineLimit(1)
         }
       }
-      .help([device.fullName, device.problem, device.current && device.usd != nil ? "Cost is an API-equivalent estimate" : nil]
-        .compactMap { $0 }.joined(separator: "\n"))
+      .help([device.fullName, device.problem].compactMap { $0 }.joined(separator: "\n"))
     }
   }
 

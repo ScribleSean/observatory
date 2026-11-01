@@ -200,15 +200,6 @@ namespace Observatory
         {
             return Span(age) + " ago";
         }
-
-        public static string Today(DeviceRow device)
-        {
-            var parts = new List<string>();
-            if (device.Seconds.HasValue) parts.Add(Duration(device.Seconds.Value));
-            if (device.Tokens.HasValue) parts.Add(Compact(device.Tokens.Value) + " tokens");
-            if (device.Usd.HasValue) parts.Add(Money(device.Usd.Value));
-            return parts.Count == 0 ? "Unknown" : string.Join(" \u00B7 ", parts);
-        }
     }
 
     // Mirrors app/design-tokens.css, like the Mac panel.
@@ -386,27 +377,46 @@ namespace Observatory
                     }
                     if (s.Devices.Count > 0)
                     {
-                        // Today per computer. The heading names the cost column, since every dollar figure is an estimate.
-                        float h = Pad * 2 + 16 + Gap + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
+                        // Today per computer, in columns that each name what they hold. The cost header wraps over its column.
+                        // Column widths match the Mac panel: screen time 72, tokens 52, cost 92. Screen time is right-aligned at timeRight.
+                        const float tokenColumn = 52, costColumn = 92, columnGap = 8;
+                        float costRight = right - Pad, tokenRight = costRight - costColumn - columnGap, timeRight = tokenRight - tokenColumn - columnGap;
+                        string costHeader = "API-equivalent (estimate)";
+                        var farFormat = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Far };
+                        float headerHeight = (float)Math.Ceiling(g.MeasureString(costHeader, small, (int)costColumn, farFormat).Height);
+                        float h = Pad * 2 + headerHeight + Gap + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
-                            Text(g, "Today", small, p.Muted, inner, row);
-                            string estimate = "API-equivalent (estimate)";
-                            Text(g, estimate, small, p.Muted, end - Measure(g, estimate, small), row);
-                            row += 16 + Gap;
+                            float headerBase = row + headerHeight - 15;
+                            Text(g, "Screen time", small, p.Muted, timeRight - Measure(g, "Screen time", small), headerBase);
+                            Text(g, "Tokens", small, p.Muted, tokenRight - Measure(g, "Tokens", small), headerBase);
+                            using (var brush = new SolidBrush(p.Muted))
+                                g.DrawString(costHeader, small, brush, new RectangleF(costRight - costColumn, row, costColumn, headerHeight + 2), farFormat);
+                            row += headerHeight + Gap;
                             foreach (var device in s.Devices)
                             {
-                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "") + (device.Current && device.Usd.HasValue ? "\nCost is an API-equivalent estimate" : "")));
+                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "")));
                                 Text(g, device.Name, strong, p.Text, inner, row);
-                                string value = device.Current ? Format.Today(device)
-                                    : device.LastSeen.HasValue ? "Last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
-                                float width = Measure(g, value, body);
-                                Text(g, value, body, device.Current ? p.Text : p.Muted, end - width, row);
-                                if (!device.Current) Ring(g, p.Muted, end - width - 12, row + 6);
-                                // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
-                                else if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, end - width - 18, row + 3);
+                                if (device.Current)
+                                {
+                                    string time = device.Seconds.HasValue ? Format.Duration(device.Seconds.Value) : "Unknown";
+                                    string tokens = device.Tokens.HasValue ? Format.Compact(device.Tokens.Value) : "Unknown";
+                                    string cost = device.Usd.HasValue ? Format.Money(device.Usd.Value) : "Unknown";
+                                    Text(g, time, body, p.Text, timeRight - Measure(g, time, body), row);
+                                    Text(g, tokens, body, p.Text, tokenRight - Measure(g, tokens, body), row);
+                                    Text(g, cost, body, p.Text, costRight - Measure(g, cost, body), row);
+                                    // One quiet mark per computer: a sync problem shows only while its data is otherwise current.
+                                    if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, inner + Measure(g, device.Name, strong) + 6, row + 3);
+                                }
+                                else
+                                {
+                                    string value = device.LastSeen.HasValue ? "Last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
+                                    float width = Measure(g, value, body);
+                                    Text(g, value, body, p.Muted, end - width, row);
+                                    Ring(g, p.Muted, end - width - 12, row + 6);
+                                }
                                 row += 18 + Gap;
                             }
                         }
