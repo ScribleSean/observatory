@@ -19,9 +19,7 @@ import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.m
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource,attachProviderTokenEstimates} from './provider-token-sources.mjs';
 import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime} from './claude-limits.mjs';
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
-import {collectSettings} from './read-settings.mjs';
-import {collectClaudeUsage} from './read-claude-usage.mjs';
-import {collectProjectTokens} from './read-projects.mjs';
+import {listDistributions,wslRoots,readClaudeRoots,readCodexRoots,readProjectRoots,cacheName} from './token-roots.mjs';
 import {buildProjectTokens,unavailableProjectTokens} from './project-tokens.mjs';
 import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
 
@@ -53,9 +51,25 @@ export function toolFolder(variable,fallback,environment=process.env) {
   return configured;
 }
 
+// The home folders whose Claude Code and Codex logs count toward this computer:
+// its own, plus each WSL home on a Windows PC when the wsl source is on.
+export async function tokenRoots(config,{distributions=listDistributions,findRoots=wslRoots}={}) {
+  // A folder setting that is not absolute leaves no folder, so only that provider is Unknown.
+  const folder=(variable,fallback)=>{try {return toolFolder(variable,fallback);} catch {return null;}};
+  const own={label:config.host,claudeFolder:folder('CLAUDE_CONFIG_DIR','.claude'),codexFolder:folder('CODEX_HOME','.codex'),home:homedir()};
+  if(config.platform!=='windows' || !config.sources.wsl)return [own];
+  let names;
+  try {names=await distributions();}
+  catch {return [own,{label:'WSL',unreadable:true}];}
+  return [own,...await findRoots({distributions:names})];
+}
+
 export function defaultReaders(config) {
-  const claudeFolder=()=>toolFolder('CLAUDE_CONFIG_DIR','.claude');
-  const codexFolder=()=>toolFolder('CODEX_HOME','.codex');
+  let pending=null;
+  // One lookup per cycle serves every reader.
+  const roots=()=>pending??=tokenRoots(config);
+  // Each folder read has its own private cache. This computer's own folders keep their original cache names.
+  const cacheFor=tool=>async root=>realpath(await privateFolder(config.dataFolder,...(root.optional?[`private-${tool}-roots`,cacheName(root)]:[`private-${tool}`])));
   return {
     screenTime:async()=>{
       if(config.platform==='mac') {
@@ -64,13 +78,12 @@ export function defaultReaders(config) {
       }
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
-    codex:async()=>collectSettings(codexFolder(),{cacheDirectory:await realpath(await privateFolder(config.dataFolder,'private-codex'))}),
+    codex:async()=>readCodexRoots(await roots(),{cacheFor:cacheFor('codex')}),
     codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
-    claudeCode:()=>collectClaudeUsage(claudeFolder()),
-    projects:({claude,codex},now)=>collectProjectTokens({claudeFolder:claude?claudeFolder():null,
-      codexFolder:codex?codexFolder():null,home:homedir(),now}),
+    claudeCode:async()=>readClaudeRoots(await roots(),{cacheFor:cacheFor('claude')}),
+    projects:async({claude,codex},now)=>readProjectRoots(await roots(),{claude,codex,now}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
       return withinTime(readClaudeLimits(config.dataFolder,{enabled:true}),20000);
@@ -111,6 +124,8 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
   const at=now.toISOString(),host=config.host,other=OTHER[host];
   const disconnected=h=>({host:h,status:'not-connected'});
   const unavailable=(error)=>({host,status:'unavailable',checkedAt:at,...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})});
+  // The folders a token total covers, kept only when the WSL source can add any.
+  const withRoots=(row,raw)=>config.sources.wsl && config.platform==='windows' && Array.isArray(raw?.roots) && row.status==='ok'?{...row,roots:raw.roots}:row;
   const read=async(key,clean)=>{
     if(!config.sources[key])return null;
     try {return await clean(await readers[key]());}
@@ -127,11 +142,11 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
     read('codex',raw=>{
       const settings={...cleanSettings(raw,host),checkedAt:at};
-      const tokens={...attachTokenHours(tokensFromSettings(settings,host),raw.hourTotals),checkedAt:at};
+      const tokens=withRoots({...attachTokenHours(tokensFromSettings(settings,host),raw.hourTotals),checkedAt:at},raw);
       return {settings,tokens};
     }),
     read('codexLimits',value=>value),
-    read('claudeCode',raw=>cleanClaudeTokenSource(raw,host,at,{hours:true})),
+    read('claudeCode',raw=>withRoots(cleanClaudeTokenSource(raw,host,at,{hours:true}),raw)),
     read('claudeLimits',value=>value),
     readProjects(),
   ]);
