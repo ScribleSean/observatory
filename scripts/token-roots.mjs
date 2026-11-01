@@ -192,11 +192,13 @@ export async function readCodexRoots(roots,{cacheFor,read=collectSettings}) {
 
 // The first root is this computer's own home, so its result carries the day.
 // A WSL session started in the Windows home would be named after the Windows
-// user, so that name and the folder holding homes are never project names there.
+// user, so that name, the WSL user names and the folder holding homes are never project names there.
 export async function readProjectRoots(roots,{claude,codex,now,read=collectProjectTokens}) {
   const unknown={providers:{...(claude?{claude:{status:'unavailable'}}:{}),...(codex?{codex:{status:'unavailable'}}:{})}};
   const own=roots.find(root=>!root.optional);
-  const hidden=new Set([path.win32.basename(own?.home ?? '').toLowerCase(),'users'].filter(Boolean));
+  // The other users' names under /home are hidden too, since a session can start in another user's home.
+  const hidden=new Set([own?.home,...roots.filter(root=>root.optional && root.home).map(root=>root.home)]
+    .map(home=>path.win32.basename(home ?? '').toLowerCase()).filter(Boolean).concat('users'));
   const hide=result=>({...result,providers:Object.fromEntries(Object.entries(result.providers).map(([name,part])=>[name,
     part.status!=='ok'?part:{...part,sessions:part.sessions.map(session=>hidden.has(String(session.project).toLowerCase())?{...session,project:null}:session)}]))});
   const parts=[];

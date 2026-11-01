@@ -188,10 +188,16 @@ test('two users in one distribution are both counted',async()=>withFolder(async 
   const {own,share,find}=await pc(folder);
   const second=path.join(share,'Fixture-1','home','second-user');
   await claudeLogs(second,'two',[400]);
+  // A session the second user started in the first user's home.
+  const other=path.join(second,'.claude','projects','-home-fixture-user');
+  await mkdir(other,{recursive:true});
+  await writeFile(path.join(other,'cross.jsonl'),lines([{type:'assistant',timestamp:at(0),sessionId:'cross',cwd:'/home/fixture-user',requestId:'cross-r0',
+    message:{id:'cross-m0',role:'assistant',model:MODEL,usage:{input_tokens:0,output_tokens:0,cache_read_input_tokens:0,cache_creation_input_tokens:1}}}]));
   const roots=[own,...await find(['Fixture-1'])];
   assert.equal(roots.length,3);
   const {data}=await buildSnapshot(pcConfig(folder),readersFor(roots),{now});
-  assert.equal(today([claudeOf(data)]).totalTokens,320+310+410);
+  assert.equal(today([claudeOf(data)]).totalTokens,320+310+410+1);
+  assert.ok(!JSON.stringify(data.projectTokens[0]).includes('fixture-user'),'another home in the distribution is not a project name');
   assert.deepEqual(claudeOf(data).roots,['Windows','WSL Fixture-1']);
 }));
 
