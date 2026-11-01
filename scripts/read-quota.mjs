@@ -42,6 +42,14 @@ export function cleanAccountUsage(result) {
     checkedAt:new Date().toISOString(),provider:'Codex',scope:'account',summary,dailyUsageBuckets};
 }
 
+// A revoked or expired ChatGPT sign-in comes back as a server error whose message carries the 401.
+export function errorStatus(error) {
+  if(error?.code===-32601)return 'unsupported';
+  if(error?.code===429)return 'rate-limited';
+  const message=typeof error?.message==='string'?error.message.slice(0,4096):'';
+  return /\b401 Unauthorized\b|"token_revoked"|"token_expired"/.test(message)?'needs-auth':'unavailable';
+}
+
 function unavailable(status='unavailable',stage='client') {return Object.assign(Error('Account usage unavailable'),{status,stage});}
 function accountScope(result,salt) {
   const account=result?.account;
@@ -96,7 +104,7 @@ async function withAccountClient(executable,action,{timeoutMs=15000,spawnProcess
       let row;try{row=JSON.parse(line);}catch{continue;}
       const item=pending.get(row?.id);if(!item)continue;
       pending.delete(row.id);
-      if(row.error)item.reject(unavailable(row.error.code===-32601?'unsupported':row.error.code===429?'rate-limited':'unavailable',item.method));
+      if(row.error)item.reject(unavailable(errorStatus(row.error),item.method));
       else item.resolve(row.result);
     }
   });

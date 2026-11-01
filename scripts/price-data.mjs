@@ -21,6 +21,12 @@ const prices = {
       "cacheWrite": 0.125,
       "output": 0.5
     },
+    "claude-opus-4-8": {
+      "input": 5,
+      "cachedInput": 0.5,
+      "cacheWrite": 6.25,
+      "output": 25
+    },
     "claude-opus-5": {
       "input": 5,
       "cachedInput": 0.5,

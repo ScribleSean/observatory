@@ -4,7 +4,7 @@ import { limitTone } from '../components/Meter';
 import { Note } from '../components/Note';
 import { snapshotFresh } from '../../../lib/freshness.mjs';
 
-export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; low: boolean; spent?: boolean; stale: boolean };
+export type LimitRow = { provider: string; name: string; window: string; remaining: number | null; note: string; absent?: string; low: boolean; spent?: boolean; stale: boolean };
 export type DeviceToday = { host: string; name: string; missing?: boolean; collectedAt?: string | null; seconds: number | null; tokens: number | null; usd: number | null; screenTimeOn?: boolean; error?: string; freshness?: { stale: boolean };
   categories?: { name: string; seconds: number }[]; costs?: { codex?: number | null; claude?: number | null } };
 export type Glance = {
@@ -30,7 +30,7 @@ function LimitsCard({ glance, view, now }: { glance: Glance; view: Record<string
             <span className="ob-tile-value">
               {/* A low limit says when it resets, and an old reading says when it was taken. */}
               {(tone || row.stale) && row.note ? <Note className={row.stale ? 'ob-meta warn' : `ob-meta ${tone}`} text={row.note} /> : null}
-              <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{percent(value)}</span>
+              <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null && row.absent ? row.absent : percent(value)}</span>
             </span>
             <span className="ob-bar" aria-hidden="true">{value !== null && <i className={row.provider} style={{ width: `${value}%` }} />}</span>
           </li>;

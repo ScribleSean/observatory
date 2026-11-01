@@ -5,7 +5,7 @@ import {realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {chmod} from 'node:fs/promises';
-import {parseClaudeUsage,parseResetTime,readClaudeUsage,usageEnvironment} from './claude-usage-command.mjs';
+import {parseClaudeUsage,parseResetTime,readClaudeUsage,signedOut,usageEnvironment} from './claude-usage-command.mjs';
 import {readClaudeLimits,withinTime} from './claude-limits.mjs';
 
 
@@ -86,13 +86,13 @@ test('comma reset lines return both windows with LF and CRLF endings', () => {
     '75% used · resets Oct 16, 6pm (America/New_York)');
   for(const ending of ['\n','\r\n'])assert.deepEqual(parseClaudeUsage(envelope(result.replaceAll('\n',ending)),now),
     {rate_limits:{five_hour:{used_percentage:23,resets_at:Date.parse('2026-10-14T03:09:00Z')/1000},
-      seven_day:{used_percentage:75,resets_at:Date.parse('2026-10-16T22:00:00Z')/1000}}});
+      seven_day:{used_percentage:75,resets_at:Date.parse('2026-10-16T22:00:00Z')/1000}},notReported:[]});
 });
 
 test('the two limit lines become status line fields and nothing else is kept', () => {
   const parsed=parseClaudeUsage(envelope(),now);
   assert.deepEqual(parsed,{rate_limits:{five_hour:{used_percentage:23,resets_at:Date.parse('2026-10-14T03:09:00Z')/1000},
-    seven_day:{used_percentage:75,resets_at:Date.parse('2026-10-16T22:00:00Z')/1000}}});
+    seven_day:{used_percentage:75,resets_at:Date.parse('2026-10-16T22:00:00Z')/1000}},notReported:[]});
   assert.doesNotMatch(JSON.stringify(parsed),/synthetic|requests|sessions/);
 });
 
@@ -192,4 +192,36 @@ test('readClaudeUsage reports only a status and sanitized reading from fake comm
   }
   assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>path.join(folder,'missing')}),{status:'failed',usage:null});
   assert.deepEqual(await readClaudeUsage({cwd:folder,find:async()=>{throw Error('synthetic');}}),{status:'failed',usage:null});
+});
+
+test('a reset time in the hour repeated when clocks go back is refused, in either zone', () => {
+  const autumn=Date.parse('2026-10-31T12:00:00Z');
+  assert.equal(parseResetTime('Nov 1 at 1:30am (America/New_York)',autumn),null);
+  assert.equal(parseResetTime('Nov 1 at 12:30am (America/New_York)',autumn),Date.parse('2026-11-01T04:30:00Z')/1000);
+  assert.equal(parseResetTime('Nov 1 at 2:30am (America/New_York)',autumn),Date.parse('2026-11-01T07:30:00Z')/1000);
+  const lordHowe=Date.parse('2027-04-03T00:00:00Z');
+  assert.equal(parseResetTime('Apr 4 at 1:45am (Australia/Lord_Howe)',lordHowe),null);
+  assert.equal(parseResetTime('Apr 4 at 3am (Australia/Lord_Howe)',lordHowe),Date.parse('2027-04-03T16:30:00Z')/1000);
+  assert.equal(parseResetTime('Mar 14 at 2:30am (America/New_York)',Date.parse('2027-03-13T12:00:00Z')),null);
+});
+
+test('a usage text without the session line lists it as not reported, and the cost summary means signed out', () => {
+  const weekOnly=`You are currently using your subscription to power your Claude Code usage\n\nCurrent week (all models): 18% used · resets Oct 16 at 6pm (America/New_York)\nCurrent week (Fable): 10% used · resets Oct 16 at 6pm (America/New_York)\n`;
+  const parsed=parseClaudeUsage(envelope(weekOnly),now);
+  assert.deepEqual(parsed.notReported,['five_hour']);
+  assert.deepEqual(Object.keys(parsed.rate_limits),['seven_day']);
+  // A session line that is present but unreadable is not "not reported".
+  assert.deepEqual(parseClaudeUsage(envelope(text('23% used · resets someday')),now).notReported,[]);
+  const summary='Total cost:            $0.0000\nTotal duration (API):  0s\nUsage:                 0 input, 0 output, 0 cache read, 0 cache write';
+  assert.equal(parseClaudeUsage(envelope(summary),now),null);
+  assert.equal(signedOut(envelope(summary)),true);
+  assert.equal(signedOut(envelope(text())),false);
+  assert.equal(signedOut({...envelope(summary),local_command:'cost'}),false);
+});
+
+test('the repeated hour is refused in zones more than 12 hours ahead of UTC', () => {
+  const april=Date.parse('2027-04-03T00:00:00Z');
+  assert.equal(parseResetTime('Apr 4 at 2:30am (Pacific/Auckland)',april),null);
+  assert.equal(parseResetTime('Apr 4 at 3:15am (Pacific/Chatham)',april),null);
+  assert.equal(parseResetTime('Apr 4 at 4am (Pacific/Auckland)',april),Date.parse('2027-04-03T16:00:00Z')/1000);
 });

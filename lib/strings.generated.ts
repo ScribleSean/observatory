@@ -52,6 +52,7 @@ export const STRINGS = {
     "enableLimits": "Not connected",
     "signIn": "Sign in to {name}",
     "noReading": "No reading available",
+    "notReported": "Not reported",
     "resetUnknown": "Reset: Unknown",
     "readingUnknown": "Reading time: Unknown",
     "hourlyUnavailable": "Hourly totals are not collected yet",

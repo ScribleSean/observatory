@@ -4,7 +4,7 @@ import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {runHub,recombine} from '../scripts/hub.mjs';
 import {combine} from '../lib/combine.mjs';
-import {pullCommand,pushCommand,sshTransport,stagedName} from '../scripts/hub-transport.mjs';
+import {pullCommand,pushCommand,sshEnvironment,sshTransport,stagedName} from '../scripts/hub-transport.mjs';
 
 const staged=stagedName('00000000-0000-0000-0000-000000000000');
 import {withFolder,ownSnapshot,testConfig} from './helpers.mjs';
@@ -229,3 +229,10 @@ test('a failed write-back is saved in combined.json',()=>withFolder(async folder
   const saved=await read(folder,'combined.json');
   assert.deepEqual(saved.hub.spokes,[{name:'PC',host:'Windows',pull:'ok',push:'timed out'}]);
 }));
+
+test('ssh and scp get a fixed environment, so a SendEnv line cannot forward other variables', () => {
+  const source={HOME:'/h',USER:'u',PATH:'/bin',SSH_AUTH_SOCK:'/s',LANG:'en_US.UTF-8',LC_ALL:'C',CLAUDECODE:'1',ANTHROPIC_API_KEY:'synthetic',GITHUB_TOKEN:'synthetic'};
+  assert.deepEqual(sshEnvironment(source,'darwin'),{HOME:'/h',USER:'u',PATH:'/bin',SSH_AUTH_SOCK:'/s'});
+  const windows=sshEnvironment({USERPROFILE:'C:\\Users\\u',SystemRoot:'C:\\Windows',Path:'C:\\Windows',OPENAI_API_KEY:'synthetic'},'win32');
+  assert.deepEqual(windows,{USERPROFILE:'C:\\Users\\u',SystemRoot:'C:\\Windows',Path:'C:\\Windows'});
+});

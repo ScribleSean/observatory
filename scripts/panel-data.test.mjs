@@ -459,3 +459,16 @@ test('a frozen snapshot loses current-day completeness an hour later without rec
   assert.match(later.codexNote, /^Unknown · as of /);
   assert.equal(JSON.stringify(data), frozen);
 });
+
+test('a limit the provider does not report says so in place of Unknown, in the dashboard order', () => {
+  const claudeLimits = { status: 'ok', checkedAt: new Date(now - 60000).toISOString(), notReported: ['five_hour', 'bogus'], windows: [
+    { bucket: 'claude', window: 'seven_day', durationMinutes: 10080, remainingPercent: 82, resetsAt: new Date(now + 86400000).toISOString() }] };
+  const rows = limitsWithGaps(limits({ claudeLimits }, now)).filter(row => row.provider === 'claude');
+  assert.deepEqual(rows.map(row => [row.window, row.remaining, row.absent ?? null, row.note]),
+    [['5-hour', null, strings.status.notReported, ''], ['weekly', 82, null, rows[1].note]]);
+  // Without the list the gap stays an Unknown with no reading.
+  const gap = limitsWithGaps(limits({ claudeLimits: { ...claudeLimits, notReported: undefined } }, now)).filter(row => row.provider === 'claude');
+  assert.deepEqual([gap[0].window, gap[0].absent, gap[0].note], ['5-hour', undefined, strings.status.noReading]);
+  // A failed source never claims a window is not reported.
+  assert.equal(limits({ claudeLimits: { ...claudeLimits, status: 'unavailable' } }, now).some(row => row.absent), false);
+});

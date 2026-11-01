@@ -74,3 +74,12 @@ test('Codex daybreak models have a public API price', () => {
   assert.equal(estimate([row]).usd, 4 + 0.4 + 20);
   assert.equal(estimate([{ ...row, model: 'gpt-daybreak-red-latest' }]).usd, 12.5 + 1.25 + 75);
 });
+
+test('Claude Opus 4.8 has a public API price, and a model with no public price stays out of the estimate', () => {
+  const row = { model: 'claude-opus-4-8', inferred: false, inputTokens: 1e6, cacheReadTokens: 1e6, cacheCreationTokens: 1e6, outputTokens: 1e6, totalTokens: 4e6 };
+  assert.equal(estimate([row]).usd, 5 + 0.5 + 6.25 + 25);
+  const partial = estimate([row, { ...row, model: 'codex-auto-review' }]);
+  assert.equal(partial.usd, 5 + 0.5 + 6.25 + 25);
+  assert.equal(partial.coveredTokens, 4e6);
+  assert.equal(partial.excluded, 1);
+});

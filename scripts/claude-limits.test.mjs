@@ -158,3 +158,52 @@ test('merged windows publish their own observation times', () => {
   assert.deepEqual(source.windows.map(row => row.checkedAt),
     [new Date(now).toISOString(), new Date(now - 30 * 60000).toISOString()]);
 });
+
+test('a usage read that leaves out the 5-hour window says it is not reported and drops the older reading', async t => {
+  const runtime=await folder(t);
+  await recordClaudeLimits(runtime,input(),now-20*60000);
+  const weekOnly={rate_limits:{seven_day:{used_percentage:50,resets_at:seconds+3*86400}},notReported:['five_hour']};
+  const source=await readClaudeLimits(runtime,{now,enabled:true,readUsage:async()=>({status:'read',usage:weekOnly})});
+  assert.equal(source.status,'ok');
+  assert.deepEqual(source.notReported,['five_hour']);
+  assert.deepEqual(source.windows.map(window=>window.window),['seven_day']);
+  const saved=JSON.parse(await readFile(path.join(runtime,'claude-limits','limits.json'),'utf8'));
+  assert.deepEqual(saved.notReported,{names:['five_hour'],observedAt:seconds});
+  // A later reading of the window brings it back.
+  const later=await readClaudeLimits(runtime,{now:now+60000,enabled:true,readUsage:async()=>({status:'read',usage:{...input(),notReported:[]}})});
+  assert.equal(later.notReported,undefined);
+  assert.deepEqual(later.windows.map(window=>window.window),['five_hour','seven_day']);
+  // A statusline reading without the list keeps the other names.
+  assert.deepEqual(mergeClaudeLimits({...saved},extractClaudeLimits({rate_limits:{seven_day:{used_percentage:51,resets_at:seconds+3*86400}}},now+60000),now+60000).notReported,
+    {names:['five_hour'],observedAt:seconds});
+});
+
+test('a not-reported list goes stale with the reading and refuses unknown names', () => {
+  const stored={observedAt:seconds,windows:{seven_day:{usedPercentage:18,resetsAt:seconds+3*86400,observedAt:seconds}},notReported:{names:['five_hour'],observedAt:seconds}};
+  assert.deepEqual(claudeLimitsSource(stored,{enabled:true,now}).notReported,['five_hour']);
+  assert.equal(claudeLimitsSource(stored,{enabled:true,now:now+3*3600000}).notReported,undefined);
+  for(const names of [['five_hour','other'],'five_hour',[1]])
+    assert.equal(claudeLimitsSource({...stored,notReported:{names,observedAt:seconds}},{enabled:true,now}).notReported,undefined);
+  assert.equal(extractClaudeLimits({rate_limits:{seven_day:{used_percentage:1,resets_at:seconds+60}},notReported:['bogus']},now).notReported,undefined);
+});
+
+test('signed out of Claude Code reads as needs sign-in unless a current reading exists', async t => {
+  const runtime=await folder(t);
+  const signedOut=async()=>({status:'signed-out',usage:null});
+  assert.deepEqual(await readClaudeLimits(runtime,{now,enabled:true,readUsage:signedOut}),
+    {provider:'Claude Code',scope:'account',status:'needs-auth',windows:[],usageCommand:'signed-out'});
+  await recordClaudeLimits(runtime,input(),now-40*60000);
+  assert.equal((await readClaudeLimits(runtime,{now,enabled:true,readUsage:signedOut})).status,'needs-auth');
+  await recordClaudeLimits(runtime,input(),now-60000);
+  assert.equal((await readClaudeLimits(runtime,{now,enabled:true,readUsage:signedOut})).status,'ok');
+});
+
+test('an earlier 5-hour reading does not come back once a read has left the window out', async t => {
+  const runtime=await folder(t);
+  await recordClaudeLimits(runtime,input(),now-20*60000);
+  await recordClaudeLimits(runtime,{rate_limits:{seven_day:{used_percentage:50,resets_at:seconds+3*86400}},notReported:['five_hour']},now);
+  const saved=JSON.parse(await readFile(path.join(runtime,'claude-limits','limits.json'),'utf8'));
+  assert.equal(saved.windows.five_hour,undefined);
+  const later=claudeLimitsSource(saved,{enabled:true,now:now+30*60000});
+  assert.deepEqual(later.windows.map(window=>window.window),['seven_day']);
+});

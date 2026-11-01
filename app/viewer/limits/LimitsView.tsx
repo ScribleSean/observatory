@@ -23,7 +23,7 @@ function Latest({ row }: { row: Row | undefined }) {
   const tone = value === null ? '' : limitTone(row!);
   return <span className="ob-history-latest">
     {row?.note && <Note className={row.stale ? 'ob-meta warn' : 'ob-meta'} text={row.note} />}
-    <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null ? STRINGS.status.unknown : format(STRINGS.limitHistory.left, { value: Math.round(value) })}</span>
+    <span className={value === null ? 'ob-num ob-unknown' : `ob-num ${tone}`.trim()}>{value === null ? (row as { absent?: string } | undefined)?.absent ?? STRINGS.status.unknown : format(STRINGS.limitHistory.left, { value: Math.round(value) })}</span>
   </span>;
 }
 
