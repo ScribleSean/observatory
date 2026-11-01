@@ -32,5 +32,6 @@ To work on the pages, run `npm run preview`. It serves the dashboard with fictio
 
 - Keep each pull request to one change, with tests for the readers, the combine step or the server when you touch them.
 - Pin every action in `.github/workflows/` to a full 40-character commit SHA, with the version it stands for in a comment, for example `uses: actions/checkout@<sha> # v4.4.0`. A tag can be moved to other code. `npm test` fails on an action pinned to a tag or branch.
+- The test suite also checks repository rules in `test/repo-rules.test.mjs`. A line that must break one of those rules says so on that line or the line above, with the marker the rule names and a reason.
 - Use synthetic data in tests and examples. Never attach real usage records, logs or screenshots with your own projects in them.
 - Write plainly in docs and interface text: full sentences, no em dashes or semicolons, no marketing language. Use "Unknown" for missing values.
