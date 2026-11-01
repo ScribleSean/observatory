@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
-import {nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,startMenuShortcut,LABEL} from '../scripts/setup.mjs';
+import {minimumNode,nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,startMenuShortcut,LABEL} from '../scripts/setup.mjs';
 
 for(const failure of ['compiler','executable','plist','sign','verify','swap','rollback',null]) {
   test(`staged Mac install: ${failure ?? 'success'}`,()=>withFolder(async folder=>{
@@ -73,11 +73,17 @@ for(const failure of ['compiler','executable','plist','sign','verify','swap','ro
   }));
 }
 
-test('Node 22.13 or later is required',()=>{
-  assert.equal(nodeSupported('22.13.0'),true);
-  assert.equal(nodeSupported('24.1.0'),true);
-  assert.equal(nodeSupported('22.12.9'),false);
-  assert.equal(nodeSupported('20.18.0'),false);
+test('Node 22.13 or later is required, and 22.17 or later on Windows',()=>{
+  assert.equal(nodeSupported('22.13.0','darwin'),true);
+  assert.equal(nodeSupported('24.1.0','darwin'),true);
+  assert.equal(nodeSupported('22.12.9','darwin'),false);
+  assert.equal(nodeSupported('20.18.0','darwin'),false);
+  assert.equal(nodeSupported('22.17.0','win32','1.51.0'),true);
+  assert.equal(nodeSupported('24.1.0','win32','1.51.0'),true);
+  assert.equal(nodeSupported('22.16.0','win32','1.49.2'),false);
+  assert.equal(nodeSupported('23.6.0','win32','1.49.2'),false);
+  assert.equal(minimumNode('darwin'),'22.13');
+  assert.equal(minimumNode('win32'),'22.17');
 });
 
 test('the glance app is built inside the clone, not in Applications',()=>{
