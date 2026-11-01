@@ -93,20 +93,22 @@ test('hourly masks hours after reading but retains the reading hour', () => {
   const result = view();
   assert.equal(result.hourly.length, 24);
   assert.equal(result.hourly[12].value, 100);
-  assert.ok(result.hourly.slice(13).every(point => point.value === null));
-  assert.ok(result.zoneLabel.includes('UTC'));
+  // Later hours have not happened yet, so they are blank rather than Unknown.
+  assert.ok(result.hourly.slice(13).every(point => point.value === undefined));
+  assert.deepEqual([result.hourly[0].label, result.hourly[13].label], ['12 AM', '1 PM']);
+  assert.equal(result.hourlyTitle, strings.activity.hourlyTitle);
   assert.equal(view(undefined, { period: 'week' }).hourly, null);
 });
 test('missing hours and dates after the reading are Unknown', () => {
   const data = snapshot(); delete data.activity[0].days[0].hours;
-  assert.ok(view(data).hourly.every(point => point.value === null));
+  assert.ok(view(data).hourly.slice(0, 13).every(point => point.value === null));
   data.activity[0].days.push(day('2026-10-15'));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
 });
 test('Combined live source without reading masks every date', () => {
   const data = snapshot(); delete data.combined.checkedAt;
   data.combined.days.push(day('2026-10-13'), day('2026-10-15'));
-  for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value === null));
+  for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value == null));
 });
 test('Combined hourly chart falls back to archive time while Now stays Unknown', () => {
   const data = {
@@ -117,12 +119,13 @@ test('Combined hourly chart falls back to archive time while Now stays Unknown',
     }],
   };
   const options = { host: 'All', period: 'day', date: '2026-10-14' };
-  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(100), ...Array(13).fill(null)]);
+  // Read at 10:20, drawn at 12:32: 11 and 12 o'clock are Unknown, later hours are blank.
+  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(100), null, null, ...Array(11).fill(undefined)]);
   assert.equal(activityNow(data, 'All', now).reason, 'noReading');
   assert.equal(activityNow(data, 'All', now).value, null);
   for (const asOf of [undefined, null, '', 'invalid']) {
     data.activityHistory[0].asOf = asOf;
-    assert.deepEqual(view(data, options).hourly.map(point => point.value), hours(null));
+    assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(13).fill(null), ...Array(11).fill(undefined)]);
   }
 });
 test('Now hourly chart follows reading date instead of selected date', () => {
@@ -147,21 +150,12 @@ for (const status of ['recent', 'stale', 'unknown', 'unavailable']) test(`tracki
   assert.equal(result.tracking.asOf, readingAt);
   assert.ok(!JSON.stringify(result).includes('PRIVATE RAW MESSAGE'));
 });
-test('Combined tracking has a distinct detail and invalid times stay null', () => {
+test('Combined tracking keeps invalid times null', () => {
   const data = snapshot(); data.activityHistory = [{ ...source('Combined'), latestReadStatus: 'ok', trackingStatus: 'recent', asOf: 'invalid' }];
   const result = view(data, { host: 'All' });
-  assert.equal(result.tracking.detail, strings.activity.trackingRecentCombinedDetail);
+  assert.equal(result.tracking.label, strings.activity.trackingRecent);
   assert.equal(result.tracking.asOf, null);
   assert.equal(result.tracking.through, null);
-});
-test('details name the time zone and match the period', () => {
-  const zone = strings.activity.zoneCaveat.replace('{zone}', 'UTC');
-  assert.ok(view().info.includes(zone));
-  assert.ok(!view().info.includes(strings.activity.nowCaveat));
-  assert.ok(view().info.includes(strings.activity.missingDates));
-  const now = view(undefined, { period: 'now' }).info;
-  assert.ok(now.includes(strings.activity.nowCaveat));
-  assert.ok(now.includes(zone));
 });
 test('zero activity without coverage carries the tracking warning', () => {
   const data = snapshot(); data.activity[0].days = [{ ...day(undefined, 0), trackedSeconds: 0 }];
@@ -239,11 +233,11 @@ test('unavailable device displays archived hours only through the archive readin
     days: [day('2026-10-13'), day(), day('2026-10-15')],
   }];
   assert.deepEqual(view(data, { date: '2026-10-13' }).hourly.map(point => point.value), hours(100));
-  assert.deepEqual(view(data).hourly.map(point => point.value), hours(100).map((value, hour) => hour <= 12 ? value : null));
+  assert.deepEqual(view(data).hourly.map(point => point.value), hours(100).map((value, hour) => hour <= 12 ? value : undefined));
   assert.deepEqual(data.activityHistory[0].days[0].hours, hours(100));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
   assert.equal(view(data, { period: 'now' }).total, null);
-  assert.ok(view(data, { period: 'now' }).hourly.every(point => point.value === null));
+  assert.ok(view(data, { period: 'now' }).hourly.every(point => point.value == null));
   data.activityHistory[0].days[0].hours = hours(null);
   assert.ok(view(data, { date: '2026-10-13' }).hourly.every(point => point.value === null));
 });
@@ -255,9 +249,9 @@ test('stale device readings cannot supply retained activity or hourly charts', (
   const result = view(data);
   assert.equal(result.total, null);
   assert.match(result.note, /as of/);
-  assert.ok(result.hourly.every(row => row.value === null));
+  assert.ok(result.hourly.every(row => row.value == null));
   assert.equal(result.tracking.status, 'unavailable');
-  assert.ok(view(data, { period: 'now' }).hourly.every(row => row.value === null));
+  assert.ok(view(data, { period: 'now' }).hourly.every(row => row.value == null));
   assert.equal(view(data, { host: 'All' }).total, 3600);
 });
 

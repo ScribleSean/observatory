@@ -94,7 +94,7 @@ test('the demo hourly spread follows the viewer\'s hour, not the build hour',()=
     const nowView=activityView(shifted.view,{host:'Mac',period:'now',now});
     assert.ok(nowView.total>0,`${builtAt} viewed ${viewedAt}: Now reads ${nowView.total}`);
     const day=activityView(shifted.view,{host:'Mac',period:'day',now});
-    const shown=day.hourly.filter(row=>row.value!==null);
+    const shown=day.hourly.filter(row=>row.value!=null);
     assert.equal(shown.length,hour+1);
     assert.equal(sum(shown.map(row=>row.value)),day.total);
     for (const source of [...shifted.view.activity,...shifted.view.tokens].filter(row=>Array.isArray(row.days))) {

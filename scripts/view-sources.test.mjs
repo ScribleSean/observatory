@@ -27,7 +27,7 @@ void test('check times preserve exact time and handle unknown and future reading
     assert.deepEqual(checkTime(iso, now), { label, iso,
       exact: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(now - age) });
   }
-  for (const at of [undefined, null, '', 'garbage', 0]) assert.deepEqual(checkTime(at, now), { label: 'Last check: Unknown', exact: null, iso: null });
+  for (const at of [undefined, null, '', 'garbage', 0]) assert.deepEqual(checkTime(at, now), { label: 'Checked: Unknown', exact: null, iso: null });
 });
 void test('all five source groups retain supported rows and device names', () => {
   const mac = { host: 'Mac', status: 'ok' }, win = { host: 'Windows', status: 'partial' }, other = { host: 'Other', status: 'ok' };
@@ -37,9 +37,9 @@ void test('all five source groups retain supported rows and device names', () =>
   const groups = sourceGroups(snapshot, now);
   assert.deepEqual(groups.map(group => group.id), ['limits', 'activity', 'codexTokens', 'claudeTokens', 'settings']);
   assert.deepEqual(groups.map(group => group.rows.length), [3, 2, 1, 1, 1]);
-  assert.deepEqual(groups[0].rows.map(row => row.device), [null, null, 'Windows']);
-  assert.equal(groups[1].rows[0].device, 'Synthetic laptop (Mac)');
-  assert.equal(sourceGroups({ activity: [mac] }, now)[1].rows[0].device, 'macOS');
+  assert.deepEqual(groups[0].rows.map(row => row.device), [null, null, 'PC']);
+  assert.deepEqual([groups[1].rows[0].device, groups[1].rows[0].deviceName], ['Mac', 'Synthetic laptop']);
+  assert.equal(sourceGroups({ activity: [mac] }, now)[1].rows[0].device, 'Mac');
   assert.equal(sourceGroups({ peerQuota: other }, now)[0].rows.length, 0);
   for (const empty of [{}, null, undefined]) {
     const groups = sourceGroups(empty, now);
@@ -89,5 +89,5 @@ void test('sources in a frozen snapshot become stale at draw time', () => {
 });
 void test('a combined limit reading names the computer it was observed on', () => {
   const groups = sourceGroups({ deviceNames: { Mac: 'Synthetic laptop' }, claudeLimits: { status: 'ok', observedOn: 'Mac' }, quota: { status: 'ok', observedOn: 'Elsewhere' } }, now);
-  assert.deepEqual(groups[0].rows.map(row => row.device), ['Synthetic laptop (Mac)', null]);
+  assert.deepEqual(groups[0].rows.map(row => [row.device, row.deviceName]), [['Mac', 'Synthetic laptop'], [null, null]]);
 });

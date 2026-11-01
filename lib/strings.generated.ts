@@ -4,11 +4,10 @@ export const STRINGS = {
     "title": "Observatory"
   },
   "limits": {
-    "deviceNamed": "{name} ({platform})",
     "resetPending": "Waiting for the reset to be observed.",
     "sharedFrom": "Shared from {device}",
     "observed": "Observed {span} ago",
-    "observationUnknown": "Observation time unknown"
+    "observationUnknown": "Observed: Unknown"
   },
   "sections": {
     "limits": "Limits",
@@ -20,15 +19,15 @@ export const STRINGS = {
   "periods": {
     "now": "Now",
     "day": "Day",
-    "week": "Week",
-    "month": "Month",
-    "all": "All time"
+    "week": "7 days",
+    "month": "30 days",
+    "all": "All"
   },
   "devices": {
     "all": "All",
-    "macOS": "macOS",
-    "windows": "Windows",
-    "device": "Device",
+    "mac": "Mac",
+    "pc": "PC",
+    "device": "Computer",
     "period": "Period"
   },
   "providers": {
@@ -37,29 +36,26 @@ export const STRINGS = {
   },
   "actions": {
     "refresh": "Refresh",
-    "checkUpdates": "Check for updates",
-    "settings": "Settings",
-    "openObservatory": "Open Observatory",
-    "navigation": "Actions"
+    "openDashboard": "Open dashboard"
   },
   "labels": {
     "screenTime": "Screen time",
     "loading": "Loading",
-    "noCombined": "No combined.json yet. Run npm run tick, or wait for the next five-minute cycle.",
+    "noCombined": "Waiting for the first reading",
     "computers": "Computers"
   },
   "status": {
     "unknown": "Unknown",
     "noRecords": "No records",
-    "byDevice": "By device",
+    "byDevice": "By computer",
     "notCollected": "Not collected yet",
-    "enableLimits": "Turn on codexLimits in observatory.config.json",
+    "enableLimits": "Not connected",
     "signIn": "Sign in to {name}",
     "noReading": "No reading available",
-    "resetUnknown": "Reset time unknown",
-    "readingUnknown": "reading time unknown",
+    "resetUnknown": "Reset: Unknown",
+    "readingUnknown": "Reading time: Unknown",
     "hourlyUnavailable": "Hourly totals are not collected yet",
-    "allUnverified": "All needs verified records from every device",
+    "allUnverified": "Needs a verified reading from each computer",
     "unknownWindow": "Unknown window",
     "updatedUnknown": "Updated: Unknown",
     "updateAhead": "Update time is ahead of this device",
@@ -85,9 +81,7 @@ export const STRINGS = {
     "runsOut": "runs out in about {span}",
     "asOf": "as of {time}",
     "sourcesRead": "{read} of {total} sources read",
-    "separator": " · ",
-    "filledBlock": "█",
-    "emptyBlock": "░"
+    "separator": " · "
   },
   "charts": {
     "item": "Item",
@@ -109,7 +103,7 @@ export const STRINGS = {
     "checkedNow": "Checked just now",
     "checkedAgo": "Checked {age} ago",
     "checkAhead": "Check time is ahead of this device",
-    "checkUnknown": "Last check: Unknown",
+    "checkUnknown": "Checked: Unknown",
     "claudeLimits": "Claude Code limits",
     "codexLimits": "Codex limits",
     "codexTokens": "Codex tokens",
@@ -117,8 +111,7 @@ export const STRINGS = {
     "modelSettings": "Model settings",
     "noConnected": "No sources are connected",
     "noRecords": "No source records",
-    "statusCount": "{word}: {count}",
-    "namedDevice": "{name} ({platform})"
+    "statusCount": "{word}: {count}"
   },
   "tokens": {
     "input": "Input",
@@ -129,57 +122,44 @@ export const STRINGS = {
     "classes": "Token classes",
     "byModel": "By model",
     "model": "Model",
-    "chartTitle": "{provider} tokens by day, last 30 days",
+    "chartTitle": "{provider} tokens by day",
     "apiEstimate": "API-equivalent (estimate)",
     "underCent": "Under $0.01",
     "pricesChecked": "Prices checked {date}",
-    "pricesUnknown": "Price check date Unknown",
+    "pricesUnknown": "Prices checked: Unknown",
     "partial": "Covers {covered} of {total} tokens. Models without a price are left out.",
     "settingsTitle": "Recorded reasoning and speed",
     "effort": "Reasoning",
     "speed": "Speed",
     "noSettings": "No settings recorded",
-    "deviceNote": "Claude Code token totals are shown per device because Observatory does not check token overlap between devices.",
-    "breakdown": "Breakdown"
+    "breakdown": "Breakdown",
+    "hourlyTitle": "{provider} tokens by hour today"
   },
   "activity": {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",
-    "zoneCaveat": "Days and hours follow the time zone of this computer, {zone}.",
-    "hourlyTitle": "Screen time by hour, {zone} clock",
+    "hourlyTitle": "Screen time by hour",
     "dailyTitle": "Screen time by day",
-    "date": "Date",
     "categoriesTitle": "Categories and recorded apps",
     "recordedApps": "Recorded apps",
     "deviceOverlap": "Device overlap",
     "noCategories": "No category breakdown available",
     "noTracking": "No tracking records for this date. That does not mean the computer went unused.",
-    "foregroundNote": "Screen time is recorded foreground time, not attention. Combined activity counts device overlap once.",
-    "missingDates": "Missing dates are Unknown, not zero.",
     "windowOf": "of the last {span}",
-    "details": "Details",
     "nowStale": "The last reading is more than 10 minutes old",
     "nowHourAfter": "No reading yet in the current clock hour",
     "nowNoHours": "Hourly totals are missing for this period",
     "nowDaylight": "Unavailable during a daylight saving change",
-    "nowNoReading": "Reading time unknown",
+    "nowNoReading": "Reading time: Unknown",
     "nowAhead": "The last reading is ahead of this device's clock",
-    "nowZone": "Time zone unknown",
+    "nowZone": "Time zone: Unknown",
     "nowNoSource": "Not collected yet",
-    "trackingTitle": "Tracking",
     "trackingRecent": "Recent tracking coverage",
     "trackingStale": "Tracking is not current",
-    "trackingUnknown": "Tracking freshness unknown",
-    "trackingUnavailable": "Source unavailable",
-    "trackingRecentDetail": "Tracking coverage was observed within 10 minutes of collection. It includes idle time as well as active use.",
-    "trackingRecentCombinedDetail": "At least one device had tracking coverage within 10 minutes of collection. This does not verify every device.",
-    "trackingStaleDetail": "No recent tracking coverage at collection. The device may be asleep or offline, or its watchers may have stopped. Saved history is kept.",
-    "trackingUnknownDetail": "Tracking freshness is unknown. Reading past records does not show that the watchers are running.",
-    "trackingUnavailableDetail": "Observatory could not read the source. Saved history is kept.",
-    "lastCoverage": "Last tracking coverage: {time}",
-    "lastCollection": "Last successful collection: {time}",
-    "helpTitle": "ActivityWatch help",
-    "help": "ActivityWatch is a separate app. Install and run it on the device you want to track. Set screenTime to true in observatory.config.json. If ActivityWatch is already running, check that its local server answers on port 5600. Missing readings stay Unknown. Tokens and Limits work without it.",
-    "helpAddress": "activitywatch.net"
+    "trackingUnknown": "Tracking: Unknown",
+    "trackingUnavailable": "ActivityWatch not reachable",
+    "helpAddress": "activitywatch.net",
+    "previousDay": "Previous day",
+    "nextDay": "Next day"
   },
   "today": {
     "noSnapshot": "No snapshot",
@@ -190,21 +170,17 @@ export const STRINGS = {
     "limitsTitle": "Limits",
     "limitsNone": "No current reading",
     "timeTitle": "Screen time today",
-    "costTitle": "API-equivalent cost today",
+    "costTitle": "API-equivalent cost today (estimate)",
     "tokens": "{value} tokens",
-    "bothNote": "both computers, not deduplicated",
+    "bothNote": "Both computers, not deduplicated",
     "asOf": "as of {time}",
     "lastDay": "Last update was {time}",
     "limitsMissing": "No current reading: {names}",
-    "lastSeen": "last seen {time}"
+    "lastSeen": "Last seen {time}"
   },
   "limitHistory": {
     "title": "Limit history",
     "range": "Range",
-    "today": "Today",
-    "week": "7 days",
-    "month": "30 days",
-    "all": "All",
     "fiveHour": "5-hour",
     "weekly": "weekly",
     "chartTitle": "{provider} {window} limit left over time",
@@ -218,15 +194,16 @@ export const STRINGS = {
   "firstRun": {
     "title": "Waiting for the first collection",
     "body": "Observatory collects every five minutes while the menu bar or tray app is running. The first numbers appear here after that.",
-    "hint": "To collect now, choose Refresh in the menu, or run npm run tick in the Observatory folder."
+    "hint": "To collect now, choose Refresh in the menu bar or tray app."
   },
   "projects": {
     "title": "Today by project",
-    "session": "session {start}–{end}",
-    "subagents": "subagents {share}",
+    "session": "{start} to {end}",
+    "subagents": "Subagents {share}",
     "other": "Other",
     "asOf": "as of {time}",
-    "more": "+{count} more"
+    "more": "+{count} more",
+    "project": "Project"
   }
 } as const;
 
