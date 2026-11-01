@@ -117,8 +117,10 @@ enum Format {
   static func compact(_ value: Double) -> String {
     let units: [(Double, String)] = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"), (1, "")]
     for (index, (divisor, suffix)) in units.enumerated() where value >= divisor || divisor == 1 {
+      // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
       let scaled = value / divisor
-      let text = scaled >= 100 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
+      var text = scaled >= 10 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
+      if text.hasSuffix(".0") { text.removeLast(2) }
       // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
       if text == "1000", index > 0 { return "1" + units[index - 1].1 }
       return text + suffix
@@ -311,6 +313,7 @@ struct PanelView: View {
 
   @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
     HStack(alignment: .bottom, spacing: 6) {
+      Text("Today")
       Spacer(minLength: 0)
       Text("Screen time").frame(width: Self.timeColumn, alignment: .trailing)
       Text("Tokens").frame(width: Self.tokenColumn, alignment: .trailing)
@@ -329,7 +332,7 @@ struct PanelView: View {
         if device.current {
           Group {
             Text(!device.screenTimeOn ? "Off" : device.seconds.map(Format.duration) ?? "Unknown")
-              .frame(minWidth: Self.timeColumn, alignment: .trailing)
+              .frame(width: Self.timeColumn, alignment: .trailing)
             Text(device.tokens.map(Format.compact) ?? "Unknown").frame(width: Self.tokenColumn, alignment: .trailing)
             Text(device.usd.map(Format.money) ?? "Unknown").frame(width: Self.costColumn, alignment: .trailing)
           }

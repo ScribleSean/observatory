@@ -174,7 +174,8 @@ export const STRINGS = {
     "asOf": "as of {time}",
     "lastDay": "Last update was {time}",
     "lastSeen": "Last seen {time}",
-    "left": "Left"
+    "left": "Left",
+    "today": "Today"
   },
   "limitHistory": {
     "title": "Limit history",

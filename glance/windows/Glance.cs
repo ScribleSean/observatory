@@ -163,7 +163,8 @@ namespace Observatory
             {
                 if (value < units[index].Item1 && index < units.Length - 1) continue;
                 double scaled = value / units[index].Item1;
-                string text = scaled >= 100 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.0", CultureInfo.InvariantCulture);
+                // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
+                string text = scaled >= 10 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.#", CultureInfo.InvariantCulture);
                 // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
                 if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
                 return text + units[index].Item2;
@@ -394,6 +395,7 @@ namespace Observatory
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
                             float headerBase = row + headerHeight - 15;
+                            Text(g, "Today", small, p.Muted, inner, headerBase);
                             Text(g, "Screen time", small, p.Muted, timeRight - Measure(g, "Screen time", small), headerBase);
                             Text(g, "Tokens", small, p.Muted, tokenRight - Measure(g, "Tokens", small), headerBase);
                             using (var brush = new SolidBrush(p.Muted))
