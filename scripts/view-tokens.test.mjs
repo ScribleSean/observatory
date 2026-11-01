@@ -48,7 +48,6 @@ test('sample Mac week uses recorded classes, estimates, prices and settings', ()
 
 test('All shows each provider by computer', () => {
   const source = sampleSnapshot(now);
-  delete source.combinedTokens;
   const result = view(source, { host: 'All' });
   for (const provider of ['codex', 'claude']) {
     assertEmpty(result[provider], 'by-device');
