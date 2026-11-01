@@ -24,6 +24,8 @@ const realpath = promisify(fs.realpath);
 const IGNORED = new Set(['ENOENT', 'ENOTDIR', 'EBADF', 'ELOOP']);
 
 class Unavailable extends Error {}
+// This run has read as much as it may. The logs read so far are kept for the next run.
+class OverBudget extends Unavailable {}
 
 const unavailable = () => ({ provider: 'claude-code', status: 'unavailable' });
 const notFound = () => ({ provider: 'claude-code', status: 'not-found' });
@@ -491,8 +493,8 @@ async function readFile(file, state, log, limits) {
     const handleLine = (line) => {
       state.lines += 1;
       state.bytesRead += line.length;
-      if (state.lines > limits.MAX_LINES || line.length > limits.MAX_LINE_BYTES || state.bytesRead > limits.MAX_TOTAL_BYTES)
-        throw new Unavailable();
+      if (line.length > limits.MAX_LINE_BYTES) throw new Unavailable();
+      if (state.lines > limits.MAX_LINES || state.bytesRead > limits.MAX_TOTAL_BYTES) throw new OverBudget();
       if (line.every((byte) => BLANK.has(byte))) return;
       let event;
       try {
@@ -616,10 +618,11 @@ function cachedLog(entry, info) {
   return { saw: entry.saw, cacheable: true, list };
 }
 
-async function saveCache(directory, rootKey, logs) {
+// Entries in carry are kept as they were: logs this run did not reach.
+async function saveCache(directory, rootKey, logs, carry = new Map()) {
   if (typeof directory !== 'string' || !directory) return;
   const file = pathApi.join(directory, CACHE_FILE);
-  const files = {};
+  const files = Object.fromEntries(carry);
   for (const { name, info, log } of logs) {
     if (!log.cacheable) continue;
     files[hashText(name)] = { at: identity(info), saw: log.saw,
@@ -664,7 +667,15 @@ export async function collectClaudeUsage(claudeFolder, { now = new Date(), limit
       if (!log) {
         log = fileLog();
         reread++;
-        await readFile(file, state, log, caps);
+        try {
+          await readFile(file, state, log, caps);
+        } catch (error) {
+          // A history larger than one run's limits is read over several runs, as the Codex cache warms.
+          if (!(error instanceof OverBudget) || !cache || reread === 1) throw error;
+          const done = new Set(logs.map(({ name }) => hashText(name)));
+          await saveCache(cacheDirectory, rootKey, logs, new Map([...cache].filter(([key]) => !done.has(key))));
+          return unavailable();
+        }
         const after = await fs.promises.stat(file, { bigint: true });
         if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs)
           return unavailable();

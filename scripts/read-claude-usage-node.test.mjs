@@ -471,3 +471,23 @@ test('a cache link or folder in place of the cache file is ignored', async () =>
       await mkdir(path.join(cache, 'claude-usage.json'));
       assert.equal((await read(root, { cacheDirectory: cache })).days[0].totalTokens, 10);
     })));
+
+test('a history over one run\'s limits warms the cache over several runs, then matches a full read', async () =>
+  fixture(async (root) =>
+    withCache(async (cache) => {
+      const pad = JSON.stringify({ type: 'user', pad: 'x'.repeat(4000) }) + '\n';
+      for (let index = 0; index < 12; index++)
+        await log(root, `part-${String(index).padStart(2, '0')}.jsonl`, pad.repeat(4) + event(`m${index}`, `r${index}`, usage(index, 1, 0, 1)));
+      const expected = await read(root);
+      const limits = { MAX_TOTAL_BYTES: 50_000 };
+      const statuses = [];
+      for (let run = 0; run < 10 && statuses.at(-1) !== 'ok'; run++) {
+        const data = await read(root, { cacheDirectory: cache, limits });
+        statuses.push(data.status);
+        if (data.status === 'ok') assert.deepEqual(data, expected);
+      }
+      assert.deepEqual(statuses, ['unavailable', 'unavailable', 'unavailable', 'ok']);
+      // One log larger than a whole run's limit can never be read and stays Unknown.
+      await log(root, 'huge.jsonl', pad.repeat(20));
+      for (let run = 0; run < 3; run++) assert.equal((await read(root, { cacheDirectory: cache, limits })).status, 'unavailable');
+    })));
