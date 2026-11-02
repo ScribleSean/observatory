@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {limitHistorySeries,windowOf} from '../lib/view-limit-history.mjs';
+import {firstReadingDate,limitHistorySeries,windowOf} from '../lib/view-limit-history.mjs';
 
 const now=Date.parse('2026-10-21T17:00:00Z');
 const minutes=m=>new Date(now-m*60000).toISOString();
@@ -61,4 +61,17 @@ test('a reset reported a minute apart is the same window, and readings that star
   assert.equal(data.resets.length,0);
   assert.equal(data.firstAt,Date.parse(at(60)));
   assert.equal(data.startsHere,true);
+});
+
+test('All starts every chart at the first stored reading of any limit, the date the range is labeled with',()=>{
+  const codex={p:'codex',w:'secondary',o:'Mac',t:minutes(40*24*60),r:90,d:10080};
+  const data=snapshot([codex,point('Mac',60,40)]);
+  const claude=limitHistorySeries(data,{provider:'claude',window:'5h',range:'all',now});
+  assert.equal(claude.from,Date.parse(codex.t));
+  assert.equal(claude.firstAt,Date.parse(minutes(60)));
+  assert.equal(limitHistorySeries(data,{provider:'codex',window:'week',range:'all',now}).from,Date.parse(codex.t));
+  const day=new Date(Date.parse(codex.t));
+  assert.equal(firstReadingDate(data,now),`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`);
+  assert.equal(firstReadingDate(snapshot([]),now),null);
+  assert.equal(limitHistorySeries(data,{provider:'claude',window:'5h',range:'week',now}).from,now-7*86400000);
 });

@@ -265,14 +265,14 @@ test('unavailable device displays archived hours only through the archive readin
   assert.ok(view(data, { date: '2026-10-13' }).hourly.every(point => point.value === null));
 });
 
-test('stale device readings cannot supply retained activity or hourly charts', () => {
+test('a stale device reading leaves today Unknown and charts only the hours up to that reading', () => {
   const data = snapshot();
   data.activity[0].checkedAt = new Date(Date.parse(data.collectedAt) - 660000).toISOString();
   data.activityHistory = [{ host: 'Mac', status: 'ok', latestReadStatus: 'ok', trackingStatus: 'recent', days: [day()] }];
   const result = view(data);
   assert.equal(result.total, null);
   assert.match(result.note, /as of/);
-  assert.ok(result.hourly.every(row => row.value == null));
+  assert.deepEqual(result.hourly.map(row => row.value), [...Array(13).fill(100), ...Array(11).fill(undefined)]);
   assert.equal(result.tracking.status, 'unavailable');
   assert.ok(view(data, { period: 'now' }).hourly.every(row => row.value == null));
   assert.equal(view(data, { host: 'All' }).total, null);
@@ -315,7 +315,7 @@ test('late Windows history remains visible, All keeps every day, and periods rea
       assert.equal(result.total, null);
       assert.match(result.note, /as of/);
       assert.ok(result.dates.includes('2026-10-13'));
-      if (period === 'week') assert.deepEqual(result.series.slice(-3).map(row => row.value), [20, 40, null]);
+      if (period === 'week') assert.deepEqual(result.series.slice(-3).map(row => row.value), [20, 40, 2400]);
     }
     const earlier = view(data, { host: 'Windows', period: 'week', date: '2026-10-13' });
     assert.equal(earlier.total, 60);
