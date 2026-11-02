@@ -4,7 +4,7 @@ import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {runHub,recombine} from '../scripts/hub.mjs';
 import {combine} from '../lib/combine.mjs';
-import {pullCommand,pushCommand,sshEnvironment,sshTransport,stagedName} from '../scripts/hub-transport.mjs';
+import {pullCommand,pushCommand,sshEnvironment,sshTransport,stagedName,MAX_FILE_BYTES} from '../scripts/hub-transport.mjs';
 
 const staged=stagedName('00000000-0000-0000-0000-000000000000');
 import {withFolder,ownSnapshot,testConfig} from './helpers.mjs';
@@ -89,6 +89,23 @@ test('a null Claude day fails only the peer read, carries its previous data and 
   assert.equal(saved.snapshots.Windows.collectedAt,ownSnapshot('Windows',now-600000).collectedAt);
   assert.equal(saved.devices[1].error,'invalid snapshot');
   assert.equal(typeof saved.glance.today[0].tokens,'number');
+  assert.equal(transport.pushed.length,0);
+}));
+
+test('an oversized peer is refused, keeps its previous data and the dashboard file stays readable',()=>withFolder(async folder=>{
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
+  await seed(folder,'usage.json',ownSnapshot('Mac',now));
+  await runHub(config,{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now-600000))),now:()=>now-600000});
+  const peer=ownSnapshot('Windows',now);
+  peer.tokens[0].roots=['x'.repeat(8_200_000)];
+  const transport=fakeTransport(JSON.stringify(peer));
+  await runHub(config,{transport,now:()=>now});
+  const text=await readFile(path.join(folder,'public','local','combined.json'),'utf8');
+  assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES);
+  const saved=JSON.parse(text);
+  assert.deepEqual(saved.hub.spokes,[{name:'PC',host:'Windows',pull:'snapshot is too large',push:'skipped'}]);
+  assert.equal(saved.devices[1].error,'snapshot is too large');
+  assert.equal(saved.snapshots.Windows.collectedAt,ownSnapshot('Windows',now-600000).collectedAt);
   assert.equal(transport.pushed.length,0);
 }));
 

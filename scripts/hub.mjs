@@ -7,6 +7,9 @@ import {privateFolder} from '../lib/private-folder.mjs';
 import {sshTransport,MAX_FILE_BYTES} from './hub-transport.mjs';
 
 const HOST={mac:'Mac',windows:'Windows'};
+// combined.json stores each peer row twice (snapshots and view), so a peer is capped at a quarter
+// of the file limit. Real snapshots are well under 1 MB.
+export const MAX_PEER_BYTES=MAX_FILE_BYTES/4;
 
 async function readJson(file) {
   try {
@@ -28,7 +31,9 @@ function parseSnapshot(text,host,now) {
     throw Error('snapshot is for another computer');
   const cleaned=ownRows(value,host);
   if(!cleaned)throw Error('invalid snapshot');
-  return {...cleaned,schema:2,device:{host,name:cleaned.name}};
+  const snapshot={...cleaned,schema:2,device:{host,name:cleaned.name}};
+  if(Buffer.byteLength(JSON.stringify(snapshot))>MAX_PEER_BYTES)throw Error('snapshot is too large');
+  return snapshot;
 }
 
 function validatedDevice(combined,host,now) {
