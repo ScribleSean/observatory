@@ -219,7 +219,7 @@ test('stored pace remains the default and can be omitted without changing other 
   });
 });
 
-test('device freshness gates tokens, activity history and provider tokens', () => {
+test('device freshness gates today for tokens, activity and provider tokens, and keeps the history', () => {
   for (const host of ['Mac', 'Windows']) for (const status of ['ok', 'stale', 'unavailable']) {
     const data = snapshot();
     const checkedAt = new Date(now - 11 * 60000).toISOString();
@@ -236,7 +236,7 @@ test('device freshness gates tokens, activity history and provider tokens', () =
       if (status === 'unavailable') assert.equal(note, '');
       else assert.match(note, /as of/);
     }
-    assert.deepEqual(recordedDays(data, 'activity', host, now), status === 'unavailable' ? data.activityHistory[0].days : []);
+    assert.deepEqual(recordedDays(data, 'activity', host), data.activityHistory[0].days);
   }
 });
 
@@ -251,7 +251,7 @@ test('fresh empty periods keep No records and the ten-minute boundary is inclusi
   }
 });
 
-test('draw time marks frozen local and peer readings incomplete while preserving history', () => {
+test('draw time marks frozen readings incomplete for today while All keeps their history', () => {
   for (const lag of [0, 9, 10, 11]) {
     const data = snapshot();
     data.collectedAt = new Date(now - 30 * 60000).toISOString();
@@ -259,10 +259,13 @@ test('draw time marks frozen local and peer readings incomplete while preserving
     for (const key of ['tokens', 'activity']) for (const row of data[key]) row.checkedAt = checkedAt;
     data.activityHistory = [{ ...data.activity[0], days: [{ date: '2026-03-09', seconds: 42 }] }];
     data.providerTokenSources = [{ ...data.tokens[0], provider: 'claude-code' }];
-    const result = totals(data, 'Mac', 'all', new Date(now));
-    assert.deepEqual([result.codexTokens, result.claudeTokens, result.seconds], [null, null, null]);
-    for (const note of [result.codexNote, result.claudeNote, result.timeNote]) assert.match(note, /as of/);
-    assert.deepEqual(recordedDays(data, 'tokens', 'Mac', now), [day('2026-03-09', 50)]);
+    const today = totals(data, 'Mac', 'day', new Date(now));
+    assert.deepEqual([today.codexTokens, today.claudeTokens, today.seconds], [null, null, null]);
+    for (const note of [today.codexNote, today.claudeNote, today.timeNote]) assert.match(note, /as of/);
+    const all = totals(data, 'Mac', 'all', new Date(now));
+    assert.deepEqual([all.codexTokens, all.claudeTokens, all.seconds], [150, 150, 42]);
+    assert.deepEqual([all.codexNote, all.claudeNote, all.timeNote], ['', '', '']);
+    assert.deepEqual(recordedDays(data, 'tokens', 'Mac'), [day('2026-03-09', 50), day('2026-03-10', 100)]);
     const empty = totals(data, 'Mac', 'day', new Date(now + 86400000));
     for (const note of [empty.codexNote, empty.claudeNote, empty.timeNote]) {
       assert.match(note, /as of/);
@@ -325,13 +328,15 @@ test('failed local activity reads preserve saved days and week totals', () => {
   assert.equal(totals(data, 'Mac', 'week', new Date(now)).seconds, 60);
 });
 
-test('late reading dates use the snapshot timezone and panel totals stay Unknown', () => {
+test('late reading dates use the snapshot timezone, periods reaching the reading stay Unknown and All keeps every day', () => {
   const data = { timezone: 'America/New_York', collectedAt: '2026-03-10T00:20:00Z' };
   const days = ['2026-03-08', '2026-03-09', '2026-03-10'].map(date => ({ date, seconds: 30, totalTokens: 50 }));
   for (const key of ['activity', 'tokens']) data[key] = [{ host: 'Windows', status: 'stale', checkedAt: '2026-03-10T00:05:00Z', days }];
   data.activityHistory = [{ host: 'Windows', status: 'ok', days }];
-  for (const key of ['activity', 'tokens']) assert.deepEqual(recordedDays(data, key, 'Windows', now), [days[0]]);
-  for (const period of ['day', 'week', 'month', 'all']) {
+  for (const key of ['activity', 'tokens']) assert.deepEqual(recordedDays(data, key, 'Windows'), days);
+  const all = totals(data, 'Windows', 'all', new Date('2026-03-10T00:20:00Z'));
+  assert.deepEqual([all.seconds, all.codexTokens, all.timeNote, all.codexNote], [90, 150, '', '']);
+  for (const period of ['day', 'week', 'month']) {
     const result = totals(data, 'Windows', period, new Date('2026-03-10T00:20:00Z'));
     assert.equal(result.seconds, null);
     assert.equal(result.codexTokens, null);

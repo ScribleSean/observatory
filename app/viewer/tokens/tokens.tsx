@@ -8,7 +8,10 @@ import { BarChart, Card, DeviceShares, FilterGroup, Row, type ChartPoint } from 
 import './tokens.css';
 
 type Computed = ReturnType<typeof tokensView>;
-type Block = Omit<Computed['codex'], 'models' | 'days'> & {
+type Block = {
+  status: string;
+  totals: Record<'input' | 'cached' | 'cacheWrite' | 'output' | 'total', number | null>;
+  estimate: { usd: number | null; coveredTokens: number | null; totalTokens: number | null; partial: boolean };
   checkedOn: string | null;
   note?: string;
   days: Day[];
@@ -65,7 +68,7 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
       <div className={known ? 'ob-hero' : 'ob-hero ob-unknown'}>{known ? count(block.totals.total) : statusWord(block.status)}</div>
       {meta.length > 0 && <p className="ob-meta">{meta.join(STRINGS.formats.separator)}</p>}
       {notes.map(note => <p key={note} className="ob-meta">{note}</p>)}
-      {both && <DeviceShares color={provider} rows={block.byDevice.map(device => ({ host: device.host, label: device.label,
+      {both && <DeviceShares color={provider} rows={block.byDevice.map((device: Block['byDevice'][number]) => ({ host: device.host, label: device.label,
         value: device.status === 'ok' ? device.total : null,
         text: device.status === 'ok' ? [count(device.total), usd(device.usd)].join(STRINGS.formats.separator) : device.note || statusWord(device.status) }))} />}
     </div>

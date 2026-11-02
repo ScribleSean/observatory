@@ -38,15 +38,16 @@ function synthetic(apiEstimate = estimate) {
     providerTokenSources: [{ provider: 'claude-code', host: 'Mac', status: 'ok', days: structuredClone(days) }] };
 }
 
-void test('sample All week keeps providers and settings per device', () => {
+void test('sample Both shows one combined total over each computer, and settings per device', () => {
   const source = sampleSnapshot(now);
   const html = renderToStaticMarkup(createElement(TokensView, { snapshot: source, now }));
   const claude = card(html, 'Claude Code');
   const codex = card(html, 'Codex');
   for (const provider of [claude, codex])
-    for (const text of ['By computer', '>Mac<', '>PC<']) assert.ok(provider.includes(text), text);
-  for (const host of ['Mac', 'Windows'])
-    assert.ok(codex.includes('>' + compact(tokensView(source, { host, period: 'day', now }).codex.totals.total) + '<'), host);
+    for (const text of ['Both computers, not deduplicated', '>Mac<', '>PC<']) assert.ok(provider.includes(text), text);
+  const own = host => tokensView(source, { host, period: 'day', now }).codex.totals.total;
+  assert.ok(codex.includes('<div class="ob-hero">' + compact(own('Mac') + own('Windows')) + '</div>'));
+  for (const host of ['Mac', 'Windows']) assert.ok(codex.includes('>' + compact(own(host)) + ' · $'), host);
   assert.ok(!claude.includes('Session cost'));
   for (const provider of [claude, codex]) {
     assert.ok(provider.includes('API-equivalent (estimate)'));
@@ -59,7 +60,7 @@ void test('sample All week keeps providers and settings per device', () => {
 const bothRow = (snapshot, provider, label, at = now) => {
   const html = renderToStaticMarkup(createElement(TokensSection, {
     result: tokensView(snapshot, { host: 'All', period: 'week', now: at }), onHostChange: noop, onPeriodChange: noop, now: at }));
-  const row = card(html, provider).match(new RegExp('<th scope="row">' + label + '</th><td>([^<]*)</td>'));
+  const row = card(html, provider).match(new RegExp('<li><span>' + label + '</span><span class="[^"]*">([^<]*)</span>'));
   assert.ok(row, provider + ' ' + label);
   return row[1];
 };
@@ -91,7 +92,7 @@ void test('sample Mac week has a recorded total and estimate', () => {
   const claude = card(render(source, 'Mac'), 'Claude Code');
   assert.ok(claude.includes('>' + compact(tokensView(source, { host: 'Mac', period: 'week', now }).claude.totals.total) + '<'));
   assert.match(claude, /API-equivalent \(estimate\)<\/span><span class="ob-num">\$[0-9]/);
-  assert.ok(!claude.includes('By computer'));
+  assert.ok(!claude.includes('Both computers'));
 });
 
 void test('empty snapshot never manufactures zero', () => {
