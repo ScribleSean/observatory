@@ -134,19 +134,24 @@ test('a peer the collector sized to its budget is accepted with its oldest histo
   assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES);
 }));
 
-test('a large snapshot on this computer loses its oldest history so the dashboard file stays readable',()=>withFolder(async folder=>{
+test('large snapshots on both computers lose their oldest history so the dashboard file stays readable',()=>withFolder(async folder=>{
   const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
-  const own=ownSnapshot('Mac',now);
-  const days=longHistory(own,'Mac',40000);
-  const sized=serializeSnapshot(own);
-  assert.ok(sized.bytes>MAX_FILE_BYTES/2 && sized.bytes<=snapshotHistoryBudget);
-  await seed(folder,'usage.json',JSON.parse(sized.text));
-  for(const run of [()=>runHub(config,{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now))),now:()=>now}),
-    ()=>recombine(config,{now:()=>now})]) {
+  const sized=host=>{
+    const snapshot=ownSnapshot(host,now);
+    longHistory(snapshot,host,40000);
+    const {text,bytes}=serializeSnapshot(snapshot);
+    assert.ok(bytes>MAX_FILE_BYTES/2 && bytes<=snapshotHistoryBudget);
+    return text;
+  };
+  const own=sized('Mac'),peer=sized('Windows');
+  const seeded=JSON.parse(own).activityHistory[0].days;
+  await seed(folder,'usage.json',JSON.parse(own));
+  for(const run of [()=>runHub(config,{transport:fakeTransport(peer),now:()=>now}),()=>recombine(config,{now:()=>now})]) {
     const combined=await run();
+    assert.ok(combined.snapshots.Windows.activityHistory[0].days.length>0);
     const kept=combined.snapshots.Mac.activityHistory[0].days;
-    assert.ok(kept.length>0 && kept.length<days.length);
-    assert.equal(kept.at(-1).date,days.at(-1).date);
+    assert.ok(kept.length>0 && kept.length<seeded.length);
+    assert.equal(kept.at(-1).date,seeded.at(-1).date);
     const text=await readFile(path.join(folder,'public','local','combined.json'),'utf8');
     assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES,`combined.json is ${Buffer.byteLength(text)} bytes`);
   }

@@ -10,8 +10,8 @@ import {serializeSnapshot} from './snapshot-size.mjs';
 const HOST={mac:'Mac',windows:'Windows'};
 // combined.json stores each computer's rows twice (snapshots and view), so this computer's snapshot
 // and its peer's are each capped at a quarter of the file limit. A larger snapshot loses its oldest
-// activity history first, as the collector does.
-export const MAX_PEER_BYTES=MAX_FILE_BYTES/4;
+// activity history first, as the collector does. The margin covers the summary fields around them.
+export const MAX_PEER_BYTES=MAX_FILE_BYTES/4-64_000;
 
 async function readJson(file) {
   try {
