@@ -5,8 +5,12 @@ import {combine,carriedDevice,ownRows,HOSTS,CLOCK_SKEW_MS} from '../lib/combine.
 import {writeAtomic} from '../lib/atomic-file.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {sshTransport,MAX_FILE_BYTES} from './hub-transport.mjs';
+import {serializeSnapshot} from './snapshot-size.mjs';
 
 const HOST={mac:'Mac',windows:'Windows'};
+// combined.json stores each peer row twice (snapshots and view), so a peer is capped at a quarter
+// of the file limit. A larger peer loses its oldest activity history first, as the collector does.
+export const MAX_PEER_BYTES=MAX_FILE_BYTES/4;
 
 async function readJson(file) {
   try {
@@ -28,7 +32,10 @@ function parseSnapshot(text,host,now) {
     throw Error('snapshot is for another computer');
   const cleaned=ownRows(value,host);
   if(!cleaned)throw Error('invalid snapshot');
-  return {...cleaned,schema:2,device:{host,name:cleaned.name}};
+  const snapshot={...cleaned,schema:2,device:{host,name:cleaned.name}};
+  const sized=serializeSnapshot(snapshot,{budget:MAX_PEER_BYTES,maximum:MAX_PEER_BYTES});
+  if(sized.bytes>MAX_PEER_BYTES)throw Error('snapshot is too large');
+  return JSON.parse(sized.text);
 }
 
 function validatedDevice(combined,host,now) {
