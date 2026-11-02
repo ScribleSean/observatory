@@ -30,8 +30,9 @@ function safeDay(row) {
     windowStart:stamp(row.windowStart),windowEnd:stamp(row.windowEnd)};
 }
 
-export function retainActivityHistory(previous,current,collectedAt,maxDates=3650) {
-  if(!Number.isInteger(maxDates)||maxDates<1||maxDates>3650) throw Error('Invalid history bound');
+// Daily history is kept with no age limit. A bound is only for tests and size checks.
+export function retainActivityHistory(previous,current,collectedAt,maxDates=Infinity) {
+  if(maxDates!==Infinity && (!Number.isInteger(maxDates)||maxDates<1)) throw Error('Invalid history bound');
   return ['Combined','Mac','Windows'].map(host=>{
     const before=previous?.find(r=>r.host===host), source=current.find(r=>r.host===host);
     const days=new Map((before?.days||[]).map(safeDay).filter(Boolean).map(row=>[row.date,row]));
@@ -49,7 +50,7 @@ export function retainActivityHistory(previous,current,collectedAt,maxDates=3650
     const retained=[...days.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-maxDates);
     return {host,status:retained.length?'ok':'unavailable',latestReadStatus:source?.status||'unavailable',
       asOf:source?.status==='ok'?stamp(collectedAt):stamp(before?.asOf),
-      ...activityTrackingHealth(source,collectedAt),maxDates,days:retained};
+      ...activityTrackingHealth(source,collectedAt),days:retained};
   });
 }
 
