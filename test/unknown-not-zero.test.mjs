@@ -33,10 +33,11 @@ test('today without tracking is Unknown, and a tracked quiet day is zero',()=>{
   assert.equal(totals(quiet,'Mac','day',new Date(now)).seconds,0);
 });
 
-test('a period that includes an untracked day has an Unknown total',()=>{
+test('a period that includes an untracked day counts the tracked days, and the untracked day stays Unknown',()=>{
   const snapshot=withDays([day('2026-10-19',3600,40000),day('2026-10-20',0,0),day('2026-10-21',1800,9000)]);
-  assert.equal(totals(snapshot,'Mac','week',new Date(now)).seconds,null);
-  const marked=recordedDays(snapshot,'activity','Mac',now).find(row=>row.date==='2026-10-20');
+  assert.equal(totals(snapshot,'Mac','week',new Date(now)).seconds,5400);
+  assert.equal(totals(withDays([day('2026-10-20',0,0)]),'Mac','week',new Date(now)).seconds,null);
+  const marked=recordedDays(snapshot,'activity','Mac').find(row=>row.date==='2026-10-20');
   assert.equal(marked.seconds,null);
   assert.equal(marked.untracked,true);
 });

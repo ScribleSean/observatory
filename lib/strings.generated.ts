@@ -47,7 +47,6 @@ export const STRINGS = {
   "status": {
     "unknown": "Unknown",
     "noRecords": "No records",
-    "byDevice": "By computer",
     "notCollected": "Not collected yet",
     "enableLimits": "Not connected",
     "signIn": "Sign in to {name}",
@@ -82,7 +81,8 @@ export const STRINGS = {
     "runsOut": "runs out in {span}",
     "asOf": "as of {time}",
     "sourcesRead": "{read} of {total} sources read",
-    "separator": " · "
+    "separator": " · ",
+    "since": "Since {date}"
   },
   "charts": {
     "item": "Item",

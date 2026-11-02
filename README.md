@@ -44,6 +44,8 @@ Every five minutes the app collects one snapshot of this computer:
 
 No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. Dollar figures are estimates at public API prices, not a bill.
 
+History goes back to the first day each source has data and is kept until you delete the data folder. Token counts are saved per day, so a day stays counted after Claude Code deletes its old transcripts.
+
 **Two computers.** A Mac and a Windows PC can share one view. The Mac reads the PC's snapshot over your own SSH alias and sends the combined view back, so both show both computers. Limits are account-wide and are not added across computers. Token and screen time sums are labeled "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
 
 ## Settings

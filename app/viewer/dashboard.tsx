@@ -86,8 +86,6 @@ type DashboardViewProps = {
 export function DashboardView({ combined, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
   const snapshot = combined?.view ?? null;
   const fresh = freshness(combined?.generatedAt ?? '', now);
-  // zero-ok: a count of computers, not a reading.
-  const home = (combined?.devices?.length ?? 0) > 1 && combined?.generatedBy ? combined.generatedBy : ALL_HOSTS;
   const showOverallAge = !loaded || !combined || fresh.stale;
   return (
     <div className={`ob-dashboard ${className}`}>
@@ -113,8 +111,8 @@ export function DashboardView({ combined, loaded, now, css, className, section, 
       {combined && <main>
         <section aria-label={SECTIONS.find(([id]) => id === section)![1]}>
           {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} />
-            : section === 'activity' ? <ActivityView key={home} snapshot={snapshot} now={now} initialHost={home} />
-            : section === 'tokens' ? <TokensView key={home} snapshot={snapshot} now={now} initialHost={home} />
+            : section === 'activity' ? <ActivityView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />
+            : section === 'tokens' ? <TokensView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />
             : <SourcesView snapshot={snapshot} now={now} />}
         </section>
       </main>}

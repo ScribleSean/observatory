@@ -45,8 +45,8 @@ for (const read of [null, '', 'invalid']) test(`invalid reading ${read}`, () => 
 });
 for (const zone of [null, '', 'Invalid/Zone']) test(`invalid zone ${zone}`, () => assert.equal(run({ timeZone: zone }).reason, 'timeZone'));
 test('observed zero stays zero', () => assert.equal(run({ days: [day('2026-10-14', 0)] }).value, 0));
-test('All needs a Combined live row', () => {
-  const data = snapshot(); delete data.combined;
+test('Both Now needs a live reading from each computer', () => {
+  const data = snapshot(); data.activity[1].status = 'unavailable';
   assert.equal(activityNow(data, 'All', now).reason, 'noSource');
 });
 test('device reading falls back to collection time', () => {
@@ -58,10 +58,35 @@ test('retired host blocks All', () => {
   assert.equal(activityNow(data, 'All', now).reason, 'noSource');
   assert.equal(view(data, { host: 'All' }).note, strings.status.allUnverified);
 });
-test('All uses Combined rather than adding device values', () => {
+test('Both Now adds each computer\'s Now', () => {
   const data = snapshot();
-  assert.equal(activityNow(data, 'All', now).value, 300);
-  assert.notEqual(activityNow(data, 'All', now).value, activityNow(data, 'Mac', now).value + activityNow(data, 'Windows', now).value);
+  assert.equal(activityNow(data, 'All', now).value, activityNow(data, 'Mac', now).value + activityNow(data, 'Windows', now).value);
+  assert.equal(activityNow(data, 'All', now).value, 600);
+});
+test('Both adds the computers day by day and its total matches the rows under it', () => {
+  const data = snapshot();
+  data.activity[0].days.push(day('2026-10-13', 1200), day('2026-09-01', 600));
+  data.activity[1].days.push(day('2026-10-13', 2400));
+  const all = view(data, { host: 'All', period: 'all' });
+  assert.equal(all.total, 2400 + 1200 + 600 + 4800 + 2400);
+  assert.deepEqual(all.byDevice.map(row => [row.label, row.total]), [['Mac', 4200], ['PC', 7200]]);
+  assert.equal(all.since, '2026-09-01');
+  assert.deepEqual(all.series.slice(-2).map(row => row.value), [3600, 7200]);
+  const day13 = view(data, { host: 'All', date: '2026-10-13' });
+  assert.equal(day13.total, 3600);
+  assert.deepEqual(day13.hourly.slice(0, 2).map(row => row.value), [150, 150]);
+  assert.equal(view(data, { host: 'All', period: 'day', date: '2026-09-01' }).total, 600);
+  assert.equal(view(data, { host: 'Mac', period: 'all' }).since, '2026-09-01');
+  assert.equal(view(data, { host: 'Mac', period: 'week' }).since, null);
+});
+test('Both is Unknown when a computer\'s own total is Unknown for that day', () => {
+  const data = snapshot();
+  data.activity[1].days = [{ ...day(), seconds: 0, trackedSeconds: 0 }];
+  const result = view(data, { host: 'All' });
+  assert.equal(result.byDevice[1].total, null);
+  assert.equal(result.total, null);
+  assert.equal(view(data, { host: 'All', period: 'week' }).total, 2400);
+  assert.equal(view(data, { host: 'All', period: 'week' }).series.at(-1).value, null);
 });
 for (const [period, expected] of [['day', 2400], ['week', 3600], ['month', 4200], ['all', 4500]]) test(`${period} total uses retained days for one host`, () => {
   const data = snapshot(); data.activity[0].days.push(day('2026-10-13', 1200), day('2026-09-20', 600), day('2026-08-01', 300));
@@ -105,25 +130,26 @@ test('missing hours and dates after the reading are Unknown', () => {
   data.activity[0].days.push(day('2026-10-15'));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
 });
-test('Combined live source without reading masks every date', () => {
-  const data = snapshot(); delete data.combined.checkedAt;
-  data.combined.days.push(day('2026-10-13'), day('2026-10-15'));
+test('Both masks every hour when a computer has no reading time', () => {
+  const data = snapshot(); delete data.collectedAt; delete data.activity[1].checkedAt;
+  data.activity[0].days.push(day('2026-10-13'), day('2026-10-15'));
   for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value == null));
 });
-test('Combined hourly chart falls back to archive time while Now stays Unknown', () => {
+test('Both hourly chart falls back to archive times while Now stays Unknown', () => {
   const data = {
     timezone: 'UTC', collectedAt: readingAt,
-    combined: { host: 'Combined', status: 'ok', days: [day()] },
-    activityHistory: [{
-      host: 'Combined', status: 'ok', latestReadStatus: 'ok', asOf: '2026-10-14T10:20:00Z', days: [day()],
-    }],
+    activity: [{ host: 'Mac', status: 'unavailable' }, { host: 'Windows', status: 'unavailable' }],
+    activityHistory: [
+      { host: 'Mac', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-14T11:20:00Z', days: [day()] },
+      { host: 'Windows', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-14T10:20:00Z', days: [day()] },
+    ],
   };
   const options = { host: 'All', period: 'day', date: '2026-10-14' };
-  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(100), null, null, ...Array(11).fill(undefined)]);
-  assert.equal(activityNow(data, 'All', now).reason, 'noReading');
+  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(200), null, null, ...Array(11).fill(undefined)]);
+  assert.equal(activityNow(data, 'All', now).reason, 'noSource');
   assert.equal(activityNow(data, 'All', now).value, null);
   for (const asOf of [undefined, null, '', 'invalid']) {
-    data.activityHistory[0].asOf = asOf;
+    data.activityHistory[1].asOf = asOf;
     assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(13).fill(null), ...Array(11).fill(undefined)]);
   }
 });
@@ -149,12 +175,13 @@ for (const status of ['recent', 'stale', 'unknown', 'unavailable']) test(`tracki
   assert.equal(result.tracking.asOf, readingAt);
   assert.ok(!JSON.stringify(result).includes('PRIVATE RAW MESSAGE'));
 });
-test('Combined tracking keeps invalid times null', () => {
-  const data = snapshot(); data.activityHistory = [{ ...source('Combined'), latestReadStatus: 'ok', trackingStatus: 'recent', asOf: 'invalid' }];
+test('Both leaves the tracking warning to each computer\'s own view', () => {
+  const data = snapshot(); data.activityHistory = [{ ...source('Mac'), latestReadStatus: 'error', trackingStatus: 'unknown' }];
   const result = view(data, { host: 'All' });
-  assert.equal(result.tracking.label, strings.activity.trackingRecent);
+  assert.equal(result.tracking.status, 'recent');
   assert.equal(result.tracking.asOf, null);
   assert.equal(result.tracking.through, null);
+  assert.equal(view(data).tracking.status, 'unavailable');
 });
 test('zero activity without coverage carries the tracking warning', () => {
   const data = snapshot(); data.activity[0].days = [{ ...day(undefined, 0), trackedSeconds: 0 }];
@@ -163,10 +190,10 @@ test('zero activity without coverage carries the tracking warning', () => {
 test('Now notes translate each failure without exposing reason codes', () => {
   const cases = [
     [{}, strings.activity.nowNoSource],
-    [{ ...snapshot(), combined: { ...source('Combined'), checkedAt: null } }, strings.activity.nowNoReading],
-    [{ ...snapshot(), combined: { ...source('Combined'), checkedAt: '2026-10-14T12:00:00Z' } }, strings.activity.nowStale],
+    [{ ...snapshot(), collectedAt: undefined, activity: [source('Mac'), { ...source('Windows'), checkedAt: null }] }, strings.activity.nowNoReading],
+    [{ ...snapshot(), activity: [source('Mac'), { ...source('Windows'), checkedAt: '2026-10-14T12:00:00Z' }] }, strings.activity.nowStale],
     [{ ...snapshot(), timezone: 'Invalid/Zone' }, strings.activity.nowZone],
-    [{ ...snapshot(), combined: { ...source('Combined'), days: [] } }, strings.activity.nowNoHours],
+    [{ ...snapshot(), activity: [source('Mac'), { ...source('Windows'), days: [] }] }, strings.activity.nowNoHours],
   ];
   for (const [data, note] of cases) {
     const result = view(data, { host: 'All', period: 'now' });
@@ -185,13 +212,15 @@ test('history supplies retained totals while Now uses the live source only', () 
   assert.equal(view(data).total, 7200);
   assert.equal(data.activityHistory[0].days[0].seconds, 7200);
 });
-test('categories do not include peer device or Combined records', () => {
+test('categories hold one computer\'s own records, and Both adds them', () => {
   const data = snapshot();
   data.activity[0].days[0].categories = { Editors: 100 };
+  data.activity[0].days[0].apps = { Editors: { 'VS Code': 100 } };
   data.activity[1].days[0].categories = { Editors: 900 };
-  data.combined.days[0].categories = { Editors: 700 };
+  data.activity[1].days[0].apps = { Editors: { 'VS Code': 400, Xcode: 500 } };
   assert.equal(view(data).categories[0].seconds, 100);
-  assert.equal(view(data, { host: 'All' }).categories[0].seconds, 700);
+  assert.deepEqual(view(data, { host: 'All' }).categories[0], { name: 'Editors', label: 'Editors', seconds: 1000,
+    apps: [{ name: 'VS Code', seconds: 500 }, { name: 'Xcode', seconds: 500 }] });
 });
 
 test('a reading ahead of the clock has its own Now reason and note', () => {
@@ -204,19 +233,17 @@ test('a reading ahead of the clock has its own Now reason and note', () => {
   assert.equal(result.note, "The last reading is ahead of this device's clock");
   assert.equal(run({ readingAt: undefined }).reason, 'noReading');
 });
-test('Combined archive masks hours after its reading despite a later collection', () => {
-  const data = {
-    timezone: 'UTC', collectedAt: readingAt,
-    combined: { host: 'Combined', status: 'unavailable' },
-    activityHistory: [{
-      host: 'Combined', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-13T14:10:00Z',
-      days: [{ date: '2026-10-13', seconds: 1500, hours: hours(100).map((value, hour) => hour <= 14 ? value : 0) }],
-    }],
-  };
+test('Both masks hours after the earlier computer\'s reading despite a later collection', () => {
+  const data = snapshot();
+  data.activity[0].days.push(day('2026-10-13'));
+  data.activity[1] = { host: 'Windows', status: 'unavailable' };
+  data.activityHistory = [{
+    host: 'Windows', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-13T14:10:00Z',
+    days: [{ date: '2026-10-13', seconds: 1500, hours: hours(100).map((value, hour) => hour <= 14 ? value : 0) }],
+  }];
   const result = view(data, { host: 'All', date: '2026-10-13' });
-  assert.deepEqual(result.hourly.map(point => point.value), [...Array(15).fill(100), ...Array(9).fill(null)]);
+  assert.deepEqual(result.hourly.map(point => point.value), [...Array(15).fill(200), ...Array(9).fill(null)]);
   assert.equal(view(data, { host: 'All', period: 'now' }).total, null);
-  delete data.combined;
   for (const asOf of [undefined, null, '', 'invalid']) {
     data.activityHistory[0].asOf = asOf;
     assert.ok(view(data, { host: 'All', date: '2026-10-13' }).hourly.every(point => point.value === null));
@@ -239,17 +266,18 @@ test('unavailable device displays archived hours only through the archive readin
   assert.ok(view(data, { date: '2026-10-13' }).hourly.every(point => point.value === null));
 });
 
-test('stale device readings cannot supply retained activity or hourly charts', () => {
+test('a stale device reading leaves today Unknown and charts only the hours up to that reading', () => {
   const data = snapshot();
   data.activity[0].checkedAt = new Date(Date.parse(data.collectedAt) - 660000).toISOString();
   data.activityHistory = [{ host: 'Mac', status: 'ok', latestReadStatus: 'ok', trackingStatus: 'recent', days: [day()] }];
   const result = view(data);
   assert.equal(result.total, null);
   assert.match(result.note, /as of/);
-  assert.ok(result.hourly.every(row => row.value == null));
+  assert.deepEqual(result.hourly.map(row => row.value), [...Array(13).fill(100), ...Array(11).fill(undefined)]);
   assert.equal(result.tracking.status, 'unavailable');
   assert.ok(view(data, { period: 'now' }).hourly.every(row => row.value == null));
-  assert.equal(view(data, { host: 'All' }).total, 3600);
+  assert.equal(view(data, { host: 'All' }).total, null);
+  assert.match(view(data, { host: 'All' }).byDevice[0].note, /as of/);
 });
 
 test('activity retains complete history while frozen readings age at draw time', () => {
@@ -276,17 +304,19 @@ test('failed Mac reads still list and total the activity archive', () => {
   assert.deepEqual(result.dates, ['2026-10-14', '2026-10-13', '2026-10-12']);
 });
 
-test('late Windows history remains visible without partial period totals', () => {
+test('late Windows history remains visible, All keeps every day, and periods reaching the reading stay Unknown', () => {
   for (const status of ['ok', 'stale']) {
     const data = snapshot();
     Object.assign(data.activity[1], { status, checkedAt: new Date(now - 15 * 60000).toISOString() });
     data.activityHistory = [{ host: 'Windows', status: 'ok', days: [day('2026-10-12', 20), day('2026-10-13', 40), day()] }];
-    for (const period of ['day', 'week', 'month', 'all']) {
+    const all = view(data, { host: 'Windows', period: 'all' });
+    assert.deepEqual([all.total, all.note, all.since], [2460, '', '2026-10-12']);
+    for (const period of ['day', 'week', 'month']) {
       const result = view(data, { host: 'Windows', period });
       assert.equal(result.total, null);
       assert.match(result.note, /as of/);
       assert.ok(result.dates.includes('2026-10-13'));
-      if (period === 'week') assert.deepEqual(result.series.slice(-3).map(row => row.value), [20, 40, null]);
+      if (period === 'week') assert.deepEqual(result.series.slice(-3).map(row => row.value), [20, 40, 2400]);
     }
     const earlier = view(data, { host: 'Windows', period: 'week', date: '2026-10-13' });
     assert.equal(earlier.total, 60);

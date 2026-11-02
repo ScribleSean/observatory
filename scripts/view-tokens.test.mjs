@@ -46,11 +46,14 @@ test('sample Mac week uses recorded classes, estimates, prices and settings', ()
   assert.deepEqual(result.claude.byDevice, []);
 });
 
-test('All shows each provider by computer', () => {
+test('Both shows one total per provider over each computer\'s own total', () => {
   const source = sampleSnapshot(now);
   const result = view(source, { host: 'All' });
   for (const provider of ['codex', 'claude']) {
-    assertEmpty(result[provider], 'by-device');
+    assert.equal(result[provider].status, 'ok');
+    assert.equal(result[provider].totals.total, sum(result[provider].byDevice, 'total'));
+    assert.ok(Math.abs(result[provider].estimate.usd - sum(result[provider].byDevice, 'usd')) < 1e-9);
+    assert.equal(result[provider].since, null);
     assert.deepEqual(result[provider].byDevice.map(row => row.label), ['Mac', 'PC']);
     for (const row of result[provider].byDevice) {
       const device = view(source, { host: row.host })[provider];
@@ -62,7 +65,35 @@ test('All shows each provider by computer', () => {
   }
   assert.equal(result.settings.length, 2);
   source.tokens[1].status = 'unavailable';
-  assert.deepEqual(view(source, { host: 'All' }).codex.byDevice.map(row => [row.status, row.total]), [['ok', result.codex.byDevice[0].total], ['unknown', null]]);
+  const unread = view(source, { host: 'All' }).codex;
+  assert.deepEqual(unread.byDevice.map(row => [row.status, row.total]), [['ok', result.codex.byDevice[0].total], ['unknown', null]]);
+  assert.equal(unread.status, 'unknown');
+  assert.equal(unread.totals.total, null);
+});
+
+test('Both leaves out a computer that has the provider switched off', () => {
+  const data = snapshot();
+  data.tokens.push({ host: 'Windows', status: 'not-connected' });
+  data.providerTokenSources.push({ provider: 'claude-code', host: 'Windows', status: 'not-connected' });
+  data.activity = [{ host: 'Windows', status: 'ok', days: [] }];
+  for (const provider of ['codex', 'claude']) {
+    const both = view(data, { host: 'All', period: 'day' })[provider];
+    assert.deepEqual([both.status, both.totals.total, both.byDevice.map(row => row.host)], ['ok', 10, ['Mac']]);
+  }
+});
+
+test('Both counts a computer with no records as nothing and dates All from the first day', () => {
+  const data = snapshot([day({ date: '2026-09-02' }), day()]);
+  for (const key of ['tokens', 'providerTokenSources']) data[key].push({ ...structuredClone(data[key][0]), host: 'Windows', days: [day({ date: '2026-10-13', totalTokens: 30, inputTokens: 22 })] });
+  data.deviceNames = { Mac: 'Mac', Windows: 'PC' };
+  for (const provider of ['codex', 'claude']) {
+    const all = view(data, { host: 'All', period: 'all' })[provider];
+    assert.deepEqual([all.status, all.totals.total, all.since], ['ok', 50, '2026-09-02']);
+    assert.deepEqual(all.days.map(row => [row.date, row.total]), [['2026-09-02', 10], ['2026-10-13', 30], ['2026-10-14', 10]]);
+    const today = view(data, { host: 'All', period: 'day' })[provider];
+    assert.deepEqual([today.status, today.totals.total], ['ok', 10]);
+    assert.deepEqual(today.byDevice.map(row => row.status), ['ok', 'no-records']);
+  }
 });
 
 test('missing and unavailable device sources are unknown', () => {
@@ -269,8 +300,8 @@ test('old device readings with ok status do not supply tokens, estimates or sett
   const result = view(data);
   assertEmpty({ ...result.codex, days: [] }, 'unknown');
   assertEmpty({ ...result.claude, days: [] }, 'unknown');
-  assert.ok(result.codex.days.every(day => day.date < '2026-10-14'));
-  assert.ok(result.claude.days.every(day => day.date < '2026-10-14'));
+  assert.ok(result.codex.days.some(day => day.date < '2026-10-14'));
+  assert.ok(result.claude.days.some(day => day.date < '2026-10-14'));
   assert.equal(result.settings[0].status, 'unknown');
   assert.deepEqual(result.settings[0].rows, []);
   const all = view(data, { host: 'All' });
@@ -295,16 +326,18 @@ test('tokens and settings in a frozen snapshot expire at draw time', () => {
   }
 });
 
-test('late token periods hide partial totals but retain complete daily values', () => {
+test('late token periods hide partial totals, keep daily values and All keeps every day', () => {
   const data = snapshot([day({ date: '2026-10-13' }), day()]);
   data.collectedAt = new Date(now).toISOString();
   for (const key of ['tokens', 'providerTokenSources']) Object.assign(data[key][0], { status: 'stale', checkedAt: new Date(now - 900000).toISOString() });
   data.settings = [{ host: 'Mac', status: 'stale', checkedAt: new Date(now - 900000).toISOString(), profiles: [{ date: '2026-10-13', model: 'fictional', totalTokens: 10 }] }];
-  for (const period of ['day', 'week', 'month', 'all']) {
+  const all = view(data, { period: 'all' });
+  for (const provider of ['codex', 'claude']) assert.deepEqual([all[provider].status, all[provider].totals.total, all[provider].note], ['ok', 20, '']);
+  for (const period of ['day', 'week', 'month']) {
     const result = view(data, { period });
     for (const provider of ['codex', 'claude']) {
       assertEmpty({ ...result[provider], days: [] }, 'unknown');
-      assert.deepEqual(result[provider].days, [{ date: '2026-10-13', total: 10, hours: null }]);
+      assert.deepEqual(result[provider].days, [{ date: '2026-10-13', total: 10, hours: null }, { date: '2026-10-14', total: 10, hours: null }]);
       assert.match(result[provider].note, /as of/);
     }
     assert.equal(result.settings[0].status, 'unknown');

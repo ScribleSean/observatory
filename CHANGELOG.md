@@ -9,6 +9,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - **Three answers at a glance.** The dashboard opens on tiles for limits, screen time and cost, then pages for Limits, Activity, Tokens and Sources.
 - **Zero-config install.** `git clone`, then `npm run setup`. Setup writes a settings file with every source on, builds the dashboard and the menu bar or tray app on your own computer, and starts it at login. `npm run setup -- --remove` takes it out again.
 - **Optional second computer.** A Mac and a Windows PC can share one view over your own SSH connection. Limits are not added across computers, and sums of time, tokens and cost are labeled "not deduplicated".
+- **History kept for good.** Each computer saves its own daily token totals, so a day stays counted after Claude Code deletes old transcripts. All starts at the first recorded day, Both shows one combined total over each computer's own, and a computer that is offline keeps its past days.
 - **Your own time zone.** Days are counted in each computer's time zone instead of a fixed one.
 
 ### Changed

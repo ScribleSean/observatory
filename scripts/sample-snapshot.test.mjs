@@ -140,9 +140,9 @@ for (const stamp of ['2026-10-14T00:00:30Z', '2026-10-14T00:01:59Z', '2026-10-14
     assert.deepEqual(snapshot.prices, { source: 'https://example.invalid/model-prices.json', checkedOn: new Date(now - 3 * 86400000).toISOString().slice(0, 10) });
     for (const host of ['Mac', 'Windows']) for (const period of ['day', 'week', 'month', 'all']) {
       const values = totals(snapshot, host, period, new Date(now));
-      const untrackedToday = recordedDays(snapshot, 'activity', host, now).some(day => day.untracked && day.date === new Date(now).toISOString().slice(0, 10));
+      const untrackedToday = recordedDays(snapshot, 'activity', host).some(day => day.untracked && day.date === new Date(now).toISOString().slice(0, 10));
       for (const key of ['codexTokens', 'seconds', 'usd', 'claudeTokens']) {
-        if (key === 'seconds' && untrackedToday) assert.equal(values.seconds, null, `${host} ${period} seconds`);
+        if (key === 'seconds' && untrackedToday && period === 'day') assert.equal(values.seconds, null, `${host} ${period} seconds`);
         else assert.ok(Number.isFinite(values[key]), `${host} ${period} ${key}`);
       }
     }

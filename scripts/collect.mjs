@@ -22,6 +22,7 @@ import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './win
 import {listDistributions,wslRoots,readClaudeRoots,readCodexRoots,readProjectRoots,cacheName} from './token-roots.mjs';
 import {buildProjectTokens,unavailableProjectTokens} from './project-tokens.mjs';
 import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
+import {openTokenStore,keepTokenDays} from './token-store.mjs';
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
@@ -114,7 +115,7 @@ async function previousSnapshot(file) {
   } catch {return null;}
 }
 
-export async function buildSnapshot(config,readers,{previous=null,now=new Date()}={}) {
+export async function buildSnapshot(config,readers,{previous=null,now=new Date(),keepDays=null}={}) {
   const at=now.toISOString(),host=config.host,other=OTHER[host];
   const disconnected=h=>({host:h,status:'not-connected'});
   const unavailable=(error)=>({host,status:'unavailable',checkedAt:at,...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})});
@@ -147,7 +148,13 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
   const codex=pick(codexRead,{settings:disconnected(host),tokens:disconnected(host)},error=>({settings:unavailable(error),tokens:unavailable(error)}));
   const quota=pick(quotaRead,{status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]},
     ()=>({status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]}));
-  const claude=pick(claudeRead,unavailableClaudeTokenSource(host,at,'not-connected'),()=>unavailableClaudeTokenSource(host,at));
+  const kept=(engine,row)=>{
+    if(!keepDays || row.status!=='ok' || !Array.isArray(row.days))return row;
+    try {return {...row,days:keepDays(engine,row.days)};}
+    catch {return row;}
+  };
+  codex.tokens=kept('codex',codex.tokens);
+  const claude=kept('claude',pick(claudeRead,unavailableClaudeTokenSource(host,at,'not-connected'),()=>unavailableClaudeTokenSource(host,at)));
   const claudeLimits=pick(limitsRead,claudeLimitsSource(null,{enabled:false}),
     ()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'}));
   const data={schema:2,timezone:TIMEZONE,collectedAt:at,
@@ -173,7 +180,11 @@ export async function collect(config,{readers=defaultReaders(config),now=()=>new
   try {
     await keepOldAppSnapshot(folder);
     const previous=await previousSnapshot(path.join(folder,'usage.json'));
-    const {data,status}=await buildSnapshot(config,readers,{previous,now:now()});
+    const store=await openTokenStore(config.dataFolder).catch(()=>null);
+    let built;
+    try {built=await buildSnapshot(config,readers,{previous,now:now(),keepDays:store?(engine,days)=>keepTokenDays(store,engine,days):null});}
+    finally {store?.close();}
+    const {data,status}=built;
     data.limitHistory=[await recordLimitHistory(config,data,now())];
     const {text,bytes}=serializeSnapshot(data);
     if(bytes>snapshotMaximumBytes)throw Object.assign(Error('Snapshot too large'),{reason:'snapshot-too-large'});

@@ -28,6 +28,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | `dashboard.port`, `dataFolder`, `codexPath` | `observatory.config.json` | `test/config.test.mjs` (parsing only) |
 | WSL logs counted on the PC | `"wsl": true` | `test/token-roots.test.mjs` |
 | Two computers over SSH | `hub.spokes`, see `docs/TWO-COMPUTERS.md` | `test/hub.test.mjs`, `test/combine.test.mjs`, `test/unknown-not-zero.test.mjs` |
+| Daily history kept for good, Both totals | Activity and Tokens, All and Both | `test/history.test.mjs`, `scripts/view-activity.test.mjs`, `scripts/view-tokens.test.mjs` |
 | Unknown, never zero, and no private text kept | Every view | `test/unknown-not-zero.test.mjs`, `scripts/snapshot-clean.test.mjs`, `scripts/snapshot-size.test.mjs` |
 | Agent status | `npm run status`, `--json`, `--wait`, `--timeout` | `test/agent-status.test.mjs` |
 | Fictional demo and preview | `npm run preview`, `npm run demo` | `scripts/demo.test.mjs`, `scripts/sample-snapshot.test.mjs`, `test/project-tokens.test.mjs` |

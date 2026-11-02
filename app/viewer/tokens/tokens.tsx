@@ -4,16 +4,20 @@ import { compact, usd } from '../../../lib/panel-data.mjs';
 import { tokensView } from '../../../lib/view-tokens.mjs';
 import { projectsView } from '../../../lib/view-projects.mjs';
 import { ProjectsCard } from './projects';
-import { BarChart, Card, FilterGroup, Row, type ChartPoint } from '../components';
+import { BarChart, Card, DeviceShares, FilterGroup, Row, type ChartPoint } from '../components';
 import './tokens.css';
 
 type Computed = ReturnType<typeof tokensView>;
-type Block = Omit<Computed['codex'], 'models' | 'days'> & {
+type Block = {
+  status: string;
+  totals: Record<'input' | 'cached' | 'cacheWrite' | 'output' | 'total', number | null>;
+  estimate: { usd: number | null; coveredTokens: number | null; totalTokens: number | null; partial: boolean };
   checkedOn: string | null;
   note?: string;
   days: Day[];
   models: { model: string; total: number | null; usd: number | null }[];
   byDevice: { host: string; label: string; status: string; note?: string; total: number | null; usd: number | null }[];
+  since: string | null;
 };
 type Result = Omit<Computed, 'claude' | 'codex'> & { codex: Block; claude: Block };
 const periods: [string, string][] = [
@@ -22,8 +26,8 @@ const periods: [string, string][] = [
 ];
 const classes = ['input', 'cached', 'cacheWrite', 'output'] as const;
 const count = (value: number | null) => value === null ? STRINGS.status.unknown : compact(value);
-const statusWord = (status: string) => status === 'no-records' ? STRINGS.status.noRecords
-  : status === 'by-device' ? STRINGS.status.byDevice : STRINGS.status.unknown;
+const statusWord = (status: string) => status === 'no-records' ? STRINGS.status.noRecords : STRINGS.status.unknown;
+const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const statusNote = (status: string) => status === 'hourly-unavailable' ? STRINGS.status.hourlyUnavailable : null;
 const recorded = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value;
 const word = (value: string) => value === 'unknown' ? STRINGS.status.unknown : value.charAt(0).toUpperCase() + value.slice(1);
@@ -57,36 +61,31 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
   const data = chartData(block.days, result.period, result.anchor);
   const chartTitle = format(result.period === 'day' ? STRINGS.tokens.hourlyTitle : STRINGS.tokens.chartTitle, { provider: label });
   const known = block.status === 'ok';
+  const both = result.host === 'All' && block.byDevice.length > 1;
+  const meta = [block.since ? format(STRINGS.formats.since, { date: shortDate(block.since) }) : '', both && known ? STRINGS.overview.bothNote : ''].filter(Boolean);
   return <Card label={label} title={label} provider={provider}>
     <div className="ob-tokens-head">
       <div className={known ? 'ob-hero' : 'ob-hero ob-unknown'}>{known ? count(block.totals.total) : statusWord(block.status)}</div>
+      {meta.length > 0 && <p className="ob-meta">{meta.join(STRINGS.formats.separator)}</p>}
       {notes.map(note => <p key={note} className="ob-meta">{note}</p>)}
-      {result.host === 'All' && block.byDevice.length > 0 && <div className="ob-tokens-table">
-        <table>
-          <thead><tr><th scope="col">{STRINGS.devices.device}</th><th scope="col">{STRINGS.tokens.total}</th><th scope="col">{STRINGS.tokens.apiEstimate}</th></tr></thead>
-          <tbody>{block.byDevice.map(device => <tr key={device.host}>
-            <th scope="row">{device.label}</th><td>{device.status === 'ok' ? count(device.total) : device.note || statusWord(device.status)}</td><td>{usd(device.usd)}</td>
-          </tr>)}</tbody>
-        </table>
-        <p className="ob-meta">{checked}</p>
-      </div>}
+      {both && <DeviceShares color={provider} rows={block.byDevice.map((device: Block['byDevice'][number]) => ({ host: device.host, label: device.label,
+        value: device.status === 'ok' ? device.total : null,
+        text: device.status === 'ok' ? [count(device.total), usd(device.usd)].join(STRINGS.formats.separator) : device.note || statusWord(device.status) }))} />}
     </div>
     <div>{data && <BarChart quietTitle title={chartTitle} data={data} series={provider} formatValue={compact} />}</div>
-    {block.status === 'by-device' && !block.models.length ? <div /> : <details className="ob-disclosure ob-tokens-breakdown">
+    <details className="ob-disclosure ob-tokens-breakdown">
       <summary>{STRINGS.tokens.breakdown}</summary>
-      {block.status !== 'by-device' && <>
-        <h4>{STRINGS.tokens.classes}</h4>
-        <dl className="ob-tokens-classes">{classes.map(key => <div key={key}>
-          <dt>{STRINGS.tokens[key]}</dt><dd>{count(block.totals[key])}</dd>
-        </div>)}</dl>
-        <div className="ob-tokens-estimate">
-          <Row><span>{STRINGS.tokens.apiEstimate}</span><span className="ob-num">{usd(block.estimate.usd)}</span></Row>
-          <p className="ob-meta">{checked}</p>
-          {block.estimate.partial && <p className="ob-meta">{format(STRINGS.tokens.partial, {
-            covered: count(block.estimate.coveredTokens), total: count(block.estimate.totalTokens),
-          })}</p>}
-        </div>
-      </>}
+      <h4>{STRINGS.tokens.classes}</h4>
+      <dl className="ob-tokens-classes">{classes.map(key => <div key={key}>
+        <dt>{STRINGS.tokens[key]}</dt><dd>{count(block.totals[key])}</dd>
+      </div>)}</dl>
+      <div className="ob-tokens-estimate">
+        <Row><span>{STRINGS.tokens.apiEstimate}</span><span className="ob-num">{usd(block.estimate.usd)}</span></Row>
+        <p className="ob-meta">{checked}</p>
+        {block.estimate.partial && <p className="ob-meta">{format(STRINGS.tokens.partial, {
+          covered: count(block.estimate.coveredTokens), total: count(block.estimate.totalTokens),
+        })}</p>}
+      </div>
       {block.models.length > 0 && <div className="ob-tokens-table">
         <h4>{STRINGS.tokens.byModel}</h4>
         <table>
@@ -96,7 +95,7 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
           </tr>)}</tbody>
         </table>
       </div>}
-    </details>}
+    </details>
   </Card>;
 }
 

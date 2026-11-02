@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { STRINGS, format } from '../../../lib/strings.generated';
 import { limitRows, peerLimits } from '../../../lib/view-limits.mjs';
-import { limitHistorySeries } from '../../../lib/view-limit-history.mjs';
+import { firstReadingDate, limitHistorySeries } from '../../../lib/view-limit-history.mjs';
 import { LimitHistoryChart, type HistoryData } from './LimitHistoryChart';
 import { span } from '../../../lib/panel-data.mjs';
 import { Card, FilterGroup } from '../components';
@@ -29,9 +29,11 @@ export function LimitsView({ snapshot, now }: { snapshot: Record<string, unknown
   const [range, setRange] = useState('week');
   const rows = limitRows(snapshot, now);
   const peer = peerLimits(snapshot, now);
+  const since = range === 'all' ? firstReadingDate(snapshot, now) : null;
   return <div className="ob-limits">
     <section className="ob-history" aria-label={STRINGS.limitHistory.title}>
-      <div className="ob-filters"><FilterGroup label={STRINGS.limitHistory.range} options={ranges} value={range} onChange={setRange} /></div>
+      <div className="ob-filters"><FilterGroup label={STRINGS.limitHistory.range} options={ranges} value={range} onChange={setRange} />
+        {since && <span className="ob-meta">{format(STRINGS.formats.since, { date: new Date(`${since}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) })}</span>}</div>
       <div className="ob-history-grid-cards">
         {providers.flatMap(([provider, name]) => windows.map(([window, label, rowWindow]) => {
           const data = limitHistorySeries(snapshot, { provider, window, range, now });
