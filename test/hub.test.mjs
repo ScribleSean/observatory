@@ -110,14 +110,19 @@ test('an oversized peer is refused, keeps its previous data and the dashboard fi
   assert.equal(transport.pushed.length,0);
 }));
 
+function longHistory(snapshot,host,count) {
+  const categories=Object.fromEntries(Array.from({length:40},(_,index)=>[`Category ${index}`,1234.5]));
+  const days=Array.from({length:count},(_,index)=>({date:new Date(now-(count-1-index)*86400000).toISOString().slice(0,10),
+    seconds:1234.5,trackedSeconds:1234.5,hours:Array(24).fill(51.4),categories}));
+  snapshot.activityHistory=[{host,status:'ok',checkedAt:new Date(now).toISOString(),days}];
+  return days;
+}
+
 test('a peer the collector sized to its budget is accepted with its oldest history trimmed to fit',()=>withFolder(async folder=>{
   const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
   await seed(folder,'usage.json',ownSnapshot('Mac',now));
   const peer=ownSnapshot('Windows',now);
-  const categories=Object.fromEntries(Array.from({length:40},(_,index)=>[`Category ${index}`,1234.5]));
-  const days=Array.from({length:20000},(_,index)=>({date:new Date(now-(19999-index)*86400000).toISOString().slice(0,10),
-    seconds:1234.5,trackedSeconds:1234.5,hours:Array(24).fill(51.4),categories}));
-  peer.activityHistory=[{host:'Windows',status:'ok',checkedAt:new Date(now).toISOString(),days}];
+  const days=longHistory(peer,'Windows',20000);
   const sized=serializeSnapshot(peer);
   assert.ok(sized.bytes>MAX_PEER_BYTES && sized.bytes<=snapshotHistoryBudget);
   const combined=await runHub(config,{transport:fakeTransport(sized.text),now:()=>now});
@@ -127,6 +132,24 @@ test('a peer the collector sized to its budget is accepted with its oldest histo
   assert.equal(kept.at(-1).date,days.at(-1).date);
   const text=await readFile(path.join(folder,'public','local','combined.json'),'utf8');
   assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES);
+}));
+
+test('a large snapshot on this computer loses its oldest history so the dashboard file stays readable',()=>withFolder(async folder=>{
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc]}});
+  const own=ownSnapshot('Mac',now);
+  const days=longHistory(own,'Mac',40000);
+  const sized=serializeSnapshot(own);
+  assert.ok(sized.bytes>MAX_FILE_BYTES/2 && sized.bytes<=snapshotHistoryBudget);
+  await seed(folder,'usage.json',JSON.parse(sized.text));
+  for(const run of [()=>runHub(config,{transport:fakeTransport(JSON.stringify(ownSnapshot('Windows',now))),now:()=>now}),
+    ()=>recombine(config,{now:()=>now})]) {
+    const combined=await run();
+    const kept=combined.snapshots.Mac.activityHistory[0].days;
+    assert.ok(kept.length>0 && kept.length<days.length);
+    assert.equal(kept.at(-1).date,days.at(-1).date);
+    const text=await readFile(path.join(folder,'public','local','combined.json'),'utf8');
+    assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES,`combined.json is ${Buffer.byteLength(text)} bytes`);
+  }
 }));
 
 test('a delayed hub transfer keeps the newest observations per computer across spoke refreshes',()=>withFolder(async folder=>{
