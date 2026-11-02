@@ -1,5 +1,6 @@
 import {spawn} from '../lib/cycle-processes.mjs';
-import {lstat} from 'node:fs/promises';
+import {access,stat} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import {homedir} from 'node:os';
 import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import path from 'node:path';
@@ -64,13 +65,24 @@ export function parseClaudeUsage(envelope,now=Date.now()) {
 export const signedOut=envelope=>envelope?.is_error===false && envelope.local_command==='usage' && typeof envelope.result==='string' &&
   /^Total cost: /m.test(envelope.result) && !Object.values(lines).some(pattern=>pattern.test(envelope.result));
 
-export async function findClaude(environment=process.env,platform=process.platform) {
-  const names=platform==='win32'?['claude.exe']:['claude'];
-  const folders=[...(environment.PATH ?? '').split(path.delimiter),path.join(homedir(),'.local/bin'),path.join(homedir(),'.claude/local'),
-    ...(platform==='win32'?[]:['/opt/homebrew/bin','/usr/local/bin'])].filter(folder=>path.isAbsolute(folder) && !isProtectedFolder(folder));
-  for(const folder of folders)for(const name of names) {
-    const file=path.join(folder,name);
-    try {if((await lstat(file)).isDirectory())continue;return file;}catch{}
+// On Windows only the installers' own folders are searched, not PATH, because a claude.exe in a
+// folder another program added to PATH would otherwise run every five minutes.
+export async function findClaude(environment=process.env,platform=process.platform,home=homedir()) {
+  let candidates;
+  if(platform==='win32') {
+    const local=environment.LOCALAPPDATA;
+    candidates=[path.win32.join(home,'.local','bin','claude.exe'),
+      ...(typeof local==='string' && path.win32.isAbsolute(local)?[path.win32.join(local,'Microsoft','WinGet','Links','claude.exe')]:[])];
+  } else {
+    candidates=[...(environment.PATH ?? '').split(path.delimiter),path.join(home,'.local/bin'),path.join(home,'.claude/local'),'/opt/homebrew/bin','/usr/local/bin']
+      .filter(folder=>path.isAbsolute(folder) && !isProtectedFolder(folder)).map(folder=>path.join(folder,'claude'));
+  }
+  for(const file of candidates) {
+    try {
+      if(!(await stat(file)).isFile())continue;
+      if(platform!=='win32')await access(file,constants.X_OK);
+      return file;
+    } catch {}
   }
   return null;
 }
