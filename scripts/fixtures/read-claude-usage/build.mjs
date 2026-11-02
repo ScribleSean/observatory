@@ -77,7 +77,14 @@ export const FIXTURES = {
     'projects/a/one.jsonl': '﻿' + event('m1', 'r1', usage(1, 0, 0, 1)),
   },
   'oversize-line': {
-    'projects/a/one.jsonl': event('m1', 'r1', usage(1, 0, 0, 1)) + JSON.stringify({ type: 'user', pad: 'x'.repeat(4 * 1024 * 1024) }) + '\n',
+    'projects/a/one.jsonl': event('m1', 'r1', usage(1, 0, 0, 1)) + JSON.stringify({ pad: 'x'.repeat(4 * 1024 * 1024), type: 'user' }) + '\n',
+  },
+  'oversize-user-line': {
+    'projects/a/one.jsonl': event('m1', 'r1', usage(1, 0, 0, 1)) + JSON.stringify({ parentUuid: null, type: 'user', pad: 'x'.repeat(4 * 1024 * 1024) }) + '\n' +
+      event('m2', 'r2', usage(2, 0, 0, 2)),
+  },
+  'oversize-assistant-line': {
+    'projects/a/one.jsonl': event('m1', 'r1', usage(1, 0, 0, 1)) + JSON.stringify({ type: 'assistant', pad: 'x'.repeat(4 * 1024 * 1024) }) + '\n',
   },
   'naive-timestamp': {
     'projects/a/one.jsonl': event('m1', 'r1', usage(1, 0, 0, 1), { timestamp: '2026-09-25T04:30:00' }),

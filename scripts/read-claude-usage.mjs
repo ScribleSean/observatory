@@ -473,17 +473,78 @@ function fileLog() {
   };
 }
 
+// Claude Code writes "type" before a user message's content and after an assistant reply's, so a line
+// too long to parse is skipped only when its top-level "type" shows in the first bytes and is not "assistant".
+const TYPE_PREFIX_BYTES = 64 * 1024;
+const prefixText = new TextDecoder('utf-8');
+function skippableType(line) {
+  const text = prefixText.decode(line.subarray(0, TYPE_PREFIX_BYTES));
+  let index = 0;
+  const space = () => {
+    while (index < text.length && ' \t\n\r'.includes(text[index])) index++;
+  };
+  const string = () => {
+    const start = index++;
+    while (index < text.length && text[index] !== '"') index += text[index] === '\\' ? 2 : 1;
+    if (index >= text.length) return null;
+    index++;
+    try {
+      return JSON.parse(text.slice(start, index));
+    } catch {
+      return null;
+    }
+  };
+  space();
+  if (text[index++] !== '{') return false;
+  for (;;) {
+    space();
+    if (text[index] !== '"') return false;
+    const key = string();
+    space();
+    if (key === null || text[index++] !== ':') return false;
+    space();
+    if (key === 'type') {
+      const value = text[index] === '"' ? string() : null;
+      return typeof value === 'string' && value !== 'assistant';
+    }
+    let depth = 0;
+    for (;;) {
+      if (index >= text.length) return false;
+      const char = text[index];
+      if (char === '"') {
+        if (string() === null) return false;
+        continue;
+      }
+      if (char === '{' || char === '[') depth++;
+      else if (char === '}' || char === ']') {
+        if (depth === 0) return false;
+        depth--;
+      } else if (char === ',' && depth === 0) break;
+      index++;
+    }
+    index++;
+  }
+}
+
 async function readFile(file, state, log, limits) {
   const handle = await fs.promises.open(file, 'r');
   try {
     const chunk = Buffer.allocUnsafe(1024 * 1024);
     let pending = [];
     let pendingLength = 0;
-    const handleLine = (line) => {
-      state.lines += 1;
-      state.bytesRead += line.length;
-      if (line.length > limits.MAX_LINE_BYTES) throw new Unavailable();
+    let skipping = false;
+    const count = (lines, bytes) => {
+      state.lines += lines;
+      state.bytesRead += bytes;
       if (state.lines > limits.MAX_LINES || state.bytesRead > limits.MAX_TOTAL_BYTES) throw new OverBudget();
+    };
+    const handleLine = (line) => {
+      if (line.length > limits.MAX_LINE_BYTES) {
+        if (!skippableType(line)) throw new Unavailable();
+        count(1, line.length);
+        return;
+      }
+      count(1, line.length);
       if (line.every((byte) => BLANK.has(byte))) return;
       let event;
       try {
@@ -500,6 +561,16 @@ async function readFile(file, state, log, limits) {
       const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
       if (bytesRead === 0) break;
       let start = 0;
+      if (skipping) {
+        const newline = chunk.indexOf(0x0a);
+        if (newline === -1 || newline >= bytesRead) {
+          count(0, bytesRead);
+          continue;
+        }
+        count(1, newline + 1);
+        skipping = false;
+        start = newline + 1;
+      }
       for (;;) {
         const newline = chunk.indexOf(0x0a, start);
         if (newline === -1 || newline >= bytesRead) break;
@@ -513,10 +584,17 @@ async function readFile(file, state, log, limits) {
       if (start < bytesRead) {
         pending.push(Buffer.from(chunk.subarray(start, bytesRead)));
         pendingLength += bytesRead - start;
-        if (pendingLength > limits.MAX_LINE_BYTES) throw new Unavailable();
+        if (pendingLength > limits.MAX_LINE_BYTES) {
+          if (!skippableType(Buffer.concat(pending))) throw new Unavailable();
+          count(0, pendingLength);
+          pending = [];
+          pendingLength = 0;
+          skipping = true;
+        }
       }
     }
-    if (pendingLength) handleLine(Buffer.concat(pending));
+    if (skipping) count(1, 0);
+    else if (pendingLength) handleLine(Buffer.concat(pending));
   } finally {
     await handle.close();
   }

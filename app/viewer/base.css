@@ -25,6 +25,10 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-dot.codex, .ob-bar i.codex { background: var(--ob-codex); }
 .ob-bar { display: block; height: 5px; border-radius: 3px; background: var(--ob-track); margin-top: 6px; overflow: hidden; }
 .ob-bar i { display: block; height: 100%; border-radius: 3px; }
+.ob-bar i.accent { background: var(--ob-accent); }
+.ob-shares { margin: var(--ob-space-4) 0 0; padding: 0; list-style: none; display: grid; gap: var(--ob-space-3); }
+.ob-shares li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ob-space-1) var(--ob-space-2); align-items: baseline; font-size: var(--ob-label-size); }
+.ob-shares .ob-bar { grid-column: 1 / -1; margin: 0; height: 4px; }
 
 .ob-unknown { color: var(--ob-muted) !important; }
 

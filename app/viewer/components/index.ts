@@ -5,3 +5,5 @@ export { FilterGroup } from './FilterGroup';
 export { Meter } from './Meter';
 export { BarChart } from './charts';
 export type { BarChartProps, ChartColor, ChartPoint } from './charts';
+export { DeviceShares } from './DeviceShares';
+export type { Share } from './DeviceShares';

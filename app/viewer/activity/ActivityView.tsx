@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { STRINGS } from '../../../lib/strings.generated';
+import { STRINGS, format } from '../../../lib/strings.generated';
 import { activityView } from '../../../lib/view-activity.mjs';
 import { duration } from '../../../lib/panel-data.mjs';
-import { Card, FilterGroup, Row, BarChart } from '../components';
+import { Card, FilterGroup, Row, BarChart, DeviceShares } from '../components';
 import './activity.css';
 
 type Props = { snapshot: Record<string, unknown> | null; now: number; initialHost?: string; initialPeriod?: string; initialDate?: string };
@@ -23,6 +23,8 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
   const [date, setDate] = useState(initialDate);
   const view = activityView(snapshot, { host, period, date, now });
   const tracking = view.tracking.status === 'recent' ? null : view.tracking;
+  const both = view.byDevice.length > 1;
+  const meta = [view.since ? format(STRINGS.formats.since, { date: shortDate(view.since) }) : '', both && view.total !== null ? STRINGS.overview.bothNote : ''].filter(Boolean);
   return <div className="ob-activity">
     <div className="ob-filters">
       {view.devices.length > 2 && <FilterGroup label={STRINGS.devices.device} options={view.devices as [string, string][]} value={host} onChange={setHost} />}
@@ -36,6 +38,9 @@ export function ActivityView({ snapshot, now, initialHost = 'All', initialPeriod
           <div className="ob-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, view.total / view.windowSeconds * 100)}%`, background: 'var(--ob-accent)' }} /></div>
           <span className="ob-meta">{view.windowLabel}</span>
         </div>}
+        {meta.length > 0 && <p className="ob-meta">{meta.join(STRINGS.formats.separator)}</p>}
+        {both && <DeviceShares color="accent" rows={view.byDevice.map(row => ({ host: row.host, label: row.label, value: row.total,
+          text: row.total === null ? row.note || STRINGS.status.unknown : duration(row.total) }))} />}
         {view.note && <p className="ob-meta">{view.note}</p>}
         {tracking && <p className={tracking.status === 'unknown' ? 'ob-meta' : 'ob-meta warn'}>{tracking.label}
           {tracking.status === 'unavailable' && <>{STRINGS.formats.separator}<a href={`https://${STRINGS.activity.helpAddress}`} target="_blank" rel="noreferrer">{STRINGS.activity.helpAddress}</a></>}</p>}
