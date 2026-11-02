@@ -3,7 +3,7 @@ import {constants} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {readClaudeUsage} from './claude-usage-command.mjs';
-import {assertPrivateOwner} from '../lib/private-folder.mjs';
+import {assertPrivateOwner,assertPrivateRoot} from '../lib/private-folder.mjs';
 import {READING_FRESH_MS} from '../lib/freshness.mjs';
 
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
@@ -106,6 +106,7 @@ export async function ensureClaudeLimitsFolder(runtime) {
   if(typeof runtime!=='string' || !path.isAbsolute(runtime))throw Error('Absolute runtime required');
   const folder=folderOf(runtime);
   await mkdir(folder,{recursive:true,mode:0o700});
+  await assertPrivateRoot(runtime);
   const info=await lstat(folder);
   if(!info.isDirectory() || info.isSymbolicLink())throw Error('Unsafe Claude limits folder');
   assertPrivateOwner(info,folder);

@@ -1,7 +1,7 @@
 // Pulls travel as base64 on standard output so console code pages cannot change the bytes.
 // Pushes travel by scp: Windows OpenSSH can stall input piped into PowerShell, so nothing is piped.
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,rm,stat,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {execFile} from '../lib/cycle-processes.mjs';
@@ -83,12 +83,22 @@ function run(program,args) {
   });
 }
 
-export function runSSH(alias,command) {
-  return run(process.platform==='win32'?'ssh.exe':'/usr/bin/ssh',[...SSH_OPTIONS,alias,command]);
+// Programs are named by full path, so a program of the same name in the working folder or
+// earlier on PATH is never run. Windows ships OpenSSH in System32; the OpenSSH installer uses Program Files.
+export async function sshProgram(name,platform=process.platform,environment=process.env,exists=async file=>(await stat(file)).isFile()) {
+  if(platform!=='win32')return `/usr/bin/${name}`;
+  const candidates=[[environment.SystemRoot,'System32','OpenSSH'],[environment.ProgramFiles,'OpenSSH']]
+    .filter(([root])=>typeof root==='string' && path.win32.isAbsolute(root)).map(parts=>path.win32.join(...parts,`${name}.exe`));
+  for(const file of candidates)if(await exists(file).catch(()=>false))return file;
+  throw Error(`${name}.exe not found. Add the OpenSSH Client in Settings, System, Optional features`);
 }
 
-export function runSCP(alias,file,name) {
-  return run(process.platform==='win32'?'scp.exe':'/usr/bin/scp',[...SSH_OPTIONS,'-q',file,`${alias}:${checkStaged(name)}`]);
+export async function runSSH(alias,command) {
+  return run(await sshProgram('ssh'),[...SSH_OPTIONS,alias,command]);
+}
+
+export async function runSCP(alias,file,name) {
+  return run(await sshProgram('scp'),[...SSH_OPTIONS,'-q',file,`${alias}:${checkStaged(name)}`]);
 }
 
 export function discardCommand(spoke,name) {
