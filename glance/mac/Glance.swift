@@ -263,11 +263,6 @@ struct PanelView: View {
   }
 
   @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack {
-      Spacer(minLength: 0)
-      Text("Left")
-    }
-    .font(.system(size: 11.5)).foregroundStyle(palette.muted)
     ForEach(state.limits) { row in
       let tint = row.remaining.map { $0 <= 0.5 ? palette.error : $0 <= PanelState.low ? palette.warning : nil } ?? nil
       VStack(alignment: .leading, spacing: 6) {
@@ -277,8 +272,8 @@ struct PanelView: View {
           Text(row.window).foregroundStyle(palette.muted)
           Spacer(minLength: 6)
           if let remaining = row.remaining {
-            Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
-              .foregroundStyle(tint ?? palette.text)
+            let percent = Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).foregroundStyle(tint ?? palette.text)
+            Text("\(percent) \(Text("left").foregroundStyle(palette.muted))").monospacedDigit()
           } else {
             Text(row.absent ?? "Unknown").foregroundStyle(palette.muted)
           }

@@ -337,13 +337,11 @@ namespace Observatory
                     if (s.Limits.Count > 0)
                     {
                         Func<LimitRow, bool> resets = limit => limit.Remaining.HasValue && limit.Remaining.Value <= PanelState.Low && limit.ResetsAt.HasValue;
-                        float h = Pad * 2 + 15 + Gap + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
+                        float h = Pad * 2 + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
                         if (draw)
                         {
                             Card(g, p, new RectangleF(left, y, right - left, h));
                             float row = y + Pad, inner = left + Pad, end = right - Pad;
-                            Text(g, "Left", small, p.Muted, end - Measure(g, "Left", small), row);
-                            row += 15 + Gap;
                             foreach (var limit in s.Limits)
                             {
                                 double? value = limit.Remaining;
@@ -351,9 +349,18 @@ namespace Observatory
                                 using (var dot = new SolidBrush(p.Provider(limit.Provider))) g.FillEllipse(dot, inner, row + 6, 7, 7);
                                 Text(g, limit.Name, strong, p.Text, inner + 13, row);
                                 Text(g, limit.Window, body, p.Muted, inner + 13 + Measure(g, limit.Name, strong) + 5, row);
-                                string percent = value.HasValue ? Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%" : limit.Absent ?? "Unknown";
-                                Font font = value.HasValue ? strong : body;
-                                Text(g, percent, font, value.HasValue ? tint ?? p.Text : p.Muted, end - Measure(g, percent, font), row);
+                                if (value.HasValue)
+                                {
+                                    string percent = Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%";
+                                    float suffix = Measure(g, " left", body);
+                                    Text(g, " left", body, p.Muted, end - suffix, row);
+                                    Text(g, percent, strong, tint ?? p.Text, end - suffix - Measure(g, percent, strong), row);
+                                }
+                                else
+                                {
+                                    string absent = limit.Absent ?? "Unknown";
+                                    Text(g, absent, body, p.Muted, end - Measure(g, absent, body), row);
+                                }
                                 var track = new RectangleF(inner, row + 24, end - inner, 5);
                                 using (var path = Rounded(track, 2.5f)) using (var brush = new SolidBrush(p.Track)) g.FillPath(brush, path);
                                 if (value > 0)
