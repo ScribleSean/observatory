@@ -272,8 +272,9 @@ struct PanelView: View {
           Text(row.window).foregroundStyle(palette.muted)
           Spacer(minLength: 6)
           if let remaining = row.remaining {
-            let percent = Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).foregroundStyle(tint ?? palette.text)
-            Text("\(percent) \(Text("left").foregroundStyle(palette.muted))").monospacedDigit()
+            let percent = Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
+              .foregroundStyle(tint ?? palette.text)
+            Text("\(percent) \(Text("left").foregroundStyle(palette.muted))")
           } else {
             Text(row.absent ?? "Unknown").foregroundStyle(palette.muted)
           }
