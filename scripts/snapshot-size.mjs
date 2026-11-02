@@ -2,10 +2,10 @@ import {retainActivityHistory} from './activity-history.mjs';
 export const snapshotMaximumBytes=16_000_000;
 export const snapshotHistoryBudget=12_000_000;
 
-export function serializeSnapshot(data) {
+export function serializeSnapshot(data,{budget=snapshotHistoryBudget,maximum=snapshotMaximumBytes}={}) {
   let text=JSON.stringify(data),bytes=Buffer.byteLength(text);
   const history=Array.isArray(data?.activityHistory)?data.activityHistory:null;
-  if(!history || bytes<=snapshotHistoryBudget)return {text,bytes};
+  if(!history || bytes<=budget)return {text,bytes};
   const dates=[...new Set(history.flatMap(host=>(Array.isArray(host?.days)?host.days:[])
     .map(day=>day?.date).filter(date=>typeof date==='string')))].sort((a,b)=>a.localeCompare(b));
   if(!dates.length)return {text,bytes};
@@ -21,7 +21,7 @@ export function serializeSnapshot(data) {
     return {text,bytes:Buffer.byteLength(text),retained};
   };
   const smallest=candidate(dates.length);
-  const target=smallest.bytes>snapshotHistoryBudget?snapshotMaximumBytes:snapshotHistoryBudget;
+  const target=smallest.bytes>budget?maximum:budget;
   if(bytes<=target)return {text,bytes};
   let low=1,high=dates.length;
   while(low<high) {
