@@ -33,8 +33,9 @@ function parseSnapshot(text,host,now) {
   const cleaned=ownRows(value,host);
   if(!cleaned)throw Error('invalid snapshot');
   const snapshot={...cleaned,schema:2,device:{host,name:cleaned.name}};
-  if(serializeSnapshot(snapshot,{budget:MAX_PEER_BYTES,maximum:MAX_PEER_BYTES}).bytes>MAX_PEER_BYTES)throw Error('snapshot is too large');
-  return snapshot;
+  const sized=serializeSnapshot(snapshot,{budget:MAX_PEER_BYTES,maximum:MAX_PEER_BYTES});
+  if(sized.bytes>MAX_PEER_BYTES)throw Error('snapshot is too large');
+  return JSON.parse(sized.text);
 }
 
 function validatedDevice(combined,host,now) {
