@@ -8,9 +8,10 @@ import {sshTransport,MAX_FILE_BYTES} from './hub-transport.mjs';
 import {serializeSnapshot} from './snapshot-size.mjs';
 
 const HOST={mac:'Mac',windows:'Windows'};
-// combined.json stores each peer row twice (snapshots and view), so a peer is capped at a quarter
-// of the file limit. A larger peer loses its oldest activity history first, as the collector does.
-export const MAX_PEER_BYTES=MAX_FILE_BYTES/4;
+// combined.json stores each computer's rows twice (snapshots and view), so this computer's snapshot
+// and its peer's are each capped at a quarter of the file limit. A larger snapshot loses its oldest
+// activity history first, as the collector does. The margin covers the summary fields around them.
+export const MAX_PEER_BYTES=MAX_FILE_BYTES/4-64_000;
 
 async function readJson(file) {
   try {
@@ -18,6 +19,14 @@ async function readJson(file) {
     if(Buffer.byteLength(text)>MAX_FILE_BYTES)return null;
     return JSON.parse(text);
   } catch {return null;}
+}
+
+async function readOwn(folder) {
+  const own=await readJson(path.join(folder,'usage.json'));
+  if(!own)return {snapshot:null,error:'no local snapshot'};
+  const sized=serializeSnapshot(own,{budget:MAX_PEER_BYTES,maximum:MAX_PEER_BYTES});
+  if(sized.bytes>MAX_PEER_BYTES)return {snapshot:null,error:'local snapshot is too large'};
+  return {snapshot:JSON.parse(sized.text)};
 }
 
 function parseSnapshot(text,host,now) {
@@ -49,8 +58,7 @@ function validatedDevice(combined,host,now) {
 export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()}={}) {
   const folder=await privateFolder(config.dataFolder,'public','local');
   const previous=await readJson(path.join(folder,'combined.json'));
-  const own=await readJson(path.join(folder,'usage.json'));
-  const devices=[{host:config.host,name:config.device.name,snapshot:own,...(own?{}:{error:'no local snapshot'})}];
+  const devices=[{host:config.host,name:config.device.name,...await readOwn(folder)}];
   const report=[];
   for(const spoke of config.hub.spokes) {
     const host=HOST[spoke.platform];
@@ -84,8 +92,7 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
   const mine=await readJson(path.join(folder,'combined.json'));
   const inbox=await readJson(path.join(folder,'combined.incoming.json'));
   const incoming=inbox?.hub?.role==='hub' && Date.parse(inbox.generatedAt)<=now()+CLOCK_SKEW_MS?inbox:null;
-  const own=await readJson(path.join(folder,'usage.json'));
-  const devices=[{host:config.host,name:config.device.name,snapshot:own,...(own?{}:{error:'no local snapshot'})}];
+  const devices=[{host:config.host,name:config.device.name,...await readOwn(folder)}];
   for(const host of HOSTS.filter(host=>host!==config.host)) {
     const carried=newer(validatedDevice(mine,host,now()),validatedDevice(incoming,host,now()));
     if(carried)devices.push(carried);
