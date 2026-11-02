@@ -71,6 +71,17 @@ test('Both shows one total per provider over each computer\'s own total', () => 
   assert.equal(unread.totals.total, null);
 });
 
+test('Both leaves out a computer that has the provider switched off', () => {
+  const data = snapshot();
+  data.tokens.push({ host: 'Windows', status: 'not-connected' });
+  data.providerTokenSources.push({ provider: 'claude-code', host: 'Windows', status: 'not-connected' });
+  data.activity = [{ host: 'Windows', status: 'ok', days: [] }];
+  for (const provider of ['codex', 'claude']) {
+    const both = view(data, { host: 'All', period: 'day' })[provider];
+    assert.deepEqual([both.status, both.totals.total, both.byDevice.map(row => row.host)], ['ok', 10, ['Mac']]);
+  }
+});
+
 test('Both counts a computer with no records as nothing and dates All from the first day', () => {
   const data = snapshot([day({ date: '2026-09-02' }), day()]);
   for (const key of ['tokens', 'providerTokenSources']) data[key].push({ ...structuredClone(data[key][0]), host: 'Windows', days: [day({ date: '2026-10-13', totalTokens: 30, inputTokens: 22 })] });

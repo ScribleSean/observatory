@@ -86,6 +86,7 @@ test('Both is Unknown when a computer\'s own total is Unknown for that day', () 
   assert.equal(result.byDevice[1].total, null);
   assert.equal(result.total, null);
   assert.equal(view(data, { host: 'All', period: 'week' }).total, 2400);
+  assert.equal(view(data, { host: 'All', period: 'week' }).series.at(-1).value, null);
 });
 for (const [period, expected] of [['day', 2400], ['week', 3600], ['month', 4200], ['all', 4500]]) test(`${period} total uses retained days for one host`, () => {
   const data = snapshot(); data.activity[0].days.push(day('2026-10-13', 1200), day('2026-09-20', 600), day('2026-08-01', 300));
