@@ -75,7 +75,10 @@ test('Windows looks for claude.exe in the installers\' folders, not on PATH', as
   const before=await readdir(repo);
   const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
-  // Linux joins these Windows-style paths as plain names inside the temporary folder.
+  // Elsewhere these Windows-style paths are plain relative names, so work inside the temporary folder.
+  const cwd=process.cwd();
+  process.chdir(root);
+  t.after(()=>process.chdir(cwd));
   const home=path.join(root,'home'),local=path.join(root,'local'),onPath=path.join(root,'tools');
   await mkdir(onPath,{recursive:true});
   await writeFile(path.join(onPath,'claude.exe'),'');

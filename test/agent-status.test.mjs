@@ -130,7 +130,7 @@ test('nextReturn gives the reset of the window at 0, the later one when both are
 // Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, burning 0.5%/h.
 const ultra = fixture({
   claude: [['seven_day', 10080, 96, 151 * hour, 0.5]],
-  codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 3.2]],
+  codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 0.5]],
 });
 
 test('with no 5-hour window, the weekly window decides and Claude is no longer unknown', () => {
@@ -198,8 +198,8 @@ test('job cap follows pace: Claude spending gives more than the old fixed 6', ()
 });
 
 test('straight-line pace and time-adjusted headroom', () => {
-  assert.equal(windowPace(96, 1.1, 151 * 60, 10080), 'spend');
-  assert.equal(windowPace(50, 25, 120, 300), 'spend');
+  assert.equal(windowPace(96, 0.5, 151 * 60, 10080), 'spend');
+  assert.equal(windowPace(50, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, null, 280, 300), 'hold');
   assert.equal(windowPace(50, null, 150, 300), 'spend');
@@ -258,7 +258,7 @@ test('stale Codex job markers do not count as busy', async () => {
     await writeFile(path.join(folder, 'c.md'), 'x');
     const old = (Date.now() - STALE_MARKER_MS - 60000) / 1000;
     await utimes(path.join(folder, 'b.running'), old, old);
-    assert.equal(await countCodexJobs(folder), 1);
+    assert.deepEqual(await countCodexJobs(folder), {running: 1, byAge: 1});
     assert.equal(await countCodexJobs(path.join(folder, 'missing')), null);
   });
 });

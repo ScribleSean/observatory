@@ -1,7 +1,9 @@
+import {execFile} from 'node:child_process';
 import {readdir, readFile, stat} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {promisify} from 'node:util';
 import {defaultDataFolder, loadConfig, localFolder} from '../lib/config.mjs';
 import {agentStatus, ENGINES, WINDOWS} from '../lib/agent-status.mjs';
 import {durationText} from './display-format.mjs';
@@ -27,21 +29,41 @@ async function readCombined() {
   catch { return null; }
 }
 
-// Codex jobs running now: codex-job and codex-job-on leave a <id>.running marker while a job
-// runs. A marker older than STALE_MARKER_MS is from a killed job, so it does not count.
+// Codex jobs running now: codex-job and codex-job-on leave a <id>.running marker in this
+// host's own state folder while a job runs, and the id ends in the wrapper's PID. A marker
+// whose PID is a live codex-job process here counts however long the job has run; a dead PID
+// never counts. When the PID cannot be read or checked, a marker older than STALE_MARKER_MS
+// (its mtime is the job's start) is taken to be from a killed job, and the rest count by age.
 export const STALE_MARKER_MS = 6 * 3600000;
-export async function countCodexJobs(folder = path.join(os.homedir(), '.local', 'state', 'codex-jobs'), now = Date.now()) {
+const markerPid = name => Number(/^\d{8}-\d{6}-.+-(\d+)\.running$/.exec(name)?.[1]) || null;
+
+// true or false when this host can tell whether pid is a running codex-job; null when it cannot.
+export async function codexJobAlive(pid) {
+  try { process.kill(pid, 0); }
+  catch (error) { if (error.code === 'ESRCH') return false; if (error.code !== 'EPERM') return null; }
+  if (process.platform === 'win32') return null;
+  try {
+    const {stdout} = await promisify(execFile)('ps', ['-p', String(pid), '-o', 'command=']);
+    return /codex-job/.test(stdout);
+  } catch (error) { return error.code === 'ENOENT' ? null : false; }
+}
+
+export async function countCodexJobs(folder = path.join(os.homedir(), '.local', 'state', 'codex-jobs'), now = Date.now(), {alive = codexJobAlive} = {}) {
   let names;
   try { names = (await readdir(folder)).filter(name => name.endsWith('.running')); }
   catch { return null; }
-  const fresh = await Promise.all(names.map(name => stat(path.join(folder, name))
-    .then(info => now - info.mtimeMs < STALE_MARKER_MS, () => false)));
-  return fresh.filter(Boolean).length;
+  const seen = await Promise.all(names.map(async name => {
+    const pid = markerPid(name);
+    const live = pid === null ? null : await alive(pid);
+    if (live !== null) return live ? 'pid' : null;
+    return stat(path.join(folder, name)).then(info => now - info.mtimeMs < STALE_MARKER_MS ? 'age' : null, () => null);
+  }));
+  return {running: seen.filter(Boolean).length, byAge: seen.filter(item => item === 'age').length};
 }
 
 const clockTime = at => new Intl.DateTimeFormat('en-GB', {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(new Date(at));
 
-export function describe(status) {
+export function describe(status, byAge = 0) {
   const lines = [];
   for (const id of ['claude', 'codex']) {
     const engine = status.engines[id];
@@ -59,7 +81,8 @@ export function describe(status) {
   const routed = hint => `${hint.engine ? names[hint.engine] : 'none'}. ${hint.reason}`;
   lines.push(`Route code: ${routed(status.route.code)}`);
   lines.push(`Route review, research: ${routed(status.route.review)}`);
-  lines.push(`Job cap: ${status.cap.total} (Claude ${status.cap.claude}, Codex ${status.cap.codex}${status.cap.codexRunning === null ? '' : `, ${status.cap.codexRunning} Codex running`}).`);
+  const age = byAge > 0 ? `, ${byAge} by marker age only` : '';
+  lines.push(`Job cap: ${status.cap.total} (Claude ${status.cap.claude}, Codex ${status.cap.codex}${status.cap.codexRunning === null ? '' : `, ${status.cap.codexRunning} Codex running${age}`}).`);
   return lines.join('\n');
 }
 
@@ -73,12 +96,19 @@ function parse(args) {
   return {json: args.includes('--json') || wait !== null, wait, timeout};
 }
 
+// running() gives {running, byAge}, a bare count, or null when it cannot tell.
+async function jobs(running) {
+  const found = await running();
+  return typeof found === 'number' ? {codexRunning: found, codexByAge: 0}
+    : {codexRunning: found?.running ?? null, codexByAge: found?.byAge ?? 0};
+}
+
 async function waitFor(engine, timeout, {read, clock, sleep, running}) {
   const deadline = timeout === null ? Infinity : clock() + timeout * 60000;
   let until = -Infinity;
   for (;;) {
     const now = clock();
-    const status = agentStatus(await read(), now, {codexRunning: await running()});
+    const status = agentStatus(await read(), now, await jobs(running));
     const back = status.nextReturn[engine];
     if (back?.resetsAt) until = Math.max(until, Date.parse(back.resetsAt));
     const out = status.engines[engine].status === 'out' || now < until;
@@ -99,8 +129,9 @@ export async function main(args = process.argv.slice(2), {read = readCombined, c
     write(JSON.stringify(status, null, 2) + '\n');
     return code;
   }
-  const status = agentStatus(await read(), clock(), {codexRunning: await running()});
-  write((options.json ? JSON.stringify(status, null, 2) : describe(status)) + '\n');
+  const counted = await jobs(running);
+  const status = agentStatus(await read(), clock(), counted);
+  write((options.json ? JSON.stringify(status, null, 2) : describe(status, counted.codexByAge)) + '\n');
   return status.current ? 0 : EXIT_NO_READING;
 }
 
