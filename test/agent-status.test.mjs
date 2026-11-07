@@ -189,7 +189,8 @@ test('job cap follows pace: Claude spending plus Codex holding gives more than t
 
 test('straight-line pace and time-adjusted headroom', () => {
   assert.equal(windowPace(96, 1.1, 151 * 60, 10080), 'spend');
-  assert.equal(windowPace(50, 25, 120, 300), 'slow');
+  assert.equal(windowPace(50, 25, 120, 300), 'spend');
+  assert.equal(windowPace(30, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, null, 280, 300), 'hold');
   assert.equal(windowPace(0, 0, 280, 300), 'out');
   assert.equal(windowPace(null, 1, 280, 300), 'unknown');
