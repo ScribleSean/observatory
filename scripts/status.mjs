@@ -37,6 +37,12 @@ async function readCombined() {
 export const STALE_MARKER_MS = 6 * 3600000;
 const markerPid = name => Number(/^\d{8}-\d{6}-.+-(\d+)\.running$/.exec(name)?.[1]) || null;
 
+// The wrappers are bash scripts, so ps shows them as `/bin/bash -p ~/.local/bin/codex-job ...`
+// or, run directly, as the script path. Only the program or the script a shell runs counts: a
+// shell, tail or editor that merely mentions a codex-job path is not a job after PID reuse.
+const CODEX_JOB_COMMAND = /^(?:\S*\/)?(?:(?:ba|z)?sh(?:\s+-\S+)*\s+)?(?:\S*\/)?codex-job(?:-on)?(?:\s|$)/;
+export const isCodexJobCommand = line => CODEX_JOB_COMMAND.test(line.trim());
+
 // true or false when this host can tell whether pid is a running codex-job; null when it cannot.
 export async function codexJobAlive(pid) {
   try { process.kill(pid, 0); }
@@ -44,7 +50,7 @@ export async function codexJobAlive(pid) {
   if (process.platform === 'win32') return null;
   try {
     const {stdout} = await promisify(execFile)('ps', ['-p', String(pid), '-o', 'command=']);
-    return /codex-job/.test(stdout);
+    return isCodexJobCommand(stdout);
   } catch (error) { return error.code === 'ENOENT' ? null : false; }
 }
 
@@ -69,7 +75,8 @@ export function describe(status, byAge = 0) {
     const engine = status.engines[id];
     const parts = WINDOWS.map(windowId => {
       const item = engine.windows[windowId];
-      if (item.percentLeft === null) return `${windowNames[windowId]} Unknown`;
+      // An engine reads ok with a window that has no number only when the reading marks that window absent.
+      if (item.percentLeft === null) return `${windowNames[windowId]} ${engine.status === 'ok' ? 'none' : 'Unknown'}`;
       const reset = item.minutesToReset === null ? 'reset Unknown' : `resets in ${durationText(item.minutesToReset * 60)}`;
       const burn = item.burnPerHour === null ? '' : `, ${item.burnPerHour}%/h`;
       return `${windowNames[windowId]} ${item.percentLeft}% left, ${reset}${burn}, ${item.pace}`;
