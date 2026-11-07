@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {assertPrivateWindowsFolder,windowsAclMessage,windowsAclProblem} from '../lib/private-folder.mjs';
 import {sshProgram} from '../scripts/hub-transport.mjs';
 import {findClaude} from '../scripts/claude-usage-command.mjs';
@@ -68,7 +69,10 @@ test('Windows runs ssh and scp from the OpenSSH folders, never from PATH', async
   assert.equal(await sshProgram('ssh','darwin'),'/usr/bin/ssh');
 });
 
+const repo=fileURLToPath(new URL('..',import.meta.url));
+
 test('Windows looks for claude.exe in the installers\' folders, not on PATH', async t => {
+  const before=await readdir(repo);
   const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   // Linux joins these Windows-style paths as plain names inside the temporary folder.
@@ -87,6 +91,7 @@ test('Windows looks for claude.exe in the installers\' folders, not on PATH', as
   await mkdir(path.dirname(installed),{recursive:true});
   await writeFile(installed,'');
   assert.equal(await findClaude({PATH:onPath,LOCALAPPDATA:local},'win32',home),installed);
+  assert.deepEqual((await readdir(repo)).filter(name=>!before.includes(name)),[],'nothing is written into the repo');
 });
 
 test('elsewhere findClaude skips files it cannot run', {skip:process.platform==='win32' && 'Requires POSIX file modes'}, async t => {

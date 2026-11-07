@@ -14,18 +14,21 @@ const now = Date.parse('2026-10-21T17:00:00Z');
 const iso = at => new Date(at).toISOString();
 const hour = 3600000;
 
-function source(bucket, rows, checkedAt = now) {
+function source(bucket, rows, checkedAt = now, notReported) {
   const windows = rows.map(([window, durationMinutes, remainingPercent, resetIn]) =>
     ({bucket, window, durationMinutes, remainingPercent, resetsAt: iso(checkedAt + resetIn)}));
   const history = [30, 20, 10, 0].map(ago => ({checkedAt: iso(checkedAt - ago * 60000),
     windows: rows.map(([window, durationMinutes, remainingPercent, resetIn, burn = 0]) =>
       ({bucket, window, durationMinutes, remainingPercent: remainingPercent + burn * ago / 60, resetsAt: iso(checkedAt + resetIn)}))}));
-  return {status: 'ok', checkedAt: iso(checkedAt), windows, history};
+  return {status: 'ok', checkedAt: iso(checkedAt), windows, history, ...(notReported ? {notReported} : {})};
 }
 
-function fixture({claude, codex, checkedAt = now}) {
+// A plan with no 5-hour window says so: the reader lists it in notReported.
+const weeklyOnly = rows => rows.some(([window]) => window === 'five_hour') ? undefined : ['five_hour'];
+
+function fixture({claude, codex, checkedAt = now, codexNotReported}) {
   const snapshot = ownSnapshot('Mac', checkedAt, value => ({...value,
-    claudeLimits: source('claude', claude, checkedAt), quota: source('codex', codex, checkedAt)}));
+    claudeLimits: source('claude', claude, checkedAt, weeklyOnly(claude)), quota: source('codex', codex, checkedAt, codexNotReported)}));
   return combine([{host: 'Mac', snapshot}], {now: checkedAt});
 }
 
@@ -124,9 +127,9 @@ test('nextReturn gives the reset of the window at 0, the later one when both are
   assert.deepEqual(agentStatus(fine, now).nextReturn, {});
 });
 
-// Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, a burst of 1.1%/h.
+// Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, burning 0.5%/h.
 const ultra = fixture({
-  claude: [['seven_day', 10080, 96, 151 * hour, 1.1]],
+  claude: [['seven_day', 10080, 96, 151 * hour, 0.5]],
   codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 3.2]],
 });
 
@@ -324,4 +327,69 @@ test('status runs with plain node and no node_modules, exits 0 with a current re
     assert.equal(waited.code, 0);
     assert.equal(JSON.parse(waited.stdout).engines.claude.status, 'ok');
   });
+});
+
+test('a window with no number is unknown unless the reading marks it absent', () => {
+  const claude = [['seven_day', 10080, 96, 151 * hour]];
+  // Codex left out its 5-hour window without saying it has none: a gap row, not an absent window.
+  const gap = agentStatus(fixture({claude, codex: [['secondary', 10080, 90, 84 * hour]]}), now);
+  assert.equal(gap.engines.codex.status, 'unknown');
+  assert.equal(gap.cap.codex, 1);
+  // A 5-hour window whose reset has passed has no number until the next reading.
+  const pending = agentStatus(fixture({claude, codex: [['primary', 300, 40, -60000], ['secondary', 10080, 90, 84 * hour]]}), now);
+  assert.equal(pending.engines.codex.status, 'unknown');
+  assert.equal(pending.cap.codex, 1);
+  // Only the explicit marker makes the weekly window decide alone.
+  const absent = agentStatus(fixture({claude, codex: [['secondary', 10080, 90, 84 * hour]], codexNotReported: ['five_hour']}), now);
+  assert.equal(absent.engines.codex.status, 'ok');
+  assert.equal(absent.engines.claude.status, 'ok');
+});
+
+test('a slow window is never promoted to spend, and spend needs at least the margin left', () => {
+  // 60% left, 150 min to reset, burning 40%/h: under the straight line but empty in 90 min.
+  assert.equal(windowPace(60, 40, 150, 300), 'slow');
+  assert.equal(windowPace(96, 1.1, 151 * 60, 10080), 'slow');
+  assert.equal(windowPace(2, null, 100, 10080), 'hold');
+  assert.equal(windowPace(2, 0, 100, 10080), 'hold');
+  assert.equal(windowPace(SPEND_MARGIN, null, 100, 10080), 'spend');
+  const burning = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 60, 150 * 60000, 40], ['secondary', 10080, 90, 84 * hour]]});
+  const status = agentStatus(burning, now);
+  assert.equal(status.engines.codex.pace, 'slow');
+  assert.equal(status.cap.codex, 1);
+});
+
+test('code leaves a slow Codex even with effective headroom to spare', () => {
+  const burning = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 60, 150 * 60000, 40], ['secondary', 10080, 90, 84 * hour]]});
+  const status = agentStatus(burning, now);
+  assert.ok(status.engines.codex.effectiveHeadroom >= SPEND_MARGIN);
+  assert.equal(status.route.code.engine, 'claude');
+  assert.match(status.route.code.reason, /codex is low/);
+});
+
+test('a Codex job marker with a live PID counts however old it is; a dead PID never counts', async () => {
+  await withFolder(async folder => {
+    const old = (Date.now() - STALE_MARKER_MS - 60000) / 1000;
+    const marker = async (name, aged) => {
+      await writeFile(path.join(folder, name), 'repo\tdarwin\t1\n');
+      if (aged) await utimes(path.join(folder, name), old, old);
+    };
+    await marker('20261107-111654-beeline-111.running', true);
+    await marker('20261107-111655-observatory-on-ubuntu-222.running', false);
+    await marker('20261107-111656-beeline-333.running', false);
+    const alive = async pid => pid === 111 ? true : pid === 222 ? false : null;
+    assert.deepEqual(await countCodexJobs(folder, Date.now(), {alive}), {running: 2, byAge: 1});
+  });
+});
+
+test('the report says when Codex jobs were counted by marker age alone', async () => {
+  const output = [];
+  await main([], {read: async () => ultra, clock: () => now, running: async () => ({running: 2, byAge: 1}),
+    write: text => output.push(text), fail: () => {}});
+  assert.match(output.join(''), /2 Codex running, 1 by marker age only/);
+  const json = [];
+  await main(['--json'], {read: async () => ultra, clock: () => now, running: async () => ({running: 2, byAge: 1}),
+    write: text => json.push(text), fail: () => {}});
+  const status = JSON.parse(json.join(''));
+  assert.equal(status.cap.codexRunning, 2);
+  assert.match(status.cap.reason, /1 Codex job counted by marker age only/);
 });
