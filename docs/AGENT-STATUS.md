@@ -50,8 +50,8 @@ For each window, with `leftAtReset = percentLeft - burnPerHour * minutesToReset 
 | Pace | Rule |
 | --- | --- |
 | `out` | `percentLeft` is 0. |
-| `slow` | `leftAtReset` is 0 or less, so the window runs out before it resets. Nothing promotes it. |
-| `spend` | `leftAtReset` is at least 20 points (`SPEND_MARGIN`), so allowance would go unused. A `hold` window, or one with no burn rate yet, also reads `spend` when it is on or under the straight-line budget (`percentLeft >= 100 * minutesToReset / windowMinutes`) and has at least 20% left. |
+| `slow` | `leftAtReset` is 0 or less, so the window runs out before it resets. A 5-hour window stays `slow`. A weekly window can still read `spend` by the straight-line rule, since an hour of burn is a burst there. |
+| `spend` | `leftAtReset` is at least 20 points (`SPEND_MARGIN`), so allowance would go unused. A window also reads `spend` when it is on or under the straight-line budget (`percentLeft >= 100 * minutesToReset / windowMinutes`) and has at least 20% left, except a `slow` 5-hour window. |
 | `hold` | Anything between, and a window with no measured burn rate that is not under budget. |
 | `unknown` | No current reading or no reset time. |
 

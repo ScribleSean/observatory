@@ -127,10 +127,10 @@ test('nextReturn gives the reset of the window at 0, the later one when both are
   assert.deepEqual(agentStatus(fine, now).nextReturn, {});
 });
 
-// Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, burning 0.5%/h.
+// Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, a burst of 1.1%/h.
 const ultra = fixture({
-  claude: [['seven_day', 10080, 96, 151 * hour, 0.5]],
-  codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 0.5]],
+  claude: [['seven_day', 10080, 96, 151 * hour, 1.1]],
+  codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 3.2]],
 });
 
 test('with no 5-hour window, the weekly window decides and Claude is no longer unknown', () => {
@@ -198,7 +198,7 @@ test('job cap follows pace: Claude spending gives more than the old fixed 6', ()
 });
 
 test('straight-line pace and time-adjusted headroom', () => {
-  assert.equal(windowPace(96, 0.5, 151 * 60, 10080), 'spend');
+  assert.equal(windowPace(96, 1.1, 151 * 60, 10080), 'spend');
   assert.equal(windowPace(50, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, null, 280, 300), 'hold');
@@ -345,10 +345,12 @@ test('a window with no number is unknown unless the reading marks it absent', ()
   assert.equal(absent.engines.claude.status, 'ok');
 });
 
-test('a slow window is never promoted to spend, and spend needs at least the margin left', () => {
+test('a slow 5-hour window is never promoted to spend, and spend needs at least the margin left', () => {
   // 60% left, 150 min to reset, burning 40%/h: under the straight line but empty in 90 min.
   assert.equal(windowPace(60, 40, 150, 300), 'slow');
-  assert.equal(windowPace(96, 1.1, 151 * 60, 10080), 'slow');
+  // A weekly window under its straight line spends through a one-hour burst.
+  assert.equal(windowPace(90, 4, 149 * 60, 10080), 'spend');
+  assert.equal(windowPace(10, 4, 10, 10080), 'hold');
   assert.equal(windowPace(2, null, 100, 10080), 'hold');
   assert.equal(windowPace(2, 0, 100, 10080), 'hold');
   assert.equal(windowPace(SPEND_MARGIN, null, 100, 10080), 'spend');
