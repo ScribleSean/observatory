@@ -200,7 +200,7 @@ test('straight-line pace and time-adjusted headroom', () => {
   assert.equal(windowPace(30, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, null, 280, 300), 'hold');
   assert.equal(windowPace(50, null, 150, 300), 'spend');
-  assert.equal(windowPace(30, 1, 150, 300), 'hold');
+  assert.equal(windowPace(30, 5, 150, 300), 'hold');
   assert.equal(windowPace(30, 0, 150, 300), 'spend');
   assert.equal(windowPace(30, null, null, 300), 'unknown');
   assert.equal(windowPace(0, 0, 280, 300), 'out');
@@ -233,8 +233,8 @@ test('ties go to Claude for review and research; code needs Codex at 20% effecti
 });
 
 test('a holding engine gets slots in proportion to its effective headroom, at least 1', () => {
-  // Codex 5-hour 30% left with half the window to go, burning 10%/h: over budget, projected above the margin.
-  const hold = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 30, 150 * 60000, 1], ['secondary', 10080, 90, 84 * hour]]});
+  // Codex 5-hour 30% left with half the window to go, burning 5%/h: over budget, ends near the margin.
+  const hold = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 30, 150 * 60000, 5], ['secondary', 10080, 90, 84 * hour]]});
   const status = agentStatus(hold, now, {codexRunning: 3});
   assert.equal(status.engines.codex.pace, 'hold');
   assert.equal(status.engines.codex.effectiveHeadroom, 60);
