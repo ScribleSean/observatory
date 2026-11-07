@@ -1,4 +1,4 @@
-import {readdir, readFile} from 'node:fs/promises';
+import {readdir, readFile, stat} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -27,10 +27,16 @@ async function readCombined() {
   catch { return null; }
 }
 
-// Codex jobs running now: codex-job and codex-job-on leave a <id>.running marker while a job runs.
-export async function countCodexJobs(folder = path.join(os.homedir(), '.local', 'state', 'codex-jobs')) {
-  try { return (await readdir(folder)).filter(name => name.endsWith('.running')).length; }
+// Codex jobs running now: codex-job and codex-job-on leave a <id>.running marker while a job
+// runs. A marker older than STALE_MARKER_MS is from a killed job, so it does not count.
+export const STALE_MARKER_MS = 6 * 3600000;
+export async function countCodexJobs(folder = path.join(os.homedir(), '.local', 'state', 'codex-jobs'), now = Date.now()) {
+  let names;
+  try { names = (await readdir(folder)).filter(name => name.endsWith('.running')); }
   catch { return null; }
+  const fresh = await Promise.all(names.map(name => stat(path.join(folder, name))
+    .then(info => now - info.mtimeMs < STALE_MARKER_MS, () => false)));
+  return fresh.filter(Boolean).length;
 }
 
 const clockTime = at => new Intl.DateTimeFormat('en-GB', {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(new Date(at));

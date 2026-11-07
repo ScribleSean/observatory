@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
-import {cp, mkdir, writeFile} from 'node:fs/promises';
+import {cp, mkdir, utimes, writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
 import {agentStatus, classifyPace, effectiveHeadroom, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
-import {main} from '../scripts/status.mjs';
+import {countCodexJobs, main, STALE_MARKER_MS} from '../scripts/status.mjs';
 import {ownSnapshot, withFolder} from './helpers.mjs';
 
 const now = Date.parse('2026-10-21T17:00:00Z');
@@ -142,6 +142,13 @@ test('with no 5-hour window, the weekly window decides and Claude is no longer u
   // A missing weekly reading still means unknown.
   const noWeekly = fixture({claude: [['five_hour', 300, 80, hour]], codex: [['primary', 300, 76, hour], ['secondary', 10080, 74, 98 * hour]]});
   assert.equal(agentStatus(noWeekly, now).engines.claude.status, 'unknown');
+  // A 5-hour window that was reported but went stale is unknown, not absent.
+  const staleShort = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 0, hour], ['secondary', 10080, 100, 98 * hour]]});
+  const staleView = structuredClone(staleShort);
+  for (const row of staleView.glance.limits) if (row.provider === 'codex' && row.window === '5-hour') row.checkedAt = iso(now - 11 * 60000);
+  const staleStatus = agentStatus(staleView, now);
+  assert.equal(staleStatus.engines.codex.windows.five_hour.percentLeft, null);
+  assert.equal(staleStatus.engines.codex.status, 'unknown');
 });
 
 test('review and research prefer Claude when it has as much effective headroom; code stays on Codex', () => {
@@ -172,7 +179,7 @@ test('code moves to Claude when every Codex slot is busy or Codex is low', () =>
   assert.match(lowStatus.route.code.reason, /codex is low/);
 });
 
-test('job cap follows pace: Claude spending plus Codex holding gives more than the old fixed 6', () => {
+test('job cap follows pace: Claude spending gives more than the old fixed 6', () => {
   const cap = agentStatus(ultra, now, {codexRunning: 2}).cap;
   assert.equal(cap.claude, MAX_SLOTS.claude);
   assert.ok(cap.codex >= 1 && cap.codex <= MAX_SLOTS.codex);
@@ -192,6 +199,10 @@ test('straight-line pace and time-adjusted headroom', () => {
   assert.equal(windowPace(50, 25, 120, 300), 'spend');
   assert.equal(windowPace(30, 25, 120, 300), 'slow');
   assert.equal(windowPace(30, null, 280, 300), 'hold');
+  assert.equal(windowPace(50, null, 150, 300), 'spend');
+  assert.equal(windowPace(30, 1, 150, 300), 'hold');
+  assert.equal(windowPace(30, 0, 150, 300), 'spend');
+  assert.equal(windowPace(30, null, null, 300), 'unknown');
   assert.equal(windowPace(0, 0, 280, 300), 'out');
   assert.equal(windowPace(null, 1, 280, 300), 'unknown');
   assert.equal(effectiveHeadroom(96, 151 * 60, 10080), 100);
@@ -199,6 +210,54 @@ test('straight-line pace and time-adjusted headroom', () => {
   assert.equal(effectiveHeadroom(0, 60, 300), 0);
   assert.equal(effectiveHeadroom(null, 60, 300), null);
   assert.equal(effectiveHeadroom(55, null, 300), 55);
+  assert.equal(effectiveHeadroom(55, 0, 300), 55);
+  assert.equal(effectiveHeadroom(10, 150, 300), 20);
+  assert.equal(effectiveHeadroom(0.4, 300, 300), 1);
+});
+
+test('ties go to Claude for review and research; code needs Codex at 20% effective or more', () => {
+  const tie = fixture({claude: [['seven_day', 10080, 50, 84 * hour]], codex: [['primary', 300, 50, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
+  const status = agentStatus(tie, now);
+  assert.equal(status.engines.claude.effectiveHeadroom, status.engines.codex.effectiveHeadroom);
+  assert.equal(status.route.review.engine, 'claude');
+  assert.equal(status.route.research.engine, 'claude');
+  assert.equal(status.route.code.engine, 'codex');
+  const edge = left => fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, left, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
+  assert.equal(agentStatus(edge(10), now).engines.codex.effectiveHeadroom, SPEND_MARGIN);
+  assert.equal(agentStatus(edge(10), now).route.code.engine, 'codex');
+  assert.equal(agentStatus(edge(9), now).route.code.engine, 'claude');
+  // With Claude out, a busy or low Codex still gets the work.
+  const claudeOut = fixture({claude: [['seven_day', 10080, 0, 151 * hour]], codex: [['primary', 300, 5, 150 * 60000], ['secondary', 10080, 90, 84 * hour]]});
+  const out = agentStatus(claudeOut, now, {codexRunning: 99});
+  for (const task of ['code', 'review', 'research']) assert.equal(out.route[task].engine, 'codex');
+});
+
+test('a holding engine gets slots in proportion to its effective headroom, at least 1', () => {
+  // Codex 5-hour 30% left with half the window to go, burning 10%/h: over budget, projected above the margin.
+  const hold = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 30, 150 * 60000, 1], ['secondary', 10080, 90, 84 * hour]]});
+  const status = agentStatus(hold, now, {codexRunning: 3});
+  assert.equal(status.engines.codex.pace, 'hold');
+  assert.equal(status.engines.codex.effectiveHeadroom, 60);
+  assert.equal(status.cap.codex, Math.ceil(MAX_SLOTS.codex * 0.6));
+  assert.equal(status.cap.codexRunning, 3);
+  assert.equal(status.route.code.engine, 'claude');
+  assert.match(status.route.code.reason, /all 3 Codex slots busy/);
+  assert.match(status.cap.reason, /codex pace hold, 60% effective gives 3/);
+  assert.equal(agentStatus(hold, now).cap.codexRunning, null);
+  const thin = fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: [['primary', 300, 2, 150 * 60000, 0.1], ['secondary', 10080, 90, 84 * hour]]});
+  assert.equal(agentStatus(thin, now).cap.codex, 1);
+});
+
+test('stale Codex job markers do not count as busy', async () => {
+  await withFolder(async folder => {
+    await writeFile(path.join(folder, 'a.running'), 'x');
+    await writeFile(path.join(folder, 'b.running'), 'x');
+    await writeFile(path.join(folder, 'c.md'), 'x');
+    const old = (Date.now() - STALE_MARKER_MS - 60000) / 1000;
+    await utimes(path.join(folder, 'b.running'), old, old);
+    assert.equal(await countCodexJobs(folder), 1);
+    assert.equal(await countCodexJobs(path.join(folder, 'missing')), null);
+  });
 });
 
 function fakeRun(args) {
