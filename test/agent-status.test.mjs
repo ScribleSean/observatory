@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
-import {agentStatus, classifyPace, SPEND_MARGIN} from '../lib/agent-status.mjs';
+import {agentStatus, classifyPace, effectiveHeadroom, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
 import {main} from '../scripts/status.mjs';
 import {ownSnapshot, withFolder} from './helpers.mjs';
 
@@ -93,13 +93,14 @@ test('pace classification boundaries', () => {
 test('JSON shape is stable and carries no personal data', () => {
   const status = agentStatus(today, now);
   const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace'];
-  assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route']);
+  assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route', 'cap']);
+  assert.deepEqual(Object.keys(status.cap), ['total', 'claude', 'codex', 'codexRunning', 'reason']);
   assert.deepEqual(Object.keys(status.nextReturn.codex), ['resetsAt', 'minutesToReset']);
   assert.equal(status.schema, 1);
   assert.equal(status.generatedAt, iso(now));
   assert.deepEqual(Object.keys(status.engines), ['claude', 'codex']);
   for (const engine of ['claude', 'codex']) {
-    assert.deepEqual(Object.keys(status.engines[engine]), ['status', 'headroom', 'pace', 'windows']);
+    assert.deepEqual(Object.keys(status.engines[engine]), ['status', 'headroom', 'effectiveHeadroom', 'pace', 'windows']);
     assert.deepEqual(Object.keys(status.engines[engine].windows), ['five_hour', 'weekly']);
     for (const item of Object.values(status.engines[engine].windows)) assert.deepEqual(Object.keys(item), window);
   }
@@ -123,10 +124,86 @@ test('nextReturn gives the reset of the window at 0, the later one when both are
   assert.deepEqual(agentStatus(fine, now).nextReturn, {});
 });
 
+// Claude Ultra: no 5-hour window, weekly 96% left 151 h before reset, a burst of 1.1%/h.
+const ultra = fixture({
+  claude: [['seven_day', 10080, 96, 151 * hour, 1.1]],
+  codex: [['primary', 300, 76, 280 * 60000], ['secondary', 10080, 74, 98 * hour, 3.2]],
+});
+
+test('with no 5-hour window, the weekly window decides and Claude is no longer unknown', () => {
+  const status = agentStatus(ultra, now);
+  const claude = status.engines.claude;
+  assert.equal(claude.windows.five_hour.percentLeft, null);
+  assert.equal(claude.status, 'ok');
+  assert.equal(claude.headroom, 96);
+  assert.equal(claude.effectiveHeadroom, 100);
+  assert.equal(claude.pace, 'spend');
+  assert.equal(status.engines.codex.status, 'ok');
+  // A missing weekly reading still means unknown.
+  const noWeekly = fixture({claude: [['five_hour', 300, 80, hour]], codex: [['primary', 300, 76, hour], ['secondary', 10080, 74, 98 * hour]]});
+  assert.equal(agentStatus(noWeekly, now).engines.claude.status, 'unknown');
+});
+
+test('review and research prefer Claude when it has as much effective headroom; code stays on Codex', () => {
+  const status = agentStatus(ultra, now);
+  assert.equal(status.route.code.engine, 'codex');
+  assert.equal(status.route.review.engine, 'claude');
+  assert.equal(status.route.research.engine, 'claude');
+  assert.match(status.route.review.reason, /claude has 100% effective headroom, codex has \d+%/);
+  // Claude behind its budget loses review to a Codex with more room.
+  const tight = fixture({
+    claude: [['seven_day', 10080, 20, 151 * hour]],
+    codex: [['primary', 300, 90, 280 * 60000], ['secondary', 10080, 74, 98 * hour]],
+  });
+  assert.equal(agentStatus(tight, now).route.review.engine, 'codex');
+});
+
+test('code moves to Claude when every Codex slot is busy or Codex is low', () => {
+  const busy = agentStatus(ultra, now, {codexRunning: MAX_SLOTS.codex});
+  assert.equal(busy.route.code.engine, 'claude');
+  assert.match(busy.route.code.reason, /all \d+ Codex slots busy/);
+  assert.equal(agentStatus(ultra, now, {codexRunning: 1}).route.code.engine, 'codex');
+  const low = fixture({
+    claude: [['seven_day', 10080, 96, 151 * hour]],
+    codex: [['primary', 300, 5, 280 * 60000], ['secondary', 10080, 74, 98 * hour]],
+  });
+  const lowStatus = agentStatus(low, now);
+  assert.equal(lowStatus.route.code.engine, 'claude');
+  assert.match(lowStatus.route.code.reason, /codex is low/);
+});
+
+test('job cap follows pace: Claude spending plus Codex holding gives more than the old fixed 6', () => {
+  const cap = agentStatus(ultra, now, {codexRunning: 2}).cap;
+  assert.equal(cap.claude, MAX_SLOTS.claude);
+  assert.ok(cap.codex >= 1 && cap.codex <= MAX_SLOTS.codex);
+  assert.equal(cap.total, cap.claude + cap.codex);
+  assert.ok(cap.total > 6);
+  assert.equal(cap.codexRunning, 2);
+  // Out of allowance gives 0 slots; stale readings give 1 each.
+  assert.equal(agentStatus(today, now).cap.codex, 0);
+  assert.deepEqual([agentStatus(null, now).cap.claude, agentStatus(null, now).cap.codex], [1, 1]);
+  // Behind budget and burning toward 0 gives one slot.
+  const slow = fixture({claude: [['seven_day', 10080, 10, 151 * hour, 2]], codex: [['primary', 300, 0, hour], ['secondary', 10080, 50, 98 * hour]]});
+  assert.equal(agentStatus(slow, now).cap.claude, 1);
+});
+
+test('straight-line pace and time-adjusted headroom', () => {
+  assert.equal(windowPace(96, 1.1, 151 * 60, 10080), 'spend');
+  assert.equal(windowPace(50, 25, 120, 300), 'slow');
+  assert.equal(windowPace(30, null, 280, 300), 'hold');
+  assert.equal(windowPace(0, 0, 280, 300), 'out');
+  assert.equal(windowPace(null, 1, 280, 300), 'unknown');
+  assert.equal(effectiveHeadroom(96, 151 * 60, 10080), 100);
+  assert.equal(effectiveHeadroom(40, 100 * 60, 10080), 67);
+  assert.equal(effectiveHeadroom(0, 60, 300), 0);
+  assert.equal(effectiveHeadroom(null, 60, 300), null);
+  assert.equal(effectiveHeadroom(55, null, 300), 55);
+});
+
 function fakeRun(args) {
   let at = now;
   const sleeps = [], output = [];
-  const result = main(args, {read: async () => today, clock: () => at,
+  const result = main(args, {read: async () => today, clock: () => at, running: async () => null,
     sleep: async ms => { sleeps.push(ms); at += ms; }, write: text => output.push(text), fail: text => output.push(text)});
   return result.then(code => ({code, at, sleeps, output: output.join('')}));
 }
@@ -179,7 +256,9 @@ test('status runs with plain node and no node_modules, exits 0 with a current re
     assert.equal(JSON.parse(ok.stdout).route.code.engine, 'claude');
     const human = await run([]);
     assert.equal(human.code, 0);
-    assert.match(human.stdout, /Route code, review, research: Claude/);
+    assert.match(human.stdout, /Route code: Claude/);
+    assert.match(human.stdout, /Route review, research: Claude/);
+    assert.match(human.stdout, /Job cap: \d+ \(Claude \d+, Codex 0/);
     assert.match(human.stdout, /Codex back at \d\d:\d\d/);
     const waited = await run(['--wait', 'claude', '--timeout', '1']);
     assert.equal(waited.code, 0);

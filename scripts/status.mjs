@@ -1,4 +1,5 @@
-import {readFile} from 'node:fs/promises';
+import {readdir, readFile} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {defaultDataFolder, loadConfig, localFolder} from '../lib/config.mjs';
@@ -26,6 +27,12 @@ async function readCombined() {
   catch { return null; }
 }
 
+// Codex jobs running now: codex-job and codex-job-on leave a <id>.running marker while a job runs.
+export async function countCodexJobs(folder = path.join(os.homedir(), '.local', 'state', 'codex-jobs')) {
+  try { return (await readdir(folder)).filter(name => name.endsWith('.running')).length; }
+  catch { return null; }
+}
+
 const clockTime = at => new Intl.DateTimeFormat('en-GB', {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(new Date(at));
 
 export function describe(status) {
@@ -43,8 +50,10 @@ export function describe(status) {
   }
   for (const [id, back] of Object.entries(status.nextReturn))
     lines.push(`${names[id]} back at ${back.resetsAt ? clockTime(back.resetsAt) : 'Unknown'}`);
-  const pick = status.route.code;
-  lines.push(`Route code, review, research: ${pick.engine ? names[pick.engine] : 'none'}. ${pick.reason}`);
+  const routed = hint => `${hint.engine ? names[hint.engine] : 'none'}. ${hint.reason}`;
+  lines.push(`Route code: ${routed(status.route.code)}`);
+  lines.push(`Route review, research: ${routed(status.route.review)}`);
+  lines.push(`Job cap: ${status.cap.total} (Claude ${status.cap.claude}, Codex ${status.cap.codex}${status.cap.codexRunning === null ? '' : `, ${status.cap.codexRunning} Codex running`}).`);
   return lines.join('\n');
 }
 
@@ -58,12 +67,12 @@ function parse(args) {
   return {json: args.includes('--json') || wait !== null, wait, timeout};
 }
 
-async function waitFor(engine, timeout, {read, clock, sleep}) {
+async function waitFor(engine, timeout, {read, clock, sleep, running}) {
   const deadline = timeout === null ? Infinity : clock() + timeout * 60000;
   let until = -Infinity;
   for (;;) {
     const now = clock();
-    const status = agentStatus(await read(), now);
+    const status = agentStatus(await read(), now, {codexRunning: await running()});
     const back = status.nextReturn[engine];
     if (back?.resetsAt) until = Math.max(until, Date.parse(back.resetsAt));
     const out = status.engines[engine].status === 'out' || now < until;
@@ -76,15 +85,15 @@ async function waitFor(engine, timeout, {read, clock, sleep}) {
 
 export async function main(args = process.argv.slice(2), {read = readCombined, clock = Date.now,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), write = text => process.stdout.write(text),
-  fail = text => process.stderr.write(text)} = {}) {
+  fail = text => process.stderr.write(text), running = countCodexJobs} = {}) {
   const options = parse(args);
   if (options.error) { fail(options.error + '\n'); return EXIT_BAD_ARGUMENTS; }
   if (options.wait) {
-    const {status, code} = await waitFor(options.wait, options.timeout, {read, clock, sleep});
+    const {status, code} = await waitFor(options.wait, options.timeout, {read, clock, sleep, running});
     write(JSON.stringify(status, null, 2) + '\n');
     return code;
   }
-  const status = agentStatus(await read(), clock());
+  const status = agentStatus(await read(), clock(), {codexRunning: await running()});
   write((options.json ? JSON.stringify(status, null, 2) : describe(status)) + '\n');
   return status.current ? 0 : EXIT_NO_READING;
 }
