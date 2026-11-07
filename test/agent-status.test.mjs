@@ -7,7 +7,7 @@ import path from 'node:path';
 import {promisify} from 'node:util';
 import {combine} from '../lib/combine.mjs';
 import {agentStatus, classifyPace, effectiveHeadroom, MAX_SLOTS, SPEND_MARGIN, windowPace} from '../lib/agent-status.mjs';
-import {countCodexJobs, main, STALE_MARKER_MS} from '../scripts/status.mjs';
+import {countCodexJobs, describe, isCodexJobCommand, main, STALE_MARKER_MS} from '../scripts/status.mjs';
 import {ownSnapshot, withFolder} from './helpers.mjs';
 
 const now = Date.parse('2026-10-21T17:00:00Z');
@@ -343,6 +343,28 @@ test('a window with no number is unknown unless the reading marks it absent', ()
   const absent = agentStatus(fixture({claude, codex: [['secondary', 10080, 90, 84 * hour]], codexNotReported: ['five_hour']}), now);
   assert.equal(absent.engines.codex.status, 'ok');
   assert.equal(absent.engines.claude.status, 'ok');
+  // The plain report says an absent window is none, and keeps Unknown for a gap.
+  assert.match(describe(absent), /^Codex: 5-hour none \| weekly 90% left/m);
+  assert.match(describe(gap), /^Codex: 5-hour Unknown \| weekly/m);
+});
+
+test('only a codex-job wrapper process counts as a live job', () => {
+  for (const line of [
+    '/bin/bash -p /Users/x/.local/bin/codex-job beeline --task /tmp/t.md',
+    '/bin/bash -p /Users/x/.local/bin/codex-job-on ubuntu observatory --task t.md',
+    '/Users/x/.local/bin/codex-job beeline --task t.md',
+    'codex-job-on ubuntu observatory',
+    'bash /home/x/.local/bin/codex-job observatory --read',
+  ]) assert.equal(isCodexJobCommand(line), true, line);
+  for (const line of [
+    'tail -f /Users/x/.local/state/codex-jobs/20261107-101010-beeline-123.md',
+    '-zsh',
+    '/bin/zsh -c cat /Users/x/.local/bin/codex-job',
+    'vim /Users/x/.local/bin/codex-job',
+    'grep codex-job notes.md',
+    '/bin/bash -p /Users/x/.local/bin/codex-jobs-cleanup',
+    '',
+  ]) assert.equal(isCodexJobCommand(line), false, line);
 });
 
 test('a slow 5-hour window is never promoted to spend, and spend needs at least the margin left', () => {
