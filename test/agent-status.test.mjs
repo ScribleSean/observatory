@@ -26,9 +26,9 @@ function source(bucket, rows, checkedAt = now, notReported) {
 // A plan with no 5-hour window says so: the reader lists it in notReported.
 const weeklyOnly = rows => rows.some(([window]) => window === 'five_hour') ? undefined : ['five_hour'];
 
-function fixture({claude, codex, checkedAt = now, codexNotReported}) {
+function fixture({claude, codex, checkedAt = now, codexNotReported, claudeNotReported = weeklyOnly(claude)}) {
   const snapshot = ownSnapshot('Mac', checkedAt, value => ({...value,
-    claudeLimits: source('claude', claude, checkedAt, weeklyOnly(claude)), quota: source('codex', codex, checkedAt, codexNotReported)}));
+    claudeLimits: source('claude', claude, checkedAt, claudeNotReported), quota: source('codex', codex, checkedAt, codexNotReported)}));
   return combine([{host: 'Mac', snapshot}], {now: checkedAt});
 }
 
@@ -416,4 +416,90 @@ test('the report says when Codex jobs were counted by marker age alone', async (
   const status = JSON.parse(json.join(''));
   assert.equal(status.cap.codexRunning, 2);
   assert.match(status.cap.reason, /1 Codex job counted by marker age only/);
+});
+
+// Pro plan (from 2026-11-15): the 5-hour window is back and is usually the one that binds.
+const proCodex = [['primary', 300, 80, hour], ['secondary', 10080, 60, 100 * hour]];
+const numbersOnly = value => JSON.stringify(value, (key, item) => {
+  if (typeof item === 'number' && !Number.isFinite(item)) throw Error(`${key} is ${item}`);
+  return item;
+});
+
+test('Pro: a 5-hour window near its limit sets Claude pace, headroom and cap', () => {
+  // 12% left with 2 h to go at 20%/h runs out first; the weekly window has plenty.
+  const status = agentStatus(fixture({claude: [['five_hour', 300, 12, 2 * hour, 20], ['seven_day', 10080, 80, 96 * hour, 1]], codex: proCodex}), now, {codexRunning: 0});
+  const claude = status.engines.claude;
+  assert.deepEqual([claude.status, claude.headroom, claude.effectiveHeadroom, claude.pace], ['ok', 12, 30, 'slow']);
+  assert.deepEqual([claude.windows.five_hour.percentLeft, claude.windows.five_hour.minutesToReset, claude.windows.five_hour.burnPerHour], [12, 120, 20]);
+  assert.equal(claude.windows.weekly.pace, 'spend');
+  assert.equal(status.cap.claude, 1);
+  assert.match(describe(status), /^Claude: 5-hour 12% left, resets in 2h 0m, 20%\/h, slow \| weekly 80% left/m);
+  // 30% left with 4 h to go at 5%/h ends with 10 left: hold, with slots from the 5-hour headroom.
+  const holding = agentStatus(fixture({claude: [['five_hour', 300, 30, 4 * hour, 5], ['seven_day', 10080, 80, 96 * hour, 1]], codex: proCodex}), now);
+  assert.deepEqual([holding.engines.claude.pace, holding.engines.claude.effectiveHeadroom], ['hold', 38]);
+  assert.equal(holding.cap.claude, Math.ceil(MAX_SLOTS.claude * 38 / 100));
+});
+
+test('Pro: a spent 5-hour window puts Claude out until that window resets', () => {
+  const status = agentStatus(fixture({claude: [['five_hour', 300, 0, 2 * hour], ['seven_day', 10080, 80, 96 * hour]], codex: proCodex}), now);
+  assert.deepEqual([status.engines.claude.status, status.engines.claude.headroom, status.cap.claude], ['out', 0, 0]);
+  assert.deepEqual(status.nextReturn.claude, {resetsAt: iso(now + 2 * hour), minutesToReset: 120});
+  assert.equal(status.route.review.engine, 'codex');
+  assert.match(status.route.review.reason, /claude is out for 120 min/);
+});
+
+test('Pro: a reading with only a 5-hour window, weekly marked not reported, is judged on the 5-hour window', () => {
+  const status = agentStatus(fixture({claude: [['five_hour', 300, 50, 2 * hour, 5]], claudeNotReported: ['seven_day'], codex: proCodex}), now);
+  const claude = status.engines.claude;
+  assert.equal(claude.status, 'ok');
+  assert.equal(claude.headroom, 50);
+  assert.equal(claude.effectiveHeadroom, 100);
+  assert.equal(claude.windows.weekly.percentLeft, null);
+  assert.ok(status.cap.claude > 1);
+  assert.match(describe(status), /^Claude: 5-hour 50% left.* \| weekly none$/m);
+  // Both windows marked not reported leaves nothing to judge on.
+  const none = fixture({claude: [['five_hour', 300, 50, 2 * hour]], claudeNotReported: ['seven_day'], codex: proCodex});
+  for (const row of none.glance.limits) if (row.provider === 'claude' && row.window === '5-hour') { delete row.remaining; row.absent = 'Not reported'; }
+  assert.equal(agentStatus(none, now).engines.claude.status, 'unknown');
+});
+
+test('Pro: missing fields on the 5-hour window never give NaN or drop the window', () => {
+  const claude = [['five_hour', 300, 50, 2 * hour, 5], ['seven_day', 10080, 80, 96 * hour]];
+  // Fields go missing in the reading itself, before combine builds the dashboard rows.
+  const strip = field => {
+    const snapshot = ownSnapshot('Mac', now, value => {
+      const limits = source('claude', claude, now);
+      for (const rows of [limits.windows, ...limits.history.map(sample => sample.windows)])
+        for (const row of rows) if (row.window === 'five_hour') delete row[field];
+      return {...value, claudeLimits: limits, quota: source('codex', proCodex, now)};
+    });
+    return combine([{host: 'Mac', snapshot}], {now});
+  };
+  // No window length: the window id still says which window it is.
+  const noLength = agentStatus(strip('durationMinutes'), now);
+  assert.equal(noLength.engines.claude.status, 'ok');
+  assert.equal(noLength.engines.claude.windows.five_hour.percentLeft, 50);
+  assert.equal(noLength.engines.claude.windows.five_hour.minutesToReset, 120);
+  // No reset time: the number stays, pace and reset are unknown, nothing is NaN.
+  const noReset = agentStatus(strip('resetsAt'), now);
+  assert.equal(noReset.engines.claude.windows.five_hour.percentLeft, 50);
+  assert.equal(noReset.engines.claude.windows.five_hour.minutesToReset, null);
+  assert.equal(noReset.engines.claude.windows.five_hour.pace, 'unknown');
+  // No percentage: Unknown, never 0.
+  const noNumber = agentStatus(strip('remainingPercent'), now);
+  assert.equal(noNumber.engines.claude.windows.five_hour.percentLeft, null);
+  assert.equal(noNumber.engines.claude.status, 'unknown');
+  for (const status of [noLength, noReset, noNumber]) {
+    numbersOnly(status);
+    assert.doesNotMatch(describe(status), /NaN|undefined|Infinity/);
+  }
+});
+
+test('Ultra to Pro: once the 5-hour window is reported again it counts', () => {
+  const ultraDay = agentStatus(fixture({claude: [['seven_day', 10080, 96, 151 * hour]], codex: proCodex}), now);
+  assert.equal(ultraDay.engines.claude.windows.five_hour.percentLeft, null);
+  const proDay = agentStatus(fixture({claude: [['five_hour', 300, 10, 3 * hour, 30], ['seven_day', 10080, 96, 151 * hour]], codex: proCodex}), now);
+  assert.equal(proDay.engines.claude.windows.five_hour.percentLeft, 10);
+  assert.equal(proDay.engines.claude.headroom, 10);
+  assert.equal(proDay.engines.claude.pace, 'slow');
 });

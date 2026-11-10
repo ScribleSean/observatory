@@ -408,3 +408,12 @@ test('a limit the provider does not report says so in place of Unknown, in the d
   // A failed source never claims a window is not reported.
   assert.equal(limits({ claudeLimits: { ...claudeLimits, status: 'unavailable' } }, now).some(row => row.absent), false);
 });
+
+test('a Claude Code window with no length is still labelled by its window id', () => {
+  const at = new Date(now - 60000).toISOString();
+  const claudeLimits = { status: 'ok', checkedAt: at, windows: [
+    { bucket: 'claude', window: 'five_hour', checkedAt: at, remainingPercent: 40, resetsAt: new Date(now + 3600000).toISOString() },
+    { bucket: 'claude', window: 'seven_day', checkedAt: at, remainingPercent: 70, resetsAt: new Date(now + 86400000).toISOString() }] };
+  const rows = limitsWithGaps(limits({ claudeLimits }, now)).filter(row => row.provider === 'claude');
+  assert.deepEqual(rows.map(row => [row.window, row.remaining]), [['5-hour', 40], ['weekly', 70]]);
+});
