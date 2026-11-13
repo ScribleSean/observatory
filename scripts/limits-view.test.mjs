@@ -28,16 +28,17 @@ const render = (data = snapshot(), props = {}) => renderToStaticMarkup(createEle
 const count = (html, pattern) => [...html.matchAll(pattern)].length;
 const card = (html, title) => html.split('aria-label="' + title + ' limit left over time"')[1]?.split('</section>')[0] ?? assert.fail(title + ' card missing');
 
-void test('every limit window has a chart whose header shows what is left now and when it resets', () => {
+void test("a chart's header names the engine and window only, with no number, Unknown or reset note", () => {
   assert.equal(LimitsView, NamedLimitsView);
   const html = render();
   assert.equal(count(html, /<figure class="ob-history-chart"/g), 4);
-  for (const name of ['Claude Code', 'Codex']) for (const window of ['5-hour', 'weekly']) {
+  for (const name of ['Claude', 'Codex']) for (const window of ['5-hour', 'weekly']) {
     const head = card(html, name + ' ' + window);
-    assert.match(head, /class="ob-num">40% left</, name + " " + window);
-    assert.match(head, /Resets in 10h 0m/);
-    assert.match(head, /runs out in/, 'the projection is said once, in the header');
+    assert.match(head, new RegExp('<span class="ob-meta">' + window + '</span>'), name + ' ' + window);
+    assert.doesNotMatch(head, /% left</, 'the home page forecast carries the number');
+    assert.doesNotMatch(head, /Resets in|as of|Unknown|runs out in|ob-note|warn/);
   }
+  assert.ok(!html.includes('Claude Code'), 'cards say Claude');
   assert.ok(!html.includes('Session cost'));
 });
 
@@ -47,27 +48,24 @@ void test('no footnotes or pace sentences: the layout carries it', () => {
     assert.ok(!html.includes(gone), gone);
 });
 
-void test('a stale reading shows Unknown and its warning, never a projection', () => {
+void test('a stale or low reading adds no header number, Unknown or warning tone', () => {
   const data = snapshot();
   data.claudeLimits.checkedAt = data.quota.checkedAt = iso(-30);
+  data.quota.windows[0].remainingPercent = 12;
   const html = render(data);
   assert.doesNotMatch(html, /runs out in/);
-  assert.match(card(html, 'Codex 5-hour'), /class="ob-note ob-meta warn"/);
-  assert.match(card(html, 'Codex 5-hour'), /class="ob-num ob-unknown">Unknown</);
-});
-
-void test('a low limit warns in its header', () => {
-  const data = snapshot();
-  data.quota.windows[0].remainingPercent = 12;
-  assert.match(card(render(data), 'Codex 5-hour'), /class="ob-num warn">12%/);
+  const head = card(html, 'Codex 5-hour');
+  assert.doesNotMatch(head, /ob-num|ob-note|ob-unknown|warn|Unknown|12%/);
 });
 
 for (const data of [{ quota: { status: 'unavailable' } }, null]) {
   void test('unknown remains unknown for ' + (data ? 'unavailable quota' : 'null snapshot'), () => {
     const html = render(data);
-    assert.equal(count(html, /class="ob-num ob-unknown">Unknown</g), 4);
-    assert.doesNotMatch(html.replace(/>(0|100)%</g, ''), /(^|[^0-9.])0 ?%/, 'the only 0% is the axis label');
-    assert.ok(html.includes('No readings in this range'));
+    assert.equal(count(html, /<figure class="ob-history-chart"/g), 0, 'no reading and no history draws no chart');
+    assert.equal(count(html, /class="ob-num[^"]*">0%/g), 0, 'never a fabricated zero');
+    assert.doesNotMatch(html, /(^|[^0-9.])0 ?%/);
+    const kept = data ? { ...data, limitHistory: [{ host: 'Mac', status: 'ok', points: [-30, -20, -10].map(minutes => ({ p: 'codex', w: 'primary', o: 'Mac', t: iso(minutes), r: 50, x: iso(200), d: 300 })) }] } : null;
+    if (kept) assert.equal(count(render(kept), /<figure class="ob-history-chart"/g), 0, 'history alone for a window the provider does not report draws no chart');
   });
 }
 
@@ -102,26 +100,48 @@ const history = points => {
 };
 const point = (host, w, minutes, r, resetMinutes, d) => ({ p: 'claude', w, o: host, t: iso(minutes), r, x: iso(resetMinutes), d });
 
-void test('two computers are two lines of one hue, the second lighter, named in one key, never summed', () => {
-  const line = host => [-300, -200, -100].map(minutes => point(host, 'seven_day', minutes, 60, 3000, 10080));
-  const html = card(history([{ host: 'Mac', status: 'ok', points: line('Mac') }, { host: 'Windows', status: 'ok', points: line('Windows') }]), 'Claude Code weekly');
+void test('two computers are one merged line, never summed, with no per-computer key', () => {
+  const line = (host, offset) => [-300, -200, -100].map(minutes => point(host, 'seven_day', minutes + offset, 60, 3000, 10080));
+  const html = card(history([{ host: 'Mac', status: 'ok', points: line('Mac', 0) }, { host: 'Windows', status: 'ok', points: line('Windows', 50) }]), 'Claude weekly');
   assert.equal(count(html, /class="ob-history-line claude primary"/g), 1);
-  assert.equal(count(html, /class="ob-history-line claude secondary"/g), 1);
-  assert.match(html, /class="ob-history-key"[^>]*><span><i class="claude primary"><\/i>Mac<\/span><span><i class="claude secondary"><\/i>PC<\/span>/);
-  assert.doesNotMatch(html, /ob-history-end/);
+  assert.equal(count(html, /ob-history-line claude secondary/g), 0);
+  assert.doesNotMatch(html, /ob-history-key|ob-history-end/);
+  assert.equal(count(html, /<tr><th scope="row">/g), 6, 'both computers\' readings, one row each');
+  assert.doesNotMatch(html, /1[2-9]\d%|[2-9]\d\d%/, 'no summed values');
 });
 
-void test('the weekly chart draws the even-spend pace guide', () => {
-  const html = card(history([{ host: 'Mac', status: 'ok', points: [-300, -100].map(minutes => point('Mac', 'seven_day', minutes, 60, 3000, 10080)) }]), 'Claude Code weekly');
-  assert.equal(count(html, /class="ob-history-guide"/g), 1);
+void test('no pace guide and no reset rule are drawn', () => {
+  const html = card(history([{ host: 'Mac', status: 'ok', points: [-300, -100].map(minutes => point('Mac', 'seven_day', minutes, 60, 3000, 10080)) }]), 'Claude weekly');
+  assert.doesNotMatch(html, /ob-history-guide|ob-history-reset/);
+  const crossed = card(history([{ host: 'Mac', status: 'ok', points: [[-500, -300], [-450, -300], [-400, -300], [-300, 100], [-250, 100], [-200, 100]].map(([minutes, reset]) => point('Mac', 'five_hour', minutes, 50, reset, 300)) }]), 'Claude 5-hour');
+  assert.doesNotMatch(crossed, /ob-history-guide|ob-history-reset/);
 });
 
-void test('over days, each 5-hour window is one column at its lowest, an empty window is a stub, and a window with no reading has none', () => {
-  const html = card(history([{ host: 'Mac', status: 'ok', points: [
-    point('Mac', 'five_hour', -900, 80, -700, 300), point('Mac', 'five_hour', -800, 30, -700, 300),
-    point('Mac', 'five_hour', -400, 0, -200, 300),
-  ] }]), 'Claude Code 5-hour');
-  assert.equal(count(html, /<rect class="ob-history-column/g), 2);
-  assert.equal(count(html, /ob-history-column claude primary empty/g), 1);
-  assert.doesNotMatch(html, /<polyline/);
+void test('a gap inside one window is joined by one faint dotted line, and a reset is not joined', () => {
+  const run = (resets) => card(history([{ host: 'Mac', status: 'ok', points: [-500, -490, -480, -250, -240, -230].map((minutes, index) => point('Mac', 'five_hour', minutes, 50, resets[index < 3 ? 0 : 1], 300)) }]), 'Claude 5-hour');
+  const same = run([-100, -100]);
+  assert.equal(count(same, /<line class="ob-history-gap claude"/g), 1);
+  assert.equal(count(same, /<polyline class="ob-history-line claude primary"/g), 2);
+  assert.equal(count(run([-100, -100 + 4]), /ob-history-gap/g), 1, 'reset times within 5 minutes are one window');
+  const reset = run([-350, 100]);
+  assert.equal(count(reset, /ob-history-gap/g), 0, 'no join across a reset');
+  assert.equal(count(reset, /<polyline class="ob-history-line claude primary"/g), 2);
+});
+
+void test('over days, a 5-hour limit is one line, never a column per window', () => {
+  const html = card(history([{ host: 'Mac', status: 'ok', points: [-500, -450, -400, -350].map(minutes => point('Mac', 'five_hour', minutes, 50, -200, 300)) }]), 'Claude 5-hour');
+  assert.equal(count(html, /<polyline class="ob-history-line claude primary"/g), 1);
+  assert.doesNotMatch(html, /ob-history-column|<rect/);
+});
+
+void test('a window the provider does not report has no chart unless it has readings', () => {
+  const data = snapshot();
+  data.quota.windows = [{ bucket: 'codex', window: 'primary', durationMinutes: 43200, remainingPercent: 70, resetsAt: iso(600) }];
+  const html = render(data);
+  assert.equal(count(html, /aria-label="Codex [^"]* limit left over time"/g), 1);
+  assert.ok(!html.includes('aria-label="Codex 5-hour limit left over time"') && !html.includes('aria-label="Codex weekly limit left over time"'));
+  assert.match(card(html, 'Codex 30-day'), /<span class="ob-meta">30-day<\/span>/);
+  assert.doesNotMatch(card(html, 'Codex 30-day'), /70%/);
+  const kept = history([{ host: 'Mac', status: 'ok', points: [-30, -20, -10].map(minutes => ({ p: 'codex', w: 'secondary', o: 'Mac', t: iso(minutes), r: 50, x: iso(200), d: 10080 })) }]);
+  assert.ok(kept.includes('aria-label="Codex weekly limit left over time"'));
 });

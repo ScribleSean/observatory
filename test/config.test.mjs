@@ -7,7 +7,7 @@ const win={platform:'win32',environment:{LOCALAPPDATA:'C:\\Users\\a\\AppData\\Lo
 
 test('sources are off unless listed as true',()=>{
   const config=parseConfig({sources:{codex:true}},mac);
-  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false,wsl:false});
+  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false,grokLimits:false,wsl:false});
   assert.equal(config.role,'spoke');
   assert.equal(config.host,'Mac');
   assert.match(config.dataFolder,/Library[\\/]Application Support[\\/]Observatory$/);
@@ -39,4 +39,18 @@ test('an older settings file that still lists agents loads, and the key is ignor
   const config=parseConfig({sources:{codex:true,agents:true}},mac);
   assert.equal('agents' in config.sources,false);
   assert.throws(()=>parseConfig({sources:{agentz:true}},mac),/unknown setting agentz/);
+});
+
+test('grok paths and engine settings are optional and checked', () => {
+  const plain=parseConfig({},mac);
+  assert.deepEqual(plain.grok,{appFolder:null,requestLog:null});
+  assert.deepEqual(plain.engines,{claude:'auto',codex:'auto',grok:'auto'});
+  const set=parseConfig({sources:{grokLimits:true},grok:{appFolder:'/data/app',requestLog:'/data/sent.jsonl'},engines:{codex:'off'}},mac);
+  assert.equal(set.sources.grokLimits,true);
+  assert.deepEqual(set.grok,{appFolder:'/data/app',requestLog:'/data/sent.jsonl'});
+  assert.equal(set.engines.codex,'off');
+  assert.throws(()=>parseConfig({grok:{appFolder:'relative'}},mac),/grok.appFolder must be an absolute path/);
+  assert.throws(()=>parseConfig({grok:{other:'/x'}},mac),/unknown setting other/);
+  assert.throws(()=>parseConfig({engines:{codex:'maybe'}},mac),/engines.codex must be/);
+  assert.throws(()=>parseConfig({engines:{gemini:'off'}},mac),/unknown setting gemini/);
 });

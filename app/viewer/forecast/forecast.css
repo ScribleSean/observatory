@@ -1,0 +1,20 @@
+.fc { margin: clamp(28px, 6vh, 72px) 0 0; }
+.fc ul { margin: 0; padding: 0; list-style: none; }
+.fc-name { display: flex; align-items: center; font-size: var(--ob-heading-size); font-weight: 500; color: var(--ob-text); }
+.fc-bar { display: block; height: 6px; border-radius: 3px; background: var(--ob-track); overflow: hidden; }
+.fc-bar i { display: block; height: 100%; border-radius: 3px; }
+.fc-bar i.claude { background: var(--ob-claude); }
+.fc-bar i.codex { background: var(--ob-codex); }
+.fc-bar i.grok { background: var(--ob-muted); }
+.fc .warn { color: var(--ob-warning); }
+.fc .spent { color: var(--ob-error); }
+
+.fc-tiles ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--ob-space-3); }
+.fc-tile { display: grid; align-content: start; gap: var(--ob-space-3); padding: 22px 22px 20px; border-radius: var(--ob-radius, 14px); background: var(--ob-surface); border: 1px solid transparent; }
+.fc-tile.lead { border-color: color-mix(in srgb, var(--ob-text) 18%, transparent); }
+.fc-big { font: 500 clamp(52px, 9vw, 76px)/0.95 var(--ob-numeral-font, inherit); font-variant-numeric: tabular-nums; letter-spacing: -2px; color: var(--ob-text); }
+.fc-phrase { font-size: var(--ob-body-size); color: var(--ob-muted); }
+.fc-tile.lead .fc-phrase { color: var(--ob-text); }
+.fc-detail { color: var(--ob-muted); }
+.fc.stale .fc-big, .fc.stale .fc-phrase { color: var(--ob-muted); }
+.fc.stale .fc-bar i { opacity: 0.45; }

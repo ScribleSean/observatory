@@ -7,56 +7,53 @@ import { useSkin } from './skin';
 import { LimitsView } from './limits/LimitsView';
 import { ActivityView } from './activity/ActivityView';
 import { TokensView } from './tokens/tokens';
-import { SourcesView } from './sources/SourcesView';
-import { Overview, type Glance } from './overview/Overview';
+import { Forecast, type Outlook } from './forecast/Forecast';
+import { FilterGroup } from './components';
 
 type Snapshot = Record<string, unknown>;
 type Device = { host: string; name: string; collectedAt: string | null; stale: boolean; error?: string };
-export type Combined = { generatedAt: string; generatedBy?: string; view: Snapshot; glance: Glance; devices?: Device[] };
+export type Summary = { generatedAt: string; generatedBy?: string; devices?: Device[]; glance: { forecast?: Outlook } };
+export type Combined = Summary & { view: Snapshot };
 
-const SECTIONS = [
-  ['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity],
-  ['tokens', STRINGS.sections.tokens], ['sources', STRINGS.sections.sources],
-] as const;
+const SECTIONS = [['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity], ['tokens', STRINGS.sections.tokens]] as const;
 type Section = typeof SECTIONS[number][0];
 const ALL_HOSTS = 'All';
-export const sectionFromHash = (hash: string): Section => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? 'limits';
+const HISTORY_REFRESH_MS = 5 * 60000;
+export const sectionFromHash = (hash: string): Section | null => SECTIONS.find(([id]) => id === hash.slice(1))?.[0] ?? null;
 
-function DeviceChips({ devices, now }: { devices: Device[]; now: number }) {
-  if (devices.length < 2) return null;
+async function fetchJson<T>(file: string): Promise<T | null> {
+  try {
+    const response = await fetch(`./local/${file}`, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    const body = response.ok ? await response.json() as T : null;
+    return body && typeof body === 'object' ? shiftDemoClock(body) : null;
+  } catch { return null; }
+}
+
+// Shown only when something is wrong: a computer that stopped reporting or could not be reached.
+function DeviceWarnings({ devices, now }: { devices: Device[]; now: number }) {
+  const late = devices.filter(device => !device.collectedAt || freshness(device.collectedAt, now).stale || device.error);
+  if (devices.length < 2 || late.length === 0) return null;
   return (
     <ul className="ob-chips" aria-label={STRINGS.labels.computers}>
-      {devices.map(device => {
-        const age = freshness(device.collectedAt ?? '', now);
-        return (
-          <li key={device.host} className={age.stale ? 'warn' : ''} title={[device.name, device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : ''].filter(Boolean).join('\n')}>
-            <i aria-hidden="true" />{deviceLabel(device.host)}{!device.collectedAt ? <span className="ob-meta">{STRINGS.today.noSnapshot}</span> : age.stale ? <span className="ob-meta">{format(STRINGS.overview.lastSeen, { time: readingTime(Date.parse(device.collectedAt), now) })}</span> : null}
-          </li>
-        );
-      })}
+      {late.map(device => <li key={device.host} className="warn" title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>
+        <i aria-hidden="true" />{deviceLabel(device.host)}<span className="ob-meta">{device.collectedAt ? readingTime(Date.parse(device.collectedAt), now) : STRINGS.today.noSnapshot}</span>
+      </li>)}
     </ul>
   );
 }
 
 export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: string }) {
   const { css, className } = useSkin(initialSkin);
-  const [combined, setCombined] = useState<Combined | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [history, setHistory] = useState<Combined | null>(null);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [section, setSection] = useState<Section>(() => sectionFromHash(window.location.hash));
+  const [section, setSection] = useState<Section | null>(() => sectionFromHash(window.location.hash));
   const [now, setNow] = useState(() => Date.now());
 
-  useEffect(() => {
-    const follow = () => setSection(sectionFromHash(window.location.hash));
-    window.addEventListener('hashchange', follow);
-    return () => window.removeEventListener('hashchange', follow);
-  }, []);
-
   const load = useCallback(async () => {
-    try {
-      const response = await fetch('./local/combined.json', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
-      const body = response.ok ? await response.json() as Combined : null;
-      setCombined(body && typeof body === 'object' && body.view ? shiftDemoClock(body) : null);
-    } catch { setCombined(null); }
+    const body = await fetchJson<Summary>('summary.json');
+    setSummary(body?.glance ? body : null);
     setNow(Date.now());
     setLoaded(true);
   }, []);
@@ -65,55 +62,69 @@ export default function Dashboard({ initialSkin = 'sage' }: { initialSkin?: stri
     const first = setTimeout(() => { void load(); }, 0);
     const tick = setInterval(() => { setNow(Date.now()); if (!document.hidden) void load(); }, 30000);
     const visible = () => { if (!document.hidden) void load(); };
+    const follow = () => setSection(sectionFromHash(window.location.hash));
     document.addEventListener('visibilitychange', visible);
-    return () => { clearTimeout(first); clearInterval(tick); document.removeEventListener('visibilitychange', visible); };
+    window.addEventListener('hashchange', follow);
+    return () => { clearTimeout(first); clearInterval(tick); document.removeEventListener('visibilitychange', visible); window.removeEventListener('hashchange', follow); };
   }, [load]);
 
-  return <DashboardView combined={combined} loaded={loaded} now={now} css={css} className={className} section={section}
-    onSectionChange={id => { setSection(id); history.replaceState(history.state, '', `#${id}`); }} />;
+  // The full history is large, so it loads only while it is open, and refreshes slowly.
+  const historyOpen = section !== null;
+  useEffect(() => {
+    if (!historyOpen) return;
+    let live = true;
+    const read = async () => { setHistoryFailed(false); const body = await fetchJson<Combined>('combined.json'); if (live) { setHistory(body?.view ? body : null); setHistoryFailed(!body?.view); } };
+    void read();
+    const timer = setInterval(() => { if (!document.hidden) void read(); }, HISTORY_REFRESH_MS);
+    return () => { live = false; clearInterval(timer); };
+  }, [historyOpen]);
+
+  const choose = (id: Section | null) => { setSection(id); writeHash(id); };
+  return <DashboardView summary={summary} history={history} loaded={loaded} now={now} css={css} className={className}
+    section={section} onSectionChange={choose} historyFailed={historyFailed} />;
+}
+
+function writeHash(id: Section | null) {
+  window.history.replaceState(window.history.state, '', id ? `#${id}` : `${window.location.pathname}${window.location.search}`);
 }
 
 type DashboardViewProps = {
-  combined: Combined | null;
+  summary: Summary | null;
+  history: Combined | null;
   loaded: boolean;
   now: number;
   css: string;
   className: string;
-  section: Section;
-  onSectionChange: (section: Section) => void;
+  section: Section | null;
+  onSectionChange: (section: Section | null) => void;
+  historyFailed?: boolean;
 };
 
-export function DashboardView({ combined, loaded, now, css, className, section, onSectionChange }: DashboardViewProps) {
-  const snapshot = combined?.view ?? null;
-  const fresh = freshness(combined?.generatedAt ?? '', now);
-  const showOverallAge = !loaded || !combined || fresh.stale;
+export function DashboardView({ summary, history, loaded, now, css, className, section, onSectionChange, historyFailed = false }: DashboardViewProps) {
+  const fresh = freshness(summary?.generatedAt ?? '', now);
+  const outlook = summary?.glance?.forecast ?? null;
+  const snapshot = history?.view ?? null;
   return (
     <div className={`ob-dashboard ${className}`}>
       <style>{css}</style>
       <header className="ob-masthead">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
-        <DeviceChips devices={combined?.devices ?? []} now={now} />
-        {showOverallAge && <span className={fresh.stale && loaded ? 'ob-meta warn' : 'ob-meta'}>{!loaded ? STRINGS.labels.loading : combined ? fresh.label : STRINGS.labels.noCombined}</span>}
+        <DeviceWarnings devices={summary?.devices ?? []} now={now} />
+        {summary && fresh.stale && <span className="ob-meta warn">{fresh.label}</span>}
       </header>
-      {combined && <Overview glance={combined.glance} view={combined.view} generatedAt={combined.generatedAt} now={now} />}
-      {!combined && <div className="ob-first-run">
-        {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- a status message, not a form output */}
-        <div className="ob-card" role="status">
-          <h2>{loaded ? STRINGS.firstRun.title : STRINGS.labels.loading}</h2>
-          {loaded && <><p>{STRINGS.firstRun.body}</p><p className="ob-meta">{STRINGS.firstRun.hint}</p></>}
-        </div>
-      </div>}
-      {combined && <nav className="ob-tabs" aria-label={STRINGS.sections.navigation}>
-        {SECTIONS.map(([id, name]) => (
-          <button key={id} type="button" aria-current={id === section ? 'page' : undefined} className={id === section ? 'on' : ''} onClick={() => onSectionChange(id)}>{name}</button>
-        ))}
+      {outlook ? <Forecast outlook={outlook} stale={fresh.stale} />
+        : <output className="ob-first-run"><span className="ob-pulse" aria-hidden="true" /><h2>{loaded ? STRINGS.firstRun.title : STRINGS.labels.loading}</h2></output>}
+      {outlook && <nav className="ob-history-nav" aria-label={STRINGS.sections.navigation}>
+        <button type="button" className={`ob-history-toggle ${section ? 'on' : ''}`} aria-expanded={section !== null}
+          onClick={() => onSectionChange(section ? null : 'limits')}>{STRINGS.sections.history}</button>
+        {section && <FilterGroup label={STRINGS.sections.history} options={SECTIONS.map(([id, name]) => [id, name])} value={section} onChange={id => onSectionChange(id as Section)} />}
       </nav>}
-      {combined && <main>
+      {section && <main>
         <section aria-label={SECTIONS.find(([id]) => id === section)![1]}>
-          {section === 'limits' ? <LimitsView snapshot={snapshot} now={now} />
+          {!snapshot ? <p className={historyFailed ? 'ob-meta warn' : 'ob-meta'}>{historyFailed ? STRINGS.labels.historyFailed : STRINGS.labels.loading}</p>
+            : section === 'limits' ? <LimitsView snapshot={snapshot} now={now} />
             : section === 'activity' ? <ActivityView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />
-            : section === 'tokens' ? <TokensView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />
-            : <SourcesView snapshot={snapshot} now={now} />}
+            : <TokensView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />}
         </section>
       </main>}
     </div>

@@ -36,6 +36,8 @@ function cleanDaily(raw, now) {
   return [...result.values()].sort((a,b)=>a.startDate.localeCompare(b.startDate)).slice(-quotaRetention.maxDailyBuckets);
 }
 
+const planName = value => typeof value === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(value) ? value : null;
+
 export function retainQuotaHistory(previous, current, {scope,enabled=true,now=Date.now()}={}) {
   if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid observation time');
   if (typeof enabled !== 'boolean') throw Error('Invalid monitoring state');
@@ -68,8 +70,11 @@ export function retainQuotaHistory(previous, current, {scope,enabled=true,now=Da
   const dailyAsOf=invalidate?null:current?.accountUsage?.status==='ok' && accountCheckedAt && Date.parse(accountCheckedAt)<=now?
     accountCheckedAt:stamp(before?.dailyAsOf);
   const asOf = retained.at(-1)?.checkedAt ?? null;
+  // The account's plan as last reported; a sign-out forgets it.
+  // A read that asked the account reports its plan, even none; a reload of saved state carries the old one.
+  const plan = invalidate ? null : current && Object.hasOwn(current, 'plan') ? planName(current.plan) : planName(before?.plan);
   const fresh=observation && asOf===observation.checkedAt;
   return {version:1,scope,status:invalidate ? latestReadStatus : fresh ? 'ok' : retained.length ? 'stale' : 'unavailable',
-    latestReadStatus,asOf,dailyAsOf,samples:retained,dailyUsageBuckets:[...days.values()].sort((a,b)=>a.startDate.localeCompare(b.startDate)).slice(-quotaRetention.maxDailyBuckets)};
+    latestReadStatus,asOf,dailyAsOf,plan,samples:retained,dailyUsageBuckets:[...days.values()].sort((a,b)=>a.startDate.localeCompare(b.startDate)).slice(-quotaRetention.maxDailyBuckets)};
 }
 

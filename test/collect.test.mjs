@@ -89,7 +89,9 @@ test('tick collects, then combines, and refuses to run twice at once',()=>withFo
   assert.equal(done.value.collect,'ok');
   const combined=JSON.parse(await readFile(path.join(folder,'public','local','combined.json'),'utf8'));
   assert.equal(combined.glance.today[0].host,'Mac');
-  assert.ok(combined.glance.limits.some(row=>row.provider==='codex' && row.remaining===80 && row.stale));
+  // The fixture's reading is more than a day old, so Codex reads Off rather than keeping its old 80%.
+  assert.ok(combined.glance.limits.some(row=>row.provider==='codex' && row.remaining===null && row.off));
+  assert.equal(combined.glance.forecast.engines.find(engine=>engine.engine==='codex').figure,'Off');
 }));
 
 test('a failed collection still writes combined.json from what is there',()=>withFolder(async folder=>{
@@ -110,3 +112,14 @@ test('the old app snapshot is copied aside once before the first write',()=>with
   await collect(testConfig(folder),{readers,now:()=>at});
   assert.equal(JSON.parse(await readFile(path.join(local,'usage.before-hub.json'),'utf8')).collectedAt,'2026-10-20T00:00:00Z');
 }));
+
+test('the Grok reader runs only while its source is on',async()=>{
+  let calls=0;
+  const grok={...readers,grokLimits:async()=>{calls++;return {status:'ok',provider:'Grok',scope:'account',checkedAt:at.toISOString(),windows:[]};}};
+  const off=await buildSnapshot(testConfig('/unused'),grok,{now:at});
+  assert.equal(calls,0);
+  assert.equal(off.data.grokLimits.status,'not-connected');
+  const on=await buildSnapshot(testConfig('/unused',{sources:{...testConfig('/unused').sources,grokLimits:true}}),grok,{now:at});
+  assert.equal(calls,1);
+  assert.equal(on.data.grokLimits.status,'ok');
+});

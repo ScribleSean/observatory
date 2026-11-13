@@ -11,9 +11,9 @@ export const STRINGS = {
   },
   "sections": {
     "limits": "Limits",
-    "activity": "Activity",
+    "activity": "Screen time",
     "tokens": "Tokens",
-    "sources": "Sources",
+    "history": "History",
     "navigation": "Sections"
   },
   "periods": {
@@ -32,7 +32,9 @@ export const STRINGS = {
   },
   "providers": {
     "claudeCode": "Claude Code",
-    "codex": "Codex"
+    "codex": "Codex",
+    "claude": "Claude",
+    "grok": "Grok"
   },
   "actions": {
     "refresh": "Refresh",
@@ -41,8 +43,8 @@ export const STRINGS = {
   "labels": {
     "screenTime": "Screen time",
     "loading": "Loading",
-    "noCombined": "Waiting for the first reading",
-    "computers": "Computers"
+    "computers": "Computers",
+    "historyFailed": "Could not load the history."
   },
   "status": {
     "unknown": "Unknown",
@@ -80,7 +82,6 @@ export const STRINGS = {
     "resetsIn": "Resets in {span}",
     "runsOut": "runs out in {span}",
     "asOf": "as of {time}",
-    "sourcesRead": "{read} of {total} sources read",
     "separator": " · ",
     "since": "Since {date}"
   },
@@ -108,10 +109,7 @@ export const STRINGS = {
     "codexLimits": "Codex limits",
     "codexTokens": "Codex tokens",
     "claudeTokens": "Claude Code tokens",
-    "modelSettings": "Model settings",
-    "noConnected": "No sources are connected",
-    "noRecords": "No source records",
-    "statusCount": "{word}: {count}"
+    "modelSettings": "Model settings"
   },
   "tokens": {
     "input": "Input",
@@ -133,7 +131,8 @@ export const STRINGS = {
     "speed": "Speed",
     "noSettings": "No settings recorded",
     "breakdown": "Breakdown",
-    "hourlyTitle": "{provider} tokens by hour today"
+    "hourlyTitle": "{provider} tokens by hour today",
+    "cost": "Estimate"
   },
   "activity": {
     "nowCaveat": "Now adds the previous clock hour to the current one up to the last reading, so it covers 60 to 120 minutes ending at that reading.",
@@ -163,19 +162,11 @@ export const STRINGS = {
   },
   "today": {
     "noSnapshot": "No snapshot",
-    "screenTimeOff": "Off",
     "unreachable": "Last pull failed: {reason}"
   },
   "overview": {
-    "limitsTitle": "Limits left",
-    "timeTitle": "Screen time today",
-    "costTitle": "API-equivalent (estimate) today",
-    "tokens": "{value} tokens",
     "bothNote": "Both computers, not deduplicated",
-    "asOf": "as of {time}",
-    "lastDay": "Last update was {time}",
-    "lastSeen": "Last seen {time}",
-    "today": "Today"
+    "lastSeen": "Last seen {time}"
   },
   "limitHistory": {
     "title": "Limit history",
@@ -185,15 +176,12 @@ export const STRINGS = {
     "chartTitle": "{provider} {window} limit left over time",
     "left": "{value}% left",
     "noReadings": "No readings in this range",
-    "lowest": "{value}% at lowest",
     "windowSpan": "{start} to {end}",
-    "paceGuide": "Even-spend pace",
-    "time": "Time"
+    "time": "Time",
+    "monthly": "30-day"
   },
   "firstRun": {
-    "title": "Waiting for the first collection",
-    "body": "Observatory collects every five minutes while the menu bar or tray app is running. The first numbers appear here after that.",
-    "hint": "To collect now, choose Refresh in the menu bar or tray app."
+    "title": "Waiting for the first reading"
   },
   "projects": {
     "title": "By project",
@@ -203,6 +191,9 @@ export const STRINGS = {
     "asOf": "as of {time}",
     "more": "+{count} more",
     "project": "Project"
+  },
+  "forecast": {
+    "title": "Forecast"
   }
 } as const;
 

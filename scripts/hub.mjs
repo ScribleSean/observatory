@@ -72,7 +72,7 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
       report.push({name:spoke.name,host,pull:error.message});
     }
   }
-  const combined=combine(devices,{now:now(),generatedBy:config.host});
+  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines});
   combined.hub={role:'hub',spokes:report};
   const text=JSON.stringify(combined);
   await writeAtomic(path.join(folder,'combined.json'),text);
@@ -97,7 +97,7 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
     const carried=newer(validatedDevice(mine,host,now()),validatedDevice(incoming,host,now()));
     if(carried)devices.push(carried);
   }
-  const combined=combine(devices,{now:now(),generatedBy:config.host});
+  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines});
   const hubTime=copy=>copy?.hub?.role==='hub'?copy.generatedAt:copy?.hub?.hubWroteAt;
   const hubWroteAt=[hubTime(mine),hubTime(incoming)].filter(at=>Number.isFinite(Date.parse(at)))
     .sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;

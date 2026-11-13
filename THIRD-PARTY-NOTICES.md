@@ -9,7 +9,6 @@ Observatory's own code is under the [MIT license](LICENSE). The pieces below com
 | Package | License |
 | --- | --- |
 | [React](https://github.com/facebook/react) and React DOM, with their scheduler | MIT |
-| [Inter Tight](https://github.com/googlefonts/inter-tight) | SIL Open Font License 1.1, in `public/fonts/OFL.txt` |
 
 ## Used only to build and test
 

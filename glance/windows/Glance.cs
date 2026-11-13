@@ -37,12 +37,12 @@ namespace Observatory
         public DateTime? ResetsAt;
     }
 
-    sealed class DeviceRow
+    sealed class EngineRow
     {
-        public string Name, FullName, Problem;
-        public double? Seconds, Tokens, Usd;
-        public DateTime? LastSeen;
-        public bool Current, ScreenTimeOn = true;
+        public string Id, Name, Status, Phrase;
+        // "Off" or a request count, shown instead of a share left.
+        public string Figure, Detail;
+        public double? Remaining;
     }
 
     sealed class PanelState
@@ -52,7 +52,8 @@ namespace Observatory
         public const double ReadingFreshMinutes = 10;
         public const double DeviceFreshMinutes = 15;
         public List<LimitRow> Limits = new List<LimitRow>();
-        public List<DeviceRow> Devices = new List<DeviceRow>();
+        public List<EngineRow> Engines = new List<EngineRow>();
+        public string Sentence, Menu, Scarce;
         public DateTime? Updated;
         public string Notice;
         public bool Refreshing;
@@ -110,37 +111,29 @@ namespace Observatory
                 Absent = Get(row, "absent") as string,
             });
             state.Limits = limits.ToList();
-            var problems = new Dictionary<string, string>();
-            var hub = Get(json, "hub") as Dictionary<string, object>;
-            foreach (var spoke in (Get(hub, "spokes") as IList ?? new object[0]).OfType<Dictionary<string, object>>())
+            // The forecast is worked out once by the collector, so the panel, the tray and the dashboard agree.
+            var forecast = Get(glance, "forecast") as Dictionary<string, object>;
+            if (forecast != null)
             {
-                var host = Get(spoke, "host") as string;
-                var pull = Get(spoke, "pull") as string;
-                var push = Get(spoke, "push") as string;
-                if (host == null) continue;
-                if (pull != null && pull != "ok") problems[host] = "Could not read (" + pull + ")";
-                else if (push != null && push != "ok" && push != "skipped") problems[host] = "Could not write back (" + push + ")";
-            }
-            foreach (var row in (Get(glance, "today") as IList ?? new object[0]).OfType<Dictionary<string, object>>())
-            {
-                var host = Get(row, "host") as string ?? "";
-                var seen = Date(Get(row, "collectedAt"));
-                var freshness = Get(row, "freshness") as Dictionary<string, object>;
-                bool stale = !(Get(freshness, "stale") is bool) || (bool)Get(freshness, "stale");
-                string problem;
-                problems.TryGetValue(host, out problem);
-                state.Devices.Add(new DeviceRow
+                state.Sentence = Get(forecast, "sentence") as string;
+                state.Menu = Get(forecast, "menu") as string;
+                state.Scarce = Get(Get(forecast, "scarce") as Dictionary<string, object>, "engine") as string;
+                foreach (var row in (Get(forecast, "engines") as IList ?? new object[0]).OfType<Dictionary<string, object>>())
                 {
-                    Name = host == "Windows" ? "PC" : host == "Mac" ? "Mac" : Get(row, "name") as string ?? host,
-                    FullName = Get(row, "name") as string ?? host,
-                    Seconds = Number(Get(row, "seconds")),
-                    Tokens = Number(Get(row, "tokens")),
-                    Usd = Number(Get(row, "usd")),
-                    ScreenTimeOn = !(Get(row, "screenTimeOn") is bool) || (bool)Get(row, "screenTimeOn"),
-                    LastSeen = seen,
-                    Current = !stale && seen.HasValue && (now - seen.Value).TotalMinutes <= PanelState.DeviceFreshMinutes && seen.Value.ToLocalTime().Date == now.ToLocalTime().Date,
-                    Problem = problem,
-                });
+                    double? remaining = Number(Get(row, "remaining"));
+                    state.Engines.Add(new EngineRow
+                    {
+                        Id = Get(row, "engine") as string ?? "",
+                        Name = Get(row, "name") as string ?? "Unknown",
+                        Status = Get(row, "status") as string ?? "unknown",
+                        Phrase = Get(row, "phrase") as string ?? "",
+                        Figure = Get(row, "figure") as string,
+                        Detail = Get(row, "detail") as string,
+                        Remaining = remaining.HasValue && remaining.Value >= 0 && remaining.Value <= 100 ? remaining : null,
+                    });
+                }
+                // The scarcer engine leads.
+                state.Engines = state.Engines.OrderBy(engine => engine.Id == state.Scarce ? 0 : 1).ToList();
             }
             return state;
         }
@@ -148,36 +141,6 @@ namespace Observatory
 
     static class Format
     {
-        public static string Duration(double seconds)
-        {
-            int minutes = (int)Math.Round(seconds / 60, MidpointRounding.AwayFromZero);
-            return minutes < 60 ? minutes + "m" : (minutes / 60) + "h " + (minutes % 60) + "m";
-        }
-
-        public static string Compact(double value)
-        {
-            var units = new[] { Tuple.Create(1e12, "T"), Tuple.Create(1e9, "B"), Tuple.Create(1e6, "M"), Tuple.Create(1e3, "K"), Tuple.Create(1.0, "") };
-            for (int index = 0; index < units.Length; index++)
-            {
-                if (value < units[index].Item1 && index < units.Length - 1) continue;
-                double scaled = value / units[index].Item1;
-                // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
-                string text = scaled >= 10 || units[index].Item2 == "" ? Math.Round(scaled, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture) : scaled.ToString("0.#", CultureInfo.InvariantCulture);
-                // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
-                if (text == "1000" && index > 0) return "1" + units[index - 1].Item2;
-                return text + units[index].Item2;
-            }
-            return Math.Round(value, MidpointRounding.AwayFromZero).ToString(CultureInfo.InvariantCulture);
-        }
-
-        // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
-        public static string Money(double value)
-        {
-            if (value > 0 && value < 0.005) return "Under $0.01";
-            return value >= 10 ? "$" + Math.Round(value, MidpointRounding.AwayFromZero).ToString("N0", CultureInfo.InvariantCulture) : "$" + value.ToString("0.00", CultureInfo.InvariantCulture);
-        }
-
-        // Same as span() in lib/panel-data.mjs.
         public static string Span(TimeSpan span)
         {
             int minutes = (int)Math.Round(Math.Max(0, span.TotalMinutes), MidpointRounding.AwayFromZero);
@@ -185,15 +148,6 @@ namespace Observatory
             int hours = minutes / 60;
             if (hours < 48) return hours + "h " + (minutes % 60) + "m";
             return (hours / 24) + "d " + (hours % 24) + "h";
-        }
-
-        public static string Clock(DateTime utc, DateTime now)
-        {
-            DateTime local = utc.ToLocalTime();
-            string time = local.ToString("t", CultureInfo.CurrentCulture);
-            if (local.Date == now.ToLocalTime().Date) return time;
-            if (Math.Abs((utc - now).TotalDays) < 6) return local.ToString("ddd", CultureInfo.CurrentCulture) + " " + time;
-            return local.ToString("MMM d", CultureInfo.CurrentCulture) + " " + time;
         }
 
         public static string Age(TimeSpan age)
@@ -232,6 +186,8 @@ namespace Observatory
     static class Painter
     {
         public const int Width = 340;
+        // Three tiles need more room than two.
+        public static int WidthFor(PanelState s) { return s.Engines.Count > 2 ? 460 : Width; }
         const int Pad = 14, Gap = 12, ButtonHeight = 30, IconButton = 34;
 
         public static void Telescope(Graphics g, RectangleF box, Color color, float stroke)
@@ -286,15 +242,15 @@ namespace Observatory
             }
         }
 
-        static void Ring(Graphics g, Color color, float x, float y)
-        {
-            using (var pen = new Pen(color, 1.2f)) g.DrawEllipse(pen, x, y, 6.5f, 6.5f);
-        }
-
         // GDI+ text, so it follows the DPI and render scale transforms (TextRenderer ignores them).
         static void Text(Graphics g, string text, Font font, Color color, float x, float y)
         {
             using (var brush = new SolidBrush(color)) g.DrawString(text, font, brush, x, y, StringFormat.GenericTypographic);
+        }
+
+        static string Capital(string text)
+        {
+            return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text.Substring(1);
         }
 
         static float Measure(Graphics g, string text, Font font)
@@ -308,6 +264,7 @@ namespace Observatory
             using (var strong = new Font("Segoe UI Semibold", 13, GraphicsUnit.Pixel))
             using (var title = new Font("Segoe UI Semibold", 15, GraphicsUnit.Pixel))
             using (var small = new Font("Segoe UI", 12, GraphicsUnit.Pixel))
+            using (var big = new Font("Segoe UI Semibold", 30, GraphicsUnit.Pixel))
             using (var glyph = new Font("Segoe MDL2 Assets", 12, GraphicsUnit.Pixel))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -315,7 +272,7 @@ namespace Observatory
                 if (draw) g.Clear(p.Background);
                 if (hits != null) hits.Clear();
                 float y = Pad;
-                float left = Pad, right = Width - Pad;
+                float left = Pad, right = WidthFor(s) - Pad;
 
                 if (draw)
                 {
@@ -334,90 +291,46 @@ namespace Observatory
                 }
                 else
                 {
-                    if (s.Limits.Count > 0)
+                    if (s.Engines.Count == 0)
                     {
-                        Func<LimitRow, bool> resets = limit => limit.Remaining.HasValue && limit.Remaining.Value <= PanelState.Low && limit.ResetsAt.HasValue;
-                        float h = Pad * 2 + s.Limits.Count * 29 + s.Limits.Count(resets) * 17 + (s.Limits.Count - 1) * Gap;
-                        if (draw)
-                        {
-                            Card(g, p, new RectangleF(left, y, right - left, h));
-                            float row = y + Pad, inner = left + Pad, end = right - Pad;
-                            foreach (var limit in s.Limits)
-                            {
-                                double? value = limit.Remaining;
-                                Color? tint = !value.HasValue ? (Color?)null : value <= 0.5 ? p.Error : value <= PanelState.Low ? p.Warning : (Color?)null;
-                                using (var dot = new SolidBrush(p.Provider(limit.Provider))) g.FillEllipse(dot, inner, row + 6, 7, 7);
-                                Text(g, limit.Name, strong, p.Text, inner + 13, row);
-                                Text(g, limit.Window, body, p.Muted, inner + 13 + Measure(g, limit.Name, strong) + 5, row);
-                                if (value.HasValue)
-                                {
-                                    string percent = Math.Round(value.Value, MidpointRounding.AwayFromZero) + "%";
-                                    float suffix = Measure(g, " left", body);
-                                    Text(g, " left", body, p.Muted, end - suffix, row);
-                                    Text(g, percent, strong, tint ?? p.Text, end - suffix - Measure(g, percent, strong), row);
-                                }
-                                else
-                                {
-                                    string absent = limit.Absent ?? "Unknown";
-                                    Text(g, absent, body, p.Muted, end - Measure(g, absent, body), row);
-                                }
-                                var track = new RectangleF(inner, row + 24, end - inner, 5);
-                                using (var path = Rounded(track, 2.5f)) using (var brush = new SolidBrush(p.Track)) g.FillPath(brush, path);
-                                if (value > 0)
-                                    using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(value.Value / 100)), 5), 2.5f))
-                                    using (var brush = new SolidBrush(p.Provider(limit.Provider))) g.FillPath(brush, path);
-                                row += 29;
-                                if (resets(limit))
-                                {
-                                    Text(g, "Resets in " + Format.Span(limit.ResetsAt.Value - s.Now), small, tint ?? p.Muted, inner, row + 2);
-                                    row += 17;
-                                }
-                                row += Gap;
-                            }
-                        }
+                        float h = Pad * 2 + 18;
+                        if (draw) { Card(g, p, new RectangleF(left, y, right - left, h)); Text(g, "Collecting the first reading\u2026", body, p.Muted, left + Pad, y + Pad); }
                         y += h + Gap;
                     }
-                    if (s.Devices.Count > 0)
+                    else
                     {
-                        const float tokenColumn = 60, costColumn = 92, columnGap = 6;
-                        float costRight = right - Pad, tokenRight = costRight - costColumn - columnGap, timeRight = tokenRight - tokenColumn - columnGap;
-                        string costHeader = "API-equivalent (estimate)";
-                        var farFormat = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Far };
-                        float headerHeight = (float)Math.Ceiling(g.MeasureString(costHeader, small, (int)costColumn, farFormat).Height);
-                        float h = Pad * 2 + headerHeight + Gap + s.Devices.Count * 18 + (s.Devices.Count - 1) * Gap;
+                        // One tile per engine: a large number and its part of the sentence.
+                        float tileGap = 10, tileWidth = (right - left - tileGap * (s.Engines.Count - 1)) / s.Engines.Count, inner = tileWidth - 24;
+                        var wrap = new StringFormat(StringFormat.GenericTypographic);
+                        Func<EngineRow, string> phrase = engine => Capital(engine.Phrase.Replace(" at this pace", "")) + (engine.Detail != null ? " \u00b7 " + engine.Detail : "");
+                        float phraseHeight = s.Engines.Max(engine => (float)Math.Ceiling(g.MeasureString(phrase(engine), small, (int)inner, wrap).Height));
+                        float h = 12 + 18 + 8 + 34 + 8 + 5 + 8 + phraseHeight + 12;
                         if (draw)
                         {
-                            Card(g, p, new RectangleF(left, y, right - left, h));
-                            float row = y + Pad, inner = left + Pad, end = right - Pad;
-                            float headerBase = row + headerHeight - 15;
-                            Text(g, "Today", small, p.Muted, inner, headerBase);
-                            Text(g, "Screen time", small, p.Muted, timeRight - Measure(g, "Screen time", small), headerBase);
-                            Text(g, "Tokens", small, p.Muted, tokenRight - Measure(g, "Tokens", small), headerBase);
-                            using (var brush = new SolidBrush(p.Muted))
-                                g.DrawString(costHeader, small, brush, new RectangleF(costRight - costColumn, row, costColumn, headerHeight + 2), farFormat);
-                            row += headerHeight + Gap;
-                            foreach (var device in s.Devices)
+                            float x = left;
+                            foreach (var engine in s.Engines)
                             {
-                                if (hits != null) hits.Add(Tuple.Create(new RectangleF(inner, row, end - inner, 18), "tip:" + device.FullName + (device.Problem != null ? "\n" + device.Problem : "")));
-                                Text(g, device.Name, strong, p.Text, inner, row);
-                                if (device.Current)
-                                {
-                                    string time = !device.ScreenTimeOn ? "Off" : device.Seconds.HasValue ? Format.Duration(device.Seconds.Value) : "Unknown";
-                                    string tokens = device.Tokens.HasValue ? Format.Compact(device.Tokens.Value) : "Unknown";
-                                    string cost = device.Usd.HasValue ? Format.Money(device.Usd.Value) : "Unknown";
-                                    Text(g, time, body, p.Text, timeRight - Measure(g, time, body), row);
-                                    Text(g, tokens, body, p.Text, tokenRight - Measure(g, tokens, body), row);
-                                    Text(g, cost, body, p.Text, costRight - Measure(g, cost, body), row);
-                                    if (device.Problem != null) Text(g, "\uE7BA", glyph, p.Warning, inner + Measure(g, device.Name, strong) + 6, row + 3);
-                                }
-                                else
-                                {
-                                    string value = device.LastSeen.HasValue ? "Last seen " + Format.Clock(device.LastSeen.Value, s.Now) : "Unknown";
-                                    float width = Measure(g, value, body);
-                                    Text(g, value, body, p.Muted, end - width, row);
-                                    Ring(g, p.Muted, end - width - 12, row + 6);
-                                }
-                                row += 18 + Gap;
+                                bool lead = engine.Id == s.Scarce && !s.Old;
+                                var tile = new RectangleF(x, y, tileWidth, h);
+                                Card(g, p, tile);
+                                if (lead) using (var path = Rounded(tile, 12)) using (var pen = new Pen(Color.FromArgb(128, p.Muted), 1)) g.DrawPath(pen, path);
+                                float ix = x + 12, row = y + 12;
+                                using (var dot = new SolidBrush(p.Provider(engine.Id))) g.FillEllipse(dot, ix, row + 6, 7, 7);
+                                Text(g, engine.Name, strong, p.Text, ix + 13, row);
+                                row += 18 + 8;
+                                Color tone = s.Old || engine.Status == "off" || (!engine.Remaining.HasValue && engine.Figure == null) ? p.Muted : engine.Status == "out" ? p.Error : engine.Status == "runs-out" ? p.Warning : p.Text;
+                                string number = engine.Figure ?? (engine.Remaining.HasValue ? Math.Round(engine.Remaining.Value, MidpointRounding.AwayFromZero) + "%" : "Unknown");
+                                Text(g, number, engine.Remaining.HasValue || engine.Figure != null ? big : body, tone, ix - 2, row - 4);
+                                row += 34 + 8;
+                                var track = new RectangleF(ix, row, inner, 5);
+                                using (var path = Rounded(track, 2.5f)) using (var brush = new SolidBrush(p.Track)) g.FillPath(brush, path);
+                                if (engine.Remaining > 0)
+                                    using (var path = Rounded(new RectangleF(track.X, track.Y, Math.Max(5, track.Width * (float)(engine.Remaining.Value / 100)), 5), 2.5f))
+                                    using (var brush = new SolidBrush(Color.FromArgb(s.Old ? 115 : 255, p.Provider(engine.Id)))) g.FillPath(brush, path);
+                                row += 5 + 8;
+                                using (var brush = new SolidBrush(lead ? p.Text : p.Muted))
+                                    g.DrawString(phrase(engine), small, brush, new RectangleF(ix, row, inner, phraseHeight + 2), wrap);
+                                x += tileWidth + tileGap;
                             }
                         }
                         y += h + Gap;
@@ -439,7 +352,7 @@ namespace Observatory
                     Pill(g, p, refresh);
                     Pill(g, p, quit);
                     string label = "Open dashboard";
-                    Text(g, label, strong, p.Text, open.X + (open.Width - Measure(g, label, strong)) / 2, open.Y + 7);
+                    Text(g, label, body, p.Text, open.X + (open.Width - Measure(g, label, body)) / 2, open.Y + 7);
                     Text(g, "\uE72C", glyph, s.Refreshing ? p.Muted : p.Text, refresh.X + 11, refresh.Y + 9);
                     Text(g, "\uE7E8", glyph, p.Text, quit.X + 11, quit.Y + 9);
                 }
@@ -453,7 +366,7 @@ namespace Observatory
             int height;
             using (var probe = new Bitmap(1, 1))
             using (var g = Graphics.FromImage(probe)) height = Paint(g, state, Palette.Of(dark), false, null);
-            var bitmap = new Bitmap((int)(Width * scale), (int)(height * scale));
+            var bitmap = new Bitmap((int)(WidthFor(state) * scale), (int)(height * scale));
             using (var g = Graphics.FromImage(bitmap))
             {
                 g.ScaleTransform(scale, scale);
@@ -520,7 +433,7 @@ namespace Observatory
                 Rectangle area = screen.WorkingArea, bounds = screen.Bounds;
                 int margin = (int)(12 * scale);
                 int full = (int)(height * scale);
-                int w = (int)(Painter.Width * scale), h = Math.Min(full, area.Height - 2 * margin);
+                int w = (int)(Painter.WidthFor(State) * scale), h = Math.Min(full, area.Height - 2 * margin);
                 AutoScrollMinSize = h < full ? new Size(0, full) : Size.Empty;
                 // The taskbar is on the edge where the work area is smaller than the screen. Auto-hide leaves none, so use bottom right.
                 bool left = area.Left > bounds.Left, top = area.Top > bounds.Top && area.Bottom == bounds.Bottom;
@@ -750,8 +663,10 @@ namespace Observatory
             state.Refreshing = tick != null && !tick.HasExited;
             panel.State = state;
             if (panel.Visible) panel.Place(false);
-            bool current = state.Notice == null && !state.Old && state.Limits.Any(row => row.Remaining.HasValue);
-            tray.Text = current ? "Observatory" : "Observatory: not updated recently";
+            // Off and a request count are definite readings too, not only a share left.
+            bool current = state.Notice == null && !state.Old && (state.Limits.Any(row => row.Remaining.HasValue) || state.Engines.Any(engine => engine.Status != "unknown"));
+            // The tray tip names the engine closest to running out.
+            tray.Text = current ? (state.Menu ?? "Observatory") : "Observatory: not updated recently";
             SetIcon(!current);
         }
 

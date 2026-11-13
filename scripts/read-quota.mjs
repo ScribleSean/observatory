@@ -51,6 +51,12 @@ export function errorStatus(error) {
   return /\b401 Unauthorized\b|"token_revoked"|"token_expired"|refresh token was revoked/i.test(message)?'needs-auth':'unavailable';
 }
 
+// The plan the signed-in account is on, as the client reports it ("plus", "pro", "free"). Nothing else about the account.
+export function accountPlan(result) {
+  const plan=result?.account?.planType;
+  return typeof plan==='string' && /^[a-z][a-z0-9_-]{0,31}$/.test(plan)?plan:null;
+}
+
 function unavailable(status='unavailable',stage='client') {return Object.assign(Error('Account usage unavailable'),{status,stage});}
 function accountScope(result,salt) {
   const account=result?.account;
@@ -67,7 +73,8 @@ export function readAccountSnapshot(executable,salt,options={}) {
   if(dailyUsageScope!==null && (typeof dailyUsageScope!=='string' || !/^[a-f0-9]{64}$/.test(dailyUsageScope)))throw Error('Invalid daily usage scope');
   let observedScope;
   return withAccountClient(executable,async request=>{
-    const scope=accountScope(await request('account/read',{refreshToken:false}),salt);
+    const account=await request('account/read',{refreshToken:false});
+    const scope=accountScope(account,salt);
     observedScope=scope;
     const [quota,accountUsage]=await Promise.all([
       request('account/rateLimits/read').then(cleanQuota),
@@ -75,7 +82,7 @@ export function readAccountSnapshot(executable,salt,options={}) {
         request('account/usage/read').then(cleanAccountUsage).catch(error=>({status:error.status || 'unavailable',provider:'Codex',scope:'account',dailyUsageBuckets:[]})),
     ]);
     if(accountScope(await request('account/read',{refreshToken:false}),salt)!==scope)throw unavailable('needs-auth');
-    return {scope,...quota,...(accountUsage?{accountUsage}:{})};
+    return {scope,plan:accountPlan(account),...quota,...(accountUsage?{accountUsage}:{})};
   },options).catch(error=>{
     throw Object.assign(unavailable(error.status,error.stage),observedScope?{scope:observedScope}:{});
   });

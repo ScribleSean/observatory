@@ -55,7 +55,7 @@ function chartData(days: Day[], period: string, anchor: string | null): ChartPoi
 
 function ProviderCard({ result, provider }: { result: Result; provider: 'claude' | 'codex' }) {
   const block: Block = result[provider];
-  const label = provider === 'claude' ? STRINGS.providers.claudeCode : STRINGS.providers.codex;
+  const label = provider === 'claude' ? STRINGS.providers.claude : STRINGS.providers.codex;
   const notes = [statusNote(block.status), block.note].filter(Boolean);
   const checked = block.checkedOn ? format(STRINGS.tokens.pricesChecked, { date: block.checkedOn }) : STRINGS.tokens.pricesUnknown;
   const data = chartData(block.days, result.period, result.anchor);
@@ -65,7 +65,8 @@ function ProviderCard({ result, provider }: { result: Result; provider: 'claude'
   const meta = [block.since ? format(STRINGS.formats.since, { date: shortDate(block.since) }) : '', both && known ? STRINGS.overview.bothNote : ''].filter(Boolean);
   return <Card label={label} title={label} provider={provider}>
     <div className="ob-tokens-head">
-      <div className={known ? 'ob-hero' : 'ob-hero ob-unknown'}>{known ? count(block.totals.total) : statusWord(block.status)}</div>
+      {/* Cache reads are re-sent context, often most of a day's total, so the headline leaves them out. */}
+      <div className={known ? 'ob-hero' : 'ob-hero ob-unknown'}>{known ? count(block.totals.total === null || block.totals.cached === null ? null : block.totals.total - block.totals.cached) : statusWord(block.status)}</div>
       {meta.length > 0 && <p className="ob-meta">{meta.join(STRINGS.formats.separator)}</p>}
       {notes.map(note => <p key={note} className="ob-meta">{note}</p>)}
       {both && <DeviceShares color={provider} rows={block.byDevice.map((device: Block['byDevice'][number]) => ({ host: device.host, label: device.label,

@@ -68,7 +68,7 @@ function project(state,now) {
     (readingFresh(Date.parse(history.asOf),now)?'ok':'stale'):history.status;
   // Do not expose the salt, account scope key, revision or private store path.
   const projected = {status,provider:'Codex',scope:'account',checkedAt:history.asOf,
-    latestReadStatus:history.latestReadStatus,nextAttemptAt:new Date(state.nextAttemptAt).toISOString(),
+    latestReadStatus:history.latestReadStatus,...(history.plan?{plan:history.plan}:{}),nextAttemptAt:new Date(state.nextAttemptAt).toISOString(),
     windows:history.samples.at(-1)?.windows || [],
     history:history.samples.filter(row=>Date.parse(row.checkedAt)>=Date.parse(history.asOf)-86400000),
     accountUsageCheckedAt:history.dailyAsOf,dailyUsageBuckets:history.dailyUsageBuckets};

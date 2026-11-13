@@ -244,8 +244,11 @@ test('limits view renders reset windows as Unknown', async t => {
   assert.match(html, /Waiting for the reset to be observed\./);
   assert.doesNotMatch(html, />0%<|>12%<|width:0%|width:12%/);
   assert.match(html, /class="ob-bar" aria-hidden="true"><\/div>/);
-  const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now }));
-  assert.match(view, /Waiting for the reset to be observed\.[\s\S]*?class="ob-num ob-unknown">Unknown<\/span>/);
+  assert.doesNotMatch(renderToStaticMarkup(createElement(LimitsView, { snapshot: data, now })), /ob-history-chart/, 'no readings and no current value, so no chart');
+  const drawn = { ...data, limitHistory: [{ host: 'Mac', points: [-30, -20, -10].map(minutes => ({ p: 'claude', w: 'five_hour', o: 'Mac', t: iso(minutes), r: 12, x: iso(-1), d: 300 })) }] };
+  const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: drawn, now }));
+  assert.match(view, /ob-history-chart/, 'history alone still earns its chart');
+  assert.doesNotMatch(view, /Unknown|Waiting for the reset/, 'the chart header carries no current value');
 });
 
 test('Claude Code pace comes from the limit history when the reading keeps no samples, across a minute-rounded reset', () => {

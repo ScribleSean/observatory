@@ -8,10 +8,16 @@ const point=(o,m,r,extra={})=>({p:'claude',w:'five_hour',o,t:minutes(m),r,d:300,
 const snapshot=points=>({deviceNames:{Mac:'Studio Mac',Windows:'Desk PC'},
   limitHistory:['Mac','Windows'].map(host=>({host,status:'ok',points:points.filter(row=>row.o===host)}))});
 
-test('one line per computer, never added together',()=>{
+test('limits are account-wide: both computers merge into one line, never added together',()=>{
   const data=limitHistorySeries(snapshot([point('Mac',60,70),point('Mac',30,60),point('Windows',45,65),point('Windows',10,55)]),{provider:'claude',window:'5h',range:'today',now});
-  assert.deepEqual(data.series.map(row=>[row.host,row.name,row.points.map(p=>p.r)]),[['Mac','Studio Mac',[70,60]],['Windows','Desk PC',[65,55]]]);
-  assert.ok(data.series.flatMap(row=>row.points).every(p=>p.r<=100),'no summed values');
+  assert.deepEqual(data.series.map(row=>[row.host,row.name,row.points.map(p=>p.r)]),[['All','',[70,65,60,55]]]);
+  assert.ok(data.series[0].points.every(p=>p.r<=100),'no summed values');
+  assert.equal(data.total,4);
+});
+
+test('two computers reading the same moment give one point, not two',()=>{
+  const data=limitHistorySeries(snapshot([point('Mac',60,70),point('Windows',60,70),point('Mac',30,60),point('Windows',30,60),point('Mac',10,50)]),{provider:'claude',window:'5h',range:'today',now});
+  assert.deepEqual(data.series[0].points.map(p=>p.r),[70,60,50]);
 });
 
 test('the freshest reading names the computer and time it came from',()=>{
@@ -20,8 +26,22 @@ test('the freshest reading names the computer and time it came from',()=>{
 });
 
 test('readings far apart break the line, so gaps stay gaps',()=>{
-  const data=limitHistorySeries(snapshot([point('Mac',300,80),point('Mac',295,79),point('Mac',100,60),point('Mac',95,59)]),{provider:'claude',window:'5h',range:'today',now});
-  assert.equal(data.series[0].segments.length,2);
+  const data=limitHistorySeries(snapshot([point('Mac',300,80),point('Mac',295,79),point('Mac',290,78),point('Mac',100,60),point('Mac',95,59),point('Windows',90,58)]),{provider:'claude',window:'5h',range:'today',now});
+  assert.deepEqual(data.series[0].segments.map(segment=>segment.length),[3,3]);
+});
+
+test('a run of fewer than three readings is left out, unless it is the only one',()=>{
+  const lone=limitHistorySeries(snapshot([point('Mac',300,80),point('Mac',295,79),point('Mac',290,78),point('Mac',100,60)]),{provider:'claude',window:'5h',range:'today',now});
+  assert.deepEqual(lone.series[0].segments.map(segment=>segment.length),[3]);
+  const only=limitHistorySeries(snapshot([point('Mac',100,60),point('Mac',95,59)]),{provider:'claude',window:'5h',range:'today',now});
+  assert.deepEqual(only.series[0].segments.map(segment=>segment.length),[2]);
+});
+
+test('the month window is Codex\'s 30-day window',()=>{
+  assert.equal(windowOf({w:'primary',d:43200}),'month');
+  const data=limitHistorySeries(snapshot([{p:'codex',w:'primary',o:'Mac',t:minutes(60),r:50,d:43200},{p:'codex',w:'primary',o:'Mac',t:minutes(30),r:49,d:43200},{p:'codex',w:'primary',o:'Mac',t:minutes(10),r:48,d:43200}]),{provider:'codex',window:'month',range:'week',now});
+  assert.equal(data.total,3);
+  assert.equal(limitHistorySeries(snapshot([]),{provider:'codex',window:'5h',range:'week',now}).empty,true);
 });
 
 test('reset markers come from the provider reset time, inside the range only',()=>{
@@ -47,8 +67,8 @@ test('no readings in range is empty, not zero, and ranges filter by time',()=>{
 });
 
 test('the line breaks at a reset, so two windows are never joined',()=>{
-  const data=limitHistorySeries(snapshot([point('Mac',90,20,{x:minutes(60)}),point('Mac',75,15,{x:minutes(60)}),point('Mac',45,100,{x:minutes(-240)})]),{provider:'claude',window:'5h',range:'today',now});
-  assert.deepEqual(data.series[0].segments.map(segment=>segment.length),[2,1]);
+  const data=limitHistorySeries(snapshot([point('Mac',100,25,{x:minutes(60)}),point('Mac',90,20,{x:minutes(60)}),point('Mac',75,15,{x:minutes(60)}),point('Mac',45,100,{x:minutes(-240)}),point('Mac',40,99,{x:minutes(-240)}),point('Mac',35,98,{x:minutes(-240)})]),{provider:'claude',window:'5h',range:'today',now});
+  assert.deepEqual(data.series[0].segments.map(segment=>segment.length),[3,3]);
 });
 
 test('a reset reported a minute apart is the same window, and readings that start inside the range are marked',()=>{

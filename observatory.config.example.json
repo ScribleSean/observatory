@@ -6,6 +6,7 @@
     "codexLimits": true,
     "claudeCode": true,
     "claudeLimits": true,
+    "grokLimits": false,
     "wsl": false
   },
   "hub": {

@@ -17,8 +17,6 @@
 
 .ob-history-grid line { stroke: var(--ob-track); stroke-width: 1; opacity: 0.7; }
 .ob-history-grid text, .ob-history-tick, .ob-history-empty { fill: var(--ob-muted); font-size: var(--ob-chart-label-size); font-variant-numeric: tabular-nums; }
-.ob-history-reset { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.35; }
-.ob-history-guide { stroke: var(--ob-muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.55; }
 .ob-history-cursor { stroke: var(--ob-muted); stroke-width: 1; opacity: 0.6; }
 
 .ob-history-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
@@ -29,10 +27,6 @@
 .ob-history-dot.claude { fill: var(--ob-claude); }
 .ob-history-dot.codex { fill: var(--ob-codex); }
 .ob-history-dot.secondary { opacity: 0.5; }
-
-.ob-history-column.claude { fill: var(--ob-claude); }
-.ob-history-column.codex { fill: var(--ob-codex); }
-.ob-history-column.secondary { opacity: 0.5; }
 
 .ob-history-key { position: absolute; top: 0; right: 0; display: flex; gap: var(--ob-space-3); font-size: var(--ob-chart-label-size); color: var(--ob-muted); }
 .ob-history-key span { display: inline-flex; align-items: center; gap: 5px; }
@@ -49,18 +43,18 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .ob-history-line.claude.secondary { stroke: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
   :root:not([data-theme="light"]) .ob-history-dot.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
-  :root:not([data-theme="light"]) .ob-history-column.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
   :root:not([data-theme="light"]) .ob-history-key i.claude.secondary { background: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
   :root:not([data-theme="light"]) .ob-history-line.codex.secondary { stroke: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
   :root:not([data-theme="light"]) .ob-history-dot.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
-  :root:not([data-theme="light"]) .ob-history-column.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
   :root:not([data-theme="light"]) .ob-history-key i.codex.secondary { background: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
 }
 :root[data-theme="dark"] .ob-history-line.claude.secondary { stroke: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
 :root[data-theme="dark"] .ob-history-dot.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
-:root[data-theme="dark"] .ob-history-column.claude.secondary { fill: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
 :root[data-theme="dark"] .ob-history-key i.claude.secondary { background: color-mix(in srgb, var(--ob-claude) 55%, white); opacity: 1; }
 :root[data-theme="dark"] .ob-history-line.codex.secondary { stroke: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
 :root[data-theme="dark"] .ob-history-dot.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
-:root[data-theme="dark"] .ob-history-column.codex.secondary { fill: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
 :root[data-theme="dark"] .ob-history-key i.codex.secondary { background: color-mix(in srgb, var(--ob-codex) 55%, white); opacity: 1; }
+
+.ob-history-gap { stroke-width: 1.5; stroke-dasharray: 2 4; opacity: 0.5; }
+.ob-history-gap.claude { stroke: var(--ob-claude); }
+.ob-history-gap.codex { stroke: var(--ob-codex); }

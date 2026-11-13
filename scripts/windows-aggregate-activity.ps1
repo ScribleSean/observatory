@@ -44,10 +44,12 @@ foreach ($windowGroup in $groups.Values) {
     $intervals += @(foreach ($event in $result[0]) {
       $app = [string]$event.data.app
       $category = 'Other'
-      if ($app -match '(?i)codex|chatgpt|antigravity') { $category='AI apps' }
-      elseif ($app -match '(?i)code\.exe|visual studio|cursor|idea|pycharm') { $category='Editors' }
-      elseif ($app -match '(?i)terminal|powershell|cmd\.exe|conhost|wezterm|ubuntu') { $category='Terminal' }
-      elseif ($app -match '(?i)chrome|firefox|msedge|brave|safari') { $category='Browser' }
+      if ($app -match '(?i)codex|chatgpt|antigravity|claude|grok|gemini|perplexity') { $category='AI apps' }
+      elseif ($app -match '(?i)code\.exe|visual studio|cursor|\bidea(64)?\b|intellij|pycharm|xcode|\bzed\b|sublime|windsurf|android studio') { $category='Editors' }
+      elseif ($app -match '(?i)terminal|powershell|cmd\.exe|conhost|wezterm|ubuntu|iterm|ghostty|\bwarp\b|alacritty|\bkitty\b|wt\.exe') { $category='Terminal' }
+      elseif ($app -match '(?i)chrome|firefox|msedge|brave|safari|arc\b|opera|vivaldi') { $category='Browser' }
+      elseif ($app -match '(?i)discord|slack|teams|zoom|messages|facetime|whatsapp|telegram|signal|\bmail\b|outlook') { $category='Communication' }
+      elseif ($app -match '(?i)steam|battle\.net|overwatch|valorant|riot client|league of legends|epicgames|minecraft|-win64-shipping') { $category='Games' }
       $duration = [double]$event.duration
       $label = 'Other app'
       if ($app -match '(?i)codex') { $label='Codex' }

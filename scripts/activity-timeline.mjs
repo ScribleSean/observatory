@@ -1,4 +1,4 @@
-export const categories = ['AI apps', 'Editors', 'Terminal', 'Browser', 'Other'];
+export const categories = ['AI apps', 'Editors', 'Terminal', 'Browser', 'Communication', 'Games', 'Other'];
 export const appLabels = ['Codex', 'ChatGPT / Codex', 'Antigravity', 'VS Code', 'Cursor', 'Chrome', 'Edge', 'Safari', 'Firefox', 'Terminal', 'Other app', 'Unknown app'];
 export function appLabel(raw) {
   const app = String(raw).toLowerCase();

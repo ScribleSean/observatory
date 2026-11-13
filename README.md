@@ -1,6 +1,6 @@
 # Observatory
 
-A menu bar app and local dashboard for people who use Claude Code and Codex. It shows how much of each limit is left, where your screen time went, and how many tokens you used, on a Mac, a Windows PC or both.
+A menu bar app and local dashboard for people who use Claude Code and Codex. It says how much of each limit is left and when it runs out at your current pace, for example "Claude runs out Thu 4 PM at this pace. Codex has room." Screen time and token history are one click away. It runs on a Mac, a Windows PC or both.
 
 Observatory reads records your tools already keep on your computer. It has no account, no hosted service and no telemetry. It only watches: it does not start, stop or answer an agent, and it does not change the tools it reads.
 
@@ -38,11 +38,14 @@ Every five minutes the app collects one snapshot of this computer:
 | Source | Read from | Kept |
 | --- | --- | --- |
 | Limits | The installed Claude Code and Codex clients, with your existing sign-in | Percent left and reset time per window |
-| Claude Code | `~/.claude/projects` | Tokens per day, hour and model, and today's tokens per project folder name |
+| Claude Code | `~/.claude/projects` | Tokens per day, hour and model, and today's tokens per project folder name. Cache reads are counted separately and left out of the headline |
 | Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts, and today's tokens per project folder name |
 | Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category |
+| Grok (optional) | The Grok Bot app's own cached weekly reading, and a request log you name | Percent left and reset time, and requests per day |
 
-No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. Dollar figures are estimates at public API prices, not a bill.
+No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. The forecast uses each limit's readings from the last day (the last two hours for a 5-hour limit) and ignores readings from before a reset. Dollar figures are estimates at public API prices, not a bill.
+
+An engine reads **Off** instead of showing an old number when its client is signed out, when the account reports a free plan, or when it has had no reading for a day.
 
 History goes back to the first day each source has data and is kept until you delete the data folder. Token counts are saved per day, so a day stays counted after Claude Code deletes its old transcripts.
 
@@ -66,6 +69,19 @@ History goes back to the first day each source has data and is kept until you de
 ```
 
 A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, and `codexPath`.
+
+**Engines.** `engines` sets each tile to `"auto"` (the default), `"off"`, or `"on"` (keep a free plan's own allowance on screen): `"engines": { "codex": "off" }`. With two computers, set it in both settings files: each one draws its own tiles.
+
+**Grok.** Set `"grokLimits": true` under `sources` and point `grok` at local files. Both are optional; nothing is sent anywhere.
+
+```json
+"grok": {
+  "appFolder": "/absolute/path/to/the/Grok Bot app data folder",
+  "requestLog": "/absolute/path/to/requests.jsonl"
+}
+```
+
+`appFolder` gives the weekly limit the app last read, which counts as current until the app's own expiry (at most a day). `requestLog` is one JSON object per line with an ISO time in `at`; only the count per day is kept. With a log and no limit, the tile shows today's requests and no percent. Without `sources.grokLimits` or either path there is no Grok tile. A limit reading older than a day stops counting.
 
 On a Windows PC, set `"wsl": true` under `sources` to also count the Claude Code and Codex logs inside WSL toward that PC. See [Two computers](docs/TWO-COMPUTERS.md#wsl-on-the-pc).
 

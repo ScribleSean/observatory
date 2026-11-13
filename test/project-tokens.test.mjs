@@ -209,9 +209,9 @@ test('an old reading from today shows its time, and a reading from the future is
   assert.equal(view(now.getTime()+10*60000).stale,false);
   const old=view(now.getTime()+20*60000);
   assert.equal(old.stale,true);
-  assert.equal(old.asOf,'13:00','as of the reading, in the collecting computer\'s time zone');
+  assert.equal(old.asOf,'1:00 PM','as of the reading, in the collecting computer\'s time zone');
   assert.equal(old.status,'ok');
-  assert.equal(clock('2026-10-21T13:02:00.000Z',timeZone),'9:02');
+  assert.equal(clock('2026-10-21T13:02:00.000Z',timeZone),'9:02 AM');
   assert.throws(()=>cleanProjectTokens({...row,checkedAt:new Date(Date.now()+6*60000).toISOString()}),/Invalid project tokens/);
   assert.equal(cleanProjectTokens({...row,checkedAt:new Date(Date.now()+60000).toISOString()}).status,'ok');
 }));

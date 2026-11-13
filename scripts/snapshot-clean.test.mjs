@@ -64,3 +64,13 @@ test('categories disclose no unknown app names', () => {
   assert.equal(category('ChatGPT'), 'AI apps');
   assert.equal(category('Code.exe'), 'Editors');
 });
+test('common desktop apps get a category instead of Other', () => {
+  assert.equal(category('Claude'), 'AI apps');
+  assert.equal(category('Discord.exe'), 'Communication');
+  assert.equal(category('Messages'), 'Communication');
+  assert.equal(category('Overwatch.exe'), 'Games');
+  assert.equal(category('VALORANT-Win64-Shipping.exe'), 'Games');
+  assert.equal(category('Ghostty'), 'Terminal');
+  assert.equal(category('idea64.exe'), 'Editors');
+  assert.equal(category('Hazel'), 'Other');
+});

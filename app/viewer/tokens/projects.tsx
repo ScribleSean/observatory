@@ -39,7 +39,7 @@ export function ProjectsCard({ devices }: { devices: Device[] }) {
       {device.stale && device.asOf && <p className="ob-meta warn">{format(STRINGS.projects.asOf, { time: device.asOf })}</p>}
       {device.status !== 'ok' ? <p className="ob-meta">{device.status === 'no-records' ? STRINGS.status.noRecords : STRINGS.status.unknown}</p>
         : <ul className="ob-projects-list">
-          <li className="ob-projects-row ob-projects-header" aria-hidden="true"><span>{STRINGS.projects.project}</span><span className="ob-projects-num">{STRINGS.tokens.total}</span><span className="ob-projects-num">{STRINGS.tokens.apiEstimate}</span></li>
+          <li className="ob-projects-row ob-projects-header" aria-hidden="true"><span>{STRINGS.projects.project}</span><span className="ob-projects-num">{STRINGS.tokens.total}</span><span className="ob-projects-num">{STRINGS.tokens.cost}</span></li>
           {device.projects.map((project, index) => <ProjectRow key={`${index}-${project.name}`} project={project} />)}</ul>}
     </div>)}
   </Card>;

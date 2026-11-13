@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanQuota,cleanAccountUsage,errorStatus,readAccountSnapshot} from './read-quota.mjs';
+import {cleanQuota,cleanAccountUsage,errorStatus,readAccountSnapshot,accountPlan} from './read-quota.mjs';
 import {EventEmitter} from 'node:events';
 import {PassThrough,Writable} from 'node:stream';
 import {createHmac} from 'node:crypto';
@@ -164,4 +164,11 @@ test('a revoked or expired Codex sign-in reads as needs sign-in, other server er
   assert.equal(errorStatus({ code: -32603 }), 'unavailable');
   assert.equal(errorStatus({ code: -32601, message: '401 Unauthorized' }), 'unsupported');
   assert.equal(errorStatus({ code: 429 }), 'rate-limited');
+});
+test('only the plan name is taken from the account read',()=>{
+  assert.equal(accountPlan({account:{type:'chatgpt',email:'PRIVATE',planType:'free'}}),'free');
+  assert.equal(accountPlan({account:{type:'chatgpt',planType:'pro'}}),'pro');
+  assert.equal(accountPlan({account:{type:'chatgpt'}}),null);
+  assert.equal(accountPlan({account:{planType:'<script>'}}),null);
+  assert.equal(accountPlan(null),null);
 });

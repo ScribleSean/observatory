@@ -23,7 +23,7 @@ test('combined rows retain only consumed fields, including nested rows and limit
       value.prompt={token:'private-marker'};
     }
   };
-  for(const key of ['activity','tokens','settings','providerTokenSources','activityHistory','quota','claudeLimits'])plant(peer[key]);
+  for(const key of ['activity','tokens','settings','providerTokenSources','activityHistory','quota','claudeLimits','grokLimits'])plant(peer[key]);
   const combined=combine([{host:'Windows',snapshot:peer}],{now});
   assert.deepEqual(combined,expected);
   assert.ok(!JSON.stringify(combined).includes('private-marker'));
@@ -41,8 +41,8 @@ test('each computer uses its own date for today across midnight',()=>{
   const at=Date.parse('2026-10-22T00:30:00Z');
   const snapshot=(host,timezone,date,amount)=>({schema:2,collectedAt:new Date(at).toISOString(),timezone,device:{host,name:host},
     activity:[{host,status:'ok',days:[{date,seconds:amount,trackedSeconds:amount,categories:{Editors:amount}}]}],
-    tokens:[{host,status:'ok',days:[{date,totalTokens:amount*10,apiEstimate:{usd:amount}}]}],
-    providerTokenSources:[{host,provider:'claude-code',status:'ok',days:[{date,totalTokens:amount*20,apiEstimate:{usd:amount*2}}]}]});
+    tokens:[{host,status:'ok',days:[{date,totalTokens:amount*10,cacheReadTokens:amount*4,apiEstimate:{usd:amount}}]}],
+    providerTokenSources:[{host,provider:'claude-code',status:'ok',days:[{date,totalTokens:amount*20,cacheReadTokens:amount*8,apiEstimate:{usd:amount*2}}]}]});
   const mac=snapshot('Mac','America/Los_Angeles','2026-10-21',10);
   const pc=snapshot('Windows','Asia/Tokyo','2026-10-22',20);
   for(const devices of [[{host:'Mac',snapshot:mac},{host:'Windows',snapshot:pc}],[{host:'Windows',snapshot:pc},{host:'Mac',snapshot:mac}]]) {
@@ -56,7 +56,9 @@ test('each computer uses its own date for today across midnight',()=>{
       assert.deepEqual(row.categories,[{name:'Editors',seconds:amount}]);
     }
     assert.equal(combined.glance.both.seconds,30);
-    assert.equal(combined.glance.both.tokens,900);
+    // The headline leaves cache reads out and keeps them as their own sum.
+    assert.equal(combined.glance.both.tokens,540);
+    assert.equal(combined.glance.both.cacheReadTokens,360);
     assert.equal(combined.glance.both.usd,90);
   }
 });
@@ -172,4 +174,29 @@ test('agent rows in an older snapshot are dropped and never reach the menu or th
   const text=JSON.stringify(combined);
   for(const gone of ['agentActivity','secret-project','Private session','waiting on you','"waiting"','"agents"'])assert.ok(!text.includes(gone),gone);
   assert.ok(!combined.glance.lines.includes('Agents'));
+});
+
+test('a Grok source with a limit wins over a newer one with requests only',()=>{
+  const mac=ownSnapshot('Mac',now),pc=ownSnapshot('Windows',now);
+  pc.grokLimits={status:'ok',provider:'Grok',scope:'account',checkedAt:new Date(now).toISOString(),windows:[],
+    requests:{timeZone:'UTC',checkedAt:new Date(now).toISOString(),days:[{date:'2026-01-01',count:2}]}};
+  const combined=combine([{host:'Mac',snapshot:mac},{host:'Windows',snapshot:pc}],{now});
+  assert.equal(combined.view.grokLimits.observedOn,'Mac');
+  assert.equal(combined.view.grokLimits.windows.length,1);
+});
+
+test('an engine set off in the config reads Off in the combined view',()=>{
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)}],{now,engines:{codex:'off'}});
+  const codex=combined.glance.forecast.engines.find(engine=>engine.engine==='codex');
+  assert.equal(codex.figure,'Off');
+  assert.ok(combined.glance.limits.filter(row=>row.provider==='codex').every(row=>row.remaining===null && row.off));
+  assert.ok(!combined.glance.forecast.menu?.startsWith('Codex'));
+});
+
+test('an expired Grok limit does not win over a live request count',()=>{
+  const mac=ownSnapshot('Mac',now),pc=ownSnapshot('Windows',now);
+  mac.grokLimits={...mac.grokLimits,validUntil:new Date(now-60000).toISOString()};
+  pc.grokLimits={status:'ok',provider:'Grok',scope:'account',checkedAt:new Date(now).toISOString(),windows:[],
+    requests:{timeZone:'UTC',checkedAt:new Date(now).toISOString(),days:[{date:'2026-01-01',count:2}]}};
+  assert.equal(combine([{host:'Mac',snapshot:mac},{host:'Windows',snapshot:pc}],{now}).view.grokLimits.observedOn,'Windows');
 });

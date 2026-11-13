@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {combine} from '../lib/combine.mjs';
-import {refusalText} from '../lib/view-sources.mjs';
+import {summaryOf} from '../lib/summary.mjs';
 import {ownSnapshot} from './helpers.mjs';
 
 const root=fileURLToPath(new URL('..',import.meta.url));
@@ -14,79 +14,71 @@ const {default:react}=await load('@vitejs/plugin-react');
 const server=await createServer({configFile:false,root,server:{middlewareMode:true},appType:'custom',logLevel:'silent',plugins:[react()]});
 after(()=>server.close());
 const {DashboardView,sectionFromHash}=await server.ssrLoadModule('/app/viewer/dashboard.tsx');
-const {SourcesView}=await server.ssrLoadModule('/app/viewer/sources/SourcesView.tsx');
 const {useSkin}=await server.ssrLoadModule('/app/viewer/skin.ts');
 
 const now=Date.parse('2026-10-21T17:00:00Z');
 const both=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ownSnapshot('Windows',now)}],{now});
 const noPc=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',name:'PC',snapshot:null,error:'unreachable'}],{now});
-const render=props=>renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,css:'',className:'',onSectionChange:()=>{},...props}));
+const render=({combined,...props})=>renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,css:'',className:'',onSectionChange:()=>{},
+  summary:combined?summaryOf(combined):null,history:props.section?combined:null,section:null,...props}));
 
-for(const section of ['limits','activity','tokens','sources']) {
-  test(`the ${section} page renders from combined.json`,()=>{
+test('the home page is one sentence and one number per engine, with no helper text',()=>{
+  const html=render({combined:both});
+  const outlook=both.glance.forecast;
+  assert.ok(html.includes('data-hero'));
+  assert.ok(html.includes(outlook.sentence));
+  for(const engine of outlook.engines)assert.ok(html.includes(engine.name),engine.name);
+  for(const helper of ['not deduplicated','API-equivalent','Checked','Screen time today'])assert.ok(!html.includes(helper),helper);
+  assert.ok(!html.includes('NaN') && !html.includes('undefined'));
+  assert.ok(html.includes('aria-expanded="false"'),'history is closed until asked for');
+  assert.ok(!html.includes('<main>'),'no history drawn on the home page');
+});
+
+test('the home numbers match the forecast, scarcer engine first',()=>{
+  const numbers=[...render({combined:both}).matchAll(/class="fc-big[^"]*"[^>]*>(\d+%|Unknown)</g)].map(match=>match[1]);
+  const engines=[...both.glance.forecast.engines].sort((a,b)=>a.engine===both.glance.forecast.scarce?.engine?-1:b.engine===both.glance.forecast.scarce?.engine?1:0);
+  assert.deepEqual(numbers,engines.map(engine=>engine.remaining===null?'Unknown':`${Math.round(engine.remaining)}%`));
+});
+
+for(const section of ['limits','activity','tokens']) {
+  test(`the ${section} history renders from combined.json`,()=>{
     const html=render({combined:both,section});
-    for(const title of ['Limits','Screen time today','API-equivalent (estimate) today'])assert.ok(html.includes(title),title);
-    assert.ok(!/>Agents</.test(html),'no Agents tab or tile');
-    assert.ok(html.includes('Both computers, not deduplicated'));
+    assert.ok(html.includes('aria-expanded="true"'));
+    assert.ok(html.includes('<main>'));
     assert.ok(!/\((Mac|Windows|macOS)\)/.test(html));
-    assert.ok(!html.includes('NaN'));
-    assert.ok(!html.includes('undefined'));
+    assert.ok(!html.includes('NaN') && !html.includes('undefined'));
   });
 }
 
-test('a missing computer shows no snapshot and the reason, and no total, never zero',()=>{
-  const html=render({combined:noPc,section:'limits'});
+test('history waits for its data instead of drawing Unknown',()=>{
+  const html=renderToStaticMarkup(createElement(DashboardView,{loaded:true,now,css:'',className:'',onSectionChange:()=>{},summary:summaryOf(both),history:null,section:'limits'}));
+  assert.ok(html.includes('Loading'));
+  assert.ok(!html.split('<main>')[1].includes('>Unknown<'),'the home sentence may say Unknown; the history may not');
+});
+
+test('a missing computer is named with its reason, and only then',()=>{
+  const html=render({combined:noPc});
   assert.ok(html.includes('No snapshot'));
   assert.ok(html.includes('Last pull failed: unreachable'));
-  const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
-  assert.ok(!tiles.includes('class="ob-hero"'),'an Unknown total is not drawn as a headline');
-  assert.ok(!/>(0m|\$0\.00)</.test(tiles),'never zero');
+  assert.ok(!render({combined:both}).includes('ob-chips'),'nothing to warn about, no chips');
 });
 
-test('a computer with an old reading shows when it was last seen, not its numbers',()=>{
-  const old=structuredClone(both);
-  const pc=old.glance.today.find(device=>device.host==='Windows');
-  pc.freshness={stale:true};pc.collectedAt=new Date(now-80*60000).toISOString();
-  const html=render({combined:old,section:'limits'});
-  assert.ok(html.includes('Last seen'));
-  const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
-  assert.ok(!tiles.includes('class="ob-hero"'),'no total that includes a hidden, old number');
-  assert.ok(tiles.includes('class="ob-hero ob-unknown">Unknown<'),'the headline says Unknown at headline size');
-});
-
-test('two computers on the next day show no numbers as today',()=>{
-  const html=render({combined:both,section:'limits',now:now+26*3600000});
-  const tiles=html.slice(html.indexOf('Screen time today'),html.indexOf('ob-tabs'));
-  assert.ok(!/class="ob-num">[^<]*(\d+h|\d+m|\$)/.test(tiles),'no duration or cost from yesterday');
-  assert.ok(tiles.includes('Last seen'));
-});
-
-test('limits keep a fixed order and a window without a reading is named, not dropped',()=>{
-  const html=render({combined:both,section:'limits'});
-  const tile=html.slice(html.indexOf('ob-tile-limits'),html.indexOf('ob-tile-time'));
-  const names=[...tile.matchAll(/<\/i>(Claude Code|Codex)<span class="ob-meta">\u00a0([^<]+)</g)].map(match=>`${match[1]} ${match[2]}`);
-  assert.deepEqual(names,['Claude Code 5-hour','Claude Code weekly','Codex 5-hour','Codex weekly']);
-  const partial=structuredClone(both);
-  partial.view.claudeLimits.windows=partial.view.claudeLimits.windows.filter(row=>row.durationMinutes!==300);
-  const missing=render({combined:partial,section:'limits'});
-  const row=missing.slice(missing.indexOf('ob-tile-limits'),missing.indexOf('ob-tile-time'));
-  assert.match(row,/Claude Code<span class="ob-meta">\u00a05-hour<\/span><\/span><span class="ob-tile-value"><span class="ob-num ob-unknown">Unknown<\/span>/);
-});
-
-test('unknown hashes open Limits and only the read-only pages exist',()=>{
+test('unknown hashes open the home page and only the read-only pages exist',()=>{
   assert.equal(sectionFromHash('#tokens'),'tokens');
-  assert.equal(sectionFromHash('#settings'),'limits');
-  assert.equal(sectionFromHash('#setup'),'limits');
+  assert.equal(sectionFromHash('#settings'),null);
+  assert.equal(sectionFromHash('#sources'),null);
   const html=render({combined:both,section:'limits'});
-  for(const removed of ['Settings','Dictation','Check for updates'])assert.ok(!html.includes(`>${removed}<`),removed);
+  for(const removed of ['Settings','Dictation','Check for updates','Sources'])assert.ok(!html.includes(`>${removed}<`),removed);
 });
 
-test('source refusals are described, not copied',()=>{
-  for(const refusal of ['synthetic-private-code','ancestor-refused']) {
-    const html=renderToStaticMarkup(createElement(SourcesView,{now,snapshot:{activity:[{host:'Mac',status:'unavailable',refusal,checkedAt:'2026-10-21T16:58:00Z'}]}}));
-    assert.ok(!html.includes(refusal));
-    assert.ok(html.includes(refusalText(refusal)));
-  }
+test('loading and first run show one calm line, not pages of Unknown',()=>{
+  const loading=render({combined:null,loaded:false});
+  assert.ok(loading.includes('Loading'));
+  assert.ok(!loading.includes('ob-history-nav'));
+  const first=render({combined:null,loaded:true});
+  assert.ok(first.includes('Waiting for the first reading'));
+  assert.ok(!first.includes('>Unknown<'));
+  assert.ok(first.split(/\s+/).length<80,'a title, not a page of text');
 });
 
 test('the skin hook returns Sage',()=>{
@@ -95,18 +87,6 @@ test('the skin hook returns Sage',()=>{
   renderToStaticMarkup(createElement(Probe));
   assert.equal(seen[0].skinId,'sage');
   assert.match(seen[0].css,/--ob-background/);
-});
-
-test('staleness is judged when the page draws, not when the file was written',()=>{
-  const at=new Date(now).toISOString();
-  const mac=ownSnapshot('Mac',now,s=>({...s,collectedAt:at}));
-  const combined=combine([{host:'Mac',snapshot:mac}],{now});
-  const later=render({combined,section:'limits',now:now+3600000});
-  assert.ok(later.includes('as of'));
-  const nextDay=render({combined,section:'limits',now:now+26*3600000});
-  assert.ok(nextDay.includes('Last update was'));
-  const time=nextDay.slice(nextDay.indexOf('Screen time today'),nextDay.indexOf('ob-tabs'));
-  assert.ok(!time.includes('class="ob-hero"'),'yesterday is not shown as today');
 });
 
 test('a 30-day chart labels Mondays only, a week labels weekdays, and Unknown is a stub, not a zero',async()=>{
@@ -128,18 +108,6 @@ test('a 30-day chart labels Mondays only, a week labels weekdays, and Unknown is
   assert.ok(labels(chart(hours)).length<=6);
 });
 
-test('loading and first run show one calm message, not pages of Unknown',()=>{
-  const loading=render({combined:null,loaded:false,section:'limits'});
-  assert.ok(loading.includes('Loading'));
-  assert.ok(!loading.includes('ob-tabs'));
-  const first=render({combined:null,loaded:true,section:'limits'});
-  assert.ok(first.includes('Waiting for the first collection'));
-  assert.ok(first.includes('choose Refresh'));
-  assert.ok(first.includes('Waiting for the first reading'));
-  assert.ok(!first.includes('Cost today'));
-  assert.ok(!first.includes('>Unknown<'));
-});
-
 test('the tokens page shows today by project, with sessions, subagent share and the sessions not listed',()=>{
   const model=tokens=>[{model:'claude-opus-5-5',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}];
   const session=(id,start,end,tokens,subagentTokens)=>({id,provider:'claude',start,end,totalTokens:tokens,subagentTokens,usd:1,models:model(tokens)});
@@ -153,20 +121,4 @@ test('the tokens page shows today by project, with sessions, subagent share and 
   for(const text of ['By project','demo-app','190M','$96','sample-site','Subagents 64%','Subagents Unknown','+1 more','>8M<'])assert.ok(html.includes(text),text);
   assert.ok(html.indexOf('demo-app')<html.indexOf('sample-site'),'largest project first');
   assert.ok(!html.includes('NaN') && !html.includes('undefined'));
-});
-
-test('with one computer, Sources leaves out the computer column and lists only that computer',()=>{
-  const one=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)}],{now});
-  const html=renderToStaticMarkup(createElement(SourcesView,{now,snapshot:one.view}));
-  assert.ok(html.includes('ob-sources-single'));
-  assert.ok(!html.includes('ob-source-device'));
-  const count=(html.match(/class="ob-source-row"/g) ?? []).length;
-  assert.match(html,new RegExp(`of ${count} sources read`));
-});
-
-test('with nothing connected, Sources says so instead of counting 0 of N',()=>{
-  const html=renderToStaticMarkup(createElement(SourcesView,{now,snapshot:{claudeLimits:{status:'not-connected'},quota:{status:'not-connected'}}}));
-  assert.ok(html.includes('No sources are connected'));
-  assert.ok(!html.includes('sources read'));
-  assert.ok(!html.includes('ob-card'));
 });

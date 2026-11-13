@@ -39,16 +39,12 @@ export function cleanSettings(raw, host) {
   return {host,status:'ok',profiles,tools,tokenProfiles};
 }
 export function category(app) {
-  if (/codex|chatgpt|antigravity/i.test(app)) return 'AI apps';
-  if (
-    /codex|chatgpt|code\.exe|visual studio|cursor|antigravity|idea|pycharm/i.test(
-      app,
-    )
-  )
-    return 'Editors';
-  if (/terminal|powershell|cmd\.exe|conhost|wezterm|ubuntu|iterm/i.test(app))
-    return 'Terminal';
-  if (/chrome|firefox|msedge|brave|safari/i.test(app)) return 'Browser';
+  if (/codex|chatgpt|antigravity|claude|grok|gemini|perplexity/i.test(app)) return 'AI apps';
+  if (/code\.exe|visual studio|cursor|\bidea(64)?\b|intellij|pycharm|xcode|\bzed\b|sublime|windsurf|android studio/i.test(app)) return 'Editors';
+  if (/terminal|powershell|cmd\.exe|conhost|wezterm|ubuntu|iterm|ghostty|\bwarp\b|alacritty|\bkitty\b|wt\.exe/i.test(app)) return 'Terminal';
+  if (/chrome|firefox|msedge|brave|safari|arc\b|opera|vivaldi/i.test(app)) return 'Browser';
+  if (/discord|slack|teams|zoom|messages|facetime|whatsapp|telegram|signal|\bmail\b|outlook/i.test(app)) return 'Communication';
+  if (/steam|battle\.net|overwatch|valorant|riot client|league of legends|epicgames|minecraft|-win64-shipping/i.test(app)) return 'Games';
   return 'Other';
 }
 export function cleanActivity(raw, host) {

@@ -5,10 +5,11 @@ import {execFileSync} from 'node:child_process';
 import {hostname,userInfo} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {summaryOf} from '../lib/summary.mjs';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const FICTIONAL_DEVICES=['Studio Mac','Desk PC'];
-const ALLOWED_FILE=/^(index\.html|local\/combined\.json|assets\/[\w-]+\.(js|css|ttf))$/;
+const ALLOWED_FILE=/^(index\.html|local\/(combined|summary)\.json|assets\/[\w-]+\.(js|css|svg))$/;
 
 function forbidden() {
   const words=[/\/Users\//,/\/home\//,/[A-Za-z]:\\\\/,/file:\/\//,/\blocalhost\b/,/127\.0\.0\.1/,/[\w.+-]+@[\w-]+\.[\w.]+/];
@@ -23,7 +24,6 @@ export async function checkDemo(dir,{patterns=forbidden()}={}) {
     .map(entry=>path.relative(dir,path.join(entry.parentPath,entry.name)).split(path.sep).join('/'));
   for (const file of files) {
     if (!ALLOWED_FILE.test(file)) {problems.push(`unexpected file ${file}`);continue;}
-    if (file.endsWith('.ttf')) continue;
     const text=await readFile(path.join(dir,file),'utf8');
     for (const pattern of patterns) if (pattern.test(text)) problems.push(`${file} matches ${pattern}`);
   }
@@ -47,7 +47,9 @@ if (process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta
   await mkdir(path.join(out,'local'));
   const file=path.join(out,'local','combined.json');
   execFileSync(process.execPath,[path.join(ROOT,'scripts','preview.mjs')],{env:{...process.env,PREVIEW_OUT:file},stdio:'ignore'});
-  await writeFile(file,JSON.stringify({demo:true,...JSON.parse(await readFile(file,'utf8'))}));
+  const demo={demo:true,...JSON.parse(await readFile(file,'utf8'))};
+  await writeFile(file,JSON.stringify(demo));
+  await writeFile(path.join(out,'local','summary.json'),JSON.stringify(summaryOf(demo)));
   const problems=await checkDemo(out);
   if (problems.length) {console.error(problems.join('\n'));process.exit(1);}
   console.log(`Demo built in ${path.relative(ROOT,out)} with fictional data only.`);

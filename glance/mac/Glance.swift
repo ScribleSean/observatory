@@ -21,23 +21,24 @@ struct LimitRow: Identifiable, Equatable {
   var absent: String? = nil
 }
 
-struct DeviceRow: Identifiable, Equatable {
+struct EngineRow: Identifiable, Equatable {
   let id: String
   let name: String
-  let fullName: String
-  let seconds: Double?
-  let tokens: Double?
-  let usd: Double?
-  let screenTimeOn: Bool
-  let lastSeen: Date?
-  let current: Bool
-  let problem: String?
+  let status: String
+  let remaining: Double?
+  let phrase: String
+  // "Off" or a request count, shown instead of a share left.
+  var figure: String? = nil
+  var detail: String? = nil
 }
 
 struct PanelState: Equatable {
   enum Notice: Equatable { case none, collecting, setupMissing, nodeMissing }
+  var sentence: String?
+  var menu: String?
+  var scarce: String?
+  var engines: [EngineRow] = []
   var limits: [LimitRow] = []
-  var devices: [DeviceRow] = []
   var updated: Date?
   var notice: Notice = .none
   var refreshing = false
@@ -74,6 +75,20 @@ struct PanelState: Equatable {
     var state = PanelState(now: now)
     state.updated = date(json["generatedAt"])
     guard let glance = json["glance"] as? [String: Any] else { state.notice = .collecting; return state }
+    // The forecast is worked out once by the collector, so the panel, the menu bar and the dashboard agree.
+    // An old forecast stays visible but dimmed, under the "Updated … ago" warning.
+    if let forecast = glance["forecast"] as? [String: Any] {
+      state.sentence = forecast["sentence"] as? String
+      state.menu = forecast["menu"] as? String
+      state.scarce = (forecast["scarce"] as? [String: Any])?["engine"] as? String
+      state.engines = (forecast["engines"] as? [[String: Any]] ?? []).map { row in
+        EngineRow(id: row["engine"] as? String ?? "", name: row["name"] as? String ?? "Unknown", status: row["status"] as? String ?? "unknown",
+                  remaining: (row["remaining"] as? Double).flatMap { $0.isFinite && $0 >= 0 && $0 <= 100 ? $0 : nil }, phrase: row["phrase"] as? String ?? "",
+                  figure: row["figure"] as? String, detail: row["detail"] as? String)
+      }
+      // The scarcer engine leads; the rest keep the collector's order.
+      state.engines = state.engines.filter { $0.id == state.scarce } + state.engines.filter { $0.id != state.scarce }
+    }
     let rows = glance["limits"] as? [[String: Any]] ?? []
     state.limits = rows.enumerated().map { index, row in
       LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["window"] as? String ?? "")-\(index)",
@@ -84,78 +99,18 @@ struct PanelState: Equatable {
                resetsAt: date(row["resetsAt"]),
                absent: row["absent"] as? String)
     }
-    var problems: [String: String] = [:]
-    if let hub = json["hub"] as? [String: Any], let spokes = hub["spokes"] as? [[String: Any]] {
-      for spoke in spokes {
-        guard let host = spoke["host"] as? String else { continue }
-        if let pull = spoke["pull"] as? String, pull != "ok" { problems[host] = "Could not read (\(pull))" }
-        else if let push = spoke["push"] as? String, push != "ok", push != "skipped" { problems[host] = "Could not write back (\(push))" }
-      }
-    }
-    let today = glance["today"] as? [[String: Any]] ?? []
-    state.devices = today.enumerated().map { index, row in
-      let host = row["host"] as? String ?? String(index)
-      let seen = date(row["collectedAt"])
-      let stale = (row["freshness"] as? [String: Any])?["stale"] as? Bool ?? true
-      let current = !stale && seen.map { now.timeIntervalSince($0) <= deviceFresh && Calendar.current.isDate($0, inSameDayAs: now) } == true
-      return DeviceRow(id: host, name: host == "Windows" ? "PC" : host == "Mac" ? "Mac" : row["name"] as? String ?? host,
-                       fullName: row["name"] as? String ?? host,
-                       seconds: number(row["seconds"]), tokens: number(row["tokens"]), usd: number(row["usd"]),
-                       screenTimeOn: row["screenTimeOn"] as? Bool ?? true, lastSeen: seen, current: current, problem: problems[host])
-    }
     return state
   }
 }
 
 
 enum Format {
-  static func duration(_ seconds: Double) -> String {
-    let minutes = Int((seconds / 60).rounded())
-    return minutes < 60 ? "\(minutes)m" : "\(minutes / 60)h \(minutes % 60)m"
-  }
-
-  static func compact(_ value: Double) -> String {
-    let units: [(Double, String)] = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"), (1, "")]
-    for (index, (divisor, suffix)) in units.enumerated() where value >= divisor || divisor == 1 {
-      // Same as compact() in lib/panel-data.mjs: under 10 of a unit one decimal (9.4M, 2M), from 10 whole (21M).
-      let scaled = value / divisor
-      var text = scaled >= 10 || divisor == 1 ? String(Int(scaled.rounded())) : String(format: "%.1f", scaled)
-      if text.hasSuffix(".0") { text.removeLast(2) }
-      // Rounding can reach the next unit (999,960 is 1000K), so step up instead.
-      if text == "1000", index > 0 { return "1" + units[index - 1].1 }
-      return text + suffix
-    }
-    return "0"
-  }
-
-  // Same as usd() in lib/panel-data.mjs: cents under $10, whole dollars with thousands separators from $10.
-  static func money(_ value: Double) -> String {
-    if value > 0 && value < 0.005 { return "Under $0.01" }
-    if value < 10 { return String(format: "$%.2f", value) }
-    let formatter = NumberFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.numberStyle = .decimal
-    formatter.groupingSeparator = ","
-    formatter.usesGroupingSeparator = true
-    formatter.maximumFractionDigits = 0
-    return "$" + (formatter.string(from: NSNumber(value: value.rounded())) ?? String(Int(value.rounded())))
-  }
-
   static func span(_ seconds: TimeInterval) -> String {
     let minutes = Int((max(0, seconds) / 60).rounded())
     if minutes < 60 { return "\(minutes)m" }
     let hours = minutes / 60
     if hours < 48 { return "\(hours)h \(minutes % 60)m" }
     return "\(hours / 24)d \(hours % 24)h"
-  }
-
-  static func clock(_ date: Date, now: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.locale = .current
-    let gap = abs(date.timeIntervalSince(now))
-    let template = Calendar.current.isDate(date, inSameDayAs: now) ? "jmm" : gap < 6 * 86400 ? "EEE jmm" : "MMMd jmm"
-    formatter.setLocalizedDateFormatFromTemplate(template)
-    return formatter.string(from: date)
   }
 
   static func age(_ seconds: TimeInterval) -> String {
@@ -215,7 +170,58 @@ struct PanelView: View {
   @ObservedObject var model: PanelModel
   @Environment(\.colorScheme) private var scheme
 
-  static let width: CGFloat = 340
+  static let width: CGFloat = 320
+  // Three tiles need more room than two.
+  static func width(_ engines: Int) -> CGFloat { engines > 2 ? 440 : width }
+
+  func tone(_ engine: EngineRow, _ palette: Palette, old: Bool) -> Color {
+    old || engine.status == "off" || (engine.remaining == nil && engine.figure == nil) ? palette.muted : engine.status == "out" ? palette.error : engine.status == "runs-out" ? palette.warning : palette.text
+  }
+
+  static func capital(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+
+  func number(_ engine: EngineRow) -> String { engine.figure ?? engine.remaining.map { "\(Int($0.rounded()))%" } ?? "Unknown" }
+
+  func phrase(_ engine: EngineRow) -> String {
+    let text = Self.capital(engine.phrase.replacingOccurrences(of: " at this pace", with: ""))
+    return engine.detail.map { text + " · " + $0 } ?? text
+  }
+
+  func bar(_ engine: EngineRow, _ palette: Palette) -> some View {
+    GeometryReader { geometry in
+      ZStack(alignment: .leading) {
+        Capsule().fill(palette.track)
+        if let remaining = engine.remaining {
+          Capsule().fill(palette.provider(engine.id)).frame(width: max(2, geometry.size.width * CGFloat(remaining / 100)))
+        }
+      }
+    }
+    .frame(height: 5)
+  }
+
+  // One tile per engine with a large number and its part of the sentence. The scarcer engine leads.
+  func tiles(_ state: PanelState, _ palette: Palette) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      ForEach(state.engines) { engine in
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(spacing: 6) {
+            Circle().fill(palette.provider(engine.id)).frame(width: 7, height: 7)
+            Text(engine.name).fontWeight(.medium)
+          }
+          Text(number(engine)).font(.system(size: 30, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+            .foregroundStyle(tone(engine, palette, old: state.old))
+          bar(engine, palette).opacity(state.old ? 0.45 : 1)
+          Text(phrase(engine)).font(.system(size: 12))
+            .foregroundStyle(engine.id == state.scarce && !state.old ? palette.text : palette.muted).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.surface))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(engine.id == state.scarce ? palette.muted.opacity(0.5) : palette.hairline))
+        .accessibilityElement(children: .combine)
+      }
+    }
+  }
 
   var body: some View {
     let palette = Palette.of(scheme)
@@ -227,13 +233,16 @@ struct PanelView: View {
       case .nodeMissing: message("Node was not found. Run npm run setup again.", palette)
       case .collecting: message("Collecting the first reading…", palette)
       case .none:
-        if !state.limits.isEmpty { card(palette) { limits(state, palette) } }
-        if !state.devices.isEmpty { card(palette) { devices(state, palette) } }
+        if state.engines.isEmpty {
+          message("Collecting the first reading…", palette)
+        } else {
+          tiles(state, palette)
+        }
       }
       footer(state, palette)
     }
     .padding(14)
-    .frame(width: Self.width, alignment: .leading)
+    .frame(width: Self.width(state.engines.count), alignment: .leading)
     .background(palette.background)
     .foregroundStyle(palette.text)
     .font(.system(size: 13))
@@ -262,79 +271,6 @@ struct PanelView: View {
       .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(palette.hairline))
   }
 
-  @ViewBuilder func limits(_ state: PanelState, _ palette: Palette) -> some View {
-    ForEach(state.limits) { row in
-      let tint = row.remaining.map { $0 <= 0.5 ? palette.error : $0 <= PanelState.low ? palette.warning : nil } ?? nil
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-          Circle().fill(palette.provider(row.provider)).frame(width: 7, height: 7).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-          Text(row.name).fontWeight(.medium)
-          Text(row.window).foregroundStyle(palette.muted)
-          Spacer(minLength: 6)
-          if let remaining = row.remaining {
-            let percent = Text("\(Int(remaining.rounded()))%").font(.system(size: 13, weight: .semibold)).monospacedDigit()
-              .foregroundStyle(tint ?? palette.text)
-            Text("\(percent) \(Text("left").foregroundStyle(palette.muted))")
-          } else {
-            Text(row.absent ?? "Unknown").foregroundStyle(palette.muted)
-          }
-        }
-        GeometryReader { geometry in
-          ZStack(alignment: .leading) {
-            Capsule().fill(palette.track)
-            if let remaining = row.remaining {
-              Capsule().fill(palette.provider(row.provider))
-                .frame(width: geometry.size.width * CGFloat(remaining / 100))
-            }
-          }
-        }
-        .frame(height: 5)
-        if let remaining = row.remaining, remaining <= PanelState.low, let reset = row.resetsAt {
-          Text("Resets in \(Format.span(reset.timeIntervalSince(state.now)))").font(.system(size: 12)).foregroundStyle(tint ?? palette.muted)
-        }
-      }
-      .accessibilityElement(children: .combine)
-    }
-  }
-
-  static let timeColumn: CGFloat = 72, tokenColumn: CGFloat = 60, costColumn: CGFloat = 92
-
-  @ViewBuilder func devices(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack(alignment: .bottom, spacing: 6) {
-      Text("Today")
-      Spacer(minLength: 0)
-      Text("Screen time").frame(width: Self.timeColumn, alignment: .trailing)
-      Text("Tokens").frame(width: Self.tokenColumn, alignment: .trailing)
-      Text("API-equivalent (estimate)").multilineTextAlignment(.trailing).fixedSize(horizontal: false, vertical: true)
-        .frame(width: Self.costColumn, alignment: .trailing)
-    }
-    .font(.system(size: 11.5)).foregroundStyle(palette.muted)
-    ForEach(state.devices) { device in
-      HStack(alignment: .firstTextBaseline, spacing: 6) {
-        Text(device.name).fontWeight(.medium).lineLimit(1).fixedSize()
-        if let problem = device.problem, device.current {
-          Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(palette.warning)
-            .accessibilityLabel(problem)
-        }
-        Spacer(minLength: 2)
-        if device.current {
-          Group {
-            Text(!device.screenTimeOn ? "Off" : device.seconds.map(Format.duration) ?? "Unknown")
-              .frame(width: Self.timeColumn, alignment: .trailing)
-            Text(device.tokens.map(Format.compact) ?? "Unknown").frame(width: Self.tokenColumn, alignment: .trailing)
-            Text(device.usd.map(Format.money) ?? "Unknown").frame(width: Self.costColumn, alignment: .trailing)
-          }
-          .monospacedDigit().lineLimit(1)
-        } else {
-          Circle().strokeBorder(palette.muted, lineWidth: 1.2).frame(width: 7, height: 7)
-          Text(device.lastSeen.map { "Last seen \(Format.clock($0, now: state.now))" } ?? "Unknown")
-            .foregroundStyle(palette.muted).lineLimit(1)
-        }
-      }
-      .help([device.fullName, device.problem].compactMap { $0 }.joined(separator: "\n"))
-    }
-  }
-
   func message(_ text: String, _ palette: Palette) -> some View {
     card(palette) { Text(text).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true) }
   }
@@ -342,7 +278,7 @@ struct PanelView: View {
   func footer(_ state: PanelState, _ palette: Palette) -> some View {
     HStack(spacing: 8) {
       Button(action: model.openDashboard) {
-        Text("Open dashboard").fontWeight(.medium).frame(maxWidth: .infinity)
+        Text("Open dashboard").frame(maxWidth: .infinity)
       }
       .buttonStyle(Pill(palette: palette, prominent: true)).keyboardShortcut("d")
       Button(action: model.refresh) { Image(systemName: "arrow.clockwise") }
@@ -364,7 +300,7 @@ struct Pill: ButtonStyle {
     configuration.label
       .font(.system(size: 13))
       .padding(.horizontal, 12)
-      .frame(minWidth: 34, minHeight: 30)
+      .frame(minWidth: 30, minHeight: 26)
       .fixedSize(horizontal: !prominent, vertical: false)
       .background(Capsule().fill(palette.surface))
       .overlay(Capsule().strokeBorder(palette.hairline))
@@ -407,7 +343,7 @@ final class FloatingPanel: NSPanel {
 
 
 final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
-  let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+  let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
   let model = PanelModel()
   var settings: Settings?
   var tick: Process?
@@ -512,9 +448,13 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if nodeMissing { state.notice = .nodeMissing }
     state.refreshing = tick?.isRunning == true
     model.state = state
-    let current = state.notice == .none && !state.old && state.limits.contains { $0.remaining != nil }
+    // Off and a request count are definite readings too, not only a share left.
+    let current = state.notice == .none && !state.old && (state.limits.contains { $0.remaining != nil } || state.engines.contains { $0.status != "unknown" })
     item.button?.appearsDisabled = !current
-    item.button?.toolTip = current ? "Observatory" : "Observatory: not updated recently"
+    // The menu bar shows the engine closest to running out.
+    item.button?.title = current ? (state.menu.map { " " + $0 } ?? "") : ""
+    item.button?.imagePosition = .imageLeading
+    item.button?.toolTip = current ? state.sentence ?? "Observatory" : "Observatory: not updated recently"
     fitPanel()
   }
 

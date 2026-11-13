@@ -1,12 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { STRINGS } from '../../../lib/strings.generated';
 import { format, deviceLabel } from '../../../lib/panel-data.mjs';
-import { windowColumns, dailyColumns, paceGuide } from '../../../lib/view-limit-history.mjs';
 
 type Point = { host: string; t: number; r: number; x: number; source: string };
 type Series = { host: string; name: string; points: Point[]; segments: Point[][] };
 export type HistoryData = { provider: string; window: string; range: string; from: number; to: number; series: Series[]; resets: number[]; firstAt: number | null; startsHere: boolean; empty: boolean };
-type Column = { start: number; end: number; low: number; readings: number; lastAt: number };
 type Item = { t: number; rows: { host: string; label: string; value: number }[]; start?: number; end?: number };
 
 const PAD = { left: 36, right: 12, top: 22, bottom: 22 };
@@ -62,11 +60,10 @@ function calendarTicks(from: number, to: number, range: string, plotWidth: numbe
   return ticks;
 }
 
-export function LimitHistoryChart({ data, color, title, window }: { data: HistoryData; color: 'claude' | 'codex'; title: string; window: '5h' | 'week' }) {
+export function LimitHistoryChart({ data, color, title }: { data: HistoryData; color: 'claude' | 'codex'; title: string; window: '5h' | 'week' | 'month' }) {
   const { ref, width } = useWidth();
   const id = useId();
   const [active, setActive] = useState<number | null>(null);
-  const columns = window === '5h' && data.range !== 'today';
   const height = width < 480 ? 140 : 164;
   const plotWidth = width - PAD.left - PAD.right, plotHeight = height - PAD.top - PAD.bottom;
   const span = Math.max(1, data.to - data.from);
@@ -76,36 +73,15 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
   const series = [...data.series].sort((a, b) => hostOrder(a.host) - hostOrder(b.host));
   const many = series.length > 1;
   const tone = (index: number) => index === 0 ? 'primary' : 'secondary';
-
-  const daily = columns && 5 * HOUR / span * plotWidth < 4;
-  const columnSets = series.map(item => {
-    const windows = windowColumns(item.points, window) as Column[];
-    const shown = daily ? dailyColumns(windows) as Column[] : windows;
-    return shown.filter(column => { const middle = (column.start + column.end) / 2; return middle >= data.from && middle <= data.to; });
-  });
-  const guide = window === 'week' ? series.flatMap(item => paceGuide(item.points, 'week', data.from, data.to).slice(-1).filter(segment => segment.used))
-    .filter((segment, index, list) => list.findIndex(other => Math.abs(other.end - segment.end) <= 5 * 60000) === index) : [];
-
-  const items: Item[] = columns
-    ? columnSets.flatMap((set, index) => set.map(column => ({ column, index })))
-      .sort((a, b) => (a.column.start + a.column.end) - (b.column.start + b.column.end))
-      .reduce<{ start: number; end: number; parts: { column: Column; index: number }[] }[]>((groups, part) => {
-        const last = groups.at(-1);
-        const middle = (part.column.start + part.column.end) / 2;
-        if (last && middle < last.end && !last.parts.some(other => other.index === part.index)) { last.parts.push(part); last.end = Math.max(last.end, part.column.end); }
-        else groups.push({ start: part.column.start, end: part.column.end, parts: [part] });
-        return groups;
-      }, [])
-      .map(group => ({ t: (group.start + group.end) / 2, start: group.start, end: group.end,
-        rows: group.parts.sort((a, b) => a.index - b.index).map(({ column, index }) => ({ host: series[index].host, label: shortName(series[index]), value: column.low })) }))
-    : series.flatMap(item => item.points.map(point => ({ t: point.t, rows: [{ host: item.host, label: shortName(item), value: point.r }] })))
-      .sort((a, b) => a.t - b.t);
+  // Lines only. One column per 5-hour window read as a barcode at week and month scale.
+  const items: Item[] = series.flatMap(item => item.points.map(point => ({ t: point.t, rows: [{ host: item.host, label: shortName(item), value: point.r }] })))
+    .sort((a, b) => a.t - b.t);
   const shown = active !== null ? items[active] ?? null : null;
   const ticks = calendarTicks(data.from, data.to, data.range, plotWidth).filter(tick => sx(tick.t) - PAD.left > 16 && PAD.left + plotWidth - sx(tick.t) > 16);
 
   const describe = (item: Item | null | undefined) => !item ? STRINGS.limitHistory.noReadings
     : `${item.start !== undefined ? format(STRINGS.limitHistory.windowSpan, { start: stamp(item.start), end: hour(item.end!) }) : stamp(item.t)}: ${
-      item.rows.map(row => `${row.label} ${format(columns ? STRINGS.limitHistory.lowest : STRINGS.limitHistory.left, { value: Math.round(row.value) })}`).join(', ')}`;
+      item.rows.map(row => `${row.label} ${format(STRINGS.limitHistory.left, { value: Math.round(row.value) })}`).join(', ')}`;
   const nearest = (event: PointerEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
     const t = data.from + (event.clientX - box.left - PAD.left) / plotWidth * span;
@@ -140,18 +116,13 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
             <text x={PAD.left - 6} y={sy(value) + 3.5} textAnchor="end">{value}%</text>
           </g>)}
           {ticks.map(tick => <text key={tick.t} className="ob-history-tick" x={sx(tick.t)} y={height - 5} textAnchor="middle">{tick.label}</text>)}
-          {!columns && data.resets.map(t => <line key={t} className="ob-history-reset" x1={sx(t)} x2={sx(t)} y1={PAD.top} y2={base} />)}
-          {guide.map(segment => <line key={segment.end} className="ob-history-guide" x1={sx(segment.t1)} y1={sy(segment.r1)} x2={sx(segment.t2)} y2={sy(segment.r2)}><title>{STRINGS.limitHistory.paceGuide}</title></line>)}
-          {columns && columnSets.map((set, index) => set.map(column => {
-            const room = Math.max(1.5, (column.end - column.start) / span * plotWidth - 1);
-            const w = Math.max(1.5, Math.min(5, room / series.length - 1));
-            const x = sx((column.start + column.end) / 2) - (series.length * (w + 1)) / 2 + index * (w + 1);
-            const state = column.low <= 0.5 ? 'empty' : '';
-            const top = state ? base - 3 : sy(column.low);
-            return <rect key={`${index}-${column.end}`} className={`ob-history-column ${color} ${tone(index)} ${state}`}
-              x={x} y={top} width={w} height={Math.max(1, base - top)} rx={Math.min(1.5, w / 2)} />;
+          {series.map(item => item.segments.slice(1).map((segment, part) => {
+            // A gap in readings inside one window is drawn faint, so the line reads as one window, not fragments.
+            const before = item.segments[part].at(-1)!, after = segment[0];
+            if (Math.abs(before.x - after.x) > 5 * 60000) return null;
+            return <line key={`${item.host}gap${part}`} className={`ob-history-gap ${color}`} x1={sx(before.t)} y1={sy(before.r)} x2={sx(after.t)} y2={sy(after.r)} />;
           }))}
-          {!columns && series.map((item, index) => item.segments.map((segment, part) => segment.length === 1
+          {series.map((item, index) => item.segments.map((segment, part) => segment.length === 1
             ? <circle key={`${item.host}${part}`} cx={sx(segment[0].t)} cy={sy(segment[0].r)} r={2.25} className={`ob-history-dot ${color} ${tone(index)}`} />
             : <polyline key={`${item.host}${part}`} className={`ob-history-line ${color} ${tone(index)}`}
               points={segment.map(point => `${sx(point.t).toFixed(1)},${sy(point.r).toFixed(1)}`).join(' ')} />))}
@@ -164,7 +135,7 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
         {shown && <div className="ob-history-tip" style={{ left: Math.min(Math.max(sx(shown.t) - 80, 0), width - 160) }} aria-live="polite">
           <span>{shown.start !== undefined ? format(STRINGS.limitHistory.windowSpan, { start: stamp(shown.start), end: hour(shown.end!) }) : stamp(shown.t)}</span>
           {shown.rows.map(row => <div key={row.host} className="ob-history-tip-row">
-            <span>{row.label}</span><strong>{format(columns ? STRINGS.limitHistory.lowest : STRINGS.limitHistory.left, { value: Math.round(row.value) })}</strong>
+            <span>{row.label}</span><strong>{format(STRINGS.limitHistory.left, { value: Math.round(row.value) })}</strong>
           </div>)}
         </div>}
       </div>
@@ -173,7 +144,7 @@ export function LimitHistoryChart({ data, color, title, window }: { data: Histor
         <thead><tr><th scope="col">{STRINGS.limitHistory.time}</th>{series.map(item => <th key={item.host} scope="col">{shortName(item)}</th>)}</tr></thead>
         <tbody>{items.slice(-200).reverse().map((item, index) => <tr key={index}>
           <th scope="row">{item.start !== undefined ? format(STRINGS.limitHistory.windowSpan, { start: stamp(item.start), end: hour(item.end!) }) : stamp(item.t)}</th>
-          {series.map(entry => { const row = item.rows.find(part => part.host === entry.host); return <td key={entry.host}>{row ? format(columns ? STRINGS.limitHistory.lowest : STRINGS.limitHistory.left, { value: Math.round(row.value) }) : STRINGS.status.unknown}</td>; })}
+          {series.map(entry => { const row = item.rows.find(part => part.host === entry.host); return <td key={entry.host}>{row ? format(STRINGS.limitHistory.left, { value: Math.round(row.value) }) : STRINGS.status.unknown}</td>; })}
         </tr>)}</tbody>
       </table></div>
     </figure>

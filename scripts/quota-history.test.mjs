@@ -55,3 +55,15 @@ test('dense multi-bucket history remains below its byte budget',()=>{
   assert.ok(history.samples.length<samples.length);assert.ok(history.samples.length>0);
   assert.ok(Buffer.byteLength(JSON.stringify(history.samples))<=quotaRetention.maxSampleBytes);
 });
+test('the reported plan is kept across failed reads and forgotten on sign-out',()=>{
+  let history=retainQuotaHistory(null,{...reading(),plan:'free'},options);
+  assert.equal(history.plan,'free');
+  history=retainQuotaHistory(history,{status:'unavailable'},{...options,now:now+60000});
+  assert.equal(history.plan,'free');
+  history=retainQuotaHistory(history,{...reading(120000),plan:'plus'},{...options,now:now+120000});
+  assert.equal(history.plan,'plus');
+  assert.equal(retainQuotaHistory(history,{status:'ok'},{...options,now:now+150000}).plan,'plus','a reload keeps the plan');
+  assert.equal(retainQuotaHistory(history,{...reading(150000),plan:null},{...options,now:now+150000}).plan,null,'a read that reports no plan clears it');
+  assert.equal(retainQuotaHistory(history,{status:'needs-auth'},{...options,now:now+180000}).plan,null);
+  assert.equal(retainQuotaHistory(null,{...reading(),plan:'Not A Plan!'},options).plan,null);
+});

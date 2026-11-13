@@ -74,7 +74,9 @@ test('Both adds the computers day by day and its total matches the rows under it
   assert.deepEqual(all.series.slice(-2).map(row => row.value), [3600, 7200]);
   const day13 = view(data, { host: 'All', date: '2026-10-13' });
   assert.equal(day13.total, 3600);
-  assert.deepEqual(day13.hourly.slice(0, 2).map(row => row.value), [150, 150]);
+  assert.equal(day13.hourly, null, 'two computers\' hours are never added into one bar');
+  assert.deepEqual(view(data, { host: 'Mac', date: '2026-10-13' }).hourly.slice(0, 2).map(row => row.value), [50, 50]);
+  assert.deepEqual(view(data, { host: 'Windows', date: '2026-10-13' }).hourly.slice(0, 2).map(row => row.value), [100, 100]);
   assert.equal(view(data, { host: 'All', period: 'day', date: '2026-09-01' }).total, 600);
   assert.equal(view(data, { host: 'Mac', period: 'all' }).since, '2026-09-01');
   assert.equal(view(data, { host: 'Mac', period: 'week' }).since, null);
@@ -130,12 +132,16 @@ test('missing hours and dates after the reading are Unknown', () => {
   data.activity[0].days.push(day('2026-10-15'));
   assert.ok(view(data, { date: '2026-10-15' }).hourly.every(point => point.value === null));
 });
-test('Both masks every hour when a computer has no reading time', () => {
+test('a computer with no reading time has every hour masked, and Both has no hourly chart at all', () => {
   const data = snapshot(); delete data.collectedAt; delete data.activity[1].checkedAt;
-  data.activity[0].days.push(day('2026-10-13'), day('2026-10-15'));
-  for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) assert.ok(view(data, { host: 'All', date }).hourly.every(point => point.value == null));
+  data.activity[0].days.push(day('2026-10-13'), day('2026-10-15'), day('2026-10-14'));
+  data.activity[1].days.push(day('2026-10-13'), day('2026-10-15'));
+  for (const date of ['2026-10-13', '2026-10-14', '2026-10-15']) {
+    assert.ok(view(data, { host: 'Windows', date }).hourly.every(point => point.value == null), date);
+    assert.equal(view(data, { host: 'All', date }).hourly, null, date);
+  }
 });
-test('Both hourly chart falls back to archive times while Now stays Unknown', () => {
+test('each computer\'s hourly chart falls back to archive times while Both Now stays Unknown', () => {
   const data = {
     timezone: 'UTC', collectedAt: readingAt,
     activity: [{ host: 'Mac', status: 'unavailable' }, { host: 'Windows', status: 'unavailable' }],
@@ -144,8 +150,10 @@ test('Both hourly chart falls back to archive times while Now stays Unknown', ()
       { host: 'Windows', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-14T10:20:00Z', days: [day()] },
     ],
   };
-  const options = { host: 'All', period: 'day', date: '2026-10-14' };
-  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(200), null, null, ...Array(11).fill(undefined)]);
+  const options = { host: 'Windows', period: 'day', date: '2026-10-14' };
+  assert.deepEqual(view(data, options).hourly.map(point => point.value), [...Array(11).fill(100), null, null, ...Array(11).fill(undefined)]);
+  assert.deepEqual(view(data, { ...options, host: 'Mac' }).hourly.map(point => point.value), [...Array(12).fill(100), null, ...Array(11).fill(undefined)]);
+  assert.equal(view(data, { ...options, host: 'All' }).hourly, null);
   assert.equal(activityNow(data, 'All', now).reason, 'noSource');
   assert.equal(activityNow(data, 'All', now).value, null);
   for (const asOf of [undefined, null, '', 'invalid']) {
@@ -233,7 +241,7 @@ test('a reading ahead of the clock has its own Now reason and note', () => {
   assert.equal(result.note, "The last reading is ahead of this device's clock");
   assert.equal(run({ readingAt: undefined }).reason, 'noReading');
 });
-test('Both masks hours after the earlier computer\'s reading despite a later collection', () => {
+test('a computer\'s hours stop at its own archive reading despite a later collection', () => {
   const data = snapshot();
   data.activity[0].days.push(day('2026-10-13'));
   data.activity[1] = { host: 'Windows', status: 'unavailable' };
@@ -241,12 +249,14 @@ test('Both masks hours after the earlier computer\'s reading despite a later col
     host: 'Windows', status: 'ok', latestReadStatus: 'unavailable', asOf: '2026-10-13T14:10:00Z',
     days: [{ date: '2026-10-13', seconds: 1500, hours: hours(100).map((value, hour) => hour <= 14 ? value : 0) }],
   }];
-  const result = view(data, { host: 'All', date: '2026-10-13' });
-  assert.deepEqual(result.hourly.map(point => point.value), [...Array(15).fill(200), ...Array(9).fill(null)]);
+  const result = view(data, { host: 'Windows', date: '2026-10-13' });
+  assert.deepEqual(result.hourly.map(point => point.value), [...Array(15).fill(100), ...Array(9).fill(null)]);
+  assert.equal(view(data, { host: 'Mac', date: '2026-10-13' }).hourly.every(point => point.value === 100), true);
+  assert.equal(view(data, { host: 'All', date: '2026-10-13' }).hourly, null);
   assert.equal(view(data, { host: 'All', period: 'now' }).total, null);
   for (const asOf of [undefined, null, '', 'invalid']) {
     data.activityHistory[0].asOf = asOf;
-    assert.ok(view(data, { host: 'All', date: '2026-10-13' }).hourly.every(point => point.value === null));
+    assert.ok(view(data, { host: 'Windows', date: '2026-10-13' }).hourly.every(point => point.value === null));
   }
 });
 test('unavailable device displays archived hours only through the archive reading', () => {

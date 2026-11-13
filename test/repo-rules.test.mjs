@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {READING_FRESH_MS,DEVICE_FRESH_MS} from '../lib/freshness.mjs';
 import strings from '../lib/strings.json' with {type:'json'};
-import {LIMIT_LOW_PERCENT,LIMIT_SPENT_PERCENT} from '../lib/glance-limits.mjs';
+import {LIMIT_LOW_PERCENT} from '../lib/glance-limits.mjs';
 import {compact} from '../lib/panel-data.mjs';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -173,19 +173,28 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   const swift=read('glance/mac/Glance.swift'),cs=read('glance/windows/Glance.cs');
   assert.equal(Number(swift.match(/static let low = ([\d.]+)/)?.[1]),LIMIT_LOW_PERCENT,'Glance.swift PanelState.low differs from LIMIT_LOW_PERCENT in lib/glance-limits.mjs.');
   assert.equal(Number(cs.match(/public const double Low = ([\d.]+);/)?.[1]),LIMIT_LOW_PERCENT,'Glance.cs PanelState.Low differs from LIMIT_LOW_PERCENT in lib/glance-limits.mjs.');
-  assert.ok(swift.includes(`$0 <= ${LIMIT_SPENT_PERCENT} ? palette.error`),'Glance.swift spent tint differs from LIMIT_SPENT_PERCENT.');
-  assert.ok(cs.includes(`value <= ${LIMIT_SPENT_PERCENT} ? p.Error`),'Glance.cs spent tint differs from LIMIT_SPENT_PERCENT.');
   // Each shared phrase, split at its placeholders, must appear in both panels.
-  const phrases=[strings.overview.today,strings.today.screenTimeOff,strings.labels.screenTime,strings.sections.tokens,strings.tokens.apiEstimate,strings.overview.lastSeen,strings.formats.resetsIn,
-    strings.status.updatedAgo,strings.actions.openDashboard,strings.actions.refresh,strings.tokens.underCent,strings.status.unknown];
+  const phrases=[strings.status.updatedAgo,strings.actions.openDashboard,strings.actions.refresh,strings.status.unknown];
   for (const phrase of phrases) for (const part of phrase.split(/\{[A-Za-z]+\}/).map(text=>text.trim()).filter(Boolean)) {
     assert.ok(swift.includes(part),`glance/mac/Glance.swift does not say "${part}" like lib/strings.json.`);
     assert.ok(cs.includes(part),`glance/windows/Glance.cs does not say "${part}" like lib/strings.json.`);
   }
-  // The panels draw "{value}% left" as the percent followed by the word in the dim label color.
-  const leftWord=strings.limitHistory.left.split('% ')[1];
-  assert.ok(swift.includes(`Text("${leftWord}")`),`glance/mac/Glance.swift does not end a limit value with "${leftWord}" like lib/strings.json.`);
-  assert.ok(cs.includes(`" ${leftWord}"`),`glance/windows/Glance.cs does not end a limit value with "${leftWord}" like lib/strings.json.`);
+  // Both panels draw glance.forecast from lib/forecast.mjs: one tile per engine, and the menu title or tray tip.
+  for (const key of ['sentence','menu','engines','phrase']) {
+    assert.ok(swift.includes(`["${key}"]`),`glance/mac/Glance.swift does not read forecast "${key}".`);
+    assert.ok(cs.includes(`Get(`) && cs.includes(`"${key}"`),`glance/windows/Glance.cs does not read forecast "${key}".`);
+  }
+  assert.ok(swift.includes('glance["forecast"]'),'Glance.swift does not read glance.forecast.');
+  assert.ok(cs.includes('Get(glance, "forecast")'),'Glance.cs does not read glance.forecast.');
+  assert.ok(swift.includes('replacingOccurrences(of: " at this pace", with: "")'),'Glance.swift does not strip " at this pace".');
+  assert.ok(cs.includes('Replace(" at this pace", "")'),'Glance.cs does not strip " at this pace".');
+  assert.match(swift,/engine\.status == "out" \? palette\.error : engine\.status == "runs-out" \? palette\.warning/,'Glance.swift does not map out to error and runs-out to warning.');
+  assert.match(cs,/engine\.Status == "out" \? p\.Error : engine\.Status == "runs-out" \? p\.Warning/,'Glance.cs does not map out to error and runs-out to warning.');
+  assert.ok(swift.includes('state.menu'),'Glance.swift menu bar does not show forecast.menu.');
+  assert.ok(cs.includes('state.Menu'),'Glance.cs tray tip does not show forecast.menu.');
+  // The removed device table and per-limit rows stay removed.
+  for (const gone of [strings.formats.resetsIn.split(/\{[A-Za-z]+\}/)[0].trim(),strings.overview.lastSeen,strings.tokens.apiEstimate])
+    for (const text of [swift,cs]) assert.ok(!text.includes(gone),`A panel still says "${gone}", which the forecast tiles replaced.`);
   // The Mac app keeps a copy of the telescope for runs outside its bundle. It must be the same drawing.
   for (const d of [...read('public/brand/telescope.svg').matchAll(/ d="([^"]+)"/g)].map(match=>match[1]))
     assert.ok(swift.includes(` d="${d}"`),'Glance.swift Brand.svg differs from public/brand/telescope.svg.');
@@ -195,14 +204,8 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   for (const text of [swift,cs]) assert.ok(!text.includes('No current reading'),'Panels show each window as a row, not a missing-readings line.');
 });
 
-test('one token format: under 10 of a unit one decimal, from 10 whole, on the dashboard and both panels', () => {
+test('one token format: under 10 of a unit one decimal, from 10 whole', () => {
   const table=[[0,'0'],[999,'999'],[999.6,'1K'],[1000,'1K'],[1500,'1.5K'],[9400,'9.4K'],[9960,'10K'],[12345,'12K'],
     [671400,'671K'],[999600,'1M'],[2e6,'2M'],[9.4e6,'9.4M'],[21e6,'21M'],[43.5e6,'44M'],[14.3e6,'14M'],[1.7e6,'1.7M'],[3.21e9,'3.2B']];
   assert.deepEqual(table.map(([value])=>compact(value)),table.map(([,text])=>text));
-  // The panels cannot be run here, so their copies must carry the same rule: whole from 10, one decimal below with ".0" dropped.
-  const swift=read('glance/mac/Glance.swift'),cs=read('glance/windows/Glance.cs');
-  assert.match(swift,/scaled >= 10 \|\| divisor == 1 \? String\(Int\(scaled\.rounded\(\)\)\) : String\(format: "%\.1f", scaled\)/);
-  assert.match(swift,/if text\.hasSuffix\("\.0"\) \{ text\.removeLast\(2\) \}/);
-  assert.match(cs,/scaled >= 10 \|\| units\[index\]\.Item2 == "" \? Math\.Round\(scaled, MidpointRounding\.AwayFromZero\)[^:]*: scaled\.ToString\("0\.#"/);
-  for (const text of [swift,cs]) assert.match(text,/"1000"/,'both panels step 1000K up to 1M');
 });

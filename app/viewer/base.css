@@ -1,12 +1,5 @@
 @import '../design-tokens.css';
 
-@font-face {
-  font-family: 'Inter Tight';
-  src: url('../../public/fonts/InterTight.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 100 900;
-}
-
 html, body { margin: 0; background: var(--ob-background); color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -23,6 +16,7 @@ html, body { margin: 0; background: var(--ob-background); color-scheme: light da
 .ob-dot { flex: none; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 .ob-dot.claude, .ob-bar i.claude { background: var(--ob-claude); }
 .ob-dot.codex, .ob-bar i.codex { background: var(--ob-codex); }
+.ob-dot.grok, .ob-bar i.grok { background: var(--ob-muted); }
 .ob-bar { display: block; height: 5px; border-radius: 3px; background: var(--ob-track); margin-top: 6px; overflow: hidden; }
 .ob-bar i { display: block; height: 100%; border-radius: 3px; }
 .ob-bar i.accent { background: var(--ob-accent); }

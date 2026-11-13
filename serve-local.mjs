@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {allowedLocalRequest} from './scripts/request-policy.mjs';
 import {loadConfig,localFolder} from './lib/config.mjs';
+import {summaryOf} from './lib/summary.mjs';
 
 const types={
   '.html':'text/html; charset=utf-8',
@@ -29,6 +30,17 @@ export function createLocalServer({assets=path.join(here,'dist/dashboard'),dataF
     try {
       const url=new URL(req.url,`http://127.0.0.1:${port}`);
       let file;
+      if(url.pathname==='/local/summary.json') {
+        file=path.join(await realpath(localFolder({dataFolder})),'combined.json');
+        if(await realpath(file)!==file)throw Error('Linked data path');
+        const info=await lstat(file);
+        if(!info.isFile() || info.size>16_000_000)throw Error('Not a file');
+        const summary=summaryOf(JSON.parse(await readFile(file,'utf8')));
+        if(!summary)throw Error('No summary');
+        res.setHeader('Content-Type','application/json');
+        res.writeHead(200);
+        return res.end(req.method==='HEAD'?undefined:JSON.stringify(summary));
+      }
       if(url.pathname==='/local/combined.json') {
         file=path.join(await realpath(localFolder({dataFolder})),'combined.json');
         if(await realpath(file)!==file)throw Error('Linked data path');

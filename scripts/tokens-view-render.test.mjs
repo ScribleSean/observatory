@@ -4,11 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { combine } from '../lib/combine.mjs';
+import { summaryOf } from '../lib/summary.mjs';
 import { ownSnapshot } from '../test/helpers.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
 import { tokensView } from '../lib/view-tokens.mjs';
 import { compact } from '../lib/panel-data.mjs';
-import { validateSkin } from '../lib/skins.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const load = specifier => import(specifier);
@@ -18,7 +18,6 @@ const server = await createServer({ configFile: false, root, server: { middlewar
 after(() => server.close());
 const { TokensView, TokensSection } = await server.ssrLoadModule('/app/viewer/tokens/tokens.tsx');
 const { DashboardView } = await server.ssrLoadModule('/app/viewer/dashboard.tsx');
-const { SKINS } = await server.ssrLoadModule('/app/viewer/skin.ts');
 const now = Date.parse('2026-10-14T12:00:00Z');
 const noop = () => {};
 const render = (snapshot, host = 'All', period = 'week') => renderToStaticMarkup(createElement(TokensSection, {
@@ -41,12 +40,14 @@ function synthetic(apiEstimate = estimate) {
 void test('sample Both shows one combined total over each computer, and settings per device', () => {
   const source = sampleSnapshot(now);
   const html = renderToStaticMarkup(createElement(TokensView, { snapshot: source, now }));
-  const claude = card(html, 'Claude Code');
+  const claude = card(html, 'Claude');
   const codex = card(html, 'Codex');
   for (const provider of [claude, codex])
     for (const text of ['Both computers, not deduplicated', '>Mac<', '>PC<']) assert.ok(provider.includes(text), text);
   const own = host => tokensView(source, { host, period: 'day', now }).codex.totals.total;
-  assert.ok(codex.includes('<div class="ob-hero">' + compact(own('Mac') + own('Windows')) + '</div>'));
+  const fresh = ({ total, cached }) => total - cached;
+  // The headline leaves cache reads out.
+  assert.ok(codex.includes('<div class="ob-hero">' + compact(fresh(tokensView(source, { host: 'All', period: 'day', now }).codex.totals)) + '</div>'));
   for (const host of ['Mac', 'Windows']) assert.ok(codex.includes('>' + compact(own(host)) + ' · $'), host);
   assert.ok(!claude.includes('Session cost'));
   for (const provider of [claude, codex]) {
@@ -69,7 +70,7 @@ void test('in Both, an unread computer says why for Codex as it does for Claude 
   const source = sampleSnapshot(now);
   source.tokens[1].status = 'unavailable';
   source.providerTokenSources[1].status = 'unavailable';
-  for (const provider of ['Codex', 'Claude Code']) assert.equal(bothRow(source, provider, 'PC'), 'Unavailable', provider);
+  for (const provider of ['Codex', 'Claude']) assert.equal(bothRow(source, provider, 'PC'), 'Unavailable', provider);
 });
 
 void test('in Both, a computer that stops reading turns to as of while the other keeps its total', () => {
@@ -78,8 +79,8 @@ void test('in Both, a computer that stops reading turns to as of while the other
   const macRead = new Date(lastPc + 9 * 60000).toISOString();
   source.tokens[0].checkedAt = macRead;
   source.providerTokenSources[0].checkedAt = macRead;
-  const totals = Object.fromEntries(['Codex', 'Claude Code'].map(provider => [provider, bothRow(source, provider, 'Mac', lastPc + 10 * 60000)]));
-  for (const provider of ['Codex', 'Claude Code']) {
+  const totals = Object.fromEntries(['Codex', 'Claude'].map(provider => [provider, bothRow(source, provider, 'Mac', lastPc + 10 * 60000)]));
+  for (const provider of ['Codex', 'Claude']) {
     assert.match(totals[provider], /^\d/, provider);
     assert.match(bothRow(source, provider, 'PC', lastPc + 10 * 60000), /^\d/, provider);
     assert.equal(bothRow(source, provider, 'Mac', lastPc + 11 * 60000), totals[provider], provider);
@@ -89,8 +90,9 @@ void test('in Both, a computer that stops reading turns to as of while the other
 
 void test('sample Mac week has a recorded total and estimate', () => {
   const source = sampleSnapshot(now);
-  const claude = card(render(source, 'Mac'), 'Claude Code');
-  assert.ok(claude.includes('>' + compact(tokensView(source, { host: 'Mac', period: 'week', now }).claude.totals.total) + '<'));
+  const claude = card(render(source, 'Mac'), 'Claude');
+  const totals = tokensView(source, { host: 'Mac', period: 'week', now }).claude.totals;
+  assert.ok(claude.includes('<div class="ob-hero">' + compact(totals.total - totals.cached) + '<'));
   assert.match(claude, /API-equivalent \(estimate\)<\/span><span class="ob-num">\$[0-9]/);
   assert.ok(!claude.includes('Both computers'));
 });
@@ -104,7 +106,7 @@ void test('empty snapshot never manufactures zero', () => {
 void test('Claude days without estimates show Unknown', () => {
   const source = synthetic();
   delete source.providerTokenSources[0].days[0].apiEstimate;
-  const claude = card(render(source, 'Mac'), 'Claude Code');
+  const claude = card(render(source, 'Mac'), 'Claude');
   assert.match(claude, /API-equivalent \(estimate\)<\/span><span class="ob-num">Unknown<\/span>/);
   assert.ok(!claude.includes('$0.00'));
 });
@@ -123,10 +125,10 @@ void test('partial estimate discloses covered tokens', () => {
 void test('dashboard tokens section mounts the view', () => {
   const combined = combine([{ host: 'Mac', snapshot: ownSnapshot('Mac', now) }, { host: 'Windows', snapshot: ownSnapshot('Windows', now) }], { now });
   const html = renderToStaticMarkup(createElement(DashboardView, {
-    combined, css: '', className: '', now, loaded: true, section: 'tokens',
-    skinId: 'sage', skin: validateSkin(SKINS.sage), onSectionChange: noop, onSkinChange: noop,
+    summary: summaryOf(combined), history: combined, css: '', className: '', now, loaded: true, section: 'tokens',
+    onSectionChange: noop,
   }));
-  card(html, 'Claude Code');
+  card(html, 'Claude');
   card(html, 'Codex');
   assert.ok(!html.includes('This section is not built yet.'));
 });
@@ -135,7 +137,7 @@ void test('every dollar figure is labeled as an API-equivalent estimate, so no f
   const html = render(sampleSnapshot(now));
   assert.ok(!html.includes('Dollar figures are estimates'));
   assert.ok(!html.includes('About these figures'));
-  for (const name of ['Claude Code', 'Codex']) assert.ok(card(html, name).includes('API-equivalent (estimate)'), name);
+  for (const name of ['Claude', 'Codex']) assert.ok(card(html, name).includes('API-equivalent (estimate)'), name);
 });
 
 void test('Codex price date is independent of missing Claude estimates', () => {
@@ -144,13 +146,13 @@ void test('Codex price date is independent of missing Claude estimates', () => {
   delete source.providerTokenSources[0].days[0].models[0].apiEstimate;
   const html = render(source, 'Mac');
   assert.ok(card(html, 'Codex').includes('Prices checked 2026-10-01'));
-  assert.ok(card(html, 'Claude Code').includes('Prices checked: Unknown'));
-  assert.ok(!card(html, 'Claude Code').includes('Prices checked 2026-10-01'));
+  assert.ok(card(html, 'Claude').includes('Prices checked: Unknown'));
+  assert.ok(!card(html, 'Claude').includes('Prices checked 2026-10-01'));
 });
 
 void test('positive estimates below half a cent do not render zero', () => {
   const html = render(synthetic({ ...estimate, usd: 0.004 }), 'Mac');
-  for (const provider of ['Codex', 'Claude Code']) {
+  for (const provider of ['Codex', 'Claude']) {
     assert.match(card(html, provider), /API-equivalent \(estimate\)<\/span><span class="ob-num">Under \$0\.01<\/span>/);
   }
   assert.ok(!html.includes('$0.00'));

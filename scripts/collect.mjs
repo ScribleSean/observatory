@@ -18,6 +18,7 @@ import {collectQuota,findCodexExecutable} from './collect-quota.mjs';
 import {findWindowsQuotaClient,readWindowsQuotaSnapshot} from './windows-quota.mjs';
 import {cleanClaudeTokenSource,unavailableClaudeTokenSource,attachProviderTokenEstimates} from './provider-token-sources.mjs';
 import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime} from './claude-limits.mjs';
+import {readGrokUsage,notConnected as grokNotConnected} from './grok-usage.mjs';
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
 import {listDistributions,wslRoots,readClaudeRoots,readCodexRoots,readProjectRoots,cacheName} from './token-roots.mjs';
 import {buildProjectTokens,unavailableProjectTokens} from './project-tokens.mjs';
@@ -79,6 +80,7 @@ export function defaultReaders(config) {
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:async()=>readClaudeRoots(await roots(),{cacheFor:cacheFor('claude')}),
     projects:async({claude,codex},now)=>readProjectRoots(await roots(),{claude,codex,now}),
+    grokLimits:()=>readGrokUsage({appFolder:config.grok?.appFolder ?? null,requestLog:config.grok?.requestLog ?? null,timeZone:TIMEZONE}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
       return withinTime(readClaudeLimits(config.dataFolder,{enabled:true}),20000);
@@ -131,7 +133,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     try {return buildProjectTokens(await readers.projects(projectSources,now),host,at);}
     catch {return unavailableProjectTokens(host,at);}
   };
-  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens]=await Promise.all([
+  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens,grokRead]=await Promise.all([
     read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
     read('codex',raw=>{
       const settings={...cleanSettings(raw,host),checkedAt:at};
@@ -142,6 +144,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('claudeCode',raw=>withRoots(cleanClaudeTokenSource(raw,host,at,{hours:true}),raw)),
     read('claudeLimits',value=>value),
     readProjects(),
+    read('grokLimits',value=>value),
   ]);
   const pick=(value,fallback,failed)=>value===null?fallback:value.failed?failed(value.error):value;
   const activity=pick(activityRead,disconnected(host),unavailable);
@@ -157,18 +160,19 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
   const claude=kept('claude',pick(claudeRead,unavailableClaudeTokenSource(host,at,'not-connected'),()=>unavailableClaudeTokenSource(host,at)));
   const claudeLimits=pick(limitsRead,claudeLimitsSource(null,{enabled:false}),
     ()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'}));
+  const grokLimits=pick(grokRead,grokNotConnected(),()=>({...grokNotConnected(),status:'unavailable'}));
   const data={schema:2,timezone:TIMEZONE,collectedAt:at,
     device:{host,name:config.device.name},
     deviceNames:{[host]:config.device.name},
     activity:[activity,disconnected(other)],combined:{host:'Combined',status:'unavailable',checkedAt:at},
     tokens:[codex.tokens,disconnected(other)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
-    quota,claudeLimits,providerTokenSources:[claude],projectTokens:[projectTokens]};
+    quota,claudeLimits,grokLimits,providerTokenSources:[claude],projectTokens:[projectTokens]};
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};
   attachProviderTokenEstimates(result);
-  const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits].filter(row=>row.status!=='not-connected');
+  const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits,grokLimits].filter(row=>row.status!=='not-connected');
   const sourcesRead=sources.filter(row=>row.status==='ok').length;
   return {data,status:{state:sources.length && sourcesRead===sources.length?'ok':'partial',sourcesRead,sourcesConfigured:sources.length}};
 }
