@@ -1,0 +1,25 @@
+.ob-drift { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ob-space-3); min-width: 0; }
+@media (min-width: 860px) { .ob-drift { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ob-drift-card { min-width: 0; }
+.ob-drift-card .ob-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--ob-space-1) var(--ob-space-3); margin-bottom: var(--ob-space-3); }
+
+.ob-drift-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: var(--ob-space-2) 0; border-top: 1px solid var(--ob-track); }
+.ob-drift-label { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ob-space-2); font-size: var(--ob-label-size); color: var(--ob-muted); }
+.ob-drift-label .ob-num { color: var(--ob-strong); font-size: var(--ob-body-size); }
+.ob-drift-label .ob-num.warn { color: var(--ob-warning); }
+.ob-drift-normal { text-align: right; min-height: 1em; }
+
+.ob-drift-spark { min-width: 0; }
+.ob-drift-spark svg { display: block; max-width: 100%; overflow: visible; }
+.ob-drift-band { fill: var(--ob-track); opacity: 0.55; }
+.ob-drift-line { fill: none; stroke: var(--ob-accent); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+.ob-drift-solo { fill: var(--ob-accent); }
+.ob-drift-flag { fill: var(--ob-warning); stroke: var(--ob-surface); stroke-width: 1.5; }
+
+.ob-drift-flags { margin-top: var(--ob-space-2); padding-top: var(--ob-space-3); border-top: 1px solid var(--ob-track); }
+.ob-drift-flags h4 { margin: 0 0 var(--ob-space-2); font-size: var(--ob-label-size); font-weight: 600; color: var(--ob-text); }
+.ob-drift-flags ul { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--ob-space-2); }
+.ob-drift-flags li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: var(--ob-space-2); font-size: var(--ob-body-size); color: var(--ob-text); }
+.ob-drift-flags li .ob-num { color: var(--ob-muted); font-size: var(--ob-label-size); }
+.ob-drift-flags p { margin: 0; }
+.ob-drift-effort { display: block; }

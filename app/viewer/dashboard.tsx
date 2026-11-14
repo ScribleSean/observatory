@@ -7,6 +7,7 @@ import { useSkin } from './skin';
 import { LimitsView } from './limits/LimitsView';
 import { ActivityView } from './activity/ActivityView';
 import { TokensView } from './tokens/tokens';
+import { DriftView } from './drift/DriftView';
 import { Forecast, type Outlook } from './forecast/Forecast';
 import { FilterGroup } from './components';
 
@@ -16,7 +17,7 @@ type Collision = { repo: string; count: number; line: string };
 export type Summary = { generatedAt: string; generatedBy?: string; devices?: Device[]; glance: { forecast?: Outlook; collisions?: Collision[] } };
 export type Combined = Summary & { view: Snapshot };
 
-const SECTIONS = [['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity], ['tokens', STRINGS.sections.tokens]] as const;
+const SECTIONS = [['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity], ['tokens', STRINGS.sections.tokens], ['drift', STRINGS.sections.drift]] as const;
 type Section = typeof SECTIONS[number][0];
 const ALL_HOSTS = 'All';
 const HISTORY_REFRESH_MS = 5 * 60000;
@@ -138,6 +139,7 @@ export function DashboardView({ summary, history, loaded, now, css, className, s
           {!snapshot ? <p className={historyFailed ? 'ob-meta warn' : 'ob-meta'}>{historyFailed ? STRINGS.labels.historyFailed : STRINGS.labels.loading}</p>
             : section === 'limits' ? <LimitsView snapshot={snapshot} now={now} />
             : section === 'activity' ? <ActivityView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />
+            : section === 'drift' ? <DriftView snapshot={snapshot} now={now} />
             : <TokensView snapshot={snapshot} now={now} initialHost={ALL_HOSTS} />}
         </section>
       </main>}

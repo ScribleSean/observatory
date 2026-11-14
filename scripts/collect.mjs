@@ -20,6 +20,7 @@ import {cleanClaudeTokenSource,unavailableClaudeTokenSource,attachProviderTokenE
 import {readClaudeLimits,claudeLimitsSource,ensureClaudeLimitsFolder,withinTime} from './claude-limits.mjs';
 import {readGrokUsage,notConnected as grokNotConnected} from './grok-usage.mjs';
 import {windowsPowerShellEnvironment,windowsPowerShellFileArguments} from './windows-powershell.mjs';
+import {readModelDriftRoots} from './read-model-drift.mjs';
 import {listDistributions,wslRoots,readClaudeRoots,readCodexRoots,readProjectRoots,cacheName} from './token-roots.mjs';
 import {buildProjectTokens,unavailableProjectTokens} from './project-tokens.mjs';
 import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
@@ -80,6 +81,7 @@ export function defaultReaders(config) {
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:async()=>readClaudeRoots(await roots(),{cacheFor:cacheFor('claude')}),
+    modelDrift:async()=>readModelDriftRoots(await roots(),{cacheFor:cacheFor('drift')}),
     projects:async({claude,codex},now)=>readProjectRoots(await roots(),{claude,codex,now}),
     sessions:()=>readSessions({host:config.host,platform:config.platform}),
     grokLimits:()=>readGrokUsage({appFolder:config.grok?.appFolder ?? null,requestLog:config.grok?.requestLog ?? null,timeZone:TIMEZONE}),
@@ -135,7 +137,15 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     try {return buildProjectTokens(await readers.projects(projectSources,now),host,at);}
     catch {return unavailableProjectTokens(host,at);}
   };
-  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens,grokRead,sessionsRead]=await Promise.all([
+  // Model drift reads the same Claude Code transcripts, so the claudeCode setting turns it on and off.
+  const readDrift=async()=>{
+    if(!config.sources.claudeCode || !readers.modelDrift)return {host,status:'not-connected'};
+    try {
+      const result=await readers.modelDrift();
+      return result.status==='ok'?{host,status:'ok',checkedAt:at,days:result.days}:{host,status:result.status==='not-found'?'not-found':'unavailable',checkedAt:at};
+    } catch {return {host,status:'unavailable',checkedAt:at};}
+  };
+  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens,grokRead,modelDrift,sessionsRead]=await Promise.all([
     read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
     read('codex',raw=>{
       const settings={...cleanSettings(raw,host),checkedAt:at};
@@ -147,6 +157,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('claudeLimits',value=>value),
     readProjects(),
     read('grokLimits',value=>value),
+    readDrift(),
     read('sessions',value=>value),
   ]);
   const pick=(value,fallback,failed)=>value===null?fallback:value.failed?failed(value.error):value;
@@ -171,7 +182,7 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     activity:[activity,disconnected(other)],combined:{host:'Combined',status:'unavailable',checkedAt:at},
     tokens:[codex.tokens,disconnected(other)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
-    quota,claudeLimits,grokLimits,providerTokenSources:[claude],projectTokens:[projectTokens],sessions:[sessions]};
+    quota,claudeLimits,grokLimits,providerTokenSources:[claude],projectTokens:[projectTokens],modelDrift:[modelDrift],sessions:[sessions]};
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};

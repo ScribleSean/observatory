@@ -14,7 +14,8 @@ export const STRINGS = {
     "activity": "Screen time",
     "tokens": "Tokens",
     "history": "History",
-    "navigation": "Sections"
+    "navigation": "Sections",
+    "drift": "Drift"
   },
   "periods": {
     "now": "Now",
@@ -196,6 +197,27 @@ export const STRINGS = {
   },
   "forecast": {
     "title": "Forecast"
+  },
+  "drift": {
+    "thinking": "Thinking per call",
+    "replySeconds": "Time per call",
+    "outputTokens": "Tokens per call",
+    "retries": "Retries and errors per 100 calls",
+    "seconds": "{value} s",
+    "perHundred": "{value}",
+    "normal": "normal {value}",
+    "replies": "{count} model calls in {days} days",
+    "standout": "Days that stood out",
+    "noStandout": "No day stood out from this model's normal.",
+    "tooQuiet": "Too few model calls to judge. A day needs {count}.",
+    "learning": "Learning this model's normal. It needs {days} busy days.",
+    "higher": "higher",
+    "lower": "lower",
+    "flag": "{metric} {value}, {direction} than the normal {normal}",
+    "effortShift": "Effort was mostly {now} that day, usually {before}.",
+    "noData": "No Claude Code replies recorded in the last {days} days.",
+    "unavailable": "Could not read Claude Code transcripts.",
+    "chart": "{metric} by day. Shaded band is the normal range."
   },
   "sameRepo": {
     "line": "{count} agents in {repo} {where} ({who})",

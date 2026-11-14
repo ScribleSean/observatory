@@ -19,7 +19,8 @@ export function ownSnapshot(host,now=Date.now(),change=snapshot=>snapshot) {
     tokens:[...keep(sample.tokens),{host:other,status:'not-connected'}],
     settings:keep(sample.settings),
     providerTokenSources:keep(sample.providerTokenSources),
-    activityHistory:keep(sample.activityHistory)};
+    activityHistory:keep(sample.activityHistory),
+    modelDrift:keep(sample.modelDrift)};
   return change(snapshot);
 }
 
