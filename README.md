@@ -43,7 +43,7 @@ Every five minutes the app collects one snapshot of this computer:
 | Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category |
 | Grok (optional) | The Grok Bot app's own cached weekly reading, and a request log you name | Percent left and reset time, and requests per day |
 
-No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. The forecast uses each limit's readings from the last day (the last two hours for a 5-hour limit) and ignores readings from before a reset. Dollar figures are estimates at public API prices, not a bill.
+No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. The forecast uses each limit's pace over the last hour and its average pace since the limit last reset. Once a few days of readings are stored, it also gives a range, taken from how far its own earlier forecasts missed, for example "Claude may run out Thu 3–6 PM." `node scripts/harness/forecast-backtest.mjs --fictional` replays the forecast over made-up readings and prints how far it missed, and `--db` does the same over your own stored readings. Dollar figures are estimates at public API prices, not a bill.
 
 An engine reads **Off** instead of showing an old number when its client is signed out, when the account reports a free plan, or when it has had no reading for a day.
 

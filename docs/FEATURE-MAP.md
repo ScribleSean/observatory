@@ -11,7 +11,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Tray panel (Windows) | Click the tray icon | `test/windows-dpi.test.mjs` (source text only), rendering none |
 | Open dashboard, Refresh, Quit | Panel footer and tray menu | `test/server-lifetime.test.mjs` (server stops with the app), Refresh none |
 | Dashboard server on 127.0.0.1, GET and HEAD only | http://127.0.0.1:5601 | `test/server.test.mjs`, `test/server-lifetime.test.mjs`, `scripts/request-policy.test.mjs` |
-| Forecast: when each engine runs out, and the scarcer engine in the menu bar | Dashboard home, menu bar and tray | `test/forecast.test.mjs`, `test/dashboard-render.test.mjs`, `test/repo-rules.test.mjs` (panel wording) |
+| Forecast: when each engine runs out, with a range once there is history, and the scarcer engine in the menu bar | Dashboard home, menu bar and tray | `test/forecast.test.mjs`, `test/forecast-backtest.test.mjs` (accuracy on made-up readings), `test/dashboard-render.test.mjs`, `test/repo-rules.test.mjs` (panel wording) |
 | Limit history charts | Dashboard, History, Limits | `scripts/view-limits.test.mjs`, `scripts/limits-view.test.mjs`, `test/limit-history*.test.mjs`, `test/dashboard-render.test.mjs` |
 | Screen time page | Dashboard, History, Screen time | `scripts/view-activity.test.mjs`, `scripts/activity-*.test.mjs`, `test/dashboard-render.test.mjs` |
 | Tokens page and today by project | Dashboard, History, Tokens | `scripts/view-tokens.test.mjs`, `scripts/tokens-view-render.test.mjs`, `test/project-tokens.test.mjs` |
