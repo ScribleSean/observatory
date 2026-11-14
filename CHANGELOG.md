@@ -16,6 +16,7 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - **WSL on Windows.** With `sources.wsl` set to `true`, a Windows PC counts the Claude Code and Codex logs inside its WSL distributions as its own.
 - **Status for scripts.** `npm run status -- --json` prints each engine's percent left, reset time, burn rate and pace from saved data, and `--wait codex` (or `claude`) waits until that engine is no longer out.
 - **Optional Grok tile.** With `sources.grokLimits` set to `true`, a Grok tile reads a cached weekly limit, a request log, or both, from the files set in `grok.appFolder` and `grok.requestLog`.
+- **Same-repo line.** When two live Claude Code or Codex sessions work in one repository, on one computer or both, the dashboard shows one line naming the repository and the sessions. A worktree and its main checkout count as one repository. It reads only process names, working folders and git facts, and shows nothing when there is no overlap. It is on in the example settings. In settings you already have, turn it on with `"sessions": true` under `sources`. It is not available on Windows yet.
 
 ### Changed
 

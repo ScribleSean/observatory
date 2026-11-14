@@ -44,7 +44,9 @@ export const STRINGS = {
     "screenTime": "Screen time",
     "loading": "Loading",
     "computers": "Computers",
-    "historyFailed": "Could not load the history."
+    "historyFailed": "Could not load the history.",
+    "sameRepo": "Agents in one repository",
+    "sameRepoMore": "and {count} more"
   },
   "status": {
     "unknown": "Unknown",
@@ -194,6 +196,16 @@ export const STRINGS = {
   },
   "forecast": {
     "title": "Forecast"
+  },
+  "sameRepo": {
+    "line": "{count} agents in {repo} {where} ({who})",
+    "onComputer": "{engine} on {computer}",
+    "unknownRepo": "Unknown"
+  },
+  "sameRepoWhere": {
+    "folder": "in the same folder",
+    "branch": "on the same branch",
+    "repo": "in different folders"
   }
 } as const;
 

@@ -7,7 +7,7 @@ const win={platform:'win32',environment:{LOCALAPPDATA:'C:\\Users\\a\\AppData\\Lo
 
 test('sources are off unless listed as true',()=>{
   const config=parseConfig({sources:{codex:true}},mac);
-  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false,grokLimits:false,wsl:false});
+  assert.deepEqual(config.sources,{screenTime:false,codex:true,codexLimits:false,claudeCode:false,claudeLimits:false,grokLimits:false,sessions:false,wsl:false});
   assert.equal(config.role,'spoke');
   assert.equal(config.host,'Mac');
   assert.match(config.dataFolder,/Library[\\/]Application Support[\\/]Observatory$/);

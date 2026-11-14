@@ -4,6 +4,7 @@ import path from 'node:path';
 import {createLocalServer} from '../serve-local.mjs';
 import {combine} from '../lib/combine.mjs';
 import {ownSnapshot} from '../test/helpers.mjs';
+import {syntheticSessions} from '../test/synthetic-sessions.mjs';
 
 const now=Date.now();
 const dataFolder=await mkdtemp(path.join(tmpdir(),'observatory-preview-'));
@@ -61,6 +62,12 @@ for(const snapshot of [mac,pc])for(const row of [...(snapshot.activity??[]),...(
   if(Array.isArray(row.days))row.days=row.days.map(day=>day.date===gapDate?untracked(day):day);
 
 mac.collectedAt=ago(1);pc.collectedAt=ago(4);
+// PREVIEW_COLLISION=folder|branch|repo shows the same-repo line with fictional sessions. Without it no line appears.
+if(process.env.PREVIEW_COLLISION) {
+  const row=(host,sessions)=>[{host,status:'ok',checkedAt:ago(1),sessions}];
+  const scene=syntheticSessions(process.env.PREVIEW_COLLISION);
+  mac.sessions=row('Mac',scene.Mac);pc.sessions=row('Windows',scene.Windows);
+}
 const devices=process.env.PREVIEW_ONE?[{host:'Mac',snapshot:mac}]:[{host:'Mac',snapshot:mac},{host:'Windows',snapshot:pc}];
 const combined=combine(devices,{now,generatedBy:'Mac'});
 await writeFile(path.join(dataFolder,'public','local','combined.json'),JSON.stringify(combined));

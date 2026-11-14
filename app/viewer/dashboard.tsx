@@ -12,7 +12,8 @@ import { FilterGroup } from './components';
 
 type Snapshot = Record<string, unknown>;
 type Device = { host: string; name: string; collectedAt: string | null; stale: boolean; error?: string };
-export type Summary = { generatedAt: string; generatedBy?: string; devices?: Device[]; glance: { forecast?: Outlook } };
+type Collision = { repo: string; count: number; line: string };
+export type Summary = { generatedAt: string; generatedBy?: string; devices?: Device[]; glance: { forecast?: Outlook; collisions?: Collision[] } };
 export type Combined = Summary & { view: Snapshot };
 
 const SECTIONS = [['limits', STRINGS.sections.limits], ['activity', STRINGS.sections.activity], ['tokens', STRINGS.sections.tokens]] as const;
@@ -38,6 +39,18 @@ function DeviceWarnings({ devices, now }: { devices: Device[]; now: number }) {
       {late.map(device => <li key={device.host} className="warn" title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>
         <i aria-hidden="true" />{deviceLabel(device.host)}<span className="ob-meta">{device.collectedAt ? readingTime(Date.parse(device.collectedAt), now) : STRINGS.today.noSnapshot}</span>
       </li>)}
+    </ul>
+  );
+}
+
+// Shown only while two live sessions share a repository. The closest overlap leads.
+function SameRepo({ collisions }: { collisions: Collision[] }) {
+  if (collisions.length === 0) return null;
+  const [first, ...rest] = collisions;
+  return (
+    <ul className="ob-chips" aria-label={STRINGS.labels.sameRepo}>
+      <li className="warn wide"><i aria-hidden="true" /><span>{first.line}
+        {rest.length > 0 && <span className="ob-meta"> {format(STRINGS.labels.sameRepoMore, { count: String(rest.length) })}</span>}</span></li>
     </ul>
   );
 }
@@ -110,6 +123,7 @@ export function DashboardView({ summary, history, loaded, now, css, className, s
       <header className="ob-masthead">
         <h1><span className="ob-mark" aria-hidden="true" />{STRINGS.app.title}</h1>
         <DeviceWarnings devices={summary?.devices ?? []} now={now} />
+        <SameRepo collisions={fresh.stale ? [] : summary?.glance?.collisions ?? []} />
         {summary && fresh.stale && <span className="ob-meta warn">{fresh.label}</span>}
       </header>
       {outlook ? <Forecast outlook={outlook} stale={fresh.stale} />

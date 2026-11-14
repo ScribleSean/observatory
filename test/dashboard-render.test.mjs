@@ -34,6 +34,21 @@ test('the home page is one sentence and one number per engine, with no helper te
   assert.ok(!html.includes('<main>'),'no history drawn on the home page');
 });
 
+test('the same-repo line shows the closest overlap, counts the rest, and hides when the summary is old',async()=>{
+  const {syntheticSessions}=await import('./synthetic-sessions.mjs');
+  const scene=syntheticSessions('folder');
+  const twin=scene.Mac.slice(0,2).map(row=>({...row,repoId:'0123456789ab',repo:'tide-charts'}));
+  const sessions=[{host:'Mac',status:'ok',checkedAt:new Date(now).toISOString(),sessions:[...scene.Mac,...twin]}];
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now,snapshot=>({...snapshot,sessions}))}],{now});
+  const [first]=combined.glance.collisions;
+  assert.equal(combined.glance.collisions.length,2);
+  const html=render({combined});
+  assert.ok(html.includes(first.line) && html.includes('and 1 more'));
+  assert.ok(!html.includes(combined.glance.collisions[1].line));
+  assert.ok(!render({combined:both}).includes('Agents in one repository'),'no overlap draws nothing');
+  assert.ok(!render({combined,now:now+60*60000}).includes(first.line),'an old summary hides the line');
+});
+
 test('the home numbers match the forecast, scarcer engine first',()=>{
   const numbers=[...render({combined:both}).matchAll(/class="fc-big[^"]*"[^>]*>(\d+%|Unknown)</g)].map(match=>match[1]);
   const engines=[...both.glance.forecast.engines].sort((a,b)=>a.engine===both.glance.forecast.scarce?.engine?-1:b.engine===both.glance.forecast.scarce?.engine?1:0);
