@@ -1,4 +1,4 @@
-import {quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
+import {allowanceStepped,quotaHistoryMaxGapMs,sameQuotaReset} from './quota-timing.mjs';
 import {durationText} from './display-format.mjs';
 const minute = 60000;
 const timestamp = value => typeof value === 'string' ? Date.parse(value) : NaN;
@@ -29,8 +29,10 @@ export function quotaPace(quota, now = Date.now()) {
         segment = []; continue;
       }
       const previous = segment.at(-1);
-      if (previous && (at <= previous.at || at-previous.at > quotaHistoryMaxGapMs || row.remainingPercent > previous.remaining)) segment = [];
-      segment.push({at,remaining:row.remainingPercent});
+      const point = {at,remaining:row.remainingPercent};
+      if (previous && (at <= previous.at || at-previous.at > quotaHistoryMaxGapMs || row.remainingPercent > previous.remaining ||
+          allowanceStepped(previous,point,window.durationMinutes))) segment = [];
+      segment.push(point);
     }
     segment = segment.filter(point => point.at >= asOf-60*minute);
     const first = segment[0], last = segment.at(-1);

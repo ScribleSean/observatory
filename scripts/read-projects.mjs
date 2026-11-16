@@ -1,5 +1,6 @@
 // Only these values leave the reader: a folder's last name, a short hash of the
-// session id, first and last request times, per-model counts and subagent counts.
+// session id, first and last request times, per-model counts, subagent counts
+// and a short hash and token count for each subagent.
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -154,15 +155,16 @@ async function lines(file,limits,keep,each) {
 function sessions() {
   const map=new Map();
   return {
-    add({provider,id,project,at,model,values,subagent}) {
+    add({provider,id,project,at,model,values,subagent,agent=null}) {
       const key=JSON.stringify([provider,id,project?.toLowerCase() ?? null]);
       let row=map.get(key);
-      if(!row) {row={provider,id,project,start:at,end:at,subagentTokens:0,models:new Map()};map.set(key,row);}
+      if(!row) {row={provider,id,project,start:at,end:at,subagentTokens:0,agents:new Map(),models:new Map()};map.set(key,row);}
       row.start=Math.min(row.start,at);
       row.end=Math.max(row.end,at);
       const total=values.reduce((a,b)=>a+b,0);
       if(subagent===null || row.subagentTokens===null)row.subagentTokens=null;
       else if(subagent)row.subagentTokens+=total;
+      if(subagent && agent!==null)row.agents.set(agent,(row.agents.get(agent) ?? 0)+total);
       let counts=row.models.get(model);
       if(!counts) {counts=[0,0,0,0];row.models.set(model,counts);}
       values.forEach((value,index)=>{counts[index]+=value;});
@@ -170,6 +172,9 @@ function sessions() {
     rows() {
       return [...map.values()].map(row=>({provider:row.provider,id:row.id,project:row.project,
         start:new Date(row.start).toISOString(),end:new Date(row.end).toISOString(),subagentTokens:row.subagentTokens,
+        // Each subagent that could be told apart, largest first. One whose turns name no agent is only in the total.
+        subagents:[...row.agents].map(([agent,totalTokens])=>({id:sessionHash(row.provider,agent),totalTokens}))
+          .sort((a,b)=>b.totalTokens-a.totalTokens || a.id.localeCompare(b.id)),
         models:[...row.models].map(([model,[inputTokens,cacheReadTokens,cacheCreationTokens,outputTokens]])=>({model,
           inputTokens,cacheReadTokens,cacheCreationTokens,outputTokens,totalTokens:inputTokens+cacheReadTokens+cacheCreationTokens+outputTokens}))}));
     },
@@ -178,7 +183,7 @@ function sessions() {
 
 // Claude Code: one request can be written several times as it streams, so the
 // largest counts for each message id win. Subagent turns carry
-// isSidechain and their parent's sessionId.
+// isSidechain, their parent's sessionId and their own agentId.
 async function readClaude(folder,{today,timeZone,since,home,limits}) {
   const requests=new Map(),name=namer(home);
   for(const file of await files(path.join(folder,'projects'),since,limits)) {
@@ -204,7 +209,9 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
       const id=owner ?? (typeof event.sessionId==='string' && event.sessionId?event.sessionId:fallback);
       requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:name(event.cwd,{branch:event.gitBranch}),
         at:prior?Math.min(prior.record.at,at):at,model:modelName(event.message.model),values,
-        subagent:inSubagents || (typeof event.isSidechain==='boolean'?event.isSidechain:null)}});
+        subagent:inSubagents || (typeof event.isSidechain==='boolean'?event.isSidechain:null),
+        // A subagent file is named agent-<its id>, so a turn without the id falls back to the same value.
+        agent:typeof event.agentId==='string' && event.agentId?event.agentId:inSubagents?fallback.replace(/^agent-/,''):null}});
     });
   }
   const result=sessions();
@@ -246,7 +253,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
     return inherited.get(file);
   };
   for(const file of found) {
-    let id=path.basename(file,'.jsonl'),project=null,repository=null,branch=null,model='unknown',subagent=null,prior=null;
+    let id=path.basename(file,'.jsonl'),project=null,repository=null,branch=null,model='unknown',subagent=null,agent=null,prior=null;
     let started=false,copiedFrom=null;
     const pending=[];
     await lines(file,limits,CODEX_KEEP,event=>{
@@ -264,7 +271,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
         project=name(payload.cwd,{repository,branch});
         const parent=typeof payload.parent_thread_id==='string' && payload.parent_thread_id?payload.parent_thread_id:null;
         subagent=parent!==null || (object(payload.source) && Object.hasOwn(payload.source,'subagent')) || payload.thread_source==='subagent';
-        if(parent)id=parent;
+        if(parent) {agent=id;id=parent;}
         return;
       }
       if(event.type==='turn_context') {
@@ -290,7 +297,7 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       // Codex input includes cache reads and writes, and output includes reasoning.
       const values=[input-cached-written,cached,written,output];
       if(values.every(value=>value===0))return;
-      pending.push({running,record:{provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent}});
+      pending.push({running,record:{provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent,agent}});
     });
     // Copies whose parent log cannot be found cannot be told apart, so the day is Unknown.
     const copies=copiedFrom===null || !pending.length?new Set():await totalsOf(copiedFrom);

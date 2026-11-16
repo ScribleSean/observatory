@@ -193,7 +193,14 @@ export const STRINGS = {
     "other": "Other",
     "asOf": "as of {time}",
     "more": "+{count} more",
-    "project": "Project"
+    "project": "Project",
+    "where": "Where it went",
+    "sessionHeader": "Session",
+    "shareHeader": "Of today",
+    "engineAndTime": "{provider}, {start} to {end}",
+    "main": "Main conversation",
+    "subagent": "Subagent {number}",
+    "otherSubagents": "Other subagents"
   },
   "forecast": {
     "title": "Forecast"
@@ -202,6 +209,7 @@ export const STRINGS = {
     "thinking": "Thinking per call",
     "replySeconds": "Time per call",
     "outputTokens": "Tokens per call",
+    "toolCalls": "Tool uses per call",
     "retries": "Retries and errors per 100 calls",
     "seconds": "{value} s",
     "perHundred": "{value}",

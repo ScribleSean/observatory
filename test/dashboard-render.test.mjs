@@ -137,3 +137,21 @@ test('the tokens page shows today by project, with sessions, subagent share and 
   assert.ok(html.indexOf('demo-app')<html.indexOf('sample-site'),'largest project first');
   assert.ok(!html.includes('NaN') && !html.includes('undefined'));
 });
+
+test('the tokens page ranks today\'s sessions with the subagents inside each',()=>{
+  const model=tokens=>[{model:'claude-unpriced-9',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}];
+  const session=(id,provider,tokens,subagentTokens,subagents=[])=>({id,provider,start:'2026-10-21T13:02:00.000Z',end:'2026-10-21T14:40:00.000Z',totalTokens:tokens,
+    subagentTokens,subagents,subagentCount:subagentTokens===null?null:subagents.length,usd:null,models:model(tokens)});
+  const row={host:'Mac',status:'ok',checkedAt:new Date(now).toISOString(),date:'2026-10-21',timeZone:'America/New_York',providers:['claude','codex'],other:null,projects:[
+    {name:'demo-app',totalTokens:150e6,subagentTokens:90e6,usd:null,sessionCount:1,sessions:[
+      session('a1b2c3d4e5','claude',150e6,90e6,[{id:'1111111111',totalTokens:60e6},{id:'2222222222',totalTokens:21e6}])]},
+    {name:'sample-site',totalTokens:50e6,subagentTokens:null,usd:null,sessionCount:1,sessions:[session('f6a7b8c9d0','codex',50e6,null)]}]};
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now,snapshot=>({...snapshot,projectTokens:[row]}))}],{now});
+  const html=render({combined,section:'tokens'});
+  const card=html.slice(html.indexOf('Where it went'),html.indexOf('By project'));
+  for(const text of ['Where it went','demo-app','Claude Code, 9:02 AM to 10:40 AM','150M','75%','Main conversation','60M','40%','Subagent 1','Subagent 2','21M','Other subagents','9M','sample-site','Codex, ','25%'])
+    assert.ok(card.includes(text),text);
+  assert.ok(card.indexOf('demo-app')<card.indexOf('sample-site'),'largest session first');
+  assert.equal(card.split('<details').length-1,1,'a session with an Unknown split has nothing to open');
+  assert.ok(!card.includes('NaN') && !card.includes('undefined') && !card.includes('1111111111'));
+});

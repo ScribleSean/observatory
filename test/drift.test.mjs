@@ -251,3 +251,52 @@ test('a call made after a tool result is timed from that tool result, not from t
   ],{timeZone:'UTC'});
   assert.deepEqual(days['2026-11-10']['claude-opus-5-5'].replySeconds,{[binOf(5)]:1,[binOf(4)]:1},'5 s and 4 s, never the 69 s that includes the tool run');
 });
+
+const toolReply=(at,id,tools)=>line({type:'assistant',timestamp:at,message:{id,model:'claude-opus-5-5',usage:{output_tokens:50},
+  content:tools.map(tool=>({type:'tool_use',id:tool,name:SECRET,input:{command:SECRET}}))}});
+
+test('tool calls are counted once per call id and keep no tool name or input',()=>{
+  const days=driftFromLines([
+    user('2026-11-10T10:00:00Z'),
+    // One reply streamed as two lines, the second repeating the first call.
+    toolReply('2026-11-10T10:00:02Z','msg_1',['toolu_a']),
+    toolReply('2026-11-10T10:00:03Z','msg_1',['toolu_a','toolu_b']),
+    toolReply('2026-11-10T10:00:09Z','msg_2',['toolu_c']),
+    reply('2026-11-10T10:00:12Z',{id:'msg_3'}),
+  ],{timeZone:'UTC'});
+  const stats=days['2026-11-10']['claude-opus-5-5'];
+  assert.equal(stats.replies,3);
+  assert.equal(stats.toolCalls,3);
+  const row=driftRow(days,{now:new Date('2026-11-12T00:00:00Z'),timeZone:'UTC'});
+  assert.equal(row[0].models[0].toolCalls,3);
+  assert.ok(!JSON.stringify(row).includes(SECRET));
+});
+
+test('a day with far fewer tool uses per call is flagged, and a computer that sends no count is left out',()=>{
+  const dates=lastDays('2026-11-30',30);
+  const withTools=(date,toolCalls)=>{const row=day(date);row.models[0].toolCalls=toolCalls;return row;};
+  const rows=dates.map(date=>withTools(date,date==='2026-11-30'?6:48));
+  const [model]=driftView([{status:'ok',days:rows}],{dates});
+  assert.deepEqual(model.flags.map(flag=>[flag.date,flag.metric,flag.direction]),[['2026-11-30','toolCalls','down']]);
+  assert.equal(model.series.toolCalls.at(-2).value,0.8);
+  // An older computer's replies carry no tool count: they neither dilute the rate nor read as zero.
+  const [mixed]=driftView([{status:'ok',days:rows},{status:'ok',days:dates.map(date=>day(date))}],{dates});
+  assert.equal(mixed.series.toolCalls.at(-2).value,0.8);
+  const [old]=driftView([{status:'ok',days:dates.map(date=>day(date))}],{dates});
+  assert.ok(old.series.toolCalls.every(point=>point.value===null));
+  assert.deepEqual(old.flags,[]);
+});
+
+test('tool counts pass the combine step, and a row without them still passes',()=>{
+  const now=Date.parse('2026-11-30T17:00:00Z');
+  const peer=ownSnapshot('Windows',now);
+  const sent=peer.modelDrift[0].days.flatMap(day=>day.models.map(model=>model.toolCalls));
+  assert.ok(sent.length>0 && sent.every(Number.isSafeInteger));
+  const windows=view=>view.modelDrift.find(row=>row.host==='Windows');
+  const kept=windows(combine([{host:'Windows',snapshot:peer}],{now}).view).days.flatMap(day=>day.models.map(model=>model.toolCalls));
+  assert.deepEqual(kept,sent);
+  for(const day of peer.modelDrift[0].days)for(const model of day.models)delete model.toolCalls;
+  const old=combine([{host:'Windows',snapshot:peer}],{now});
+  assert.equal(old.devices[0].error,undefined);
+  assert.ok(windows(old.view).days.every(day=>day.models.every(model=>model.toolCalls===undefined && model.replies>0)));
+});

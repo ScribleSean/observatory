@@ -41,6 +41,7 @@
 .ob-projects-name { min-width: 0; overflow-wrap: anywhere; }
 .ob-projects-num { font-family: var(--ob-numeral-font); font-variant-numeric: tabular-nums; text-align: end; }
 .ob-projects-sessions { padding-bottom: var(--ob-space-2); }
+.ob-sessions-when { display: block; }
 .ob-projects-sessions .ob-projects-row { padding-top: var(--ob-space-1); padding-bottom: var(--ob-space-1); color: var(--ob-muted); font-size: var(--ob-meta-size); }
 .ob-projects-sessions .ob-projects-row { padding-left: 1.1em; }
 @container (max-width: 480px) {

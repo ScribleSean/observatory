@@ -6,10 +6,10 @@ import {homedir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {collectProjectTokens,projectName,repositoryRoot,sessionHash} from '../scripts/read-projects.mjs';
-import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS} from '../scripts/project-tokens.mjs';
+import {buildProjectTokens,cleanProjectTokens,MAX_PROJECTS,MAX_SESSIONS,MAX_SUBAGENTS} from '../scripts/project-tokens.mjs';
 import {buildSnapshot,toolFolder} from '../scripts/collect.mjs';
 import {combine} from '../lib/combine.mjs';
-import {projectsView,clock} from '../lib/view-projects.mjs';
+import {projectsView,clock,TOP_SESSIONS} from '../lib/view-projects.mjs';
 import {withFolder,testConfig,ownSnapshot} from './helpers.mjs';
 
 const now=new Date('2026-10-21T17:00:00Z');
@@ -420,4 +420,141 @@ test('combine cleans sample project tokens against its own clock, not the wall c
   const later=Date.parse('2031-03-04T12:00:00Z');
   const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',later)},{host:'Windows',snapshot:ownSnapshot('Windows',later)}],{now:later});
   assert.deepEqual(combined.view.projectTokens.map(row=>[row.host,row.status]),[['Mac','ok'],['Windows','ok']]);
+});
+
+// "Where it went": today's largest sessions and the subagents inside each.
+async function subagentFixture(folder,agents=3) {
+  const project=path.join(folder,'.claude','projects','p');
+  await mkdir(path.join(project,'session-main-0001','subagents'),{recursive:true});
+  const main={sessionId:'session-main-0001',cwd:repo};
+  await writeFile(path.join(project,'session-main-0001.jsonl'),lines([
+    assistant({id:'m1',request:'r1',at:'2026-10-21T13:00:00Z',...main,side:false,tokens:usage(100,100)}),
+    // Older logs keep a subagent's turns in the session file, with or without its id.
+    {...assistant({id:'m2',request:'r2',at:'2026-10-21T13:05:00Z',...main,side:true,tokens:usage(30,30)}),agentId:'agent-inline'},
+    assistant({id:'m3',request:'r3',at:'2026-10-21T13:06:00Z',...main,side:true,tokens:usage(5,5)}),
+  ]));
+  // A subagent's own file is agent-<id>.jsonl, and its turns carry that id and the parent's session id.
+  const turn=(id,tokens,at='2026-10-21T13:10:00Z')=>assistant({id,request:id,at,sessionId:'session-main-0001',cwd:repo,side:true,tokens:usage(tokens,0)});
+  for(let index=0;index<agents;index++)await writeFile(path.join(project,'session-main-0001','subagents',`agent-file-${index}.jsonl`),lines([
+    {...turn(`a${index}`,1000*(index+1)),agentId:`file-${index}`},
+    // A turn streamed twice counts once.
+    {...turn(`a${index}`,1000*(index+1),'2026-10-21T13:10:01Z'),agentId:`file-${index}`},
+    // A turn without the id is still this file's subagent.
+    turn(`b${index}`,7),
+  ]));
+}
+
+test('each subagent of a session is ranked by tokens under a hash, in Claude Code and Codex',async()=>withFolder(async folder=>{
+  await subagentFixture(folder);
+  await codexFixture(folder);
+  const raw=await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),codexFolder:path.join(folder,'.codex'),now,timeZone,home});
+  const row=buildProjectTokens(raw,'Mac',now);
+  const text=JSON.stringify(row);
+  for(const secret of [...SECRETS,'file-0','agent-inline','codex-child-0002'])assert.ok(!text.includes(secret),secret);
+  const sessions=row.projects.flatMap(project=>project.sessions);
+  const claude=sessions.find(session=>session.provider==='claude');
+  assert.equal(claude.totalTokens,200+60+10+6021);
+  assert.equal(claude.subagentTokens,60+10+6021);
+  assert.deepEqual(claude.subagents,[['file-2',3007],['file-1',2007],['file-0',1007],['agent-inline',60]]
+    .map(([name,totalTokens])=>({id:sessionHash('claude',name),totalTokens})));
+  assert.equal(claude.subagentCount,4,'the turns that name no agent are in the total only');
+  const codex=sessions.find(session=>session.provider==='codex');
+  assert.deepEqual(codex.subagents,[{id:sessionHash('codex','codex-child-0002'),totalTokens:500}]);
+  assert.equal(codex.subagentCount,1);
+  assert.deepEqual(cleanProjectTokens(row),row,'a built row passes the same check as a pulled one');
+}));
+
+test('only the largest subagents are kept, with the count of all of them',async()=>withFolder(async folder=>{
+  await subagentFixture(folder,MAX_SUBAGENTS+2);
+  const row=buildProjectTokens(await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home}),'Mac',now);
+  const [session]=row.projects[0].sessions;
+  assert.equal(session.subagents.length,MAX_SUBAGENTS);
+  assert.equal(session.subagents[0].totalTokens,1000*(MAX_SUBAGENTS+2)+7);
+  assert.equal(session.subagentCount,MAX_SUBAGENTS+3);
+  const [top]=projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()})[0].sessions;
+  assert.equal(top.main,200);
+  assert.equal(top.otherSubagents,session.subagentTokens-session.subagents.reduce((sum,agent)=>sum+agent.totalTokens,0));
+  assert.equal(top.main+top.otherSubagents+top.subagents.reduce((sum,agent)=>sum+agent.total,0),top.total,'the parts add up to the session');
+}));
+
+test('a session with an Unknown subagent split lists no subagents',async()=>withFolder(async folder=>{
+  const row=buildProjectTokens(await fixture(folder),'Mac',now);
+  const tree=row.projects.flatMap(project=>project.sessions).find(session=>session.id===sessionHash('claude','session-tree-0002') && session.subagentTokens===null);
+  assert.deepEqual([tree.subagents,tree.subagentCount],[[],null]);
+  const main=row.projects[0].sessions.find(session=>session.id===sessionHash('claude','session-main-0001'));
+  assert.deepEqual(main.subagents,[{id:sessionHash('claude','a1'),totalTokens:1000}],'named by its file when no turn carries the id');
+}));
+
+test('pulled subagent rows are checked, and a row from an older version still passes',async()=>withFolder(async folder=>{
+  await subagentFixture(folder);
+  const row=buildProjectTokens(await collectProjectTokens({claudeFolder:path.join(folder,'.claude'),now,timeZone,home}),'Mac',now);
+  const withSession=change=>({...row,projects:[{...row.projects[0],sessions:[change(row.projects[0].sessions[0])]}]});
+  const [agent]=row.projects[0].sessions[0].subagents;
+  for(const [name,change] of Object.entries({
+    'a name instead of a hash':session=>({...session,subagents:[{...agent,id:'file-2'}]}),
+    'more tokens than the session spent in subagents':session=>({...session,subagents:[{...agent,totalTokens:session.subagentTokens+1}]}),
+    'the same subagent twice':session=>({...session,subagents:[agent,agent]}),
+    'a count below the list':session=>({...session,subagentCount:1}),
+    'too many rows':session=>({...session,subagents:Array.from({length:MAX_SUBAGENTS+1},(_,index)=>({id:`${index}`.padStart(10,'0'),totalTokens:1}))}),
+    'subagents under an Unknown split':session=>({...session,subagentTokens:null}),
+  }))assert.throws(()=>cleanProjectTokens(withSession(change)),/Invalid project tokens/,name);
+  const planted=cleanProjectTokens(withSession(session=>({...session,subagents:session.subagents.map(item=>({...item,name:'PLANTED-TITLE',prompt:'PLANTED-PROMPT'}))})));
+  assert.ok(!JSON.stringify(planted).includes('PLANTED'));
+  // A computer on an older version sends neither field: its subagents are Unknown, not none.
+  const old=cleanProjectTokens(withSession(session=>Object.fromEntries(Object.entries(session).filter(([key])=>!['subagents','subagentCount'].includes(key)))));
+  assert.deepEqual([old.projects[0].sessions[0].subagents,old.projects[0].sessions[0].subagentCount],[[],null]);
+  const [top]=projectsView({timezone:timeZone,projectTokens:[old]},{host:'Mac',now:now.getTime()})[0].sessions;
+  assert.deepEqual([top.subagents,top.otherSubagents],[[],6091],'the subagent tokens are still shown as one part');
+}));
+
+// A model with no price, so every cost here is Unknown.
+const model=tokens=>[{model:'claude-unpriced-9',inputTokens:tokens,cacheReadTokens:0,cacheCreationTokens:0,outputTokens:0,totalTokens:tokens}];
+const listed=(id,tokens,provider='claude')=>({id,provider,start:'2026-10-21T13:00:00.000Z',end:'2026-10-21T13:30:00.000Z',totalTokens:tokens,subagentTokens:0,models:model(tokens)});
+const tokensRow=(projects,other=null)=>({host:'Mac',status:'ok',checkedAt:now.toISOString(),date:'2026-10-21',timeZone,providers:['claude','codex'],projects,other});
+const ranked=row=>projectsView({timezone:timeZone,projectTokens:[row]},{host:'Mac',now:now.getTime()})[0].sessions;
+
+test('today\'s sessions are ranked across projects and engines, with their share of the day',()=>{
+  const row=tokensRow([
+    {name:'alpha',totalTokens:600,subagentTokens:0,usd:null,sessionCount:2,sessions:[listed('aaaaaaaaaa',500),listed('bbbbbbbbbb',100)]},
+    {name:'beta',totalTokens:400,subagentTokens:0,usd:null,sessionCount:1,sessions:[listed('cccccccccc',400,'codex')]}]);
+  const sessions=ranked(cleanProjectTokens(row));
+  assert.deepEqual(sessions.map(session=>[session.project,session.provider,session.total,session.share]),
+    [['alpha','Claude Code',500,0.5],['beta','Codex',400,0.4],['alpha','Claude Code',100,0.1]]);
+  assert.deepEqual(sessions[0].range,{start:'9:00 AM',end:'9:30 AM'});
+  assert.equal(sessions[0].main,500);
+});
+
+test('the ranking stops at the size a session it cannot see could have',()=>{
+  // alpha lists 2 of its 3 sessions: the third is at most 150 (what is left of the project).
+  const capped=tokensRow([
+    {name:'alpha',totalTokens:850,subagentTokens:0,usd:null,sessionCount:3,sessions:[listed('aaaaaaaaaa',500),listed('bbbbbbbbbb',200)]},
+    {name:'beta',totalTokens:260,subagentTokens:0,usd:null,sessionCount:2,sessions:[listed('cccccccccc',160),listed('dddddddddd',100)]}]);
+  assert.deepEqual(ranked(capped).map(session=>session.total),[500,200,160],'100 could be below the unlisted session');
+  // Projects past the cap are one row: any of their sessions could be as large as that row,
+  // but no larger than the smallest listed project.
+  const other=totalTokens=>({name:null,totalTokens,subagentTokens:0,usd:null,sessionCount:4,sessions:[]});
+  assert.deepEqual(ranked(tokensRow(capped.projects,other(250))).map(session=>session.total),[500]);
+  assert.equal(ranked(tokensRow(capped.projects,other(250)))[0].share,500/1360);
+  assert.deepEqual(ranked(tokensRow(capped.projects,other(900))).map(session=>session.total),[500],'bounded by the smallest listed project, 260');
+  // One session that worked in two projects is a row in each, told apart.
+  const twice=ranked(tokensRow([{...capped.projects[1],name:'gamma'},capped.projects[1]]));
+  assert.equal(new Set(twice.map(session=>session.id)).size,twice.length);
+  const many=tokensRow([{name:'alpha',totalTokens:100*(TOP_SESSIONS+2),subagentTokens:0,usd:null,sessionCount:TOP_SESSIONS+2,
+    sessions:Array.from({length:TOP_SESSIONS+2},(_,index)=>listed(String(index).padStart(10,'0'),100))}]);
+  assert.equal(ranked(many).length,TOP_SESSIONS);
+  const stale=projectsView({timezone:timeZone,projectTokens:[capped]},{host:'Mac',now:now.getTime()+86400000})[0];
+  assert.deepEqual(stale.sessions,[],'a reading from another day ranks nothing');
+});
+
+test('the sample snapshot ranks sessions with subagents on both computers',()=>{
+  const at=Date.parse('2026-11-30T17:00:00Z');
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',at)},{host:'Windows',snapshot:ownSnapshot('Windows',at)}],{now:at});
+  const devices=projectsView(combined.view,{host:'All',now:at});
+  assert.deepEqual(devices.map(device=>device.host),['Mac','Windows']);
+  for(const device of devices) {
+    assert.equal(device.sessions[0].project,'field-notes');
+    assert.equal(device.sessions[0].subagents.length,2);
+    assert.ok(device.sessions[0].otherSubagents>0);
+    assert.ok(device.sessions.some(session=>session.provider==='Codex' && session.main===null));
+  }
 });

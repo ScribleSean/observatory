@@ -3,7 +3,7 @@ import { STRINGS, format } from '../../../lib/strings.generated';
 import { compact, usd } from '../../../lib/panel-data.mjs';
 import { tokensView } from '../../../lib/view-tokens.mjs';
 import { projectsView } from '../../../lib/view-projects.mjs';
-import { ProjectsCard } from './projects';
+import { ProjectsCard, SessionsCard } from './projects';
 import { BarChart, Card, DeviceShares, FilterGroup, Row, type ChartPoint } from '../components';
 import './tokens.css';
 
@@ -119,6 +119,7 @@ export function TokensSection({ result, projects = [], onHostChange, onPeriodCha
       <ProviderCard result={result} provider="codex" />
     </div>
     <div className="ob-tokens-lower">
+      {showProjects && <SessionsCard devices={projects} />}
       {showProjects && <ProjectsCard devices={projects} />}
       <Card label={STRINGS.tokens.settingsTitle} title={STRINGS.tokens.settingsTitle}>
         {result.settings.map(device => <div key={device.host} className="ob-tokens-settings">

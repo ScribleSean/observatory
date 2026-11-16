@@ -9,6 +9,10 @@ import {READING_FRESH_MS} from '../lib/freshness.mjs';
 export const CLAUDE_LIMITS_FOLDER='claude-limits';
 export const CLAUDE_LIMITS_FILE='limits.json';
 const windows={five_hour:300,seven_day:10080};
+// Use only grows inside one reset period, so a reading a point or two lower is rounding and the higher one is kept.
+// A fall of this many points is the allowance changing (a plan change in the middle of the period), and the new
+// reading stands.
+export const ALLOWANCE_CHANGE_POINTS=3;
 
 const isObject=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 
@@ -69,7 +73,8 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     const before=saved.windows[name],after=next.windows[name];
     if(!before || !after) {if(before || after)merged.windows[name]=before ?? after;continue;}
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
-    merged.windows[name]=samePeriod && before.usedPercentage>after.usedPercentage ? before : after;
+    const late=samePeriod && before.usedPercentage>after.usedPercentage && before.usedPercentage-after.usedPercentage<ALLOWANCE_CHANGE_POINTS;
+    merged.windows[name]=late ? before : after;
   }
   const missing=next.notReported ?? (saved.notReported && {...saved.notReported,names:saved.notReported.names.filter(name=>!next.windows[name])});
   if(missing)merged.notReported=missing;

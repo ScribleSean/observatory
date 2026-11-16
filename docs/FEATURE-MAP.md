@@ -15,11 +15,13 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Limit history charts | Dashboard, History, Limits | `scripts/view-limits.test.mjs`, `scripts/limits-view.test.mjs`, `test/limit-history*.test.mjs`, `test/dashboard-render.test.mjs` |
 | Screen time page | Dashboard, History, Screen time | `scripts/view-activity.test.mjs`, `scripts/activity-*.test.mjs`, `test/dashboard-render.test.mjs` |
 | Tokens page and today by project | Dashboard, History, Tokens | `scripts/view-tokens.test.mjs`, `scripts/tokens-view-render.test.mjs`, `test/project-tokens.test.mjs` |
-| Model drift: thinking, time, tokens and retries per Claude model and day, against that model's normal | Dashboard, History, Drift | `test/drift.test.mjs`, `test/repo-rules.test.mjs` (wording) |
+| Where it went: today's largest sessions on each computer, with the subagents inside each | Dashboard, History, Tokens, Day | `test/project-tokens.test.mjs`, `test/dashboard-render.test.mjs` |
+| Model drift: thinking, time, tokens, tool uses and retries per Claude model and day, against that model's normal | Dashboard, History, Drift | `test/drift.test.mjs`, `test/repo-rules.test.mjs` (wording) |
 | API price estimates | Tokens page dollar figures | `scripts/api-estimate.test.mjs`, `scripts/price-table.test.mjs`, `scripts/provider-token-sources.test.mjs` |
 | Switching computer, period, date or range | Dashboard controls | none (views are only rendered with their first props) |
 | Collection every five minutes | Runs on its own, or `npm run tick` | `test/collect.test.mjs`, `test/run-lock.test.mjs`, `test/cycle-processes.test.mjs` |
 | Claude limits | Limits page and panel | `scripts/claude-limits.test.mjs`, `scripts/claude-usage-command.test.mjs` |
+| A plan that changes in the middle of a reset period: the new reading is shown, and the fall is not counted as use | Limits page, forecast and panel | `scripts/claude-limits.test.mjs`, `scripts/quota-pace.test.mjs`, `test/forecast.test.mjs` |
 | Codex limits and pace | Limits page and panel | `scripts/read-quota.test.mjs`, `scripts/collect-quota.test.mjs`, `scripts/quota-*.test.mjs` |
 | Claude Code tokens | Tokens page | `scripts/read-claude-usage-node.test.mjs`, `scripts/token-hours.test.mjs` |
 | Codex tokens, settings and tool calls | Tokens page | `scripts/read-settings-node.test.mjs` |

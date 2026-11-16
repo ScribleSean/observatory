@@ -13,6 +13,9 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - **History kept for good.** Each computer saves its own daily token totals, so a day stays counted after Claude Code deletes old transcripts. All starts at the first recorded day, Both shows one combined total over each computer's own, and a computer that is offline keeps its past days.
 - **Your own time zone.** Days are counted in each computer's time zone instead of a fixed one.
 - **Today by project.** The Tokens page shows today's tokens per project folder name. Only folder names are kept, not paths.
+- **Where it went.** The Tokens page ranks today's largest sessions on each computer, across Claude Code and Codex, and opens each one into its main conversation and its largest subagents. Sessions and subagents are kept as short hashes with token counts, not names.
+- **Tool uses in the drift view.** The Drift page also shows tool uses per model call for each Claude model and day, next to thinking, time, tokens and retries.
+- **Plan changes in the middle of a period.** When a plan changes before a limit resets, the new reading replaces the old one, and the forecast and the pace do not count the change as use.
 - **WSL on Windows.** With `sources.wsl` set to `true`, a Windows PC counts the Claude Code and Codex logs inside its WSL distributions as its own.
 - **Status for scripts.** `npm run status -- --json` prints each engine's percent left, reset time, burn rate and pace from saved data, and `--wait codex` (or `claude`) waits until that engine is no longer out.
 - **Optional Grok tile.** With `sources.grokLimits` set to `true`, a Grok tile reads a cached weekly limit, a request log, or both, from the files set in `grok.appFolder` and `grok.requestLog`.

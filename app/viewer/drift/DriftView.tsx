@@ -13,13 +13,13 @@ type ModelDrift = { model: string; replies: number; series: Record<Metric, Point
 
 const LABELS: Record<Metric, string> = {
   thinking: STRINGS.drift.thinking, replySeconds: STRINGS.drift.replySeconds,
-  outputTokens: STRINGS.drift.outputTokens, retries: STRINGS.drift.retries,
+  outputTokens: STRINGS.drift.outputTokens, toolCalls: STRINGS.drift.toolCalls, retries: STRINGS.drift.retries,
 };
 const round = (value: number) => value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
 export function valueText(metric: Metric, value: number | null) {
   if (value === null) return STRINGS.status.unknown;
   if (metric === 'outputTokens') return compact(Math.round(value));
-  if (metric === 'retries') return format(STRINGS.drift.perHundred, { value: round(value) });
+  if (metric === 'retries' || metric === 'toolCalls') return format(STRINGS.drift.perHundred, { value: round(value) });
   return format(STRINGS.drift.seconds, { value: round(value) });
 }
 // "claude-opus-5-5" reads as "Opus 5.5". Dated names keep their date off the title.

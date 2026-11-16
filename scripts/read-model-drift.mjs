@@ -1,5 +1,6 @@
 // Reads Claude Code transcripts into daily numbers per model for the drift view: how long each reply
-// thought, how long it took, how many tokens it wrote, and how many retries and errors there were.
+// thought, how long it took, how many tokens it wrote, how many tools it called, and how many retries
+// and errors there were.
 // Only numbers, dates and model names leave this file. Prompts, replies, paths and session names never do.
 // Values are kept as small histograms so files and computers can be merged before a median is taken.
 import fs from 'node:fs';
@@ -16,7 +17,8 @@ export const MAX_LINE_BYTES=4*1024*1024;
 // A gap longer than this between the request and the reply is the user away, not the model working.
 export const MAX_REPLY_SECONDS=30*60;
 const CACHE_FILE='model-drift.json';
-const CACHE_VERSION=1;
+// 2: each file's numbers also count tool calls.
+const CACHE_VERSION=2;
 
 function dayFormatter(timeZone) {
   const format=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'});
@@ -24,7 +26,7 @@ function dayFormatter(timeZone) {
 }
 
 function emptyStats() {
-  return {replies:0,retries:0,thinking:{},replySeconds:{},outputTokens:{},efforts:{}};
+  return {replies:0,retries:0,toolCalls:0,thinking:{},replySeconds:{},outputTokens:{},efforts:{}};
 }
 
 function addTo(histogram,value) {
@@ -72,7 +74,7 @@ function driftParser({timeZone=TIME_ZONE}={}) {
     const id=typeof message.id==='string'?message.id:typeof entry.requestId==='string'?entry.requestId:`line-${replies.size}`;
     let reply=replies.get(id);
     if(!reply) {
-      reply={model:message.model,requestAt:lastRequestAt,lastAt:at,output:0,thinkingMs:0,effort:null};
+      reply={model:message.model,requestAt:lastRequestAt,lastAt:at,output:0,thinkingMs:0,effort:null,tools:new Set()};
       replies.set(id,reply);
     }
     reply.lastAt=Math.max(reply.lastAt,at);
@@ -81,11 +83,15 @@ function driftParser({timeZone=TIME_ZONE}={}) {
     const thinking=entry.thinkingDurationMs;
     if(typeof thinking==='number' && Number.isFinite(thinking) && thinking>reply.thinkingMs)reply.thinkingMs=thinking;
     if(typeof entry.effort==='string')reply.effort=EFFORTS.includes(entry.effort)?entry.effort:'other';
+    // A reply is written once per block as it streams, so a tool call is counted by its id.
+    if(Array.isArray(message.content))for(const block of message.content)
+      if(block?.type==='tool_use' && typeof block.id==='string')reply.tools.add(block.id);
   };
   const finish=()=>{
     for(const reply of replies.values()) {
       const stats=statsFor(days,dayOf(reply.lastAt),reply.model);
       stats.replies++;
+      stats.toolCalls+=reply.tools.size;
       if(reply.output>0)addTo(stats.outputTokens,reply.output);
       if(reply.thinkingMs>0)addTo(stats.thinking,reply.thinkingMs/1000);
       if(reply.requestAt!==null) {
@@ -143,6 +149,7 @@ export function mergeDays(into,from) {
     const target=statsFor(into,date,model);
     target.replies+=stats.replies;
     target.retries+=stats.retries;
+    target.toolCalls+=stats.toolCalls;
     for(const key of ['thinking','replySeconds','outputTokens','efforts'])mergeHistogram(target[key],stats[key]);
   }
   return into;
@@ -154,7 +161,7 @@ const pairs=histogram=>Object.entries(histogram).map(([bin,count])=>[Number(bin)
 export function driftRow(days,{now=new Date(),timeZone=TIME_ZONE,keepDays=KEEP_DAYS}={}) {
   const first=dayFormatter(timeZone)(now.getTime()-(keepDays-1)*86400000);
   return Object.keys(days).filter(date=>date>=first).sort().map(date=>({date,models:Object.entries(days[date]).sort(([a],[b])=>a.localeCompare(b))
-    .map(([model,stats])=>({model,replies:stats.replies,retries:stats.retries,thinking:pairs(stats.thinking),
+    .map(([model,stats])=>({model,replies:stats.replies,retries:stats.retries,toolCalls:stats.toolCalls,thinking:pairs(stats.thinking),
       replySeconds:pairs(stats.replySeconds),outputTokens:pairs(stats.outputTokens),
       efforts:Object.fromEntries([...EFFORTS,'other','unset'].map(name=>[name,stats.efforts[name] ?? 0]))}))}));
 }

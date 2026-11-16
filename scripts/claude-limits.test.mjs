@@ -5,7 +5,7 @@ import {realpathSync} from 'node:fs';
 import fs from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {claudeLimitsSource,extractClaudeLimits,mergeClaudeLimits,readClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
+import {ALLOWANCE_CHANGE_POINTS,claudeLimitsSource,extractClaudeLimits,mergeClaudeLimits,readClaudeLimits,recordClaudeLimits} from './claude-limits.mjs';
 
 
 
@@ -38,9 +38,9 @@ test('missing, malformed and impossible readings are rejected', () => {
   assert.deepEqual(Object.keys(partial.windows),['seven_day']);
 });
 
-test('several sessions keep the higher reading within one reset period', () => {
+test('a slightly lower reading within one reset period keeps the higher one', () => {
   const first=extractClaudeLimits(input(40,10),now);
-  const lower=extractClaudeLimits(input(35,12),now+60000);
+  const lower=extractClaudeLimits(input(38,12),now+60000);
   const merged=mergeClaudeLimits(first,lower,now+60000);
   assert.equal(merged.windows.five_hour.usedPercentage,40);
   assert.equal(merged.windows.five_hour.observedAt,seconds);
@@ -206,4 +206,30 @@ test('an earlier 5-hour reading does not come back once a read has left the wind
   assert.equal(saved.windows.five_hour,undefined);
   const later=claudeLimitsSource(saved,{enabled:true,now:now+30*60000});
   assert.deepEqual(later.windows.map(window=>window.window),['seven_day']);
+});
+
+// A plan that changes in the middle of a reset period (fictional readings).
+test('a plan change inside one reset period replaces the reading instead of keeping the higher one', async t => {
+  const week=seconds+3*86400;
+  const weekOnly=used=>({rate_limits:{seven_day:{used_percentage:used,resets_at:week}},notReported:['five_hour']});
+  const both=(session,used)=>({rate_limits:{five_hour:{used_percentage:session,resets_at:seconds+4*3600},seven_day:{used_percentage:used,resets_at:week}},notReported:[]});
+  const runtime=await folder(t);
+  const read=(usage,at)=>readClaudeLimits(runtime,{now:at,enabled:true,readUsage:async()=>({status:'read',usage})});
+  const shape=source=>source.windows.map(window=>[window.window,window.remainingPercent]);
+  // A plan with no 5-hour limit, a week 12% used.
+  let source=await read(weekOnly(12),now);
+  assert.deepEqual([shape(source),source.notReported],[[['seven_day',88]],['five_hour']]);
+  // A smaller plan starts: the same week now reads 70% used and a 5-hour limit appears.
+  source=await read(both(3,70),now+300000);
+  assert.deepEqual([shape(source),source.notReported],[[['five_hour',97],['seven_day',30]],undefined]);
+  // A larger plan starts: the same week falls to 9% used and the 5-hour limit goes away again.
+  source=await read(weekOnly(9),now+600000);
+  assert.deepEqual([shape(source),source.notReported],[[['seven_day',91]],['five_hour']]);
+  assert.equal(source.status,'ok');
+  // A small change of allowance shows too.
+  source=await read(weekOnly(9-ALLOWANCE_CHANGE_POINTS),now+900000);
+  assert.deepEqual(shape(source),[['seven_day',91+ALLOWANCE_CHANGE_POINTS]]);
+  // A reading a point lower is rounding: the higher one stays.
+  source=await read(weekOnly(9-ALLOWANCE_CHANGE_POINTS-1),now+1200000);
+  assert.deepEqual(shape(source),[['seven_day',91+ALLOWANCE_CHANGE_POINTS]]);
 });

@@ -3,6 +3,7 @@ import {validTimeZone} from '../lib/timezone.mjs';
 
 export const MAX_PROJECTS=20;
 export const MAX_SESSIONS=10;
+export const MAX_SUBAGENTS=5;
 const PROVIDERS=['claude','codex'];
 const HOSTS=['Mac','Windows'];
 const COUNTERS=['inputTokens','cacheReadTokens','cacheCreationTokens','outputTokens','totalTokens'];
@@ -30,6 +31,16 @@ function cleanModel(raw) {
   return {model:raw.model,...Object.fromEntries(COUNTERS.map(key=>[key,raw[key]]))};
 }
 
+// The largest subagents of one session. A row from a version that sends none keeps an Unknown count.
+function cleanSubagents(raw) {
+  if(raw.subagents===undefined && raw.subagentCount===undefined)return {subagents:[],subagentCount:null};
+  const list=raw.subagents,total=raw.subagentCount;
+  if(!Array.isArray(list) || list.length>MAX_SUBAGENTS || !(total===null || (count(total) && total>=list.length)) ||
+    list.some(row=>!object(row) || typeof row.id!=='string' || !HASH.test(row.id) || !count(row.totalTokens) || row.totalTokens===0) ||
+    new Set(list.map(row=>row.id)).size!==list.length || (list.length && (raw.subagentTokens===null || sumOf(list,'totalTokens')>raw.subagentTokens)))fail();
+  return {subagents:list.map(row=>({id:row.id,totalTokens:row.totalTokens})).sort((a,b)=>b.totalTokens-a.totalTokens || a.id.localeCompare(b.id)),subagentCount:total};
+}
+
 function cleanSession(raw) {
   if(!object(raw) || typeof raw.id!=='string' || !HASH.test(raw.id) || !PROVIDERS.includes(raw.provider) ||
     !instant(raw.start) || !instant(raw.end) || raw.start>raw.end || !Array.isArray(raw.models) || !raw.models.length || raw.models.length>50)fail();
@@ -38,7 +49,7 @@ function cleanSession(raw) {
   const totalTokens=sumOf(models,'totalTokens');
   if(raw.totalTokens!==totalTokens || !(raw.subagentTokens===null || (count(raw.subagentTokens) && raw.subagentTokens<=totalTokens)))fail();
   // The estimate is priced again here, so a pulled row cannot carry its own.
-  return {id:raw.id,provider:raw.provider,start:raw.start,end:raw.end,totalTokens,subagentTokens:raw.subagentTokens,usd:priced(models),models};
+  return {id:raw.id,provider:raw.provider,start:raw.start,end:raw.end,totalTokens,subagentTokens:raw.subagentTokens,...cleanSubagents(raw),usd:priced(models),models};
 }
 
 function cleanProject(raw,{other=false}={}) {
@@ -82,6 +93,10 @@ export function buildProjectTokens(raw,host,checkedAt) {
     const models=session.models.map(cleanModel);
     const row={id:session.id,provider:name,start:session.start,end:session.end,totalTokens:sumOf(models,'totalTokens'),
       subagentTokens:session.subagentTokens,usd:priced(models),models};
+    // Subagents are listed only when every turn said whether it was one.
+    const agents=session.subagentTokens!==null && Array.isArray(session.subagents)?session.subagents:null;
+    row.subagents=agents?agents.slice(0,MAX_SUBAGENTS):[];
+    row.subagentCount=agents?agents.length:null;
     const folder=session.project ?? null,key=folder?.toLowerCase() ?? null;
     if(!groups.has(key))groups.set(key,{spellings:new Map(),sessions:[]});
     const group=groups.get(key);

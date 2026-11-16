@@ -108,3 +108,19 @@ test('expired extrapolation waits for evidence instead of reporting a measured e
   assert.equal(quotaPace(q,now+60000)[0].status,'awaiting-observation');
   assert.equal(quotaPace(q,now+60000)[0].remainingMinutes,null);
 });
+
+test('a plan change in the middle of a weekly window is not a pace',()=>{
+  // The share left falls from 90 to 30 between two readings with the same reset, then holds.
+  const week={bucket:'claude',window:'seven_day',remainingPercent:30,durationMinutes:10080,resetsAt:iso(now+4*86400000)};
+  const history=steps=>Array.from({length:13},(_,i)=>({checkedAt:iso(now-(12-i)*300000),windows:[{...week,remainingPercent:steps(i)}]}));
+  const changed=pace({status:'ok',checkedAt:iso(now),windows:[week],history:history(i=>i<6?90:30)});
+  assert.equal(changed.status,'no-recent-consumption');
+  assert.equal(changed.observedMinutes,30,'only the readings after the change count');
+  // The same fall spread over the hour is use.
+  const used=pace({status:'ok',checkedAt:iso(now),windows:[week],history:history(i=>90-i*5)});
+  assert.equal(used.status,'projected');
+  // A short window keeps a fast fall as use.
+  const short={...week,window:'five_hour',durationMinutes:300,resetsAt:iso(now+4*3600000)};
+  const fast=pace({status:'ok',checkedAt:iso(now),windows:[short],history:Array.from({length:13},(_,i)=>({checkedAt:iso(now-(12-i)*300000),windows:[{...short,remainingPercent:i<6?90:30}]}))});
+  assert.equal(fast.status,'projected');
+});

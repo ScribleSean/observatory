@@ -411,3 +411,47 @@ test('a reset that has already passed is room, not a run-out', () => {
   assert.equal(result.status, 'room');
   assert.equal(result.runoutAt, null);
 });
+
+// A plan change in the middle of a weekly window: the share left falls at once with the same reset.
+const stepReset = now + 100 * HOUR;
+const stepped = (before, after, minutesAgo) => burning(before, 0.2, 24, stepReset).map(reading =>
+  reading.at >= now - minutesAgo * 60000 ? { ...reading, remaining: after } : reading);
+
+test('a plan change in the middle of a week is not read as use', () => {
+  // 90% left on the old plan, then 30% left on the new one from 20 minutes ago, with nothing spent since.
+  const result = windowForecast({ remaining: 30, resetsAt: iso(stepReset), durationMinutes: WEEK, readings: stepped(90, 30, 20), now });
+  // Read as use, the fall would be 60 points in an hour and the window would be gone within the hour.
+  // The week's average on the new plan (70 points in 68 hours) still says it runs out, about 31 hours on.
+  assert.equal(result.status, 'runs-out');
+  assert.ok(Date.parse(result.runoutAt) > now + 30 * HOUR && Date.parse(result.runoutAt) < now + 32 * HOUR, result.runoutAt);
+  const ahead = projection({ remaining: 30, resetsAt: iso(stepReset), durationMinutes: WEEK, readings: stepped(90, 30, 20), now });
+  assert.equal(ahead.pace.recent, 0);
+  // Right after the change there is no pace since it yet: the average since the window opened stands in.
+  const fresh = projection({ remaining: 30, resetsAt: iso(stepReset), durationMinutes: WEEK, readings: stepped(90, 30, 5), now });
+  assert.equal(fresh.pace.measured, false);
+  assert.equal(fresh.pace.recent, fresh.pace.average);
+});
+
+test('a fast fall in a short window, or a slow one in a week, is still use', () => {
+  // A 5-hour window can really lose 30 points in ten minutes.
+  const reset = now + 4 * HOUR;
+  const readings = burning(40, 0, 1, reset).map(reading => reading.at < now - 600000 ? { ...reading, remaining: 70 } : reading);
+  assert.equal(projection({ remaining: 40, resetsAt: iso(reset), durationMinutes: 300, readings, now }).pace.recent, 30);
+  // 30 points over the last hour of a week is a burst, not a plan change.
+  const burst = projection({ remaining: 50, resetsAt: iso(stepReset), durationMinutes: WEEK, readings: burning(50, 30, 1, stepReset), now });
+  assert.ok(Math.abs(burst.pace.recent - 30) < 1e-6);
+});
+
+test('the range from past forecasts does not count a plan change as use', () => {
+  // Three weeks of readings every 10 minutes at a steady 0.03 points an hour, with one fall of 25 points ten days ago.
+  const reset = now + 24 * HOUR;
+  const steady = Array.from({ length: 21 * 144 }, (_, index) => {
+    const ago = (21 * 144 - index) * HOUR / 6;
+    return { at: now - ago, remaining: 60 + 0.03 * ago / HOUR, resetsAt: reset };
+  });
+  const changed = steady.map(reading => reading.at < now - 10 * 24 * HOUR ? { ...reading, remaining: reading.remaining + 25 } : reading);
+  // Every forecast made in the three days before the change spans it: counted as use, they would put the top of the range near 25.
+  const range = readings => projection({ remaining: 60, resetsAt: iso(reset), durationMinutes: WEEK, readings, now }).miss(72);
+  assert.ok(range(steady).high < 1);
+  assert.ok(range(changed).high < 1, String(range(changed).high));
+});
