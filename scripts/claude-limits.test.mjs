@@ -43,7 +43,7 @@ test('a slightly lower reading within one reset period keeps the higher one', ()
   const lower=extractClaudeLimits(input(38,12),now+60000);
   const merged=mergeClaudeLimits(first,lower,now+60000);
   assert.equal(merged.windows.five_hour.usedPercentage,40);
-  assert.equal(merged.windows.five_hour.observedAt,seconds);
+  assert.equal(merged.windows.five_hour.observedAt,seconds+60);
   assert.equal(merged.windows.seven_day.usedPercentage,12);
   const later=input(2,12);later.rate_limits.five_hour.resets_at=seconds+7200+18000;
   assert.equal(mergeClaudeLimits(merged,extractClaudeLimits(later,now+120000),now+120000).windows.five_hour.usedPercentage,2);

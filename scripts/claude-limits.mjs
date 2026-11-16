@@ -74,7 +74,8 @@ export function mergeClaudeLimits(previous,next,now=Date.now()) {
     if(!before || !after) {if(before || after)merged.windows[name]=before ?? after;continue;}
     const samePeriod=Math.abs(before.resetsAt-after.resetsAt)<=120;
     const late=samePeriod && before.usedPercentage>after.usedPercentage && before.usedPercentage-after.usedPercentage<ALLOWANCE_CHANGE_POINTS;
-    merged.windows[name]=late ? before : after;
+    // Rounding keeps the higher value, but the window was read just now, so the reading is as new as the later one.
+    merged.windows[name]=late ? {...after,usedPercentage:before.usedPercentage} : after;
   }
   const missing=next.notReported ?? (saved.notReported && {...saved.notReported,names:saved.notReported.names.filter(name=>!next.windows[name])});
   if(missing)merged.notReported=missing;
