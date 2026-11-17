@@ -119,8 +119,8 @@ Description=Observatory: collect usage and combine computers
 Type=oneshot
 WorkingDirectory=${unitText(repo).replace(/%/g,'%%')}
 Environment=${envQuote('OBSERVATORY_CONFIG='+unitText(configFile))}
-Environment=${envQuote('PATH='+[path.dirname(unitText(node)),'/usr/local/bin','/usr/bin','/bin'].join(':'))}
-ExecStart=${unitQuote(node)} ${unitQuote(path.join(repo,'scripts','tick.mjs'))}
+Environment=${envQuote('PATH='+[path.posix.dirname(unitText(node)),'/usr/local/bin','/usr/bin','/bin'].join(':'))}
+ExecStart=${unitQuote(node)} ${unitQuote(path.posix.join(repo,'scripts','tick.mjs'))}
 `;
 }
 

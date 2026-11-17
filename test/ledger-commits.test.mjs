@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {writeFile,chmod,mkdir} from 'node:fs/promises';
-import {existsSync,rmSync,readFileSync} from 'node:fs';
+import {existsSync,rmSync,readFileSync,realpathSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
@@ -74,13 +74,15 @@ test('a worktree resolves to its main repository, and a pointer to a missing fol
     const tree=path.join(home,'trees','meadow-feature');
     git(repo,['worktree','add','-q','-b','feature/x',tree]);
     const resolve=repositoryResolver(home,'linux');
-    assert.equal(resolve(path.join(tree,'src')),repo);
-    assert.equal(resolve(path.join(repo,'docs','deep')),repo);
+    // Repositories are keyed by their real path, as git writes it in the worktree's pointer.
+    const real=realpathSync.native(repo);
+    assert.equal(resolve(path.join(tree,'src')),real);
+    assert.equal(resolve(path.join(repo,'docs','deep')),real);
     assert.equal(resolve('/'),null,'above home is never a repository');
     const fake=path.join(home,'code','fake');
     await mkdir(fake,{recursive:true});
     await writeFile(path.join(fake,'.git'),'gitdir: ../does-not-exist/.git/worktrees/x\n');
-    assert.equal(resolve(fake),fake);
+    assert.equal(resolve(fake),realpathSync.native(fake));
   });
 });
 

@@ -57,12 +57,15 @@ export function cleanWeeklyUsage(raw) {
 }
 
 // Opened without following links and checked on the open file, so nothing can be swapped in between.
+// Windows has no O_NOFOLLOW, so a link is refused before opening and the open file must be the one checked.
 async function smallFile(file,limit) {
+  const before=await lstat(file);
+  if(!before.isFile() || before.size>limit)return null;
   // Non-blocking, so a named pipe planted under a matching name cannot stall collection.
   const handle=await open(file,constants.O_RDONLY|(constants.O_NOFOLLOW ?? 0)|(constants.O_NONBLOCK ?? 0));
   try {
     const info=await handle.stat();
-    if(!info.isFile() || info.size>limit)return null;
+    if(!info.isFile() || info.size>limit || info.dev!==before.dev || info.ino!==before.ino)return null;
     return await handle.readFile('utf8');
   } finally {await handle.close();}
 }
@@ -112,7 +115,8 @@ async function logTail(file) {
   // No following a link swapped in after the check.
   const handle=await open(file,constants.O_RDONLY|(constants.O_NOFOLLOW ?? 0)|(constants.O_NONBLOCK ?? 0));
   try {
-    if(!(await handle.stat()).isFile())return null;
+    const opened=await handle.stat();
+    if(!opened.isFile() || opened.dev!==info.dev || opened.ino!==info.ino)return null;
     const length=Math.min(info.size,MAX_LOG_BYTES);
     const buffer=Buffer.alloc(length);
     const {bytesRead}=await handle.read(buffer,0,length,info.size-length);

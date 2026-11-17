@@ -38,9 +38,11 @@ async function check(folder,mutate=()=>{},{prepare=async()=>{},args=[]}={}) {
   assert.equal(await snapshotOf(),before,'the check added, removed or changed a file');
   return {code,results:Object.fromEntries(JSON.parse(out).results.map(row=>[row.id,row]))};
 }
+// The check runs here as the Mac, so a Windows temporary folder cannot be its data folder.
+const macOnly=process.platform==='win32' && 'the check runs as the Mac, whose settings take POSIX paths';
 const withTemp=async action=>{const folder=await mkdtemp(path.join(tmpdir(),'observatory-parity-'));try {return await action(folder);}finally {await rm(folder,{recursive:true,force:true});}};
 
-test('the parity check passes on synthetic two-computer data and changes nothing',()=>withTemp(async folder=>{
+test('the parity check passes on synthetic two-computer data and changes nothing',{skip:macOnly},()=>withTemp(async folder=>{
   const {code,results}=await check(folder);
   for(const id of ['own snapshot usage.json','combined view lists both computers','both computers fresh','Both sum labeled and equal to its parts','sources on as on the Mac'])
     assert.equal(results[id]?.status,'PASS',`${id}: ${results[id]?.detail}`);
@@ -48,19 +50,19 @@ test('the parity check passes on synthetic two-computer data and changes nothing
   assert.equal(code,0);
 }));
 
-test('the parity check fails when the Both sum loses its label',()=>withTemp(async folder=>{
+test('the parity check fails when the Both sum loses its label',{skip:macOnly},()=>withTemp(async folder=>{
   const {code,results}=await check(folder,combined=>{combined.glance.both.label='total';});
   assert.match(results['Both sum labeled and equal to its parts'].detail,/label is "total"/);
   assert.equal(code,1);
 }));
 
-test('the parity check fails when the Both sum stops matching its parts',()=>withTemp(async folder=>{
+test('the parity check fails when the Both sum stops matching its parts',{skip:macOnly},()=>withTemp(async folder=>{
   const {code,results}=await check(folder,combined=>{combined.glance.both.tokens+=1;});
   assert.match(results['Both sum labeled and equal to its parts'].detail,/is not the sum/);
   assert.equal(code,1);
 }));
 
-test('the parity check fails when combined.json is old',()=>withTemp(async folder=>{
+test('the parity check fails when combined.json is old',{skip:macOnly},()=>withTemp(async folder=>{
   const old=new Date(now-3*86400000).toISOString();
   const {code,results}=await check(folder,combined=>{combined.generatedAt=old;});
   assert.equal(results['both computers fresh'].status,'FAIL');
@@ -74,19 +76,19 @@ const saveDays=dates=>async data=>{
   finally {db.close();}
 };
 
-test('saved daily totals that reach past 30 days pass, and the store is left as it was',()=>withTemp(async folder=>{
+test('saved daily totals that reach past 30 days pass, and the store is left as it was',{skip:macOnly},()=>withTemp(async folder=>{
   const {results}=await check(folder,undefined,{prepare:saveDays([dayAgo(40),dayAgo(1)])});
   assert.equal(results['daily token history kept'].status,'PASS',results['daily token history kept'].detail);
   assert.match(results['daily token history kept'].detail,/claude 2 days/);
 }));
 
-test('saved daily totals younger than 30 days cannot prove anything yet, so they are skipped',()=>withTemp(async folder=>{
+test('saved daily totals younger than 30 days cannot prove anything yet, so they are skipped',{skip:macOnly},()=>withTemp(async folder=>{
   const {code,results}=await check(folder,undefined,{prepare:saveDays([dayAgo(3),dayAgo(1)])});
   assert.equal(results['daily token history kept'].status,'SKIP');
   assert.equal(code,0);
 }));
 
-test('no saved totals yet is a skip, and a store that cannot be read is a failure',()=>withTemp(async folder=>{
+test('no saved totals yet is a skip, and a store that cannot be read is a failure',{skip:macOnly},()=>withTemp(async folder=>{
   assert.equal((await check(path.join(folder,'none'))).results['daily token history kept'].status,'SKIP');
   const broken=async data=>{
     await mkdir(path.join(data,'private-history'),{recursive:true});
@@ -97,7 +99,7 @@ test('no saved totals yet is a skip, and a store that cannot be read is a failur
   assert.equal(code,1);
 }));
 
-test('limit history counts its readings and tells imported older history apart',()=>withTemp(async folder=>{
+test('limit history counts its readings and tells imported older history apart',{skip:macOnly},()=>withTemp(async folder=>{
   const reading=(observedAt,source)=>({provider:'claude',window:'weekly',observedAt,observer:'Mac',remaining:60,resetsAt:null,durationMinutes:null,source});
   const save=readings=>async data=>{
     const db=await openHistory(data);
@@ -123,7 +125,7 @@ test('--expect compares the checkout with the commit it is given',()=>withTemp(a
   assert.equal(other.code,1);
 }));
 
-test('a computer whose tokens are unknown makes Both unknown, and a number there fails',()=>withTemp(async folder=>{
+test('a computer whose tokens are unknown makes Both unknown, and a number there fails',{skip:macOnly},()=>withTemp(async folder=>{
   const unknown=combined=>{combined.glance.today[1].tokens=null;combined.glance.both.tokens=null;};
   assert.equal((await check(path.join(folder,'unknown'),unknown)).results['Both sum labeled and equal to its parts'].status,'PASS');
   const wrong=await check(path.join(folder,'wrong'),combined=>{combined.glance.today[1].tokens=null;});
@@ -132,7 +134,7 @@ test('a computer whose tokens are unknown makes Both unknown, and a number there
   assert.match(one.results['Both sum labeled and equal to its parts'].detail,/1 per-computer rows/);
 }));
 
-test('one computer in the combined file, or an old own snapshot, fails',()=>withTemp(async folder=>{
+test('one computer in the combined file, or an old own snapshot, fails',{skip:macOnly},()=>withTemp(async folder=>{
   const alone=await check(path.join(folder,'alone'),combined=>{combined.devices.pop();});
   assert.equal(alone.results['combined view lists both computers'].status,'FAIL');
   const stale=await check(path.join(folder,'stale'),combined=>{combined.devices[1].collectedAt=new Date(now-3*3600000).toISOString();});

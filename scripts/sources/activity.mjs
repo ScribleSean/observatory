@@ -97,9 +97,9 @@ export function shellWrites(command,cwd,home) {
     if(typeof arg!=='string' || !arg)return null;
     let text=arg;
     if(home) text=text.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/,home);
-    if(/[$`*?[\]{}]/.test(text) || text==='-')return null;
-    const full=path.resolve(base,text);
-    return full.startsWith('/dev/')?null:full;
+    // Checked before resolving: on Windows /dev/null resolves to a folder on the current drive.
+    if(/[$`*?[\]{}]/.test(text) || text==='-' || text.startsWith('/dev/'))return null;
+    return path.resolve(base,text);
   };
   const fileDir=arg=>{const full=resolve(arg);if(full)dirs.push(path.dirname(full));};
   for(const line of commandLines(command)) {
@@ -167,6 +167,10 @@ export function patchFiles(text) {
 // macOS guards with a privacy prompt. Folders that no longer exist walk up to one that does.
 export function repositoryResolver(home,platform=process.platform) {
   const memo=new Map();
+  // Git writes a worktree's pointer as the real path, so every repository is keyed by its real path
+  // (macOS /var is /private/var, Windows short names are spelled out) and a worktree and its main
+  // checkout share one key.
+  const canonical=dir=>{try {return fs.realpathSync.native(dir);} catch {return dir;}};
   const main=root=>{
     const dotGit=path.join(root,'.git');
     let info;
@@ -194,7 +198,8 @@ export function repositoryResolver(home,platform=process.platform) {
     if(typeof dir!=='string' || !path.isAbsolute(dir))return null;
     if(memo.has(dir))return memo.get(dir);
     const root=repositoryRoot(dir,home,platform);
-    const found=root?main(root):null;
+    const repo=root?main(root):null;
+    const found=repo?canonical(repo):null;
     memo.set(dir,found);
     return found;
   };

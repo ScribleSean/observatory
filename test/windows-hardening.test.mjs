@@ -19,6 +19,10 @@ test('a Windows folder only you, SYSTEM and Administrators can change is private
   assert.equal(windowsAclProblem(`O:BAG:SYD:(A;OICI;FA;;;${me})(A;OICIIO;FA;;;CO)(D;;FA;;;WD)`,me),null);
   assert.equal(windowsAclProblem(`O:${me}D:(A;;FA;;;${me})`,me),null);
   assert.equal(windowsAclProblem(`${own}(A;;FA;;;${me})S:AI`,me),null);
+  // Signed in as the built-in Administrator, SDDL names the account LA instead of by its SID.
+  const admin='S-1-5-21-1111111111-2222222222-3333333333-500';
+  assert.equal(windowsAclProblem('O:BAG:SYD:AI(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)(A;OICIID;FA;;;LA)',admin),null);
+  assert.equal(windowsAclProblem('O:LAG:SYD:(A;OICI;FA;;;LA)',admin),null);
 });
 
 test('a Windows folder others can change or anyone can read is refused', () => {
@@ -74,11 +78,11 @@ const repo=fileURLToPath(new URL('..',import.meta.url));
 test('Windows looks for claude.exe in the installers\' folders, not on PATH', async t => {
   const before=await readdir(repo);
   const root=await mkdtemp(path.join(tmpdir(),'observatory-claude-'));
-  t.after(()=>rm(root,{recursive:true,force:true}));
   // Elsewhere these Windows-style paths are plain relative names, so work inside the temporary folder.
+  // Windows cannot remove the folder a process is in, so leave it first.
   const cwd=process.cwd();
   process.chdir(root);
-  t.after(()=>process.chdir(cwd));
+  t.after(async()=>{process.chdir(cwd);await rm(root,{recursive:true,force:true});});
   const home=path.join(root,'home'),local=path.join(root,'local'),onPath=path.join(root,'tools');
   await mkdir(onPath,{recursive:true});
   await writeFile(path.join(onPath,'claude.exe'),'');

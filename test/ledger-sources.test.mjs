@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,appendFile,readFile} from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
 import {claudeAssistant,claudeResult,claudePrompt,claudeTitle,writeClaude,appendEvents,codexToken,writeCodex,jsonl,iso} from './ledger-fixtures.mjs';
@@ -54,7 +55,7 @@ test('Claude: a streamed request counts once at its largest, subagents carry the
     assert.deepEqual(session.agents,[{key:'a1',kind:'search'}]);
     assert.equal(session.requests.find(request=>request.key==='m3').agent,'a1');
     // The edit is a write in the repository. Reading another folder is not.
-    assert.deepEqual([...new Set(session.writes.map(write=>write.repo))],[repo]);
+    assert.deepEqual([...new Set(session.writes.map(write=>write.repo))],[realpathSync.native(repo)]);
     assert.equal(session.live.stop,'end_turn');
     assert.deepEqual(session.typed,[T]);
   });
@@ -115,7 +116,7 @@ test('Codex: token turns, a subagent thread under its parent, a patch write and 
     assert.deepEqual(session.requests.map(request=>[request.model,request.values,request.agent]).sort(byJson),[
       ['gpt-6-luna',[200,0,0,20],child],['gpt-6-sol',[200,800,0,50],null],['gpt-6-sol',[200,300,0,30],null]].sort(byJson));
     assert.deepEqual(session.agents,[{key:child,kind:'review'}]);
-    assert.deepEqual([...new Set(session.writes.map(write=>write.repo))],[repo]);
+    assert.deepEqual([...new Set(session.writes.map(write=>write.repo))],[realpathSync.native(repo)]);
     assert.equal(session.live.stop,'end_turn');
     assert.equal(session.rateLimits,null,'Codex limit hits are not read, so auto-resume stays Unknown');
   });
@@ -171,13 +172,16 @@ test('a line still being written is left for the next read',async()=>{
 });
 
 test('shell commands count as writes only when they write',()=>{
-  const home='/home/fern',cwd='/home/fern/code/garden';
+  // On Windows a path that starts with / sits on the current drive, so the expected folders resolve too.
+  const at=folder=>path.resolve(folder);
+  const home=at('/home/fern'),cwd=at('/home/fern/code/garden');
   assert.deepEqual(shellWrites('git status && git log --oneline | head',cwd,home).dirs,[]);
-  assert.deepEqual(shellWrites('cd ~/code/orchard && git commit -am "Prune; then water" 2>&1 | tail -2',cwd,home).dirs,['/home/fern/code/orchard']);
-  assert.deepEqual(shellWrites('git -C /home/fern/code/pond push',cwd,home).dirs,['/home/fern/code/pond']);
-  assert.deepEqual(shellWrites('echo hi > notes/today.md',cwd,home).dirs,['/home/fern/code/garden/notes']);
-  assert.deepEqual(shellWrites("cat > /home/fern/code/pond/a.md <<'EOF'\ngit commit -m nope\nEOF",cwd,home).dirs,['/home/fern/code/pond']);
+  assert.deepEqual(shellWrites('cd ~/code/orchard && git commit -am "Prune; then water" 2>&1 | tail -2',cwd,home).dirs,[at('/home/fern/code/orchard')]);
+  assert.deepEqual(shellWrites('git -C /home/fern/code/pond push',cwd,home).dirs,[at('/home/fern/code/pond')]);
+  assert.deepEqual(shellWrites('echo hi > notes/today.md',cwd,home).dirs,[at('/home/fern/code/garden/notes')]);
+  assert.deepEqual(shellWrites("cat > /home/fern/code/pond/a.md <<'EOF'\ngit commit -m nope\nEOF",cwd,home).dirs,[at('/home/fern/code/pond')]);
   assert.deepEqual(shellWrites('ls 2>/dev/null >&2',cwd,home).dirs,[]);
+  assert.deepEqual(shellWrites('echo hi > /dev/null',cwd,home).dirs,[],'the null device is not a folder');
   assert.deepEqual(shellWrites('git checkout -b feature/rows',cwd,home).branches,[{dir:cwd,name:'feature/rows'}]);
   assert.deepEqual(patchFiles('*** Begin Patch\n*** Add File: a/b.js\n*** Update File: c.md\n*** End Patch'),['a/b.js','c.md']);
   assert.deepEqual(['Bash','Edit','WebSearch','mcp__browser__click','Read'].map(toolCategory),['Shell','File edits','Research','Browser','Other tools']);

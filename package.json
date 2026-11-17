@@ -13,7 +13,7 @@
     "build": "vite build",
     "preview": "node scripts/preview.mjs",
     "demo": "vite build && node scripts/demo.mjs",
-    "test": "node --import ./test/pin-timezone.mjs --test \"test/*.test.mjs\" \"scripts/*.test.mjs\"",
+    "test": "node --import ./test/pin-timezone.mjs --import ./test/private-temp.mjs --test \"test/*.test.mjs\" \"scripts/*.test.mjs\"",
     "lint": "oxlint",
     "format": "oxfmt",
     "status": "node scripts/status.mjs",
