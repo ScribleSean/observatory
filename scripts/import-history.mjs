@@ -59,7 +59,7 @@ export function snapshotReadings(snapshot,{observer,label}) {
   readings.push(...readingsFrom(snapshot.claudeLimits,{provider:'claude',observer,source:label}));
   const peer=snapshot.peerQuota;
   if(peer && typeof peer==='object') {
-    const host=['Mac','Windows'].includes(peer.host)?peer.host:OTHER[observer];
+    const host=['Mac','Windows','Linux'].includes(peer.host)?peer.host:OTHER[observer];
     readings.push(...readingsFrom(peer.quota ?? peer,{provider:'codex',observer:host,source:`${label} (shared from ${host})`}));
   }
   return readings;

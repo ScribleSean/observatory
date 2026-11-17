@@ -11,7 +11,11 @@ Observatory runs on your own computers. It has no account, no hosted service and
 
 ## What is saved
 
-`usage.json` and `combined.json` hold daily and hourly totals, model names, limit readings and the time each was observed. They do not hold prompts, responses, window titles, session names, commands, file paths or credentials.
+`usage.json` and `combined.json` hold daily and hourly totals, model names, limit readings and the time each was observed. For each agent session they also hold its title, as the tool named it, plus its counts, model names and the folder names of the repositories it wrote to. They do not hold prompts, responses, window titles, commands, file paths or credentials.
+
+Session titles are on by default. They stay on your computers, but with several computers they travel to the hub over your own SSH connection and back in `combined.json`. Set `"sessions": { "titles": false }` to replace each title with a short hash, keyed with a random secret that is made once per install and never leaves the computer. A hub with titles off also hashes the titles it receives from the other computers before it writes `combined.json`.
+
+The collector keeps a private cache in the data folder (`private-ledger/`) so it can resume reading the agents' transcripts where it stopped. The cache holds file locations, working folders, read positions and short hashes of tool inputs. It is never copied into `usage.json` or `combined.json` and never leaves the computer. The title hash secret is kept next to it.
 
 The tests feed the readers synthetic logs that contain private text and check that the text does not appear in the output.
 

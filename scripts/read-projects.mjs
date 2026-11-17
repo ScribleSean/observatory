@@ -7,19 +7,18 @@ import path from 'node:path';
 import readline from 'node:readline';
 import {isProtectedFolder} from '../lib/protected-folders.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
+import {claudeRequest,codexTurn,modelName as sharedModelName} from './sources/usage.mjs';
 
 export const LIMITS=Object.freeze({maxFiles:5000,maxTotalBytes:2*1024*1024*1024,maxLineBytes:16*1024*1024});
 // A file last written before this window cannot hold a request from today.
 const WINDOW_MS=26*3600000;
-const MODEL=/^[a-z0-9][a-z0-9.-]{0,63}$/;
 const NAME=/^[\p{L}\p{N}_.+ -]{1,64}$/u;
 const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
-const count=value=>Number.isSafeInteger(value) && value>=0?value:null;
 
 class Unavailable extends Error {}
 
 export const sessionHash=(provider,id)=>createHash('sha256').update(`${provider}:${id}`).digest('hex').slice(0,10);
-export const modelName=value=>typeof value==='string' && MODEL.test(value)?value:'unknown';
+export const modelName=sharedModelName;
 
 const formatters=new Map();
 export function dayKey(at,timeZone=TIME_ZONE) {
@@ -193,22 +192,18 @@ async function readClaude(folder,{today,timeZone,since,home,limits}) {
     const owner=inSubagents?path.basename(path.dirname(path.dirname(file))):null;
     const fallback=path.basename(file,'.jsonl');
     await lines(file,limits,line=>line.includes('"assistant"') && line.includes('"usage"'),event=>{
-      if(event.type!=='assistant' || !object(event.message) || !object(event.message.usage))return;
-      const usage=event.message.usage;
-      const at=Date.parse(event.timestamp);
-      if(!Number.isFinite(at))throw new Unavailable();
-      if(dayKey(at,timeZone)!==today)return;
-      const values=['input_tokens','cache_read_input_tokens','cache_creation_input_tokens','output_tokens'].map(key=>count(usage[key]));
-      if(values.includes(null))throw new Unavailable();
+      const request=claudeRequest(event);
+      if(request===null)return;
+      if(request==='invalid')throw new Unavailable();
       // Placeholder replies carry no message id and no usage.
-      if(typeof event.message.id!=='string' || !event.message.id || values.every(value=>value===0))return;
-      const key=event.message.id;
-      const total=values.reduce((a,b)=>a+b,0);
+      if(request==='empty' || dayKey(request.at,timeZone)!==today)return;
+      if(request.invalid)throw new Unavailable();
+      const {id:key,at,values,total}=request;
       const prior=requests.get(key);
       if(prior && prior.total>=total)return;
       const id=owner ?? (typeof event.sessionId==='string' && event.sessionId?event.sessionId:fallback);
       requests.set(key,{total,record:{provider:'claude',id:sessionHash('claude',id),project:name(event.cwd,{branch:event.gitBranch}),
-        at:prior?Math.min(prior.record.at,at):at,model:modelName(event.message.model),values,
+        at:prior?Math.min(prior.record.at,at):at,model:request.model,values,
         subagent:inSubagents || (typeof event.isSidechain==='boolean'?event.isSidechain:null),
         // A subagent file is named agent-<its id>, so a turn without the id falls back to the same value.
         agent:typeof event.agentId==='string' && event.agentId?event.agentId:inSubagents?fallback.replace(/^agent-/,''):null}});
@@ -292,11 +287,9 @@ async function readCodex(folder,{today,timeZone,since,home,limits}) {
       if(seen.has(identity))return;
       seen.add(identity);
       if(!object(last)) {if(Object.values(total).some(value=>typeof value==='number' && value>0))throw new Unavailable();return;}
-      const input=count(last.input_tokens),cached=count(last.cached_input_tokens),written=count(last.cache_write_input_tokens ?? 0),output=count(last.output_tokens);
-      if([input,cached,written,output].includes(null) || input<cached+written)throw new Unavailable();
-      // Codex input includes cache reads and writes, and output includes reasoning.
-      const values=[input-cached-written,cached,written,output];
-      if(values.every(value=>value===0))return;
+      const values=codexTurn(last);
+      if(values==='invalid')throw new Unavailable();
+      if(values==='empty')return;
       pending.push({running,record:{provider:'codex',id:sessionHash('codex',id),project,at,model,values,subagent,agent}});
     });
     // Copies whose parent log cannot be found cannot be told apart, so the day is Unknown.

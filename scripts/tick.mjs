@@ -1,13 +1,40 @@
+import {rm} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {withCycleDeadline} from '../lib/cycle-processes.mjs';
 import {loadConfig} from '../lib/config.mjs';
 import {privateFolder} from '../lib/private-folder.mjs';
 import {withRunLock} from '../lib/run-lock.mjs';
+import {writeJsonAtomic} from '../lib/atomic-file.mjs';
+import {glanceView} from '../lib/glance-view.mjs';
+import {TIME_ZONE} from '../lib/timezone.mjs';
 import {collect} from './collect.mjs';
 import {runHub,recombine} from './hub.mjs';
 
-export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=recombine}={}) {
+// The flags shown in the menu bar and tray: lib/ledger-flags.mjs pools every computer's sessions per tool.
+export async function glanceFlags(combined) {
+  try {
+    const {snapshotFlags}=await import('../lib/ledger-flags.mjs');
+    return snapshotFlags(combined);
+  } catch {return null;}
+}
+
+// The menu bar and tray apps draw public/local/glance.json and nothing else. When it cannot be made, the old
+// file is removed so the apps fall back to combined.json rather than show an older glance.
+export async function writeGlance(config,combined,{now=Date.now(),flags=glanceFlags}={}) {
+  const file=path.join(await privateFolder(config.dataFolder,'public','local'),'glance.json');
+  try {
+    const timeZone=combined.view?.timezone ?? TIME_ZONE;
+    const view=glanceView(combined,{now,timeZone,flags:await flags(combined,{now,timeZone}),settings:{titles:config.sessions?.titles!==false}});
+    await writeJsonAtomic(file,view);
+    return 'ok';
+  } catch(error) {
+    await rm(file,{force:true});
+    return error.message;
+  }
+}
+
+export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=recombine,glanceStep=writeGlance}={}) {
   const lockFolder=await privateFolder(config.dataFolder,'.runtime');
   return withRunLock(path.join(lockFolder,'tick.lock'),async()=>{
     const result={role:config.role,collect:'ok'};
@@ -16,6 +43,7 @@ export async function tick(config,{collectStep=collect,hubStep=runHub,spokeStep=
     const combined=config.role==='hub'?await hubStep(config):await spokeStep(config);
     result.combined=combined.generatedAt;
     result.title=combined.glance.title;
+    result.glance=await glanceStep(config,combined);
     if(combined.hub?.spokes)result.spokes=combined.hub.spokes;
     return result;
   });

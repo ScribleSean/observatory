@@ -50,6 +50,9 @@ export async function findCodexExecutable({runtime,appCandidates,toolCandidates,
     {windowsHide:true,timeout:10000,maxBuffer:4096,env:windowsPowerShellEnvironment()});
     const root=stdout.trim();
     if(path.isAbsolute(root) && !root.includes('\n') && !root.includes('\r'))candidates=[path.join(root,'app/resources/codex.exe')];
+  } else {
+    const onPath=(process.env.PATH??'').split(path.delimiter).filter(folder=>path.isAbsolute(folder)).map(folder=>path.join(folder,'codex'));
+    candidates=[...(toolCandidates??['/usr/local/bin/codex',path.join(homedir(),'.local/bin/codex'),...onPath])];
   }
   for(const file of candidates) {
     try {

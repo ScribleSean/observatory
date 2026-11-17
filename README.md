@@ -1,10 +1,14 @@
 # Observatory
 
-A menu bar app and local dashboard for people who use Claude Code and Codex. It says how much of each limit is left and when it runs out at your current pace, for example "Claude runs out Thu 4 PM at this pace. Codex has room." Screen time and token history are one click away. It runs on a Mac, a Windows PC or both.
+A menu bar app and local dashboard for people who run coding agents such as Claude Code and Codex on a plan with usage limits. It shows which sessions used this week's limit, what each one shipped, and when each limit runs out at your current pace, for example "Claude runs out Wed 3–7 PM at this pace." A year of history is one click away. It runs on a Mac, a Windows PC, a Linux computer or any mix.
 
 Observatory reads records your tools already keep on your computer. It has no account, no hosted service and no telemetry. It only watches: it does not start, stop or answer an agent, and it does not change the tools it reads.
 
-<p align="center"><img src="docs/images/demo.gif" width="720" alt="The Observatory menu bar panel with four limits left; Open dashboard is clicked and the dashboard shows the limits over 30 days"></p>
+<p align="center"><img src="docs/images/next-dashboard.png" width="860" alt="The Week view: the Claude weekly limit with its forecast, sessions ranked by share of the week with what each shipped, and a short list of sessions worth a look"></p>
+
+<p align="center"><img src="docs/images/next-second.png" width="420" alt="The History view with a year of daily use, use by model and by hour, and 5-hour blocks"> <img src="docs/images/next-menubar.png" width="420" alt="The menu bar panel in light and dark"></p>
+
+**Week** ranks this week's sessions by their share of the limit, with the computer they ran on, the models and subagents they used, and the commits and merges they made. A few flags point at sessions worth a look, such as one that fanned out to hundreds of subagents and merged nothing. Click a session for its detail. **History** shows every day of the year, use by model and by hour, 5-hour blocks, cache hits and cost at API prices. The menu bar and tray show the scarcer limit, what is running now and the top flag.
 
 [Demo with fictional data](https://scriblesean.github.io/observatory/)
 
@@ -29,6 +33,7 @@ Setup writes a settings file if there is none, builds the dashboard and a small 
 - Preview the changes first with `npm run setup -- --dry-run`.
 - Update with `git pull`, then `npm run setup`.
 - Remove with `npm run setup -- --remove`, then delete the folder. History lives in `~/Library/Application Support/Observatory` on a Mac and `%LOCALAPPDATA%\Observatory` on Windows.
+- On Linux, setup builds nothing and has no menu bar app. It installs a systemd user timer that collects every five minutes, or prints one crontab line when systemd is not available. `npm run setup -- --dry-run` shows the files first.
 - If the notch hides the menu bar item on a MacBook, hold Command and drag it right.
 
 ## How it works
@@ -38,18 +43,19 @@ Every five minutes the app collects one snapshot of this computer:
 | Source | Read from | Kept |
 | --- | --- | --- |
 | Limits | The installed Claude Code and Codex clients, with your existing sign-in | Percent left and reset time per window |
-| Claude Code | `~/.claude/projects` | Tokens per day, hour and model, and today's tokens per project folder name. Cache reads are counted separately and left out of the headline |
-| Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts, and today's tokens per project folder name |
+| Claude Code | `~/.claude/projects` | Tokens per day, hour and model. Per session: its title, start and end, tokens and models, subagent counts and their kind of work (from the subagent's own type and description), and the names of the repositories it wrote to. Cache reads are counted separately and left out of the headline |
+| Codex | `~/.codex` | Tokens per day and model, effort and speed settings, tool call counts, and the same per-session facts as Claude Code where Codex records them |
+| Commits | The local git repositories a session wrote to | Commit counts per session and whether they reached the default branch. A commit counts for the session that last wrote in that repository in the 20 minutes before it, so these are estimates: a commit pulled in, or made by hand in that time, can count too |
 | Screen time | ActivityWatch on 127.0.0.1 | Seconds per app and category |
 | Grok (optional) | The Grok Bot app's own cached weekly reading, and a request log you name | Percent left and reset time, and requests per day |
 
-No prompts, responses, window titles, paths or credentials are kept. A value that could not be read shows as Unknown, not as zero. The forecast uses each limit's pace over the last hour and its average pace since the limit last reset. Once a few days of readings are stored, it also gives a range, taken from how far its own earlier forecasts missed, for example "Claude may run out Thu 3–6 PM." `node scripts/harness/forecast-backtest.mjs --fictional` replays the forecast over made-up readings and prints how far it missed, and `--db` does the same over your own stored readings. Dollar figures are estimates at public API prices, not a bill.
+The snapshots and the dashboard hold no prompts, responses, commands, window titles, paths or credentials. Session titles are kept so the dashboard can name sessions. With several computers they travel to the hub over your own SSH connection. Set `"sessions": { "titles": false }` to keep only a short hash instead, keyed with a secret that never leaves the computer. A private cache in the data folder holds file locations so the collector can resume reading where it stopped. It never leaves the computer. [SECURITY.md](SECURITY.md) has the details. A value that could not be read shows as Unknown, not as zero. The forecast uses each limit's pace over the last hour and its average pace since the limit last reset. Once a few days of readings are stored, it also gives a range, taken from how far its own earlier forecasts missed, for example "Claude may run out Thu 3–6 PM." `node scripts/harness/forecast-backtest.mjs --fictional` replays the forecast over made-up readings and prints how far it missed, and `--db` does the same over your own stored readings. Dollar figures are estimates at public API prices, not a bill.
 
 An engine reads **Off** instead of showing an old number when its client is signed out, when the account reports a free plan, or when it has had no reading for a day.
 
 History goes back to the first day each source has data and is kept until you delete the data folder. Token counts are saved per day, so a day stays counted after Claude Code deletes its old transcripts.
 
-**Two computers.** A Mac and a Windows PC can share one view. The Mac reads the PC's snapshot over your own SSH alias and sends the combined view back, so both show both computers. Limits are account-wide and are not added across computers. Token and screen time sums are labeled "not deduplicated". See [Two computers](docs/TWO-COMPUTERS.md).
+**Several computers.** A Mac, a Windows PC and a Linux computer can share one view. The hub reads each other computer's snapshot over your own SSH alias and sends the combined view back, so every computer shows all of them. A Linux computer, such as a headless server where agents run, collects tokens, limits and sessions and has no screen time or tray app. Limits are account-wide and are not added across computers. Token and screen time sums are labeled "not deduplicated". See [Several computers](docs/SEVERAL-COMPUTERS.md).
 
 ## Settings
 
@@ -70,7 +76,7 @@ History goes back to the first day each source has data and is kept until you de
 
 A source is read only while it is `true`. Run `npm run setup` after a change. Optional: `dashboard.port` (default 5601), `dataFolder`, and `codexPath`.
 
-**Engines.** `engines` sets each tile to `"auto"` (the default), `"off"`, or `"on"` (keep a free plan's own allowance on screen): `"engines": { "codex": "off" }`. With two computers, set it in both settings files: each one draws its own tiles.
+**Engines.** `engines` sets each tile to `"auto"` (the default), `"off"`, or `"on"` (keep a free plan's own allowance on screen): `"engines": { "codex": "off" }`. With several computers, set it in each settings file: each one draws its own tiles.
 
 **Grok.** Set `"grokLimits": true` under `sources` and point `grok` at local files. Both are optional; nothing is sent anywhere.
 
@@ -83,7 +89,7 @@ A source is read only while it is `true`. Run `npm run setup` after a change. Op
 
 `appFolder` gives the weekly limit the app last read, which counts as current until the app's own expiry (at most a day). `requestLog` is one JSON object per line with an ISO time in `at`; only the count per day is kept. With a log and no limit, the tile shows today's requests and no percent. Without `sources.grokLimits` or either path there is no Grok tile. A limit reading older than a day stops counting.
 
-On a Windows PC, set `"wsl": true` under `sources` to also count the Claude Code and Codex logs inside WSL toward that PC. See [Two computers](docs/TWO-COMPUTERS.md#wsl-on-the-pc).
+On a Windows PC, set `"wsl": true` under `sources` to also count the Claude Code and Codex logs inside WSL toward that PC. See [Several computers](docs/SEVERAL-COMPUTERS.md#wsl-on-the-pc).
 
 ## Agent status
 

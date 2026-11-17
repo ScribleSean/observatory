@@ -32,7 +32,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Grok engine from local files (`sources.grokLimits`, `grok.appFolder`, `grok.requestLog`) | Dashboard home, menu bar and tray | `scripts/grok-usage.test.mjs`, `test/forecast.test.mjs` |
 | `dashboard.port`, `dataFolder`, `codexPath` | `observatory.config.json` | `test/config.test.mjs` (parsing only) |
 | WSL logs counted on the PC | `"wsl": true` | `test/token-roots.test.mjs` |
-| Two computers over SSH | `hub.spokes`, see `docs/TWO-COMPUTERS.md` | `test/hub.test.mjs`, `test/combine.test.mjs`, `test/unknown-not-zero.test.mjs` |
+| Several computers over SSH | `hub.spokes`, see `docs/SEVERAL-COMPUTERS.md` | `test/hub.test.mjs`, `test/combine.test.mjs`, `test/unknown-not-zero.test.mjs` |
 | Daily history kept for good, Both totals | Activity and Tokens, All and Both | `test/history.test.mjs`, `test/history-two-computers.test.mjs`, `scripts/view-activity.test.mjs`, `scripts/view-tokens.test.mjs` |
 | Older limit history imported | `scripts/import-history.mjs` | `test/limit-history.test.mjs` |
 | Check that a computer matches the Mac (read-only) | `node scripts/harness/parity-check.mjs` | `test/parity-check.test.mjs` |

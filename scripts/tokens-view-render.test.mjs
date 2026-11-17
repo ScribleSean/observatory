@@ -125,8 +125,8 @@ void test('partial estimate discloses covered tokens', () => {
 void test('dashboard tokens section mounts the view', () => {
   const combined = combine([{ host: 'Mac', snapshot: ownSnapshot('Mac', now) }, { host: 'Windows', snapshot: ownSnapshot('Windows', now) }], { now });
   const html = renderToStaticMarkup(createElement(DashboardView, {
-    summary: summaryOf(combined), history: combined, css: '', className: '', now, loaded: true, section: 'tokens',
-    onSectionChange: noop,
+    summary: summaryOf(combined), history: combined, css: '', className: '', now, loaded: true, route: { view: 'history', detail: 'tokens', session: null },
+    onRoute: noop,
   }));
   card(html, 'Claude');
   card(html, 'Codex');

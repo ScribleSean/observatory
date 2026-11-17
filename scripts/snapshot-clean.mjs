@@ -1,4 +1,7 @@
 import { cleanIntervals, summarizeTracked } from './activity-timeline.mjs';
+import {createHmac} from 'node:crypto';
+import {LEDGER_TOP,WORK_KINDS} from '../lib/ledger-shape.mjs';
+import {TOOL_CATEGORIES,cleanTitle} from './sources/pure.mjs';
 const fields = [
   'inputTokens',
   'cacheReadTokens',
@@ -78,4 +81,97 @@ export function cleanActivity(raw, host) {
     latestEvent: stamp(raw.latestEvent),
     categories,
   };
+}
+
+// ---- Ledger (lib/ledger-shape.mjs). A row from another computer is untrusted, so it is rebuilt field
+// by field. Repository names must be folder names, never paths. Titles stay only while the
+// `sessions.titles` setting is on. Off, each becomes a short hash so sessions still tell apart. The
+// hash is keyed with a random secret kept in this install's private data folder (titleSalt), so a
+// common title cannot be found by hashing guesses. A hash that came in already made is kept.
+const LEDGER_FAIL=()=>{throw Error('Invalid ledger');};
+const ledgerObject=value=>value!==null && typeof value==='object' && !Array.isArray(value);
+const ledgerCount=value=>value===null || (Number.isSafeInteger(value) && value>=0);
+const ledgerUsd=value=>value===null || (typeof value==='number' && Number.isFinite(value) && value>=0);
+const ledgerInstant=value=>typeof value==='string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString()===value;
+const LEDGER_ID=/^[0-9a-f]{12}$/;
+const LEDGER_TOOL=/^[a-z][a-z0-9-]{0,31}$/;
+const LEDGER_MODEL=/^[a-z0-9][a-z0-9.-]{0,63}$/;
+const LEDGER_REPO=/^[\p{L}\p{N}_.+ @-]{1,64}$/u;
+const LEDGER_DATE=/^\d{4}-\d\d-\d\d$/;
+const STATES=['working','waiting','idle'];
+const need=(ok)=>{if(!ok)LEDGER_FAIL();};
+const list=(value,max)=>{need(Array.isArray(value) && value.length<=max);return value;};
+const nullableCount=value=>{need(ledgerCount(value ?? null));return value ?? null;};
+const nullableUsd=value=>{need(ledgerUsd(value ?? null));return value ?? null;};
+
+function cleanShipped(raw) {
+  need(ledgerObject(raw));
+  const repos=list(raw.repos ?? [],8).filter(name=>typeof name==='string' && LEDGER_REPO.test(name) && name!=='.' && name!=='..' && !/[\\/]/.test(name));
+  return {estimated:raw.estimated!==false,commits:nullableCount(raw.commits),onMain:nullableCount(raw.onMain),merges:nullableCount(raw.merges),
+    prsOpen:nullableCount(raw.prsOpen),repos};
+}
+
+const TITLE_HASH=/^[0-9a-f]{12}$/;
+export const titleHash=(title,salt)=>createHmac('sha256',String(salt ?? '')).update(title).digest('hex').slice(0,12);
+
+function cleanLedgerSession(raw,titles,salt) {
+  need(ledgerObject(raw) && LEDGER_ID.test(raw.id) && ledgerInstant(raw.startedAt) && ledgerInstant(raw.lastActiveAt) &&
+    typeof raw.running==='boolean' && ledgerObject(raw.tokens) && ledgerObject(raw.signals) && Number.isSafeInteger(raw.subagents) && raw.subagents>=0);
+  const title=cleanTitle(raw.title);
+  const signals=raw.signals;
+  need(signals.retryTool===null || signals.retryTool===undefined || TOOL_CATEGORIES.includes(signals.retryTool));
+  const kept=typeof raw.titleHash==='string' && TITLE_HASH.test(raw.titleHash)?raw.titleHash:null;
+  const hash=titles?(title?null:kept):(title?titleHash(title,salt):kept);
+  return {id:raw.id,title:titles?title:null,...(hash?{titleHash:hash}:{}),
+    startedAt:raw.startedAt,lastActiveAt:raw.lastActiveAt,running:raw.running,
+    state:raw.running && STATES.includes(raw.state)?raw.state:null,ratePerHour:raw.running?nullableUsd(raw.ratePerHour):null,
+    tokens:Object.fromEntries(['input','output','cacheRead','cacheWrite'].map(key=>[key,nullableCount(raw.tokens[key])])),
+    apiUsd:nullableUsd(raw.apiUsd),
+    models:list(raw.models,20).map(model=>{need(ledgerObject(model) && (model.model==='unknown' || LEDGER_MODEL.test(model.model)));
+      return {model:model.model,apiUsd:nullableUsd(model.apiUsd),outputTokens:nullableCount(model.outputTokens)};}),
+    subagents:raw.subagents,
+    kinds:list(raw.kinds,60).map(part=>{need(ledgerObject(part) && WORK_KINDS.includes(part.kind) && (part.model==='unknown' || LEDGER_MODEL.test(part.model)) &&
+      Number.isSafeInteger(part.subagents) && part.subagents>=0);return {kind:part.kind,model:part.model,subagents:part.subagents,apiUsd:nullableUsd(part.apiUsd)};}),
+    fanout:list(raw.fanout ?? [],FANOUT_MAX).map(point=>{need(ledgerObject(point) && ledgerInstant(point.at) && Number.isSafeInteger(point.count) && point.count>=0);
+      return {at:point.at,count:point.count};}),
+    shipped:cleanShipped(raw.shipped),
+    signals:{longestRetry:nullableCount(signals.longestRetry),retryTool:signals.retryTool ?? null,autoResumeUsd:nullableUsd(signals.autoResumeUsd),
+      searchOnTopModelUsd:nullableUsd(signals.searchOnTopModelUsd),searchOnSmallModelUsd:nullableUsd(signals.searchOnSmallModelUsd)}};
+}
+
+// 15-minute slots over two weeks.
+const FANOUT_MAX=2*7*96;
+
+function cleanLedgerPeriod(raw,titles,salt) {
+  need(ledgerObject(raw) && ['current','previous'].includes(raw.key) && ledgerInstant(raw.start) && ledgerInstant(raw.end) && raw.start<=raw.end &&
+    typeof raw.windowKnown==='boolean');
+  const sessions=list(raw.sessions,LEDGER_TOP).map(session=>cleanLedgerSession(session,titles,salt));
+  need(new Set(sessions.map(session=>session.id)).size===sessions.length);
+  let other=null;
+  if(raw.other!==null && raw.other!==undefined) {
+    need(ledgerObject(raw.other) && Number.isSafeInteger(raw.other.count) && raw.other.count>0 && Number.isSafeInteger(raw.other.subagents) && raw.other.subagents>=0);
+    other={count:raw.other.count,apiUsd:nullableUsd(raw.other.apiUsd),subagents:raw.other.subagents,shipped:cleanShipped(raw.other.shipped)};
+  }
+  const sessionCount=nullableCount(raw.sessionCount);
+  need(sessionCount===null || sessionCount>=sessions.length);
+  return {key:raw.key,start:raw.start,end:raw.end,windowKnown:raw.windowKnown,apiUsd:nullableUsd(raw.apiUsd),sessionCount,sessions,other,
+    days:list(raw.days ?? [],62).map(day=>{need(ledgerObject(day) && LEDGER_DATE.test(day.date));return {date:day.date,apiUsd:nullableUsd(day.apiUsd),onMain:nullableCount(day.onMain)};})};
+}
+
+export function cleanLedgerRow(raw,{titles=true,salt=null}={}) {
+  need(ledgerObject(raw) && typeof raw.host==='string' && raw.host.length<=32);
+  if(raw.status!=='ok') {
+    need(['not-connected','unavailable'].includes(raw.status));
+    return {host:raw.host,status:raw.status,...(ledgerInstant(raw.collectedAt)?{collectedAt:raw.collectedAt}:{})};
+  }
+  need(ledgerInstant(raw.collectedAt));
+  const tools=list(raw.tools,16).map(tool=>{
+    need(ledgerObject(tool) && LEDGER_TOOL.test(tool.tool) && (tool.limitEngine===null || LEDGER_TOOL.test(tool.limitEngine)));
+    const periods=list(tool.periods,2).map(period=>cleanLedgerPeriod(period,titles,salt));
+    need(new Set(periods.map(period=>period.key)).size===periods.length);
+    return {tool:tool.tool,name:cleanTitle(tool.name)?.slice(0,40) ?? tool.tool,limitEngine:tool.limitEngine,
+      ...(tool.status==='unavailable'?{status:'unavailable'}:{status:'ok'}),periods};
+  });
+  need(new Set(tools.map(tool=>tool.tool)).size===tools.length);
+  return {host:raw.host,status:'ok',collectedAt:raw.collectedAt,tools};
 }

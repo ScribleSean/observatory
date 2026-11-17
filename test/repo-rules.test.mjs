@@ -8,6 +8,7 @@ import {READING_FRESH_MS,DEVICE_FRESH_MS} from '../lib/freshness.mjs';
 import strings from '../lib/strings.json' with {type:'json'};
 import {LIMIT_LOW_PERCENT} from '../lib/glance-limits.mjs';
 import {compact} from '../lib/panel-data.mjs';
+import {GLANCE_SCHEMA} from '../lib/glance-view.mjs';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const read=file=>readFileSync(path.join(ROOT,file),'utf8');
@@ -192,6 +193,17 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
   assert.match(cs,/engine\.Status == "out" \? p\.Error : engine\.Status == "runs-out" \? p\.Warning/,'Glance.cs does not map out to error and runs-out to warning.');
   assert.ok(swift.includes('state.menu'),'Glance.swift menu bar does not show forecast.menu.');
   assert.ok(cs.includes('state.Menu'),'Glance.cs tray tip does not show forecast.menu.');
+  // Both panels draw public/local/glance.json from lib/glance-view.mjs and fall back to combined.json without it.
+  assert.ok(swift.includes(`static let glanceSchema = "${GLANCE_SCHEMA}"`),'Glance.swift does not check the glance.json schema from lib/glance-view.mjs.');
+  assert.ok(cs.includes(`public const string GlanceSchema = "${GLANCE_SCHEMA}";`),'Glance.cs does not check the glance.json schema from lib/glance-view.mjs.');
+  for (const file of ['glance.json','combined.json']) {
+    assert.ok(swift.includes(`"${file}"`),`Glance.swift does not read ${file}.`);
+    assert.ok(cs.includes(`"${file}"`),`Glance.cs does not read ${file}.`);
+  }
+  for (const key of ['bar','ring','showPercent','headline','used','resets','fraction','limits','percent','tone','running','summary','sessions','machine','rate','flag','subject','updated','updatedAt']) {
+    assert.ok(swift.includes(`["${key}"]`),`Glance.swift does not read glance "${key}".`);
+    assert.ok(cs.includes(`, "${key}")`),`Glance.cs does not read glance "${key}".`);
+  }
   // The removed device table and per-limit rows stay removed.
   for (const gone of [strings.formats.resetsIn.split(/\{[A-Za-z]+\}/)[0].trim(),strings.overview.lastSeen,strings.tokens.apiEstimate])
     for (const text of [swift,cs]) assert.ok(!text.includes(gone),`A panel still says "${gone}", which the forecast tiles replaced.`);
@@ -208,4 +220,26 @@ test('one token format: under 10 of a unit one decimal, from 10 whole', () => {
   const table=[[0,'0'],[999,'999'],[999.6,'1K'],[1000,'1K'],[1500,'1.5K'],[9400,'9.4K'],[9960,'10K'],[12345,'12K'],
     [671400,'671K'],[999600,'1M'],[2e6,'2M'],[9.4e6,'9.4M'],[21e6,'21M'],[43.5e6,'44M'],[14.3e6,'14M'],[1.7e6,'1.7M'],[3.21e9,'3.2B']];
   assert.deepEqual(table.map(([value])=>compact(value)),table.map(([,text])=>text));
+});
+
+test('the privacy docs say session titles are kept and travel to the hub unless sessions.titles is false',()=>{
+  for(const file of ['SECURITY.md','README.md','docs/SEVERAL-COMPUTERS.md','CONTRIBUTING.md']) {
+    const text=read(file);
+    assert.match(text,/sessions\.titles|"titles": false/,`${file} names the setting`);
+    assert.ok(!/(no|not hold)[^.]*session names/i.test(text),`${file} does not claim session names are never kept`);
+  }
+  assert.match(read('SECURITY.md'),/private cache/);
+  assert.match(read('README.md'),/private cache in the data folder holds file locations/);
+});
+
+test('source, tests and the apps name no person and no private way of working',()=>{
+  const files=[...sources(['lib','scripts','app','test'],file=>file!=='test/repo-rules.test.mjs' && file!=='test/agent-status.test.mjs'),'glance/mac/Glance.swift'];
+  // A decision signed with a name and a date, a bot-named fixture, or words from one private workflow.
+  const found=hits(files,/\([A-Z][a-z]+, 20\d\d-\d\d-\d\d|^\s*\/\/ [A-Z][a-z]+, 20\d\d-\d\d-\d\d:|\b[A-Z][a-z]+Bot\b|\bon ubuntu\b|\bsicko\b|\bself-clean\b|\bdata lane\b/i,'repo-rules: allow');
+  assert.deepEqual(found,[]);
+});
+
+test('both native apps show Collecting when the glance says nothing has been read yet',()=>{
+  assert.match(read('glance/mac/Glance.swift'),/json\["collecting"\] as\? Bool == true \{ state\.notice = \.collecting \}/);
+  assert.match(read('glance/windows/Glance.cs'),/Get\(json, "collecting"\)[\s\S]{0,120}state\.Notice = "Collecting the first reading/);
 });

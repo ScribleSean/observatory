@@ -1,12 +1,13 @@
 // npm run setup: check prerequisites, write a starter settings file, build the
 // dashboard and the glance app on this computer, and start it at login.
 // Run it again after `git pull`. `npm run setup -- --dry-run` changes nothing.
+// On Linux nothing is built: it installs a systemd user timer (or prints one crontab line) that runs the collector every 5 minutes.
 // `--no-login` builds without starting the app. `--no-start` registers the login item without starting it now. `npm run setup -- --remove` removes the login item and stops the app.
 import {execFile,spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import * as filesystem from 'node:fs/promises';
 import {mkdir,readFile,writeFile,rm} from 'node:fs/promises';
-import {homedir} from 'node:os';
+import {homedir,hostname} from 'node:os';
 import path from 'node:path';
 import {promisify} from 'node:util';
 import {randomBytes} from 'node:crypto';
@@ -20,6 +21,8 @@ export const LABEL='io.github.observatory.glance';
 export const MAC_EXECUTABLE='ObservatoryGlance';
 export const WINDOWS_EXECUTABLE='ObservatoryGlance.exe';
 export const STARTUP_NAME='ObservatoryGlance';
+export const SERVICE_NAME='observatory.service';
+export const TIMER_NAME='observatory.timer';
 const OLD_EXECUTABLES={darwin:'WorkspaceObservatory',win32:'WorkspaceObservatory.exe'};
 const MIN_NODE=[22,13];
 // libuv 1.49 (Node 22.13 to 22.16 and Node 23) reports device 0 for a Windows path but the
@@ -43,6 +46,11 @@ export function paths(platform=process.platform,repo=REPO,home=homedir(),environ
     const app=path.join(repo,'build','Observatory.app');
     return {app,executable:path.join(app,'Contents','MacOS',MAC_EXECUTABLE),settings:path.join(app,'Contents','Resources','glance.json'),
       launchAgent:path.join(home,'Library','LaunchAgents',`${LABEL}.plist`)};
+  }
+  if(platform==='linux') {
+    const configured=environment.XDG_CONFIG_HOME;
+    const unitFolder=path.join(configured && path.posix.isAbsolute(configured)?configured:path.join(home,'.config'),'systemd','user');
+    return {unitFolder,service:path.join(unitFolder,SERVICE_NAME),timer:path.join(unitFolder,TIMER_NAME)};
   }
   const folder=path.win32.join(repo,'build','windows');
   const windir=environment.WINDIR || environment.SystemRoot || 'C:\\Windows';
@@ -96,6 +104,47 @@ export function launchAgent(executable) {
 `;
 }
 
+// systemd reads $ and % in a command line, so both are doubled inside its double quotes. An
+// Environment= line expands % only, so $ stays as it is there. A newline would end the line, so a
+// path with one is refused.
+const unitText=value=>{const text=String(value);if(/[\r\n]/.test(text))throw Error('A path for the systemd unit cannot hold a line break');return text;};
+const unitQuote=value=>'"'+unitText(value).replace(/[\\"]/g,'\\$&').replace(/[$%]/g,'$&$&')+'"';
+const envQuote=value=>'"'+unitText(value).replace(/[\\"]/g,'\\$&').replace(/%/g,'%%')+'"';
+
+export function systemdService(node,repo=REPO,configFile=CONFIG_FILE) {
+  return `[Unit]
+Description=Observatory: collect usage and combine computers
+
+[Service]
+Type=oneshot
+WorkingDirectory=${unitText(repo).replace(/%/g,'%%')}
+Environment=${envQuote('OBSERVATORY_CONFIG='+unitText(configFile))}
+Environment=${envQuote('PATH='+[path.dirname(unitText(node)),'/usr/local/bin','/usr/bin','/bin'].join(':'))}
+ExecStart=${unitQuote(node)} ${unitQuote(path.join(repo,'scripts','tick.mjs'))}
+`;
+}
+
+export function systemdTimer() {
+  return `[Unit]
+Description=Run Observatory every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+Unit=${SERVICE_NAME}
+
+[Install]
+WantedBy=timers.target
+`;
+}
+
+const shellWord=value=>"'"+String(value).replace(/'/g,"'\\''")+"'";
+
+// For a computer with no systemd user session: the one line to add with `crontab -e`.
+export function crontabLine(node,repo=REPO,configFile=CONFIG_FILE) {
+  return `*/5 * * * * cd ${shellWord(repo)} && OBSERVATORY_CONFIG=${shellWord(configFile)} ${shellWord(node)} scripts/tick.mjs >/dev/null 2>&1`;
+}
+
 export function glanceSettings(config,node=process.execPath,repo=REPO,configFile=CONFIG_FILE) {
   return {node,repo,config:configFile,dataFolder:config.dataFolder,port:config.dashboard.port};
 }
@@ -122,10 +171,10 @@ export async function leftoverStatusline(settingsPath) {
 }
 
 export async function computerName(platform=process.platform,environment=process.env) {
-  const raw=platform==='darwin'?await quiet('/usr/sbin/scutil',['--get','ComputerName']):environment.COMPUTERNAME;
+  const raw=platform==='darwin'?await quiet('/usr/sbin/scutil',['--get','ComputerName']):platform==='linux'?hostname():environment.COMPUTERNAME;
   // oxlint-disable-next-line no-control-regex -- control characters are removed on purpose
   const name=typeof raw==='string'?raw.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,40):'';
-  return name || (platform==='win32'?'PC':'Mac');
+  return name || (platform==='win32'?'PC':platform==='linux'?'Linux':'Mac');
 }
 
 async function quiet(file,args,options={}) {
@@ -266,10 +315,55 @@ export async function installMacApp(target,settings,{fs=filesystem,run=execute,s
   }
 }
 
-export async function setup({dryRun=false,login=true,start=true,platform=process.platform,log=console.log}={}) {
+// systemd --user needs a session bus. Without one (a container, or a login with no user manager) cron is the fallback.
+async function systemdUserAvailable() {
+  return (await quiet('systemctl',['--user','show-environment']))!==null;
+}
+// A user timer stops at logout unless lingering is on. That is a system setting, so setup only says so.
+async function lingerOff() {
+  return /Linger=no/.test(await quiet('loginctl',['show-user',String(process.getuid()),'--property=Linger']) ?? '');
+}
+
+async function checkSpokes(config,{dryRun,step,log}) {
+  if(config.role==='hub') for(const spoke of config.hub.spokes) {
+    if(dryRun) {step(`would check SSH to ${spoke.name} (${spoke.ssh})`);continue;}
+    try {await sshTransport().pull(spoke);step(`${spoke.name}: reached over SSH and read its snapshot`);}
+    catch(error) {log(`  Note: ${spoke.name} (${spoke.ssh}): ${error.message}. Check that "ssh ${spoke.ssh}" works without a password prompt, and that setup has run there.`);}
+  }
+}
+
+const indented=text=>text.trimEnd().split('\n').map(line=>`      ${line}`).join('\n');
+
+async function setupLinux(config,configFile,{dryRun,login,start,step,act,log,hasSystemd,lingerIsOff}) {
+  const target=paths('linux');
+  const node=await stableNode('linux');
+  const repo=REPO,settings=path.resolve(configFile);
+  await checkSpokes(config,{dryRun,step,log});
+  if(!login) {step('left the timer unchanged (--no-login)');return;}
+  if(await hasSystemd()) {
+    const service=systemdService(node,repo,settings),timer=systemdTimer();
+    await act(`write the systemd user timer to ${target.unitFolder} (runs every 5 minutes)`,async()=>{
+      await mkdir(target.unitFolder,{recursive:true});
+      await writeFile(target.service,service);
+      await writeFile(target.timer,timer);
+      await execute('systemctl',['--user','daemon-reload']);
+      await execute('systemctl',['--user','enable',...(start?['--now']:[]),TIMER_NAME]);
+    });
+    if(dryRun) {
+      log(`    ${SERVICE_NAME}:\n${indented(service)}`);
+      log(`    ${TIMER_NAME}:\n${indented(timer)}`);
+    }
+    if(await lingerIsOff())log('  Note: run "loginctl enable-linger $USER" once so the timer keeps running when nobody is logged in.');
+  } else {
+    step('systemd user services are not available here, so nothing is scheduled. Add this line with "crontab -e":');
+    log(`    ${crontabLine(node,repo,settings)}`);
+  }
+}
+
+export async function setup({dryRun=false,login=true,start=true,platform=process.platform,log=console.log,hasSystemd=systemdUserAvailable,lingerIsOff=lingerOff}={}) {
   const step=(text)=>log(`- ${text}`);
   const act=async(text,action)=>{step(dryRun?`would ${text}`:text);if(!dryRun)return action();};
-  if(!['darwin','win32'].includes(platform))throw Error('Observatory runs on macOS and Windows only.');
+  if(!['darwin','win32','linux'].includes(platform))throw Error('Observatory runs on macOS, Windows and Linux only.');
   if(!nodeSupported(process.versions.node,platform))throw Error(`Node ${minimumNode(platform)} or later is required. This is Node ${process.versions.node}.`);
   step(`Node ${process.versions.node}`);
 
@@ -278,13 +372,15 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
   if(!existsSync(configFile)) {
     const example=JSON.parse(await readFile(path.join(REPO,'observatory.config.example.json'),'utf8'));
     example.device.name=await computerName(platform);
+    // Linux has no screen time reader, and the sample list of sources is the Mac one.
+    if(platform==='linux')example.sources.screenTime=false;
     await act('write observatory.config.json with every source on (edit it any time)',()=>
       writeFile(configFile,JSON.stringify(example,null,2)+'\n',{flag:'wx'}));
     config=dryRun?parseConfig(example,{platform}):await loadConfig(configFile,{platform});
   } else config=await loadConfig(configFile,{platform});
   step(`Settings: ${config.device.name}, ${config.role==='hub'?`combining with ${config.hub.spokes.map(spoke=>spoke.name).join(', ')}`:'this computer'}, sources on: ${Object.entries(config.sources).filter(([,on])=>on).map(([key])=>key).join(', ') || 'none'}`);
 
-  if(config.dataFolder===defaultDataFolder(platform) && await oldAppRunning(platform)) {
+  if(platform!=='linux' && config.dataFolder===defaultDataFolder(platform) && await oldAppRunning(platform)) {
     const message='The older Observatory app is running and writes the same files. Quit it (and turn off its login item) first, then run setup again.';
     if(!dryRun)throw Error(message);
     log(`  Note: ${message}`);
@@ -294,9 +390,16 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     if(await leftoverStatusline(settingsPath))
       log(`  Note: Claude Code's status line still runs Observatory's status line bridge, which was removed. Delete the "statusLine" entry in ${settingsPath} to turn it off. Observatory does not need it.`);
   } catch {}
-  if(config.sources.screenTime && !await activityWatchUp())
+  if(platform!=='linux' && config.sources.screenTime && !await activityWatchUp())
     log('  Note: ActivityWatch is not answering on 127.0.0.1:5600. Screen time stays Unknown until it runs.');
 
+  // A Linux computer only collects: no dashboard build, no tray app, no native code.
+  if(platform==='linux') {
+    await setupLinux(config,configFile,{dryRun,login,start,step,act,log,hasSystemd,lingerIsOff});
+    if(dryRun) {log('Dry run: nothing was changed.');return;}
+    log('Done. This computer collects every 5 minutes. A Mac or Windows hub reads it over SSH once it is listed under hub.spokes there.');
+    return;
+  }
   if(!existsSync(path.join(REPO,'node_modules','vite')))await act('install build tools with npm ci',()=>npm(['ci']));
   await act('build the dashboard into dist/dashboard',()=>npm(['run','build']));
   // Before the app build: the Mac install stops the running app, so nothing that can fail
@@ -334,11 +437,7 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
     await writeFile(target.settings,JSON.stringify(glanceSettings(config,await stableNode(platform),REPO,path.resolve(configFile)),null,2)+'\n');
   });
 
-  if(config.role==='hub') for(const spoke of config.hub.spokes) {
-    if(dryRun) {step(`would check SSH to ${spoke.name} (${spoke.ssh})`);continue;}
-    try {await sshTransport().pull(spoke);step(`${spoke.name}: reached over SSH and read its snapshot`);}
-    catch(error) {log(`  Note: ${spoke.name} (${spoke.ssh}): ${error.message}. Check that "ssh ${spoke.ssh}" works without a password prompt, and that setup has run there.`);}
-  }
+  await checkSpokes(config,{dryRun,step,log});
 
   // A Start menu entry, so Windows search finds the app with its icon, with or without the login item.
   // It is a convenience: if a locked-down PC refuses it, setup carries on.
@@ -372,8 +471,21 @@ export async function setup({dryRun=false,login=true,start=true,platform=process
   log(`Done. Dashboard: http://127.0.0.1:${config.dashboard.port} (use Open dashboard in the ${platform==='darwin'?'menu bar':'tray'} menu).`);
 }
 
-export async function remove({platform=process.platform,log=console.log}={}) {
+export async function remove({platform=process.platform,log=console.log,dryRun=false}={}) {
   const target=paths(platform);
+  if(dryRun) {
+    log(platform==='linux'?`Would stop and delete ${TIMER_NAME} and ${SERVICE_NAME} in ${target.unitFolder}. Dry run: nothing was changed.`
+      :'Would remove the login item and stop the app. Dry run: nothing was changed.');
+    return;
+  }
+  if(platform==='linux') {
+    await quiet('systemctl',['--user','disable','--now',TIMER_NAME]);
+    await rm(target.timer,{force:true});
+    await rm(target.service,{force:true});
+    await quiet('systemctl',['--user','daemon-reload']);
+    log('Removed the timer and stopped it. If you added the crontab line instead, delete it with "crontab -e". Your data folder and settings file are unchanged.');
+    return;
+  }
   if(platform==='darwin') {
     await quiet('/bin/launchctl',['bootout',`gui/${process.getuid()}/${LABEL}`]);
     await rm(target.launchAgent,{force:true});
@@ -387,7 +499,7 @@ export async function remove({platform=process.platform,log=console.log}={}) {
 
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
-    if(process.argv.includes('--remove'))await remove();
+    if(process.argv.includes('--remove'))await remove({dryRun:process.argv.includes('--dry-run')});
     else await setup({dryRun:process.argv.includes('--dry-run'),login:!process.argv.includes('--no-login'),start:!process.argv.includes('--no-start')});
   } catch(error) {
     console.error(`Setup stopped: ${error.message}`);

@@ -3,12 +3,12 @@ import path from 'node:path';
 import {privateFolder} from '../lib/private-folder.mjs';
 
 export const PROVIDERS=['claude','codex'];
-export const OBSERVERS=['Mac','Windows'];
+export const OBSERVERS=['Mac','Windows','Linux'];
 const SCHEMA=`CREATE TABLE IF NOT EXISTS limit_readings (
   provider TEXT NOT NULL CHECK (provider IN ('claude','codex')),
   window TEXT NOT NULL CHECK (length(window) BETWEEN 1 AND 40),
   observed_at INTEGER NOT NULL,
-  observer TEXT NOT NULL CHECK (observer IN ('Mac','Windows')),
+  observer TEXT NOT NULL CHECK (observer IN ('Mac','Windows','Linux')),
   remaining REAL NOT NULL CHECK (remaining >= 0 AND remaining <= 100),
   resets_at INTEGER,
   duration_minutes INTEGER,

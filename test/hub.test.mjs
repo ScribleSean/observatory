@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import path from 'node:path';
-import {runHub,recombine,MAX_PEER_BYTES} from '../scripts/hub.mjs';
+import {runHub,recombine,MAX_PEER_BYTES,peerBytes} from '../scripts/hub.mjs';
 import {combine} from '../lib/combine.mjs';
 import {serializeSnapshot,snapshotHistoryBudget} from '../scripts/snapshot-size.mjs';
 import {pullCommand,pushCommand,sshEnvironment,sshTransport,stagedName,MAX_FILE_BYTES} from '../scripts/hub-transport.mjs';
@@ -301,3 +301,17 @@ test('ssh and scp get a fixed environment, so a SendEnv line cannot forward othe
   const windows=sshEnvironment({USERPROFILE:'C:\\Users\\u',SystemRoot:'C:\\Windows',Path:'C:\\Windows',OPENAI_API_KEY:'synthetic'},'win32');
   assert.deepEqual(windows,{USERPROFILE:'C:\\Users\\u',SystemRoot:'C:\\Windows',Path:'C:\\Windows'});
 });
+
+test('with three computers each large snapshot gets a third of the room, so the dashboard file stays readable',()=>withFolder(async folder=>{
+  const linux={name:'Build box',ssh:'build-box',platform:'linux',dataFolder:null};
+  const config=testConfig(folder,{role:'hub',hub:{spokes:[pc,linux]}});
+  const big=host=>{const snapshot=ownSnapshot(host,now);longHistory(snapshot,host,20000);return serializeSnapshot(snapshot).text;};
+  await seed(folder,'usage.json',JSON.parse(big('Mac')));
+  const texts={PC:big('Windows'),'Build box':big('Linux')};
+  const transport={pushed:[],pull:async spoke=>texts[spoke.name],push:async(spoke,text)=>{transport.pushed.push(text);}};
+  const combined=await runHub(config,{transport,now:()=>now});
+  assert.deepEqual(combined.hub.spokes.map(spoke=>spoke.pull),['ok','ok']);
+  const text=await readFile(path.join(folder,'public','local','combined.json'),'utf8');
+  assert.ok(Buffer.byteLength(text)<MAX_FILE_BYTES,`${Buffer.byteLength(text)} bytes`);
+  assert.ok(peerBytes(3)<MAX_PEER_BYTES && peerBytes(2)===MAX_PEER_BYTES);
+}));

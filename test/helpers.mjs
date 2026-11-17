@@ -20,7 +20,8 @@ export function ownSnapshot(host,now=Date.now(),change=snapshot=>snapshot) {
     settings:keep(sample.settings),
     providerTokenSources:keep(sample.providerTokenSources),
     activityHistory:keep(sample.activityHistory),
-    modelDrift:keep(sample.modelDrift)};
+    modelDrift:keep(sample.modelDrift),
+    ledger:keep(sample.ledger)};
   return change(snapshot);
 }
 

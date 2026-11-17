@@ -26,7 +26,7 @@ function sum(rows,key) {
 }
 
 export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString(),{hours=false}={}) {
-  if(!['Mac','Windows'].includes(host) || !Number.isFinite(Date.parse(checkedAt)) ||
+  if(!['Mac','Windows','Linux'].includes(host) || !Number.isFinite(Date.parse(checkedAt)) ||
     !raw || typeof raw!=='object' || raw.provider!=='claude-code' || raw.status!=='ok' ||
     !Array.isArray(raw.days) || !raw.days.length || raw.days.length>3660) throw Error('Invalid Claude report');
   const seen=new Set();
@@ -53,7 +53,7 @@ export function cleanClaudeTokenSource(raw,host,checkedAt=new Date().toISOString
 }
 
 export function unavailableClaudeTokenSource(host,checkedAt=new Date().toISOString(),status='unavailable') {
-  if(!['Mac','Windows'].includes(host) || !['unavailable','not-connected'].includes(status) || !Number.isFinite(Date.parse(checkedAt))) throw Error('Invalid Claude source status');
+  if(!['Mac','Windows','Linux'].includes(host) || !['unavailable','not-connected'].includes(status) || !Number.isFinite(Date.parse(checkedAt))) throw Error('Invalid Claude source status');
   return {provider:'claude-code',host,status,checkedAt:new Date(checkedAt).toISOString(),scope:'Recorded Claude Code requests'};
 }
 

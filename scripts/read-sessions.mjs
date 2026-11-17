@@ -80,8 +80,8 @@ async function gitFacts(folder,exec) {
 // Runs work over items a few at a time and stops starting new ones once the deadline has passed.
 async function eachLimited(items,limit,deadline,work) {
   let next=0;
-  const lane=async()=>{while(next<items.length && Date.now()<deadline)await work(items[next++]);};
-  await Promise.all(Array.from({length:Math.min(limit,items.length)},lane));
+  const worker=async()=>{while(next<items.length && Date.now()<deadline)await work(items[next++]);};
+  await Promise.all(Array.from({length:Math.min(limit,items.length)},worker));
 }
 
 export async function readSessions({host,platform,exec=run,list=null,now=new Date(),ownPid=process.pid,rootPid=null,budgetMs=BUDGET_MS}={}) {

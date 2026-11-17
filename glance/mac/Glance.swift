@@ -12,13 +12,26 @@ struct Settings: Decodable {
 
 struct LimitRow: Identifiable, Equatable {
   let id: String
-  let provider: String
+  let engine: String
   let name: String
-  let window: String
-  let remaining: Double?
-  let resetsAt: Date?
-  // Set when the provider reports no such limit, shown in place of Unknown.
-  var absent: String? = nil
+  // Share used, 0 to 1, or nil when Unknown.
+  let fraction: Double?
+  let percent: String
+  let resets: String?
+  let tone: String
+}
+
+struct SessionRow: Identifiable, Equatable {
+  let id: Int
+  let title: String
+  let machine: String
+  let rate: String
+}
+
+struct FlagRow: Equatable {
+  let count: Int
+  let subject: String?
+  let text: String
 }
 
 struct EngineRow: Identifiable, Equatable {
@@ -27,29 +40,42 @@ struct EngineRow: Identifiable, Equatable {
   let status: String
   let remaining: Double?
   let phrase: String
-  // "Off" or a request count, shown instead of a share left.
-  var figure: String? = nil
-  var detail: String? = nil
+  var window: String? = nil
 }
 
 struct PanelState: Equatable {
   enum Notice: Equatable { case none, collecting, setupMissing, nodeMissing }
+  // From glance.json (lib/glance-view.mjs), or worked out from combined.json when that file is missing.
+  var headline: String?
+  var headTone = "unknown"
+  var headEngine: String?
+  var used: String?
+  var resets: String?
+  var fraction: Double?
+  var barText: String?
+  var ring: Double?
+  var limits: [LimitRow] = []
+  var runningTitle: String?
+  var runningSummary: String?
+  var sessions: [SessionRow] = []
+  var flag: FlagRow?
+  var updatedText: String?
+  // Read only from combined.json, the fallback.
   var sentence: String?
   var menu: String?
-  var scarce: String?
-  var engines: [EngineRow] = []
-  var limits: [LimitRow] = []
   var updated: Date?
   var notice: Notice = .none
   var refreshing = false
   var now = Date()
 
   static let low = 15.0
+  static let glanceSchema = "observatory-glance/1"
   // Copies of lib/freshness.mjs. test/repo-rules.test.mjs checks they match.
   static let readingFresh: TimeInterval = 10 * 60
   static let deviceFresh: TimeInterval = 15 * 60
 
   var old: Bool { updated.map { now.timeIntervalSince($0) > Self.deviceFresh } ?? false }
+  var empty: Bool { headline == nil && limits.isEmpty }
 
   static func date(_ value: Any?) -> Date? {
     guard let text = value as? String else { return nil }
@@ -61,6 +87,10 @@ struct PanelState: Equatable {
     return value
   }
 
+  static func share(_ value: Any?) -> Double? { number(value).flatMap { $0 <= 1 ? $0 : nil } }
+
+  static func capital(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+
   // Keep this pure rule in sync with lib/glance-limits.mjs and the Windows app.
   static func limitRemaining(_ row: [String: Any], now: Date) -> Double? {
     guard row["stale"] as? Bool == false,
@@ -71,33 +101,80 @@ struct PanelState: Equatable {
     return remaining
   }
 
+  // glance.json: drawn as it is.
+  static func parseGlance(_ json: [String: Any], now: Date) -> PanelState {
+    var state = PanelState(now: now)
+    state.updated = date(json["updatedAt"])
+    state.updatedText = json["updated"] as? String
+    // Nothing read yet: the first-run notice, the same as with no snapshot at all.
+    if json["collecting"] as? Bool == true { state.notice = .collecting }
+    let bar = json["bar"] as? [String: Any] ?? [:]
+    state.ring = share(bar["ring"])
+    state.barText = bar["showPercent"] as? Bool == true ? bar["text"] as? String : nil
+    let head = json["headline"] as? [String: Any] ?? [:]
+    state.headline = head["text"] as? String
+    state.headTone = head["tone"] as? String ?? "unknown"
+    state.headEngine = head["engine"] as? String
+    state.used = head["used"] as? String
+    state.resets = head["resets"] as? String
+    state.fraction = share(head["fraction"])
+    state.limits = (json["limits"] as? [[String: Any]] ?? []).enumerated().map { index, row in
+      LimitRow(id: "\(index)", engine: row["engine"] as? String ?? "", name: row["name"] as? String ?? "Unknown",
+               fraction: share(row["fraction"]), percent: row["percent"] as? String ?? "Unknown",
+               resets: row["resets"] as? String, tone: row["tone"] as? String ?? "muted")
+    }
+    if let running = json["running"] as? [String: Any] {
+      state.runningTitle = running["title"] as? String
+      state.runningSummary = running["summary"] as? String
+      state.sessions = (running["sessions"] as? [[String: Any]] ?? []).enumerated().map { index, row in
+        SessionRow(id: index, title: row["title"] as? String ?? "Unknown", machine: row["machine"] as? String ?? "",
+                   rate: row["rate"] as? String ?? "Unknown")
+      }
+    }
+    if let flag = json["flag"] as? [String: Any], let text = flag["text"] as? String {
+      state.flag = FlagRow(count: (flag["count"] as? Int) ?? 1, subject: flag["subject"] as? String, text: text)
+    }
+    return state
+  }
+
+  // combined.json, when glance.json is missing: the forecast and the limit rows, no sessions or flag.
   static func parse(_ json: [String: Any], now: Date) -> PanelState {
     var state = PanelState(now: now)
     state.updated = date(json["generatedAt"])
     guard let glance = json["glance"] as? [String: Any] else { state.notice = .collecting; return state }
-    // The forecast is worked out once by the collector, so the panel, the menu bar and the dashboard agree.
-    // An old forecast stays visible but dimmed, under the "Updated … ago" warning.
+    var engines: [EngineRow] = []
     if let forecast = glance["forecast"] as? [String: Any] {
       state.sentence = forecast["sentence"] as? String
       state.menu = forecast["menu"] as? String
-      state.scarce = (forecast["scarce"] as? [String: Any])?["engine"] as? String
-      state.engines = (forecast["engines"] as? [[String: Any]] ?? []).map { row in
+      let scarce = (forecast["scarce"] as? [String: Any])?["engine"] as? String
+      engines = (forecast["engines"] as? [[String: Any]] ?? []).map { row in
         EngineRow(id: row["engine"] as? String ?? "", name: row["name"] as? String ?? "Unknown", status: row["status"] as? String ?? "unknown",
                   remaining: (row["remaining"] as? Double).flatMap { $0.isFinite && $0 >= 0 && $0 <= 100 ? $0 : nil }, phrase: row["phrase"] as? String ?? "",
-                  figure: row["figure"] as? String, detail: row["detail"] as? String)
+                  window: row["window"] as? String)
       }
-      // The scarcer engine leads; the rest keep the collector's order.
-      state.engines = state.engines.filter { $0.id == state.scarce } + state.engines.filter { $0.id != state.scarce }
+      if let engine = engines.first(where: { $0.id == scarce }) {
+        state.headline = capital(engine.name + " " + engine.phrase.replacingOccurrences(of: " at this pace", with: ""))
+        state.headTone = engine.status
+        state.headEngine = engine.id
+      } else {
+        state.headline = state.sentence?.replacingOccurrences(of: " at this pace", with: "")
+      }
     }
-    let rows = glance["limits"] as? [[String: Any]] ?? []
-    state.limits = rows.enumerated().map { index, row in
-      LimitRow(id: "\(row["provider"] as? String ?? "")-\(row["window"] as? String ?? "")-\(index)",
-               provider: row["provider"] as? String ?? "",
-               name: row["name"] as? String ?? "Unknown",
-               window: row["window"] as? String ?? "",
-               remaining: limitRemaining(row, now: now),
-               resetsAt: date(row["resetsAt"]),
-               absent: row["absent"] as? String)
+    let names = Dictionary(engines.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+    let lead = engines.first { $0.id == state.headEngine }
+    for (index, row) in (glance["limits"] as? [[String: Any]] ?? []).enumerated() {
+      let provider = row["provider"] as? String ?? "", window = row["window"] as? String ?? ""
+      if window.isEmpty || row["absent"] is String { continue }
+      let used = limitRemaining(row, now: now).map { (100 - $0).rounded() }
+      if let lead, provider == lead.id, window == lead.window, state.fraction == nil {
+        state.fraction = used.map { $0 / 100 }
+        state.ring = state.fraction
+        if let used, lead.status == "out" || lead.status == "runs-out" { state.barText = "\(Int(used))%" }
+        continue
+      }
+      state.limits.append(LimitRow(id: "\(index)", engine: provider, name: (names[provider] ?? row["name"] as? String ?? "Unknown") + " " + window,
+                                   fraction: used.map { $0 / 100 }, percent: used.map { "\(Int($0))%" } ?? "Unknown", resets: nil,
+                                   tone: used == nil ? "muted" : row["spent"] as? Bool == true ? "out" : row["low"] as? Bool == true ? "low" : "normal"))
     }
     return state
   }
@@ -168,144 +245,200 @@ final class PanelModel: ObservableObject {
 
 struct PanelView: View {
   @ObservedObject var model: PanelModel
+  // The live panel sits on the system popover material. A render to PNG has no window behind it.
+  var opaque = false
   @Environment(\.colorScheme) private var scheme
 
-  static let width: CGFloat = 320
-  // Three tiles need more room than two.
-  static func width(_ engines: Int) -> CGFloat { engines > 2 ? 440 : width }
+  static let width: CGFloat = 336
 
-  func tone(_ engine: EngineRow, _ palette: Palette, old: Bool) -> Color {
-    old || engine.status == "off" || (engine.remaining == nil && engine.figure == nil) ? palette.muted : engine.status == "out" ? palette.error : engine.status == "runs-out" ? palette.warning : palette.text
+  // The headline bar takes the forecast's tone: out reads as an error, runs-out as a warning.
+  func tone(_ state: PanelState, _ palette: Palette) -> Color {
+    let engine = (status: state.headTone, id: state.headEngine ?? "")
+    return state.old ? palette.muted : engine.status == "out" ? palette.error : engine.status == "runs-out" ? palette.warning : palette.provider(engine.id)
   }
 
-  static func capital(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
-
-  func number(_ engine: EngineRow) -> String { engine.figure ?? engine.remaining.map { "\(Int($0.rounded()))%" } ?? "Unknown" }
-
-  func phrase(_ engine: EngineRow) -> String {
-    let text = Self.capital(engine.phrase.replacingOccurrences(of: " at this pace", with: ""))
-    return engine.detail.map { text + " · " + $0 } ?? text
+  func limitTone(_ row: LimitRow, _ palette: Palette) -> Color {
+    row.tone == "out" ? palette.error : row.tone == "low" ? palette.warning : row.tone == "muted" ? palette.muted : palette.text
   }
 
-  func bar(_ engine: EngineRow, _ palette: Palette) -> some View {
+  func bar(_ fraction: Double?, _ color: Color, _ palette: Palette, height: CGFloat) -> some View {
     GeometryReader { geometry in
       ZStack(alignment: .leading) {
         Capsule().fill(palette.track)
-        if let remaining = engine.remaining {
-          Capsule().fill(palette.provider(engine.id)).frame(width: max(2, geometry.size.width * CGFloat(remaining / 100)))
+        if let fraction, fraction > 0 {
+          Capsule().fill(color).frame(width: max(height, geometry.size.width * CGFloat(min(1, fraction))))
         }
       }
     }
-    .frame(height: 5)
-  }
-
-  // One tile per engine with a large number and its part of the sentence. The scarcer engine leads.
-  func tiles(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack(alignment: .top, spacing: 10) {
-      ForEach(state.engines) { engine in
-        VStack(alignment: .leading, spacing: 8) {
-          HStack(spacing: 6) {
-            Circle().fill(palette.provider(engine.id)).frame(width: 7, height: 7)
-            Text(engine.name).fontWeight(.medium)
-          }
-          Text(number(engine)).font(.system(size: 30, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-            .foregroundStyle(tone(engine, palette, old: state.old))
-          bar(engine, palette).opacity(state.old ? 0.45 : 1)
-          Text(phrase(engine)).font(.system(size: 12))
-            .foregroundStyle(engine.id == state.scarce && !state.old ? palette.text : palette.muted).fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(engine.id == state.scarce ? palette.muted.opacity(0.5) : palette.hairline))
-        .accessibilityElement(children: .combine)
-      }
-    }
+    .frame(height: height)
   }
 
   var body: some View {
     let palette = Palette.of(scheme)
     let state = model.state
-    VStack(alignment: .leading, spacing: 12) {
-      header(state, palette)
+    VStack(alignment: .leading, spacing: 10) {
       switch state.notice {
       case .setupMissing: message("Settings are missing. Run npm run setup again.", palette)
       case .nodeMissing: message("Node was not found. Run npm run setup again.", palette)
       case .collecting: message("Collecting the first reading…", palette)
       case .none:
-        if state.engines.isEmpty {
+        if state.empty {
           message("Collecting the first reading…", palette)
         } else {
-          tiles(state, palette)
+          content(state, palette).opacity(state.old ? 0.6 : 1)
         }
       }
+      Divider()
       footer(state, palette)
     }
-    .padding(14)
-    .frame(width: Self.width(state.engines.count), alignment: .leading)
-    .background(palette.background)
+    .padding(.horizontal, 14)
+    .padding(.top, 13)
+    .padding(.bottom, 12)
+    .frame(width: Self.width, alignment: .leading)
+    .background(opaque ? palette.background : Color.clear)
     .foregroundStyle(palette.text)
     .font(.system(size: 13))
+    .background(shortcuts)
   }
 
-  func header(_ state: PanelState, _ palette: Palette) -> some View {
-    HStack(spacing: 8) {
-      Image(nsImage: Brand.mark(size: 18)).renderingMode(.template).foregroundStyle(palette.text)
-      Text("Observatory").font(.system(size: 15, weight: .semibold)).tracking(-0.3)
-      Spacer(minLength: 8)
-      if state.refreshing {
-        ProgressView().controlSize(.small).scaleEffect(0.8)
-      } else if state.old, let updated = state.updated {
-        Text("Updated \(Format.age(state.now.timeIntervalSince(updated)))")
-          .font(.system(size: 11.5)).foregroundStyle(palette.warning)
+  @ViewBuilder func content(_ state: PanelState, _ palette: Palette) -> some View {
+    VStack(alignment: .leading, spacing: 5) {
+      Text(state.headline ?? "Unknown").font(.system(size: 14.5, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text(state.used ?? "")
+        Spacer(minLength: 8)
+        if let resets = state.resets { Text(resets) }
+      }
+      .font(.system(size: 12)).foregroundStyle(palette.muted)
+      bar(state.fraction, tone(state, palette), palette, height: 6).padding(.top, 3)
+    }
+    .accessibilityElement(children: .combine)
+    if !state.limits.isEmpty {
+      Divider()
+      VStack(alignment: .leading, spacing: 7) {
+        ForEach(state.limits) { row in
+          HStack(spacing: 8) {
+            Circle().fill(palette.provider(row.engine)).frame(width: 7, height: 7)
+            Text(row.name).lineLimit(1).truncationMode(.tail).layoutPriority(1)
+            Spacer(minLength: 0)
+            bar(row.fraction, palette.provider(row.engine), palette, height: 4).frame(width: 48)
+            Text(row.percent).monospacedDigit().foregroundStyle(limitTone(row, palette)).lineLimit(1).fixedSize().frame(minWidth: 36, alignment: .trailing)
+            Text(row.resets ?? "").font(.system(size: 11.5)).foregroundStyle(palette.muted).lineLimit(1).fixedSize().frame(width: 70, alignment: .trailing)
+          }
+          .accessibilityElement(children: .combine)
+        }
       }
     }
-    .padding(.horizontal, 2)
-  }
-
-  func card<Content: View>(_ palette: Palette, @ViewBuilder _ content: () -> Content) -> some View {
-    VStack(alignment: .leading, spacing: 12, content: content)
-      .padding(14)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.surface))
-      .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(palette.hairline))
+    if let title = state.runningTitle {
+      Divider()
+      VStack(alignment: .leading, spacing: 7) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+          Text(title).fontWeight(.semibold)
+          Spacer(minLength: 8)
+          Text(state.runningSummary ?? "")
+        }
+        .font(.system(size: 12)).foregroundStyle(palette.muted)
+        ForEach(state.sessions) { session in
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(Text(session.title))  \(Text(session.machine).font(.system(size: 11.5)).foregroundColor(palette.muted))")
+              .lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 8)
+            Text(session.rate).monospacedDigit()
+          }
+          .accessibilityElement(children: .combine)
+        }
+      }
+    }
+    if let flag = state.flag {
+      Divider()
+      HStack(alignment: .top, spacing: 9) {
+        Text("\(flag.count)").font(.system(size: 10.5, weight: .semibold)).monospacedDigit()
+          .foregroundStyle(scheme == .dark ? Color.black.opacity(0.8) : Color.white)
+          .frame(width: 18, height: 18)
+          .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(palette.warning))
+        if let subject = flag.subject {
+          Text("\(Text(subject).fontWeight(.semibold)) \(flag.text)")
+        } else {
+          Text(flag.text)
+        }
+      }
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityElement(children: .combine)
+    }
   }
 
   func message(_ text: String, _ palette: Palette) -> some View {
-    card(palette) { Text(text).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true) }
+    Text(text).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true).padding(.vertical, 4)
   }
 
   func footer(_ state: PanelState, _ palette: Palette) -> some View {
     HStack(spacing: 8) {
-      Button(action: model.openDashboard) {
-        Text("Open dashboard").frame(maxWidth: .infinity)
+      Button("Open dashboard", action: model.openDashboard)
+        .buttonStyle(Push(palette: palette)).keyboardShortcut("d")
+      Spacer(minLength: 8)
+      if state.refreshing { ProgressView().controlSize(.small).scaleEffect(0.7) }
+      if state.old, let updated = state.updated {
+        Text("Updated \(Format.age(state.now.timeIntervalSince(updated)))").foregroundStyle(palette.warning)
+      } else if let text = state.updatedText {
+        Text(text).foregroundStyle(palette.muted)
       }
-      .buttonStyle(Pill(palette: palette, prominent: true)).keyboardShortcut("d")
-      Button(action: model.refresh) { Image(systemName: "arrow.clockwise") }
-        .buttonStyle(Pill(palette: palette)).keyboardShortcut("r").disabled(state.refreshing)
-        .help("Refresh").accessibilityLabel("Refresh")
-      Button(action: model.quit) { Image(systemName: "power") }
-        .buttonStyle(Pill(palette: palette)).keyboardShortcut("q")
-        .help("Quit Observatory").accessibilityLabel("Quit Observatory")
     }
+    .font(.system(size: 12))
+  }
+
+  // Refresh and Quit live in the right-click menu. Their keys still work while the panel is open.
+  var shortcuts: some View {
+    ZStack {
+      Button("Refresh", action: model.refresh).keyboardShortcut("r")
+      Button("Quit Observatory", action: model.quit).keyboardShortcut("q")
+    }
+    .opacity(0).frame(width: 0, height: 0).accessibilityHidden(true)
   }
 }
 
-struct Pill: ButtonStyle {
+// A macOS push button drawn in SwiftUI, so a render to PNG shows it too.
+struct Push: ButtonStyle {
   let palette: Palette
-  var prominent = false
-  @Environment(\.isEnabled) private var enabled
+  @Environment(\.colorScheme) private var scheme
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.system(size: 13))
-      .padding(.horizontal, 12)
-      .frame(minWidth: 30, minHeight: 26)
-      .fixedSize(horizontal: !prominent, vertical: false)
-      .background(Capsule().fill(palette.surface))
-      .overlay(Capsule().strokeBorder(palette.hairline))
-      .opacity(configuration.isPressed ? 0.6 : enabled ? 1 : 0.4)
-      .contentShape(Capsule())
+      .padding(.horizontal, 11)
+      .frame(minHeight: 24)
+      .fixedSize()
+      .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(scheme == .dark ? Color.white.opacity(0.14) : Color.white))
+      .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(palette.hairline))
+      .shadow(color: .black.opacity(scheme == .dark ? 0 : 0.08), radius: 0.5, y: 0.5)
+      .opacity(configuration.isPressed ? 0.6 : 1)
+      .contentShape(RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+// The menu bar glyph: a ring filled to the share used of the scarcer limit.
+enum Ring {
+  static func image(_ fraction: Double, size: CGFloat = 16) -> NSImage {
+    let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+      let line: CGFloat = 2.2
+      let box = rect.insetBy(dx: line / 2 + 0.5, dy: line / 2 + 0.5)
+      let track = NSBezierPath(ovalIn: box)
+      track.lineWidth = line
+      NSColor.black.withAlphaComponent(0.3).setStroke()
+      track.stroke()
+      let share = CGFloat(min(1, max(0, fraction)))
+      if share > 0 {
+        let arc = NSBezierPath()
+        arc.appendArc(withCenter: NSPoint(x: rect.midX, y: rect.midY), radius: box.width / 2, startAngle: 90, endAngle: 90 - 360 * share, clockwise: true)
+        arc.lineWidth = line
+        arc.lineCapStyle = .round
+        NSColor.black.setStroke()
+        arc.stroke()
+      }
+      return true
+    }
+    image.isTemplate = true
+    image.accessibilityDescription = "Observatory"
+    return image
   }
 }
 
@@ -320,9 +453,13 @@ final class FloatingPanel: NSPanel {
     hasShadow = true
     hidesOnDeactivate = false
     collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
-    let clip = NSView()
+    // The system popover material, so the panel looks like the other menu bar extras in light and dark.
+    let clip = NSVisualEffectView()
+    clip.material = .popover
+    clip.blendingMode = .behindWindow
+    clip.state = .active
     clip.wantsLayer = true
-    clip.layer?.cornerRadius = 16
+    clip.layer?.cornerRadius = 12
     clip.layer?.cornerCurve = .continuous
     clip.layer?.masksToBounds = true
     content.translatesAutoresizingMaskIntoConstraints = false
@@ -357,6 +494,10 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     if let data = try? Data(contentsOf: file) { settings = try? JSONDecoder().decode(Settings.self, from: data) }
     item.button?.image = Brand.mark(size: 18)
     item.button?.toolTip = "Observatory"
+    menu.addItem(withTitle: "Open dashboard", action: #selector(openFromMenu), keyEquivalent: "").target = self
+    menu.addItem(withTitle: "Refresh", action: #selector(runTick), keyEquivalent: "").target = self
+    menu.addItem(.separator())
+    menu.addItem(withTitle: "Quit Observatory", action: #selector(quitFromMenu), keyEquivalent: "").target = self
     item.button?.target = self
     item.button?.action = #selector(toggle)
     item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -394,9 +535,25 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     termination = source
   }
 
-  var combinedFile: URL? {
+  let menu = NSMenu()
+  @objc func openFromMenu() { openDashboard() }
+  @objc func quitFromMenu() { NSApp.terminate(nil) }
+
+  func localFile(_ name: String) -> URL? {
     guard let settings else { return nil }
-    return URL(fileURLWithPath: settings.dataFolder).appendingPathComponent("public/local/combined.json")
+    return URL(fileURLWithPath: settings.dataFolder).appendingPathComponent("public/local/" + name)
+  }
+
+  static func json(_ file: URL?) -> [String: Any]? {
+    guard let file, let data = try? Data(contentsOf: file) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  // glance.json from the tick is drawn as it is. Without it (an older collector, or a failed glance step) the
+  // panel falls back to the forecast in combined.json.
+  static func state(glance: [String: Any]?, combined: () -> [String: Any]?, now: Date) -> PanelState? {
+    if let glance, glance["schema"] as? String == PanelState.glanceSchema { return PanelState.parseGlance(glance, now: now) }
+    return combined().map { PanelState.parse($0, now: now) }
   }
 
   var nodeMissing = false
@@ -439,28 +596,33 @@ final class Glance: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var state: PanelState
     if settings == nil {
       state = PanelState(notice: .setupMissing)
-    } else if let file = combinedFile, let data = try? Data(contentsOf: file),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-      state = PanelState.parse(json, now: Date())
+    } else if let read = Self.state(glance: Self.json(localFile("glance.json")), combined: { Self.json(self.localFile("combined.json")) }, now: Date()) {
+      state = read
     } else {
       state = PanelState(notice: .collecting)
     }
     if nodeMissing { state.notice = .nodeMissing }
     state.refreshing = tick?.isRunning == true
     model.state = state
-    // Off and a request count are definite readings too, not only a share left.
-    let current = state.notice == .none && !state.old && (state.limits.contains { $0.remaining != nil } || state.engines.contains { $0.status != "unknown" })
+    let current = state.notice == .none && !state.old && !state.empty
     item.button?.appearsDisabled = !current
-    // The menu bar shows the engine closest to running out.
-    item.button?.title = current ? (state.menu.map { " " + $0 } ?? "") : ""
+    // A ring filled to the scarcer limit. The percent used shows beside it only while that limit is forecast to run
+    // out before it resets. With no current share the telescope stands in, never an empty ring.
+    item.button?.image = current && state.ring != nil ? Ring.image(state.ring ?? 0) : Brand.mark(size: 18)
+    item.button?.title = current ? (state.barText.map { " " + $0 } ?? "") : ""
     item.button?.imagePosition = .imageLeading
-    item.button?.toolTip = current ? state.sentence ?? "Observatory" : "Observatory: not updated recently"
+    item.button?.toolTip = current ? state.headline ?? state.menu ?? "Observatory" : "Observatory: not updated recently"
     fitPanel()
   }
 
   var closedAt = Date.distantPast
 
   @objc func toggle() {
+    if NSApp.currentEvent?.type == .rightMouseUp, let button = item.button {
+      closePanel()
+      menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+      return
+    }
     if panel?.isVisible == true { closePanel(); return }
     // Clicking the icon while open first takes focus from the panel, which closes it. Don't reopen on that same click.
     if Date().timeIntervalSince(closedAt) < 0.3 { return }
@@ -526,19 +688,19 @@ extension ISO8601DateFormatter {
   }()
 }
 
-// `Observatory --render combined.json out.png light|dark [now-iso]` draws the panel to a PNG without
-// a menu bar, for checking the layout and for documentation screenshots.
+// `Observatory --render glance.json|combined.json out.png light|dark [now-iso]` draws the panel to a PNG
+// without a menu bar, for checking the layout and for documentation screenshots.
 @MainActor func render(_ arguments: [String]) -> Int32 {
   guard arguments.count >= 4, let data = FileManager.default.contents(atPath: arguments[1]),
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-    FileHandle.standardError.write("usage: --render combined.json out.png light|dark [now]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: --render glance.json out.png light|dark [now]\n".data(using: .utf8)!)
     return 2
   }
   let now = arguments.count > 4 ? PanelState.date(arguments[4]) ?? Date() : Date()
   let model = PanelModel()
-  model.state = PanelState.parse(json, now: now)
+  model.state = Glance.state(glance: json, combined: { json }, now: now) ?? PanelState(notice: .collecting)
   let scheme: ColorScheme = arguments[3] == "dark" ? .dark : .light
-  let renderer = ImageRenderer(content: PanelView(model: model).environment(\.colorScheme, scheme))
+  let renderer = ImageRenderer(content: PanelView(model: model, opaque: true).environment(\.colorScheme, scheme))
   renderer.scale = 2
   guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
         let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return 1 }

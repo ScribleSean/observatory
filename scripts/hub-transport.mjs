@@ -21,8 +21,10 @@ const shellQuote=value=>"'"+value.replace(/'/g,"'\\''")+"'";
 function windowsFolder(spoke) {
   return spoke.dataFolder?powerShellQuote(spoke.dataFolder):"(Join-Path $env:LOCALAPPDATA 'Observatory')";
 }
+// A Mac and a Linux computer share the shell commands and differ only in where the data folder is.
 function macFolder(spoke) {
-  return spoke.dataFolder?shellQuote(spoke.dataFolder):'"$HOME/Library/Application Support/Observatory"';
+  if(spoke.dataFolder)return shellQuote(spoke.dataFolder);
+  return spoke.platform==='linux'?'"${XDG_DATA_HOME:-$HOME/.local/share}/observatory"':'"$HOME/Library/Application Support/Observatory"';
 }
 
 const encoded=script=>`powershell -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script,'utf16le').toString('base64')}`;

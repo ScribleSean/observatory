@@ -6,10 +6,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {loadConfig} from '../lib/config.mjs';
 import {TIME_ZONE} from '../lib/timezone.mjs';
-import {privateFolder} from '../lib/private-folder.mjs';
+import {privateFolder,titleSalt} from '../lib/private-folder.mjs';
 import {writeJsonAtomic,writeAtomic} from '../lib/atomic-file.mjs';
 import {REFUSAL_CODES} from './refusal-codes.mjs';
-import {cleanActivity,cleanSettings} from './snapshot-clean.mjs';
+import {cleanActivity,cleanSettings,cleanLedgerRow} from './snapshot-clean.mjs';
 import {tokensFromSettings} from './windows-snapshot.mjs';
 import {attachTokenHours} from './token-hours.mjs';
 import {retainActivityHistory} from './activity-history.mjs';
@@ -26,6 +26,15 @@ import {buildProjectTokens,unavailableProjectTokens} from './project-tokens.mjs'
 import {openHistory,readingsFrom,recordReadings,compactHistory} from './limit-history.mjs';
 import {readSessions} from './read-sessions.mjs';
 import {openTokenStore,keepTokenDays} from './token-store.mjs';
+import {readLedgerSources} from './sources/index.mjs';
+import {buildLedger,WEEK_MS} from './ledger.mjs';
+
+// The ledger reads at most this long in one collection. What it read stays cached, so a first run on a
+// large history finishes over a few collections instead of holding up this one.
+export const LEDGER_READ_MS=150000;
+// The commit join's share of the tick (scripts/tick.mjs TICK_DEADLINE_MS): the read above, this, and
+// the hub's pulls fit inside it. Repositories not reached in time ship Unknown and are read next time.
+export const LEDGER_JOIN_MS=20000;
 
 const scripts=path.dirname(fileURLToPath(import.meta.url));
 const OTHER={Mac:'Windows',Windows:'Mac'};
@@ -77,13 +86,17 @@ export function defaultReaders(config) {
       return JSON.parse(await runPowerShellFile(path.join(scripts,'windows-aggregate-activity.ps1')));
     },
     codex:async()=>readCodexRoots(await roots(),{cacheFor:cacheFor('codex')}),
-    codexLimits:()=>collectQuota(config.dataFolder,config.platform==='mac'
+    codexLimits:()=>collectQuota(config.dataFolder,config.platform!=='windows'
       ?{enabled:true,resolveExecutable:()=>findCodexExecutable({runtime:config.dataFolder,configured:config.codexPath})}
       :{enabled:true,resolveExecutable:()=>findWindowsQuotaClient({configured:config.codexPath}),readSnapshot:readWindowsQuotaSnapshot}),
     claudeCode:async()=>readClaudeRoots(await roots(),{cacheFor:cacheFor('claude')}),
     modelDrift:async()=>readModelDriftRoots(await roots(),{cacheFor:cacheFor('drift')}),
     projects:async({claude,codex},now)=>readProjectRoots(await roots(),{claude,codex,now}),
     sessions:()=>readSessions({host:config.host,platform:config.platform}),
+    // Two weekly windows back, plus a day for a reset that moved.
+    ledger:async now=>readLedgerSources({config,home:homedir(),saveCache:false,
+      cacheFile:path.join(await privateFolder(config.dataFolder,'private-ledger'),'parse-cache.json'),
+      since:now.getTime()-2*WEEK_MS-86400000,deadline:Date.now()+LEDGER_READ_MS}),
     grokLimits:()=>readGrokUsage({appFolder:config.grok?.appFolder ?? null,requestLog:config.grok?.requestLog ?? null,timeZone:TIMEZONE}),
     claudeLimits:async()=>{
       await ensureClaudeLimitsFolder(config.dataFolder);
@@ -123,6 +136,8 @@ async function previousSnapshot(file) {
 
 export async function buildSnapshot(config,readers,{previous=null,now=new Date(),keepDays=null}={}) {
   const at=now.toISOString(),host=config.host,other=OTHER[host];
+  // The Mac and Windows snapshots carry a not-connected row for each other. Linux has no partner row.
+  const peer=value=>other?[value(other)]:[];
   const disconnected=h=>({host:h,status:'not-connected'});
   const unavailable=(error)=>({host,status:'unavailable',checkedAt:at,...(REFUSAL_CODES.includes(error?.refusal)?{refusal:error.refusal}:{})});
   const withRoots=(row,raw)=>config.sources.wsl && config.platform==='windows' && Array.isArray(raw?.roots) && row.status==='ok'?{...row,roots:raw.roots}:row;
@@ -145,8 +160,14 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
       return result.status==='ok'?{host,status:'ok',checkedAt:at,days:result.days}:{host,status:result.status==='not-found'?'not-found':'unavailable',checkedAt:at};
     } catch {return {host,status:'unavailable',checkedAt:at};}
   };
-  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens,grokRead,modelDrift,sessionsRead]=await Promise.all([
-    read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
+  const ledgerOn=Boolean(readers.ledger) && (config.sources.claudeCode || config.sources.codex);
+  const readLedger=async()=>{
+    if(!ledgerOn)return null;
+    try {return await readers.ledger(now);}
+    catch(error) {return {failed:true,error};}
+  };
+  const [activityRead,codexRead,quotaRead,claudeRead,limitsRead,projectTokens,grokRead,modelDrift,sessionsRead,ledgerRead]=await Promise.all([
+    config.platform==='linux'?null:read('screenTime',raw=>{const {intervals:_i,trackingIntervals:_t,...safe}=cleanActivity(raw,host);return {...safe,checkedAt:at};}),
     read('codex',raw=>{
       const settings={...cleanSettings(raw,host),checkedAt:at};
       const tokens=withRoots({...attachTokenHours(tokensFromSettings(settings,host),raw.hourTotals),checkedAt:at},raw);
@@ -159,9 +180,11 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     read('grokLimits',value=>value),
     readDrift(),
     read('sessions',value=>value),
+    readLedger(),
   ]);
   const pick=(value,fallback,failed)=>value===null?fallback:value.failed?failed(value.error):value;
-  const activity=pick(activityRead,disconnected(host),unavailable);
+  const activity=config.platform==='linux' && config.sources.screenTime
+    ?{host,status:'unsupported',checkedAt:at}:pick(activityRead,disconnected(host),unavailable);
   const codex=pick(codexRead,{settings:disconnected(host),tokens:disconnected(host)},error=>({settings:unavailable(error),tokens:unavailable(error)}));
   const quota=pick(quotaRead,{status:'not-connected',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]},
     ()=>({status:'unavailable',provider:'Codex',scope:'account',windows:[],history:[],dailyUsageBuckets:[]}));
@@ -176,18 +199,32 @@ export async function buildSnapshot(config,readers,{previous=null,now=new Date()
     ()=>({...claudeLimitsSource(null,{enabled:true}),usageCommand:'timed-out'}));
   const grokLimits=pick(grokRead,grokNotConnected(),()=>({...grokNotConnected(),status:'unavailable'}));
   const sessions=pick(sessionsRead,disconnected(host),unavailable);
+  let ledger=disconnected(host);
+  if(ledgerRead?.failed)ledger={host,status:'unavailable',collectedAt:at};
+  else if(ledgerRead) {
+    try {
+      // Save what was read before asking git, so a tick stopped during the join does not read it all again.
+      try {await ledgerRead.cache?.save?.();} catch {}
+      const {row}=await buildLedger({host,read:ledgerRead,limits:{claudeLimits,quota},live:sessions,now:now.getTime(),cache:ledgerRead.cache ?? null,
+        deadline:Date.now()+LEDGER_JOIN_MS});
+      const titles=config.sessions?.titles!==false;
+      ledger=cleanLedgerRow(row,{titles,salt:titles?null:await titleSalt(config.dataFolder)});
+    } catch {ledger={host,status:'unavailable',collectedAt:at};}
+    try {await ledgerRead.cache?.save?.();} catch {}
+  }
   const data={schema:2,timezone:TIMEZONE,collectedAt:at,
     device:{host,name:config.device.name},
     deviceNames:{[host]:config.device.name},
-    activity:[activity,disconnected(other)],combined:{host:'Combined',status:'unavailable',checkedAt:at},
-    tokens:[codex.tokens,disconnected(other)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
+    activity:[activity,...peer(disconnected)],combined:{host:'Combined',status:'unavailable',checkedAt:at},
+    tokens:[codex.tokens,...peer(disconnected)],combinedTokens:{host:'All',status:'unavailable',checkedAt:at},
     settings:[codex.settings],combinedSettings:{host:'All',status:'unavailable',checkedAt:at},
-    quota,claudeLimits,grokLimits,providerTokenSources:[claude],projectTokens:[projectTokens],modelDrift:[modelDrift],sessions:[sessions]};
+    quota,claudeLimits,grokLimits,providerTokenSources:[claude],projectTokens:[projectTokens],modelDrift:[modelDrift],sessions:[sessions],
+    ledger:[ledger,...peer(disconnected)]};
   const history=Array.isArray(previous?.activityHistory)?previous.activityHistory.filter(row=>row?.host===host):[];
   data.activityHistory=retainActivityHistory(history,data.activity,at).filter(row=>row.host===host);
   const result={data};
   attachProviderTokenEstimates(result);
-  const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits,grokLimits].filter(row=>row.status!=='not-connected');
+  const sources=[activity,codex.settings,codex.tokens,quota,claude,claudeLimits,grokLimits].filter(row=>!['not-connected','unsupported'].includes(row.status));
   const sourcesRead=sources.filter(row=>row.status==='ok').length;
   return {data,status:{state:sources.length && sourcesRead===sources.length?'ok':'partial',sourcesRead,sourcesConfigured:sources.length}};
 }

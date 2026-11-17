@@ -1,7 +1,7 @@
 // Static price table. Edit by hand to update.
 const prices = {
   "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
-  "checkedOn": "2026-10-14",
+  "checkedOn": "2026-11-17",
   "models": {
     "claude-fable-5": {
       "input": 10,
@@ -14,6 +14,12 @@ const prices = {
       "cachedInput": 0.25,
       "cacheWrite": 12.5,
       "output": 50
+    },
+    "claude-fable-5-2": {
+      "input": 8,
+      "cachedInput": 0.2,
+      "cacheWrite": 10,
+      "output": 40
     },
     "claude-haiku-5-5": {
       "input": 0.1,

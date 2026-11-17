@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import {withFolder} from './helpers.mjs';
-import {minimumNode,nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,startMenuShortcut,LABEL} from '../scripts/setup.mjs';
+import {minimumNode,nodeSupported,paths,launchAgent,infoPlist,glanceSettings,installMacApp,startMenuShortcut,systemdService,systemdTimer,crontabLine,LABEL} from '../scripts/setup.mjs';
 
 for(const failure of ['compiler','executable','plist','sign','verify','swap','rollback',null]) {
   test(`staged Mac install: ${failure ?? 'success'}`,()=>withFolder(async folder=>{
@@ -129,16 +129,108 @@ test('a status line that still runs the removed bridge is reported, and the sett
   assert.equal(claudeSettingsPath({CLAUDE_CONFIG_DIR:'/c'}),path.join('/c','settings.json'));
 })));
 
-test('a dry run on a fresh clone lists every step and writes nothing',{skip:!['darwin','win32'].includes(process.platform) && 'Setup runs on macOS and Windows only'},()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
+test('a dry run on a fresh clone lists every step and writes nothing',{skip:!['darwin','win32','linux'].includes(process.platform) && 'Setup runs on macOS, Windows and Linux only'},()=>import('./helpers.mjs').then(({withFolder})=>withFolder(async folder=>{
   const {execFileSync}=await import('node:child_process');
   const {existsSync}=await import('node:fs');
   const path=(await import('node:path')).default;
   const config=path.join(folder,'observatory.config.json');
   const output=execFileSync(process.execPath,['scripts/setup.mjs','--dry-run'],{env:{...process.env,OBSERVATORY_CONFIG:config},encoding:'utf8'});
-  for(const step of ['would write observatory.config.json','would build the dashboard','would import limit history','would write the app settings','Dry run: nothing was changed.'])
-    assert.ok(output.includes(step),step);
+  const steps=process.platform==='linux'
+    ?['would write observatory.config.json','Dry run: nothing was changed.']
+    :['would write observatory.config.json','would build the dashboard','would import limit history','would write the app settings','Dry run: nothing was changed.'];
+  for(const step of steps)assert.ok(output.includes(step),step);
+  if(process.platform==='linux')assert.ok(!output.includes('build the dashboard'));
   assert.equal(existsSync(config),false);
-})),{skip:!['darwin','win32'].includes(process.platform) && 'setup runs on macOS and Windows only'});
+})));
+
+async function linuxDryRun(options={}) {
+  const {setup}=await import('../scripts/setup.mjs');
+  const lines=[];
+  const before=process.env.OBSERVATORY_CONFIG;
+  await withFolder(async folder=>{
+    process.env.OBSERVATORY_CONFIG=path.join(folder,'observatory.config.json');
+    try {await setup({dryRun:true,platform:'linux',log:line=>lines.push(line),hasSystemd:async()=>true,lingerIsOff:async()=>true,...options});}
+    finally {if(before===undefined)delete process.env.OBSERVATORY_CONFIG;else process.env.OBSERVATORY_CONFIG=before;}
+    assert.equal((await fs.readdir(folder)).length,0,'a dry run writes nothing');
+  });
+  return lines.join('\n');
+}
+
+test('Linux paths follow XDG_CONFIG_HOME for the systemd user folder',()=>{
+  const posix=value=>value.replaceAll(path.sep,'/');
+  const plain=paths('linux','/r','/home/a',{});
+  assert.equal(posix(plain.unitFolder),'/home/a/.config/systemd/user');
+  assert.equal(posix(plain.timer),'/home/a/.config/systemd/user/observatory.timer');
+  assert.equal(posix(plain.service),'/home/a/.config/systemd/user/observatory.service');
+  assert.equal(posix(paths('linux','/r','/home/a',{XDG_CONFIG_HOME:'/etc/xdg-a'}).unitFolder),'/etc/xdg-a/systemd/user');
+  assert.equal(posix(paths('linux','/r','/home/a',{XDG_CONFIG_HOME:'relative'}).unitFolder),'/home/a/.config/systemd/user');
+});
+
+test('the Linux service runs tick.mjs once with the settings file, and the timer repeats every 5 minutes',()=>{
+  const service=systemdService('/opt/node 22/bin/node','/srv/obs 100%','/srv/obs 100%/observatory.config.json');
+  assert.match(service,/^Type=oneshot$/m);
+  assert.match(service,/^ExecStart="\/opt\/node 22\/bin\/node" "\/srv\/obs 100%%\/scripts\/tick\.mjs"$/m);
+  assert.match(service,/^WorkingDirectory=\/srv\/obs 100%%$/m);
+  assert.match(service,/^Environment="OBSERVATORY_CONFIG=\/srv\/obs 100%%\/observatory\.config\.json"$/m);
+  assert.match(service,/^Environment="PATH=\/opt\/node 22\/bin:\/usr\/local\/bin:\/usr\/bin:\/bin"$/m);
+  const priced=systemdService('/opt/node$1/bin/node','/srv/obs$x','/srv/obs$x/observatory.config.json');
+  assert.match(priced,/^Environment="OBSERVATORY_CONFIG=\/srv\/obs\$x\/observatory\.config\.json"$/m,'Environment= does not expand $, so it stays single');
+  assert.match(priced,/^Environment="PATH=\/opt\/node\$1\/bin:/m);
+  assert.match(priced,/^ExecStart="\/opt\/node\$\$1\/bin\/node" "\/srv\/obs\$\$x\/scripts\/tick\.mjs"$/m,'ExecStart= does, so it is doubled');
+  for(const args of [['/opt/node','/srv/a\nb','/srv/c.json'],['/opt/node','/srv/a','/srv/c\n.json'],['/opt/no\rde','/srv/a','/srv/c.json']])
+    assert.throws(()=>systemdService(...args),/line break/);
+  const timer=systemdTimer();
+  assert.match(timer,/^OnUnitActiveSec=5min$/m);
+  assert.match(timer,/^OnBootSec=1min$/m);
+  assert.match(timer,/^Unit=observatory\.service$/m);
+  assert.match(timer,/^WantedBy=timers\.target$/m);
+  assert.doesNotMatch(service+timer,/[\u2014;]/);
+});
+
+test('the crontab line quotes every path',()=>{
+  assert.equal(crontabLine('/opt/n o/bin/node','/srv/o\'x','/srv/o\'x/observatory.config.json'),
+    "*/5 * * * * cd '/srv/o'\\''x' && OBSERVATORY_CONFIG='/srv/o'\\''x/observatory.config.json' '/opt/n o/bin/node' scripts/tick.mjs >/dev/null 2>&1");
+});
+
+test('a Linux dry run prints the timer and service, and builds nothing',async()=>{
+  const output=await linuxDryRun();
+  assert.match(output,/would write observatory\.config\.json/);
+  assert.match(output,/would write the systemd user timer to .*systemd.user \(runs every 5 minutes\)/);
+  assert.match(output,/observatory\.service:/);
+  assert.match(output,/ExecStart=.*tick\.mjs/);
+  assert.match(output,/observatory\.timer:/);
+  assert.match(output,/OnUnitActiveSec=5min/);
+  assert.match(output,/loginctl enable-linger/);
+  assert.match(output,/Dry run: nothing was changed\./);
+  assert.doesNotMatch(output,/npm|dashboard|tray|menu bar|ActivityWatch|Start menu|swiftc/);
+});
+
+test('without a systemd user session a Linux dry run prints the one crontab line instead',async()=>{
+  const output=await linuxDryRun({hasSystemd:async()=>false});
+  assert.match(output,/systemd user services are not available/);
+  assert.equal(output.split('\n').filter(line=>line.includes('*/5 * * * * cd ')).length,1);
+  assert.match(output,/scripts\/tick\.mjs >\/dev\/null 2>&1/);
+  assert.doesNotMatch(output,/OnUnitActiveSec/);
+});
+
+test('a Linux dry run with --no-login leaves the schedule alone',async()=>{
+  const output=await linuxDryRun({login:false});
+  assert.match(output,/left the timer unchanged/);
+  assert.doesNotMatch(output,/OnUnitActiveSec|crontab/);
+});
+
+test('removing on Linux says what it would delete, and a dry run deletes nothing',async()=>{
+  const {remove}=await import('../scripts/setup.mjs');
+  const lines=[];
+  await remove({platform:'linux',dryRun:true,log:line=>lines.push(line)});
+  assert.match(lines.join('\n'),/Would stop and delete observatory\.timer and observatory\.service/);
+});
+
+test('a Linux computer is named by its host name, with control characters removed',async()=>{
+  const {computerName}=await import('../scripts/setup.mjs');
+  const name=await computerName('linux',{});
+  assert.ok(name.length>0 && name.length<=40 && !Array.from(name).some(c=>c.charCodeAt(0)<32));
+});
 
 test('the app icon is named in Info.plist, and the Start menu entry uses the app\'s own icon',()=>{
   assert.match(infoPlist(),/<key>CFBundleIconFile<\/key><string>Observatory<\/string>/);

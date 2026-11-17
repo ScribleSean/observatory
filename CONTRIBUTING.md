@@ -6,11 +6,11 @@ Thanks for helping. Observatory is small on purpose, so the best contributions a
 
 - Observatory only reads. It does not start, stop or answer an agent, and it does not write to the tools it reads.
 - Never show Unknown as zero. Keep activity, tokens, account limits, billed cost and estimates separate. Never add limits across computers, and label sums of time or tokens across computers "not deduplicated".
-- Store nothing private: no window titles, prompts, messages, session names, arguments, environment variables or credentials. Check data from a second computer the same way as local reads.
+- Store nothing private: no window titles, prompts, messages, arguments, paths, environment variables or credentials. Agent session titles are the one exception: they are kept while `sessions.titles` is on (the default) and hashed when it is off. File locations needed to resume reading stay in the private cache in the data folder, never in a snapshot. Check data from another computer the same way as local reads.
 - Read a source only while `observatory.config.json` lists it as `true`.
-- The dashboard listens on 127.0.0.1 only and stays read-only. Observatory reaches the second computer over the user's own SSH alias, so don't add a network listener, a pairing service or a hosted account.
-- One computer must work with no configuration beyond `npm run setup`. The apps target macOS and Windows. Tests also run on Linux, where tests that need the menu bar app, setup or the server skip with a reason.
-- If syncing between two computers breaks, compare existing sync tools before writing a new one.
+- The dashboard listens on 127.0.0.1 only and stays read-only. Observatory reaches the other computers over the user's own SSH alias, so don't add a network listener, a pairing service or a hosted account.
+- One computer must work with no configuration beyond `npm run setup`. The apps target macOS and Windows, and a Linux computer collects with no app. Tests also run on Linux, where tests that need the menu bar app, setup or the server skip with a reason.
+- If syncing between computers breaks, compare existing sync tools before writing a new one.
 - Keeping the separate Mac and Windows apps in step has been costly. Before building a cross-platform window or a richer Windows tray panel, compare Tauri, Electron and the current native apps.
 - For anything larger than a fix, open an issue first so we can agree on the approach.
 

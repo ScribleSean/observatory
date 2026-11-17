@@ -2,7 +2,22 @@ import {retainActivityHistory} from './activity-history.mjs';
 export const snapshotMaximumBytes=16_000_000;
 export const snapshotHistoryBudget=12_000_000;
 
-export function serializeSnapshot(data,{budget=snapshotHistoryBudget,maximum=snapshotMaximumBytes}={}) {
+// The ledger lists at most LEDGER_TOP sessions per period (lib/ledger-shape.mjs), so it is small. Its
+// largest part is each session's fan-out timeline: past this many bytes those timelines go first,
+// then the ledger reads as unavailable, so it never pushes out the activity history.
+export const ledgerBudget=2_000_000;
+export function fitLedger(data,{budget=ledgerBudget}={}) {
+  if(!Array.isArray(data?.ledger))return;
+  const size=()=>Buffer.byteLength(JSON.stringify(data.ledger));
+  if(size()<=budget)return;
+  for(const row of data.ledger)for(const tool of row?.tools ?? [])for(const period of tool?.periods ?? [])
+    for(const session of period?.sessions ?? [])session.fanout=[];
+  if(size()<=budget)return;
+  data.ledger=data.ledger.map(row=>row?.status==='ok'?{host:row.host,status:'unavailable',collectedAt:row.collectedAt}:row);
+}
+
+export function serializeSnapshot(data,{budget=snapshotHistoryBudget,maximum=snapshotMaximumBytes,ledger=ledgerBudget}={}) {
+  fitLedger(data,{budget:ledger});
   let text=JSON.stringify(data),bytes=Buffer.byteLength(text);
   const history=Array.isArray(data?.activityHistory)?data.activityHistory:null;
   if(!history || bytes<=budget)return {text,bytes};
