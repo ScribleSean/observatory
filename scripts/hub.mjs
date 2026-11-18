@@ -111,12 +111,15 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
   const others=HOSTS.filter(host=>host!==config.host && (carriedDevice(mine,host) || carriedDevice(incoming,host)));
   const cap=peerBytes(1+others.length);
   const devices=[{host:config.host,name:config.device.name,...await readOwn(folder,cap)}];
+  const hubTime=copy=>copy?.hub?.role==='hub'?copy.generatedAt:copy?.hub?.hubWroteAt;
+  // Whether a computer is Off is the hub's setting, so it comes from the copy the hub wrote last, whatever the age
+  // of the snapshots. An Off computer's snapshot never changes, so its age cannot decide this.
+  const fromHub=incoming && !(Date.parse(hubTime(mine))>=Date.parse(incoming.generatedAt))?incoming:mine;
   for(const host of others) {
     const carried=newer(validatedDevice(mine,host,now(),cap),validatedDevice(incoming,host,now(),cap));
-    if(carried)devices.push(carried);
+    if(carried)devices.push({...carried,off:carriedDevice(fromHub,host)?.off===true});
   }
   const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,...await titleSettings(config)});
-  const hubTime=copy=>copy?.hub?.role==='hub'?copy.generatedAt:copy?.hub?.hubWroteAt;
   const hubWroteAt=[hubTime(mine),hubTime(incoming)].filter(at=>Number.isFinite(Date.parse(at)))
     .sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;
   combined.hub={role:'spoke',hubWroteAt};

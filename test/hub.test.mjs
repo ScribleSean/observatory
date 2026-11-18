@@ -221,6 +221,28 @@ test('a spoke recombines its fresh snapshot with the hub rows it was sent',()=>w
   assert.equal(combined.glance.today.length,2);
 }));
 
+test('a spoke shows another computer as Off exactly when the hub last said so, whatever the age of its copy',()=>withFolder(async folder=>{
+  // The other computer's snapshot never changes while it is off, so both copies of it are the same age.
+  const other=ownSnapshot('Mac',now-3*3600000);
+  const copy=(off,generated)=>({...combine([{host:'Mac',snapshot:other,...(off?{off:true}:{error:'unreachable'})},
+    {host:'Windows',snapshot:ownSnapshot('Windows',now-600000)}],{now:generated,generatedBy:'Mac'}),hub:{role:'hub'}});
+  const config=testConfig(folder,{platform:'windows',host:'Windows',device:{name:'PC'}});
+  await seed(folder,'usage.json',ownSnapshot('Windows',now));
+  await seed(folder,'combined.json',copy(false,now-60000));
+  const state=async at=>(await recombine(config,{now:()=>at})).devices.find(device=>device.host==='Mac');
+  assert.equal((await state(now)).state,'late');
+  // The hub's settings turn it off: the next copy it sends says Off, and the spoke follows.
+  await seed(folder,'combined.incoming.json',copy(true,now+60000));
+  const off=await state(now+120000);
+  assert.deepEqual([off.state,off.stateLabel],['off','Off']);
+  assert.equal((await state(now+180000)).state,'off','Off stays while the hub has not said otherwise');
+  // Turned back on but unreachable: the hub says so and the spoke shows the time of its last reading again.
+  await seed(folder,'combined.incoming.json',copy(false,now+240000));
+  const back=await state(now+300000);
+  assert.equal(back.state,'late');
+  assert.match(back.stateLabel,/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d\d (AM|PM)$/);
+}));
+
 test('a spoke on its own shows only itself',()=>withFolder(async folder=>{
   await seed(folder,'usage.json',ownSnapshot('Windows',now));
   const combined=await recombine(testConfig(folder,{platform:'windows',host:'Windows',device:{name:'PC'}}),{now:()=>now});

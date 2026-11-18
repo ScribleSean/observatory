@@ -23,7 +23,7 @@ function feed(change=summary=>summary) {
 }
 function base() {
   return ({generatedAt:iso(0),timezone:'UTC',devices:[{host:'Mac',name:'Studio Mac'},{host:'Windows',name:'Desk PC'}],
-    glance:{forecast:{engines:[{engine:'claude',name:'Claude'},{engine:'codex',name:'Codex'}],scarce:{engine:'claude'}}},
+    glance:{forecast:{asOf:iso(0),timeZone:'UTC',engines:[{engine:'claude',name:'Claude'},{engine:'codex',name:'Codex'}],scarce:{engine:'claude'}}},
     week:{windows:[
       window('claude','Claude Code','weekly','seven_day',10080,36,{status:'runs-out',runoutAt:iso(32*HOUR),previousUsed:71}),
       window('claude','Claude Code','5-hour','five_hour',300,59,{resetsAt:iso(2*HOUR)}),

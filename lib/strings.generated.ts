@@ -423,11 +423,12 @@ export const STRINGS = {
     "resetsWhen": "resets",
     "hasRoom": "has room",
     "noReading": "has no current reading",
-    "unknown": "Run-out time: Unknown",
     "resets": "Resets {time}",
     "beforeResetHour": "1 hour before the reset",
     "beforeResetHours": "{count} hours before the reset",
-    "beforeResetDays": "{count} days before the reset"
+    "beforeResetDays": "{count} days before the reset",
+    "asOf": "{text}, as of {time}",
+    "sentenceAsOf": "{sentence} As of {time}."
   }
 } as const;
 

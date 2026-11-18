@@ -102,7 +102,7 @@ test('JSON shape is stable and carries no personal data', () => {
   const status = agentStatus(today, now);
   const window = ['percentLeft', 'resetsAt', 'minutesToReset', 'burnPerHour', 'pace', 'forecast'];
   assert.deepEqual(Object.keys(status), ['schema', 'generatedAt', 'current', 'engines', 'nextReturn', 'route', 'cap', 'forecast', 'devices']);
-  assert.deepEqual(Object.keys(status.forecast), ['asOf', 'timeZone', 'sentence']);
+  assert.deepEqual(Object.keys(status.forecast), ['asOf', 'timeZone', 'sentence', 'stale']);
   for (const device of status.devices) assert.deepEqual(Object.keys(device), ['host', 'state', 'stateLabel', 'collectedAt']);
   assert.deepEqual(Object.keys(status.cap), ['total', 'claude', 'codex', 'codexRunning', 'reason']);
   assert.deepEqual(Object.keys(status.nextReturn.codex), ['resetsAt', 'minutesToReset']);
@@ -111,11 +111,11 @@ test('JSON shape is stable and carries no personal data', () => {
   assert.deepEqual(Object.keys(status.engines), ['claude', 'codex']);
   for (const engine of ['claude', 'codex']) {
     assert.deepEqual(Object.keys(status.engines[engine]), ['status', 'headroom', 'effectiveHeadroom', 'pace', 'windows', 'forecast']);
-    assert.deepEqual(Object.keys(status.engines[engine].forecast), ['status', 'phrase', 'sentence', 'runsOutAt', 'earliestAt', 'latestAt', 'leftAtReset', 'resetsLabel', 'headline', 'window']);
+    assert.deepEqual(Object.keys(status.engines[engine].forecast), ['status', 'phrase', 'sentence', 'runsOutAt', 'earliestAt', 'latestAt', 'leftAtReset', 'resetsLabel', 'stale', 'asOfLabel', 'headline', 'window']);
     assert.deepEqual(Object.keys(status.engines[engine].windows), ['five_hour', 'weekly']);
     for (const item of Object.values(status.engines[engine].windows)) {
       assert.deepEqual(Object.keys(item), window);
-      assert.deepEqual(Object.keys(item.forecast), ['status', 'phrase', 'sentence', 'runsOutAt', 'earliestAt', 'latestAt', 'leftAtReset', 'resetsLabel']);
+      assert.deepEqual(Object.keys(item.forecast), ['status', 'phrase', 'sentence', 'runsOutAt', 'earliestAt', 'latestAt', 'leftAtReset', 'resetsLabel', 'stale', 'asOfLabel', 'headline']);
     }
   }
   assert.deepEqual(Object.keys(status.route), ['code', 'review', 'research']);
