@@ -3,6 +3,11 @@ import { buildOverview, patchScope, useR2 } from '../data';
 
 type Props = import('../../../../lib/r2-blocks.mjs').FlagsProps;
 
+/** Two lines can read the same, so a line's key is its place in the list and the session it opens, not its text. */
+export function flagKey(line: { sessionKey?: string | null }, index: number): string {
+  return `${index}:${line.sessionKey ?? ''}`;
+}
+
 /** "Needs you": a few data statements, each with a terracotta dot. A line about a session opens its panel. */
 export function Flags({ element }: ComponentRenderProps<Props>) {
   const { snapshot, scope, now, openSession } = useR2();
@@ -14,9 +19,9 @@ export function Flags({ element }: ComponentRenderProps<Props>) {
         <h3>Needs you</h3><span className={lines.length ? 'acc' : 'fa'} style={{ fontWeight: 600 }}>{lines.length}</span><span className="fill" /><span className="fa">{frame.period.label}</span>
       </div>
       {lines.length === 0 && <div className="empty">Nothing flagged in this range.</div>}
-      {lines.map(line => line.sessionKey
-        ? <button key={line.text} type="button" className="li" onClick={() => openSession(line.sessionKey)}><span className="flagdot" /><span className="t on">{line.text}</span><span className="fa">›</span></button>
-        : <div key={line.text} className="li flat"><span className="flagdot" /><span className="t on">{line.text}</span></div>)}
+      {lines.map((line, index) => line.sessionKey
+        ? <button key={flagKey(line, index)} type="button" className="li" onClick={() => openSession(line.sessionKey)}><span className="flagdot" /><span className="t on">{line.text}</span><span className="fa">›</span></button>
+        : <div key={flagKey(line, index)} className="li flat"><span className="flagdot" /><span className="t on">{line.text}</span></div>)}
     </section>
   );
 }

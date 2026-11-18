@@ -89,7 +89,9 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
           {!child && (row.kind === 'bundle'
             ? <button type="button" className="car" aria-expanded={expanded} aria-label={expanded ? 'Hide the sessions in this row' : 'Show the sessions in this row'} onClick={event => { event.stopPropagation(); toggle(row.key, false); }}>{expanded ? '−' : '+'}</button>
             : <span className="car" />)}
-          <span className="nm"><SessionName row={row} />{row.kind === 'bundle' && <span className="fa"> ({row.count})</span>}{row.running && <span className="fa"> · running</span>}</span>
+          {/* The name is the keyboard's way into the session panel. The whole row stays a target for the mouse. */}
+          {child ? <span className="nm"><SessionName row={row} /></span>
+            : <button type="button" className="nm" onClick={event => { event.stopPropagation(); openSession(row.key); }}><SessionName row={row} />{row.kind === 'bundle' && <span className="fa"> ({row.count})</span>}{row.running && <span className="fa"> · running</span>}</button>}
         </td>
         <td className="hide-s">{row.device}{row.tool !== 'claude' && ` · ${TOOL_NAMES[row.tool] ?? row.tool}`}</td>
         <td className="r hide-s">{row.subagents ? count(row.subagents) : <span className="fa">0</span>}</td>
@@ -125,8 +127,8 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
       const landed = group.onMain.value;
       const total = (vm.groups ?? []).reduce((sum, each) => sum + (each.spend.value ?? 0), 0); // zero-ok: a share of the listed groups, drawn only when known
       return [
-        <tr key={`g:${group.key}`} className="grp" onClick={() => toggle(`g:${group.key}`, true)}>
-          <td className="name"><button type="button" className="car" aria-expanded={shown} aria-label={`${shown ? 'Hide' : 'Show'} ${group.label} sessions`}>{shown ? '−' : '+'}</button><b>{group.label}</b> <span className="fa">{plural(group.count, 'session')}</span></td>
+        <tr key={`g:${group.key}`} className="grp">
+          <td className="name"><button type="button" className="gb" aria-expanded={shown} aria-label={`${shown ? 'Hide' : 'Show'} ${group.label} sessions, ${plural(group.count, 'session')}`} onClick={() => toggle(`g:${group.key}`, true)}><span className="car" aria-hidden="true">{shown ? '−' : '+'}</span><b>{group.label}</b> <span className="fa">{plural(group.count, 'session')}</span></button></td>
           <td className="hide-s" aria-hidden="true" /><td className="r hide-s">{count(group.subagents)}</td><td className="hide-m" aria-hidden="true" />
           <td className="r"><b>{group.spend.text}</b></td>
           <td className="r hide-s">{bar(group, group.spend.value !== null && total ? 100 * group.spend.value / total : null)}</td>

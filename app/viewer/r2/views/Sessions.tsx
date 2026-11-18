@@ -1,7 +1,8 @@
+import { useEffect, useRef } from 'react';
 import type { Spec } from '@json-render/react';
 import { UNKNOWN, buildSessions, clock, count, share, useR2, type SessionRow } from '../data';
 import { SpecView } from '../registry';
-import { SESSIONS } from '../specs';
+import { SESSIONS } from '../pins';
 import { BarList } from '../blocks/Breakdown';
 import { SessionName, flagged } from '../blocks/SessionsTable';
 
@@ -17,6 +18,16 @@ function find(rows: SessionRow[], key: string): SessionRow | null {
   return null;
 }
 
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Where Tab goes inside the open panel: past the last control it wraps to the first, and Shift+Tab the other way. Null leaves it to the browser. */
+export function trapTab(count: number, current: number, back: boolean): number | null {
+  if (count === 0) return null;
+  if (back && current <= 0) return count - 1;
+  if (!back && (current === count - 1 || current < 0)) return 0;
+  return null;
+}
+
 /** One session, broken down. It opens over any view and changes nothing: the dashboard only reads. */
 export function SessionPanel() {
   const { snapshot, scope, now, selected, openSession } = useR2();
@@ -24,11 +35,30 @@ export function SessionPanel() {
   const row = vm && selected ? find(vm.rows, selected) : null;
   const zone = vm?.frame.timeZone ?? 'UTC';
   const models = row?.spend.breakdowns.model ?? [], kinds = row?.spend.breakdowns.kind ?? [], repos = row?.onMain.breakdowns.repo ?? [];
+  const panel = useRef<HTMLDialogElement | null>(null);
+  const shown = row !== null;
+  // Opening moves focus into the panel and keeps Tab inside it. Closing hands focus back to whatever opened it.
+  useEffect(() => {
+    if (!shown) return;
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panel.current?.querySelector<HTMLElement>('.x')?.focus();
+    const keepFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab' || !panel.current) return;
+      const controls = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      const next = trapTab(controls.length, controls.indexOf(document.activeElement as HTMLElement), event.shiftKey);
+      if (next !== null) { event.preventDefault(); controls[next]?.focus(); }
+    };
+    document.addEventListener('keydown', keepFocus);
+    return () => { document.removeEventListener('keydown', keepFocus); if (before?.isConnected) before.focus(); };
+  }, [shown]);
+  // A session that leaves the list (a refresh, a new range) closes the panel instead of leaving the page inert.
+  useEffect(() => { if (selected && vm && !row) openSession(null); }, [selected, vm, row, openSession]);
   const flags = !row ? [] : row.onMain.of === 0 ? ['No commits in this range'] : row.onMain.value === 0 ? ['Commits exist only on branches, none on main'] : [];
   return (
     <>
       <div className={row ? 'scrim on' : 'scrim'} onClick={() => openSession(null)} aria-hidden="true" />
-      <aside className={row ? 'panel on' : 'panel'} aria-label="Session" aria-hidden={!row} inert={!row || undefined}>
+      {/* A dialog element kept in the page (not showModal), so it can slide in and out. App.tsx makes the page behind it inert. */}
+      <dialog ref={panel} open={row ? true : undefined} className={row ? 'panel on' : 'panel'} aria-modal="true" aria-label="Session" aria-hidden={!row} inert={!row || undefined}>
         {row && vm && <>
           <div className="ph">
             <button type="button" className="btn sq x" aria-label="Close" onClick={() => openSession(null)}>×</button>
@@ -62,7 +92,7 @@ export function SessionPanel() {
             <span>Monitor only</span><span>Nothing here can stop or change a session</span>
           </div></div>
         </>}
-      </aside>
+      </dialog>
     </>
   );
 }

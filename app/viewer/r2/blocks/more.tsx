@@ -5,7 +5,9 @@ import type { ComponentRenderProps } from '@json-render/react';
 import type { GrokRequestsVM, LimitsVM } from '../../../../lib/view-r2.mjs';
 import { resolveBlock } from '../../../../lib/view-r2.mjs';
 import { limitsOn, patchScope, useR2 } from '../data';
-import { PINS, blockList } from '../specs';
+import { PINS, blockList } from '../pins';
+import { BlockBoundary } from '../Boundary';
+import { Loading } from '../Loading';
 import { LimitMeter as MeterRows } from './LimitMeter';
 import { GrokRequests as GrokBlock, GrokRequestsRow } from './GrokRequests';
 
@@ -24,9 +26,9 @@ const VIEWS = { limits: Limits, tokens: Tokens, 'screen-time': ScreenTime, drift
 export function MoreView({ title }: { title: string }) {
   const { view, snapshot, scope, now } = useR2();
   const View = VIEWS[view as keyof typeof VIEWS];
-  if (view === 'settings') return <Suspense fallback={null}><Settings snapshot={snapshot as never} scope={scope} now={now} pins={PINS.map(pin => ({ id: pin.id, title: pin.title, blocks: blockList(pin.spec as never).map(block => block.name) }))} /></Suspense>;
+  if (view === 'settings') return <BlockBoundary name={title}><Suspense fallback={<Loading />}><Settings snapshot={snapshot as never} scope={scope} now={now} pins={PINS.map(pin => ({ id: pin.id, title: pin.title, blocks: blockList(pin.spec as never).map(block => block.name) }))} /></Suspense></BlockBoundary>;
   if (!View) return <div className="grid"><section className="blk"><div className="empty"><b>{title}</b>This view is not part of this build.</div></section></div>;
-  return <Suspense fallback={null}><View snapshot={snapshot as never} scope={scope} now={now} /></Suspense>;
+  return <BlockBoundary name={title}><Suspense fallback={<Loading />}><View snapshot={snapshot as never} scope={scope} now={now} /></Suspense></BlockBoundary>;
 }
 
 /**
