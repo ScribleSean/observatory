@@ -82,7 +82,7 @@ export async function runHub(config,{transport=sshTransport(),now=()=>Date.now()
       report.push({name:spoke.name,host,pull:error.message});
     }
   }
-  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,...await titleSettings(config)});
+  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,sources:config.sources,...await titleSettings(config)});
   combined.hub={role:'hub',spokes:report};
   const text=JSON.stringify(combined);
   await writeAtomic(path.join(folder,'combined.json'),text);
@@ -119,7 +119,7 @@ export async function recombine(config,{now=()=>Date.now()}={}) {
     const carried=newer(validatedDevice(mine,host,now(),cap),validatedDevice(incoming,host,now(),cap));
     if(carried)devices.push({...carried,off:carriedDevice(fromHub,host)?.off===true});
   }
-  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,...await titleSettings(config)});
+  const combined=combine(devices,{now:now(),generatedBy:config.host,engines:config.engines,sources:config.sources,...await titleSettings(config)});
   const hubWroteAt=[hubTime(mine),hubTime(incoming)].filter(at=>Number.isFinite(Date.parse(at)))
     .sort((a,b)=>Date.parse(b)-Date.parse(a))[0] ?? null;
   combined.hub={role:'spoke',hubWroteAt};

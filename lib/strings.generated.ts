@@ -27,7 +27,7 @@ export const STRINGS = {
     "year": "Year"
   },
   "devices": {
-    "all": "Both",
+    "all": "All",
     "mac": "Mac",
     "pc": "PC",
     "device": "Computer",
@@ -171,7 +171,7 @@ export const STRINGS = {
     "off": "Off"
   },
   "overview": {
-    "bothNote": "Both computers, not deduplicated",
+    "bothNote": "All computers, not deduplicated",
     "lastSeen": "Last seen {time}"
   },
   "limitHistory": {
