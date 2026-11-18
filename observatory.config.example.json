@@ -12,5 +12,9 @@
   },
   "hub": {
     "spokes": []
+  },
+  "sessions": {
+    "titles": true,
+    "roles": {}
   }
 }
