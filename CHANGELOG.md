@@ -21,8 +21,18 @@ Observatory was rebuilt from a full desktop app into a small menu bar companion 
 - **Optional Grok tile.** With `sources.grokLimits` set to `true`, a Grok tile reads a cached weekly limit, a request log, or both, from the files set in `grok.appFolder` and `grok.requestLog`.
 - **Same-repo line.** When two live Claude Code or Codex sessions work in one repository, on one computer or both, the dashboard shows one line naming the repository and the sessions. A worktree and its main checkout count as one repository. It reads only process names, working folders and git facts, and shows nothing when there is no overlap. It is on in the example settings. In settings you already have, turn it on with `"sessions": true` under `sources`. It is not available on Windows yet.
 
+- **One forecast, the same words everywhere.** Each computer works out the forecast once per reading and stores it, worded, in its `combined.json`. The dashboard, the menu bar, the tray and `npm run status -- --json` all show that stored result, so they always name the same time. A forecast older than a snapshot may be says when it was made ("as of Wed 7:40 AM"), and one whose window has reset since reads Unknown.
+- **Turn a computer off.** `"off": true` on a `hub.spokes` entry stops the hub from reaching that computer, and every surface shows it as Off instead of the time of its last reading. A computer that is on but unreachable still shows that time, now with its day.
+
 ### Changed
 
+- A time always names its day, today included: "Wed 4 PM", never "4 PM".
+- The menu bar and tray show the same forecast words as the dashboard, "at this pace" included.
+- `npm run status -- --json`: `burnPerHour` is now the average pace since the window opened, from the stored forecast, not the last hour's rate. A window's pace follows the stored forecast: `slow` when it runs out before the reset, `spend` when 20 points or more are expected left, `hold` in between. The status adds the stored words (`forecast` on each engine and window, a top-level `forecast`) and each computer's state (`devices`).
+- The Limits rows no longer add "runs out in" to a Codex window. That note came from a second, separate estimate, which is gone.
+- The Week page shows a tool's tab only when it has sessions in the period. A tool whose sessions could not be read keeps its tab and reads Unknown.
+- Running sessions on the Week page come only from computers with a current reading, as in the menu bar.
+- A session with no title is named from how it ran, the kind of its first prompt and its repository ("Review run in garden"), the same in the menu bar as on the Week page. A working folder that is not a git repository is not kept.
 - The readers that were written in Python are now in Node, checked against saved results from the Python versions. Node is the only runtime to install.
 - One hand-edited `observatory.config.json` replaces the settings screens. A source runs only while it is `true` there.
 - The dashboard is read-only and listens on 127.0.0.1 only.

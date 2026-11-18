@@ -1,6 +1,6 @@
 import { STRINGS } from '../../lib/strings.generated';
 import { useCallback, useEffect, useState } from 'react';
-import { freshness, format, readingTime, deviceLabel } from '../../lib/panel-data.mjs';
+import { freshness, format, deviceLabel } from '../../lib/panel-data.mjs';
 import { hasLastWeek } from '../../lib/view-week.mjs';
 import { sessionView } from '../../lib/view-session.mjs';
 import R2App from './r2/App';
@@ -11,7 +11,7 @@ import { HistoryView, DETAILS, type Detail } from './history/HistoryView';
 import { FilterGroup } from './components';
 
 type Snapshot = Record<string, unknown>;
-type Device = { host: string; name: string; collectedAt: string | null; stale: boolean; error?: string };
+type Device = { host: string; name: string; collectedAt: string | null; stale: boolean; error?: string; state?: string; stateLabel?: string };
 type Collision = { repo: string; count: number; line: string };
 export type Summary = { generatedAt: string; generatedBy?: string; devices?: Device[]; glance: { forecast?: unknown; collisions?: Collision[] }; week?: unknown };
 export type Combined = Summary & { view: Snapshot };
@@ -45,14 +45,15 @@ export function hashOf(route: Route): string {
   return route.session ? `#session/${route.session}` : '';
 }
 
-// Shown only when something is wrong: a computer that stopped reporting or could not be reached.
-function DeviceWarnings({ devices, now }: { devices: Device[]; now: number }) {
-  const late = devices.filter(device => !device.collectedAt || freshness(device.collectedAt, now).stale || device.error);
-  if (devices.length < 2 || late.length === 0) return null;
+// Shown only when a computer is not current: off in the settings, late, unreachable or with no snapshot.
+// The state and its label are decided once by the hub (lib/combine.mjs deviceState) and shown as stored.
+function DeviceWarnings({ devices }: { devices: Device[] }) {
+  const shown = devices.filter(device => device.state !== 'current');
+  if (devices.length < 2 || shown.length === 0) return null;
   return (
     <ul className="ob-chips" aria-label={STRINGS.labels.computers}>
-      {late.map(device => <li key={device.host} className="warn" title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>
-        <i aria-hidden="true" />{device.name || deviceLabel(device.host)}<span className="ob-meta">{device.collectedAt ? readingTime(Date.parse(device.collectedAt), now) : STRINGS.today.noSnapshot}</span>
+      {shown.map(device => <li key={device.host} className={device.state === 'off' ? 'off' : 'warn'} title={device.error ? format(STRINGS.today.unreachable, { reason: device.error }) : undefined}>
+        <i aria-hidden="true" />{device.name || deviceLabel(device.host)}<span className="ob-meta">{device.stateLabel ?? STRINGS.status.unknown}</span>
       </li>)}
     </ul>
   );
@@ -121,7 +122,7 @@ export function DashboardView({ summary, history, loaded, now, css, className, r
         </div>}
       </header>
       <div className="ob-notices" inert={sessionOpen || undefined}>
-        <DeviceWarnings devices={summary?.devices ?? []} now={now} />
+        <DeviceWarnings devices={summary?.devices ?? []} />
         <SameRepo collisions={fresh.stale ? [] : summary?.glance?.collisions ?? []} />
       </div>
       {!ready && <output className="ob-first-run"><span className="ob-pulse" aria-hidden="true" /><h2>{loaded ? STRINGS.firstRun.title : STRINGS.labels.loading}</h2></output>}

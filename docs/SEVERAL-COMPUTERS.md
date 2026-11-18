@@ -94,3 +94,11 @@ A distribution without those folders adds nothing. If a folder exists but cannot
 ## If a computer is off
 
 The hub keeps the last copy it read and shows its age. That computer's numbers for today show Unknown, not zero, and so does any sum that includes them.
+
+To turn a computer off on purpose, set `"off": true` on its entry:
+
+```json
+{ "name": "PC", "ssh": "my-pc", "platform": "windows", "off": true }
+```
+
+The hub then does not reach it over SSH. Every menu, tray and dashboard shows it as Off instead of the time of its last reading, and its earlier sessions still count in the week. A computer that is on in the settings but cannot be reached still shows the time of its last reading. Remove the setting, or set it to `false`, to turn the computer back on.

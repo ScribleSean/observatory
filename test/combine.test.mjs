@@ -231,3 +231,16 @@ test('combine passes each computer\'s ledger history and settings echo through, 
   assert.deepEqual(again.view.ledgerHistory[1],combined.view.ledgerHistory[1]);
   assert.deepEqual(again.view.config[1],combined.view.config[1]);
 });
+
+test('each computer\'s state is decided once, and a computer that is Off stays Off on every computer that carries its copy',()=>{
+  const now=Date.parse('2026-11-18T12:40:00Z');
+  const combined=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ownSnapshot('Windows',now-5*3600000),off:true}],{now});
+  assert.deepEqual(combined.devices.map(device=>[device.host,device.state]),[['Mac','current'],['Windows','off']]);
+  assert.equal(combined.devices[1].stateLabel,'Off');
+  assert.match(combined.devices[0].stateLabel,/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d\d (AM|PM)$/);
+  const copy=JSON.parse(JSON.stringify(combined));
+  assert.equal(carriedDevice(copy,'Windows').off,true);
+  assert.equal(carriedDevice(copy,'Mac').off,undefined);
+  const late=combine([{host:'Mac',snapshot:ownSnapshot('Mac',now)},{host:'Windows',snapshot:ownSnapshot('Windows',now-5*3600000),error:'unreachable'}],{now});
+  assert.equal(late.devices[1].state,'late','unreachable but on still shows the time of its last reading');
+});

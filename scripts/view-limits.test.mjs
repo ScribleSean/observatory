@@ -2,7 +2,6 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanPeerQuotaForDisplay, limitRows, limitHistory, peerLimits } from '../lib/view-limits.mjs';
 import { sampleSnapshot } from '../lib/sample-snapshot.mjs';
-import { span } from '../lib/panel-data.mjs';
 
 const legacyNow=Date.parse('2026-09-08T20:00:00.000Z');
 const sample={checkedAt:'2026-09-08T19:55:00.000Z',windows:[{bucket:'codex',window:'primary',remainingPercent:43,durationMinutes:300,resetsAt:'2026-09-09T00:00:00.000Z'}]};
@@ -41,28 +40,19 @@ const snapshot = () => {
   return { timezone: 'UTC', claudeLimits: source('claude', ['five_hour', 'seven_day']), quota: source('codex', ['primary', 'secondary']) };
 };
 
-test('ok readings project pace separately for both providers and windows', () => {
-  const rows = limitRows(snapshot(), now);
-  assert.equal(rows.length, 4);
-  for (const row of rows) {
-    assert.equal(row.pace.status, 'projected');
-    assert.equal(Number.isFinite(row.pace.ratePerHour), true);
-    assert.equal(row.pace.runsOutInMinutes > 0, true);
-    assert.equal(row.pace.resetInMinutes > 0, true);
-    assert.equal(row.pace.observedMinutes, 60);
-    assert.equal(Number.isFinite(row.pace.coverage), true);
+
+// The Limits page words no run-out time. The one forecast is stored by the hub (glance.forecast) and shown as stored.
+test('limit rows carry no second forecast, whatever the stored history says', () => {
+  for (const fixture of [snapshot(), sampleSnapshot(now)]) for (const row of limitRows(fixture, now)) {
+    assert.equal('pace' in row, false);
+    assert.equal(row.note.includes('runs out'), false, row.note);
   }
 });
 
-test('stale readings have no projected time or rate', () => {
+test('stale readings are marked stale', () => {
   const data = snapshot();
   data.claudeLimits.checkedAt = data.quota.checkedAt = iso(-30);
-  for (const row of limitRows(data, now)) {
-    assert.equal(row.stale, true);
-    assert.equal(row.pace.status, 'stale');
-    assert.equal(row.pace.runsOutInMinutes, null);
-    assert.equal(row.pace.ratePerHour, null);
-  }
+  for (const row of limitRows(data, now)) assert.equal(row.stale, true);
 });
 
 test('low remaining allowance is marked low', () => {
@@ -72,7 +62,7 @@ test('low remaining allowance is marked low', () => {
 
 test('unknown sources have null rows and empty history for every period', () => {
   const data = { timezone: 'UTC', quota: { status: 'unavailable' } };
-  assert.deepEqual(limitRows(data, now).map(row => [row.provider, row.remaining, row.pace]), [['claude', null, null], ['codex', null, null]]);
+  assert.deepEqual(limitRows(data, now).map(row => [row.provider, row.remaining]), [['claude', null], ['codex', null]]);
   for (const provider of ['claude', 'codex']) for (const period of periods)
     assert.deepEqual(limitHistory(data, provider, period, now).windows, []);
 });
@@ -89,11 +79,11 @@ test('unknown history slots stay null rather than zero', () => {
   }
 });
 
-test('exhausted fresh readings alone report zero minutes remaining', () => {
+test('exhausted fresh readings read as spent and keep their zero', () => {
   const data = snapshot(); data.quota.windows[0].remainingPercent = 0;
   const row = limitRows(data, now).find(row => row.provider === 'codex');
-  assert.equal(row.pace.status, 'exhausted');
-  assert.equal(row.pace.runsOutInMinutes, 0);
+  assert.equal(row.remaining, 0);
+  assert.equal(row.spent, true);
   assert.equal(JSON.stringify(limitHistory(data, 'codex', 'now', now)).includes('"value":0'), true);
 });
 
@@ -138,14 +128,13 @@ test('peer absent or invalid is null and empty peer windows are Unknown', () => 
   assert.equal(peer.stale, true);
 });
 
-test('pace defensively filters malformed shapes without mutating the snapshot', () => {
+test('limit rows defensively filter malformed shapes without mutating the snapshot', () => {
   const data = snapshot();
   data.quota.windows.push(null, [], { bucket: 1, window: 'primary' });
   data.quota.history.push(null, [], { windows: null }, { windows: [null, [], { bucket: 1 }] });
   const before = structuredClone(data);
   assert.doesNotThrow(() => limitRows(data, now));
   assert.deepEqual(data, before);
-  assert.equal(limitRows(snapshot(), -1).every(row => row.pace === null), true);
 });
 
 test('history uses local calendar dates with UTC fallback and caps all at 400 days', () => {
@@ -179,25 +168,8 @@ test('peer without windows preserves a valid observation time and an Unknown row
   }
 });
 
-test('computed pace alone supplies every projected window note', () => {
-  const data = snapshot();
-  data.quota.pace = [{ bucket: 'codex', window: 'primary', status: 'projected',
-    asOf: data.quota.checkedAt, estimatedExhaustionAt: iso(170) }];
-  for (const fixture of [data, sampleSnapshot(now)]) {
-    for (const row of limitRows(fixture, now)) {
-      assert.doesNotMatch(row.note, /runs out in 2h 50m/);
-      assert.equal(row.note.includes('runs out in'), row.pace?.status === 'projected');
-      if (row.pace?.status === 'projected') {
-        assert.equal(row.note.split(' · ')[1], 'runs out in ' + span(row.pace.runsOutInMinutes * 60000));
-      }
-    }
-  }
-  const rows = limitRows(data, now);
-  assert.equal(rows.find(row => row.provider === 'codex' && row.windowId === 'secondary').pace.status, 'projected');
-  assert.equal(rows.find(row => row.provider === 'claude').pace.status, 'projected');
-});
 
-test('expired local and peer windows are Unknown with no low warning or pace', () => {
+test('expired local and peer windows are Unknown with no low warning', () => {
   const data = snapshot();
   for (const source of [data.claudeLimits, data.quota]) {
     source.windows[0].resetsAt = iso(-1);
@@ -206,7 +178,6 @@ test('expired local and peer windows are Unknown with no low warning or pace', (
   for (const row of limitRows(data, now).filter(row => row.window === '5-hour')) {
     assert.equal(row.remaining, null);
     assert.equal(row.low, false);
-    assert.equal(row.pace, null);
     assert.equal(row.note, 'Waiting for the reset to be observed.');
   }
   const peer = peerLimits({ peerQuota: { ...data.quota, host: 'Mac' } }, now);
@@ -215,15 +186,13 @@ test('expired local and peer windows are Unknown with no low warning or pace', (
   assert.equal(peer.rows[0].note, 'Waiting for the reset to be observed.');
 });
 
-test('a carried window cannot project pace from the fresh source timestamp', () => {
+test('a carried window older than its source reads stale', () => {
   const data = snapshot();
   data.claudeLimits.windows[1].checkedAt = iso(-30);
   const rows = limitRows(data, now).filter(row => row.provider === 'claude');
-  assert.equal(rows[0].pace.status, 'projected');
+  assert.equal(rows[0].stale, false);
   assert.equal(rows[1].stale, true);
-  assert.equal(rows[1].pace.status, 'stale');
-  assert.equal(rows[1].pace.ratePerHour, null);
-  assert.doesNotMatch(rows[1].note, /runs out in/);
+  assert.doesNotMatch(rows[1].note, /runs out/);
 });
 
 test('limits view renders reset windows as Unknown', async t => {
@@ -249,17 +218,4 @@ test('limits view renders reset windows as Unknown', async t => {
   const view = renderToStaticMarkup(createElement(LimitsView, { snapshot: drawn, now }));
   assert.match(view, /ob-history-chart/, 'history alone still earns its chart');
   assert.doesNotMatch(view, /Unknown|Waiting for the reset/, 'the chart header carries no current value');
-});
-
-test('Claude Code pace comes from the limit history when the reading keeps no samples, across a minute-rounded reset', () => {
-  const now = Date.parse('2026-10-21T22:00:30Z');
-  const at = minutes => new Date(now - 30000 - minutes * 60000).toISOString();
-  const window = { bucket: 'claude', window: 'seven_day', durationMinutes: 10080, remainingPercent: 50, resetsAt: '2026-10-25T00:00:00.000Z', checkedAt: at(0) };
-  const points = [[20, 53, '2026-10-24T23:59:00.000Z'], [10, 52, '2026-10-25T00:00:00.000Z'], [0, 50, '2026-10-25T00:00:00.000Z']]
-    .map(([minutes, r, x]) => ({ p: 'claude', w: 'seven_day', o: 'Mac', t: at(minutes), r, x, d: 10080 }));
-  const snapshot = { claudeLimits: { status: 'ok', checkedAt: at(0), observedOn: 'Mac', windows: [window] },
-    limitHistory: [{ host: 'Mac', points }, { host: 'Windows', points: points.map(point => ({ ...point, o: 'Windows', r: 99 })) }] };
-  const row = limitRows(snapshot, now).find(item => item.provider === 'claude');
-  assert.equal(row.pace.status, 'projected');
-  assert.equal(row.pace.ratePerHour, 9);
 });

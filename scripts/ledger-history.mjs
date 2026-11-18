@@ -54,7 +54,7 @@ function sessionDay(source,session,part,{titles}) {
   const unknown=session.unknownTokens===true;
   const usd=values=>unknown?null:round(knownSum(values));
   const apiUsd=usd(requests.map(request=>request.usd));
-  const repo=repoName(session.repo);
+  const repo=repoName(session.gitRepo);
   // Shipped, per repository folder. A repository written in that day that git could not read is Unknown.
   const ship=new Map();
   const entry=name=>{

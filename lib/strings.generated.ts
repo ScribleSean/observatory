@@ -86,7 +86,6 @@ export const STRINGS = {
     "under": "<{value}",
     "usd": "${value}",
     "resetsIn": "Resets in {span}",
-    "runsOut": "runs out in {span}",
     "asOf": "as of {time}",
     "separator": " · ",
     "since": "Since {date}"
@@ -168,7 +167,8 @@ export const STRINGS = {
   },
   "today": {
     "noSnapshot": "No snapshot",
-    "unreachable": "Last pull failed: {reason}"
+    "unreachable": "Last pull failed: {reason}",
+    "off": "Off"
   },
   "overview": {
     "bothNote": "Both computers, not deduplicated",
@@ -241,7 +241,6 @@ export const STRINGS = {
     "weekUsed": "{percent} of the week used",
     "windowUsed": "{percent} of the {window} limit used",
     "usedUnknown": "Used: Unknown",
-    "resets": "Resets {time}",
     "off": "Off",
     "running": "Running now",
     "oneSession": "1 session",
@@ -249,7 +248,6 @@ export const STRINGS = {
     "perHour": "{sessions}, {rate}% per hour",
     "sessionRate": "{rate}%/h",
     "noneRunning": "None",
-    "toolSession": "{tool} session",
     "updatedAt": "Updated {time}"
   },
   "ledger": {
@@ -270,15 +268,6 @@ export const STRINGS = {
     "resets": "Resets {time}",
     "ended": "Ended {time}",
     "used": "{value}% used",
-    "runsOut": "Runs out",
-    "mayRunOut": "May run out",
-    "atPace": "at this pace",
-    "out": "Out",
-    "outUntil": "Out until {time}",
-    "lasts": "Lasts until the reset at this pace",
-    "beforeResetHour": "1 hour before the reset",
-    "beforeResetHours": "{count} hours before the reset",
-    "beforeResetDays": "{count} days before the reset",
     "others": "{count} others",
     "otherSessions": "Other sessions",
     "meter": "{name} {window}",
@@ -486,6 +475,38 @@ export const STRINGS = {
     "metricGrokRequests": "Grok requests",
     "metricSessions": "sessions",
     "metricSubagents": "subagents"
+  },
+  "forecast": {
+    "sentence": "{name} {phrase}.",
+    "headline": "{name} {phrase}",
+    "allRoom": "{names} have room.",
+    "listMany": "{rest} and {last}",
+    "isOff": "is off",
+    "signedOut": "is signed out",
+    "noPlan": "has no plan",
+    "noReadingSince": "has no reading since",
+    "oneRequest": "has 1 request today",
+    "requests": "has {count} requests today",
+    "oneRequestToday": "1 request today",
+    "requestsToday": "{count} requests today",
+    "out": "is out",
+    "outUntil": "is out until",
+    "mayRunOut": "may run out",
+    "mayRunOutFrom": "may run out from",
+    "likelyLasts": "likely lasts until",
+    "runsOut": "runs out",
+    "runsOutAround": "runs out around",
+    "atPace": "at this pace",
+    "lastsUntil": "lasts until",
+    "resetsWhen": "resets",
+    "hasRoom": "has room",
+    "noReading": "has no current reading",
+    "resets": "Resets {time}",
+    "beforeResetHour": "1 hour before the reset",
+    "beforeResetHours": "{count} hours before the reset",
+    "beforeResetDays": "{count} days before the reset",
+    "asOf": "{text}, as of {time}",
+    "sentenceAsOf": "{sentence} As of {time}."
   }
 } as const;
 

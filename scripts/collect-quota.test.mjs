@@ -131,7 +131,7 @@ test('opt-out during a poll discards its late result but preserves earlier archi
   assert.deepEqual(await readQuotaArchive(runtime,{scope,kind:'observation'}),before);
   assert.equal((await readQuotaArchive(runtime,{scope,kind:'poll'})).records.length,1);
 }));
-test('collected pace uses retained observations and cannot survive an account switch',async()=>fixture(async runtime=>{
+test('collected history keeps retained observations, stores no forecast, and cannot survive an account switch',async()=>fixture(async runtime=>{
   let result;
   for(let i=0;i<=12;i++) {
     const at=now+i*300000;
@@ -140,13 +140,13 @@ test('collected pace uses retained observations and cannot survive an account sw
         windows:[{bucket:'codex',window:'primary',remainingPercent:74-i*2,durationMinutes:300,
           resetsAt:new Date(now+5*3600000).toISOString()}]})});
   }
-  assert.equal(result.pace[0].percentagePointsPerHour,24);
-  assert.equal(result.pace[0].remainingMinutes,125);
+  assert.equal(result.history.length,13);
+  // The one forecast is made by the hub from the limit history (lib/forecast.mjs), not stored per source.
+  assert.equal('pace' in result,false);
   const switched=await collectQuota(runtime,{enabled:true,clock:()=>now+3900000,resolveExecutable:async()=>'/fake/codex',
     readSnapshot:async()=>({scope:'b'.repeat(64),status:'ok',checkedAt:new Date(now+3900000).toISOString(),
       windows:[{bucket:'codex',window:'primary',remainingPercent:50,durationMinutes:300,
         resetsAt:new Date(now+5*3600000).toISOString()}]})});
-  assert.equal(switched.pace[0].status,'insufficient-history');
   assert.equal(switched.history.length,1);
 }));
 async function fixture(action) {const runtime=await realpath(await mkdtemp(path.join(runtimeBase,'observatory-quota-collection-')));try{await action(runtime);}finally{await rm(runtime,{recursive:true,force:true});}}
@@ -198,7 +198,7 @@ test('quota collection survives restart, respects cooldown, and excludes account
   const first=await collectQuota(runtime,options);
   const cached=await collectQuota(runtime,options);
   assert.equal(calls,1);assert.equal(first.status,'ok');assert.equal(cached.status,'ok');
-  assert.equal(first.pace[0].status,'insufficient-history');
+  assert.equal('pace' in first,false);
   assert.equal(cached.checkedAt,first.checkedAt);
   assert.deepEqual(cached.history,first.history);
   assert.equal(cached.history.length,1);assert.equal(cached.scope,'account');
@@ -217,7 +217,6 @@ test('successful cached samples age out and failed polls remain stale even with 
     windows:[{bucket:'codex',window:'primary',remainingPercent:75}]})};
   const old=await collectQuota(runtime,options);
   assert.equal(old.status,'stale');assert.equal(old.latestReadStatus,'ok');
-  assert.equal(old.pace[0].status,'stale');
   assert.equal(old.checkedAt,new Date(now-600000).toISOString());
   const fresh=await collectQuota(runtime,{...options,clock:()=>now+300001,readSnapshot:async()=>({
     scope:'a'.repeat(64),status:'ok',checkedAt:new Date(now+300001).toISOString(),

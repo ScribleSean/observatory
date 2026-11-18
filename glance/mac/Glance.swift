@@ -39,8 +39,10 @@ struct EngineRow: Identifiable, Equatable {
   let name: String
   let status: String
   let remaining: Double?
-  let phrase: String
+  // The hub's stored words for this engine (lib/forecast.mjs). The app shows them as they are.
+  let headline: String?
   var window: String? = nil
+  var resets: String? = nil
 }
 
 struct PanelState: Equatable {
@@ -89,7 +91,6 @@ struct PanelState: Equatable {
 
   static func share(_ value: Any?) -> Double? { number(value).flatMap { $0 <= 1 ? $0 : nil } }
 
-  static func capital(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
 
   // Keep this pure rule in sync with lib/glance-limits.mjs and the Windows app.
   static func limitRemaining(_ row: [String: Any], now: Date) -> Double? {
@@ -149,15 +150,17 @@ struct PanelState: Equatable {
       let scarce = (forecast["scarce"] as? [String: Any])?["engine"] as? String
       engines = (forecast["engines"] as? [[String: Any]] ?? []).map { row in
         EngineRow(id: row["engine"] as? String ?? "", name: row["name"] as? String ?? "Unknown", status: row["status"] as? String ?? "unknown",
-                  remaining: (row["remaining"] as? Double).flatMap { $0.isFinite && $0 >= 0 && $0 <= 100 ? $0 : nil }, phrase: row["phrase"] as? String ?? "",
-                  window: row["window"] as? String)
+                  remaining: (row["remaining"] as? Double).flatMap { $0.isFinite && $0 >= 0 && $0 <= 100 ? $0 : nil }, headline: row["headline"] as? String,
+                  window: row["window"] as? String, resets: row["resets"] as? String)
       }
+      // The stored words only. A combined.json from before they were stored reads Unknown.
       if let engine = engines.first(where: { $0.id == scarce }) {
-        state.headline = capital(engine.name + " " + engine.phrase.replacingOccurrences(of: " at this pace", with: ""))
+        state.headline = engine.headline ?? "Unknown"
+        state.resets = engine.resets
         state.headTone = engine.status
         state.headEngine = engine.id
       } else {
-        state.headline = state.sentence?.replacingOccurrences(of: " at this pace", with: "")
+        state.headline = forecast["asOf"] is String ? state.sentence : "Unknown"
       }
     }
     let names = Dictionary(engines.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })

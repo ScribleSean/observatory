@@ -16,9 +16,9 @@ test('the made-up history is the same every run', () => {
 test('every method is scored on the same forecasts', () => {
   assert.ok(result.moments > 1000);
   for (const target of [3, 6, 12, 24, 'reset']) {
-    const counts = ['none', 'line', 'average', 'forecast'].map(method => result.errors[method][target].count);
+    const counts = ['none', 'line', 'hour', 'average', 'forecast'].map(method => result.errors[method][target].count);
     assert.ok(counts[0] > 500, `too few forecasts scored at ${target}`);
-    assert.deepEqual(counts, Array(4).fill(counts[0]));
+    assert.deepEqual(counts, Array(5).fill(counts[0]));
   }
 });
 
@@ -30,6 +30,16 @@ test('the forecast misses by less than the straight line it replaced, near and a
   // Half a day ahead and at the reset neither is better on these readings: allow a fifth either way.
   assert.ok(forecast[12].mae < line[12].mae * 1.2);
   assert.ok(forecast.reset.mae < line.reset.mae * 1.2);
+});
+
+// The last-hour line was the second forecast (scripts/quota-pace.mjs) until both were merged into lib/forecast.mjs.
+// Three hours ahead the two are even. From six hours on the last hour misses more, and by the reset it misses by
+// over half as much again, because a burst or a quiet hour is taken as the pace for the rest of the window.
+test('the forecast is as good as the last-hour line it absorbed near, and better from six hours on', () => {
+  const { forecast, hour } = result.errors;
+  assert.ok(forecast[3].mae < hour[3].mae * 1.05, `3 hours: ${forecast[3].mae} against ${hour[3].mae}`);
+  for (const target of [6, 12, 24, 'reset']) assert.ok(forecast[target].mae < hour[target].mae, `${target}: ${forecast[target].mae} against ${hour[target].mae}`);
+  assert.ok(forecast.reset.mae < hour.reset.mae * 0.75, `reset: ${forecast.reset.mae} against ${hour.reset.mae}`);
 });
 
 test('the stated range holds the outcome about as often as it says', () => {
@@ -60,5 +70,5 @@ test('the straight line needs three readings and a quarter hour', () => {
 
 test('the report names every method and the range', () => {
   const text = report(result);
-  for (const word of ['no spend', 'straight line', 'window average', 'forecast', 'range, 80% stated', 'days better']) assert.ok(text.includes(word), word);
+  for (const word of ['no spend', 'straight line', 'last hour', 'window average', 'forecast', 'range, 80% stated', 'days better']) assert.ok(text.includes(word), word);
 });

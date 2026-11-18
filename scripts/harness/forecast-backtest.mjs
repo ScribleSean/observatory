@@ -2,8 +2,9 @@
 // Usage: node scripts/harness/forecast-backtest.mjs --db <history.sqlite> | --data <points.json> | --fictional [--json]
 // At each past half hour the forecast sees only the readings the dashboard would have had by then, and is
 // scored on the share left 3, 6, 12 and 24 hours later and at the last reading before the reset.
-// Compared: no spend at all, a straight line over the last day (the method before this one), the average
-// pace since the window opened, and the forecast in lib/forecast.mjs with its stated range.
+// Compared: no spend at all, a straight line over the last day (the method before this one), a straight line over
+// the last hour (the retired scripts/quota-pace.mjs), the average pace since the window opened, and the forecast in
+// lib/forecast.mjs with its stated range.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { projection, windowForecast, lookbackMs, RANGE_SHARE } from '../../lib/forecast.mjs';
@@ -105,7 +106,7 @@ export function backtest(series, { stepMinutes = 30 } = {}) {
       if (actual === null) continue;
       const hours = (at - now) / HOUR;
       const predicted = ahead.after(hours);
-      const guesses = { none: remaining, line: Math.max(0, remaining - line * hours),
+      const guesses = { none: remaining, line: Math.max(0, remaining - line * hours), hour: Math.max(0, remaining - ahead.pace.recent * hours),
         average: Math.max(0, remaining - ahead.pace.average * hours), forecast: predicted.left };
       for (const [method, left] of Object.entries(guesses)) add(method, target, { miss: left - actual, day, half });
       if (predicted.low !== null) (ranges[target] ??= []).push({ inside: actual >= predicted.low - 0.5 && actual <= predicted.high + 0.5,
@@ -187,7 +188,7 @@ const cell = value => String(value ?? '-').padStart(8);
 export function report(result) {
   const lines = [`\n${result.name}: ${result.moments} forecasts over ${result.days} days`,
     `mean miss in points   ${TARGETS.map(target => cell(target === 'reset' ? 'reset' : `+${target}h`)).join('')}`];
-  const names = { none: 'no spend', line: 'straight line', average: 'window average', forecast: 'forecast' };
+  const names = { none: 'no spend', line: 'straight line', hour: 'last hour', average: 'window average', forecast: 'forecast' };
   for (const [method, name] of Object.entries(names)) lines.push(`${name.padEnd(22)}${TARGETS.map(target => cell(result.errors[method]?.[target].mae)).join('')}`);
   lines.push(`${'  first half'.padEnd(22)}${TARGETS.map(target => cell(`${result.errors.forecast?.[target].firstHalf ?? '-'}/${result.errors.line?.[target].firstHalf ?? '-'}`)).join(' ')}  (forecast/line)`);
   lines.push(`${'  second half'.padEnd(22)}${TARGETS.map(target => cell(`${result.errors.forecast?.[target].secondHalf ?? '-'}/${result.errors.line?.[target].secondHalf ?? '-'}`)).join(' ')}`);

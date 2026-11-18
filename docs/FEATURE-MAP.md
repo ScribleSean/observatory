@@ -11,7 +11,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Tray panel (Windows) | Click the tray icon | `test/windows-dpi.test.mjs` (source text only), rendering none |
 | Open dashboard, Refresh, Quit | Panel footer and tray menu | `test/server-lifetime.test.mjs` (server stops with the app), Refresh none |
 | Dashboard server on 127.0.0.1, GET and HEAD only | http://127.0.0.1:5601 | `test/server.test.mjs`, `test/server-lifetime.test.mjs`, `scripts/request-policy.test.mjs` |
-| Forecast: when each engine runs out, with a range once there is history, and the scarcer engine in the menu bar | Dashboard home, menu bar and tray | `test/forecast.test.mjs`, `test/forecast-backtest.test.mjs` (accuracy on made-up readings), `test/dashboard-render.test.mjs`, `test/repo-rules.test.mjs` (panel wording) |
+| Forecast: when each engine runs out, with a range once there is history, and the scarcer engine in the menu bar. Made once per reading by the hub and shown as stored, in the same words, on every surface | Dashboard home, menu bar, tray and `npm run status -- --json` | `test/forecast.test.mjs`, `test/forecast-contract.test.mjs` (every surface agrees), `test/forecast-backtest.test.mjs` (accuracy on made-up readings), `test/dashboard-render.test.mjs`, `test/repo-rules.test.mjs` (panel wording) |
 | Limit history charts | Dashboard, History, Limits | `scripts/view-limits.test.mjs`, `scripts/limits-view.test.mjs`, `test/limit-history*.test.mjs`, `test/dashboard-render.test.mjs` |
 | Screen time page | Dashboard, History, Screen time | `scripts/view-activity.test.mjs`, `scripts/activity-*.test.mjs`, `test/dashboard-render.test.mjs` |
 | Tokens page and today by project | Dashboard, History, Tokens | `scripts/view-tokens.test.mjs`, `scripts/tokens-view-render.test.mjs`, `test/project-tokens.test.mjs` |
@@ -21,7 +21,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | Switching computer, period, date or range | Dashboard controls | none (views are only rendered with their first props) |
 | Collection every five minutes | Runs on its own, or `npm run tick` | `test/collect.test.mjs`, `test/run-lock.test.mjs`, `test/cycle-processes.test.mjs` |
 | Claude limits | Limits page and panel | `scripts/claude-limits.test.mjs`, `scripts/claude-usage-command.test.mjs` |
-| A plan that changes in the middle of a reset period: the new reading is shown, and the fall is not counted as use | Limits page, forecast and panel | `scripts/claude-limits.test.mjs`, `scripts/quota-pace.test.mjs`, `test/forecast.test.mjs` |
+| A plan that changes in the middle of a reset period: the new reading is shown, and the fall is not counted as use | Limits page, forecast and panel | `scripts/claude-limits.test.mjs`, `test/forecast.test.mjs` |
 | Codex limits and pace | Limits page and panel | `scripts/read-quota.test.mjs`, `scripts/collect-quota.test.mjs`, `scripts/quota-*.test.mjs` |
 | Claude Code tokens | Tokens page | `scripts/read-claude-usage-node.test.mjs`, `scripts/token-hours.test.mjs` |
 | Codex tokens, settings and tool calls | Tokens page | `scripts/read-settings-node.test.mjs` |
@@ -33,6 +33,7 @@ What a user can do, how they reach it, and what checks it today. Test files are 
 | `dashboard.port`, `dataFolder`, `codexPath` | `observatory.config.json` | `test/config.test.mjs` (parsing only) |
 | WSL logs counted on the PC | `"wsl": true` | `test/token-roots.test.mjs` |
 | Several computers over SSH | `hub.spokes`, see `docs/SEVERAL-COMPUTERS.md` | `test/hub.test.mjs`, `test/combine.test.mjs`, `test/unknown-not-zero.test.mjs` |
+| A computer turned off in the settings (`"off": true` on its `hub.spokes` entry) reads Off on every surface, not the time of its last reading | Dashboard, menu bar, tray and `npm run status -- --json` | `test/hub.test.mjs`, `test/forecast-contract.test.mjs` |
 | Daily history kept for good, Both totals | Activity and Tokens, All and Both | `test/history.test.mjs`, `test/history-two-computers.test.mjs`, `scripts/view-activity.test.mjs`, `scripts/view-tokens.test.mjs` |
 | Older limit history imported | `scripts/import-history.mjs` | `test/limit-history.test.mjs` |
 | Check that a computer matches the Mac (read-only) | `node scripts/harness/parity-check.mjs` | `test/parity-check.test.mjs` |
