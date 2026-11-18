@@ -201,9 +201,10 @@ function listedSession(session,titles) {
   return {...session,title:titles?session.title ?? null:null,
     models:capped(session.models,MAX_SESSION_MODELS,'model',rows=>({apiUsd:round(sumOf(rows,'apiUsd')),outputTokens:sumOf(rows,'outputTokens')})),
     kinds:capped(session.kinds,MAX_SESSION_KINDS,'kind',rows=>({apiUsd:round(sumOf(rows,'apiUsd')),subagents:rows.reduce((sum,row)=>sum+row.subagents,0)})),
-    ship:session.ship.slice(0,MAX_SESSION_REPOS)};
+    // Repositories past the cap fold into 'other', so one that git could not read keeps the session's count Unknown.
+    ship:capped(session.ship,MAX_SESSION_REPOS,'repo',rows=>({apiUsd:round(sumOf(rows,'apiUsd')),...shipOf(rows)}))};
 }
-const shipOf=ships=>({commits:sumOf(ships,'commits'),onMain:sumOf(ships,'onMain'),merges:sumOf(ships,'merges')});
+function shipOf(ships) {return {commits:sumOf(ships,'commits'),onMain:sumOf(ships,'onMain'),merges:sumOf(ships,'merges')};}
 
 // Folds sessions into a day's `other`, with a compact row each.
 export function foldSessions(day,sessions) {

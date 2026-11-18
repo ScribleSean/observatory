@@ -144,6 +144,19 @@ test('the snapshot lists the largest sessions, folds the rest into compact rows,
   assert.equal(foldSessions({other:null},[]),null);
 });
 
+test('a session that wrote to more repositories than the cap folds the rest into other, keeping Unknown',()=>{
+  const repo=name=>`/fictional/code/${name}`;
+  const commit=(name,sha)=>({repo:repo(name),sha,at:NOON+MIN,onMain:true,merge:false});
+  const s=session({id:'wide',writes:['hedge','quarry','orchard','lantern'].map(name=>({repo:repo(name),at:NOON}))});
+  const shipped=new Map([['claude:wide',{commits:[commit('hedge','h1'),commit('hedge','h2'),commit('hedge','h3'),commit('quarry','q1'),commit('quarry','q2'),commit('orchard','o1')],branches:[]}]]);
+  const {days:[day]}=build([s],{joined:{shipped,unread:new Set([repo('lantern')])}});
+  const shaped=snapshotDay(day,{listSessions:true,titles:true,frozen:false});
+  assert.deepEqual(shaped.sessions[0].ship.map(part=>[part.repo,part.commits,part.onMain,part.merges]),
+    [['hedge',3,3,0],['quarry',2,2,0],['other',null,null,null]],'lantern could not be read, so the folded row is Unknown');
+  const clean=cleanLedgerHistory(wrap([shaped]),{titles:true});
+  assert.equal(clean.days[0].sessions[0].ship.length,3);
+});
+
 test('codex days carry tool codex, and a cleaned row with titles off has no titles',()=>{
   const {days}=build([session({requests:[{key:'g',at:NOON,model:'gpt-6-astra',values:[10,0,0,10],agent:null}]})],{source:codex});
   assert.equal(days[0].tool,'codex');
