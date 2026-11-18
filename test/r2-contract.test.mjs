@@ -1,34 +1,32 @@
-// The round 2 contract (docs/R2-PLAN.md): the modules every lane builds against export what the plan
-// names, and the fictional fixture has the shape lib/r2-shape.mjs describes. Lanes replace the
-// "not implemented" checks with real tests as they fill in the bodies.
+// The round 2 contract (docs/R2-PLAN.md): the modules every lane builds on export what the plan names, and the
+// fictional fixture has the shape lib/r2-shape.mjs describes.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as scope from '../lib/scope.mjs';
-import * as shape from '../lib/r2-shape.mjs';
-import * as roles from '../lib/roles.mjs';
-import * as blocks from '../lib/r2-blocks.mjs';
-import * as views from '../lib/view-r2.mjs';
+// Named imports: a name the plan uses that a module does not export fails here, when the file loads.
+import { defaultScope, periodOf, stepRange, comparisonOf, patchScope, deviceChips, visibleSources, scopeToSearch, scopeFromSearch, RANGE_UNITS, SOURCE_IDS } from '../lib/scope.mjs';
+import { cleanLedgerHistory, fitLedgerHistory, LEDGER_HISTORY_SCHEMA, LEDGER_HISTORY_BUDGET } from '../lib/r2-shape.mjs';
+import { sessionName, sessionNameOverDays, ROLES, KIND_ROLES, TITLE_ALIASES } from '../lib/roles.mjs';
+import { METRICS, METRIC_DIMS, DIMS } from '../lib/r2-blocks.mjs';
+import { buildFrame, buildOverview, buildSessions, buildLimits, buildTokens, buildScreenTime, buildDrift, buildSettings, metric, resolveBlock, answerQuestion } from '../lib/view-r2.mjs';
 import { sampleR2Combined } from '../lib/sample-r2.mjs';
 import { WORK_KINDS } from '../lib/ledger-shape.mjs';
 
 const NOW = Date.parse('2026-11-18T15:00:00Z');
 
 test('the contract modules export every name the plan uses', () => {
-  for (const name of ['defaultScope', 'periodOf', 'stepRange', 'comparisonOf', 'patchScope', 'deviceChips', 'visibleSources', 'scopeToSearch', 'scopeFromSearch'])
-    assert.equal(typeof scope[name], 'function', `scope.${name}`);
-  for (const name of ['buildFrame', 'buildOverview', 'buildSessions', 'buildLimits', 'buildTokens', 'buildScreenTime', 'buildDrift', 'buildSettings', 'metric', 'resolveBlock', 'answerQuestion'])
-    assert.equal(typeof views[name], 'function', `view-r2.${name}`);
-  for (const name of ['cleanLedgerHistory', 'fitLedgerHistory']) assert.equal(typeof shape[name], 'function', `r2-shape.${name}`);
-  for (const name of ['sessionName', 'sessionNameOverDays']) assert.equal(typeof roles[name], 'function', `roles.${name}`);
-  assert.deepEqual(scope.RANGE_UNITS, ['day', 'week', 'month', 'year', 'all']);
-  assert.deepEqual(scope.SOURCE_IDS, ['claude', 'codex', 'grok']);
+  const functions = { defaultScope, periodOf, stepRange, comparisonOf, patchScope, deviceChips, visibleSources, scopeToSearch, scopeFromSearch,
+    buildFrame, buildOverview, buildSessions, buildLimits, buildTokens, buildScreenTime, buildDrift, buildSettings, metric, resolveBlock, answerQuestion,
+    cleanLedgerHistory, fitLedgerHistory, sessionName, sessionNameOverDays };
+  for (const [name, value] of Object.entries(functions)) assert.equal(typeof value, 'function', name);
+  assert.deepEqual(RANGE_UNITS, ['day', 'week', 'month', 'year', 'all']);
+  assert.deepEqual(SOURCE_IDS, ['claude', 'codex', 'grok']);
 });
 
 test('every metric names only dims the catalog knows, and every kind maps to a known role', () => {
-  assert.deepEqual(Object.keys(blocks.METRIC_DIMS).sort(), [...blocks.METRICS].sort());
-  for (const dims of Object.values(blocks.METRIC_DIMS)) for (const dim of dims) assert.ok(blocks.DIMS.includes(dim), dim);
-  for (const [kind, role] of Object.entries(roles.KIND_ROLES)) { assert.ok(WORK_KINDS.includes(kind), kind); assert.ok(roles.ROLES.includes(role), role); }
-  for (const role of Object.values(roles.TITLE_ALIASES)) assert.ok(roles.ROLES.includes(role), role);
+  assert.deepEqual(Object.keys(METRIC_DIMS).sort(), [...METRICS].sort());
+  for (const dims of Object.values(METRIC_DIMS)) for (const dim of dims) assert.ok(DIMS.includes(dim), dim);
+  for (const [kind, role] of Object.entries(KIND_ROLES)) { assert.ok(WORK_KINDS.includes(kind), kind); assert.ok(ROLES.includes(role), role); }
+  for (const role of Object.values(TITLE_ALIASES)) assert.ok(ROLES.includes(role), role);
 });
 
 test('the fixture is fictional, deterministic and shaped like lib/r2-shape.mjs', () => {
@@ -38,8 +36,8 @@ test('the fixture is fictional, deterministic and shaped like lib/r2-shape.mjs',
   assert.deepEqual(history.map(row => row.host), ['Mac', 'Windows', 'Linux']);
   assert.equal(new Set(history.map(row => row.firstDate)).size, 3, 'each computer starts its history on a different date');
   for (const row of history) {
-    assert.equal(row.schema, shape.LEDGER_HISTORY_SCHEMA);
-    assert.ok(Buffer.byteLength(JSON.stringify(row)) <= shape.LEDGER_HISTORY_BUDGET, `${row.host} fits the history budget`);
+    assert.equal(row.schema, LEDGER_HISTORY_SCHEMA);
+    assert.ok(Buffer.byteLength(JSON.stringify(row)) <= LEDGER_HISTORY_BUDGET, `${row.host} fits the history budget`);
     for (const day of row.days) {
       assert.match(day.date, /^\d{4}-\d{2}-\d{2}$/);
       if (day.status === 'unavailable') { assert.equal(day.apiUsd, null); continue; }
@@ -59,8 +57,8 @@ test('the fixture is fictional, deterministic and shaped like lib/r2-shape.mjs',
 
 test('lane b\'s modules are written: they return values instead of throwing', () => {
   const combined = sampleR2Combined(NOW);
-  const scopeNow = scope.defaultScope(combined, { now: NOW });
-  assert.equal(scope.periodOf({ unit: 'week', anchor: '2026-11-18' }, { timeZone: 'UTC', now: NOW }).first, '2026-11-16');
-  assert.ok(views.buildOverview(combined, scopeNow, { now: NOW }).headline.spend);
-  assert.equal(roles.sessionName({ title: 'Builder: Lantern' }).role, 'Builder');
+  const scopeNow = defaultScope(combined, { now: NOW });
+  assert.equal(periodOf({ unit: 'week', anchor: '2026-11-18' }, { timeZone: 'UTC', now: NOW }).first, '2026-11-16');
+  assert.ok(buildOverview(combined, scopeNow, { now: NOW }).headline.spend);
+  assert.equal(sessionName({ title: 'Builder: Lantern' }).role, 'Builder');
 });
