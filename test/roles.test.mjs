@@ -66,3 +66,24 @@ test('over several days the latest titled day decides, else the summed kinds', (
   assert.deepEqual([plain.role, plain.display], [null, 'Tidepool notes']);
   assert.equal(sessionNameOverDays([]).role, null);
 });
+
+// Real-shaped titles, with fictional names: a bot named by the user, a `Role:` title and untitled headless runs.
+test('real-shaped titles map sensibly: a user alias, a Role: prefix and untitled headless runs', () => {
+  const aliases = { 'AtlasBot': 'Chief of staff' };
+  // The alias names the role, and a rest that only says the role again leaves the bot's name as the object.
+  assert.deepEqual(pick(sessionName({ title: 'AtlasBot: chief of staff', origin: 'interactive', repo: 'notes' }, { aliases })),
+    ['Chief of staff', 'alias', 'AtlasBot', '[Chief of staff] AtlasBot']);
+  assert.deepEqual(pick(sessionName({ title: 'AtlasBot: triage the inbox', origin: 'interactive' }, { aliases })),
+    ['Chief of staff', 'alias', 'triage the inbox', '[Chief of staff] triage the inbox']);
+  // Without the alias the title is shown as it is, with no role guessed from a personal name.
+  assert.deepEqual(pick(sessionName({ title: 'AtlasBot: chief of staff', origin: 'interactive' })), [null, null, 'AtlasBot: chief of staff', 'AtlasBot: chief of staff']);
+  assert.deepEqual(pick(sessionName({ title: 'Builder: Lantern', origin: 'interactive', repo: 'lantern' })), ['Builder', 'title', 'Lantern', '[Builder] Lantern']);
+  // Untitled headless runs: review and test work is a Reviewer, anything else a Runner, named by their repository.
+  for (const [task, role] of [['review', 'Reviewer'], ['test', 'Reviewer'], ['build', 'Runner'], [null, 'Runner']]) {
+    const name = sessionName({ title: null, origin: 'headless', task, repo: 'lantern' });
+    assert.deepEqual([name.role, name.display], [role, `[${role}] lantern`], String(task));
+  }
+  // The same holds over several days, and the alias comes from the hub's settings echo.
+  const days = [{ title: 'AtlasBot: chief of staff', origin: 'interactive', task: null, repo: 'notes', kinds: [] }, { title: null, origin: 'interactive', task: null, repo: 'notes', kinds: [{ kind: 'build', apiUsd: 4 }] }];
+  assert.equal(sessionNameOverDays(days, { aliases }).display, '[Chief of staff] AtlasBot');
+});
