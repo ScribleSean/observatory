@@ -57,7 +57,10 @@ test('the fixture is fictional, deterministic and shaped like lib/r2-shape.mjs',
   assert.ok(combined.view.grokLimits.requests.days.some(day => day.count === null), 'one Grok day has no count');
 });
 
-test('the stubs say they are not written yet instead of returning a made-up value', () => {
-  assert.throws(() => views.buildOverview(sampleR2Combined(NOW), null), /not implemented/);
-  assert.throws(() => scope.periodOf({ unit: 'week', anchor: '2026-11-18' }, { timeZone: 'UTC' }), /not implemented/);
+test('lane b\'s modules are written: they return values instead of throwing', () => {
+  const combined = sampleR2Combined(NOW);
+  const scopeNow = scope.defaultScope(combined, { now: NOW });
+  assert.equal(scope.periodOf({ unit: 'week', anchor: '2026-11-18' }, { timeZone: 'UTC', now: NOW }).first, '2026-11-16');
+  assert.ok(views.buildOverview(combined, scopeNow, { now: NOW }).headline.spend);
+  assert.equal(roles.sessionName({ title: 'Builder: Lantern' }).role, 'Builder');
 });
