@@ -121,7 +121,8 @@ test('with the Codex limits off, Codex is on no surface, even with a computer th
   assert.equal(hidden.snapshots.Windows.quota.status, 'ok', 'the computer that is on carries a Codex limit');
   assert.ok(hidden.snapshots.Mac.limitHistory[0].points.some(point => point.p === 'codex'), 'and a copy of the Codex history');
   for (const [name, part] of Object.entries(without)) assert.doesNotMatch(JSON.stringify(part), /codex|no plan/i, name);
-  assert.ok(withCodex.projects.some(row => row.host === 'Mac') && !without.projects.some(row => row.host === 'Mac'), 'the hub\'s own Codex projects are gone');
+  assert.match(JSON.stringify(withCodex.projects.filter(row => row.host === 'Mac')), /Codex/);
+  assert.ok(without.projects.some(row => row.host === 'Mac'), 'the hub\'s Claude projects stay');
   assert.ok(without.history.figures.length > 0, 'the History page still draws, so the check is not vacuous');
   // The history of a hidden engine is not in the stored view either.
   assert.equal(hidden.view.limitHistory.flatMap(row => row.points).some(point => point.p === 'codex'), false);
@@ -180,7 +181,7 @@ test('the total adds up the computers that are on, says All, and counts each num
   assert.deepEqual(withOff.glance.both, alone.glance.both);
   // Screen time off on both computers: nothing is left to add, so that number reads off, not Unknown.
   const noScreen = fleet({ others: { Windows: 'on' }, screenOff: ['Mac', 'Windows'] });
-  assert.match(allLine(noScreen), /^ {2}All: screen off · /);
+  assert.match(allLine(noScreen), /^ {2}All: screen time off · /);
   assert.ok(rowOf(noScreen, 'Mac').tokens > 0 && allLine(noScreen).includes(`${compact(rowOf(noScreen, 'Mac').tokens + rowOf(noScreen, 'Windows').tokens)} tokens`));
   // Screen time on for one computer only: its number, with no sum label, while the other numbers are still sums.
   const oneScreen = fleet({ others: { Windows: 'on' }, screenOff: ['Windows'] });
@@ -190,7 +191,7 @@ test('the total adds up the computers that are on, says All, and counts each num
   assert.doesNotMatch(allLine(oneScreen), /screen \(sum/);
   // Nobody has a measure on: every number reads off.
   const none = fleet({ others: { Windows: 'on' }, screenOff: ['Mac', 'Windows'], sources: { ...ALL_ON, screenTime: false } });
-  assert.match(allLine(none), /^ {2}All: screen off · /);
+  assert.match(allLine(none), /^ {2}All: screen time off · /);
 });
 
 test('a window the provider does not report reads Not reported and nothing else', () => {
@@ -248,7 +249,7 @@ test('a limits source that is off leaves that engine Unknown for job slots, neve
   assert.equal(status.engines.claude.sourceOff, true);
   assert.equal(status.engines.claude.status, 'unknown');
   assert.equal(status.cap.claude, 1, 'Unknown keeps one Claude slot');
-  assert.ok(status.cap.codex >= 1);
+  assert.equal(status.cap.total, status.cap.codex, 'no phantom Claude slot in the total');
   assert.match(describe(status), /Job cap: \d+ \(Claude 1, Codex \d+, 2 Codex running\)/);
   const bothOff = agentStatus(clone(fleet({ sources: { ...ALL_ON, claudeLimits: false, codexLimits: false } })), now, { codexRunning: 3 });
   assert.deepEqual([bothOff.cap.claude, bothOff.cap.codex, bothOff.cap.total], [1, 1, 2]);
@@ -292,4 +293,48 @@ test('the limit history is drawn as the percent used, with the heavy end of the 
   assert.ok(drawn[0][1] > drawn.at(-1)[1], 'the line rises as the week is used');
   assert.ok(drawn[0][1] > bottom - (bottom - top) * 0.1 && drawn.at(-1)[1] < top + (bottom - top) * 0.1, 'it runs from the bottom to the top of what is drawn');
   assert.match(html, /\d+% used/);
+});
+
+test('a spoke with no hub copy follows its own limits settings, and turns them on when asked', () => withFolder(async folder => {
+  const at = Date.parse('2026-10-21T17:00:00Z');
+  const local = path.join(folder, 'public', 'local');
+  await mkdir(local, { recursive: true, mode: 0o700 });
+  await writeFile(path.join(local, 'usage.json'), JSON.stringify(ownSnapshot('Windows', at)));
+  const config = limits => testConfig(folder, { platform: 'windows', host: 'Windows', device: { name: 'PC' }, sources: { ...ALL_ON, codexLimits: limits } });
+  const off = await recombine(config(false), { now: () => at });
+  assert.ok(off.view.sourcesOff.includes('codex'), 'with its own Codex limits off, the spoke hides them');
+  assert.ok(!off.hub.hubWroteAt, 'there was never a hub copy');
+  // The spoke's own last output carries sourcesOff, and it is not the hub's word.
+  const on = await recombine(config(true), { now: () => at + 60000 });
+  assert.ok(!on.view.sourcesOff.includes('codex'), 'turning its Codex limits on takes effect');
+  assert.ok(on.glance.limits.some(row => row.provider === 'codex'));
+}));
+
+test('a project list keeps its Claude projects when Codex is turned off after it was collected', () => {
+  const snapshot = ownSnapshot('Mac', now);
+  const before = snapshot.projectTokens.find(row => row.host === 'Mac');
+  assert.ok(before.providers.includes('codex') && before.projects.some(project => project.sessions.some(session => session.provider === 'claude')));
+  const claudeTokens = before.projects.flatMap(project => project.sessions).filter(session => session.provider === 'claude').reduce((sum, session) => sum + session.totalTokens, 0);
+  const combined = combine([{ host: 'Mac', name: 'Mac', snapshot }], { now, generatedBy: 'Mac', sources: CODEX_OFF });
+  const list = combined.view.projectTokens.find(row => row.host === 'Mac');
+  assert.equal(list.status, 'ok');
+  assert.deepEqual(list.providers, ['claude']);
+  const kept = list.projects.flatMap(project => project.sessions);
+  assert.ok(kept.length > 0 && kept.every(session => session.provider === 'claude'));
+  assert.equal(kept.reduce((sum, session) => sum + session.totalTokens, 0), claudeTokens);
+  assert.doesNotMatch(JSON.stringify(projectsView(combined.view, { host: 'All', now })), /codex/i);
+});
+
+test('a Mac hub with Codex off still shows the Codex card for another computer that reads Codex', () => {
+  const combined = fleet({ sources: CODEX_OFF, others: { Windows: 'on' }, ownCodex: ['Windows'] });
+  const result = tokensView(combined.view, { host: 'All', period: 'week', now });
+  assert.deepEqual(result.codex.byDevice.map(row => row.host), ['Windows']);
+  assert.ok(result.codex.byDevice[0].total > 0);
+  const page = tokensPage(combined.view);
+  assert.ok(page.includes('aria-label="Codex"'), 'the Codex card is drawn');
+  assert.ok(page.includes('aria-label="Codex models"'), 'and its settings card');
+  assert.ok(!combined.view.sourcesOff.includes('claude'));
+  // The Mac's own Codex tokens are not in it, and the Codex limits stay hidden.
+  assert.ok(combined.view.tokens.find(row => row.host === 'Mac').status === 'not-connected');
+  assert.doesNotMatch(JSON.stringify(combined.glance.lines), /Codex/);
 });
