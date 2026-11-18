@@ -236,13 +236,16 @@ tbody tr:last-child td{border-bottom:0}
 tbody tr.row{cursor:pointer}
 tbody tr.row:hover{background:var(--hover)}
 tbody tr.sel{background:var(--raised)}
-td.name{max-width:clamp(8rem,30cqi,19rem);overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+td.name{max-width:clamp(8rem,32cqi,26rem);overflow:hidden;text-overflow:ellipsis;color:var(--text)}
 td.strong{color:var(--text);font-weight:500}
 tr.grp td{background:var(--bg);font-size:var(--fs-small);cursor:pointer;padding-top:6px;padding-bottom:6px}
 tr.grp td b{color:var(--text);font-weight:600}
 tr.child td.name{color:var(--muted);padding-left:calc(var(--pad) + 1.5em)}
 tr.more td{cursor:pointer}
 tr.more:hover td{color:var(--text)}
+tr.more td.name,tr.rest td.name{color:var(--muted)}
+/* The name is cut inside its own box, so the caret stays and the full name is on hover. */
+.nm{display:inline-block;max-width:calc(100% - 1.2em);overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .car{display:inline-block;width:1.1em;color:var(--faint);font-size:var(--fs-small)}
 .mix{display:inline-flex;width:4.3em;height:4px;border-radius:2px;overflow:hidden;background:var(--track);vertical-align:middle}
 .mix i{display:block;height:100%}
@@ -306,6 +309,9 @@ button.li:hover{background:var(--hover)}
   .strip,.strip.n4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi .v,.strip>.kpi:first-child .v{font-size:20px}
   .hide-s{display:none}
+  /* On a phone the name is the row: the role sits above it and the name takes the width. */
+  td.name{max-width:40cqi}
+  .nm .role{display:block;font-size:var(--fs-small);line-height:1.25}
   .seg.dev button small{display:none}
   .srcs{display:none}
   .range{margin-left:0;width:100%}

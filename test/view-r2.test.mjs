@@ -223,7 +223,7 @@ test('Grok is counted in requests and never added to dollars or tokens', () => {
   assert.equal(v.metric(snapshot, 'grokRequests', at('day', missing), { now: NOW }).value, null);
 });
 
-test('sessions fold headless runs and small sessions into bundles, group by role and show what runs now', () => {
+test('sessions fold headless runs into named bundles, group by role and show what runs now', () => {
   const linux = v.buildSessions(snapshot, at('week', '2026-11-18', { devices: ['Linux'] }), { now: NOW, limit: 100 });
   const bundles = linux.rows.filter(row => row.kind === 'bundle');
   assert.ok(bundles.length > 0);
@@ -244,9 +244,30 @@ test('sessions fold headless runs and small sessions into bundles, group by role
   const limited = v.buildSessions(snapshot, at('week'), { now: NOW, limit: 3 });
   assert.equal(limited.rows.length, 3);
   assert.ok(limited.totals.other.count > 0);
+  // One rule: the top rows, then everything else as one count. The only bundles are headless runs of one repository.
+  const every = v.buildSessions(snapshot, at('week'), { now: NOW, limit: 5000 });
+  for (const row of every.rows.filter(row => row.kind === 'bundle')) { assert.match(row.key, /^bundle\.headless\./); assert.match(row.name.object, /^Headless runs in /); }
+  assert.ok(every.rows.some(row => row.kind === 'session' && row.share !== null && row.share < 1), 'a small session is its own row');
+  assert.equal(limited.totals.other.count + limited.rows.reduce((sum, row) => sum + row.count, 0), limited.totals.count);
+  // What is kept as totals only cannot be listed, and it is counted apart. A role filter leaves it out.
+  assert.equal(every.totals.other?.count ?? 0, every.totals.unlisted?.count ?? 0);
+  assert.equal(v.buildSessions(snapshot, at('month'), { now: NOW, role: 'Builder', limit: 5000 }).totals.other, null);
   // Sorted by spend, largest first.
   const spends = limited.rows.map(row => row.spend.value);
   assert.deepEqual(spends, [...spends].sort((a, b) => b - a));
+});
+
+test('a breakdown by role has one Other row, last, for sessions with no role and sessions kept as totals only', () => {
+  for (const unit of ['week', 'month', 'year']) for (const metric of ['spend', 'sessions', 'onMain']) {
+    const parts = v.metric(snapshot, metric, at(unit), { now: NOW }).breakdowns.role;
+    const labels = parts.map(part => part.label);
+    assert.ok(!labels.some(label => /no role|unlisted|smaller/i.test(label)), labels.join(', '));
+    assert.ok(labels.filter(label => label === 'Other').length <= 1);
+    if (labels.includes('Other')) assert.equal(labels.at(-1), 'Other');
+  }
+  const groups = v.buildSessions(snapshot, at('month'), { now: NOW, groupBy: 'role', limit: 5000 }).groups;
+  assert.ok(groups.every(group => group.label !== 'No role'));
+  assert.equal(groups.find(group => group.key === 'none')?.label ?? 'Other', 'Other');
 });
 
 test('screen time adds tracked days only, a single untracked day is Unknown, and a computer with it off adds nothing', () => {

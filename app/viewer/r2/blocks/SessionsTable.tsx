@@ -1,13 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import type { ComponentRenderProps } from '@json-render/react';
 import { ROLES } from '../../../../lib/roles.mjs';
-import { UNKNOWN, buildSessions, clock, count, metric, patchScope, plural, share, useR2, type SessionRow, type SessionsVM } from '../data';
+import { UNKNOWN, buildSessions, clock, count, metric, patchScope, formatValue, plural, share, useR2, type SessionRow, type SessionsVM } from '../data';
 
 type Props = import('../../../../lib/r2-blocks.mjs').SessionsTableProps;
 type Sort = NonNullable<Props['sort']>;
 const MIX = ['m0', 'm1', 'm2', 'm3'];
 const TOOL_NAMES: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', grok: 'Grok' };
 const NO_LIMIT = 5000;
+// One rule for every list: the top rows, then one "N more sessions" row that opens the rest.
+const TOP_ROWS = 25, GROUP_ROWS = 5;
 
 /** A row is flagged when work piled up with nothing on main, or money went out with no commit at all. */
 export function flagged(row: SessionRow): boolean {
@@ -65,7 +67,7 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [all, setAll] = useState(false);
   const inner = patchScope(scope, props.scope);
-  const limit = full || all ? NO_LIMIT : props.limit ?? 25;
+  const limit = all ? NO_LIMIT : props.limit ?? TOP_ROWS;
   const vm = buildSessions(snapshot, inner, { now, groupBy: grouped ? 'role' : props.groupBy === 'role' ? null : props.groupBy ?? null, role, running: props.running ?? false, sort, limit });
   if (props.running) return <Running vm={vm} />;
 
@@ -83,11 +85,11 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
     const flag = flagged(row);
     return [
       <tr key={row.key} className={`${child ? 'child' : 'row'}${selected === row.key ? ' sel' : ''}`} onClick={child ? undefined : () => openSession(row.key)}>
-        <td className="name">
+        <td className="name" title={row.name.display}>
           {!child && (row.kind === 'bundle'
             ? <button type="button" className="car" aria-expanded={expanded} aria-label={expanded ? 'Hide the sessions in this row' : 'Show the sessions in this row'} onClick={event => { event.stopPropagation(); toggle(row.key, false); }}>{expanded ? '−' : '+'}</button>
             : <span className="car" />)}
-          <SessionName row={row} />{row.kind === 'bundle' && <span className="fa"> ({row.count})</span>}{row.running && <span className="fa"> · running</span>}
+          <span className="nm"><SessionName row={row} />{row.kind === 'bundle' && <span className="fa"> ({row.count})</span>}{row.running && <span className="fa"> · running</span>}</span>
         </td>
         <td className="hide-s">{row.device}{row.tool !== 'claude' && ` · ${TOOL_NAMES[row.tool] ?? row.tool}`}</td>
         <td className="r hide-s">{row.subagents ? count(row.subagents) : <span className="fa">0</span>}</td>
@@ -101,6 +103,18 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
       ...(row.kind === 'bundle' && expanded ? row.children.map(kid => line(kid, true)) : []),
     ];
   };
+
+  const blanks = (spend: string) => <>
+    <td className="hide-s" aria-hidden="true" /><td className="r hide-s" aria-hidden="true" /><td className="hide-m" aria-hidden="true" /><td className="r strong">{spend}</td>
+    <td className="r hide-s" aria-hidden="true" /><td aria-hidden="true" /><td className="r hide-s" aria-hidden="true" />{full && <td className="hide-m" aria-hidden="true" />}
+  </>;
+  const more = (key: string, hidden: number, spend: string, onOpen: () => void) => (
+    <tr key={key} className="more" onClick={onOpen}>
+      <td className="name"><button type="button" className="car" aria-label="Show these sessions">+</button>{plural(hidden, 'more session')}</td>{blanks(spend)}
+    </tr>
+  );
+  const sumText = (list: SessionRow[]) => formatValue('usd', list.some(row => row.spend.value === null) ? null : list.reduce((sum, row) => sum + (row.spend.value ?? 0), 0)); // zero-ok: an Unknown row makes the sum Unknown before this adds
+  const sessionsIn = (list: SessionRow[]) => list.reduce((sum, row) => sum + row.count, 0);
 
   const body = rows.length === 0
     ? <tr><td colSpan={columns}><div className="empty">{coverage.unknownDays.length
@@ -120,10 +134,16 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
           <td className="r hide-s">{landed && group.spend.value !== null ? `$${(group.spend.value / landed).toFixed(2)}` : ''}</td>
           {full && <td className="hide-m" aria-hidden="true" />}
         </tr>,
-        ...(shown ? group.rows.flatMap(row => line(row)) : []),
+        ...(shown ? (() => {
+          const whole = open[`m:${group.key}`] ?? false, cut = whole || group.rows.length <= GROUP_ROWS + 1 ? group.rows.length : GROUP_ROWS;
+          const rest = group.rows.slice(cut);
+          return [...group.rows.slice(0, cut).flatMap(row => line(row)), ...(rest.length ? [more(`m:${group.key}`, sessionsIn(rest), sumText(rest), () => toggle(`m:${group.key}`, false))] : [])];
+        })() : []),
       ];
     }) : rows.flatMap(row => line(row));
 
+  // Every session with a name is on the page: the grouped table lists them all under their roles.
+  const listsAll = (grouped && vm.groups !== null) || !totals.other || totals.other.count === (totals.unlisted?.count ?? 0); // zero-ok: a count of rows
   const head = (key: Sort, label: string) => full
     ? <button type="button" className={sort === key ? 'on' : ''} aria-pressed={sort === key} onClick={() => setSort(key)}>{label}{sort === key ? ' ↓' : ''}</button> : label;
   return (
@@ -145,10 +165,10 @@ export function SessionsTable({ element }: ComponentRenderProps<Props>) {
           </tr></thead>
           <tbody>
             {body}
-            {totals.other && (
-              <tr className="more" onClick={() => setAll(true)}>
-                <td className="name"><button type="button" className="car" aria-label="Show every session">+</button>{plural(totals.other.count, 'more session')}</td>
-                <td className="hide-s" aria-hidden="true" /><td className="r hide-s" aria-hidden="true" /><td className="hide-m" aria-hidden="true" /><td className="r strong">{totals.other.spend.text}</td><td className="r hide-s" aria-hidden="true" /><td aria-hidden="true" /><td className="r hide-s" aria-hidden="true" />
+            {!listsAll && totals.other && more('more', totals.other.count, totals.other.spend.text, () => setAll(true))}
+            {listsAll && totals.unlisted && (
+              <tr className="rest" title="Small and older sessions are kept as totals, so there is no name to list">
+                <td className="name"><span className="car" />{plural(totals.unlisted.count, 'more session')} <span className="fa">kept as totals only</span></td>{blanks(totals.unlisted.spend.text)}
               </tr>
             )}
           </tbody>

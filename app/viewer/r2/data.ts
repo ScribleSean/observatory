@@ -5,7 +5,7 @@ import type { Spec } from '@json-render/react';
 import { readAt, when } from '../../../lib/forecast.mjs';
 
 export { defaultScope, limitsOn, patchScope, scopeToSearch, scopeFromSearch } from '../../../lib/scope.mjs';
-export { buildFrame, buildOverview, buildSessions, buildTokens, buildScreenTime, metric, answerQuestion, resolveBlock } from '../../../lib/view-r2.mjs';
+export { buildFrame, buildOverview, buildSessions, buildTokens, buildScreenTime, metric, answerQuestion, resolveBlock, formatValue } from '../../../lib/view-r2.mjs';
 
 export type Scope = import('../../../lib/scope.mjs').Scope;
 export type ScopePatch = import('../../../lib/scope.mjs').ScopePatch;
@@ -70,7 +70,8 @@ export const SPEND_METRICS: MetricId[] = ['spend', 'perLanded', 'noCommitSpend']
 export const HOST_TINTS: Record<string, string> = { Mac: 'mac', Windows: 'pc', Linux: 'ubuntu' };
 
 export const count = (value: number | null) => value === null ? UNKNOWN : Math.round(value).toLocaleString('en-US');
-export const share = (value: number | null) => value === null ? '' : `${value > 0 && value < 10 ? value.toFixed(1) : Math.round(value)}%`;
+// A share too small for one decimal is still more than nothing: "<0.1%", never "0.0%".
+export const share = (value: number | null) => value === null ? '' : value > 0 && value < 0.05 ? '<0.1%' : `${value > 0 && value < 10 ? value.toFixed(1) : Math.round(value)}%`;
 export const plural = (value: number, word: string) => `${count(value)} ${word}${Math.round(value) === 1 ? '' : 's'}`;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
