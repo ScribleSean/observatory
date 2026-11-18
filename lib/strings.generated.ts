@@ -287,7 +287,10 @@ export const STRINGS = {
     "metricScreenTime": "at the screen",
     "metricGrokRequests": "Grok requests",
     "metricSessions": "sessions",
-    "metricSubagents": "subagents"
+    "metricSubagents": "subagents",
+    "atLeast": "at least {value}, {missing}",
+    "dayNotRead": "1 day not read on {name}",
+    "daysNotRead": "{count} days not read on {name}"
   },
   "forecast": {
     "sentence": "{name} {phrase}.",

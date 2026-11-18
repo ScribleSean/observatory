@@ -80,6 +80,9 @@ test('a day a computer could not read is Unknown, never zero, and the strip says
   assert.ok(html.includes('class="v unk">Unknown<'),'the headline reads Unknown');
   assert.ok(text(html).includes('Tower could not be read on Nov 9'));
   assert.ok(!/class="v[^"]*">\$0(\.00)?</.test(html),'no headline shows a zero for an Unknown');
+  // The known part shows beside it as secondary text, never in place of Unknown.
+  assert.match(spend.atLeast.text,/^at least \$[\d,.]+, 1 day not read on Tower$/);
+  assert.ok(html.includes(`<span class="c">${spend.atLeast.text}</span>`),'the spend headline says what was read');
 });
 
 test('the scope in the address is followed: one device, a range and a step back',()=>{

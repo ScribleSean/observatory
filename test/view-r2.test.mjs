@@ -20,7 +20,7 @@ const windowsUnavailable = history('Windows').days.find(day => day.status === 'u
 const ledgerSum = (hosts, dates, read) => hosts.flatMap(host => history(host).days.filter(day => dates.includes(day.date) && day.status === 'ok')).reduce((sum, day) => sum + read(day), 0);
 const close = (a, b) => assert.ok(Math.abs(a - b) < 0.02, `${a} is not ${b}`);
 
-const NUM_KEYS = ['metric', 'unit', 'value', 'text', 'of', 'sumLabel', 'previous', 'delta', 'deltaText', 'breakdowns', 'note'];
+const NUM_KEYS = ['metric', 'unit', 'value', 'text', 'of', 'sumLabel', 'previous', 'delta', 'deltaText', 'breakdowns', 'note', 'atLeast'];
 function assertNum(num, metric) {
   assert.deepEqual(Object.keys(num).sort(), [...NUM_KEYS].sort(), `${metric} keys`);
   if (metric) assert.deepEqual(new Set(Object.keys(num.breakdowns)), new Set(METRIC_DIMS[metric]), `${metric} breakdowns`);
@@ -76,6 +76,16 @@ test('a day a computer could not read is Unknown, and so is every total that inc
   assert.equal(parts.Windows, null);
   close(parts.Mac, ledgerSum(['Mac'], [windowsUnavailable], d => d.apiUsd));
   for (const part of all.breakdowns.model) assert.equal(part.value, null, 'a part of an Unknown total is Unknown');
+  // The total stays Unknown, and says what was read beside it.
+  const read = ledgerSum(['Mac', 'Linux'], [windowsUnavailable], d => d.apiUsd);
+  close(all.atLeast.value, read);
+  assert.equal(all.atLeast.text, `at least ${v.formatValue('usd', all.atLeast.value)}, 1 day not read on Tower`);
+  assert.equal(alone.atLeast, null, 'with nothing read there is no known part');
+  const week = v.metric(snapshot, 'spend', at('week', windowsUnavailable), { now: NOW });
+  assert.equal(week.value, null, 'a multi-day sum with an Unknown day is Unknown');
+  assert.match(week.atLeast.text, /^at least \$[\d,.]+, 1 day not read on Tower$/);
+  assert.equal(v.metric(snapshot, 'perLanded', day, { now: NOW }).atLeast, null, 'a rate has no lower bound');
+  assert.equal(v.metric(snapshot, 'spend', { ...day, devices: ['Mac', 'Linux'] }, { now: NOW }).atLeast, null, 'a known sum has none');
   const frame = v.buildSessions(snapshot, day, { now: NOW });
   assert.deepEqual(frame.coverage.unknownDays, [{ host: 'Windows', name: 'Tower', dates: [windowsUnavailable] }]);
   // Without Windows, the same day is known.

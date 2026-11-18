@@ -21,7 +21,7 @@ export function TokensBody({ vm, kinds, now }: TokensData) {
   if (vm.total.value === 0) return <StateView title="No tokens" line={`Nothing ran in ${period.label}.`} />;
   const total = vm.total.value;
   const cells: Cell[] = [
-    { label: 'All tokens', value: tokens(total), context: `in ${period.label}${vm.total.sumLabel ? `, ${vm.total.sumLabel}` : ''}` },
+    { label: 'All tokens', value: tokens(total), context: vm.total.atLeast ? vm.total.atLeast.text : `in ${period.label}${vm.total.sumLabel ? `, ${vm.total.sumLabel}` : ''}` },
     ...KINDS.map(([key, label]) => ({ label, value: tokens(kinds[key]), context: kinds[key] === null ? 'a day was not read' : `${share(kinds[key], total)} of tokens` })),
     { label: 'Spend per million tokens', mark: true, value: vm.spend.value === null || !total ? UNKNOWN : money(vm.spend.value / (total / 1e6)), context: 'API equivalent' },
   ];

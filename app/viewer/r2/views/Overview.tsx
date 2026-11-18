@@ -15,7 +15,7 @@ function Answer({ question, missed, onClear }: { question: string; missed: boole
         <div className="q"><span>{question}</span><span style={{ flex: 1 }} /><button type="button" className="fa" onClick={onClear}>Clear</button></div>
         <div className="a">
           {missed ? <>No block answers that yet. <span>Try spend, shipped, limits, a role or a range.</span></>
-            : spend.value === null ? <>Spend {when} is {UNKNOWN}. <span>A computer could not be read on a day in this range.</span></>
+            : spend.value === null ? <>Spend {when} is {UNKNOWN}. <span>{spend.atLeast ? `${spend.atLeast.text.charAt(0).toUpperCase()}${spend.atLeast.text.slice(1)}.` : 'A computer could not be read on a day in this range.'}</span></>
             : <>{spend.text} {when}{top?.share ? `. ${top.label} took ${Math.round(top.share)}%` : ''}. <span>{landed.value === null ? `Commits on main are ${UNKNOWN}.` : `${count(landed.value)} of ${count(landed.of)} commits reached main.`}</span></>}
         </div>
       </div>

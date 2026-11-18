@@ -47,7 +47,7 @@ export function Breakdown({ element }: ComponentRenderProps<Props>) {
       <div className="bb">
         {parts.length ? <BarList parts={parts} accent={SPEND_METRICS.includes(id)} limit={limit} /> : <div className="empty"><b>Nothing to split</b>{frame.period.label} has no {METRIC_LABELS[id].toLowerCase()}.</div>}
       </div>
-      {num.value === null && parts.length > 0 && <div className="foot"><span className="dot stale" />The total is {UNKNOWN} because a day in this range could not be read.</div>}
+      {num.value === null && parts.length > 0 && <div className="foot"><span className="dot stale" />{num.atLeast ? `The total is ${UNKNOWN}, ${num.atLeast.text}.` : `The total is ${UNKNOWN} because a day in this range could not be read.`}</div>}
     </section>
   );
 }

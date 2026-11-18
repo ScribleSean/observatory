@@ -32,6 +32,7 @@ export function Drawer({ id, patch, wanted }: { id: MetricId; patch: ScopePatch 
         <button type="button" className="fa" onClick={() => toggleMetric(id)}>Close</button>
       </div>
       {parts.length ? <BarList parts={parts} accent={SPEND_METRICS.includes(id)} limit={9} /> : <div className="empty"><b>Nothing to split</b>{frame.period.label} has no records for this number.</div>}
+      {num.atLeast && <p className="sum">The total is Unknown, {num.atLeast.text}.</p>}
       {active === 'device' && num.sumLabel && <p className="sum">The total adds these computers and is {num.sumLabel}.</p>}
     </div>
   );
@@ -43,7 +44,8 @@ export function Headline({ element }: ComponentRenderProps<Props>) {
   const { metric: id, compare = true } = element.props;
   const num = metric(snapshot, id, patchScope(scope, element.props.scope), { now });
   const { main, unit } = figure(num);
-  const context = id === 'noCommitSpend' ? num.note : compare ? num.deltaText ?? num.note : num.note;
+  // An Unknown sum still says what was read: "at least $642, 1 day not read on Tower".
+  const context = num.atLeast ? num.atLeast.text : id === 'noCommitSpend' ? num.note : compare ? num.deltaText ?? num.note : num.note;
   const open = openMetric === id;
   const cell = (
     <button type="button" className={open ? 'kpi on' : 'kpi'} aria-expanded={open} title={`${METRIC_LABELS[id]}. Open the breakdown.`} onClick={() => toggleMetric(id)}>
