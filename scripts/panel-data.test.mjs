@@ -210,7 +210,7 @@ test('limit rows show no stored pace, even from an older snapshot that has one',
       resetsAt: new Date(now + 3600000).toISOString() }],
     pace: [{ bucket: 'codex', window: 'primary', status: 'projected', asOf: checkedAt,
       estimatedExhaustionAt: new Date(now + 30 * 60000).toISOString() }] };
-  for (const row of limits({ quota, claudeLimits: quota }, now)) assert.equal(row.note, 'Resets in 1h 0m');
+  for (const row of limits({ quota, claudeLimits: quota }, now)) assert.equal(row.note, '', 'a coming reset is worded by the stored forecast, not counted down here');
 });
 
 test('device freshness gates today for tokens, activity and provider tokens, and keeps the history', () => {

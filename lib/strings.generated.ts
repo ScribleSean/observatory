@@ -4,7 +4,7 @@ export const STRINGS = {
     "resetPending": "Waiting for the reset to be observed."
   },
   "devices": {
-    "all": "Both",
+    "all": "All",
     "mac": "Mac",
     "pc": "PC"
   },
@@ -51,7 +51,6 @@ export const STRINGS = {
     "percent": "{value}%",
     "under": "<{value}",
     "usd": "${value}",
-    "resetsIn": "Resets in {span}",
     "asOf": "as of {time}",
     "separator": " · "
   },

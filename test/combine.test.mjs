@@ -97,7 +97,7 @@ test('a missing computer is Unknown, and so is the sum, never zero',()=>{
   assert.equal(pc.seconds,null);assert.equal(pc.tokens,null);
   assert.equal(combined.glance.both.seconds,null);assert.equal(combined.glance.both.tokens,null);
   assert.ok(combined.glance.lines.some(line=>line.includes('PC: Unknown')));
-  assert.ok(combined.glance.lines.some(line=>line.startsWith('  Both: Unknown')));
+  assert.ok(combined.glance.lines.some(line=>line.startsWith('  All: Unknown')));
   assert.equal(combined.view.activity.find(row=>row.host==='Windows').status,'unavailable');
   assert.equal(combined.devices[1].stale,true);
 });

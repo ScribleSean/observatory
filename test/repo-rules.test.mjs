@@ -206,7 +206,7 @@ test('the native panels use the dashboard limit thresholds and wording', () => {
     assert.ok(cs.includes(`, "${key}")`),`Glance.cs does not read glance "${key}".`);
   }
   // The removed device table and per-limit rows stay removed.
-  for (const gone of [strings.formats.resetsIn.split(/\{[A-Za-z]+\}/)[0].trim(),strings.overview.lastSeen,strings.tokens.apiEstimate])
+  for (const gone of ['Resets in',strings.overview.lastSeen,strings.tokens.apiEstimate])
     for (const text of [swift,cs]) assert.ok(!text.includes(gone),`A panel still says "${gone}", which the forecast tiles replaced.`);
   // The Mac app keeps a copy of the telescope for runs outside its bundle. It must be the same drawing.
   for (const d of [...read('public/brand/telescope.svg').matchAll(/ d="([^"]+)"/g)].map(match=>match[1]))
