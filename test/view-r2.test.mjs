@@ -244,9 +244,11 @@ test('sessions fold headless runs into named bundles, group by role and show wha
   const limited = v.buildSessions(snapshot, at('week'), { now: NOW, limit: 3 });
   assert.equal(limited.rows.length, 3);
   assert.ok(limited.totals.other.count > 0);
-  // One rule: the top rows, then everything else as one count. The only bundles are headless runs of one repository.
+  // One rule: the top rows, then everything else as one count. The only bundles are recurring runs and headless runs of one repository.
   const every = v.buildSessions(snapshot, at('week'), { now: NOW, limit: 5000 });
-  for (const row of every.rows.filter(row => row.kind === 'bundle')) { assert.match(row.key, /^bundle\.headless\./); assert.match(row.name.object, /^Headless runs in /); }
+  for (const row of every.rows.filter(row => row.kind === 'bundle'))
+    assert.ok(row.key.startsWith('bundle.headless.') && row.name.object.startsWith('Headless runs in ') || row.key.startsWith('bundle.recurring.'), row.key);
+  assert.ok(every.rows.some(row => row.key === 'bundle.recurring.Runner|job queue' && row.name.display === '[Runner] job queue' && row.count >= v.RECURRING_MIN));
   assert.ok(every.rows.some(row => row.kind === 'session' && row.share !== null && row.share < 1), 'a small session is its own row');
   assert.equal(limited.totals.other.count + limited.rows.reduce((sum, row) => sum + row.count, 0), limited.totals.count);
   // What is kept as totals only cannot be listed, and it is counted apart. A role filter leaves it out.
@@ -255,6 +257,46 @@ test('sessions fold headless runs into named bundles, group by role and show wha
   // Sorted by spend, largest first.
   const spends = limited.rows.map(row => row.spend.value);
   assert.deepEqual(spends, [...spends].sort((a, b) => b - a));
+});
+
+test('recurring runs with one role and object fold into one named row that opens into its runs', () => {
+  // Fictional: every listed Mac session this week is a queue run named "LanternBot: job queue", written several ways,
+  // except two "Kestrel sync" runs (below the minimum) and three bare "Chief of staff" titles on one Windows day.
+  const copy = structuredClone(snapshot);
+  const week = v.buildFrame(copy, at('week'), { now: NOW }).period.dates;
+  const ledger = host => copy.view.ledgerHistory.find(row => row.host === host).days.filter(day => week.includes(day.date) && day.status === 'ok');
+  const spellings = ['LanternBot: job queue', 'LanternBot: Job  queue.', 'LanternBot:  job queue'];
+  let queued = 0, kestrel = 0;
+  for (const day of ledger('Mac')) for (const session of day.sessions) {
+    if (kestrel < 2) { session.title = 'Kestrel sync'; kestrel++; continue; }
+    session.title = spellings[queued++ % spellings.length];
+  }
+  const windowsDay = ledger('Windows').find(day => day.tool === 'claude' && day.sessions.length >= 3);
+  for (const session of windowsDay.sessions.slice(0, 3)) session.title = 'Chief of staff';
+  // The fixture's own queue runs on other computers this week join the same row.
+  queued += ['Windows', 'Linux'].flatMap(host => ledger(host)).flatMap(day => day.sessions).filter(session => /^LanternBot:\s*job queue$/.test(session.title ?? '')).length;
+  const rows = v.buildSessions(copy, at('week'), { now: NOW, limit: 5000 }).rows;
+  const queue = rows.filter(row => row.name.object.toLowerCase().replace(/[^a-z]+/g, ' ').trim() === 'job queue');
+  assert.equal(queue.length, 1, 'one row for every spelling');
+  assert.equal(queue[0].kind, 'bundle');
+  assert.equal(queue[0].key, 'bundle.recurring.Runner|job queue');
+  assert.equal(queue[0].name.display, '[Runner] job queue');
+  assert.equal(queue[0].count, queued);
+  assert.equal(queue[0].children.length, queued);
+  assert.ok(queue[0].children.every(child => child.kind === 'session' && child.name.role === 'Runner'));
+  close(queue[0].spend.value, queue[0].children.reduce((sum, child) => sum + child.spend.value, 0));
+  // Two runs are not a recurring run, and titles that are only a role name their day, which never recurs.
+  assert.equal(rows.filter(row => row.kind === 'session' && /^Kestrel sync$/.test(row.name.object)).length, 2);
+  assert.ok(!rows.some(row => row.kind === 'bundle' && row.name.object.startsWith('Kestrel')));
+  const bare = new Set(windowsDay.sessions.slice(0, 3).map(session => `Windows.claude.${session.id}`));
+  assert.ok(rows.filter(row => row.key.startsWith('bundle.recurring.')).every(row => row.children.every(child => !bare.has(child.key))));
+  assert.ok(rows.filter(row => bare.has(row.key)).length === 3, 'each bare role title is its own row');
+  // Grouped by role, the queue counts all its runs under Runner.
+  const runner = v.buildSessions(copy, at('week'), { now: NOW, groupBy: 'role', limit: 5000 }).groups.find(group => group.key === 'Runner');
+  assert.ok(runner.count >= queued);
+  // The normalized object ignores case, spacing and end punctuation, and nothing else.
+  assert.equal(v.recurringObject(' Job  queue. '), 'job queue');
+  assert.notEqual(v.recurringObject('job queue 2'), v.recurringObject('job queue'));
 });
 
 test('a breakdown by role has one Other row, last, for sessions with no role and sessions kept as totals only', () => {
@@ -299,7 +341,7 @@ test('settings are read-only, keyed by computer and hold no paths', () => {
   assert.equal(settings.howToChange, 'Edit observatory.config.json on that computer. The next collection uses it.');
   assert.deepEqual(settings.computers.map(row => [row.host, row.name, row.role]), [['Mac', 'Studio', 'hub'], ['Windows', 'Tower', 'spoke'], ['Linux', 'Lab', 'spoke']]);
   assert.deepEqual(settings.sources.find(row => row.id === 'codex').on, { Mac: false, Windows: true, Linux: false });
-  assert.deepEqual(settings.roleAliases, [{ prefix: 'tidepool notes', role: 'Researcher' }]);
+  assert.deepEqual(settings.roleAliases, [{ prefix: 'tidepool notes', role: 'Researcher' }, { prefix: 'lanternbot', role: 'Runner' }]);
   assert.doesNotMatch(JSON.stringify(settings), /\/Users\/|C:\\\\|dataFolder|sshAlias/);
 });
 

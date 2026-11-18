@@ -110,7 +110,7 @@ export function SettingsBody({ vm, firstDate, roleWeek, pins, now }: SettingsDat
 export const firstLedgerDate = (view: { ledgerHistory?: { firstDate: string | null }[] }) =>
   (view.ledgerHistory ?? []).map(row => row.firstDate).filter((date): date is string => Boolean(date)).sort()[0] ?? null;
 
-/** Sessions and spend per role this week, with the largest session of each role as its example. */
+/** Sessions and spend per role this week, with the largest row of each role (a session or a folded run) as its example. */
 export function roleWeekOf(snapshot: object, scope: Scope, now: number): RoleWeek[] {
   const week = { ...scope, range: { unit: 'week' as const, anchor: scope.range.anchor } };
   const sessions = buildSessions(snapshot, week, { now, groupBy: 'role', limit: 500 });
